@@ -1,0 +1,11 @@
+{
+  "name": "FrameFocus",
+  "short_name": "FrameFocus",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0F2A44",
+  "theme_color": "#0F2A44",
+  "description": "Construction Management Platform",
+  "orientation": "portrait-primary",
+  "prefer_related_applications": false
+}
