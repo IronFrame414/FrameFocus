@@ -53,7 +53,7 @@ class _AuthScreenState extends State<AuthScreen> {
         decoration: BoxDecoration(
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 24)],
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.2), blurRadius: 24)],
         ),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Text('FrameFocus', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: AppColors.primary, letterSpacing: 1)),
