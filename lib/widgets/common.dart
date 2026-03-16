@@ -25,7 +25,7 @@ class StatCard extends StatelessWidget {
       boxShadow: [BoxShadow(color: AppColors.cardShadow, blurRadius: 8, offset: const Offset(0, 2))],
     ),
     child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(label.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1.2, color: accentColor.withValues(alpha: 0.7))),
+      Text(label.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1.2, color: accentColor.withOpacity(0.7))),
       const SizedBox(height: 8),
       Text(value, style: TextStyle(fontSize: 28, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
       if (subtitle != null) ...[
@@ -54,7 +54,7 @@ class StatusBadge extends StatelessWidget {
     final label = status.replaceAll('_', ' ');
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20), border: Border.all(color: color.withValues(alpha: 0.3))),
+      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(20), border: Border.all(color: color.withOpacity(0.3))),
       child: Text(label[0].toUpperCase() + label.substring(1), style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: color)),
     );
   }
@@ -96,7 +96,7 @@ class EmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Center(
     child: Padding(padding: const EdgeInsets.all(48), child: Column(mainAxisSize: MainAxisSize.min, children: [
-      Icon(icon, size: 56, color: AppColors.textMuted.withValues(alpha: 0.4)),
+      Icon(icon, size: 56, color: AppColors.textMuted.withOpacity(0.4)),
       const SizedBox(height: 16),
       Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.textSecondary)),
       if (subtitle != null) Padding(padding: const EdgeInsets.only(top: 6), child: Text(subtitle!, textAlign: TextAlign.center, style: const TextStyle(fontSize: 13, color: AppColors.textMuted))),
