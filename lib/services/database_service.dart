@@ -8,13 +8,26 @@ class DatabaseService {
   // ── Projects ───────────────────────────────────────────────────────────────
   Future<List<Project>> getProjects() async {
     final data = await _db.from('projects')
-        .select('*, users!projects_owner_id_fkey(full_name)')
+        .select('*')
         .order('updated_at', ascending: false);
     return data.map((m) => Project.fromMap(m)).toList();
   }
 
   Future<Project> createProject(Project p) async {
-    final data = await _db.from('projects').insert(p.toMap()).select().single();
+    final map = <String, dynamic>{
+      'name': p.name,
+      'description': p.description,
+      'status': p.status,
+      'address': p.address,
+      'city': p.city,
+      'state': p.state,
+      'zip': p.zip,
+      'budget': p.budget,
+    };
+    if (p.startDate != null) map['start_date'] = p.startDate!.toIso8601String().split('T').first;
+    if (p.endDate != null) map['end_date'] = p.endDate!.toIso8601String().split('T').first;
+    if (p.ownerId != null) map['owner_id'] = p.ownerId;
+    final data = await _db.from('projects').insert(map).select().single();
     return Project.fromMap(data);
   }
 
@@ -29,14 +42,14 @@ class DatabaseService {
   // ── Change Orders ──────────────────────────────────────────────────────────
   Future<List<ChangeOrder>> getChangeOrders(int projectId) async {
     final data = await _db.from('change_orders')
-        .select('*, users!change_orders_requested_by_fkey(full_name)')
+        .select('*')
         .eq('project_id', projectId).order('co_number');
     return data.map((m) => ChangeOrder.fromMap(m)).toList();
   }
 
   Future<List<ChangeOrder>> getAllChangeOrders() async {
     final data = await _db.from('change_orders')
-        .select('*, users!change_orders_requested_by_fkey(full_name)')
+        .select('*')
         .order('created_at', ascending: false);
     return data.map((m) => ChangeOrder.fromMap(m)).toList();
   }
@@ -88,14 +101,14 @@ class DatabaseService {
   // ── Time Entries ───────────────────────────────────────────────────────────
   Future<List<TimeEntry>> getTimeEntries(int projectId) async {
     final data = await _db.from('time_entries')
-        .select('*, users(full_name)')
+        .select('*')
         .eq('project_id', projectId).order('date', ascending: false);
     return data.map((m) => TimeEntry.fromMap(m)).toList();
   }
 
   Future<List<TimeEntry>> getAllTimeEntries({int limit = 50}) async {
     final data = await _db.from('time_entries')
-        .select('*, users(full_name)')
+        .select('*')
         .order('date', ascending: false).limit(limit);
     return data.map((m) => TimeEntry.fromMap(m)).toList();
   }
@@ -112,7 +125,7 @@ class DatabaseService {
   // ── Daily Logs ─────────────────────────────────────────────────────────────
   Future<List<DailyLog>> getDailyLogs(int projectId) async {
     final data = await _db.from('daily_logs')
-        .select('*, users(full_name)')
+        .select('*')
         .eq('project_id', projectId).order('date', ascending: false);
     return data.map((m) => DailyLog.fromMap(m)).toList();
   }
@@ -168,10 +181,12 @@ class DatabaseService {
   }
 
   Future<Estimate> createEstimate(Estimate est) async {
-    final data = await _db.from('estimates').insert({
+    final map = <String, dynamic>{
       'project_id': est.projectId, 'title': est.title, 'description': est.description,
-      'markup_pct': est.markupPct, 'tax_pct': est.taxPct, 'created_by': est.createdBy,
-    }).select().single();
+      'markup_pct': est.markupPct, 'tax_pct': est.taxPct,
+    };
+    if (est.createdBy != null) map['created_by'] = est.createdBy;
+    final data = await _db.from('estimates').insert(map).select().single();
     return Estimate.fromMap(data);
   }
 
@@ -183,7 +198,6 @@ class DatabaseService {
 
   Future<void> addLineItem(EstimateLineItem item) async {
     await _db.from('estimate_line_items').insert(item.toInsert());
-    // Recalculate estimate total
     final items = await _db.from('estimate_line_items')
         .select('total').eq('estimate_id', item.estimateId);
     final sum = items.fold<double>(0, (s, i) => s + ((i['total'] as num?)?.toDouble() ?? 0));
@@ -208,12 +222,6 @@ class DatabaseService {
 
   Future<void> markAllNotificationsRead(int userId) async {
     await _db.from('notifications').update({'is_read': true}).eq('user_id', userId);
-  }
-
-  Future<void> createNotification(int userId, String type, String title, {String? body, String? link}) async {
-    await _db.from('notifications').insert({
-      'user_id': userId, 'type': type, 'title': title, 'body': body, 'link': link,
-    });
   }
 
   // ── Users ──────────────────────────────────────────────────────────────────
