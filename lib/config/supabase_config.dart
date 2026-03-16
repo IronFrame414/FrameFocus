@@ -1,11 +1,8 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupabaseConfig {
-  // Replace these with your Supabase project values
-  static const String url = 'https://dbmjqetqtgbfaljlhbzj.supabase.co
-
-';
-  static const String anonKey = 'sb_publishable_Do2kWRRwvqGfmT8QBXu7bw_UR9OutiG';
+  static const String url = 'https://dbmjqetqtgbfaljlhbzj.supabase.co';
+  static const String anonKey = 'YOUR-ANON-PUBLIC-KEY';
 
   static SupabaseClient get client => Supabase.instance.client;
 
