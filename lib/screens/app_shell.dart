@@ -82,7 +82,7 @@ class _AppShellState extends State<AppShell> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
                         decoration: active ? BoxDecoration(
-                          color: AppColors.sidebarActive.withValues(alpha: 0.15),
+                          color: AppColors.sidebarActive.withOpacity(0.15),
                           borderRadius: BorderRadius.circular(8),
                         ) : null,
                         child: Row(children: [
