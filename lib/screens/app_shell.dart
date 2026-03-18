@@ -4,13 +4,13 @@ import '../config/theme.dart';
 import '../services/auth_service.dart';
 import 'dashboard_screen.dart';
 import 'projects_screen.dart';
+import 'clients_screen.dart';
 import 'change_orders_screen.dart';
 import 'catalog_screen.dart';
 import 'time_tracking_screen.dart';
 import 'bid_requests_screen.dart';
 import 'daily_log_screen.dart';
 import 'estimating_screen.dart';
-import 'clients_screen.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -33,7 +33,7 @@ class _AppShellState extends State<AppShell> {
     _NavItem(Icons.inventory_2_rounded, 'Cost Catalog'),
   ];
 
-Widget _buildScreen() => switch (_selectedIndex) {
+  Widget _buildScreen() => switch (_selectedIndex) {
     0 => DashboardScreen(onNavigate: (i) => setState(() => _selectedIndex = i)),
     1 => const ClientsScreen(),
     2 => const ProjectsScreen(),
@@ -45,7 +45,6 @@ Widget _buildScreen() => switch (_selectedIndex) {
     8 => const CatalogScreen(),
     _ => const DashboardScreen(),
   };
-  };
 
   @override
   Widget build(BuildContext context) {
@@ -55,12 +54,10 @@ Widget _buildScreen() => switch (_selectedIndex) {
 
     return Scaffold(
       body: Row(children: [
-        // Sidebar
         if (isWide) Container(
           width: 240,
           color: AppColors.sidebar,
           child: Column(children: [
-            // Logo - stacked layout
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -79,7 +76,6 @@ Widget _buildScreen() => switch (_selectedIndex) {
 
             const Divider(color: Color(0xFF1A3A5C), height: 1),
 
-            // Nav items
             Expanded(child: ListView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               itemCount: _navItems.length,
@@ -123,7 +119,6 @@ Widget _buildScreen() => switch (_selectedIndex) {
               },
             )),
 
-            // User profile at bottom
             Container(
               padding: const EdgeInsets.all(16),
               decoration: const BoxDecoration(border: Border(top: BorderSide(color: Color(0xFF1A3A5C)))),
@@ -147,19 +142,17 @@ Widget _buildScreen() => switch (_selectedIndex) {
           ]),
         ),
 
-        // Main Content
         Expanded(child: _buildScreen()),
       ]),
 
-      // Mobile bottom nav
       bottomNavigationBar: isWide ? null : NavigationBar(
         selectedIndex: _selectedIndex.clamp(0, 4),
         onDestinationSelected: (i) => setState(() => _selectedIndex = i),
         destinations: const [
           NavigationDestination(icon: Icon(Icons.dashboard_rounded), label: 'Dashboard'),
+          NavigationDestination(icon: Icon(Icons.people_alt_rounded), label: 'Clients'),
           NavigationDestination(icon: Icon(Icons.folder_rounded), label: 'Projects'),
           NavigationDestination(icon: Icon(Icons.access_time_rounded), label: 'Time'),
-          NavigationDestination(icon: Icon(Icons.calculate_rounded), label: 'Estimate'),
           NavigationDestination(icon: Icon(Icons.more_horiz_rounded), label: 'More'),
         ],
       ),
