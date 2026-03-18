@@ -4,7 +4,15 @@ import '../models/client.dart';
 class ClientService {
   final _supabase = Supabase.instance.client;
 
-  // Get all active clients for this company
+  Future<String> _getCompanyId() async {
+    final profile = await _supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', _supabase.auth.currentUser!.id)
+        .single();
+    return profile['company_id'] as String;
+  }
+
   Future<List<Client>> getClients() async {
     final response = await _supabase
         .from('clients')
@@ -15,7 +23,6 @@ class ClientService {
     return (response as List).map((json) => Client.fromJson(json)).toList();
   }
 
-  // Get a single client by ID
   Future<Client> getClient(String id) async {
     final response = await _supabase
         .from('clients')
@@ -26,28 +33,21 @@ class ClientService {
     return Client.fromJson(response);
   }
 
-  // Create a new client
-Future<Client> createClient(Client client) async {
-    final profile = await _supabase
-        .from('profiles')
-        .select('company_id')
-        .eq('id', _supabase.auth.currentUser!.id)
-        .single();
+  Future<Client> createClient(Client client) async {
+    final companyId = await _getCompanyId();
 
     final response = await _supabase
         .from('clients')
         .insert({
           ...client.toJson(),
-          'company_id': profile['company_id'],
+          'company_id': companyId,
         })
         .select()
         .single();
 
     return Client.fromJson(response);
   }
-  }
 
-  // Update an existing client
   Future<Client> updateClient(String id, Client client) async {
     final response = await _supabase
         .from('clients')
@@ -59,7 +59,6 @@ Future<Client> createClient(Client client) async {
     return Client.fromJson(response);
   }
 
-  // Soft delete a client
   Future<void> deleteClient(String id) async {
     await _supabase
         .from('clients')
