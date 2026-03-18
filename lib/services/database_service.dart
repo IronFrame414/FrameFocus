@@ -13,7 +13,13 @@ class DatabaseService {
     return data.map((m) => Project.fromMap(m)).toList();
   }
 
-  Future<Project> createProject(Project p) async {
+Future<Project> createProject(Project p) async {
+    final profile = await _db
+        .from('profiles')
+        .select('company_id')
+        .eq('id', _db.auth.currentUser!.id)
+        .single();
+
     final map = <String, dynamic>{
       'name': p.name,
       'description': p.description,
@@ -23,6 +29,7 @@ class DatabaseService {
       'state': p.state,
       'zip': p.zip,
       'budget': p.budget,
+      'company_id': profile['company_id'],
     };
     if (p.startDate != null) map['start_date'] = p.startDate!.toIso8601String().split('T').first;
     if (p.endDate != null) map['end_date'] = p.endDate!.toIso8601String().split('T').first;
