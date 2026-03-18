@@ -33,17 +33,18 @@ class _AppShellState extends State<AppShell> {
     _NavItem(Icons.inventory_2_rounded, 'Cost Catalog'),
   ];
 
-  Widget _buildScreen() => switch (_selectedIndex) {
+Widget _buildScreen() => switch (_selectedIndex) {
     0 => DashboardScreen(onNavigate: (i) => setState(() => _selectedIndex = i)),
-    1 => const ProjectsScreen(),
-    2 => const DailyLogScreen(),
-    3 => const TimeTrackingScreen(),
-    4 => const EstimatingScreen(),
-    5 => const ChangeOrdersScreen(),
-    6 => const BidRequestsScreen(),
-    7 => const CatalogScreen(),
-    8 => const ClientsScreen(),
+    1 => const ClientsScreen(),
+    2 => const ProjectsScreen(),
+    3 => const DailyLogScreen(),
+    4 => const TimeTrackingScreen(),
+    5 => const EstimatingScreen(),
+    6 => const ChangeOrdersScreen(),
+    7 => const BidRequestsScreen(),
+    8 => const CatalogScreen(),
     _ => const DashboardScreen(),
+  };
   };
 
   @override
