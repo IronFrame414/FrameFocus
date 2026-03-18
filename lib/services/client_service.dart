@@ -27,17 +27,24 @@ class ClientService {
   }
 
   // Create a new client
-  Future<Client> createClient(Client client) async {
+Future<Client> createClient(Client client) async {
+    final profile = await _supabase
+        .from('profiles')
+        .select('company_id')
+        .eq('id', _supabase.auth.currentUser!.id)
+        .single();
+
     final response = await _supabase
         .from('clients')
         .insert({
           ...client.toJson(),
-          'company_id': _supabase.auth.currentUser!.id,
+          'company_id': profile['company_id'],
         })
         .select()
         .single();
 
     return Client.fromJson(response);
+  }
   }
 
   // Update an existing client
