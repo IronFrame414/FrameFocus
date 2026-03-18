@@ -23,6 +23,7 @@ class _AppShellState extends State<AppShell> {
 
   static const _navItems = [
     _NavItem(Icons.dashboard_rounded, 'Dashboard'),
+    _NavItem(Icons.people_alt_rounded, 'Clients'),
     _NavItem(Icons.folder_rounded, 'Projects'),
     _NavItem(Icons.calendar_today_rounded, 'Daily Logs'),
     _NavItem(Icons.people_rounded, 'Time Tracking'),
@@ -30,7 +31,6 @@ class _AppShellState extends State<AppShell> {
     _NavItem(Icons.receipt_long_rounded, 'Change Orders'),
     _NavItem(Icons.gavel_rounded, 'Bid Requests'),
     _NavItem(Icons.inventory_2_rounded, 'Cost Catalog'),
-    _NavItem(Icons.people_alt_rounded, 'Clients'),
   ];
 
   Widget _buildScreen() => switch (_selectedIndex) {
