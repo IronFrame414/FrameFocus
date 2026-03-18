@@ -10,6 +10,7 @@ import 'time_tracking_screen.dart';
 import 'bid_requests_screen.dart';
 import 'daily_log_screen.dart';
 import 'estimating_screen.dart';
+import 'clients_screen.dart';
 
 class AppShell extends StatefulWidget {
   const AppShell({super.key});
@@ -29,6 +30,7 @@ class _AppShellState extends State<AppShell> {
     _NavItem(Icons.receipt_long_rounded, 'Change Orders'),
     _NavItem(Icons.gavel_rounded, 'Bid Requests'),
     _NavItem(Icons.inventory_2_rounded, 'Cost Catalog'),
+    _NavItem(Icons.people_alt_rounded, 'Clients'),
   ];
 
   Widget _buildScreen() => switch (_selectedIndex) {
@@ -40,6 +42,7 @@ class _AppShellState extends State<AppShell> {
     5 => const ChangeOrdersScreen(),
     6 => const BidRequestsScreen(),
     7 => const CatalogScreen(),
+    8 => const ClientsScreen(),
     _ => const DashboardScreen(),
   };
 
