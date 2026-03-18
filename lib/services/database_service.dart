@@ -27,6 +27,7 @@ class DatabaseService {
     if (p.startDate != null) map['start_date'] = p.startDate!.toIso8601String().split('T').first;
     if (p.endDate != null) map['end_date'] = p.endDate!.toIso8601String().split('T').first;
     if (p.ownerId != null) map['owner_id'] = p.ownerId;
+    if (p.clientId != null) map['client_id'] = p.clientId;
     final data = await _db.from('projects').insert(map).select().single();
     return Project.fromMap(data);
   }
