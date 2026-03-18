@@ -55,13 +55,15 @@ class Project {
   final double budget;
   final int? ownerId;
   final String? ownerName;
+  final String? clientId;
   final DateTime? createdAt, updatedAt;
 
-  Project({
+Project({
     this.id, required this.name, this.description, this.status = 'planning',
     this.address, this.city, this.state, this.zip, this.lat, this.lng,
     this.startDate, this.endDate, this.budget = 0, this.ownerId,
-    this.ownerName, this.createdAt, this.updatedAt,
+    this.ownerName, this.clientId, this.createdAt, this.updatedAt,
+  });
   });
 
   factory Project.fromMap(Map<String, dynamic> m) => Project(
@@ -84,7 +86,7 @@ class Project {
     'lat': lat, 'lng': lng,
     'start_date': startDate?.toIso8601String().split('T').first,
     'end_date': endDate?.toIso8601String().split('T').first,
-    'budget': budget, 'owner_id': ownerId,
+    'budget': budget, 'owner_id': ownerId, 'client_id': clientId,
   };
 
   String get location {
