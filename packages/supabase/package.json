@@ -1,0 +1,16 @@
+{
+  "name": "@framefocus/supabase",
+  "version": "0.0.1",
+  "private": true,
+  "scripts": {
+    "type-check": "tsc --noEmit",
+    "gen-types": "npx supabase gen types typescript --project-id YOUR_PROJECT_ID > types/database.ts"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "supabase": "^2.15.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.0"
+  }
+}
