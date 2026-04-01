@@ -1,6 +1,12 @@
 // ── Role Definitions ──
 
-export const COMPANY_ROLES = ['owner', 'project_manager', 'foreman', 'crew_member', 'client'] as const;
+export const COMPANY_ROLES = [
+  'owner',
+  'project_manager',
+  'foreman',
+  'crew_member',
+  'client',
+] as const;
 
 export const ROLE_LABELS: Record<string, string> = {
   owner: 'Owner',
@@ -63,3 +69,4 @@ export const MODULE_STATUS = {
   IN_PROGRESS: 'in_progress',
   COMPLETE: 'complete',
 } as const;
+export * from './roles';

@@ -63,3 +63,4 @@ export interface BaseEntity {
   is_deleted: boolean;
   deleted_at?: string;
 }
+export * from './roles';
