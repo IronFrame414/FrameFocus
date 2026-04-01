@@ -31,6 +31,7 @@ export function DashboardShell({ children, userName, userRole, companyName }: Da
           </h1>
           <p className="mt-1 text-sm text-brand-300">{companyName}</p>
         </div>
+
         <nav className="flex-1 px-4 space-y-1">
           <Link
             href="/dashboard"
@@ -44,15 +45,14 @@ export function DashboardShell({ children, userName, userRole, companyName }: Da
           >
             Settings
           </Link>
+          <Link
+            href="/dashboard/team"
+            className="flex items-center rounded-lg px-3 py-2 text-sm font-medium text-brand-100 hover:bg-brand-800"
+          >
+            Team
+          </Link>
         </nav>
-        <Link
-          href="/dashboard/team"
-          className="flex items-center rounded-lg px-3 py-2 text-sm font-medium text-brand-100 hover:bg-brand-800"
-        >
-          Team
-        </Link>
-        ``` Save, then commit everything: ``` git add apps/web/ ``` ``` git commit -m "[Settings]
-        Add team management page and nav link" ``` ``` git push
+
         <div className="border-t border-brand-800 p-4">
           <div className="mb-3">
             <p className="text-sm font-medium text-white">{userName}</p>

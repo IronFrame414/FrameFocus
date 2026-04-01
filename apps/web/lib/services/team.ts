@@ -15,8 +15,10 @@ export interface Invitation {
   status: string;
   created_at: string;
   expires_at: string;
+  token?: string;
 }
 
+/** Fetch all active team members for the current user's company */
 export async function getTeamMembers(supabase: SupabaseClient) {
   const { data, error } = await supabase
     .from('profiles')
@@ -28,6 +30,7 @@ export async function getTeamMembers(supabase: SupabaseClient) {
   return data as TeamMember[];
 }
 
+/** Fetch all pending invitations for the current user's company */
 export async function getPendingInvitations(supabase: SupabaseClient) {
   const { data, error } = await supabase
     .from('invitations')
@@ -40,6 +43,7 @@ export async function getPendingInvitations(supabase: SupabaseClient) {
   return data as Invitation[];
 }
 
+/** Cancel a pending invitation */
 export async function cancelInvitation(supabase: SupabaseClient, invitationId: string) {
   const { error } = await supabase
     .from('invitations')
@@ -47,4 +51,30 @@ export async function cancelInvitation(supabase: SupabaseClient, invitationId: s
     .eq('id', invitationId);
 
   if (error) throw error;
+}
+
+/** Create a new invitation and return the record (including token) */
+export async function createInvitation(
+  supabase: SupabaseClient,
+  params: {
+    companyId: string;
+    email: string;
+    role: string;
+    invitedBy: string;
+  }
+) {
+  const { data, error } = await supabase
+    .from('invitations')
+    .insert({
+      company_id: params.companyId,
+      email: params.email,
+      role: params.role,
+      invited_by: params.invitedBy,
+      created_by: params.invitedBy,
+    })
+    .select('id, email, role, token, expires_at')
+    .single();
+
+  if (error) throw error;
+  return data as Invitation;
 }
