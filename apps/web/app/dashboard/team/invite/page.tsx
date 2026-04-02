@@ -16,7 +16,7 @@ export default async function InvitePage() {
   const { data: profile } = await supabase
     .from('profiles')
     .select('role, company_id')
-    .eq('id', user.id)
+    .eq('user_id', user.id)
     .single();
 
   if (!profile || profile.role !== 'owner') {
