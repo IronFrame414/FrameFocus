@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
+import { getSeatUsage } from '@/lib/services/seats';
 import InviteForm from './invite-form';
 
 export default async function InvitePage() {
@@ -23,9 +24,15 @@ export default async function InvitePage() {
     redirect('/dashboard');
   }
 
+  const seatUsage = await getSeatUsage();
+
   return (
     <div className="p-6 max-w-lg mx-auto">
-      <InviteForm companyId={profile.company_id} invitedBy={user.id} />
+      <InviteForm
+        companyId={profile.company_id}
+        invitedBy={user.id}
+        seatUsage={seatUsage}
+      />
     </div>
   );
 }

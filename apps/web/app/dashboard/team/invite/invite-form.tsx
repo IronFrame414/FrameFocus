@@ -32,18 +32,30 @@ const INVITABLE_ROLES = [
   },
 ];
 
+interface SeatUsage {
+  used: number;
+  limit: number;
+  remaining: number;
+  canInvite: boolean;
+}
+
 interface InviteFormProps {
   companyId: string;
   invitedBy: string;
+  seatUsage: SeatUsage | null;
 }
 
-export default function InviteForm({ companyId, invitedBy }: InviteFormProps) {
+export default function InviteForm({ companyId, invitedBy, seatUsage }: InviteFormProps) {
   const supabase = createClient();
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
+
+  // Client invites don't count toward seat limits
+  const isClientRole = role === 'client';
+  const seatsBlocked = seatUsage && !seatUsage.canInvite && !isClientRole;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -52,6 +64,14 @@ export default function InviteForm({ companyId, invitedBy }: InviteFormProps) {
 
     if (!email || !role) {
       setError('Please enter an email and select a role.');
+      return;
+    }
+
+    // Block if seats are full (except for client invites)
+    if (seatsBlocked) {
+      setError(
+        `Your plan allows ${seatUsage!.limit} team members. You're using ${seatUsage!.used}. Upgrade your plan to invite more.`
+      );
       return;
     }
 
@@ -95,6 +115,24 @@ export default function InviteForm({ companyId, invitedBy }: InviteFormProps) {
         <h1 className="text-2xl font-bold text-gray-900 mt-2">Invite Team Member</h1>
         <p className="text-sm text-gray-500 mt-1">Send an invitation to join your company.</p>
       </div>
+
+      {/* Seat usage banner */}
+      {seatUsage && (
+        <div
+          className={`mb-4 rounded-lg border p-3 text-sm ${
+            seatUsage.canInvite
+              ? 'bg-gray-50 border-gray-200 text-gray-600'
+              : 'bg-yellow-50 border-yellow-200 text-yellow-800'
+          }`}
+        >
+          <span className="font-medium">
+            {seatUsage.used} of {seatUsage.limit} team seats used.
+          </span>
+          {seatUsage.remaining > 0
+            ? ` ${seatUsage.remaining} seat${seatUsage.remaining === 1 ? '' : 's'} remaining.`
+            : ' Upgrade your plan to add more team members. Client invites are always unlimited.'}
+        </div>
+      )}
 
       {inviteLink ? (
         <div className="bg-green-50 border border-green-200 rounded-lg p-6">
@@ -179,7 +217,7 @@ export default function InviteForm({ companyId, invitedBy }: InviteFormProps) {
 
             <button
               onClick={handleSubmit}
-              disabled={loading}
+              disabled={loading || (!!seatsBlocked && !isClientRole)}
               className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
               {loading ? 'Creating invitation...' : 'Send Invitation'}

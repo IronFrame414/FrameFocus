@@ -51,6 +51,14 @@ export function DashboardShell({ children, userName, userRole, companyName }: Da
           >
             Team
           </Link>
+          {userRole === 'owner' && (
+            <Link
+              href="/dashboard/billing"
+              className="flex items-center rounded-lg px-3 py-2 text-sm font-medium text-brand-100 hover:bg-brand-800"
+            >
+              Billing
+            </Link>
+          )}
         </nav>
 
         <div className="border-t border-brand-800 p-4">
