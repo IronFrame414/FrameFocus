@@ -19,7 +19,7 @@ export default async function InvitePage() {
     .eq('user_id', user.id)
     .single();
 
-  if (!profile || profile.role !== 'owner') {
+  if (!profile || (profile.role !== 'owner' && profile.role !== 'admin')) {
     redirect('/dashboard');
   }
 
