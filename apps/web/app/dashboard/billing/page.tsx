@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase-server';
 import { getSubscription, getTrialDaysRemaining } from '@/lib/services/billing';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
+import { ManageSubscriptionButton } from './manage-subscription-button';
 
 export default async function BillingPage() {
   const supabase = await createClient();
@@ -11,7 +12,6 @@ export default async function BillingPage() {
 
   if (!user) redirect('/sign-in');
 
-  // Check if user is owner
   const { data: profile } = await supabase
     .from('profiles')
     .select('role')
@@ -52,6 +52,8 @@ export default async function BillingPage() {
     unpaid: 'bg-red-100 text-red-800',
     incomplete: 'bg-gray-100 text-gray-800',
   };
+
+  const hasStripeSubscription = !!subscription.stripe_subscription_id;
 
   return (
     <div className="max-w-2xl mx-auto py-8 px-4">
@@ -127,6 +129,7 @@ export default async function BillingPage() {
               ? 'Choose a Plan'
               : 'Change Plan'}
           </Link>
+          {hasStripeSubscription && <ManageSubscriptionButton />}
         </div>
       </div>
     </div>

@@ -8,12 +8,6 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-const SEAT_LIMITS: Record<string, number> = {
-  starter: 2,
-  professional: 5,
-  business: 15,
-};
-
 export async function POST(request: NextRequest) {
   const body = await request.text();
   const signature = request.headers.get('stripe-signature');
@@ -44,7 +38,6 @@ export async function POST(request: NextRequest) {
             session.subscription as string
           );
 
-          // Get period dates from the first subscription item
           const item = stripeSubscription.items.data[0];
 
           await supabaseAdmin
@@ -69,7 +62,6 @@ export async function POST(request: NextRequest) {
             })
             .eq('company_id', companyId);
 
-          // Save Stripe customer ID to company if not already set
           if (session.customer) {
             await supabaseAdmin
               .from('companies')
@@ -83,7 +75,16 @@ export async function POST(request: NextRequest) {
 
       case 'customer.subscription.updated': {
         const subscription = event.data.object;
-        const companyId = subscription.metadata?.company_id;
+        let companyId = subscription.metadata?.company_id;
+
+        if (!companyId) {
+          const { data: existing } = await supabaseAdmin
+            .from('subscriptions')
+            .select('company_id')
+            .eq('stripe_subscription_id', subscription.id)
+            .single();
+          companyId = existing?.company_id;
+        }
 
         if (companyId) {
           const planTier = subscription.metadata?.plan_tier || 'starter';
@@ -114,7 +115,16 @@ export async function POST(request: NextRequest) {
 
       case 'customer.subscription.deleted': {
         const subscription = event.data.object;
-        const companyId = subscription.metadata?.company_id;
+        let companyId = subscription.metadata?.company_id;
+
+        if (!companyId) {
+          const { data: existing } = await supabaseAdmin
+            .from('subscriptions')
+            .select('company_id')
+            .eq('stripe_subscription_id', subscription.id)
+            .single();
+          companyId = existing?.company_id;
+        }
 
         if (companyId) {
           await supabaseAdmin

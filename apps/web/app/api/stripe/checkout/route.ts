@@ -3,9 +3,9 @@ import { createClient } from '@/lib/supabase-server';
 import { stripe } from '@/lib/stripe';
 
 const PRICE_IDS: Record<string, string> = {
-  starter: 'price_XXXXXXXXXXXXX', // ← Replace with your real Starter price ID
-  professional: 'price_XXXXXXXXXXXXX', // ← Replace with your real Professional price ID
-  business: 'price_XXXXXXXXXXXXX', // ← Replace with your real Business price ID
+  starter: process.env.STRIPE_PRICE_STARTER!,
+  professional: process.env.STRIPE_PRICE_PROFESSIONAL!,
+  business: process.env.STRIPE_PRICE_BUSINESS!,
 };
 
 const SEAT_LIMITS: Record<string, number> = {

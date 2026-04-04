@@ -2,13 +2,12 @@ import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { DashboardShell } from './dashboard-shell';
 
-export default async function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   if (!user) {
     redirect('/sign-in');
@@ -20,16 +19,20 @@ export default async function DashboardLayout({
     .eq('user_id', user.id)
     .single();
 
+  if (!profile) {
+    redirect('/sign-in');
+  }
+
   const { data: company } = await supabase
     .from('companies')
     .select('name')
-    .eq('id', profile?.company_id ?? '')
+    .eq('id', profile.company_id)
     .single();
 
   return (
     <DashboardShell
-      userName={profile ? `${profile.first_name} ${profile.last_name}` : user.email ?? 'User'}
-      userRole={profile?.role ?? 'owner'}
+      userName={`${profile.first_name} ${profile.last_name}`}
+      userRole={profile.role}
       companyName={company?.name ?? 'My Company'}
     >
       {children}
