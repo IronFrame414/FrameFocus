@@ -174,7 +174,8 @@ Build order follows strict dependency chain. Each module depends on the ones abo
 2. **Never replace QuickBooks for accounting.** No P&L, no tax prep, no bank reconciliation in FrameFocus.
 3. **QB handles 1099s.** Vendor records with EINs and payment totals sync from FrameFocus; QB generates the actual 1099 filings.
 4. **Timeclock flow:** Crew member clocks in/out on mobile → Foreman/PM approves timesheet → approved hours sync to QB as time entries tied to employee + job → QB handles payroll.
-5. **Build during Modules 6 and 7.** QB connection UI lives in Company Settings. Each financial action optionally syncs.
+5. **Vendor markup flows into estimates.** When a vendor is selected for estimate line items, their `default_markup_percent` auto-populates the markup column. Can be overridden per line item. Actual cost vs. marked-up price feeds profit tracking in Module 9.
+6. **Build during Modules 6 and 7.** QB connection UI lives in Company Settings. Each financial action optionally syncs.
 
 ---
 
@@ -226,7 +227,7 @@ PM creates CO → Owner notified → Owner approves → (if client-facing) clien
 ### Module 2 Tables
 
 - `contacts` — leads and clients. Fields: contact_type (lead/client), status, first_name, last_name, company_name, email, phone, mobile, address fields, source, notes, tags[]
-- `subcontractors` — subs and vendors. Fields: sub_type (subcontractor/vendor), status, company_name, contact_first_name, contact_last_name, email, phone, mobile, address fields, trade_type, license_number, insurance_expiry, rating (1-5), rating_notes, ein, default_hourly_rate, preferred, notes, tags[]
+- `subcontractors` — subs and vendors. Fields: sub_type (subcontractor/vendor), status, company_name, contact_first_name, contact_last_name, email, phone, mobile, address fields, trade_type, license_number, insurance_expiry, rating (1-5), rating_notes, ein, default_hourly_rate, default_markup_percent, preferred, notes, tags[]
 
 ### Storage Buckets
 
@@ -437,6 +438,7 @@ NEXT_PUBLIC_APP_URL=https://frame-focus-eight.vercel.app
 9. 009 — company settings columns + logo storage bucket
 10. 010 — contacts and subcontractors tables with RLS
 11. 011 — subcontractor extras (ein, default_hourly_rate, preferred)
+12. 012 — vendor default_markup_percent
 
 ---
 

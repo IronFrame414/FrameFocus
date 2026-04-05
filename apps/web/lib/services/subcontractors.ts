@@ -23,6 +23,7 @@ export interface Subcontractor {
   rating_notes: string | null;
   ein: string | null;
   default_hourly_rate: number | null;
+  default_markup_percent: number | null;
   preferred: boolean;
   notes: string | null;
   tags: string[];

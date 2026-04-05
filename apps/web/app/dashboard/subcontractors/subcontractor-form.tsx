@@ -64,6 +64,7 @@ export function SubcontractorForm({ existing }: SubcontractorFormProps) {
     rating_notes: existing?.rating_notes || '',
     ein: existing?.ein || '',
     default_hourly_rate: existing?.default_hourly_rate ?? '',
+    default_markup_percent: existing?.default_markup_percent ?? '',
     preferred: existing?.preferred ?? false,
     notes: existing?.notes || '',
   });
@@ -109,6 +110,7 @@ export function SubcontractorForm({ existing }: SubcontractorFormProps) {
       rating_notes: form.rating_notes.trim() || null,
       ein: form.ein.trim() || null,
       default_hourly_rate: form.default_hourly_rate !== '' ? Number(form.default_hourly_rate) : null,
+      default_markup_percent: form.default_markup_percent !== '' ? Number(form.default_markup_percent) : null,
       preferred: form.preferred,
       notes: form.notes.trim() || null,
     };
@@ -236,6 +238,14 @@ export function SubcontractorForm({ existing }: SubcontractorFormProps) {
             <label style={labelStyle}>Default Hourly Rate</label>
             <input name="default_hourly_rate" type="number" step="0.01" value={form.default_hourly_rate} onChange={handleChange} style={inputStyle} placeholder="0.00" />
           </div>
+        </div>
+        <div style={gridTwoCol}>
+          <div>
+            <label style={labelStyle}>Standard Markup %</label>
+            <input name="default_markup_percent" type="number" step="0.5" value={form.default_markup_percent} onChange={handleChange} style={inputStyle} placeholder="e.g. 20" />
+            <p style={{ fontSize: "0.75rem", color: "#9ca3af", marginTop: "0.25rem" }}>Auto-applied when this vendor is used in estimates</p>
+          </div>
+          <div></div>
         </div>
         <div style={{ marginTop: '1rem' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
