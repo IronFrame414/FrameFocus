@@ -45,12 +45,14 @@ export function DashboardShell({ children, userName, userRole, companyName }: Da
           >
             Settings
           </Link>
-          <Link
-            href="/dashboard/team"
-            className="flex items-center rounded-lg px-3 py-2 text-sm font-medium text-brand-100 hover:bg-brand-800"
-          >
-            Team
-          </Link>
+{(userRole === 'owner' || userRole === 'admin') && (
+            <Link
+              href="/dashboard/settings"
+              className="flex items-center rounded-lg px-3 py-2 text-sm font-medium text-brand-100 hover:bg-brand-800"
+            >
+              Settings
+            </Link>
+          )}
           {userRole === 'owner' && (
             <Link
               href="/dashboard/billing"
