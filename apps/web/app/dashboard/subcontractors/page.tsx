@@ -32,7 +32,7 @@ export default async function SubcontractorsPage() {
           </p>
         </div>
         {profile && ['owner', 'admin', 'project_manager'].includes(profile.role) && (
-          
+          <a
             href="/dashboard/subcontractors/new"
             style={{
               padding: '0.5rem 1rem',

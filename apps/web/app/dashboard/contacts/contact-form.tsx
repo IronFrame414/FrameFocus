@@ -279,7 +279,7 @@ export function ContactForm({ existing }: ContactFormProps) {
         >
           {saving ? 'Saving...' : isEdit ? 'Update Contact' : 'Create Contact'}
         </button>
-        
+        <a
           href="/dashboard/contacts"
           style={{
             padding: '0.625rem 1.5rem',

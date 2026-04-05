@@ -363,7 +363,8 @@ export function SubcontractorForm({ existing }: SubcontractorFormProps) {
           {saving ? 'Saving...' : isEdit ? 'Update' : 'Create'}
         </button>
         
-          href="/dashboard/subcontractors"
+          <a
+            href="/dashboard/subcontractors"
           style={{
             padding: '0.625rem 1.5rem',
             fontSize: '0.875rem',

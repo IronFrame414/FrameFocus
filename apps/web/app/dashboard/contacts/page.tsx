@@ -32,7 +32,7 @@ export default async function ContactsPage() {
           </p>
         </div>
         {profile && ['owner', 'admin', 'project_manager'].includes(profile.role) && (
-          
+          <a
             href="/dashboard/contacts/new"
             style={{
               padding: '0.5rem 1rem',
