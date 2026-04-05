@@ -156,6 +156,7 @@ export function ContactsList({ contacts, canEdit }: ContactsListProps) {
                     <td style={{ padding: '0.75rem 0.5rem' }}>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
                         
+                          <a
                           href={`/dashboard/contacts/${c.id}/edit`}
                           style={{ color: '#2563eb', textDecoration: 'none', fontSize: '0.875rem' }}
                         >
