@@ -1,0 +1,2 @@
+-- Migration 010: Contacts & Subcontractors tables
+-- (paste same SQL as above — this is just for version control)

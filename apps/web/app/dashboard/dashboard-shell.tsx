@@ -34,10 +34,16 @@ export function DashboardShell({ children, userName, userRole, companyName }: Da
 
         <nav className="flex-1 px-4 space-y-1">
           <Link
-            href="/dashboard"
+            href="/dashboard/contacts"
             className="flex items-center rounded-lg px-3 py-2 text-sm font-medium text-brand-100 hover:bg-brand-800"
           >
-            Dashboard
+            Contacts
+          </Link>
+          <Link
+            href="/dashboard/subcontractors"
+            className="flex items-center rounded-lg px-3 py-2 text-sm font-medium text-brand-100 hover:bg-brand-800"
+          >
+            Subs & Vendors
           </Link>
           <Link
             href="/dashboard/settings"
@@ -45,7 +51,7 @@ export function DashboardShell({ children, userName, userRole, companyName }: Da
           >
             Settings
           </Link>
-{(userRole === 'owner' || userRole === 'admin') && (
+          {(userRole === 'owner' || userRole === 'admin') && (
             <Link
               href="/dashboard/settings"
               className="flex items-center rounded-lg px-3 py-2 text-sm font-medium text-brand-100 hover:bg-brand-800"
