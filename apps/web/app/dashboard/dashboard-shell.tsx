@@ -1,27 +1,22 @@
 'use client';
-
 import { createClient } from '@/lib/supabase-browser';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ROLE_LABELS } from '@framefocus/shared';
-
 interface DashboardShellProps {
   children: React.ReactNode;
   userName: string;
   userRole: string;
   companyName: string;
 }
-
 export function DashboardShell({ children, userName, userRole, companyName }: DashboardShellProps) {
   const router = useRouter();
-
   async function handleSignOut() {
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push('/sign-in');
     router.refresh();
   }
-
   return (
     <div className="flex min-h-screen bg-gray-50">
       <aside className="flex w-64 flex-col bg-brand-900 text-white">
@@ -31,8 +26,13 @@ export function DashboardShell({ children, userName, userRole, companyName }: Da
           </h1>
           <p className="mt-1 text-sm text-brand-300">{companyName}</p>
         </div>
-
         <nav className="flex-1 px-4 space-y-1">
+          <Link
+            href="/dashboard"
+            className="flex items-center rounded-lg px-3 py-2 text-sm font-medium text-brand-100 hover:bg-brand-800"
+          >
+            Dashboard
+          </Link>
           <Link
             href="/dashboard/contacts"
             className="flex items-center rounded-lg px-3 py-2 text-sm font-medium text-brand-100 hover:bg-brand-800"
@@ -45,12 +45,6 @@ export function DashboardShell({ children, userName, userRole, companyName }: Da
           >
             Subs & Vendors
           </Link>
-          <Link
-            href="/dashboard/settings"
-            className="flex items-center rounded-lg px-3 py-2 text-sm font-medium text-brand-100 hover:bg-brand-800"
-          >
-            Settings
-          </Link>
           {(userRole === 'owner' || userRole === 'admin') && (
             <Link
               href="/dashboard/settings"
@@ -59,6 +53,12 @@ export function DashboardShell({ children, userName, userRole, companyName }: Da
               Settings
             </Link>
           )}
+          <Link
+            href="/dashboard/team"
+            className="flex items-center rounded-lg px-3 py-2 text-sm font-medium text-brand-100 hover:bg-brand-800"
+          >
+            Team
+          </Link>
           {userRole === 'owner' && (
             <Link
               href="/dashboard/billing"
@@ -68,7 +68,6 @@ export function DashboardShell({ children, userName, userRole, companyName }: Da
             </Link>
           )}
         </nav>
-
         <div className="border-t border-brand-800 p-4">
           <div className="mb-3">
             <p className="text-sm font-medium text-white">{userName}</p>
@@ -82,7 +81,6 @@ export function DashboardShell({ children, userName, userRole, companyName }: Da
           </button>
         </div>
       </aside>
-
       <main className="flex-1 p-8">{children}</main>
     </div>
   );
