@@ -21,6 +21,9 @@ export interface Subcontractor {
   insurance_expiry: string | null;
   rating: number | null;
   rating_notes: string | null;
+  ein: string | null;
+  default_hourly_rate: number | null;
+  preferred: boolean;
   notes: string | null;
   tags: string[];
   created_at: string;

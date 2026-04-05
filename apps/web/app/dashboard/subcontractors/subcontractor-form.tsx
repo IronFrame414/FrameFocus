@@ -62,6 +62,9 @@ export function SubcontractorForm({ existing }: SubcontractorFormProps) {
     insurance_expiry: existing?.insurance_expiry || '',
     rating: existing?.rating ?? 0,
     rating_notes: existing?.rating_notes || '',
+    ein: existing?.ein || '',
+    default_hourly_rate: existing?.default_hourly_rate ?? '',
+    preferred: existing?.preferred ?? false,
     notes: existing?.notes || '',
   });
 
@@ -72,7 +75,7 @@ export function SubcontractorForm({ existing }: SubcontractorFormProps) {
     const { name, value } = e.target;
     setForm((prev) => ({
       ...prev,
-      [name]: name === 'rating' ? parseInt(value) || 0 : value,
+      [name]: name === 'rating' ? parseInt(value) || 0 : name === 'preferred' ? !prev.preferred : value,
     }));
   }
 
@@ -104,6 +107,9 @@ export function SubcontractorForm({ existing }: SubcontractorFormProps) {
       insurance_expiry: form.insurance_expiry || null,
       rating: form.rating > 0 ? form.rating : null,
       rating_notes: form.rating_notes.trim() || null,
+      ein: form.ein.trim() || null,
+      default_hourly_rate: form.default_hourly_rate !== '' ? Number(form.default_hourly_rate) : null,
+      preferred: form.preferred,
       notes: form.notes.trim() || null,
     };
 
@@ -220,6 +226,22 @@ export function SubcontractorForm({ existing }: SubcontractorFormProps) {
         <div>
           <label style={labelStyle}>Insurance Expiry Date</label>
           <input name="insurance_expiry" type="date" value={form.insurance_expiry} onChange={handleChange} style={inputStyle} />
+        </div>
+        <div style={gridTwoCol}>
+          <div>
+            <label style={labelStyle}>EIN (Tax ID)</label>
+            <input name="ein" value={form.ein} onChange={handleChange} style={inputStyle} placeholder="XX-XXXXXXX" />
+          </div>
+          <div>
+            <label style={labelStyle}>Default Hourly Rate</label>
+            <input name="default_hourly_rate" type="number" step="0.01" value={form.default_hourly_rate} onChange={handleChange} style={inputStyle} placeholder="0.00" />
+          </div>
+        </div>
+        <div style={{ marginTop: '1rem' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+            <input type="checkbox" name="preferred" checked={form.preferred} onChange={handleChange} style={{ width: '1rem', height: '1rem' }} />
+            <span style={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>Preferred — show this sub/vendor first in lists and estimating</span>
+          </label>
         </div>
       </div>
 
