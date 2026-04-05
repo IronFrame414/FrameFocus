@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Contact } from '@/lib/services/contacts';
+import type { Contact } from '@/lib/services/contacts';
 import { deleteContact } from '@/lib/services/contacts-client';
 import { useRouter } from 'next/navigation';
 

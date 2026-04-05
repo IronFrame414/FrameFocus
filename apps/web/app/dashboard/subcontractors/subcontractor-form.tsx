@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createSubcontractor, updateSubcontractor } from '@/lib/services/subcontractors-client';
-import { Subcontractor } from '@/lib/services/subcontractors';
+import type { Subcontractor } from '@/lib/services/subcontractors';
 
 const TRADE_TYPES = [
   'General Contractor',

@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createContact, updateContact } from '@/lib/services/contacts-client';
-import { Contact } from '@/lib/services/contacts';
+import type { Contact } from '@/lib/services/contacts';
 
 const SOURCES = [
   { value: 'referral', label: 'Referral' },

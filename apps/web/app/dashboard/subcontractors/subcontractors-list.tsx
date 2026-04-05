@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Subcontractor } from '@/lib/services/subcontractors';
+import type { Subcontractor } from '@/lib/services/subcontractors';
 import { deleteSubcontractor } from '@/lib/services/subcontractors-client';
 import { useRouter } from 'next/navigation';
 
