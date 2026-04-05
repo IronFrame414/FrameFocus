@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { CompanyData, updateCompany, uploadCompanyLogo } from '@/lib/services/company';
+import { CompanyData, updateCompany, uploadCompanyLogo } from '@/lib/services/company-client';
 
 const TRADE_TYPES = [
   'General Contractor',
@@ -26,11 +26,57 @@ const TRADE_TYPES = [
 ];
 
 const US_STATES = [
-  'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA',
-  'HI','ID','IL','IN','IA','KS','KY','LA','ME','MD',
-  'MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ',
-  'NM','NY','NC','ND','OH','OK','OR','PA','RI','SC',
-  'SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC',
+  'AL',
+  'AK',
+  'AZ',
+  'AR',
+  'CA',
+  'CO',
+  'CT',
+  'DE',
+  'FL',
+  'GA',
+  'HI',
+  'ID',
+  'IL',
+  'IN',
+  'IA',
+  'KS',
+  'KY',
+  'LA',
+  'ME',
+  'MD',
+  'MA',
+  'MI',
+  'MN',
+  'MS',
+  'MO',
+  'MT',
+  'NE',
+  'NV',
+  'NH',
+  'NJ',
+  'NM',
+  'NY',
+  'NC',
+  'ND',
+  'OH',
+  'OK',
+  'OR',
+  'PA',
+  'RI',
+  'SC',
+  'SD',
+  'TN',
+  'TX',
+  'UT',
+  'VT',
+  'VA',
+  'WA',
+  'WV',
+  'WI',
+  'WY',
+  'DC',
 ];
 
 interface SettingsFormProps {
@@ -306,21 +352,11 @@ export function SettingsForm({ company }: SettingsFormProps) {
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '1rem' }}>
           <div>
             <label style={labelStyle}>City</label>
-            <input
-              name="city"
-              value={form.city}
-              onChange={handleChange}
-              style={inputStyle}
-            />
+            <input name="city" value={form.city} onChange={handleChange} style={inputStyle} />
           </div>
           <div>
             <label style={labelStyle}>State</label>
-            <select
-              name="state"
-              value={form.state}
-              onChange={handleChange}
-              style={inputStyle}
-            >
+            <select name="state" value={form.state} onChange={handleChange} style={inputStyle}>
               <option value="">--</option>
               {US_STATES.map((s) => (
                 <option key={s} value={s}>
