@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
-import { stripe } from '@/lib/stripe';
+import { getStripe } from '@/lib/stripe';
 
 const PRICE_IDS: Record<string, string> = {
   starter: process.env.STRIPE_PRICE_STARTER!,
@@ -15,6 +15,7 @@ const SEAT_LIMITS: Record<string, number> = {
 };
 
 export async function POST(request: NextRequest) {
+  const stripe = getStripe();
   try {
     const supabase = await createClient();
     const {
