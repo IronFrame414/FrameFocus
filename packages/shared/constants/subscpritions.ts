@@ -1,29 +1,3 @@
-// ── Role Definitions ──
-
-export const COMPANY_ROLES = [
-  'owner',
-  'project_manager',
-  'foreman',
-  'crew_member',
-  'client',
-] as const;
-
-export const ROLE_LABELS: Record<string, string> = {
-  owner: 'Owner',
-  project_manager: 'Project Manager',
-  foreman: 'Foreman',
-  crew_member: 'Crew Member',
-  client: 'Client',
-};
-
-export const ROLE_HIERARCHY: Record<string, number> = {
-  owner: 100,
-  project_manager: 80,
-  foreman: 60,
-  crew_member: 40,
-  client: 10,
-};
-
 // ── Subscription Tiers ──
 
 export const SUBSCRIPTION_TIERS = {
@@ -62,12 +36,4 @@ export const SUBSCRIPTION_TIERS = {
   },
 } as const;
 
-// ── Module Status ──
-
-export const MODULE_STATUS = {
-  NOT_STARTED: 'not_started',
-  IN_PROGRESS: 'in_progress',
-  COMPLETE: 'complete',
-} as const;
-export * from './roles';
-export * from './form-options';
+export type SubscriptionTier = keyof typeof SUBSCRIPTION_TIERS;

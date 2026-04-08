@@ -65,7 +65,8 @@ export function ContactsList({ contacts, canEdit }: ContactsListProps) {
     borderRadius: '9999px',
     fontSize: '0.75rem',
     fontWeight: 500 as const,
-    backgroundColor: status === 'active' ? '#dcfce7' : status === 'inactive' ? '#f3f4f6' : '#fef2f2',
+    backgroundColor:
+      status === 'active' ? '#dcfce7' : status === 'inactive' ? '#f3f4f6' : '#fef2f2',
     color: status === 'active' ? '#166534' : status === 'inactive' ? '#374151' : '#991b1b',
   });
 
@@ -84,12 +85,20 @@ export function ContactsList({ contacts, canEdit }: ContactsListProps) {
             minWidth: '200px',
           }}
         />
-        <select value={filterType} onChange={(e) => setFilterType(e.target.value)} style={selectStyle}>
+        <select
+          value={filterType}
+          onChange={(e) => setFilterType(e.target.value)}
+          style={selectStyle}
+        >
           <option value="all">All Types</option>
           <option value="lead">Leads</option>
           <option value="client">Clients</option>
         </select>
-        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} style={selectStyle}>
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+          style={selectStyle}
+        >
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
           <option value="archived">Archived</option>
@@ -104,13 +113,15 @@ export function ContactsList({ contacts, canEdit }: ContactsListProps) {
 
       {/* Table */}
       {filtered.length === 0 ? (
-        <div style={{
-          textAlign: 'center',
-          padding: '3rem',
-          color: '#9ca3af',
-          backgroundColor: '#f9fafb',
-          borderRadius: '0.5rem',
-        }}>
+        <div
+          style={{
+            textAlign: 'center',
+            padding: '3rem',
+            color: '#9ca3af',
+            backgroundColor: '#f9fafb',
+            borderRadius: '0.5rem',
+          }}
+        >
           No contacts found. {canEdit && 'Click "+ Add Contact" to get started.'}
         </div>
       ) : (
@@ -146,17 +157,12 @@ export function ContactsList({ contacts, canEdit }: ContactsListProps) {
                       {c.status.charAt(0).toUpperCase() + c.status.slice(1)}
                     </span>
                   </td>
-                  <td style={{ padding: '0.75rem 0.5rem', color: '#6b7280' }}>
-                    {c.email || '—'}
-                  </td>
-                  <td style={{ padding: '0.75rem 0.5rem', color: '#6b7280' }}>
-                    {c.phone || '—'}
-                  </td>
+                  <td style={{ padding: '0.75rem 0.5rem', color: '#6b7280' }}>{c.email || '—'}</td>
+                  <td style={{ padding: '0.75rem 0.5rem', color: '#6b7280' }}>{c.phone || '—'}</td>
                   {canEdit && (
                     <td style={{ padding: '0.75rem 0.5rem' }}>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        
-                          <a
+                        <a
                           href={`/dashboard/contacts/${c.id}/edit`}
                           style={{ color: '#2563eb', textDecoration: 'none', fontSize: '0.875rem' }}
                         >

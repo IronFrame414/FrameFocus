@@ -5,22 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createContact, updateContact } from '@/lib/services/contacts-client';
 import type { Contact } from '@/lib/services/contacts';
 
-const SOURCES = [
-  { value: 'referral', label: 'Referral' },
-  { value: 'website', label: 'Website' },
-  { value: 'google', label: 'Google' },
-  { value: 'social_media', label: 'Social Media' },
-  { value: 'repeat', label: 'Repeat Customer' },
-  { value: 'other', label: 'Other' },
-];
-
-const US_STATES = [
-  'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA',
-  'HI','ID','IL','IN','IA','KS','KY','LA','ME','MD',
-  'MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ',
-  'NM','NY','NC','ND','OH','OK','OR','PA','RI','SC',
-  'SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC',
-];
+import { LEAD_SOURCES, US_STATES } from '@framefocus/shared/constants';
 
 interface ContactFormProps {
   existing?: Contact;
@@ -51,7 +36,9 @@ export function ContactForm({ existing }: ContactFormProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
+  function handleChange(
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+  ) {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   }
 
@@ -139,7 +126,12 @@ export function ContactForm({ existing }: ContactFormProps) {
         <div style={gridTwoCol}>
           <div>
             <label style={labelStyle}>Type *</label>
-            <select name="contact_type" value={form.contact_type} onChange={handleChange} style={inputStyle}>
+            <select
+              name="contact_type"
+              value={form.contact_type}
+              onChange={handleChange}
+              style={inputStyle}
+            >
               <option value="lead">Lead</option>
               <option value="client">Client</option>
             </select>
@@ -161,23 +153,40 @@ export function ContactForm({ existing }: ContactFormProps) {
         <div style={{ ...gridTwoCol, marginBottom: '1rem' }}>
           <div>
             <label style={labelStyle}>First Name *</label>
-            <input name="first_name" value={form.first_name} onChange={handleChange} style={inputStyle} />
+            <input
+              name="first_name"
+              value={form.first_name}
+              onChange={handleChange}
+              style={inputStyle}
+            />
           </div>
           <div>
             <label style={labelStyle}>Last Name *</label>
-            <input name="last_name" value={form.last_name} onChange={handleChange} style={inputStyle} />
+            <input
+              name="last_name"
+              value={form.last_name}
+              onChange={handleChange}
+              style={inputStyle}
+            />
           </div>
         </div>
         <div style={{ marginBottom: '1rem' }}>
           <label style={labelStyle}>Company Name</label>
-          <input name="company_name" value={form.company_name} onChange={handleChange} style={inputStyle} />
+          <input
+            name="company_name"
+            value={form.company_name}
+            onChange={handleChange}
+            style={inputStyle}
+          />
         </div>
         <div>
           <label style={labelStyle}>Source</label>
           <select name="source" value={form.source} onChange={handleChange} style={inputStyle}>
             <option value="">Select source...</option>
-            {SOURCES.map((s) => (
-              <option key={s.value} value={s.value}>{s.label}</option>
+            {LEAD_SOURCES.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
             ))}
           </select>
         </div>
@@ -188,16 +197,34 @@ export function ContactForm({ existing }: ContactFormProps) {
         <div style={sectionTitleStyle}>Contact Information</div>
         <div style={{ marginBottom: '1rem' }}>
           <label style={labelStyle}>Email</label>
-          <input name="email" type="email" value={form.email} onChange={handleChange} style={inputStyle} />
+          <input
+            name="email"
+            type="email"
+            value={form.email}
+            onChange={handleChange}
+            style={inputStyle}
+          />
         </div>
         <div style={gridTwoCol}>
           <div>
             <label style={labelStyle}>Phone</label>
-            <input name="phone" value={form.phone} onChange={handleChange} style={inputStyle} placeholder="(555) 123-4567" />
+            <input
+              name="phone"
+              value={form.phone}
+              onChange={handleChange}
+              style={inputStyle}
+              placeholder="(555) 123-4567"
+            />
           </div>
           <div>
             <label style={labelStyle}>Mobile</label>
-            <input name="mobile" value={form.mobile} onChange={handleChange} style={inputStyle} placeholder="(555) 987-6543" />
+            <input
+              name="mobile"
+              value={form.mobile}
+              onChange={handleChange}
+              style={inputStyle}
+              placeholder="(555) 987-6543"
+            />
           </div>
         </div>
       </div>
@@ -207,11 +234,21 @@ export function ContactForm({ existing }: ContactFormProps) {
         <div style={sectionTitleStyle}>Address</div>
         <div style={{ marginBottom: '1rem' }}>
           <label style={labelStyle}>Address Line 1</label>
-          <input name="address_line1" value={form.address_line1} onChange={handleChange} style={inputStyle} />
+          <input
+            name="address_line1"
+            value={form.address_line1}
+            onChange={handleChange}
+            style={inputStyle}
+          />
         </div>
         <div style={{ marginBottom: '1rem' }}>
           <label style={labelStyle}>Address Line 2</label>
-          <input name="address_line2" value={form.address_line2} onChange={handleChange} style={inputStyle} />
+          <input
+            name="address_line2"
+            value={form.address_line2}
+            onChange={handleChange}
+            style={inputStyle}
+          />
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '1rem' }}>
           <div>
@@ -223,7 +260,9 @@ export function ContactForm({ existing }: ContactFormProps) {
             <select name="state" value={form.state} onChange={handleChange} style={inputStyle}>
               <option value="">--</option>
               {US_STATES.map((s) => (
-                <option key={s} value={s}>{s}</option>
+                <option key={s} value={s}>
+                  {s}
+                </option>
               ))}
             </select>
           </div>
@@ -249,14 +288,16 @@ export function ContactForm({ existing }: ContactFormProps) {
 
       {/* Error */}
       {error && (
-        <div style={{
-          padding: '0.75rem 1rem',
-          borderRadius: '0.375rem',
-          marginBottom: '1rem',
-          backgroundColor: '#fef2f2',
-          color: '#991b1b',
-          fontSize: '0.875rem',
-        }}>
+        <div
+          style={{
+            padding: '0.75rem 1rem',
+            borderRadius: '0.375rem',
+            marginBottom: '1rem',
+            backgroundColor: '#fef2f2',
+            color: '#991b1b',
+            fontSize: '0.875rem',
+          }}
+        >
           {error}
         </div>
       )}

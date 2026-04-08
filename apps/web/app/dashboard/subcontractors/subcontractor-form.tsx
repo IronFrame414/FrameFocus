@@ -5,35 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createSubcontractor, updateSubcontractor } from '@/lib/services/subcontractors-client';
 import type { Subcontractor } from '@/lib/services/subcontractors';
 
-const TRADE_TYPES = [
-  'General Contractor',
-  'Electrical',
-  'Plumbing',
-  'HVAC',
-  'Roofing',
-  'Painting',
-  'Concrete / Masonry',
-  'Framing / Carpentry',
-  'Flooring',
-  'Landscaping',
-  'Glazing / Aluminum',
-  'Fire Protection',
-  'Insulation',
-  'Drywall',
-  'Demolition',
-  'Excavation / Site Work',
-  'Steel / Structural',
-  'Waterproofing',
-  'Other',
-];
-
-const US_STATES = [
-  'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA',
-  'HI','ID','IL','IN','IA','KS','KY','LA','ME','MD',
-  'MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ',
-  'NM','NY','NC','ND','OH','OK','OR','PA','RI','SC',
-  'SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC',
-];
+import { TRADE_TYPES, US_STATES } from '@framefocus/shared/constants';
 
 interface SubcontractorFormProps {
   existing?: Subcontractor;
@@ -72,11 +44,14 @@ export function SubcontractorForm({ existing }: SubcontractorFormProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) {
+  function handleChange(
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+  ) {
     const { name, value } = e.target;
     setForm((prev) => ({
       ...prev,
-      [name]: name === 'rating' ? parseInt(value) || 0 : name === 'preferred' ? !prev.preferred : value,
+      [name]:
+        name === 'rating' ? parseInt(value) || 0 : name === 'preferred' ? !prev.preferred : value,
     }));
   }
 
@@ -109,8 +84,10 @@ export function SubcontractorForm({ existing }: SubcontractorFormProps) {
       rating: form.rating > 0 ? form.rating : null,
       rating_notes: form.rating_notes.trim() || null,
       ein: form.ein.trim() || null,
-      default_hourly_rate: form.default_hourly_rate !== '' ? Number(form.default_hourly_rate) : null,
-      default_markup_percent: form.default_markup_percent !== '' ? Number(form.default_markup_percent) : null,
+      default_hourly_rate:
+        form.default_hourly_rate !== '' ? Number(form.default_hourly_rate) : null,
+      default_markup_percent:
+        form.default_markup_percent !== '' ? Number(form.default_markup_percent) : null,
       preferred: form.preferred,
       notes: form.notes.trim() || null,
     };
@@ -172,7 +149,12 @@ export function SubcontractorForm({ existing }: SubcontractorFormProps) {
         <div style={gridTwoCol}>
           <div>
             <label style={labelStyle}>Type *</label>
-            <select name="sub_type" value={form.sub_type} onChange={handleChange} style={inputStyle}>
+            <select
+              name="sub_type"
+              value={form.sub_type}
+              onChange={handleChange}
+              style={inputStyle}
+            >
               <option value="subcontractor">Subcontractor</option>
               <option value="vendor">Vendor</option>
             </select>
@@ -193,16 +175,31 @@ export function SubcontractorForm({ existing }: SubcontractorFormProps) {
         <div style={sectionTitleStyle}>Company Information</div>
         <div style={{ marginBottom: '1rem' }}>
           <label style={labelStyle}>Company Name *</label>
-          <input name="company_name" value={form.company_name} onChange={handleChange} style={inputStyle} />
+          <input
+            name="company_name"
+            value={form.company_name}
+            onChange={handleChange}
+            style={inputStyle}
+          />
         </div>
         <div style={gridTwoCol}>
           <div>
             <label style={labelStyle}>Contact First Name</label>
-            <input name="contact_first_name" value={form.contact_first_name} onChange={handleChange} style={inputStyle} />
+            <input
+              name="contact_first_name"
+              value={form.contact_first_name}
+              onChange={handleChange}
+              style={inputStyle}
+            />
           </div>
           <div>
             <label style={labelStyle}>Contact Last Name</label>
-            <input name="contact_last_name" value={form.contact_last_name} onChange={handleChange} style={inputStyle} />
+            <input
+              name="contact_last_name"
+              value={form.contact_last_name}
+              onChange={handleChange}
+              style={inputStyle}
+            />
           </div>
         </div>
       </div>
@@ -213,44 +210,96 @@ export function SubcontractorForm({ existing }: SubcontractorFormProps) {
         <div style={{ ...gridTwoCol, marginBottom: '1rem' }}>
           <div>
             <label style={labelStyle}>Trade Type</label>
-            <select name="trade_type" value={form.trade_type} onChange={handleChange} style={inputStyle}>
+            <select
+              name="trade_type"
+              value={form.trade_type}
+              onChange={handleChange}
+              style={inputStyle}
+            >
               <option value="">Select a trade...</option>
               {TRADE_TYPES.map((t) => (
-                <option key={t} value={t}>{t}</option>
+                <option key={t} value={t}>
+                  {t}
+                </option>
               ))}
             </select>
           </div>
           <div>
             <label style={labelStyle}>License Number</label>
-            <input name="license_number" value={form.license_number} onChange={handleChange} style={inputStyle} />
+            <input
+              name="license_number"
+              value={form.license_number}
+              onChange={handleChange}
+              style={inputStyle}
+            />
           </div>
         </div>
         <div>
           <label style={labelStyle}>Insurance Expiry Date</label>
-          <input name="insurance_expiry" type="date" value={form.insurance_expiry} onChange={handleChange} style={inputStyle} />
+          <input
+            name="insurance_expiry"
+            type="date"
+            value={form.insurance_expiry}
+            onChange={handleChange}
+            style={inputStyle}
+          />
         </div>
         <div style={gridTwoCol}>
           <div>
             <label style={labelStyle}>EIN (Tax ID)</label>
-            <input name="ein" value={form.ein} onChange={handleChange} style={inputStyle} placeholder="XX-XXXXXXX" />
+            <input
+              name="ein"
+              value={form.ein}
+              onChange={handleChange}
+              style={inputStyle}
+              placeholder="XX-XXXXXXX"
+            />
           </div>
           <div>
             <label style={labelStyle}>Default Hourly Rate</label>
-            <input name="default_hourly_rate" type="number" step="0.01" value={form.default_hourly_rate} onChange={handleChange} style={inputStyle} placeholder="0.00" />
+            <input
+              name="default_hourly_rate"
+              type="number"
+              step="0.01"
+              value={form.default_hourly_rate}
+              onChange={handleChange}
+              style={inputStyle}
+              placeholder="0.00"
+            />
           </div>
         </div>
         <div style={gridTwoCol}>
           <div>
             <label style={labelStyle}>Standard Markup %</label>
-            <input name="default_markup_percent" type="number" step="0.5" value={form.default_markup_percent} onChange={handleChange} style={inputStyle} placeholder="e.g. 20" />
-            <p style={{ fontSize: "0.75rem", color: "#9ca3af", marginTop: "0.25rem" }}>Auto-applied when this vendor is used in estimates</p>
+            <input
+              name="default_markup_percent"
+              type="number"
+              step="0.5"
+              value={form.default_markup_percent}
+              onChange={handleChange}
+              style={inputStyle}
+              placeholder="e.g. 20"
+            />
+            <p style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.25rem' }}>
+              Auto-applied when this vendor is used in estimates
+            </p>
           </div>
           <div></div>
         </div>
         <div style={{ marginTop: '1rem' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-            <input type="checkbox" name="preferred" checked={form.preferred} onChange={handleChange} style={{ width: '1rem', height: '1rem' }} />
-            <span style={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>Preferred — show this sub/vendor first in lists and estimating</span>
+          <label
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}
+          >
+            <input
+              type="checkbox"
+              name="preferred"
+              checked={form.preferred}
+              onChange={handleChange}
+              style={{ width: '1rem', height: '1rem' }}
+            />
+            <span style={{ fontSize: '0.875rem', fontWeight: 500, color: '#374151' }}>
+              Preferred — show this sub/vendor first in lists and estimating
+            </span>
           </label>
         </div>
       </div>
@@ -265,7 +314,9 @@ export function SubcontractorForm({ existing }: SubcontractorFormProps) {
               <button
                 key={star}
                 type="button"
-                onClick={() => setForm((prev) => ({ ...prev, rating: prev.rating === star ? 0 : star }))}
+                onClick={() =>
+                  setForm((prev) => ({ ...prev, rating: prev.rating === star ? 0 : star }))
+                }
                 style={{
                   fontSize: '1.5rem',
                   background: 'none',
@@ -279,7 +330,14 @@ export function SubcontractorForm({ existing }: SubcontractorFormProps) {
               </button>
             ))}
             {form.rating > 0 && (
-              <span style={{ fontSize: '0.875rem', color: '#6b7280', marginLeft: '0.5rem', alignSelf: 'center' }}>
+              <span
+                style={{
+                  fontSize: '0.875rem',
+                  color: '#6b7280',
+                  marginLeft: '0.5rem',
+                  alignSelf: 'center',
+                }}
+              >
                 {form.rating}/5
               </span>
             )}
@@ -303,12 +361,24 @@ export function SubcontractorForm({ existing }: SubcontractorFormProps) {
         <div style={sectionTitleStyle}>Contact Information</div>
         <div style={{ marginBottom: '1rem' }}>
           <label style={labelStyle}>Email</label>
-          <input name="email" type="email" value={form.email} onChange={handleChange} style={inputStyle} />
+          <input
+            name="email"
+            type="email"
+            value={form.email}
+            onChange={handleChange}
+            style={inputStyle}
+          />
         </div>
         <div style={gridTwoCol}>
           <div>
             <label style={labelStyle}>Phone</label>
-            <input name="phone" value={form.phone} onChange={handleChange} style={inputStyle} placeholder="(555) 123-4567" />
+            <input
+              name="phone"
+              value={form.phone}
+              onChange={handleChange}
+              style={inputStyle}
+              placeholder="(555) 123-4567"
+            />
           </div>
           <div>
             <label style={labelStyle}>Mobile</label>
@@ -322,11 +392,21 @@ export function SubcontractorForm({ existing }: SubcontractorFormProps) {
         <div style={sectionTitleStyle}>Address</div>
         <div style={{ marginBottom: '1rem' }}>
           <label style={labelStyle}>Address Line 1</label>
-          <input name="address_line1" value={form.address_line1} onChange={handleChange} style={inputStyle} />
+          <input
+            name="address_line1"
+            value={form.address_line1}
+            onChange={handleChange}
+            style={inputStyle}
+          />
         </div>
         <div style={{ marginBottom: '1rem' }}>
           <label style={labelStyle}>Address Line 2</label>
-          <input name="address_line2" value={form.address_line2} onChange={handleChange} style={inputStyle} />
+          <input
+            name="address_line2"
+            value={form.address_line2}
+            onChange={handleChange}
+            style={inputStyle}
+          />
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '1rem' }}>
           <div>
@@ -338,7 +418,9 @@ export function SubcontractorForm({ existing }: SubcontractorFormProps) {
             <select name="state" value={form.state} onChange={handleChange} style={inputStyle}>
               <option value="">--</option>
               {US_STATES.map((s) => (
-                <option key={s} value={s}>{s}</option>
+                <option key={s} value={s}>
+                  {s}
+                </option>
               ))}
             </select>
           </div>
@@ -364,14 +446,16 @@ export function SubcontractorForm({ existing }: SubcontractorFormProps) {
 
       {/* Error */}
       {error && (
-        <div style={{
-          padding: '0.75rem 1rem',
-          borderRadius: '0.375rem',
-          marginBottom: '1rem',
-          backgroundColor: '#fef2f2',
-          color: '#991b1b',
-          fontSize: '0.875rem',
-        }}>
+        <div
+          style={{
+            padding: '0.75rem 1rem',
+            borderRadius: '0.375rem',
+            marginBottom: '1rem',
+            backgroundColor: '#fef2f2',
+            color: '#991b1b',
+            fontSize: '0.875rem',
+          }}
+        >
           {error}
         </div>
       )}
@@ -394,9 +478,9 @@ export function SubcontractorForm({ existing }: SubcontractorFormProps) {
         >
           {saving ? 'Saving...' : isEdit ? 'Update' : 'Create'}
         </button>
-        
-          <a
-            href="/dashboard/subcontractors"
+
+        <a
+          href="/dashboard/subcontractors"
           style={{
             padding: '0.625rem 1.5rem',
             fontSize: '0.875rem',
