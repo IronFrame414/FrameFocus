@@ -1,39 +1,39 @@
 # CLAUDE.md — FrameFocus Development Guide
 
-> **Last updated:** April 5, 2026 (Session 5)
+> **Last updated:** April 8, 2026 (Session 6 — Planning, continued + Admin role audit)
 > **Purpose:** This file is the single source of truth for all development conversations. Read this before every session.
 
 ---
 
 ## Project Overview
 
-**FrameFocus** is a subscription-based construction management SaaS platform for residential and commercial contractors. It covers the full business lifecycle: lead capture → estimating → project management → field operations → job finances → client experience → business intelligence.
+**FrameFocus** is a subscription-based construction management SaaS platform for residential and commercial contractors. It covers the full business lifecycle: lead capture → estimating → project management → field operations → job finances → inventory & tools → client experience → business intelligence.
 
 **Owner:** Josh Bishop (jsbishop14@gmail.com)
 **Repo:** github.com/IronFrame414/FrameFocus (private)
 **Live URL:** https://frame-focus-eight.vercel.app
-**Status:** Module 1 complete. Module 2 complete. Ready for Module 3.
+**Status:** Module 1 complete. Module 2 complete. Ready for Module 3. **Platform now has 11 modules** (Inventory & Tools added as Module 8 during Session 6 planning).
 
 ---
 
 ## Technology Stack
 
-| Layer           | Technology                                                         | Notes                                                        |
-| --------------- | ------------------------------------------------------------------ | ------------------------------------------------------------ |
-| Web Frontend    | Next.js 14 + React + TypeScript + Tailwind CSS + shadcn/ui         | Office users (estimators, PMs, owners)                       |
-| Mobile Frontend | React Native + Expo                                                | Field crew (techs, foremen)                                  |
-| Shared Logic    | TypeScript packages in monorepo                                    | Types, validation, business logic shared across web + mobile |
-| Backend / DB    | Supabase (PostgreSQL + Auth + Storage + Realtime + Edge Functions) | Multi-tenant with RLS                                        |
-| AI              | OpenAI API (GPT-4o) + Supabase pgvector                            | Estimating, reporting, summaries, marketing                  |
-| Payments        | Stripe Billing + Stripe Connect                                    | Subscriptions + contractor-to-client payments                |
-| Accounting      | QuickBooks Online API (OAuth 2.0)                                  | Sync only — FrameFocus runs operations, QB runs the books    |
-| Web Hosting     | Vercel                                                             | Auto-deploy from main branch                                 |
-| Mobile Builds   | Expo EAS                                                           | Cloud iOS/Android builds + OTA updates                       |
-| CI/CD           | GitHub Actions                                                     | Lint, test, build verification                               |
-| Monorepo        | Turborepo                                                          | Multi-package management                                     |
-| Email           | Resend                                                             | Transactional emails                                         |
-| E-Signatures    | DocuSign API or BoldSign                                           | Proposals, change orders, lien releases                      |
-| Doc Generation  | React-PDF or Puppeteer                                             | PDF estimates, invoices, reports                             |
+| Layer | Technology | Notes |
+|-------|-----------|-------|
+| Web Frontend | Next.js 14 + React + TypeScript + Tailwind CSS + shadcn/ui | Office users (estimators, PMs, owners) |
+| Mobile Frontend | React Native + Expo | Field crew (techs, foremen) |
+| Shared Logic | TypeScript packages in monorepo | Types, validation, business logic shared across web + mobile |
+| Backend / DB | Supabase (PostgreSQL + Auth + Storage + Realtime + Edge Functions) | Multi-tenant with RLS |
+| AI | OpenAI API (GPT-4o vision + text) + Supabase pgvector | Estimating, photo auto-tagging, reporting, summaries, marketing |
+| Payments | Stripe Billing + Stripe Connect | Subscriptions + contractor-to-client payments |
+| Accounting | QuickBooks Online API (OAuth 2.0) | Sync only — FrameFocus runs operations, QB runs the books |
+| Web Hosting | Vercel | Auto-deploy from main branch |
+| Mobile Builds | Expo EAS | Cloud iOS/Android builds + OTA updates |
+| CI/CD | GitHub Actions | Lint, test, build verification |
+| Monorepo | Turborepo | Multi-package management |
+| Email | Resend | Transactional emails |
+| E-Signatures | DocuSign API or BoldSign | Proposals, change orders, lien releases |
+| Doc Generation | React-PDF or Puppeteer | PDF estimates, invoices, reports |
 
 **Language:** TypeScript everywhere — web, mobile, backend, shared.
 
@@ -69,7 +69,7 @@ framefocus/
 │   │   ├── constants/        # Role hierarchy, labels, descriptions (roles.ts)
 │   │   └── utils/            # Pure business logic functions
 │   ├── supabase/             # Supabase-specific package
-│   │   ├── migrations/       # SQL migration files (001–011)
+│   │   ├── migrations/       # SQL migration files (001–012)
 │   │   ├── functions/        # Edge Functions
 │   │   ├── seed/             # Seed data
 │   │   └── types/            # Auto-generated database types
@@ -89,7 +89,6 @@ framefocus/
 **No local dev environment required.** Everything runs in the cloud.
 
 The `.devcontainer/devcontainer.json` pre-configures:
-
 - Node.js 20 LTS
 - Required VS Code extensions: ESLint, Prettier, Tailwind IntelliSense, Prisma (for Supabase types)
 - Automatic `npm install` on Codespace creation
@@ -108,43 +107,44 @@ The `.devcontainer/devcontainer.json` pre-configures:
 
 ---
 
-## Platform Modules (10 total)
+## Platform Modules (11 total)
 
-Build order follows strict dependency chain. Each module depends on the ones above it.
+Build order follows strict dependency chain. Each module depends on the ones above it. **Module 8 (Inventory & Tools) was added during Session 6 planning, which bumped the previous Modules 8, 9, 10 to 9, 10, 11.**
 
 ### Phase 1: Foundation Layer (Months 1–3)
 
-| #   | Module                     | Status      | Description                                                                                                                                                                               |
-| --- | -------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Settings, Admin & Billing  | ✅ COMPLETE | Multi-tenant auth, roles/permissions (owner + admin), Stripe subscriptions (3 tiers), company settings with logo upload, trial system with abuse prevention, invite flow, team management |
-| 2   | Contacts & CRM             | ✅ COMPLETE | Two-table design: `contacts` (leads & clients) + `subcontractors` (subs & vendors). Full CRUD with search, filtering, star ratings, preferred flags, EIN, insurance tracking              |
-| 3   | Document & File Management | NOT STARTED | Supabase Storage, file tagging, project folders, upload from web + mobile camera                                                                                                          |
+| # | Module | Status | Description |
+|---|--------|--------|-------------|
+| 1 | Settings, Admin & Billing | ✅ COMPLETE | Multi-tenant auth, roles/permissions (owner + admin), Stripe subscriptions (3 tiers), company settings with logo upload, trial system with abuse prevention, invite flow, team management |
+| 2 | Contacts & CRM | ✅ COMPLETE | Two-table design: `contacts` (leads & clients) + `subcontractors` (subs & vendors). Full CRUD with search, filtering, star ratings, preferred flags, EIN, default hourly rate, standard markup %, insurance tracking |
+| 3 | Document & File Management | NOT STARTED | Supabase Storage, file tagging, project folders, upload from web + mobile camera, photo markup & annotation (desktop + mobile), AI auto-tagging of photos via GPT-4o vision, receipt attachments linked to Module 8 inventory items |
 
-### Phase 2: Core Business Modules (Months 3–7)
+### Phase 2: Core Business Modules (Months 3–8)
 
-| #   | Module                  | Status      | Description                                                                                 |
-| --- | ----------------------- | ----------- | ------------------------------------------------------------------------------------------- |
-| 4   | Sales & Estimating      | NOT STARTED | Estimate builder, cost catalog, AI line-item suggestions, proposals, e-signatures, pipeline |
-| 5   | Project Management      | NOT STARTED | Phases, milestones, Kanban tasks, scheduling, templates, change order initiation            |
-| 6   | Team & Field Operations | NOT STARTED | Mobile-first: clock in/out with GPS, daily logs, photo markup, punch lists, offline mode    |
-| 7   | Job Finances            | NOT STARTED | Budget vs. actual, cost codes, change orders, invoicing, sub pay apps, retainage            |
+| # | Module | Status | Description |
+|---|--------|--------|-------------|
+| 4 | Sales & Estimating | NOT STARTED | Estimate builder, cost catalog, AI line-item suggestions, proposals, e-signatures, pipeline. When a vendor is selected for a material line item, auto-populate markup from their default_markup_percent (override per line item). Estimates link to contacts (client/lead). Sub bids link to subcontractors. |
+| 5 | Project Management | NOT STARTED | Phases, milestones, Kanban tasks, scheduling, templates, change order initiation |
+| 6 | Team & Field Operations | NOT STARTED | Mobile-first: clock in/out with GPS, **time categorization** (regular/OT/travel/drive/shop), **break tracking**, **overtime calculation**, **mileage tracking**, **hours allocated to tasks/change orders/T&M jobs**, daily logs with **safety hazards section** (checkbox + text), **safety incident reporting** (separate formal workflow with PDF), photo capture with markup (shared component from Module 3), punch lists, **daily huddle/crew briefing** (optional), **material delivery tracking** (checked in by anyone assigned to project, contents via receipt photo or typed list), offline mode, voice-to-text daily logs. Approved timesheets sync to QB Time/Payroll. |
+| 7 | Job Finances | NOT STARTED | Budget vs. actual, cost codes, change orders, invoicing (including T&M invoicing pulling hours from Module 6 and materials from Module 8), sub pay apps, retainage. Track actual vendor cost vs. marked-up client price for profit analysis. Sub pay apps reference subcontractors table (EIN for 1099s, default_hourly_rate for labor estimates). QB sync for invoices, bills, and payments. |
+| 8 | **Inventory & Tools (NEW)** | NOT STARTED | **Inventory:** categorized items (lumber, fasteners, drywall, electrical, plumbing, finishes, consumables, other) with unit of measure, default vendor, photo, receipt attachment, flag-for-return with notes. **Tools:** categorized durables (power tools, hand tools, ladders, safety equipment, measurement, heavy equipment, other) with brand, model, serial, photo, notes for specs (blade size, voltage, capacity). Tool location required (shop/job site/truck/custom). Tool-to-person assignment optional. Check-in/check-out log tracks every location or assignment change. Bulk assignment of multiple tools at once. All roles (Owner through Crew) can check tools in/out. |
 
-### Phase 3: Differentiator Layer (Months 7–10)
+### Phase 3: Differentiator Layer (Months 8–10)
 
-| #   | Module                     | Status      | Description                                                                                            |
-| --- | -------------------------- | ----------- | ------------------------------------------------------------------------------------------------------ |
-| 8   | Customer Experience Portal | NOT STARTED | Client login, project timeline, AI weekly summaries (owner-approved), selections, payments, messaging  |
-| 9   | Reporting & Analytics      | NOT STARTED | Profitability, estimating accuracy, pipeline metrics, AI queries, anomaly detection, custom dashboards |
+| # | Module | Status | Description |
+|---|--------|--------|-------------|
+| 9 | Customer Experience Portal | NOT STARTED | Client login, project timeline, AI weekly summaries (owner-approved), **material selections workflow** (separate pages by category, grouped by room, finalized list auto-logs to decision log), **decision log** (timestamped record of every significant client decision, exportable as PDF), **photo gallery with client favorites** (clients heart photos, favorites feed Module 11 marketing), **pre-construction checklist** (permits, insurance, deposit, HOA, selections, start date), selection deadlines with reminders, change order e-signature, invoice viewing + payment via Stripe Connect, PM messaging thread |
+| 10 | Reporting & Analytics | NOT STARTED | Profitability, estimating accuracy, pipeline metrics, AI natural language queries, anomaly detection, custom dashboards. Vendor cost vs. markup analysis for profit tracking. (Crew productivity, estimate accuracy by type, sub scorecards, cash flow forecast all deferred to post-launch.) |
 
 ### Phase 4: Premium Add-On (Months 10–12)
 
-| #   | Module                | Status      | Description                                                                                     |
-| --- | --------------------- | ----------- | ----------------------------------------------------------------------------------------------- |
-| 10  | AI Marketing & Social | NOT STARTED | Auto social posts from projects, Facebook/Google integration, review requests, content calendar |
+| # | Module | Status | Description |
+|---|--------|--------|-------------|
+| 11 | AI Marketing & Social | NOT STARTED | Auto social posts from projects (pulling from client-favorited photos in Module 9), Facebook/Google Business integration, review requests, content calendar |
 
 ### Cross-Cutting Systems (built incrementally)
 
-- **AI Layer** — Woven into modules 4, 5, 7, 8, 9, 10. Uses OpenAI GPT-4o + pgvector. Core principle: AI drafts, humans approve.
+- **AI Layer** — Woven into modules 3, 4, 5, 6 (post-launch), 7, 9, 10, 11. Uses OpenAI GPT-4o (text + vision) + pgvector. Core principle: AI drafts, humans approve. First AI feature: photo auto-tagging in Module 3. Exception to the approval rule: photo auto-tags apply instantly since they are internal organization only.
 - **Workflow Engine** — Event-driven automation via Supabase Webhooks + Edge Functions. Built during Phase 2, extended in Phase 3.
 - **QuickBooks Integration** — Cross-cutting sync layer built during Modules 6 and 7. See dedicated section below.
 
@@ -154,19 +154,19 @@ Build order follows strict dependency chain. Each module depends on the ones abo
 
 **Core principle:** FrameFocus runs daily operations. QuickBooks runs the books. Data syncs so contractors never double-enter.
 
-**Connection:** OAuth 2.0 via QuickBooks Online API. Owner connects QB from Company Settings. Refresh token stored securely. Sync handled by Supabase Edge Functions or webhook queue.
+**Connection:** OAuth 2.0 via QuickBooks Online API. **Owner connects QB** from Company Settings (Admin cannot — this is treated as a billing-adjacent action because it touches financial data flow and Owner is the billing contact of record). Refresh token stored securely. Sync handled by Supabase Edge Functions or webhook queue.
 
 ### Sync Points by Module
 
-| Module               | FrameFocus → QuickBooks                          | Direction |
-| -------------------- | ------------------------------------------------ | --------- |
-| Module 2 (Contacts)  | Clients → QB Customers                           | FF → QB   |
-| Module 2 (Contacts)  | Subs/Vendors (with EIN) → QB Vendors             | FF → QB   |
-| Module 6 (Field Ops) | Approved timesheets → QB Time/Payroll entries    | FF → QB   |
-| Module 7 (Finances)  | Client invoices → QB Invoices                    | FF → QB   |
-| Module 7 (Finances)  | Sub pay applications → QB Bills                  | FF → QB   |
-| Module 7 (Finances)  | Sub payments → QB Bill Payments                  | FF → QB   |
-| Module 7 (Finances)  | Approved change orders → QB contract adjustments | FF → QB   |
+| Module | FrameFocus → QuickBooks | Direction |
+|--------|------------------------|-----------|
+| Module 2 (Contacts) | Clients → QB Customers | FF → QB |
+| Module 2 (Contacts) | Subs/Vendors (with EIN) → QB Vendors | FF → QB |
+| Module 6 (Field Ops) | Approved timesheets → QB Time/Payroll entries | FF → QB |
+| Module 7 (Finances) | Client invoices → QB Invoices | FF → QB |
+| Module 7 (Finances) | Sub pay applications → QB Bills | FF → QB |
+| Module 7 (Finances) | Sub payments → QB Bill Payments | FF → QB |
+| Module 7 (Finances) | Approved change orders → QB contract adjustments | FF → QB |
 
 ### Key Design Rules
 
@@ -174,38 +174,38 @@ Build order follows strict dependency chain. Each module depends on the ones abo
 2. **Never replace QuickBooks for accounting.** No P&L, no tax prep, no bank reconciliation in FrameFocus.
 3. **QB handles 1099s.** Vendor records with EINs and payment totals sync from FrameFocus; QB generates the actual 1099 filings.
 4. **Timeclock flow:** Crew member clocks in/out on mobile → Foreman/PM approves timesheet → approved hours sync to QB as time entries tied to employee + job → QB handles payroll.
-5. **Vendor markup flows into estimates.** When a vendor is selected for estimate line items, their `default_markup_percent` auto-populates the markup column. Can be overridden per line item. Actual cost vs. marked-up price feeds profit tracking in Module 9.
+5. **Vendor markup flows into estimates.** When a vendor is selected for estimate line items, their `default_markup_percent` auto-populates the markup column. Can be overridden per line item. Actual cost vs. marked-up price feeds profit tracking in Module 10.
 6. **Build during Modules 6 and 7.** QB connection UI lives in Company Settings. Each financial action optionally syncs.
 
 ---
 
 ## Change Order Workflow (Detailed)
 
-Change orders span Modules 5, 7, and 8:
+Change orders span Modules 5, 7, and 9:
 
 **Module 5 (Project Management) — Creation:**
-
-- PM or Owner creates a CO tied to a specific project
+- PM, Admin, or Owner creates a CO tied to a specific project
 - References original estimate line items from Module 4
 - Shows cost and schedule impact
 - Status lifecycle: `draft` → `pending_approval` → `approved` → `rejected` or `executed`
+- Hours logged by crew against an approved CO track to the CO's budget bucket (see Module 6)
 
 **Module 7 (Job Finances) — Budget Impact:**
-
 - Approved CO automatically updates project budget (contract value, cost codes, projected profit)
 - If CO involves a sub, creates or modifies the sub's pay application
 - Approved CO syncs to QuickBooks as contract adjustment
 
-**Module 8 (Client Portal) — Client Sign-off:**
-
+**Module 9 (Client Portal) — Client Sign-off:**
 - If CO changes scope or price, it routes to the client for e-signature
 - Client sees CO in their portal with before/after comparison
+- Signed CO auto-logs to the client Decision Log
 
 **Change Order Approval Chain Workflow:**
-PM creates CO → Owner notified → Owner approves → (if client-facing) client signs via portal → CO marked `executed` → budget auto-updates → QB sync
+PM or Admin creates CO → Owner (and Admin, if Admin did not create it) notified → Owner approves → (if client-facing) client signs via portal → CO marked `executed` → budget auto-updates → QB sync
+
+**Note on Admin involvement:** Admin can create change orders and receives notifications on all CO activity, but **final approval authority stays with the Owner** because change orders affect contract value and money out the door. This is consistent with the principle that Admin has full operational access except for billing and direct financial sign-off.
 
 **Data model (planned):**
-
 - `change_orders` — linked to project, created_by, amounts, description, reason category, status
 - `change_order_line_items` — what changed, before/after quantities and prices
 - `change_order_approvals` — who approved when
@@ -213,10 +213,257 @@ PM creates CO → Owner notified → Owner approves → (if client-facing) clien
 
 ---
 
+## Module 3: Document & File Management (Detailed Design)
+
+Module 3 adds cloud file storage, organization, photo markup, and AI auto-tagging.
+
+### Core Features
+
+1. **Project Folders** — Every project auto-gets a folder. Files sorted into sub-folders by category (Photos, Contracts, Plans, Permits, Invoices, Change Orders, Daily Logs, Other).
+2. **Company-Level Files** — Files not tied to a project (insurance policies, vendor price lists, templates) live at the company level.
+3. **File Tagging** — Flexible labels on any file. Manual tags + AI auto-tags coexist. Searchable.
+4. **File Versioning** — Upload a new version of a file → old version marked "superseded" but preserved. Latest version always on top.
+5. **Search** — Find files by name, tag, date, project, file type, or uploader.
+6. **Favorites / Pinned** — Any user can pin frequently-used files for quick access.
+
+### Photo Markup & Annotation
+
+- **Platforms:** Desktop (mouse/trackpad) and mobile (finger/stylus). Shared component used in Module 3 (web) and reused in Module 6 (mobile field ops).
+- **Tools:** Arrows, circles, rectangles, freehand drawing, text labels. Color picker for annotation color.
+- **Non-destructive:** Original photo is always preserved. Markup saved as a layer on top. Users can toggle markup on/off, edit existing annotations, or clear all markup.
+- **Output:** Marked-up photo exportable as a flattened image (for sharing outside the app) or as original + markup layer (for continued editing).
+- **Key use cases:** Punch list items (circle defect, add note), field communication (arrows showing where work goes), change order documentation (mark what changed), quality control.
+- **Technical approach (planned):** Canvas-based annotation library (e.g., Fabric.js for web, react-native-canvas or Skia for mobile). Markup data stored as JSON (coordinates, shapes, text) alongside the original file reference. Flattened export generated on demand.
+
+### AI Photo Auto-Tagging
+
+- **Trigger:** Every photo upload (web or mobile) is sent to OpenAI GPT-4o vision API.
+- **What the AI tags:** Construction-specific content detected in the image (e.g., "framing", "electrical rough-in", "plumbing", "drywall", "concrete", "roofing", "exterior paint", "damage", "before", "after"). Also auto-tags metadata: date, GPS coordinates, project name, uploader name/role.
+- **User control:** AI tags are suggestions — any team member who can view the file can add, edit, or remove tags. AI tags are visually distinguished from manual tags (e.g., different color or icon).
+- **No approval needed:** Auto-tagging is internal organization, not client-facing content. Applies instantly on upload.
+- **Subscription limits:** Auto-tagging available on all tiers. Usage counted against OpenAI API costs. Consider rate limiting on Starter tier if costs are high.
+- **Technical approach (planned):** On file upload, a Supabase Edge Function (or Next.js API route) sends the image to OpenAI's vision endpoint with a system prompt tuned for construction photo classification. Response parsed into tag array and saved to the file's `ai_tags` column. User-added tags stored in a separate `tags` column.
+- **Future enhancement:** AI Photo Progress Comparison — AI compares before/after photos and estimates completion percentage. Evaluate after auto-tagging is proven reliable.
+
+### Upload Methods
+
+1. **Web drag-and-drop** — Desktop users drag files or click to browse. Select project + category before uploading.
+2. **Mobile camera** — Capture photo from app → AI auto-tags → optional markup → saved to project folder.
+3. **Mobile file upload** — Upload from phone storage (PDFs, attachments).
+4. **System auto-save** — Generated documents (invoices, proposals, change orders, lien releases, daily log PDFs) auto-file to the correct project folder.
+5. **Email forwarding (future)** — Forward email to a FrameFocus address → attachment filed to project. Nice-to-have, not MVP.
+
+### Storage Architecture (planned)
+
+- **Supabase Storage buckets:** One private bucket per file category or one `project-files` bucket with folder structure by `company_id/project_id/category/`.
+- **Database table:** `files` table with columns: id, company_id, project_id (nullable for company-level files), category, file_name, file_path (Supabase Storage path), file_size, mime_type, tags[], ai_tags[], version (integer), supersedes_id (FK to previous version), uploaded_by, markup_data (JSONB, nullable), is_favorited_by (array or junction table), is_deleted, created_at, updated_at.
+- **RLS:** Any company member can read files in their company. Upload: all team roles. Delete: owner/admin/PM only. Company-level file management: owner/admin only.
+- **Storage limits enforced:** Track total storage per company. Compare against subscription tier limit. Block uploads when limit reached. Show usage in billing settings.
+
+### Connections to Later Modules
+
+- **Module 4 (Estimating):** Signed proposals auto-save to project Documents folder.
+- **Module 5 (Project Mgmt):** Plans, change order docs filed here. Markup used for change order documentation.
+- **Module 6 (Field Ops):** Photo capture + markup reused for daily logs, punch lists, safety incidents. AI auto-tags field photos.
+- **Module 7 (Finances):** Invoices, pay apps, lien releases auto-filed. Signed lien releases stored as proof.
+- **Module 8 (Inventory & Tools):** Receipts and item photos stored here. Receipt attachments link to inventory items.
+- **Module 9 (Client Portal):** Clients see shared files (contracts, photos, change orders). PM controls which files are visible to clients.
+- **Module 11 (Marketing):** Best project photos selected for social media posts.
+
+---
+
+## Module 6: Team & Field Operations (Detailed Design)
+
+Module 6 is mobile-first and is where most of the new session 6 planning decisions landed. It covers time tracking, daily logs, safety, deliveries, punch lists, huddles, and offline sync.
+
+### 6.1 Time Tracking (Enhanced)
+
+- **Clock in/out with GPS** — crew taps to clock in, location captured for verification
+- **Time categorization** — every time entry tagged as: `regular`, `overtime`, `travel`, `drive`, `shop`. Categories may bill at different rates on T&M jobs.
+- **Break tracking** — paid vs. unpaid breaks, lunch tracking. Configurable per company (state labor law varies).
+- **Overtime calculation** — auto-flag and track when a crew member crosses 40 hours in a week. OT hours categorized separately.
+- **Mileage tracking** — log miles driven for reimbursement (simple odometer start/end or GPS-based).
+- **Hours → Task** — when clocking in, crew picks which Module 5 task they are working on.
+- **Hours → Change Order** — if the task is part of an approved change order (not original scope), hours track against the CO's budget bucket.
+- **Hours → T&M line** — for time & material jobs, hours feed directly into billable lines in Module 7 invoicing.
+- **Timesheet approval chain** — Foreman approves crew, PM or Admin approves foreman. Owner can approve at any level. Only approved hours sync to QB.
+
+### 6.2 Daily Logs
+
+- Standard fields: date, project, crew present, weather, work performed, hours, materials delivered, issues
+- **Safety Hazards section** — checkbox ("hazards present today?") + text field for description. This is quick in-the-moment hazard logging, NOT a formal incident report.
+- Photos auto-pulled from day's captures
+- **Voice-to-text** — foreman talks into phone, app transcribes
+- End-of-day: auto-generated PDF saved to Module 3
+
+### 6.3 Safety Incident Reporting (Separate from Daily Log Hazards)
+
+A dedicated formal workflow for when something actually happens on site (injury, property damage, near miss). Distinct from the daily log's hazard section.
+
+- Dedicated incident report form: who, what, when, where, witnesses, photos, first aid given, actions taken
+- Required fields for OSHA compliance: injury details, body part, time, date, location
+- PDF generation auto-saved to Module 3
+- Automatic notifications: Owner, Admin, and assigned PM notified immediately
+- Company-wide incident log for compliance tracking
+- Workflow: Report filed → PDF generated → filed to docs → Owner/Admin/PM notified → incident log updated
+
+### 6.4 Punch Lists
+
+- Quick-add from photo with markup
+- Assign, track status (open/in progress/done), priority
+- All punch items must close before project can be marked complete
+- **Post-launch enhancement:** AI punch list generation from multiple photos, video walkthrough, or audio walkthrough. Uses OpenAI Whisper (transcription) + GPT-4o vision (frame analysis) → AI proposes items → PM reviews and approves. Deferred to post-launch.
+
+### 6.5 Material Delivery Tracking
+
+- Scheduled deliveries tracked with date, vendor, expected contents
+- **Anyone assigned to the project** (Owner through Crew, excluding Client) can check in a delivery when it arrives
+- Delivery contents recorded two ways: photo of the receipt/packing slip, OR typed list
+- Discrepancies flagged on arrival (missing, damaged, wrong items)
+- Discrepancies flow into Module 8 inventory as items flagged for return
+
+### 6.6 Daily Huddle / Crew Briefing
+
+- Simple morning briefing tool: Foreman sends daily task list + safety note to crew before work starts
+- Crew sees it on their phone via push notification
+- **Not mandatory** — not a required daily task. Optional feature to keep everyone aligned when used.
+
+### 6.7 Photo Markup (Mobile)
+
+Uses the shared markup component from Module 3. Same tool set, same non-destructive approach. Reused — not rebuilt.
+
+### 6.8 Offline Mode
+
+- Offline-first architecture for clock in/out, daily logs, photos, punch lists
+- Expo SQLite for data, separate cache for photos
+- Auto-sync when reconnected
+- Last-write-wins for conflict resolution (needs validation in testing)
+
+### 6.9 Data Model Concepts (Planned)
+
+- `time_entries` — user_id, task_id (optional), change_order_id (optional), tm_line_id (optional), category (regular/ot/travel/drive/shop), clock_in, clock_out, gps_in, gps_out, break_minutes, approved_by, approved_at
+- `daily_logs` — project_id, date, weather, crew_present[], work_performed, hazards_present (bool), hazard_notes, pdf_file_id
+- `safety_incidents` — project_id, incident_date, type, description, injured_person, body_part, witnesses[], actions_taken, photos[], pdf_file_id, reported_by
+- `mileage_entries` — user_id, project_id, start_odometer, end_odometer, miles, date
+- `material_deliveries` — project_id, vendor_id, scheduled_date, arrived_at, checked_in_by, contents_file_id (receipt photo) OR contents_text (typed list), discrepancies
+- `crew_briefings` — project_id, date, sent_by, task_list, safety_note
+
+---
+
+## Module 8: Inventory & Tools (Detailed Design — NEW)
+
+Module 8 was added during Session 6 planning. It tracks two related but distinct things: **inventory** (consumables like lumber, drywall, screws) and **tools** (durables like drills, saws, ladders). Both share structure (categorized items with photos and history) but behave differently.
+
+### 8.1 Inventory (Consumables)
+
+- **Item catalog** — list of inventory items the contractor buys regularly
+- **Categories** — lumber, fasteners, concrete, drywall, electrical, plumbing, finishes, consumables, other (flexible, editable)
+- **Fields** — name, category, unit of measure (each, box, linear foot, square foot, etc.), default vendor (FK to subcontractors), last cost paid, photo, notes
+- **Receipt attachments** — link receipts stored in Module 3 to inventory items (paid what, when, from whom)
+- **Assignment to projects** — items allocated to a specific project flow into Module 7's project material budget
+- **Return flagging** — simple flag + notes. No automation. Office handles the actual return process manually. Decision: NOT an automated return workflow for launch.
+
+### 8.2 Tools (Durables)
+
+- **Tool catalog** — all tools owned by the contractor
+- **Categories** — power tools, hand tools, ladders & scaffolding, safety equipment, measurement, heavy equipment, other
+- **Fields** — name, category, brand, model, serial number, purchase date, notes (for specs like blade size, voltage, capacity), photo
+- **Current location** — REQUIRED. Options: shop, specific job site (project), truck, custom location
+- **Assigned person** — OPTIONAL. Tool can exist without an assigned person. When assigned, tracks who is currently responsible.
+- **Check-in/check-out log** — every location change OR assignment change logged: when, from where, to where, who made the change. Full history preserved.
+- **Bulk assignment** — select multiple tools at once and assign them to a location in one action (loading a truck for a new job)
+- **Notes for specs** — critical specs (blade size, voltage, capacity, hose length) stored in notes so any crew can look them up
+- **Photo required** — every tool has a photo for visual identification
+
+### 8.3 Explicitly Deferred to Post-Launch
+
+- **Tool maintenance tracking** — service schedules, oil changes, blade replacements. Post-launch.
+- **Low-stock alerts** — automatic reorder notifications. Post-launch.
+- **Barcode/QR code scanning** — sticker-and-scan workflow. Post-launch. Manual entry at launch.
+- **Automated return workflow** — launch version is just flag + notes. No document generation, no status tracking, no QB credit sync.
+
+### 8.4 Roles & Permissions
+
+- **View inventory and tools** — anyone on the team (Owner through Crew)
+- **Add/edit inventory items** — Owner, Admin, PM
+- **Check tools in/out, change location, assign person** — anyone on the team (Owner through Crew) — this is deliberate, so the field has access
+- **Delete items or tools** — Owner, Admin
+- **Flag items for return** — anyone on the team
+
+### 8.5 Data Model Concepts (Planned)
+
+- `inventory_items` — id, company_id, name, category, unit_of_measure, default_vendor_id (FK subcontractors), last_cost, photo_file_id, notes, is_deleted
+- `inventory_transactions` — id, company_id, item_id, type (added/used/assigned/returned/flagged_for_return), quantity, project_id (nullable), receipt_file_id, return_notes, created_by, created_at
+- `tools` — id, company_id, name, category, brand, model, serial_number, purchase_date, current_location_type (shop/project/truck/custom), current_location_id (nullable, FK to projects if type=project), current_location_custom (nullable text), assigned_to_user_id (nullable), notes, photo_file_id, is_deleted
+- `tool_history` — id, tool_id, changed_at, changed_by, previous_location_type, previous_location_id, new_location_type, new_location_id, previous_assignee, new_assignee, notes
+
+### 8.6 Connections
+
+- **Module 2** — inventory items link to subcontractors/vendors as default supplier
+- **Module 3** — receipts and item photos stored here; receipt attachments link inventory ↔ files
+- **Module 5** — tools and inventory assigned to projects
+- **Module 6** — material deliveries from field feed into inventory; tool check-out happens from mobile field app; delivery discrepancies flagged as returns
+- **Module 7** — inventory costs flow into project material budgets; T&M materials billable to client
+
+---
+
+## Module 9: Customer Experience Portal (Detailed Design — Updated)
+
+Module 9 gained several features during Session 6 planning: material selections workflow, decision log, client favorites, and pre-construction checklist.
+
+### 9.1 Material Selections Workflow (NEW)
+
+- **Separate pages by category** — flooring, cabinets, countertops, paint, tile, fixtures, appliances, etc. PM or Admin loads options (photos, descriptions, prices) per category.
+- **Client picks per category** — visual selection interface
+- **Grouped by room** — as selections are made, they populate a room-grouped page (kitchen, master bath, etc.). Clients see all their choices per room together.
+- **Finalization** — once all selections made and approved, finalized list becomes the "approved material list" for the project
+- **Auto-log to Decision Log** — when a selection category is finalized, it gets logged on the Decision Log as a timestamped record
+- **Selection deadlines** — PM or Admin sets deadlines with automated reminders. Example: "Client must pick tile by Friday or framing stops."
+- **Decision on deadline enforcement:** Open question (see Known Risks) — soft reminder only vs. blocking project progress.
+
+### 9.2 Decision Log (NEW)
+
+A separate feature from selections. Timestamped record of every significant client decision during the project. Protects the contractor in disputes.
+
+- **Auto-populated** — approved change orders, finalized selections, signed documents all auto-log
+- **Manual entries** — Owner, Admin, or PM can log verbal conversations (with client confirmation)
+- **Timestamped and attributed** — every entry shows who decided and when, and which role logged the entry
+- **Exportable as PDF** — for legal or insurance purposes. Export available to Owner, Admin, PM.
+- **Edit history question:** Append-only vs. editable (see Known Risks — leaning append-only for defensibility)
+
+### 9.3 Photo Gallery with Client Favorites (NEW)
+
+- Clients can "heart" photos they love in the gallery
+- PM, Admin, and Owner can see which photos resonated with the client
+- Client favorites feed into Module 11 marketing as top candidates for social posts
+
+### 9.4 Pre-Construction Checklist (NEW)
+
+- Before work starts: permits pulled, insurance verified, deposit received, HOA approval (if applicable), selections approved, start date agreed
+- Managed by Owner, Admin, or PM. Client can see status and help move items forward.
+
+### 9.5 Other Module 9 Features (Existing Plan)
+
+- Client login, project timeline, photo gallery, document access (PM or Admin controls what is shared with the client)
+- Change order e-signature
+- Invoice viewing and payment (Stripe Connect)
+- **Messaging** — client messages with their assigned PM by default. Admin and Owner can also message clients and view all client message threads across projects.
+- AI Weekly Summaries (Business tier only, **owner-approved** before client sees them — this is an owner-only approval; Admin cannot approve client-facing AI content)
+
+### 9.6 Data Model Concepts (Planned)
+
+- `material_selection_categories` — project_id, category_name, deadline, status, created_by
+- `material_selection_options` — category_id, name, description, price, photo_file_id, created_by
+- `material_selections` — category_id, chosen_option_id, finalized_at, finalized_by, room_assignment
+- `decision_log` — project_id, decided_at, decision_type (CO/selection/manual/signing), description, actor (client/PM/admin/owner), logged_by_role, source_record_id, is_append_only
+- `photo_favorites` — file_id, client_user_id, favorited_at
+- `preconstruction_checklist` — project_id, item_name, status, due_date, completed_at, managed_by
+
+---
+
 ## Database Tables (Current)
 
 ### Module 1 Tables
-
 - `companies` — tenant table with name, slug, address, phone, website, trade_type, license_number, logo_url, stripe_customer_id
 - `profiles` — company users with user_id, company_id, role (owner/admin/project_manager/foreman/crew_member/client), first_name, last_name, email
 - `platform_admins` — FrameFocus internal admin users (no company_id)
@@ -225,13 +472,37 @@ PM creates CO → Owner notified → Owner approves → (if client-facing) clien
 - `trial_emails` — prevents trial abuse by tracking emails that have used a trial
 
 ### Module 2 Tables
-
 - `contacts` — leads and clients. Fields: contact_type (lead/client), status, first_name, last_name, company_name, email, phone, mobile, address fields, source, notes, tags[]
 - `subcontractors` — subs and vendors. Fields: sub_type (subcontractor/vendor), status, company_name, contact_first_name, contact_last_name, email, phone, mobile, address fields, trade_type, license_number, insurance_expiry, rating (1-5), rating_notes, ein, default_hourly_rate, default_markup_percent, preferred, notes, tags[]
 
-### Storage Buckets
+### Module 3 Tables (planned)
+- `files` — all uploaded documents and photos. Fields: id, company_id, project_id (nullable), category, file_name, file_path, file_size, mime_type, tags[], ai_tags[], version, supersedes_id, uploaded_by, markup_data (JSONB), is_deleted, created_at, updated_at
 
+### Module 6 Tables (planned)
+- `time_entries` — with categorization (regular/ot/travel/drive/shop), GPS, task_id / change_order_id / tm_line_id allocation, approval tracking
+- `daily_logs` — including hazards_present bool + hazard_notes
+- `safety_incidents` — formal incident reports with OSHA fields, PDF reference
+- `mileage_entries` — per user per project
+- `material_deliveries` — with contents_file_id (receipt photo) OR contents_text (typed list), discrepancy flag
+- `crew_briefings` — daily huddle records
+
+### Module 8 Tables (planned — NEW)
+- `inventory_items` — catalog with category, unit, default_vendor_id, last_cost, photo, notes
+- `inventory_transactions` — adds, uses, assignments, returns-flagged with notes
+- `tools` — durables with brand, model, serial, current location (required), assigned person (optional), notes, photo
+- `tool_history` — every location or assignment change logged
+
+### Module 9 Tables (planned)
+- `material_selection_categories` — per project, with deadlines
+- `material_selection_options` — per category
+- `material_selections` — chosen options, finalization tracking, room grouping
+- `decision_log` — append-only timestamped client decisions
+- `photo_favorites` — client-hearted photos
+- `preconstruction_checklist` — per project
+
+### Storage Buckets
 - `company-logos` — public bucket for company logo uploads, organized by company_id folders
+- `project-files` — (Module 3, planned) private bucket for all project documents, photos, and files. Organized by company_id/project_id/category/.
 
 ---
 
@@ -242,7 +513,6 @@ PM creates CO → Owner notified → Owner approves → (if client-facing) clien
 **Row-Level Security:** Enabled on ALL tables. No exceptions. Every policy uses a `get_my_company_id()` helper function that reads company_id from the user's profile.
 
 **Naming conventions:**
-
 - Tables: `snake_case`, plural (e.g., `contacts`, `estimates`, `line_items`)
 - Columns: `snake_case` (e.g., `company_id`, `created_at`, `updated_by`)
 - Foreign keys: `{referenced_table_singular}_id` (e.g., `contact_id`, `project_id`)
@@ -250,7 +520,6 @@ PM creates CO → Owner notified → Owner approves → (if client-facing) clien
 - RLS policies: `{table}_{action}_{role}` (e.g., `contacts_select_authenticated`)
 
 **Standard columns on every table:**
-
 ```sql
 id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
 company_id      UUID NOT NULL REFERENCES companies(id)
@@ -271,12 +540,11 @@ deleted_at      TIMESTAMPTZ
 Server and client Supabase clients must be in separate files to avoid Next.js build errors (`next/headers` cannot be imported in client components).
 
 **Pattern for each data entity:**
-
 - `lib/services/{entity}.ts` — Server-side functions (imports from `@/lib/supabase-server`). Used in server components and page.tsx files. Contains read operations (getAll, getById).
 - `lib/services/{entity}-client.ts` — Client-side functions (imports from `@/lib/supabase-browser`). Used in `'use client'` form components. Contains write operations (create, update, delete).
+- Client components must use `import type { ... }` when importing interfaces from server service files.
 
 **Current service files:**
-
 - `company.ts` / `company-client.ts` — Company settings CRUD + logo upload
 - `contacts.ts` / `contacts-client.ts` — Contacts (leads & clients) CRUD
 - `subcontractors.ts` / `subcontractors-client.ts` — Subs & vendors CRUD
@@ -291,14 +559,13 @@ Server and client Supabase clients must be in separate files to avoid Next.js bu
 ## Code Conventions
 
 ### TypeScript
-
 - Strict mode enabled (`"strict": true` in tsconfig)
 - No `any` types — use `unknown` and narrow
 - Interfaces for data shapes, types for unions/aliases
 - Zod schemas in `packages/shared/validation/` for all form and API validation
+- Use `import type { ... }` when importing types across server/client boundaries
 
 ### React (Web — Next.js)
-
 - App Router (not Pages Router)
 - Server Components by default; `"use client"` only when state/interactivity needed
 - shadcn/ui components as the base; customize via Tailwind
@@ -306,21 +573,18 @@ Server and client Supabase clients must be in separate files to avoid Next.js bu
 - Colocate component-specific files: `components/estimate-builder/estimate-builder.tsx`
 
 ### React Native (Mobile — Expo)
-
 - Expo Router for navigation
 - Expo SDK managed workflow (no bare workflow)
 - NativeWind (Tailwind for React Native) for styling consistency with web
 - Offline-first for field operations using Expo SQLite with sync queue
 
 ### API / Data Layer
-
 - Supabase client initialized once per app in a shared provider
 - All database calls go through service modules: `services/contacts.ts`, `services/estimates.ts`, etc.
 - Never call Supabase directly from components — always through a service function
 - Edge Functions for server-side logic that can't run on client (webhook handlers, AI calls, PDF generation)
 
 ### Git Workflow
-
 - `main` branch is production (auto-deploys to Vercel)
 - `dev` branch for integration
 - Feature branches: `feature/{module}-{description}` (e.g., `feature/contacts-csv-import`)
@@ -336,8 +600,8 @@ There are two completely separate layers of users. They use different auth syste
 
 These users manage the FrameFocus platform itself. They are NOT tied to any company tenant.
 
-| Role           | Description                                                                                                                                            |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Role | Description |
+|------|-------------|
 | Platform Admin | Full access to all companies, subscriptions, support tools, platform analytics, and system configuration. Josh and any future FrameFocus team members. |
 
 **Implementation:** Platform Admins are stored in a separate `platform_admins` table (not the company `profiles` table). They access a separate admin dashboard route (`/admin`). They do NOT have a `company_id`.
@@ -346,14 +610,68 @@ These users manage the FrameFocus platform itself. They are NOT tied to any comp
 
 Each subscribing company is an isolated tenant. Within that company, there are 6 roles with descending access levels. The Owner is always the billing contact.
 
-| Role            | DB Value          | Web Access                         | Mobile Access     | Key Permissions                                                                                                                            |
-| --------------- | ----------------- | ---------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Owner           | `owner`           | Full                               | Full              | All features, billing/subscription management, user invitations, approval authority on change orders/payments/AI content, company settings |
-| Admin           | `admin`           | Full                               | Full              | Everything except billing, promoting to Admin                                                                                              |
-| Project Manager | `project_manager` | Full (scoped to assigned projects) | Full              | Create/manage estimates, manage assigned projects, assign tasks, create change orders, view job finances, manage client communication      |
-| Foreman         | `foreman`         | Limited                            | Full              | Manage assigned field crews, daily logs, schedule crew tasks, review Crew Member submissions, punch lists, quality control                 |
-| Crew Member     | `crew_member`     | Minimal                            | Full              | Clock in/out with GPS, daily log entries, photo capture, task status updates, view assigned tasks and schedule                             |
-| Client          | `client`          | Portal only                        | No (future phase) | View project timeline, photo gallery, approve selections, sign documents, make payments, message PM, view AI weekly summaries              |
+| Role | DB Value | Web Access | Mobile Access | Key Permissions |
+|------|----------|-----------|---------------|-----------------|
+| Owner | `owner` | Full | Full | All features, billing/subscription management, user invitations, approval authority on change orders/payments/AI content, company settings, QuickBooks connection |
+| Admin | `admin` | Full | Full | Everything Owner can do EXCEPT items in the owner-only list below |
+| Project Manager | `project_manager` | Full (scoped to assigned projects) | Full | Create/manage estimates, manage assigned projects, assign tasks, create change orders, view job finances, manage client communication |
+| Foreman | `foreman` | Limited | Full | Manage assigned field crews, daily logs, schedule crew tasks, review Crew Member submissions, punch lists, quality control |
+| Crew Member | `crew_member` | Minimal | Full | Clock in/out with GPS, daily log entries, photo capture, task status updates, view assigned tasks and schedule |
+| Client | `client` | Portal only | No (future phase) | View project timeline, photo gallery, approve selections, sign documents, make payments, message PM, view AI weekly summaries |
+
+### The Admin Role Principle (authoritative)
+
+**Admin is defined as "Owner minus money minus Admin promotion."** Anywhere in the platform where the rule for an action is not explicitly owner-only, Admin has the same access as Owner. When in doubt during implementation, Admin can do it.
+
+**Owner-only actions (Admin is NOT allowed):**
+
+1. **Billing and subscription management** — viewing/changing the subscription plan, updating payment methods, canceling the subscription, viewing billing history. Admin cannot see the Billing page at all.
+2. **Promoting a user to the Admin role** — Admin cannot create more Admins. Only Owner can invite at the Admin level or promote an existing user to Admin.
+3. **Transferring ownership** — only the current Owner can transfer ownership to another user. Admin cannot initiate ownership transfer.
+4. **Connecting or disconnecting QuickBooks** — QB connection is treated as billing-adjacent because it controls financial data flow out of FrameFocus. Owner-only.
+5. **Releasing final sub payments (money out the door)** — Admin can review, adjust, and approve sub pay applications, but the final "release payment" click that actually records payment and triggers the QB sync is Owner-only.
+6. **Approving client-facing AI weekly summaries** — before an AI-drafted weekly project summary is shown to the client, it must be approved by the Owner specifically. Admin cannot approve these.
+7. **Approving marketing content for publishing** — AI-generated social posts, review request emails, and any marketing content going out under the company name must be Owner-approved before publishing. Admin cannot approve these.
+8. **Deleting the company account** — only Owner can close the company account (this is a billing-adjacent action).
+
+**What Admin CAN do (non-exhaustive — this is the default, not the list):**
+- Full access to all modules (1 through 11) except the Billing page
+- Invite and remove users at all levels EXCEPT Admin (cannot invite at Admin level)
+- Edit company settings (name, logo, address, trade type, etc.)
+- Create, edit, and approve estimates
+- Create and edit projects, tasks, phases, milestones
+- Create change orders (but Owner gives final approval)
+- Approve timesheets (Foreman and below)
+- Review and approve sub pay applications (but Owner releases final payment)
+- Manage contacts, subcontractors, vendors, inventory, and tools
+- Upload, edit, and delete files
+- View all project finances, budgets, and reports
+- File and manage safety incident reports
+- Message clients through the portal (Admin, PM, and Owner all can)
+- Approve AI estimate suggestions, AI punch list proposals, AI anomaly flags, AI-drafted daily log summaries (everything except client-facing AI and marketing AI)
+
+### Role Permissions Quick Reference (By Action)
+
+For any action not listed in the owner-only section above, assume Admin has access. When building a new feature, if a permission decision needs to be made, default to "Owner + Admin can do it" unless there is a specific reason (financial sign-off, billing, or client-facing owner-approval) to restrict it to Owner only.
+
+**Who can approve what (summary):**
+
+| Approval | Owner | Admin | PM | Foreman |
+|----------|-------|-------|----|---------| 
+| Billing changes | ✓ | — | — | — |
+| Promote to Admin | ✓ | — | — | — |
+| Connect QuickBooks | ✓ | — | — | — |
+| Release sub payments | ✓ | — | — | — |
+| Approve AI weekly summaries | ✓ | — | — | — |
+| Approve marketing content | ✓ | — | — | — |
+| Approve change orders (final) | ✓ | — | — | — |
+| Approve sub pay apps (review step) | ✓ | ✓ | ✓ | — |
+| Approve estimates for sending | ✓ | ✓ | ✓ | — |
+| Approve foreman timesheets | ✓ | ✓ | ✓ | — |
+| Approve crew timesheets | ✓ | ✓ | ✓ | ✓ |
+| Invite users (non-Admin) | ✓ | ✓ | — | — |
+| Delete files | ✓ | ✓ | ✓ | — |
+| Edit company settings | ✓ | ✓ | — | — |
 
 ---
 
@@ -361,36 +679,47 @@ Each subscribing company is an isolated tenant. Within that company, there are 6
 
 User counts below refer to Company Users (Owner + Admin + PM + Foreman + Crew Member). Client portal accounts are unlimited on the Business tier.
 
-|                     | Starter ($79/mo) | Professional ($149/mo) | Business ($249/mo)            |
-| ------------------- | ---------------- | ---------------------- | ----------------------------- |
-| Company Users       | 2                | 5                      | 15                            |
-| Additional Users    | $15/user/mo      | $15/user/mo            | $12/user/mo                   |
-| Storage             | 10 GB            | 50 GB                  | 200 GB                        |
-| AI Estimates        | 5/mo             | 25/mo                  | Unlimited                     |
-| Client Portal       | —                | —                      | ✓ (unlimited client accounts) |
-| Workflow Automation | —                | Core                   | All + custom                  |
-| AI Marketing        | —                | —                      | Add-on $99/mo                 |
-| QuickBooks Sync     | ✓                | ✓                      | ✓                             |
+| | Starter ($79/mo) | Professional ($149/mo) | Business ($249/mo) |
+|---|---|---|---|
+| Company Users | 2 | 5 | 15 |
+| Additional Users | $15/user/mo | $15/user/mo | $12/user/mo |
+| Storage | 10 GB | 50 GB | 200 GB |
+| AI Estimates | 5/mo | 25/mo | Unlimited |
+| Client Portal | — | — | ✓ (unlimited client accounts) |
+| Workflow Automation | — | Core | All + custom |
+| AI Marketing | — | — | Add-on $99/mo |
+| QuickBooks Sync | ✓ | ✓ | ✓ |
 
 ---
 
 ## Built-In Workflow Automations
 
-1. **Lien Release on Sub Completion** — Sub marks work complete → system generates lien release → e-signature request → signed release unlocks payment approval → payment recorded
-2. **Change Order Approval Chain** — PM creates CO → owner approves → client signs → budget/schedule updated → QB sync
-3. **Milestone Client Notification** — Milestone complete → portal updated → client notified → invoice generated if billing milestone
-4. **Estimate Follow-Up** — No response in 3 days → owner reminder → optional auto follow-up to client
-5. **Insurance Expiration Alert** — Sub cert within 30 days of expiry → notifications → auto-request to sub
-6. **Project Completion Closeout** — All tasks/punch done → final invoice with retainage → satisfaction survey → portfolio prompt → archive
+**Note on Admin role in workflows:** Admin has the same access as Owner throughout these workflows EXCEPT for (a) final payment release, (b) owner-only approval of client-facing AI content, and (c) billing/subscription actions. Admin receives all notifications that Owner receives and can take most actions on Owner's behalf for operational matters.
+
+1. **Lien Release on Sub Completion** — Sub marks work complete → system generates lien release → e-signature request → signed release unlocks payment approval → payment recorded → QB sync
+2. **Change Order Approval Chain** — PM or Admin creates CO → Owner (and Admin) notified → Owner approves (owner-only final approval) → client signs via portal → budget/schedule updated → auto-log to Decision Log → QB sync
+3. **Milestone Client Notification** — Milestone complete → portal updated → client notified → invoice generated if billing milestone → Owner, Admin, and PM notified
+4. **Estimate Follow-Up** — No response in 3 days → Owner and Admin reminder → optional auto follow-up to client
+5. **Insurance Expiration Alert** — Sub cert within 30 days of expiry → Owner, Admin, and assigned PM notified → auto-request to sub → block from new work if expired
+6. **Project Completion Closeout** — All tasks/punch done → final invoice with retainage → satisfaction survey → portfolio prompt → archive. Owner, Admin, and PM involved in closeout steps.
+7. **Daily Log Auto-Report** (NEW) — End of day → compile log entries, photos, time, safety hazards → PDF → file to Module 3 → notify PM and Admin
+8. **Safety Incident Report** (NEW) — Incident reported → PDF generated → filed to Module 3 → **Owner, Admin, and assigned PM notified immediately** → company incident log updated
+9. **New Client Welcome Package** (NEW) — Lead → Client conversion → portal account created (Business tier) → welcome email → signed proposal auto-filed → PM and Admin notified → QB Customer sync
+10. **Sub Payment Processing** (NEW) — Pay app submitted → PM or Admin reviews → PM or Admin approves pay app → **Owner releases payment (owner-only final approval)** → payment recorded → QB sync → retainage tracked
+11. **Material Delivery Arrival** (NEW) — Scheduled delivery arrives → any project member checks in via mobile → receipt photo or typed list → discrepancies flagged → flow to Module 8 inventory returns → PM and Admin notified of discrepancies
+12. **Material Selection Finalization** (NEW) — Client finalizes a selection category → auto-log to Decision Log → contributes to approved material list → PM and Admin notified
 
 ---
 
 ## AI Integration Rules
 
-1. **AI drafts, humans approve.** Nothing client-facing or financially significant ships without owner review.
-2. **Historical data powers suggestions.** Estimating AI uses pgvector embeddings of completed job line items.
-3. **Company context included in all prompts.** Trade type, region, typical project size, approved brand voice.
-4. **Approval queue for all AI outputs.** Weekly summaries, social posts, report narratives all go through a review step.
+1. **AI drafts, humans approve.** Nothing client-facing or financially significant ships without human review.
+2. **Owner-only approvals:** AI weekly client summaries, marketing content for publishing, and AI-drafted financial narratives that affect billing require **Owner** approval specifically. Admin cannot approve these.
+3. **Admin-or-Owner approvals:** AI line item suggestions in estimates, AI-drafted daily log summaries, AI punch list proposals, and AI anomaly flags can be reviewed and approved by **Owner or Admin**.
+4. **Exception: AI photo auto-tags apply instantly.** Auto-tagging is internal organization, not client-facing. Tags are editable by any team member who can view the file. No approval queue needed.
+5. **Historical data powers suggestions.** Estimating AI uses pgvector embeddings of completed job line items.
+6. **Company context included in all prompts.** Trade type, region, typical project size, approved brand voice.
+7. **Approval queue for all AI outputs.** Weekly summaries, social posts, report narratives all go through a review step before anything reaches a client.
 
 ---
 
@@ -408,6 +737,77 @@ When generating code, migrations, or instructions for Josh:
 
 ---
 
+## Known Technical Debt (from Session 5 Audit)
+
+Track these items for resolution in upcoming sessions:
+
+| Priority | Issue | When to Fix |
+|----------|-------|-------------|
+| Next session | US_STATES and TRADE_TYPES duplicated in 3 form files — move to packages/shared/constants/form-options.ts | Module 3 |
+| Next session | CompanyData interface duplicated in company.ts and company-client.ts — move shared interfaces to packages/shared/types/ | Module 3 |
+| Module 4 | Add `converted_at` timestamp to contacts for lead-to-client conversion tracking | Module 4 |
+| Module 4 | Add cursor-based pagination to list pages | Module 4 |
+| Pre-beta | Add tags UI (add/remove/display) to contacts and subcontractors forms | Pre-beta |
+| Pre-beta | Add loading.tsx and error.tsx to contacts and subcontractors routes | Pre-beta |
+| Pre-beta | Add active page highlighting to sidebar nav | Pre-beta |
+| Pre-beta | Add CSV import for contacts and subcontractors | Pre-beta |
+| Pre-beta | Add insurance_carrier and insurance_policy_number to subcontractors | Module 5/6 |
+
+### Admin Role Verification (audit from Session 6)
+
+The Admin role was added mid-Session 2 during the Module 1E invite system build. It was designed to mean "Owner minus billing minus Admin promotion," but as the platform has grown, it is worth explicitly verifying what was actually built in Modules 1 and 2 matches the Admin Role Principle (see User & Role Architecture section). The following items should be checked against the live codebase during the next build session, and any gaps fixed before Module 3 starts:
+
+| Area | What to verify | Status |
+|------|----------------|--------|
+| **Module 1: Invite flow** | Admin can invite Owner, PM, Foreman, Crew Member, Client (NOT Admin). UI should not show Admin as an invitable role when the current user is Admin. | **Verify** — was built this way but has not been re-tested since. |
+| **Module 1: Team management** | Admin can remove users at all levels except Owner. Admin cannot promote another user to Admin. | **Verify** |
+| **Module 1: Billing page** | Admin should get a 403 or redirect when navigating to `/dashboard/billing`. RLS + middleware check. | **Verify** — middleware enforcement added in Session 5 audit fixes; confirm it blocks Admin. |
+| **Module 1: Company settings** | Admin can edit company name, logo, address, phone, website, trade type, license number. | **Verify** — should work based on RLS policies written in Session 5. |
+| **Module 1: QuickBooks connection button** | Per Session 6 decision, QB connection is Owner-only. The Connect QB button on company settings should be hidden from Admin. QB build has not happened yet, so this is a note for when it does. | **Note for future** |
+| **Module 2: Contacts CRUD** | Admin can create, edit, delete contacts. RLS policy `contacts_*_admin_or_above` or equivalent. | **Verify** — RLS was written for "owner or admin or PM" per Session 5 notes. |
+| **Module 2: Subcontractors CRUD** | Admin can create, edit, delete subcontractors. | **Verify** — same as contacts. |
+| **Module 2: Sidebar navigation** | Admin sees Contacts, Subcontractors, Team, Settings in the sidebar. Does NOT see Billing. | **Verify** — sidebar gating was built for owner/admin on Settings; confirm Billing is hidden from Admin. |
+| **Seat counting** | Admin users count against the plan's seat limit (same as any other company user). Client accounts do not. | **Verify** — seat counting logic excludes `client` role; confirm it includes `admin`. |
+| **handle_new_user() trigger** | When an invited Admin signs up, trigger creates profile with `role = 'admin'` and correct `company_id`. No special Admin creation path outside of Owner-sent invites. | **Verify** |
+| **Database CHECK constraint** | `profiles.role` CHECK constraint includes `'admin'` as a valid value (added in migration 003). | **Confirmed** — migration 003 added this. |
+| **Shared types** | `packages/shared/types/roles.ts` includes `admin` in the role union type. `packages/shared/constants/roles.ts` has ROLE_HIERARCHY, ROLE_LABELS, ROLE_DESCRIPTIONS, INVITABLE_ROLES, canManageRole() correctly handling Admin. | **Confirmed** — built during Session 2. |
+
+### Admin Role Verification — Action Items
+
+Before starting Module 3, run a verification pass on the live codebase:
+
+1. **Sign in as Admin** (create a test Admin account via Owner invite if one does not exist) and click through every page in the dashboard. Confirm:
+   - Billing page is blocked
+   - Team page shows invite form but "Admin" is not a selectable role in the dropdown
+   - Company Settings page is accessible and editable
+   - Contacts and Subcontractors pages work fully (create, edit, delete)
+   - Sidebar shows all expected nav items and no unexpected ones
+
+2. **Check RLS policies** in Supabase SQL Editor:
+   ```sql
+   SELECT policyname, cmd, qual, with_check 
+   FROM pg_policies 
+   WHERE schemaname = 'public' 
+   ORDER BY tablename, policyname;
+   ```
+   Confirm every write policy that allows Owner also allows Admin (except billing-related tables like `subscriptions`).
+
+3. **Check middleware** in `apps/web/middleware.ts`:
+   - Confirm Admin cannot access `/dashboard/billing/*` routes
+   - Confirm Admin CAN access `/dashboard/settings`, `/dashboard/team`, `/dashboard/contacts`, `/dashboard/subcontractors`
+
+4. **Check sidebar gating** in `apps/web/app/dashboard/dashboard-shell.tsx`:
+   - Confirm Settings link shows for Owner and Admin
+   - Confirm Billing link shows for Owner ONLY
+   - Confirm Team link shows for Owner and Admin
+
+5. **Check invite form** in `apps/web/app/dashboard/team/invite/invite-form.tsx`:
+   - Confirm INVITABLE_ROLES constant excludes "admin" when the current user is Admin (only Owner can invite at Admin level)
+
+If any of these fail, log the issue and fix before Module 3. The Admin role is foundational — every subsequent module assumes it works correctly.
+
+---
+
 ## Environment Variables (apps/web/.env.local and Vercel)
 
 ```
@@ -421,6 +821,7 @@ STRIPE_PRICE_STARTER=(price_ id)
 STRIPE_PRICE_PROFESSIONAL=(price_ id)
 STRIPE_PRICE_BUSINESS=(price_ id)
 NEXT_PUBLIC_APP_URL=https://frame-focus-eight.vercel.app
+OPENAI_API_KEY=(sk-... key — needed for Module 3 AI auto-tagging, set up when Module 3 build starts)
 ```
 
 ---
@@ -455,18 +856,41 @@ NEXT_PUBLIC_APP_URL=https://frame-focus-eight.vercel.app
 ## Current Session Context
 
 **What's been completed:**
-
 - Full tech stack and architecture finalized (Session 1)
 - Infrastructure scaffolded: monorepo, Codespaces, Supabase, Vercel (Session 2)
 - Module 1 complete: auth, invites, admin role, Stripe billing, company settings (Sessions 2–5)
 - Module 2 complete: contacts (leads/clients) + subcontractors (subs/vendors) with full CRUD (Session 5)
 - QuickBooks integration strategy decided (Session 5)
 - Change order workflow detailed (Session 5)
+- Architecture audit completed with tech debt tracked (Session 5)
+- Module 3 detailed design completed: file management, photo markup & annotation, AI auto-tagging (Session 6)
+- Platform roadmap spreadsheet produced (8 tabs) (Session 6)
+- **Major platform expansion during Session 6 planning:**
+  - Added Module 8: Inventory & Tools (NEW) — bumped Client Portal → 9, Reporting → 10, AI Marketing → 11
+  - Added time categorization (regular/OT/travel/drive/shop), break tracking, overtime, mileage tracking to Module 6
+  - Added hours-to-change-order and hours-to-T&M-line allocation to Module 6
+  - Added safety hazards section to daily logs + separate Safety Incident Reporting workflow
+  - Added daily huddle/crew briefing (optional) to Module 6
+  - Added material delivery tracking (anyone on project can check in, receipt photo or typed list) to Module 6
+  - Added receipt attachment capability to Module 3, linked to Module 8 inventory items
+  - Added Material Selections workflow to Module 9 (separate category pages, room grouping, auto-log to Decision Log)
+  - Added Decision Log to Module 9 (timestamped, append-only planned, exportable PDF)
+  - Added photo gallery client favorites to Module 9 (feeds Module 11 marketing)
+  - Added pre-construction checklist to Module 9
+  - Added voice-to-text daily logs, offline photo queue, quick-add punch list from photo/video/audio (video/audio post-launch)
+  - Canceled weather-based work cancellation and customer referral tracking
+  - Deferred to post-launch: tool maintenance, low-stock alerts, barcode scanning, automated return workflow, AI punch list from video/audio
+- **Session 6 deliverables produced:**
+  - `FrameFocus_Platform_Roadmap.xlsx` — 8-tab planning spreadsheet
+  - `FrameFocus_Platform_Roadmap.docx` — 51-page comprehensive reference document (10th grade reading level)
+  - `FrameFocus_Quick_Reference.docx` — 5-page scannable summary
+  - `context7.md` — session summary log
 
 **What's next:**
-
-- Module 3: Document & File Management
-- Module 4: Sales & Estimating (first core business module)
+- Run audit fixes from Session 5 (import type, consolidate duplicated constants)
+- Module 3: Document & File Management (build) — first build session for the new expanded scope
+- Decide open questions before building: T&M rate structure (per-employee vs. per-role), photo markup storage format (JSON vs. image), selection deadline enforcement, decision log edit history policy
+- Set up OpenAI API key in env vars before Module 3 build starts
 
 ---
 
@@ -477,12 +901,10 @@ NEXT_PUBLIC_APP_URL=https://frame-focus-eight.vercel.app
 **What it is:** Claude Code is a command-line tool that runs directly in the terminal. It can read the full codebase, edit multiple files, run commands, and execute multi-step coding tasks without copy-pasting.
 
 **How to use both tools together:**
-
 - **Claude Code (in Codespaces terminal)** — Hands-on coding: building components, writing migrations, creating services, fixing errors, running tests.
 - **Claude Chat (this interface)** — Planning and review: data model design, architecture decisions, module planning, document creation.
 
 **Setup instructions:**
-
 1. Open your Codespace terminal
 2. Run: `npm install -g @anthropic-ai/claude-code`
 3. Run: `claude` to authenticate
@@ -492,6 +914,9 @@ NEXT_PUBLIC_APP_URL=https://frame-focus-eight.vercel.app
 
 ## Reference Documents
 
-- `FrameFocus_Development_Roadmap.docx` — Full business roadmap with module details, pricing, and timeline
-- This file (`CLAUDE.md`) — Technical development guide (update after every major session)
-- `context1.md` through `context5.md` — Session-by-session build logs
+- `FrameFocus_Platform_Roadmap.docx` — **Primary reference.** 51-page comprehensive roadmap with all 11 modules, workflows, AI features, roles, dependencies, data flow, success metrics, known risks, beta plan placeholder, and post-launch roadmap. 10th grade reading level. Updated during Session 6.
+- `FrameFocus_Quick_Reference.docx` — 5-page scannable summary of all features and workflows. For sharing with reviewers or quick refreshers.
+- `FrameFocus_Platform_Roadmap.xlsx` — 8-tab planning spreadsheet with integrations, workflows, AI features, roles/permissions, QB sync, and future ideas.
+- `FrameFocus_Development_Roadmap.docx` — Original business roadmap from Session 1 (now superseded by the newer docs above; kept for historical reference).
+- This file (`CLAUDE.md`) — Technical development guide (update after every major session).
+- `context1.md` through `context7.md` — Session-by-session build and planning logs. Read the most recent one at the start of each new session.
