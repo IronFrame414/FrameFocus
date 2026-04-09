@@ -1,9 +1,9 @@
 # STATE.md — FrameFocus Current State
 
-> **Last updated:** April 9, 2026 (end of Session 9 — Option C generated types, session-start.sh, CLAUDE.md update)
+> **Last updated:** April 9, 2026 (end of Session 10 — verification session, no code written, 5 new tech debt items logged)
 > **Purpose:** Snapshot of the current state of the codebase, infrastructure, and database. Lives in the repo root. Updated at the end of each session.
 >
-> **Note on Session 8:** This was a housekeeping and process-improvement session. No code was written. The session verified that audit fixes 1a and 1b were already complete (work from a prior Claude Code session that wasn't reflected in context files), decided on Option C (generated Supabase types) for audit fix 1c, restructured the repo to hold reference documents and session context files in version control, and documented new tech debt. See `docs/sessions/context9.md` for the full session narrative and Session 9 definition of done.
+> **Note on Session 10:** Verification session. The Session 9 Option C refactor was verified safe in a production-equivalent environment. All 5 items in the Verification First checklist passed. Smoke testing surfaced 5 small UX/feature gaps in Modules 1 and 2 that were logged as new tech debt rather than fixed mid-session. The two open data-model decisions (T&M rate structure, photo markup format) were deferred to Session 11. See `docs/sessions/context11.md` for the full session narrative.
 
 ---
 
@@ -51,20 +51,20 @@
 
 ## Infrastructure
 
-| Component          | Status            | Details                                                                                                            |
-| ------------------ | ----------------- | ------------------------------------------------------------------------------------------------------------------ |
-| GitHub repo        | ✅ Live           | github.com/IronFrame414/FrameFocus (private)                                                                       |
-| GitHub Codespaces  | ✅ Configured     | Current Codespace: "fantastic trout"; prior: "zany orbit"                                                          |
-| Turborepo monorepo | ✅ Scaffolded     | apps/web, apps/mobile, packages/shared, packages/supabase, packages/ui                                             |
-| Supabase project   | ✅ Live           | jwkcknyuyvcwcdeskrmz.supabase.co                                                                                   |
-| Supabase Storage   | ✅ Live           | `company-logos` public bucket configured                                                                           |
-| Vercel deployment  | ✅ Live           | https://frame-focus-eight.vercel.app (auto-deploy from main)                                                       |
-| GitHub Actions CI  | ✅ Configured     | Lint + type-check on push to main/dev                                                                              |
-| Stripe             | ✅ Live           | Test mode. 3 products + webhook + Customer Portal configured                                                       |
-| Supabase CLI       | ✅ Installed      | Installed Session 9. Linked to jwkcknyuyvcwcdeskrmz. Run `npx supabase login` after Codespace rebuild.             |
-| QuickBooks Online  | ⚪ Not connected  | Strategy decided. Implementation deferred to Modules 6 & 7.                                                        |
-| OpenAI API         | ✅ Configured     | `OPENAI_API_KEY` set in `.env.local` and Vercel (Session 9). Ready for Module 3.                                   |
-| Claude Code        | ✅ Installed      | Installed Session 9. CLI in Codespace terminal.                                                                    |
+| Component          | Status           | Details                                                                                                |
+| ------------------ | ---------------- | ------------------------------------------------------------------------------------------------------ |
+| GitHub repo        | ✅ Live          | github.com/IronFrame414/FrameFocus (private)                                                           |
+| GitHub Codespaces  | ✅ Configured    | Current Codespace: "fantastic trout"; prior: "zany orbit"                                              |
+| Turborepo monorepo | ✅ Scaffolded    | apps/web, apps/mobile, packages/shared, packages/supabase, packages/ui                                 |
+| Supabase project   | ✅ Live          | jwkcknyuyvcwcdeskrmz.supabase.co                                                                       |
+| Supabase Storage   | ✅ Live          | `company-logos` public bucket configured                                                               |
+| Vercel deployment  | ✅ Live          | https://frame-focus-eight.vercel.app (auto-deploy from main)                                           |
+| GitHub Actions CI  | ✅ Configured    | Lint + type-check on push to main/dev                                                                  |
+| Stripe             | ✅ Live          | Test mode. 3 products + webhook + Customer Portal configured                                           |
+| Supabase CLI       | ✅ Installed     | Installed Session 9. Linked to jwkcknyuyvcwcdeskrmz. Run `npx supabase login` after Codespace rebuild. |
+| QuickBooks Online  | ⚪ Not connected | Strategy decided. Implementation deferred to Modules 6 & 7.                                            |
+| OpenAI API         | ✅ Configured    | `OPENAI_API_KEY` set in `.env.local` and Vercel (Session 9). Ready for Module 3.                       |
+| Claude Code        | ✅ Installed     | Installed Session 9. CLI in Codespace terminal.                                                        |
 
 ---
 
@@ -285,15 +285,15 @@ Same complete set as `.env.local`. All variables must be set in both places.
 
 ## Supabase Configuration
 
-| Setting                     | Value                                                                                                     |
-| --------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Email provider              | ✅ Enabled                                                                                                |
-| Email confirmation          | ✅ Re-enabled (Session 9)                                                                                 |
-| Site URL                    | `https://frame-focus-eight.vercel.app`                                                                    |
-| Redirect URLs               | `https://frame-focus-eight.vercel.app/auth/callback`, `http://localhost:3000/auth/callback`               |
-| Automatic RLS on new tables | ✅ Enabled                                                                                                |
-| Data API                    | ✅ Enabled                                                                                                |
-| Storage buckets             | `company-logos` (public)                                                                                  |
+| Setting                     | Value                                                                                       |
+| --------------------------- | ------------------------------------------------------------------------------------------- |
+| Email provider              | ✅ Enabled                                                                                  |
+| Email confirmation          | ✅ Re-enabled (Session 9)                                                                   |
+| Site URL                    | `https://frame-focus-eight.vercel.app`                                                      |
+| Redirect URLs               | `https://frame-focus-eight.vercel.app/auth/callback`, `http://localhost:3000/auth/callback` |
+| Automatic RLS on new tables | ✅ Enabled                                                                                  |
+| Data API                    | ✅ Enabled                                                                                  |
+| Storage buckets             | `company-logos` (public)                                                                    |
 
 ---
 
@@ -457,6 +457,21 @@ DELETE FROM auth.users;
 
 ## Outstanding Items / Tech Debt
 
+### Session 10 Accomplishments (April 9, 2026)
+
+- ✅ Ran Verification First checklist — all 5 items green
+  - `bash scripts/session-start.sh` — clean repo, Supabase CLI linked
+  - `npm run type-check` — 5/5 packages pass
+  - `npm run build` — production build clean, all 22 routes compile
+  - Vercel preview deploy on `verify/session-10` branch built and Ready
+  - Browser smoke test on preview URL — settings, contacts, subcontractors, team, team/invite all render correctly with no console errors
+- ✅ Verified Session 9 null guards working in live preview (team-page-client.tsx dates render correctly)
+- ✅ Discovered Vercel deduplicates preview deploys by SHA — pushing a branch at the same SHA as `main` will not trigger a build. Force a fresh deploy with `git commit --allow-empty`. Logged as a lesson for future verification sessions.
+- ✅ Logged 5 new tech debt items surfaced during smoke test (see Code Quality / UX Polish section below)
+- ✅ Cleaned up `verify/session-10` branch (deleted local + origin)
+- ❌ Open decisions (T&M rate structure, photo markup format) deferred to Session 11
+- ❌ Module 3 build deferred to Session 11
+
 ### Session 9 Accomplishments (April 9, 2026)
 
 - ✅ Implemented Option C (generated Supabase types as single source of truth)
@@ -467,7 +482,7 @@ DELETE FROM auth.users;
   - Surfaced and fixed 2 real latent bugs (null guards on timestamps in team-page-client.tsx)
 - ✅ Created `scripts/session-start.sh` ground-truth snapshot script
 - ✅ Added Generated Types Workflow section to CLAUDE.md
-- ✅ Cleaned up .gitignore (removed dead entry, added supabase/.temp/, *.tsbuildinfo)
+- ✅ Cleaned up .gitignore (removed dead entry, added supabase/.temp/, \*.tsbuildinfo)
 - ✅ Re-enabled Supabase email confirmation
 - ✅ Added OPENAI_API_KEY to .env.local and Vercel
 - ✅ Installed Claude Code in Codespace
@@ -510,22 +525,34 @@ These came up in Session 6 planning and are not resolved. They affect data model
 22. **`packages/shared/types/index.ts` `Company` interface missing `website` and `license_number`** — Columns exist in DB (Migration 009) but not in the type. Partially mitigated by generated types in service files; hand-written types/index.ts still drifts.
 23. **Migration filename `014_handle_new_User_Bypass_rls.sql` breaks naming convention** — Rename to `014_handle_new_user_bypass_rls.sql`. Cosmetic only, low priority.
 
+### UX Polish (Discovered Session 10)
+
+These all surfaced during the Session 10 smoke test. None are blocking, all are real product gaps. Best fixed as a "Module 1/2 polish" mini-session before Module 4, or folded into whichever module touches the affected pages next.
+
+24. **Row click should open read-only detail view (contacts + subcontractors)** — Currently the only way to open a contact or vendor is the Edit button. Clicking the row should open a read-only detail view; editing should still require the explicit Edit button. Prevents accidental changes when users just want to look at a record. Same fix needed in both contacts and subcontractors.
+25. **Team member edit UI** — Owner/Admin currently cannot open or edit existing team members from the team page. Need a `/dashboard/team/[id]` detail page similar to contacts.
+26. **Team member delete UI** — Owner/Admin currently cannot remove a team member from the team page. Add to the team detail page.
+27. **Team member password reset (Owner/Admin action)** — Owner/Admin should be able to trigger a password reset for a team member from the team detail page. Likely a Supabase admin API call.
+28. **Team member notes field** — Add a simple text notes field on the team member detail page. Visible only when you click into the member, not in the list view. Useful for things like "handles framing crew, prefers text over email."
+
+Items 25–28 share the same fix pattern: build a `/dashboard/team/[id]` detail page with edit/delete/notes/reset-password actions. Probably 1–2 hours total once the page exists.
+
 ### Lower Priority / Existing
 
-27. **Invite emails not automated** — Owner currently copies the invite link manually. Resend integration deferred.
-28. **No Edge Functions yet** — `packages/supabase/functions/` is empty. Stripe webhook handler is a Next.js API route. Module 3 AI auto-tagging may be the first Edge Function candidate.
-29. **No shared UI components** — `apps/web/components/` and `packages/ui/` are empty. shadcn/ui not yet installed.
-30. **Mobile app is a placeholder** — No real screens, no Supabase wiring, no NativeWind. Phase 2 work.
-31. **No tests** — Test infrastructure not set up.
-32. **`profiles` table uses `user_id` column** — All queries use `.eq('user_id', user.id)`.
-33. **Promote-to-admin UI not built** — Owners can invite Admin role but no UI to promote existing members.
-34. **Per-seat overage billing not implemented** — Module 1F blocks invites at limit but doesn't charge extra. Deferred until pricing model is finalized.
-35. **`.env.local` doesn't persist across Codespace rebuilds** — Must be recreated from Vercel env vars.
-36. **Legacy columns on companies table** — `subscription_tier` and `subscription_status` from earlier work, separate from `subscriptions` table. Unused but redundant.
-37. **TypeScript `any` workaround in webhook** — `_supabaseAdmin` typed as `any`.
-38. **Bishop Contracting may need manual subscription row** — Predates Migration 007.
-39. **Role-check patterns repeated** — `['owner', 'admin', 'project_manager'].includes(profile.role)` in every page.tsx. Extend `canManageRole()` pattern. Helper functions like `isOwnerOrAdmin()`, `canManageProjects()` would prevent Admin role drift.
-40. **Inline style objects duplicated** across all three forms. Will be cleaned up with shadcn/ui migration.
+29. **Invite emails not automated** — Owner currently copies the invite link manually. Resend integration deferred.
+30. **No Edge Functions yet** — `packages/supabase/functions/` is empty. Stripe webhook handler is a Next.js API route. Module 3 AI auto-tagging may be the first Edge Function candidate.
+31. **No shared UI components** — `apps/web/components/` and `packages/ui/` are empty. shadcn/ui not yet installed.
+32. **Mobile app is a placeholder** — No real screens, no Supabase wiring, no NativeWind. Phase 2 work.
+33. **No tests** — Test infrastructure not set up.
+34. **`profiles` table uses `user_id` column** — All queries use `.eq('user_id', user.id)`.
+35. **Promote-to-admin UI not built** — Owners can invite Admin role but no UI to promote existing members.
+36. **Per-seat overage billing not implemented** — Module 1F blocks invites at limit but doesn't charge extra. Deferred until pricing model is finalized.
+37. **`.env.local` doesn't persist across Codespace rebuilds** — Must be recreated from Vercel env vars.
+38. **Legacy columns on companies table** — `subscription_tier` and `subscription_status` from earlier work, separate from `subscriptions` table. Unused but redundant.
+39. **TypeScript `any` workaround in webhook** — `_supabaseAdmin` typed as `any`.
+40. **Bishop Contracting may need manual subscription row** — Predates Migration 007.
+41. **Role-check patterns repeated** — `['owner', 'admin', 'project_manager'].includes(profile.role)` in every page.tsx. Extend `canManageRole()` pattern. Helper functions like `isOwnerOrAdmin()`, `canManageProjects()` would prevent Admin role drift.
+42. **Inline style objects duplicated** across all three forms. Will be cleaned up with shadcn/ui migration.
 
 ---
 
@@ -553,42 +580,29 @@ All reference documents now live in the repo. Nothing is uploaded per-session an
 
 ---
 
-## Session 10 — Starting Point
+## Session 11 — Starting Point
 
-### Verification First
+Verification First was completed in Session 10 — all 5 items passed. The Session 9 Option C refactor is verified safe. No re-verification needed at the start of Session 11 unless something has changed since Session 10 closed.
 
-Before answering the open decisions or starting Module 3, verify nothing broke during the Session 9 refactor. Run these in order and stop on the first failure:
+### Open Decisions — Must Answer Before Building
 
-1. `bash scripts/session-start.sh` — confirm clean repo state and Supabase CLI link
-2. `npm run type-check` — must pass for all 5 packages
-3. `npm run build` — production build of @framefocus/web (catches issues type-check misses)
-4. Push to a Vercel preview branch and confirm the deploy succeeds
-5. Browser smoke test on the preview URL — sign in and verify these pages load and work without console errors:
-   - `/dashboard/settings` (uses company.ts / company-client.ts)
-   - `/dashboard/contacts` — list, add new, edit existing (uses contacts.ts)
-   - `/dashboard/subcontractors` — list, add new, edit existing (uses subcontractors.ts)
-   - `/dashboard/team` — confirm member list renders and dates display correctly (most likely place for the null-guard changes to surface a bug)
-   - `/dashboard/team/invite` — create a test invite (uses team.ts create path)
+These two decisions from Session 6 are still blocking the Module 3 data model. **Answer photo markup format first since it directly blocks Module 3.** T&M rate structure can technically wait until closer to Module 6, but better to decide upfront.
 
-If any of the above fails, fix it before touching Module 3 or the open decisions.
-
-**Before writing any Module 3 code, answer these two open decisions first.
-They block the data model. Do not skip.**
-
-1. **T&M rate structure (blocks Module 6 data model)** — rates per employee or per role?
-   - Per employee: more flexible, more admin overhead
-   - Per role: simpler, less granular
-   - Decision affects `time_entries` schema and the Module 6 build
-
-2. **Photo markup storage format (blocks Module 3 photo markup feature)** — JSON or rendered image?
+1. **Photo markup storage format (blocks Module 3 photo markup feature)** — JSON or rendered image?
    - JSON (shape coordinates): editable, non-destructive, larger implementation
    - Rendered image: simpler, loses editability
    - Decision affects `files` table schema (`markup_data` column type) and component architecture
 
-**Once both decisions are made, Session 10 work is:**
+2. **T&M rate structure (blocks Module 6 data model)** — rates per employee or per role?
+   - Per employee: more flexible, more admin overhead
+   - Per role: simpler, less granular
+   - Decision affects `time_entries` schema and the Module 6 build
+
+### Once both decisions are made, Session 11 work is:
+
 - Migration 016: `files` table + RLS (Module 3 foundation)
 - Supabase Storage: `project-files` bucket + RLS policies
-- File upload service layer (server + client)
+- File upload service layer (server + client) using the Option C generated types pattern
 - Basic file list UI (web)
 
 ---
@@ -599,12 +613,10 @@ They block the data model. Do not skip.**
 2. Run:
    ```bash
    git pull
-   git log --oneline -15
-   ls docs/sessions/
-   cat STATE.md
+   bash scripts/session-start.sh
    ```
 3. Open a new Claude Chat (ideally inside a "FrameFocus" Claude Project with `CLAUDE.md`, `STATE.md`, and Quick Reference as project knowledge)
-4. Paste the output from step 2 plus `docs/sessions/context9.md`
-5. Say: **"Starting Session 9. Ready to implement Option C (generated Supabase types). Plan is in context9.md definition of done. Before writing any code, install Claude Code in the Codespace."**
-6. After Claude Code is installed, switch to it for the actual refactor work
-7. Return to Claude Chat at end of session to generate `context10.md` and update `STATE.md`
+4. Paste the output from step 2 plus `docs/sessions/context11.md`
+5. Say: **"Starting Session 11. First task is to answer the photo markup storage format decision before any Module 3 code."**
+6. Once both open decisions are made, switch to Claude Code in the terminal for the actual Migration 016 + Module 3 build
+7. Return to Claude Chat at end of session to generate `context12.md` and update `STATE.md`
