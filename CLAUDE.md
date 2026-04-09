@@ -141,6 +141,61 @@ SQL functions with `SECURITY DEFINER` reliably bypass RLS in this context. See `
 
 ---
 
+## Generated Types Workflow
+
+**Single source of truth:** `packages/shared/types/database.ts` is auto-generated from the live Supabase schema. All service files import from this file — never hand-write database type shapes.
+
+**Regenerate after every migration that adds, removes, or renames a column or table:**
+```bash
+npm run db:types
+```
+Then run `npm run type-check` to surface any callers that need updating. Commit the updated `database.ts` alongside the migration.
+
+**Two patterns for deriving service types:**
+
+**Pattern 1 — `Pick<>` (use when the query selects specific columns):**
+```typescript
+// apps/web/lib/services/company.ts
+import type { Database } from '@framefocus/shared/types/database';
+
+export type CompanyData = Pick<
+  Database['public']['Tables']['companies']['Row'],
+  'id' | 'name' | 'address_line1' | 'logo_url' // ... only selected columns
+>;
+```
+Use `Pick<>` when the query uses `select('col1, col2, ...')`. The type is honest about what the query actually returns.
+
+**Pattern 2 — `Omit<Row> + intersection` (use when `select('*')` AND the table has CHECK-constrained columns):**
+```typescript
+// apps/web/lib/services/contacts.ts
+import type { Database } from '@framefocus/shared/types/database';
+
+type ContactRow = Database['public']['Tables']['contacts']['Row'];
+export type Contact = Omit<ContactRow, 'contact_type' | 'status'> & {
+  contact_type: 'lead' | 'client';
+  status: 'active' | 'inactive' | 'archived';
+};
+```
+Use this when `select('*')` returns the full Row but the generated types use `string` for CHECK-constrained columns. The intersection re-narrows those fields to string literal unions so discriminated checks (`if (contact.contact_type === 'lead')`) remain type-safe.
+
+**Rule: always preserve string literal unions on CHECK-constrained columns.** The Supabase type generator cannot see CHECK constraints, so it emits `string` for columns like `contact_type`, `status`, `sub_type`, `role`. Restore them via intersection rather than using the loose `string`. Current examples: `contact_type`/`status` in `contacts.ts`, `sub_type`/`status` in `subcontractors.ts`.
+
+**Client files re-export, never redefine:**
+```typescript
+// apps/web/lib/services/company-client.ts
+import type { CompanyData } from '@/lib/services/company';
+export type { CompanyData }; // re-export preserves public API
+```
+Client-side service files (`*-client.ts`) must never redefine types already in the server service file. Use `import type` (not `import`) to avoid pulling server-only code into client bundles.
+
+**Refactored files (Phase 4, Session 9) — use as reference implementations:**
+- `Pick<>` pattern: `apps/web/lib/services/company.ts`
+- `Omit + intersection` pattern: `apps/web/lib/services/contacts.ts`, `apps/web/lib/services/subcontractors.ts`
+- `Pick<>` with multiple tables: `apps/web/lib/services/team.ts`
+- Re-export pattern: `apps/web/lib/services/company-client.ts`
+
+---
+
 ## Session Workflow
 
 Every session should follow this pattern to avoid drift between context and reality:
