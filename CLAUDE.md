@@ -1,6 +1,6 @@
 # CLAUDE.md — FrameFocus Development Guide
 
-> **Last updated:** April 8, 2026 (Session 6 — Planning, continued + Admin role audit)
+> **Last updated:** April 9, 2026 (Session 8 — Housekeeping, repo restructure, generated types decision)
 > **Purpose:** This file is the single source of truth for all development conversations. Read this before every session.
 
 ---
@@ -74,6 +74,24 @@ framefocus/
 │   │   ├── seed/             # Seed data
 │   │   └── types/            # Auto-generated database types
 │   └── ui/                   # Shared UI primitives (placeholder)
+├── docs/                     # Reference documentation (added Session 8)
+│   ├── roadmap/              # Platform roadmap docs (.docx, .xlsx)
+│   │   ├── FrameFocus_Development_Roadmap.docx
+│   │   ├── FrameFocus_Platform_Roadmap.docx
+│   │   ├── FrameFocus_Platform_Roadmap.xlsx
+│   │   └── FrameFocus_Quick_Reference.docx
+│   └── sessions/             # Session-by-session context files
+│       ├── context1.md       # Session 1: Strategic planning
+│       ├── context2.md       # Session 2: First coding session
+│       ├── context3.md       # Session 3: Module 1E (Invites + Admin)
+│       ├── context4.md       # Session 4: Module 1F (Stripe billing)
+│       ├── context5.md       # Session 5: Audit fixes + full system test
+│       ├── context6.md       # Session 6: Company settings + Module 2
+│       ├── context7.md       # Session 7: Module 3 planning
+│       ├── context8.md       # Session 8: Admin invite bug fix (Migration 015)
+│       └── context9.md       # Session 9: Housekeeping + Option C decision
+├── scripts/                  # Dev utility scripts
+├── STATE.md                  # Live repo state dashboard (added Session 8)
 ├── .devcontainer/            # GitHub Codespaces configuration
 ├── turbo.json
 ├── package.json
@@ -104,6 +122,49 @@ The `.devcontainer/devcontainer.json` pre-configures:
 - Shell heredocs (`cat << 'EOF'`) eat `<a` tags from JSX. Use Node.js `fs.writeFileSync()` or create files directly in the Codespace editor instead.
 - Long file replacements via GitHub's web editor frequently truncate. Use a two-part paste strategy for long files.
 - The Supabase anon key uses `sb_publishable_...` format.
+- **RLS inside SECURITY DEFINER triggers:** `SET row_security TO 'off'` at the function level is silently ignored in Postgres unless the executing role is a superuser or table owner. Inside a `SECURITY DEFINER` trigger on `auth.users`, it does NOT bypass RLS. The working pattern is to put the RLS-protected query inside a separate `SECURITY DEFINER` **SQL** function (not plpgsql) and call that from the trigger. See `get_invitation_for_signup()` in Migration 015 for the reference implementation.
+- **Context files describe intent, git describes state.** Never trust `context-N.md` files for "is X committed?" — always run `git log --oneline -15` at the start of a session to ground truth the repo. Session 8 wasted ~30 minutes chasing phantom work because context8.md said migrations were uncommitted when git log showed they were already in.
+- **VS Code browser drag-and-drop targets are finicky.** Drop zones are ambiguous — files can end up at filesystem root (`/`) instead of the intended folder. If uploading fails with "Insufficient permissions" errors referencing `\filename.md`, the drop missed the target folder. Right-click the destination folder → "Upload..." is more reliable when available.
+
+---
+
+## Database Patterns
+
+**RLS-bypassing helper functions for triggers.** When a trigger on `auth.users` (or any table) needs to query an RLS-protected table, the trigger runs in a context where `get_my_company_id()` and similar helpers return NULL — meaning RLS filters out every row. The working pattern:
+
+1. Create a `SECURITY DEFINER` **SQL** function (not plpgsql) that does the query
+2. Call that function from the trigger
+
+SQL functions with `SECURITY DEFINER` reliably bypass RLS in this context. See `get_invitation_for_signup()` (Migration 015) and `get_invitation_by_token()` (used by the invite acceptance page) for working examples.
+
+**Why SQL and not plpgsql:** plpgsql `SECURITY DEFINER` functions still hit RLS in some trigger contexts. SQL `SECURITY DEFINER` functions bypass reliably. When in doubt, use SQL.
+
+---
+
+## Session Workflow
+
+Every session should follow this pattern to avoid drift between context and reality:
+
+**At session start:**
+1. Run the ground-truth snapshot (`scripts/session-start.sh` once created, or run the commands manually) and paste the output
+2. State a definition-of-done for the session (3–5 specific, verifiable outcomes)
+3. Review `STATE.md` for current status and open items
+
+**During the session:**
+- Commit often, even for WIP (prefix messages with `WIP:`)
+- Use `// TODO(session-N):` comments for anything deferred to a later session
+- Don't chase rabbit holes — log new tech debt to `STATE.md` and keep moving
+
+**At session end:**
+1. Update `STATE.md` with new state and any new tech debt discovered
+2. Create `docs/sessions/contextN.md` with decisions made, outstanding items, and next session plan
+3. Commit and push everything, including documentation files
+4. Verify next session can be resumed by reading only `STATE.md` + the latest context file
+
+**Chat vs. Claude Code:**
+- **Claude Chat:** Strategy, architecture decisions, product planning, document generation (roadmaps, context files, CLAUDE.md updates), product research with web search, explaining concepts
+- **Claude Code:** Multi-file edits, investigation (`grep`, file reads), refactors across the codebase, running migrations and verifying results, debugging builds, anything that involves touching code in the repo
+- **Hybrid:** Plan in Chat → execute in Claude Code → review in Chat → close session in Chat
 
 ---
 
@@ -753,6 +814,18 @@ Track these items for resolution in upcoming sessions:
 | Pre-beta | Add CSV import for contacts and subcontractors | Pre-beta |
 | Pre-beta | Add insurance_carrier and insurance_policy_number to subcontractors | Module 5/6 |
 
+**Items discovered Session 8:**
+
+| # | Item | Priority | Discovered | Notes |
+|---|------|----------|------------|-------|
+| 18 | `team-page-client.tsx` has local `ROLE_LABELS` | Medium | Session 8 | Should import from `@framefocus/shared`. Resolves once Option C (generated types) lands in Session 9. |
+| 19 | `invite-form.tsx` has local `INVITABLE_ROLES` | Medium | Session 8 | Should import from `@framefocus/shared`. |
+| 20 | `invite-form.tsx` imports `Invitation` without `import type` | Low | Session 8 | Cross-boundary type import should use `import type` per convention. |
+| 21 | `packages/shared/constants/index.ts` has role constants inline AND re-exports `./roles` | High | Session 8 | Duplication inside the shared package. The inline `COMPANY_ROLES` and `ROLE_LABELS` are **missing the `admin` role** — latent drift bug. Fix: move inline `SUBSCRIPTION_TIERS` and `MODULE_STATUS` to their own files, make `index.ts` a pure barrel. |
+| 22 | `packages/shared/types/index.ts` `Company` interface missing `website` and `license_number` | Medium | Session 8 | Columns exist in DB (Migration 009) but not in the type. Will be fixed automatically by Option C generated types in Session 9. |
+| 23 | Migration filename `014_handle_new_User_Bypass_rls.sql` breaks naming convention | Low | Session 8 | Rename to `014_handle_new_user_bypass_rls.sql` for consistency. Cosmetic only. |
+| 24 | Supabase email confirmation was OFF (from Session 7 rate-limit workaround) | High | Session 7 | Re-enabled in Session 9. Tracked here for reference. |
+
 ### Admin Role Verification (audit from Session 6)
 
 The Admin role was added mid-Session 2 during the Module 1E invite system build. It was designed to mean "Owner minus billing minus Admin promotion," but as the platform has grown, it is worth explicitly verifying what was actually built in Modules 1 and 2 matches the Admin Role Principle (see User & Role Architecture section). The following items should be checked against the live codebase during the next build session, and any gaps fixed before Module 3 starts:
@@ -914,9 +987,12 @@ OPENAI_API_KEY=(sk-... key — needed for Module 3 AI auto-tagging, set up when 
 
 ## Reference Documents
 
-- `FrameFocus_Platform_Roadmap.docx` — **Primary reference.** 51-page comprehensive roadmap with all 11 modules, workflows, AI features, roles, dependencies, data flow, success metrics, known risks, beta plan placeholder, and post-launch roadmap. 10th grade reading level. Updated during Session 6.
-- `FrameFocus_Quick_Reference.docx` — 5-page scannable summary of all features and workflows. For sharing with reviewers or quick refreshers.
-- `FrameFocus_Platform_Roadmap.xlsx` — 8-tab planning spreadsheet with integrations, workflows, AI features, roles/permissions, QB sync, and future ideas.
-- `FrameFocus_Development_Roadmap.docx` — Original business roadmap from Session 1 (now superseded by the newer docs above; kept for historical reference).
+All reference documents now live in `docs/roadmap/` in the repo (no longer uploaded per session):
+
+- `docs/roadmap/FrameFocus_Platform_Roadmap.docx` — **Primary reference.** 51-page comprehensive roadmap with all 11 modules, workflows, AI features, roles, dependencies, data flow, success metrics, known risks, beta plan placeholder, and post-launch roadmap. 10th grade reading level. Updated during Session 6.
+- `docs/roadmap/FrameFocus_Quick_Reference.docx` — 5-page scannable summary of all features and workflows. For sharing with reviewers or quick refreshers.
+- `docs/roadmap/FrameFocus_Platform_Roadmap.xlsx` — 8-tab planning spreadsheet with integrations, workflows, AI features, roles/permissions, QB sync, and future ideas.
+- `docs/roadmap/FrameFocus_Development_Roadmap.docx` — Original Session 1 business roadmap (superseded by the docs above; kept for historical reference).
+- `docs/sessions/context1.md` through `context9.md` — Session-by-session build and planning logs. Read the most recent one at the start of each new session.
+- `STATE.md` — Live repo state dashboard. Updated at end of each session.
 - This file (`CLAUDE.md`) — Technical development guide (update after every major session).
-- `context1.md` through `context7.md` — Session-by-session build and planning logs. Read the most recent one at the start of each new session.
