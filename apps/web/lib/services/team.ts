@@ -1,22 +1,18 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@framefocus/shared/types/database';
 
-export interface TeamMember {
-  id: string;
-  first_name: string;
-  last_name: string;
-  role: string;
-  created_at: string;
-}
+type ProfileRow = Database['public']['Tables']['profiles']['Row'];
+type InvitationRow = Database['public']['Tables']['invitations']['Row'];
 
-export interface Invitation {
-  id: string;
-  email: string;
-  role: string;
-  status: string;
-  created_at: string;
-  expires_at: string;
-  token?: string;
-}
+export type TeamMember = Pick<
+  ProfileRow,
+  'id' | 'first_name' | 'last_name' | 'role' | 'created_at'
+>;
+
+export type Invitation = Pick<
+  InvitationRow,
+  'id' | 'email' | 'role' | 'status' | 'created_at' | 'expires_at'
+> & { token?: string };
 
 /** Fetch all active team members for the current user's company */
 export async function getTeamMembers(supabase: SupabaseClient) {
