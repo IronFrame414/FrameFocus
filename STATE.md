@@ -1,6 +1,6 @@
 # STATE.md — FrameFocus Current State
 
-> **Last updated:** April 9, 2026 (end of Session 8 — Housekeeping, repo restructure, generated types decision)
+> **Last updated:** April 9, 2026 (end of Session 9 — Option C generated types, session-start.sh, CLAUDE.md update)
 > **Purpose:** Snapshot of the current state of the codebase, infrastructure, and database. Lives in the repo root. Updated at the end of each session.
 >
 > **Note on Session 8:** This was a housekeeping and process-improvement session. No code was written. The session verified that audit fixes 1a and 1b were already complete (work from a prior Claude Code session that wasn't reflected in context files), decided on Option C (generated Supabase types) for audit fix 1c, restructured the repo to hold reference documents and session context files in version control, and documented new tech debt. See `docs/sessions/context9.md` for the full session narrative and Session 9 definition of done.
@@ -61,10 +61,10 @@
 | Vercel deployment  | ✅ Live           | https://frame-focus-eight.vercel.app (auto-deploy from main)                                                       |
 | GitHub Actions CI  | ✅ Configured     | Lint + type-check on push to main/dev                                                                              |
 | Stripe             | ✅ Live           | Test mode. 3 products + webhook + Customer Portal configured                                                       |
-| Supabase CLI       | ⚪ Not installed  | **Install in Session 9** for Option C (generated types)                                                            |
+| Supabase CLI       | ✅ Installed      | Installed Session 9. Linked to jwkcknyuyvcwcdeskrmz. Run `npx supabase login` after Codespace rebuild.             |
 | QuickBooks Online  | ⚪ Not connected  | Strategy decided. Implementation deferred to Modules 6 & 7.                                                        |
-| OpenAI API         | ⚪ Not configured | Needed for Module 3 (photo auto-tagging). `OPENAI_API_KEY` must be set in `.env.local` and Vercel before Module 3. |
-| Claude Code        | ⚪ Not installed  | **Install in Session 9** before beginning the Option C refactor                                                    |
+| OpenAI API         | ✅ Configured     | `OPENAI_API_KEY` set in `.env.local` and Vercel (Session 9). Ready for Module 3.                                   |
+| Claude Code        | ✅ Installed      | Installed Session 9. CLI in Codespace terminal.                                                                    |
 
 ---
 
@@ -178,7 +178,7 @@ apps/web/
 │   │   │   └── [id]/edit/page.tsx         ✅
 │   │   └── team/
 │   │       ├── page.tsx                   ✅
-│   │       ├── team-page-client.tsx       ⚠️ Has local ROLE_LABELS — tech debt #21
+│   │       ├── team-page-client.tsx       ⚠️ Has local ROLE_LABELS — tech debt #18. Null guards added Session 9.
 │   │       └── invite/
 │   │           ├── page.tsx               ✅
 │   │           └── invite-form.tsx        ⚠️ Has local INVITABLE_ROLES — tech debt #22
@@ -196,11 +196,11 @@ apps/web/
 │   │   ├── team.ts                        ✅
 │   │   ├── billing.ts                     ✅
 │   │   ├── seats.ts                       ✅
-│   │   ├── company.ts                     ⚠️ Local CompanyData — replaced by generated types Session 9
-│   │   ├── company-client.ts              ⚠️ Local CompanyData duplicate — replaced Session 9
-│   │   ├── contacts.ts                    ⚠️ Hand-written Contact interface — Option C target
+│   │   ├── company.ts                     ✅ Uses generated types (Session 9)
+│   │   ├── company-client.ts              ✅ Re-exports CompanyData from company.ts (Session 9)
+│   │   ├── contacts.ts                    ✅ Uses generated types (Session 9)
 │   │   ├── contacts-client.ts             ✅
-│   │   ├── subcontractors.ts              ⚠️ Hand-written Subcontractor interface — Option C target
+│   │   ├── subcontractors.ts              ✅ Uses generated types (Session 9)
 │   │   └── subcontractors-client.ts       ✅
 │   ├── stripe.ts                          ✅ Lazy getStripe() factory
 │   ├── supabase-browser.ts                ✅
@@ -220,7 +220,7 @@ packages/shared/
 │   ├── roles.ts                            ✅ Full role definitions with admin
 │   └── form-options.ts                     ✅ TRADE_TYPES, US_STATES, LEAD_SOURCES (Session 8 consolidation)
 ├── types/
-│   ├── index.ts                            ⚠️ Company interface missing website/license_number — tech debt #25
+│   ├── index.ts                            ⚠️ Company interface missing website/license_number — tech debt #22. Partially mitigated by generated types in service files; hand-written types/index.ts still drifts.
 │   └── roles.ts                            ✅
 ├── validation/                             (Zod schemas — in use)
 ├── utils/                                  (utilities)
@@ -235,7 +235,7 @@ packages/supabase/
 ├── migrations/                             ✅ All 15 migrations in sync with production
 ├── functions/                              (empty — no Edge Functions yet)
 ├── seed/                                   (empty)
-└── types/index.ts                          ✅ Placeholder Database type (replaced Session 9 by generated types)
+└── types/index.ts                          ✅ Placeholder (real generated types at packages/shared/types/database.ts)
 ```
 
 ### apps/mobile (Expo)
@@ -248,7 +248,6 @@ apps/mobile/                                Placeholder. Phase 2 work.
 
 ```
 docs/
-├── CLAUDE_APPENDIX_session8.md             ⚠️ To be merged into CLAUDE.md Session 9, then deleted
 ├── roadmap/
 │   ├── FrameFocus_Development_Roadmap.docx
 │   ├── FrameFocus_Platform_Roadmap.docx
@@ -275,7 +274,7 @@ STRIPE_PRICE_STARTER=price_1THpfMCgYe8l4i02H6iQ0Dfs
 STRIPE_PRICE_PROFESSIONAL=price_1THpg4CgYe8l4i02allsU1Js
 STRIPE_PRICE_BUSINESS=price_1THpgOCgYe8l4i023gQwTtYi
 NEXT_PUBLIC_APP_URL=https://frame-focus-eight.vercel.app
-OPENAI_API_KEY=(sk-... — NOT YET SET, needed before Module 3)
+OPENAI_API_KEY=(sk-... key — set Session 9, ready for Module 3)
 ```
 
 ### Vercel environment variables
@@ -289,7 +288,7 @@ Same complete set as `.env.local`. All variables must be set in both places.
 | Setting                     | Value                                                                                                     |
 | --------------------------- | --------------------------------------------------------------------------------------------------------- |
 | Email provider              | ✅ Enabled                                                                                                |
-| Email confirmation          | ⚠️ **DISABLED** (from Session 7 rate-limit workaround — **MUST be re-enabled before real users sign up**) |
+| Email confirmation          | ✅ Re-enabled (Session 9)                                                                                 |
 | Site URL                    | `https://frame-focus-eight.vercel.app`                                                                    |
 | Redirect URLs               | `https://frame-focus-eight.vercel.app/auth/callback`, `http://localhost:3000/auth/callback`               |
 | Automatic RLS on new tables | ✅ Enabled                                                                                                |
@@ -333,7 +332,7 @@ Same complete set as `.env.local`. All variables must be set in both places.
 **At session start:**
 
 1. `git pull` to sync the Codespace
-2. Run ground-truth snapshot (`scripts/session-start.sh` once created): `git log --oneline -15`, `ls docs/sessions/`, `git status`
+2. Run ground-truth snapshot (`scripts/session-start.sh`): `bash scripts/session-start.sh`
 3. Read `STATE.md` (this file) and the latest `docs/sessions/contextN.md`
 4. State a 3–5 item definition-of-done for the session
 
@@ -370,7 +369,7 @@ Same complete set as `.env.local`. All variables must be set in both places.
 
 SQL functions with `SECURITY DEFINER` reliably bypass RLS in trigger contexts because the planner evaluates them with the function owner's privileges in a simpler context than plpgsql triggers. See `get_invitation_for_signup()` and Migration 015 for the canonical example. Use the same pattern any time a trigger on `auth.users` (or any other context where the new user has no profile yet) needs to read from an RLS-protected table.
 
-**This lesson is captured in `docs/CLAUDE_APPENDIX_session8.md` and will be added to `CLAUDE.md` permanently in Session 9.**
+**This lesson is captured in `CLAUDE.md` under Database Patterns.**
 
 ### Context vs. git source of truth (Session 8)
 
@@ -458,16 +457,21 @@ DELETE FROM auth.users;
 
 ## Outstanding Items / Tech Debt
 
-### Critical — Session 9 Blockers (Do First)
+### Session 9 Accomplishments (April 9, 2026)
 
-### Must handle in Session 9 (in execution order)
-
-1. **Re-enable Supabase email confirmation** (Authentication → Providers → Email → "Confirm email" toggle) — off since Session 7 rate-limit workaround. 30 seconds.
-2. **Install Claude Code** in the Codespace (`npm install -g @anthropic-ai/claude-code`) — prerequisite for items 3–5.
-3. **Create `scripts/session-start.sh`** with the ground-truth snapshot command. Good first Claude Code task.
-4. **Merge `docs/CLAUDE_APPENDIX_session8.md` into `CLAUDE.md`** and delete the appendix file. Claude Code task.
-5. **Implement Option C** — generated Supabase types, with refactor of existing service files. Main Session 9 work, Claude Code task.
-6. **Add `OPENAI_API_KEY`** to `.env.local` and Vercel. Anytime during Session 9.
+- ✅ Implemented Option C (generated Supabase types as single source of truth)
+  - Generated `packages/shared/types/database.ts` from live schema (707 lines)
+  - Added `npm run db:types` script
+  - Refactored all 5 service files: `company.ts`, `company-client.ts`, `contacts.ts`, `subcontractors.ts`, `team.ts`
+  - Established Pick<> and Omit + intersection patterns (documented in CLAUDE.md)
+  - Surfaced and fixed 2 real latent bugs (null guards on timestamps in team-page-client.tsx)
+- ✅ Created `scripts/session-start.sh` ground-truth snapshot script
+- ✅ Added Generated Types Workflow section to CLAUDE.md
+- ✅ Cleaned up .gitignore (removed dead entry, added supabase/.temp/, *.tsbuildinfo)
+- ✅ Re-enabled Supabase email confirmation
+- ✅ Added OPENAI_API_KEY to .env.local and Vercel
+- ✅ Installed Claude Code in Codespace
+- `npm run type-check` passes for all 5 packages
 
 ### Open Decisions Needed Before Building
 
@@ -499,12 +503,12 @@ These came up in Session 6 planning and are not resolved. They affect data model
 
 ### Code Quality (Discovered Session 8)
 
-21. **`team-page-client.tsx` has local `ROLE_LABELS`** — Should import from `@framefocus/shared`. Fix in Session 9 (may be resolved by Option C depending on whether role labels move to shared types).
-22. **`invite-form.tsx` has local `INVITABLE_ROLES`** — Should import from `@framefocus/shared`.
-23. **`invite-form.tsx` imports `Invitation` type without `import type`** — Cross-boundary type import should use `import type` per convention.
-24. **`packages/shared/constants/index.ts` duplication (HIGH PRIORITY — latent bug)** — Has inline `COMPANY_ROLES`, `ROLE_LABELS`, `ROLE_HIERARCHY`, `SUBSCRIPTION_TIERS`, `MODULE_STATUS` **AND** re-exports from `./roles`. The inline `COMPANY_ROLES` and `ROLE_LABELS` are **missing the `admin` role** — which export wins depends on order. Fix: move inline `SUBSCRIPTION_TIERS` and `MODULE_STATUS` to their own files (`subscriptions.ts`, `modules.ts`), make `index.ts` a pure barrel.
-25. **`packages/shared/types/index.ts` `Company` interface missing `website` and `license_number`** — Columns exist in DB (Migration 009) but not in the type. Auto-resolved by Option C generated types in Session 9.
-26. **Migration filename `014_handle_new_User_Bypass_rls.sql` breaks naming convention** — Rename to `014_handle_new_user_bypass_rls.sql`. Cosmetic only, low priority.
+18. **`team-page-client.tsx` has local `ROLE_LABELS`** — Should import from `@framefocus/shared`. Null guards added Session 9 but local constants still not consolidated.
+19. **`invite-form.tsx` has local `INVITABLE_ROLES`** — Should import from `@framefocus/shared`.
+20. **`invite-form.tsx` imports `Invitation` type without `import type`** — Cross-boundary type import should use `import type` per convention.
+21. **`packages/shared/constants/index.ts` duplication (HIGH PRIORITY — latent bug)** — Has inline `COMPANY_ROLES`, `ROLE_LABELS`, `ROLE_HIERARCHY`, `SUBSCRIPTION_TIERS`, `MODULE_STATUS` **AND** re-exports from `./roles`. The inline `COMPANY_ROLES` and `ROLE_LABELS` are **missing the `admin` role** — which export wins depends on order. Fix: move inline `SUBSCRIPTION_TIERS` and `MODULE_STATUS` to their own files (`subscriptions.ts`, `modules.ts`), make `index.ts` a pure barrel.
+22. **`packages/shared/types/index.ts` `Company` interface missing `website` and `license_number`** — Columns exist in DB (Migration 009) but not in the type. Partially mitigated by generated types in service files; hand-written types/index.ts still drifts.
+23. **Migration filename `014_handle_new_User_Bypass_rls.sql` breaks naming convention** — Rename to `014_handle_new_user_bypass_rls.sql`. Cosmetic only, low priority.
 
 ### Lower Priority / Existing
 
@@ -536,8 +540,6 @@ All reference documents now live in the repo. Nothing is uploaded per-session an
 
 **In `docs/`:**
 
-- `docs/CLAUDE_APPENDIX_session8.md` — Pending merge into CLAUDE.md in Session 9
-
 **In `docs/roadmap/`:**
 
 - `FrameFocus_Platform_Roadmap.docx` — 51-page comprehensive reference. **Primary planning reference.**
@@ -551,28 +553,43 @@ All reference documents now live in the repo. Nothing is uploaded per-session an
 
 ---
 
-## Session 9 — Definition of Done
+## Session 10 — Starting Point
 
-From `docs/sessions/context9.md`. Session 9 is complete when all of the following are true:
+### Verification First
 
-1. ✅ `docs/CLAUDE_APPENDIX_session8.md` merged into `CLAUDE.md` and the appendix file deleted
-2. ✅ Supabase CLI installed and linked to the FrameFocus project
-3. ✅ `packages/shared/types/database.ts` generated and committed
-4. ✅ `npm run db:types` script added to root `package.json`
-5. ✅ `company.ts` and `company-client.ts` refactored to use generated types (closes audit fix 1c)
-6. ✅ At least 2 other service files migrated to generated types as pattern-establishing examples
-7. ✅ `npm run type-check` passes
-8. ✅ `scripts/session-start.sh` created and committed
-9. ✅ Supabase email confirmation re-enabled
-10. ✅ `OPENAI_API_KEY` added to `.env.local` and Vercel
-11. ✅ Claude Code installed in the Codespace
-12. ✅ `STATE.md` updated to reflect end-of-Session-9 state
+Before answering the open decisions or starting Module 3, verify nothing broke during the Session 9 refactor. Run these in order and stop on the first failure:
 
-**Stretch goals** (only if above is complete and there's time):
+1. `bash scripts/session-start.sh` — confirm clean repo state and Supabase CLI link
+2. `npm run type-check` — must pass for all 5 packages
+3. `npm run build` — production build of @framefocus/web (catches issues type-check misses)
+4. Push to a Vercel preview branch and confirm the deploy succeeds
+5. Browser smoke test on the preview URL — sign in and verify these pages load and work without console errors:
+   - `/dashboard/settings` (uses company.ts / company-client.ts)
+   - `/dashboard/contacts` — list, add new, edit existing (uses contacts.ts)
+   - `/dashboard/subcontractors` — list, add new, edit existing (uses subcontractors.ts)
+   - `/dashboard/team` — confirm member list renders and dates display correctly (most likely place for the null-guard changes to surface a bug)
+   - `/dashboard/team/invite` — create a test invite (uses team.ts create path)
 
-- Decide T&M rate structure
-- Decide photo markup storage format
-- Begin Module 3 Migration 016 (`files` table + RLS)
+If any of the above fails, fix it before touching Module 3 or the open decisions.
+
+**Before writing any Module 3 code, answer these two open decisions first.
+They block the data model. Do not skip.**
+
+1. **T&M rate structure (blocks Module 6 data model)** — rates per employee or per role?
+   - Per employee: more flexible, more admin overhead
+   - Per role: simpler, less granular
+   - Decision affects `time_entries` schema and the Module 6 build
+
+2. **Photo markup storage format (blocks Module 3 photo markup feature)** — JSON or rendered image?
+   - JSON (shape coordinates): editable, non-destructive, larger implementation
+   - Rendered image: simpler, loses editability
+   - Decision affects `files` table schema (`markup_data` column type) and component architecture
+
+**Once both decisions are made, Session 10 work is:**
+- Migration 016: `files` table + RLS (Module 3 foundation)
+- Supabase Storage: `project-files` bucket + RLS policies
+- File upload service layer (server + client)
+- Basic file list UI (web)
 
 ---
 
