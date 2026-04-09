@@ -1,27 +1,11 @@
 import { createClient } from '@/lib/supabase-server';
+import type { Database } from '@framefocus/shared/types/database';
 
-export interface Contact {
-  id: string;
-  company_id: string;
+type ContactRow = Database['public']['Tables']['contacts']['Row'];
+export type Contact = Omit<ContactRow, 'contact_type' | 'status'> & {
   contact_type: 'lead' | 'client';
   status: 'active' | 'inactive' | 'archived';
-  first_name: string;
-  last_name: string;
-  company_name: string | null;
-  email: string | null;
-  phone: string | null;
-  mobile: string | null;
-  address_line1: string | null;
-  address_line2: string | null;
-  city: string | null;
-  state: string | null;
-  zip: string | null;
-  source: string | null;
-  notes: string | null;
-  tags: string[];
-  created_at: string;
-  updated_at: string;
-}
+};
 
 export async function getContacts(filters?: {
   contact_type?: string;
