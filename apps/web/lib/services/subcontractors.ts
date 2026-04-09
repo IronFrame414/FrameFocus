@@ -1,35 +1,11 @@
 import { createClient } from '@/lib/supabase-server';
+import type { Database } from '@framefocus/shared/types/database';
 
-export interface Subcontractor {
-  id: string;
-  company_id: string;
+type SubcontractorRow = Database['public']['Tables']['subcontractors']['Row'];
+export type Subcontractor = Omit<SubcontractorRow, 'sub_type' | 'status'> & {
   sub_type: 'subcontractor' | 'vendor';
   status: 'active' | 'inactive' | 'archived';
-  company_name: string;
-  contact_first_name: string | null;
-  contact_last_name: string | null;
-  email: string | null;
-  phone: string | null;
-  mobile: string | null;
-  address_line1: string | null;
-  address_line2: string | null;
-  city: string | null;
-  state: string | null;
-  zip: string | null;
-  trade_type: string | null;
-  license_number: string | null;
-  insurance_expiry: string | null;
-  rating: number | null;
-  rating_notes: string | null;
-  ein: string | null;
-  default_hourly_rate: number | null;
-  default_markup_percent: number | null;
-  preferred: boolean;
-  notes: string | null;
-  tags: string[];
-  created_at: string;
-  updated_at: string;
-}
+};
 
 export async function getSubcontractors(filters?: {
   sub_type?: string;
