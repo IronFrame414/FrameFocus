@@ -1,19 +1,21 @@
 import { createClient } from '@/lib/supabase-server';
+import type { Database } from '@framefocus/shared/types/database';
 
-export interface CompanyData {
-  id: string;
-  name: string;
-  address_line1: string | null;
-  address_line2: string | null;
-  city: string | null;
-  state: string | null;
-  zip: string | null;
-  phone: string | null;
-  website: string | null;
-  trade_type: string | null;
-  license_number: string | null;
-  logo_url: string | null;
-}
+export type CompanyData = Pick<
+  Database['public']['Tables']['companies']['Row'],
+  | 'id'
+  | 'name'
+  | 'address_line1'
+  | 'address_line2'
+  | 'city'
+  | 'state'
+  | 'zip'
+  | 'phone'
+  | 'website'
+  | 'trade_type'
+  | 'license_number'
+  | 'logo_url'
+>;
 
 export async function getCompany(): Promise<CompanyData | null> {
   const supabase = await createClient();
