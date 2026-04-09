@@ -42,4 +42,7 @@ yarn-debug.log*
 yarn-error.log*
 
 # Supabase
-packages/supabase/types/database.ts
+supabase/.temp/
+
+# TypeScript
+*.tsbuildinfo
