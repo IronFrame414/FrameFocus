@@ -1,19 +1,7 @@
 import { createClient } from '@/lib/supabase-browser';
+import type { CompanyData } from '@/lib/services/company';
 
-export interface CompanyData {
-  id: string;
-  name: string;
-  address_line1: string | null;
-  address_line2: string | null;
-  city: string | null;
-  state: string | null;
-  zip: string | null;
-  phone: string | null;
-  website: string | null;
-  trade_type: string | null;
-  license_number: string | null;
-  logo_url: string | null;
-}
+export type { CompanyData };
 
 export async function updateCompany(
   companyId: string,
