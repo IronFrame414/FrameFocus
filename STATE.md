@@ -1,6 +1,6 @@
 # STATE.md — FrameFocus Current State
 
-> **Last updated:** April 9, 2026 (end of Session 10 — verification session, no code written, 5 new tech debt items logged)
+> **Last updated:** April 10, 2026 (end of Session 11 — Module 3 database foundation built: migrations 016 and 017 live in production)
 > **Purpose:** Snapshot of the current state of the codebase, infrastructure, and database. Lives in the repo root. Updated at the end of each session.
 >
 > **Note on Session 10:** Verification session. The Session 9 Option C refactor was verified safe in a production-equivalent environment. All 5 items in the Verification First checklist passed. Smoke testing surfaced 5 small UX/feature gaps in Modules 1 and 2 that were logged as new tech debt rather than fixed mid-session. The two open data-model decisions (T&M rate structure, photo markup format) were deferred to Session 11. See `docs/sessions/context11.md` for the full session narrative.
@@ -13,7 +13,7 @@
 | ----------------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1. Settings, Admin & Billing  | ✅ COMPLETE    | All sub-modules + company settings page tested and live. Admin invite flow fixed Session 7 (Migration 015).                                                                                    |
 | 2. Contacts & CRM             | ✅ COMPLETE    | Two-table design (contacts + subcontractors), full CRUD, filters, ratings, markup                                                                                                              |
-| 3. Document & File Management | ⚪ NOT STARTED | Scheduled for Session 9 stretch goal or Session 10. Scope expanded Session 6: photo markup (desktop+mobile), AI auto-tagging via GPT-4o vision, receipt attachments linking to Module 8        |
+| 3. Document & File Management | 🟡 IN PROGRESS | Database foundation complete (Session 11): migrations 016 (files table + RLS) and 017 (project-files storage bucket + RLS) live in production. Service layer, UI, photo markup component, and AI auto-tagging remain. |
 | 4. Sales & Estimating         | ⚪ NOT STARTED |                                                                                                                                                                                                |
 | 5. Project Management         | ⚪ NOT STARTED |                                                                                                                                                                                                |
 | 6. Team & Field Operations    | ⚪ NOT STARTED | Scope significantly expanded Session 6. Time categorization, break tracking, OT, mileage, daily logs with safety, separate safety incident workflow, daily huddles, material delivery tracking |
@@ -82,6 +82,7 @@
 | `trial_emails`    | Multiple  | ❌ No RLS          | Tracks emails that have used a free trial. Only accessed by SECURITY DEFINER trigger                                                                                                                                                                                                                                    |
 | `contacts`        | Test rows | ✅ Enabled         | Leads & clients. contact_type CHECK (lead/client), status, name, company, email, phone, mobile, address, source, notes, tags[]. Soft delete                                                                                                                                                                             |
 | `subcontractors`  | Test rows | ✅ Enabled         | Subs & vendors. Full field set incl. EIN, default_hourly_rate, default_markup_percent, preferred, rating, insurance_expiry. Soft delete                                                                                                                                                                                 |
+| `files`           | 0         | ✅ Enabled         | Module 3 (Session 11). Project & company files. project_id nullable (no FK until Module 5). markup_data JSONB for photo annotations. Soft delete. 4 RLS policies (non-client read/write, owner+admin permanent delete).                                                                                                 |
 | `auth.users`      | Multiple  | (Supabase managed) | Test sign-ups + Session 7 debugging artifacts                                                                                                                                                                                                                                                                           |
 
 ### Storage Buckets
@@ -89,6 +90,7 @@
 | Bucket          | Public         | Notes                                                                                     |
 | --------------- | -------------- | ----------------------------------------------------------------------------------------- |
 | `company-logos` | ✅ Public read | Folder: `{company_id}/logo.{ext}`. RLS: members can upload/update; owner/admin can delete |
+| `project-files` | ❌ Private     | Module 3 (Session 11). Folder: `{company_id}/{project_id}/{category}/{filename}`. 4 RLS policies on storage.objects. Inline subquery pattern matching Migration 009.                                                                                                              |
 
 ### Helper functions
 
@@ -141,6 +143,8 @@
 | 013 | `013_fix_handle_new_user_invite_update.sql`  | ✅ Run in production, in repo (committed as part of Session 7/8 bundle — commit `b43c9f6`) |
 | 014 | `014_handle_new_User_Bypass_rls.sql`         | ✅ Run in production, in repo. Filename has inconsistent capitalization — tech debt #26    |
 | 015 | `015_handle_new_user_use_helper.sql`         | ✅ Run in production, in repo. **This is the actual fix for the admin invite bug.**        |
+| 016 | `016_files_table.sql`                        | ✅ Run in production, in repo (Session 11). Module 3 `files` table with 4 RLS policies. |
+| 017 | `017_project_files_bucket.sql`               | ✅ Run in production, in repo (Session 11). Private `project-files` Storage bucket with 4 RLS policies. |
 
 ---
 
@@ -232,7 +236,7 @@ packages/shared/
 
 ```
 packages/supabase/
-├── migrations/                             ✅ All 15 migrations in sync with production
+├── migrations/                             ✅ All 17 migrations in sync with production
 ├── functions/                              (empty — no Edge Functions yet)
 ├── seed/                                   (empty)
 └── types/index.ts                          ✅ Placeholder (real generated types at packages/shared/types/database.ts)
@@ -254,7 +258,7 @@ docs/
 │   ├── FrameFocus_Platform_Roadmap.xlsx
 │   └── FrameFocus_Quick_Reference.docx
 └── sessions/
-    └── context1.md through context9.md    ✅ All session context files in repo
+    └── context1.md through context12.md   ✅ All session context files in repo
 ```
 
 ---
@@ -492,8 +496,8 @@ DELETE FROM auth.users;
 
 These came up in Session 6 planning and are not resolved. They affect data model design:
 
-7. **T&M rate structure (Module 6)** — Rates set per employee or per role? Per employee is more flexible but more admin overhead. Per role is simpler. Affects `time_entries` and `users` data model.
-8. **Photo markup storage format (Module 3)** — JSON (coordinates of shapes, editable) or rendered image (simpler but loses editability)? Leaning JSON. Decide before Module 3 build because component is shared with Module 6.
+7. ✅ **RESOLVED Session 11: T&M rate structure** — Per-employee rate, set by Owner/Admin on the team member detail page. Combines with tech debt items 25-28 (team member edit/delete/notes/password reset) when the `/dashboard/team/[id]` page is built.
+8. ✅ **RESOLVED Session 11: Photo markup storage format** — JSON (JSONB column on `files` table). Non-destructive, editable. 8 tools at launch: arrow, circle, rectangle, freehand, text, color picker, crop, rotate.
 9. **Selection deadline enforcement (Module 9)** — Soft reminder only or auto-block project progress? Decide before Module 9.
 10. **Decision log edit history policy (Module 9)** — Append-only (more legally defensible) or editable? Leaning append-only. Decide before Module 9.
 
@@ -576,34 +580,31 @@ All reference documents now live in the repo. Nothing is uploaded per-session an
 
 **In `docs/sessions/`:**
 
-- `context1.md` through `context9.md` — Session-by-session build, planning, and debug logs. **`context9.md` is the most recent.**
+- `context1.md` through `context12.md` — Session-by-session build, planning, and debug logs. **`context12.md` is the most recent.**
 
 ---
 
-## Session 11 — Starting Point
+## Session 12 — Starting Point
 
-Verification First was completed in Session 10 — all 5 items passed. The Session 9 Option C refactor is verified safe. No re-verification needed at the start of Session 11 unless something has changed since Session 10 closed.
+Module 3 database foundation is complete and verified in production (Session 11). Both Session 6 open decisions (T&M rate structure, photo markup format) were resolved Session 11.
 
-### Open Decisions — Must Answer Before Building
+### Session 12 work — Module 3 build continues
 
-These two decisions from Session 6 are still blocking the Module 3 data model. **Answer photo markup format first since it directly blocks Module 3.** T&M rate structure can technically wait until closer to Module 6, but better to decide upfront.
-
-1. **Photo markup storage format (blocks Module 3 photo markup feature)** — JSON or rendered image?
-   - JSON (shape coordinates): editable, non-destructive, larger implementation
-   - Rendered image: simpler, loses editability
-   - Decision affects `files` table schema (`markup_data` column type) and component architecture
-
-2. **T&M rate structure (blocks Module 6 data model)** — rates per employee or per role?
-   - Per employee: more flexible, more admin overhead
-   - Per role: simpler, less granular
-   - Decision affects `time_entries` schema and the Module 6 build
-
-### Once both decisions are made, Session 11 work is:
-
-- Migration 016: `files` table + RLS (Module 3 foundation)
-- Supabase Storage: `project-files` bucket + RLS policies
-- File upload service layer (server + client) using the Option C generated types pattern
+- File upload service layer (server + client), Option C generated types pattern
 - Basic file list UI (web)
+- Photo markup component (8 tools, JSONB storage, shared with Module 6)
+- AI auto-tagging via GPT-4o vision
+- `file_favorites` junction table migration (deferred from Session 11)
+
+### Module 5 follow-up (logged Session 11, must not be forgotten)
+
+When Module 5 builds the `projects` table:
+1. Add FK constraint: `ALTER TABLE files ADD CONSTRAINT files_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id);`
+2. The `projects` table itself must include `contact_id UUID NOT NULL REFERENCES contacts(id)` — one client, many projects, each with its own address.
+
+### Module 9 follow-up (logged Session 11, must not be forgotten)
+
+Add a SECOND SELECT policy on the `files` table to grant clients read access to specifically-shared files. Likely via a `file_shares` junction table. Module 3 launches with files locked to internal team only.
 
 ---
 
@@ -616,7 +617,7 @@ These two decisions from Session 6 are still blocking the Module 3 data model. *
    bash scripts/session-start.sh
    ```
 3. Open a new Claude Chat (ideally inside a "FrameFocus" Claude Project with `CLAUDE.md`, `STATE.md`, and Quick Reference as project knowledge)
-4. Paste the output from step 2 plus `docs/sessions/context11.md`
-5. Say: **"Starting Session 11. First task is to answer the photo markup storage format decision before any Module 3 code."**
-6. Once both open decisions are made, switch to Claude Code in the terminal for the actual Migration 016 + Module 3 build
-7. Return to Claude Chat at end of session to generate `context12.md` and update `STATE.md`
+4. Paste the output from step 2 plus `docs/sessions/context12.md`
+5. Say: **"Starting Session 12. Module 3 database is live (migrations 016 and 017). Next is the file upload service layer."**
+6. Switch to Claude Code in the terminal once a plan is agreed
+7. Return to Claude Chat at end of session to generate `context13.md` and update `STATE.md`
