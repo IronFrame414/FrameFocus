@@ -200,6 +200,87 @@ export type Database = {
           },
         ]
       }
+      files: {
+        Row: {
+          ai_tags: string[] | null
+          category: string
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          file_name: string
+          file_path: string
+          file_size: number
+          id: string
+          is_deleted: boolean | null
+          markup_data: Json | null
+          mime_type: string
+          project_id: string | null
+          supersedes_id: string | null
+          tags: string[] | null
+          updated_at: string | null
+          updated_by: string | null
+          version: number | null
+        }
+        Insert: {
+          ai_tags?: string[] | null
+          category: string
+          company_id: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          file_name: string
+          file_path: string
+          file_size: number
+          id?: string
+          is_deleted?: boolean | null
+          markup_data?: Json | null
+          mime_type: string
+          project_id?: string | null
+          supersedes_id?: string | null
+          tags?: string[] | null
+          updated_at?: string | null
+          updated_by?: string | null
+          version?: number | null
+        }
+        Update: {
+          ai_tags?: string[] | null
+          category?: string
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          file_name?: string
+          file_path?: string
+          file_size?: number
+          id?: string
+          is_deleted?: boolean | null
+          markup_data?: Json | null
+          mime_type?: string
+          project_id?: string | null
+          supersedes_id?: string | null
+          tags?: string[] | null
+          updated_at?: string | null
+          updated_by?: string | null
+          version?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "files_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "files_supersedes_id_fkey"
+            columns: ["supersedes_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invitations: {
         Row: {
           company_id: string
