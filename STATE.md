@@ -1,6 +1,6 @@
 # STATE.md — FrameFocus Current State
 
-> **Last updated:** April 10, 2026 (end of Session 11 — Module 3 database foundation built: migrations 016 and 017 live in production)
+> **Last updated:** April 10, 2026 (end of Session 12 — Module 3 file upload service layer built: migration 018 + files.ts + files-client.ts committed; end-to-end testing deferred until Module 5 ships projects table)
 > **Purpose:** Snapshot of the current state of the codebase, infrastructure, and database. Lives in the repo root. Updated at the end of each session.
 >
 > **Note on Session 10:** Verification session. The Session 9 Option C refactor was verified safe in a production-equivalent environment. All 5 items in the Verification First checklist passed. Smoke testing surfaced 5 small UX/feature gaps in Modules 1 and 2 that were logged as new tech debt rather than fixed mid-session. The two open data-model decisions (T&M rate structure, photo markup format) were deferred to Session 11. See `docs/sessions/context11.md` for the full session narrative.
@@ -13,7 +13,7 @@
 | ----------------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1. Settings, Admin & Billing  | ✅ COMPLETE    | All sub-modules + company settings page tested and live. Admin invite flow fixed Session 7 (Migration 015).                                                                                    |
 | 2. Contacts & CRM             | ✅ COMPLETE    | Two-table design (contacts + subcontractors), full CRUD, filters, ratings, markup                                                                                                              |
-| 3. Document & File Management | 🟡 IN PROGRESS | Database foundation complete (Session 11): migrations 016 (files table + RLS) and 017 (project-files storage bucket + RLS) live in production. Service layer, UI, photo markup component, and AI auto-tagging remain. |
+| 3. Document & File Management | 🟡 IN PROGRESS | Database foundation (Session 11) and file upload service layer (Session 12) complete. Migration 018 added Postgres column defaults on `files`; `files.ts` (server reads) and `files-client.ts` (client writes) committed. End-to-end testing blocked until Module 5 ships projects table. UI, photo markup component, AI auto-tagging, and file_favorites junction table remain. |
 | 4. Sales & Estimating         | ⚪ NOT STARTED |                                                                                                                                                                                                |
 | 5. Project Management         | ⚪ NOT STARTED |                                                                                                                                                                                                |
 | 6. Team & Field Operations    | ⚪ NOT STARTED | Scope significantly expanded Session 6. Time categorization, break tracking, OT, mileage, daily logs with safety, separate safety incident workflow, daily huddles, material delivery tracking |
@@ -82,7 +82,7 @@
 | `trial_emails`    | Multiple  | ❌ No RLS          | Tracks emails that have used a free trial. Only accessed by SECURITY DEFINER trigger                                                                                                                                                                                                                                    |
 | `contacts`        | Test rows | ✅ Enabled         | Leads & clients. contact_type CHECK (lead/client), status, name, company, email, phone, mobile, address, source, notes, tags[]. Soft delete                                                                                                                                                                             |
 | `subcontractors`  | Test rows | ✅ Enabled         | Subs & vendors. Full field set incl. EIN, default_hourly_rate, default_markup_percent, preferred, rating, insurance_expiry. Soft delete                                                                                                                                                                                 |
-| `files`           | 0         | ✅ Enabled         | Module 3 (Session 11). Project & company files. project_id nullable (no FK until Module 5). markup_data JSONB for photo annotations. Soft delete. 4 RLS policies (non-client read/write, owner+admin permanent delete).                                                                                                 |
+| `files`           | 0         | ✅ Enabled         | Module 3 (Session 11). Project & company files. project_id nullable (no FK until Module 5). markup_data JSONB for photo annotations. Soft delete. 4 RLS policies (non-client read/write, owner+admin permanent delete). Migration 018 (Session 12) added Postgres column defaults on company_id, created_by, updated_by. Migration 018 (Session 12) added Postgres column defaults on company_id, created_by, updated_by. |                                                                                           |
 | `auth.users`      | Multiple  | (Supabase managed) | Test sign-ups + Session 7 debugging artifacts                                                                                                                                                                                                                                                                           |
 
 ### Storage Buckets
@@ -90,7 +90,7 @@
 | Bucket          | Public         | Notes                                                                                     |
 | --------------- | -------------- | ----------------------------------------------------------------------------------------- |
 | `company-logos` | ✅ Public read | Folder: `{company_id}/logo.{ext}`. RLS: members can upload/update; owner/admin can delete |
-| `project-files` | ❌ Private     | Module 3 (Session 11). Folder: `{company_id}/{project_id}/{category}/{filename}`. 4 RLS policies on storage.objects. Inline subquery pattern matching Migration 009.                                                                                                              |
+| `project-files` | ❌ Private     | Module 3 (Session 11). Folder: `{company_id}/{project_id}/{uuid}-{filename}` — Session 12 dropped category from path; category lives in column to allow recategorization without blob movement. 4 RLS policies on storage.objects. Inline subquery pattern matching Migration 009.                                                                                                              |
 
 ### Helper functions
 
@@ -145,6 +145,8 @@
 | 015 | `015_handle_new_user_use_helper.sql`         | ✅ Run in production, in repo. **This is the actual fix for the admin invite bug.**        |
 | 016 | `016_files_table.sql`                        | ✅ Run in production, in repo (Session 11). Module 3 `files` table with 4 RLS policies. |
 | 017 | `017_project_files_bucket.sql`               | ✅ Run in production, in repo (Session 11). Private `project-files` Storage bucket with 4 RLS policies. |
+| 018 | `018_files_column_defaults.sql`              | ✅ Run in production, in repo (Session 12). Postgres column defaults on `files` (created_by, updated_by, company_id) so the service layer skips manual auth+profile lookup on insert. |
+| 018 | `018_files_column_defaults.sql`              | ✅ Run in production, in repo (Session 12). Postgres column defaults on `files` (created_by, updated_by, company_id) so the service layer skips manual auth+profile lookup on insert. |
 
 ---
 
@@ -205,7 +207,9 @@ apps/web/
 │   │   ├── contacts.ts                    ✅ Uses generated types (Session 9)
 │   │   ├── contacts-client.ts             ✅
 │   │   ├── subcontractors.ts              ✅ Uses generated types (Session 9)
-│   │   └── subcontractors-client.ts       ✅
+│   │   ├── subcontractors-client.ts       ✅
+│   │   ├── files.ts                       ✅ Server reads + signed URLs (Session 12)
+│   │   └── files-client.ts                ✅ Upload, update, soft/restore/permanent delete (Session 12)
 │   ├── stripe.ts                          ✅ Lazy getStripe() factory
 │   ├── supabase-browser.ts                ✅
 │   ├── supabase-server.ts                 ✅
@@ -236,7 +240,7 @@ packages/shared/
 
 ```
 packages/supabase/
-├── migrations/                             ✅ All 17 migrations in sync with production
+├── migrations/                             ✅ All 18 migrations in sync with production
 ├── functions/                              (empty — no Edge Functions yet)
 ├── seed/                                   (empty)
 └── types/index.ts                          ✅ Placeholder (real generated types at packages/shared/types/database.ts)
@@ -558,6 +562,16 @@ Items 25–28 share the same fix pattern: build a `/dashboard/team/[id]` detail 
 41. **Role-check patterns repeated** — `['owner', 'admin', 'project_manager'].includes(profile.role)` in every page.tsx. Extend `canManageRole()` pattern. Helper functions like `isOwnerOrAdmin()`, `canManageProjects()` would prevent Admin role drift.
 42. **Inline style objects duplicated** across all three forms. Will be cleaned up with shadcn/ui migration.
 
+### Discovered Session 12
+
+43. **Polish migration 019 needed (Module 3)** — Bundle (a) `BEFORE UPDATE` trigger on `files` to auto-set `updated_by = auth.uid()`, and (b) `CHECK (mime_type <> '')` constraint on `files.mime_type`. Both are defense-in-depth follow-ups to the Session 12 service layer build.
+44. **`files-client.ts` dead code cleanup (after migration 019 lands)** — Drop manual `updated_by` and `auth.getUser()` calls from `updateFile`, `softDeleteFile`, `restoreFile`, `permanentDeleteFile` once the trigger handles it.
+45. **Service layer pattern drift between modules** — `files-client.ts` uses Postgres column defaults via migration 018; `contacts-client.ts` and `subcontractors-client.ts` still do manual auth + profile lookups on every insert. Migrate them to the defaults pattern in a polish session for consistency.
+46. **`uploadFile` still does an auth + profile lookup just to build the storage path** — Unavoidable until `company_id` is cached in JWT custom claims or session context. Bigger architectural change. Defer.
+47. **`tm_rate` column on `profiles` table (Module 6 prep)** — Decided Session 11 (per-employee T&M rates on team member detail page). Needs a Module 6 migration. Currently tracked in context prose only.
+48. **CLAUDE.md updates from Session 11 patterns** — Two patterns still undocumented in CLAUDE.md: (a) the inline subquery pattern for storage RLS policies and why helper functions can fail there, (b) the trash bin pattern (no `is_deleted` filter in RLS, service layer enforces). **First task in Session 13.**
+49. **Heredoc warning in CLAUDE.md should cover SQL files** — Existing warning covers JSX only. Same paste-mangling failure mode hit a multi-line SQL heredoc this session. Update the warning to extend to all multi-line file content.
+
 ---
 
 ## Reference Documents
@@ -584,17 +598,18 @@ All reference documents now live in the repo. Nothing is uploaded per-session an
 
 ---
 
-## Session 12 — Starting Point
+## Session 13 — Starting Point
 
-Module 3 database foundation is complete and verified in production (Session 11). Both Session 6 open decisions (T&M rate structure, photo markup format) were resolved Session 11.
+Module 3 file upload service layer is complete and committed (Session 12). Migration 018 (column defaults) + `files.ts` (server reads + signed URLs) + `files-client.ts` (upload, update, soft/restore/permanent delete) are live. End-to-end testing is blocked until Module 5 ships the `projects` table, per the Session 12 B1 decision.
 
-### Session 12 work — Module 3 build continues
+### Session 13 work — Module 3 build continues
 
-- File upload service layer (server + client), Option C generated types pattern
-- Basic file list UI (web)
-- Photo markup component (8 tools, JSONB storage, shared with Module 6)
+- **First task:** Update CLAUDE.md with two patterns logged in the Session 11 audit but not yet documented (tech debt #48): (a) inline subquery for storage RLS policies, (b) trash bin pattern (no `is_deleted` filter in RLS, service layer enforces). Also extend the heredoc warning to cover SQL (tech debt #49).
+- Basic file list UI (web) — design and stub OK; real testing gated on Module 5
+- Photo markup component (8 tools, JSONB storage, shared with Module 6) — needs JSONB shape design first
 - AI auto-tagging via GPT-4o vision
 - `file_favorites` junction table migration (deferred from Session 11)
+- Polish migration 019 (tech debt #43): `BEFORE UPDATE` trigger on `files.updated_by` + `CHECK (mime_type <> '')` constraint
 
 ### Module 5 follow-up (logged Session 11, must not be forgotten)
 
@@ -617,7 +632,7 @@ Add a SECOND SELECT policy on the `files` table to grant clients read access to 
    bash scripts/session-start.sh
    ```
 3. Open a new Claude Chat (ideally inside a "FrameFocus" Claude Project with `CLAUDE.md`, `STATE.md`, and Quick Reference as project knowledge)
-4. Paste the output from step 2 plus `docs/sessions/context12.md`
-5. Say: **"Starting Session 12. Module 3 database is live (migrations 016 and 017). Next is the file upload service layer."**
+4. Paste the output from step 2 plus `docs/sessions/context13.md`
+5. Say: **"Starting Session 13. Module 3 service layer is live (migration 018 + files.ts + files-client.ts). First task: update CLAUDE.md with the Session 11 carry-forward patterns, then evaluate next Module 3 build target."**
 6. Switch to Claude Code in the terminal once a plan is agreed
-7. Return to Claude Chat at end of session to generate `context13.md` and update `STATE.md`
+7. Return to Claude Chat at end of session to generate `context14.md` and update `STATE.md`
