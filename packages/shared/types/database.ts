@@ -225,7 +225,7 @@ export type Database = {
         Insert: {
           ai_tags?: string[] | null
           category: string
-          company_id: string
+          company_id?: string
           created_at?: string | null
           created_by?: string | null
           deleted_at?: string | null
