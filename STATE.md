@@ -1,6 +1,6 @@
 # STATE.md — FrameFocus Current State
 
-> **Last updated:** April 10, 2026 (end of Session 13 — Module 3 file upload service layer built: migration 018 + files.ts + files-client.ts committed; end-to-end testing deferred until Module 5 ships projects table)
+> **Last updated:** April 11, 2026 (end of Session 14 — session renumbering: context9–13 and STATE.md updated so internal "Session N" labels match context file numbers; no code changes)
 > **Purpose:** Snapshot of the current state of the codebase, infrastructure, and database. Lives in the repo root. Updated at the end of each session.
 >
 > **Note on Session 11:** Verification session. The Session 10 Option C refactor was verified safe in a production-equivalent environment. All 5 items in the Verification First checklist passed. Smoke testing surfaced 5 small UX/feature gaps in Modules 1 and 2 that were logged as new tech debt rather than fixed mid-session. The two open data-model decisions (T&M rate structure, photo markup format) were deferred to Session 12. See `docs/sessions/context11.md` for the full session narrative.
