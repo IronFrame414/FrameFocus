@@ -1,14 +1,14 @@
-# Context — FrameFocus Session 10 (April 9, 2026)
+# Context — FrameFocus Session 11 (April 9, 2026)
 
-> **Format note:** Following the Session 8/9 pattern — short, decisions-focused. See `STATE.md` for live repo status.
+> **Format note:** Following the Session 9/10 pattern — short, decisions-focused. See `STATE.md` for live repo status.
 
 ---
 
 ## Session summary
 
-Verification session. No code written. The goal was to confirm nothing broke during the Session 9 Option C refactor before starting Module 3, and to surface any UX gaps in the existing modules while clicking through them.
+Verification session. No code written. The goal was to confirm nothing broke during the Session 10 Option C refactor before starting Module 3, and to surface any UX gaps in the existing modules while clicking through them.
 
-All 5 items in the Verification First checklist passed cleanly. The Option C refactor is verified safe in a production-equivalent environment. Module 3 is unblocked from a code-health standpoint — the only remaining blockers are the two open data-model decisions, which were deferred to Session 11.
+All 5 items in the Verification First checklist passed cleanly. The Option C refactor is verified safe in a production-equivalent environment. Module 3 is unblocked from a code-health standpoint — the only remaining blockers are the two open data-model decisions, which were deferred to Session 12.
 
 The smoke test surfaced 5 small UX/feature gaps in Modules 1 and 2 that were logged as new tech debt rather than fixed mid-verification.
 
@@ -31,7 +31,7 @@ The smoke test surfaced 5 small UX/feature gaps in Modules 1 and 2 that were log
 | `/dashboard/settings`       | ✅ Loads, form pre-fills correctly                                        |
 | `/dashboard/contacts`       | ✅ List, edit, new all work                                               |
 | `/dashboard/subcontractors` | ✅ List, edit, new all work                                               |
-| `/dashboard/team`           | ✅ Loads, dates render correctly (Session 9 null guards verified working) |
+| `/dashboard/team`           | ✅ Loads, dates render correctly (Session 10 null guards verified working) |
 | `/dashboard/team/invite`    | ✅ Form renders, role dropdown populated                                  |
 
 ---
@@ -44,7 +44,7 @@ Initial push of `verify/session-10` did not trigger a preview deploy. We chased 
 
 **Lesson:** when verifying a branch on Vercel, either add a real commit or push an empty commit (`git commit --allow-empty`) to force a build. Don't waste time hunting through deployment settings.
 
-### Session 9 null guards verified working
+### Session 10 null guards verified working
 
 The two null guards added to `team-page-client.tsx` for `member.created_at` and `inv.expires_at` were verified in the live preview. Dates render correctly, no crashes. Item closed.
 
@@ -68,7 +68,7 @@ These all share the same fix pattern: build a `/dashboard/team/[id]` detail page
 
 ---
 
-## Decisions deferred to Session 11
+## Decisions deferred to Session 12
 
 Both open decisions from Session 6 still block the Module 3 data model. Neither was answered this session.
 
@@ -76,7 +76,7 @@ Both open decisions from Session 6 still block the Module 3 data model. Neither 
 
 2. **Photo markup storage format** — JSON (shape coordinates, editable) vs. rendered image (simpler, loses editability). Affects `files.markup_data` column type in Migration 016. **This one directly blocks Module 3.**
 
-Recommendation for Session 11: answer photo markup format first since it's the actual blocker.
+Recommendation for Session 12: answer photo markup format first since it's the actual blocker.
 
 ---
 
@@ -90,7 +90,7 @@ Recommendation for Session 11: answer photo markup format first since it's the a
 | 4   | Create context11.md                              | ✅           |
 | 5   | Delete verify/session-10 branch (local + origin) | ✅           |
 
-**Stretch goals not attempted:** Open decisions, Migration 016, Module 3 build. Deferred to Session 11.
+**Stretch goals not attempted:** Open decisions, Migration 016, Module 3 build. Deferred to Session 12.
 
 ---
 
@@ -104,7 +104,7 @@ Recommendation for Session 11: answer photo markup format first since it's the a
 
 ---
 
-## How to start Session 11
+## How to start Session 12
 
 1. Open the Codespace at `github.com/IronFrame414/FrameFocus`
 2. Run in terminal:
@@ -115,7 +115,7 @@ Recommendation for Session 11: answer photo markup format first since it's the a
 ```
 
 3. Paste the snapshot output, plus `STATE.md` and `docs/sessions/context11.md`, into a new Claude Chat session.
-4. Say: **"Starting Session 11. First task is to answer the photo markup storage format decision before any Module 3 code."**
+4. Say: **"Starting Session 12. First task is to answer the photo markup storage format decision before any Module 3 code."**
 5. Once both open decisions are made, switch to Claude Code in the terminal for the actual Migration 016 + Module 3 build.
 
 ---

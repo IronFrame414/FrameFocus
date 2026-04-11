@@ -1,12 +1,12 @@
-# Context — FrameFocus Session 12 (April 10, 2026)
+# Context — FrameFocus Session 13 (April 10, 2026)
 
-> **Format note:** Following the Session 8/11 pattern — short, decisions-focused. Detailed work history is in `git log`. See `STATE.md` for live repo status.
+> **Format note:** Following the Session 9/11 pattern — short, decisions-focused. Detailed work history is in `git log`. See `STATE.md` for live repo status.
 
 ---
 
 ## Session summary
 
-Module 3 file upload service layer built and committed. One new migration (018 — Postgres column defaults on `files`), regenerated types, and two new service files: `files.ts` (server-side reads + signed URLs) and `files-client.ts` (client-side writes). Per the Session 12 B1 decision, end-to-end smoke testing is deferred until Module 5 ships the `projects` table — uploads are blocked without a real `project_id`.
+Module 3 file upload service layer built and committed. One new migration (018 — Postgres column defaults on `files`), regenerated types, and two new service files: `files.ts` (server-side reads + signed URLs) and `files-client.ts` (client-side writes). Per the Session 13 B1 decision, end-to-end smoke testing is deferred until Module 5 ships the `projects` table — uploads are blocked without a real `project_id`.
 
 Light Chat-driven session with no Claude Code involvement. All file writes done manually in the Codespace editor after a heredoc paste mangling discovered early on (Lesson 1).
 
@@ -113,22 +113,22 @@ Type alias `FileRecord` (not `File` — that name collides with the browser glob
 
 ---
 
-## Carry-forward from Session 11 (still outstanding)
+## Carry-forward from Session 12 (still outstanding)
 
-These were logged in the Session 11 audit but did not land this session:
+These were logged in the Session 12 audit but did not land this session:
 
 1. **Trash bin UI** — Service layer supports it; the actual `/dashboard/files/trash` view + restore + permanent-delete buttons are TBD. Will land alongside the file list UI.
 2. **`tm_rate` column on `profiles`** — Tracked in context prose only; needs to land as a Module 6 migration.
-3. **CLAUDE.md updates with Session 11 patterns** — Two patterns to document: (a) inline subquery pattern for storage RLS, (b) trash bin pattern (no `is_deleted` filter in RLS, service layer enforces). **First task in Session 13.**
+3. **CLAUDE.md updates with Session 12 patterns** — Two patterns to document: (a) inline subquery pattern for storage RLS, (b) trash bin pattern (no `is_deleted` filter in RLS, service layer enforces). **First task in Session 14.**
 4. **Photo markup JSONB data model spec** — Will be designed when the markup component is built.
 
-## Carry-forward to Session 13 (Module 3 build queue)
+## Carry-forward to Session 14 (Module 3 build queue)
 
 1. **First task:** CLAUDE.md updates (carry-forward item 3 above)
 2. Basic file list UI (web) — design and stub OK; real testing gated on Module 5
 3. Photo markup component (8 tools, JSONB storage, shared with Module 6) — needs JSONB shape design first
 4. AI auto-tagging via GPT-4o vision
-5. `file_favorites` junction table migration (deferred from Session 11)
+5. `file_favorites` junction table migration (deferred from Session 12)
 6. Polish migration 019 (BEFORE UPDATE trigger + mime_type CHECK)
 7. Module 5 still gates end-to-end testing of everything built this session
 
@@ -138,15 +138,15 @@ These were logged in the Session 11 audit but did not land this session:
 
 1. **Shell heredocs for multi-line SQL files mangle on paste.** Same failure mode as the JSX heredoc warning already in CLAUDE.md — the closing `EOF` marker can fuse onto a line of content when pasting into the terminal. Fix: use the Codespace editor for any multi-line file content, not heredocs. Logged as tech debt #49 to update CLAUDE.md.
 
-2. **`cat`-verify after every file save.** Type-check passed for `files-client.ts` but only the cat output confirmed the file was complete and unmangled (auto-formatter had reorganized destructuring patterns — logic identical, format different). Session 11 lesson #2 reaffirmed.
+2. **`cat`-verify after every file save.** Type-check passed for `files-client.ts` but only the cat output confirmed the file was complete and unmangled (auto-formatter had reorganized destructuring patterns — logic identical, format different). Session 12 lesson #2 reaffirmed.
 
 3. **Encoding mutable data in immutable identifiers creates silent drift.** Caught during design review: putting `category` in the storage path would have made every recategorize either silently break or require physical blob movement. Storage paths should only contain things that never change for the lifetime of the file. Always ask: "what in this identifier is mutable?"
 
-4. **One question, one decision, then move on.** The session went smoothly when each design question got isolated and answered before the next one. Bundling multiple open questions creates the same ping-pong problem Session 11 ran into with RLS edits.
+4. **One question, one decision, then move on.** The session went smoothly when each design question got isolated and answered before the next one. Bundling multiple open questions creates the same ping-pong problem Session 12 ran into with RLS edits.
 
 ---
 
-## How to start Session 13
+## How to start Session 14
 
 1. Open the Codespace at `github.com/IronFrame414/FrameFocus`
 2. Run:
@@ -157,7 +157,7 @@ These were logged in the Session 11 audit but did not land this session:
 ```
 
 3. Paste the snapshot output plus `STATE.md` and `docs/sessions/context13.md` into a new Claude Chat session
-4. Say: **"Starting Session 13. Module 3 service layer is live (migration 018 + files.ts + files-client.ts). First task: update CLAUDE.md with the Session 11 carry-forward patterns, then evaluate next Module 3 build target."**
+4. Say: **"Starting Session 14. Module 3 service layer is live (migration 018 + files.ts + files-client.ts). First task: update CLAUDE.md with the Session 12 carry-forward patterns, then evaluate next Module 3 build target."**
 5. Switch to Claude Code once a plan is agreed
 6. End the session in Chat with a STATE.md update and context14.md
 

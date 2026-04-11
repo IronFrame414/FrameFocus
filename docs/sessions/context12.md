@@ -1,6 +1,6 @@
-# Context — FrameFocus Session 11 (April 10, 2026)
+# Context — FrameFocus Session 12 (April 10, 2026)
 
-> **Format note:** Following the Session 8 pattern — short, decisions-focused. Detailed work history is in `git log`. See `STATE.md` for live repo status.
+> **Format note:** Following the Session 9 pattern — short, decisions-focused. Detailed work history is in `git log`. See `STATE.md` for live repo status.
 
 ---
 
@@ -102,7 +102,7 @@ Add a SECOND SELECT policy on the `files` table to grant clients read access to 
 
 ## Outstanding items
 
-### Session 12 — Module 3 build continues
+### Session 13 — Module 3 build continues
 
 1. File upload service layer (server + client), Option C generated types pattern
 2. Basic file list UI (web)
@@ -130,7 +130,7 @@ Add a SECOND SELECT policy on the `files` table to grant clients read access to 
 
 ---
 
-## How to start Session 12
+## How to start Session 13
 
 1. Open the Codespace at `github.com/IronFrame414/FrameFocus`
 2. Run:
@@ -139,7 +139,7 @@ Add a SECOND SELECT policy on the `files` table to grant clients read access to 
    bash scripts/session-start.sh
 ```
 3. Paste the snapshot output plus `STATE.md` and `docs/sessions/context12.md` into a new Claude Chat session
-4. Say: **"Starting Session 12. Module 3 database is live (migrations 016 and 017). Next is the file upload service layer."**
+4. Say: **"Starting Session 13. Module 3 database is live (migrations 016 and 017). Next is the file upload service layer."**
 5. Switch to Claude Code once a plan is agreed
 6. End the session in Chat with a STATE.md update and context13.md
 

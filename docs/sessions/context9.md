@@ -1,12 +1,12 @@
-# Context — FrameFocus Session 8 (April 9, 2026)
+# Context — FrameFocus Session 9 (April 9, 2026)
 
-> **Format note:** This context file follows a new, shorter pattern established in Session 8. Detailed work history lives in `git log`; this file focuses on decisions, outstanding items, and next-session planning. See `STATE.md` for live repo status.
+> **Format note:** This context file follows a new, shorter pattern established in Session 9. Detailed work history lives in `git log`; this file focuses on decisions, outstanding items, and next-session planning. See `STATE.md` for live repo status.
 
 ---
 
 ## Session summary
 
-No code was written. Session 8 was a housekeeping and process-improvement session that surfaced several workflow issues, made key decisions about how to run future sessions, and restructured the repo to support those decisions.
+No code was written. Session 9 was a housekeeping and process-improvement session that surfaced several workflow issues, made key decisions about how to run future sessions, and restructured the repo to support those decisions.
 
 **Time mostly spent on:**
 - Verifying audit fixes 1a and 1b (both already complete — confirmed via `git log`)
@@ -22,9 +22,9 @@ No code was written. Session 8 was a housekeeping and process-improvement sessio
 
 ### 1. Audit fix 1c → Option C (generated Supabase types)
 
-Rejected quick patches (Option A and B). Will implement `supabase gen types typescript` as the single source of truth for all database types in Session 9. This eliminates hand-written interfaces across service files and prevents future drift.
+Rejected quick patches (Option A and B). Will implement `supabase gen types typescript` as the single source of truth for all database types in Session 10. This eliminates hand-written interfaces across service files and prevents future drift.
 
-**Scope for Session 9:**
+**Scope for Session 10:**
 - Install Supabase CLI in the Codespace
 - Link CLI to the FrameFocus project
 - Generate `packages/shared/types/database.ts` from the live schema
@@ -33,9 +33,9 @@ Rejected quick patches (Option A and B). Will implement `supabase gen types type
 - Run `npm run type-check` after each file refactor
 - Commit incrementally, not as one big bang
 
-### 2. Install Claude Code in the Codespace before Session 9
+### 2. Install Claude Code in the Codespace before Session 10
 
-Recommendation from Session 8 workflow discussion. Claude Code will dramatically speed up multi-file refactors like the Option C migration. Install with `npm install -g @anthropic-ai/claude-code`, then run `claude` to authenticate.
+Recommendation from Session 9 workflow discussion. Claude Code will dramatically speed up multi-file refactors like the Option C migration. Install with `npm install -g @anthropic-ai/claude-code`, then run `claude` to authenticate.
 
 ### 3. Reference docs and session contexts now live in the repo
 
@@ -52,13 +52,13 @@ The old 360-line `CLAUDE.md` was pre-development and stale. Swapped for the upda
 
 ### 5. New workflow: ground-truth snapshot at session start
 
-Future sessions should begin with a `git log` + file structure snapshot to avoid the "phantom work" problem that cost ~30 minutes this session. The specific snapshot script will be created as `scripts/session-start.sh` in Session 9.
+Future sessions should begin with a `git log` + file structure snapshot to avoid the "phantom work" problem that cost ~30 minutes this session. The specific snapshot script will be created as `scripts/session-start.sh` in Session 10.
 
 ---
 
 ## Outstanding items
 
-### Must handle in Session 9 (before Module 3 work)
+### Must handle in Session 10 (before Module 3 work)
 
 1. **Merge `docs/CLAUDE_APPENDIX_session8.md` into `CLAUDE.md`** and delete the appendix file
 2. **Implement Option C** — generated Supabase types, with refactor of existing service files
@@ -67,7 +67,7 @@ Future sessions should begin with a `git log` + file structure snapshot to avoid
 5. **Add `OPENAI_API_KEY`** to `.env.local` and Vercel (needed for Module 3 photo auto-tagging)
 6. **Install Claude Code** in the Codespace (`npm install -g @anthropic-ai/claude-code`)
 
-### Must handle before Module 3 starts (but not blocking Session 9 start)
+### Must handle before Module 3 starts (but not blocking Session 10 start)
 
 7. **Answer Session 6 open questions** that block Module 3 / Module 6:
    - **T&M rate structure** (per-employee vs. per-role) — affects Module 6 data model
@@ -81,9 +81,9 @@ Future sessions should begin with a `git log` + file structure snapshot to avoid
 
 ---
 
-## Definition of done for Session 9
+## Definition of done for Session 10
 
-Session 9 is complete when:
+Session 10 is complete when:
 
 1. ✅ `docs/CLAUDE_APPENDIX_session8.md` has been merged into `CLAUDE.md` and deleted
 2. ✅ Supabase CLI installed and linked to the FrameFocus project
@@ -109,12 +109,12 @@ Session 9 is complete when:
 
 1. **T&M rate structure** — still unresolved (Session 6). Blocks Module 6.
 2. **Photo markup storage format** — still unresolved (Session 6). Blocks Module 3 photo markup feature.
-3. **Should `docs/sessions/context*.md` files be referenced as project knowledge in a Claude Project?** Setting up a claude.ai Project with `CLAUDE.md`, `STATE.md`, and the Quick Reference doc as project files would make every conversation have them automatically. Defer decision until Session 9 structure settles.
+3. **Should `docs/sessions/context*.md` files be referenced as project knowledge in a Claude Project?** Setting up a claude.ai Project with `CLAUDE.md`, `STATE.md`, and the Quick Reference doc as project files would make every conversation have them automatically. Defer decision until Session 10 structure settles.
 4. **Should the existing 12 migrations be squashed into one?** Probably not — they're fine and preserve history. Just noting the option exists.
 
 ---
 
-## How to start Session 9
+## How to start Session 10
 
 1. Open the Codespace at `github.com/IronFrame414/FrameFocus`
 2. Run in terminal:
@@ -125,7 +125,7 @@ Session 9 is complete when:
    cat STATE.md
    ```
 3. Paste the output plus `CLAUDE.md` and `docs/sessions/context9.md` into a new Claude Chat session
-4. Say: **"Starting Session 9. Ready to implement Option C (generated Supabase types). Plan is in context9.md definition of done."**
+4. Say: **"Starting Session 10. Ready to implement Option C (generated Supabase types). Plan is in context9.md definition of done."**
 5. Before writing any code, install Claude Code in the Codespace terminal and switch to it for the actual refactor work
 6. Return to Claude Chat at end of session to generate context10.md and update `STATE.md`
 

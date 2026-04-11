@@ -1,12 +1,12 @@
-# Context — FrameFocus Session 9 (April 9, 2026)
+# Context — FrameFocus Session 10 (April 9, 2026)
 
-> **Format note:** Following the Session 8 pattern — short, decisions-focused. Detailed work history is in `git log`. See `STATE.md` for live repo status.
+> **Format note:** Following the Session 9 pattern — short, decisions-focused. Detailed work history is in `git log`. See `STATE.md` for live repo status.
 
 ---
 
 ## Session summary
 
-The biggest build session since Module 2. Option C (generated Supabase types) is fully implemented across all 5 service files, the deferred Session 8 housekeeping is done, and the codebase has a documented refactor pattern other modules can follow.
+The biggest build session since Module 2. Option C (generated Supabase types) is fully implemented across all 5 service files, the deferred Session 9 housekeeping is done, and the codebase has a documented refactor pattern other modules can follow.
 
 This was also the first session run primarily through Claude Code in the Codespace terminal, with Claude Chat used for planning, decision-making, and review. The hybrid worked well — Chat caught two things Claude Code missed (a missing newline in `.gitignore`, an unverified script output before commit) and Claude Code did the actual multi-file refactor work in a fraction of the time it would have taken in Chat.
 
@@ -14,7 +14,7 @@ This was also the first session run primarily through Claude Code in the Codespa
 
 | Commit  | Description                                      |
 | ------- | ------------------------------------------------ |
-| 6451f00 | Merge Session 8 appendix into CLAUDE.md          |
+| 6451f00 | Merge Session 9 appendix into CLAUDE.md          |
 | 5bb7cf0 | Supabase CLI + generated types (Phases 1–3)      |
 | 02d6048 | company.ts → generated types                     |
 | 4e8fb6c | company-client.ts → re-export                    |
@@ -23,7 +23,7 @@ This was also the first session run primarily through Claude Code in the Codespa
 | 0dd9626 | team.ts → generated types + null guard bug fixes |
 | a8a9405 | session-start.sh + .gitignore cleanup            |
 | f638b4b | CLAUDE.md Generated Types Workflow section       |
-| 2dfb0df | STATE.md Session 9 closeout                      |
+| 2dfb0df | STATE.md Session 10 closeout                      |
 
 ---
 
@@ -80,9 +80,9 @@ The `tags: string[] | null` change on `contacts.ts` and `subcontractors.ts` did 
 
 ## Outstanding items
 
-### Session 10 — must verify before building
+### Session 11 — must verify before building
 
-The **Verification First** subsection now lives in STATE.md at the top of the Session 10 starting point. Don't skip it. Every page Phase 4 touched needs a smoke test before Module 3 starts:
+The **Verification First** subsection now lives in STATE.md at the top of the Session 11 starting point. Don't skip it. Every page Phase 4 touched needs a smoke test before Module 3 starts:
 
 1. `bash scripts/session-start.sh`
 2. `npm run type-check`
@@ -90,23 +90,23 @@ The **Verification First** subsection now lives in STATE.md at the top of the Se
 4. Vercel preview deploy
 5. Browser smoke test on `/dashboard/settings`, `/dashboard/contacts`, `/dashboard/subcontractors`, `/dashboard/team`, `/dashboard/team/invite`
 
-### Session 10 — must answer before building Module 3
+### Session 11 — must answer before building Module 3
 
 Two open decisions from Session 6 still block the data model:
 
 1. **T&M rate structure** (per-employee vs. per-role) — affects `time_entries` schema and Module 6
 2. **Photo markup storage format** (JSON vs. rendered image) — affects `files.markup_data` column and Module 3 component architecture
 
-### Session 10 — Module 3 build order (after verification + decisions)
+### Session 11 — Module 3 build order (after verification + decisions)
 
 1. Migration 016: `files` table + RLS
 2. Supabase Storage: `project-files` bucket + RLS policies
 3. File upload service layer (server + client) using the Option C pattern
 4. Basic file list UI (web)
 
-### Tracked in STATE.md (not blocking Session 10)
+### Tracked in STATE.md (not blocking Session 11)
 
-- Tech debt items 18–23 from the Session 8 audit (role label drift, local constants in client components, hand-written `Company` interface in `packages/shared/types/index.ts`, migration filename casing)
+- Tech debt items 18–23 from the Session 9 audit (role label drift, local constants in client components, hand-written `Company` interface in `packages/shared/types/index.ts`, migration filename casing)
 - Optional cleanup of orphaned test accounts from Session 7 debugging
 - The deferred consolidation in `packages/shared/constants/index.ts` (item 21 — has a real latent bug where inline `COMPANY_ROLES` is missing the `admin` role)
 
@@ -129,7 +129,7 @@ Two open decisions from Session 6 still block the data model:
 | 11  | Claude Code installed                             | ✅                                  |
 | 12  | `STATE.md` updated                                | ✅                                  |
 
-**Stretch goals not attempted:** T&M rate decision, photo markup format decision, Migration 016. Deferred to Session 10 deliberately so verification can happen first.
+**Stretch goals not attempted:** T&M rate decision, photo markup format decision, Migration 016. Deferred to Session 11 deliberately so verification can happen first.
 
 ---
 
@@ -143,7 +143,7 @@ Two open decisions from Session 6 still block the data model:
 
 ---
 
-## How to start Session 10
+## How to start Session 11
 
 1. Open the Codespace at `github.com/IronFrame414/FrameFocus`
 2. Run in terminal:
@@ -153,7 +153,7 @@ Two open decisions from Session 6 still block the data model:
    ```
 3. If `Supabase CLI: NOT LINKED` shows, run `npx supabase login --token <token>` and `npx supabase link --project-ref jwkcknyuyvcwcdeskrmz`.
 4. Paste the snapshot output, plus `STATE.md` and `docs/sessions/context10.md`, into a new Claude Chat session.
-5. Say: **"Starting Session 10. First task is the Verification First checklist from STATE.md before any decisions or Module 3 work."**
+5. Say: **"Starting Session 11. First task is the Verification First checklist from STATE.md before any decisions or Module 3 work."**
 6. Switch to Claude Code in the terminal once verification is green and you're ready to start building.
 7. End the session in Chat with a STATE.md update and a context11.md.
 
