@@ -1,9 +1,9 @@
 # STATE.md — FrameFocus Current State
 
-> **Last updated:** April 10, 2026 (end of Session 12 — Module 3 file upload service layer built: migration 018 + files.ts + files-client.ts committed; end-to-end testing deferred until Module 5 ships projects table)
+> **Last updated:** April 10, 2026 (end of Session 13 — Module 3 file upload service layer built: migration 018 + files.ts + files-client.ts committed; end-to-end testing deferred until Module 5 ships projects table)
 > **Purpose:** Snapshot of the current state of the codebase, infrastructure, and database. Lives in the repo root. Updated at the end of each session.
 >
-> **Note on Session 10:** Verification session. The Session 9 Option C refactor was verified safe in a production-equivalent environment. All 5 items in the Verification First checklist passed. Smoke testing surfaced 5 small UX/feature gaps in Modules 1 and 2 that were logged as new tech debt rather than fixed mid-session. The two open data-model decisions (T&M rate structure, photo markup format) were deferred to Session 11. See `docs/sessions/context11.md` for the full session narrative.
+> **Note on Session 11:** Verification session. The Session 10 Option C refactor was verified safe in a production-equivalent environment. All 5 items in the Verification First checklist passed. Smoke testing surfaced 5 small UX/feature gaps in Modules 1 and 2 that were logged as new tech debt rather than fixed mid-session. The two open data-model decisions (T&M rate structure, photo markup format) were deferred to Session 12. See `docs/sessions/context11.md` for the full session narrative.
 
 ---
 
@@ -13,7 +13,7 @@
 | ----------------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1. Settings, Admin & Billing  | ✅ COMPLETE    | All sub-modules + company settings page tested and live. Admin invite flow fixed Session 7 (Migration 015).                                                                                    |
 | 2. Contacts & CRM             | ✅ COMPLETE    | Two-table design (contacts + subcontractors), full CRUD, filters, ratings, markup                                                                                                              |
-| 3. Document & File Management | 🟡 IN PROGRESS | Database foundation (Session 11) and file upload service layer (Session 12) complete. Migration 018 added Postgres column defaults on `files`; `files.ts` (server reads) and `files-client.ts` (client writes) committed. End-to-end testing blocked until Module 5 ships projects table. UI, photo markup component, AI auto-tagging, and file_favorites junction table remain. |
+| 3. Document & File Management | 🟡 IN PROGRESS | Database foundation (Session 12) and file upload service layer (Session 13) complete. Migration 018 added Postgres column defaults on `files`; `files.ts` (server reads) and `files-client.ts` (client writes) committed. End-to-end testing blocked until Module 5 ships projects table. UI, photo markup component, AI auto-tagging, and file_favorites junction table remain. |
 | 4. Sales & Estimating         | ⚪ NOT STARTED |                                                                                                                                                                                                |
 | 5. Project Management         | ⚪ NOT STARTED |                                                                                                                                                                                                |
 | 6. Team & Field Operations    | ⚪ NOT STARTED | Scope significantly expanded Session 6. Time categorization, break tracking, OT, mileage, daily logs with safety, separate safety incident workflow, daily huddles, material delivery tracking |
@@ -61,10 +61,10 @@
 | Vercel deployment  | ✅ Live          | https://frame-focus-eight.vercel.app (auto-deploy from main)                                           |
 | GitHub Actions CI  | ✅ Configured    | Lint + type-check on push to main/dev                                                                  |
 | Stripe             | ✅ Live          | Test mode. 3 products + webhook + Customer Portal configured                                           |
-| Supabase CLI       | ✅ Installed     | Installed Session 9. Linked to jwkcknyuyvcwcdeskrmz. Run `npx supabase login` after Codespace rebuild. |
+| Supabase CLI       | ✅ Installed     | Installed Session 10. Linked to jwkcknyuyvcwcdeskrmz. Run `npx supabase login` after Codespace rebuild. |
 | QuickBooks Online  | ⚪ Not connected | Strategy decided. Implementation deferred to Modules 6 & 7.                                            |
-| OpenAI API         | ✅ Configured    | `OPENAI_API_KEY` set in `.env.local` and Vercel (Session 9). Ready for Module 3.                       |
-| Claude Code        | ✅ Installed     | Installed Session 9. CLI in Codespace terminal.                                                        |
+| OpenAI API         | ✅ Configured    | `OPENAI_API_KEY` set in `.env.local` and Vercel (Session 10). Ready for Module 3.                       |
+| Claude Code        | ✅ Installed     | Installed Session 10. CLI in Codespace terminal.                                                        |
 
 ---
 
@@ -82,7 +82,7 @@
 | `trial_emails`    | Multiple  | ❌ No RLS          | Tracks emails that have used a free trial. Only accessed by SECURITY DEFINER trigger                                                                                                                                                                                                                                    |
 | `contacts`        | Test rows | ✅ Enabled         | Leads & clients. contact_type CHECK (lead/client), status, name, company, email, phone, mobile, address, source, notes, tags[]. Soft delete                                                                                                                                                                             |
 | `subcontractors`  | Test rows | ✅ Enabled         | Subs & vendors. Full field set incl. EIN, default_hourly_rate, default_markup_percent, preferred, rating, insurance_expiry. Soft delete                                                                                                                                                                                 |
-| `files`           | 0         | ✅ Enabled         | Module 3 (Session 11). Project & company files. project_id nullable (no FK until Module 5). markup_data JSONB for photo annotations. Soft delete. 4 RLS policies (non-client read/write, owner+admin permanent delete). Migration 018 (Session 12) added Postgres column defaults on company_id, created_by, updated_by. Migration 018 (Session 12) added Postgres column defaults on company_id, created_by, updated_by. |                                                                                           |
+| `files`           | 0         | ✅ Enabled         | Module 3 (Session 12). Project & company files. project_id nullable (no FK until Module 5). markup_data JSONB for photo annotations. Soft delete. 4 RLS policies (non-client read/write, owner+admin permanent delete). Migration 018 (Session 13) added Postgres column defaults on company_id, created_by, updated_by. Migration 018 (Session 13) added Postgres column defaults on company_id, created_by, updated_by. |                                                                                           |
 | `auth.users`      | Multiple  | (Supabase managed) | Test sign-ups + Session 7 debugging artifacts                                                                                                                                                                                                                                                                           |
 
 ### Storage Buckets
@@ -90,7 +90,7 @@
 | Bucket          | Public         | Notes                                                                                     |
 | --------------- | -------------- | ----------------------------------------------------------------------------------------- |
 | `company-logos` | ✅ Public read | Folder: `{company_id}/logo.{ext}`. RLS: members can upload/update; owner/admin can delete |
-| `project-files` | ❌ Private     | Module 3 (Session 11). Folder: `{company_id}/{project_id}/{uuid}-{filename}` — Session 12 dropped category from path; category lives in column to allow recategorization without blob movement. 4 RLS policies on storage.objects. Inline subquery pattern matching Migration 009.                                                                                                              |
+| `project-files` | ❌ Private     | Module 3 (Session 12). Folder: `{company_id}/{project_id}/{uuid}-{filename}` — Session 13 dropped category from path; category lives in column to allow recategorization without blob movement. 4 RLS policies on storage.objects. Inline subquery pattern matching Migration 009.                                                                                                              |
 
 ### Helper functions
 
@@ -140,13 +140,13 @@
 | 010 | `010_contacts_subcontractors.sql`            | ✅ Run in production, in repo                                                              |
 | 011 | `011_subcontractor_extras.sql`               | ✅ Run in production, in repo                                                              |
 | 012 | `012_vendor_markup.sql`                      | ✅ Run in production, in repo                                                              |
-| 013 | `013_fix_handle_new_user_invite_update.sql`  | ✅ Run in production, in repo (committed as part of Session 7/8 bundle — commit `b43c9f6`) |
+| 013 | `013_fix_handle_new_user_invite_update.sql`  | ✅ Run in production, in repo (committed as part of Session 7/9 bundle — commit `b43c9f6`) |
 | 014 | `014_handle_new_User_Bypass_rls.sql`         | ✅ Run in production, in repo. Filename has inconsistent capitalization — tech debt #26    |
 | 015 | `015_handle_new_user_use_helper.sql`         | ✅ Run in production, in repo. **This is the actual fix for the admin invite bug.**        |
-| 016 | `016_files_table.sql`                        | ✅ Run in production, in repo (Session 11). Module 3 `files` table with 4 RLS policies. |
-| 017 | `017_project_files_bucket.sql`               | ✅ Run in production, in repo (Session 11). Private `project-files` Storage bucket with 4 RLS policies. |
-| 018 | `018_files_column_defaults.sql`              | ✅ Run in production, in repo (Session 12). Postgres column defaults on `files` (created_by, updated_by, company_id) so the service layer skips manual auth+profile lookup on insert. |
-| 018 | `018_files_column_defaults.sql`              | ✅ Run in production, in repo (Session 12). Postgres column defaults on `files` (created_by, updated_by, company_id) so the service layer skips manual auth+profile lookup on insert. |
+| 016 | `016_files_table.sql`                        | ✅ Run in production, in repo (Session 12). Module 3 `files` table with 4 RLS policies. |
+| 017 | `017_project_files_bucket.sql`               | ✅ Run in production, in repo (Session 12). Private `project-files` Storage bucket with 4 RLS policies. |
+| 018 | `018_files_column_defaults.sql`              | ✅ Run in production, in repo (Session 13). Postgres column defaults on `files` (created_by, updated_by, company_id) so the service layer skips manual auth+profile lookup on insert. |
+| 018 | `018_files_column_defaults.sql`              | ✅ Run in production, in repo (Session 13). Postgres column defaults on `files` (created_by, updated_by, company_id) so the service layer skips manual auth+profile lookup on insert. |
 
 ---
 
@@ -169,22 +169,22 @@ apps/web/
 │   │   ├── billing/                       ✅ All 5 files
 │   │   ├── settings/
 │   │   │   ├── page.tsx                   ✅
-│   │   │   └── settings-form.tsx          ✅ Uses shared TRADE_TYPES, US_STATES (Session 8)
+│   │   │   └── settings-form.tsx          ✅ Uses shared TRADE_TYPES, US_STATES (Session 9)
 │   │   ├── contacts/
 │   │   │   ├── page.tsx                   ✅
 │   │   │   ├── contacts-list.tsx          ✅ Uses `import type`
-│   │   │   ├── contact-form.tsx           ✅ Uses shared LEAD_SOURCES, US_STATES (Session 8)
+│   │   │   ├── contact-form.tsx           ✅ Uses shared LEAD_SOURCES, US_STATES (Session 9)
 │   │   │   ├── new/page.tsx               ✅
 │   │   │   └── [id]/edit/page.tsx         ✅
 │   │   ├── subcontractors/
 │   │   │   ├── page.tsx                   ✅
 │   │   │   ├── subcontractors-list.tsx    ✅ Uses `import type`
-│   │   │   ├── subcontractor-form.tsx     ✅ Uses shared TRADE_TYPES, US_STATES (Session 8)
+│   │   │   ├── subcontractor-form.tsx     ✅ Uses shared TRADE_TYPES, US_STATES (Session 9)
 │   │   │   ├── new/page.tsx               ✅
 │   │   │   └── [id]/edit/page.tsx         ✅
 │   │   └── team/
 │   │       ├── page.tsx                   ✅
-│   │       ├── team-page-client.tsx       ⚠️ Has local ROLE_LABELS — tech debt #18. Null guards added Session 9.
+│   │       ├── team-page-client.tsx       ⚠️ Has local ROLE_LABELS — tech debt #18. Null guards added Session 10.
 │   │       └── invite/
 │   │           ├── page.tsx               ✅
 │   │           └── invite-form.tsx        ⚠️ Has local INVITABLE_ROLES — tech debt #22
@@ -202,14 +202,14 @@ apps/web/
 │   │   ├── team.ts                        ✅
 │   │   ├── billing.ts                     ✅
 │   │   ├── seats.ts                       ✅
-│   │   ├── company.ts                     ✅ Uses generated types (Session 9)
-│   │   ├── company-client.ts              ✅ Re-exports CompanyData from company.ts (Session 9)
-│   │   ├── contacts.ts                    ✅ Uses generated types (Session 9)
+│   │   ├── company.ts                     ✅ Uses generated types (Session 10)
+│   │   ├── company-client.ts              ✅ Re-exports CompanyData from company.ts (Session 10)
+│   │   ├── contacts.ts                    ✅ Uses generated types (Session 10)
 │   │   ├── contacts-client.ts             ✅
-│   │   ├── subcontractors.ts              ✅ Uses generated types (Session 9)
+│   │   ├── subcontractors.ts              ✅ Uses generated types (Session 10)
 │   │   ├── subcontractors-client.ts       ✅
-│   │   ├── files.ts                       ✅ Server reads + signed URLs (Session 12)
-│   │   └── files-client.ts                ✅ Upload, update, soft/restore/permanent delete (Session 12)
+│   │   ├── files.ts                       ✅ Server reads + signed URLs (Session 13)
+│   │   └── files-client.ts                ✅ Upload, update, soft/restore/permanent delete (Session 13)
 │   ├── stripe.ts                          ✅ Lazy getStripe() factory
 │   ├── supabase-browser.ts                ✅
 │   ├── supabase-server.ts                 ✅
@@ -226,7 +226,7 @@ packages/shared/
 ├── constants/
 │   ├── index.ts                            ⚠️ Inline role/subscription/module definitions AND re-exports ./roles — tech debt #24 (High priority, latent bug)
 │   ├── roles.ts                            ✅ Full role definitions with admin
-│   └── form-options.ts                     ✅ TRADE_TYPES, US_STATES, LEAD_SOURCES (Session 8 consolidation)
+│   └── form-options.ts                     ✅ TRADE_TYPES, US_STATES, LEAD_SOURCES (Session 9 consolidation)
 ├── types/
 │   ├── index.ts                            ⚠️ Company interface missing website/license_number — tech debt #22. Partially mitigated by generated types in service files; hand-written types/index.ts still drifts.
 │   └── roles.ts                            ✅
@@ -252,7 +252,7 @@ packages/supabase/
 apps/mobile/                                Placeholder. Phase 2 work.
 ```
 
-### docs/ (NEW — Session 8)
+### docs/ (NEW — Session 9)
 
 ```
 docs/
@@ -282,7 +282,7 @@ STRIPE_PRICE_STARTER=price_1THpfMCgYe8l4i02H6iQ0Dfs
 STRIPE_PRICE_PROFESSIONAL=price_1THpg4CgYe8l4i02allsU1Js
 STRIPE_PRICE_BUSINESS=price_1THpgOCgYe8l4i023gQwTtYi
 NEXT_PUBLIC_APP_URL=https://frame-focus-eight.vercel.app
-OPENAI_API_KEY=(sk-... key — set Session 9, ready for Module 3)
+OPENAI_API_KEY=(sk-... key — set Session 10, ready for Module 3)
 ```
 
 ### Vercel environment variables
@@ -296,7 +296,7 @@ Same complete set as `.env.local`. All variables must be set in both places.
 | Setting                     | Value                                                                                       |
 | --------------------------- | ------------------------------------------------------------------------------------------- |
 | Email provider              | ✅ Enabled                                                                                  |
-| Email confirmation          | ✅ Re-enabled (Session 9)                                                                   |
+| Email confirmation          | ✅ Re-enabled (Session 10)                                                                   |
 | Site URL                    | `https://frame-focus-eight.vercel.app`                                                      |
 | Redirect URLs               | `https://frame-focus-eight.vercel.app/auth/callback`, `http://localhost:3000/auth/callback` |
 | Automatic RLS on new tables | ✅ Enabled                                                                                  |
@@ -335,7 +335,7 @@ Same complete set as `.env.local`. All variables must be set in both places.
 
 ---
 
-## Session Workflow (established Session 8)
+## Session Workflow (established Session 9)
 
 **At session start:**
 
@@ -379,11 +379,11 @@ SQL functions with `SECURITY DEFINER` reliably bypass RLS in trigger contexts be
 
 **This lesson is captured in `CLAUDE.md` under Database Patterns.**
 
-### Context vs. git source of truth (Session 8)
+### Context vs. git source of truth (Session 9)
 
-Context files (`docs/sessions/contextN.md`) describe **intent and decisions**, not state. Git describes **state**. Never trust a context file for "is X committed?" — always run `git log --oneline -15` at session start. Session 8 wasted roughly 30 minutes chasing phantom work because context8.md said certain migrations were uncommitted, when git log showed they were already in.
+Context files (`docs/sessions/contextN.md`) describe **intent and decisions**, not state. Git describes **state**. Never trust a context file for "is X committed?" — always run `git log --oneline -15` at session start. Session 9 wasted roughly 30 minutes chasing phantom work because context8.md said certain migrations were uncommitted, when git log showed they were already in.
 
-### VS Code browser drag-and-drop targeting (Session 8)
+### VS Code browser drag-and-drop targeting (Session 9)
 
 When uploading files via drag-and-drop in browser VS Code, drop zones are ambiguous — files can end up at filesystem root (`/`) instead of the intended folder. If uploads fail with "Insufficient permissions" errors referencing `\filename.md`, the drop missed the target folder. Right-click the destination folder → "Upload..." is more reliable.
 
@@ -465,7 +465,7 @@ DELETE FROM auth.users;
 
 ## Outstanding Items / Tech Debt
 
-### Session 10 Accomplishments (April 9, 2026)
+### Session 11 Accomplishments (April 9, 2026)
 
 - ✅ Ran Verification First checklist — all 5 items green
   - `bash scripts/session-start.sh` — clean repo, Supabase CLI linked
@@ -473,14 +473,14 @@ DELETE FROM auth.users;
   - `npm run build` — production build clean, all 22 routes compile
   - Vercel preview deploy on `verify/session-10` branch built and Ready
   - Browser smoke test on preview URL — settings, contacts, subcontractors, team, team/invite all render correctly with no console errors
-- ✅ Verified Session 9 null guards working in live preview (team-page-client.tsx dates render correctly)
+- ✅ Verified Session 10 null guards working in live preview (team-page-client.tsx dates render correctly)
 - ✅ Discovered Vercel deduplicates preview deploys by SHA — pushing a branch at the same SHA as `main` will not trigger a build. Force a fresh deploy with `git commit --allow-empty`. Logged as a lesson for future verification sessions.
 - ✅ Logged 5 new tech debt items surfaced during smoke test (see Code Quality / UX Polish section below)
 - ✅ Cleaned up `verify/session-10` branch (deleted local + origin)
-- ❌ Open decisions (T&M rate structure, photo markup format) deferred to Session 11
-- ❌ Module 3 build deferred to Session 11
+- ❌ Open decisions (T&M rate structure, photo markup format) deferred to Session 12
+- ❌ Module 3 build deferred to Session 12
 
-### Session 9 Accomplishments (April 9, 2026)
+### Session 10 Accomplishments (April 9, 2026)
 
 - ✅ Implemented Option C (generated Supabase types as single source of truth)
   - Generated `packages/shared/types/database.ts` from live schema (707 lines)
@@ -500,8 +500,8 @@ DELETE FROM auth.users;
 
 These came up in Session 6 planning and are not resolved. They affect data model design:
 
-7. ✅ **RESOLVED Session 11: T&M rate structure** — Per-employee rate, set by Owner/Admin on the team member detail page. Combines with tech debt items 25-28 (team member edit/delete/notes/password reset) when the `/dashboard/team/[id]` page is built.
-8. ✅ **RESOLVED Session 11: Photo markup storage format** — JSON (JSONB column on `files` table). Non-destructive, editable. 8 tools at launch: arrow, circle, rectangle, freehand, text, color picker, crop, rotate.
+7. ✅ **RESOLVED Session 12: T&M rate structure** — Per-employee rate, set by Owner/Admin on the team member detail page. Combines with tech debt items 25-28 (team member edit/delete/notes/password reset) when the `/dashboard/team/[id]` page is built.
+8. ✅ **RESOLVED Session 12: Photo markup storage format** — JSON (JSONB column on `files` table). Non-destructive, editable. 8 tools at launch: arrow, circle, rectangle, freehand, text, color picker, crop, rotate.
 9. **Selection deadline enforcement (Module 9)** — Soft reminder only or auto-block project progress? Decide before Module 9.
 10. **Decision log edit history policy (Module 9)** — Append-only (more legally defensible) or editable? Leaning append-only. Decide before Module 9.
 
@@ -524,18 +524,18 @@ These came up in Session 6 planning and are not resolved. They affect data model
 19. **Source CHECK constraint may be too restrictive** — Currently limits to referral/website/google/social_media/repeat/other. Real contractors may want yard sign, trade show, Angi, HomeAdvisor, etc.
 20. **Optional cleanup of Session 7 debugging artifacts** — Orphaned test users and "My Company" rows. Not blocking.
 
-### Code Quality (Discovered Session 8)
+### Code Quality (Discovered Session 9)
 
-18. **`team-page-client.tsx` has local `ROLE_LABELS`** — Should import from `@framefocus/shared`. Null guards added Session 9 but local constants still not consolidated.
+18. **`team-page-client.tsx` has local `ROLE_LABELS`** — Should import from `@framefocus/shared`. Null guards added Session 10 but local constants still not consolidated.
 19. **`invite-form.tsx` has local `INVITABLE_ROLES`** — Should import from `@framefocus/shared`.
 20. **`invite-form.tsx` imports `Invitation` type without `import type`** — Cross-boundary type import should use `import type` per convention.
 21. **`packages/shared/constants/index.ts` duplication (HIGH PRIORITY — latent bug)** — Has inline `COMPANY_ROLES`, `ROLE_LABELS`, `ROLE_HIERARCHY`, `SUBSCRIPTION_TIERS`, `MODULE_STATUS` **AND** re-exports from `./roles`. The inline `COMPANY_ROLES` and `ROLE_LABELS` are **missing the `admin` role** — which export wins depends on order. Fix: move inline `SUBSCRIPTION_TIERS` and `MODULE_STATUS` to their own files (`subscriptions.ts`, `modules.ts`), make `index.ts` a pure barrel.
 22. **`packages/shared/types/index.ts` `Company` interface missing `website` and `license_number`** — Columns exist in DB (Migration 009) but not in the type. Partially mitigated by generated types in service files; hand-written types/index.ts still drifts.
 23. **Migration filename `014_handle_new_User_Bypass_rls.sql` breaks naming convention** — Rename to `014_handle_new_user_bypass_rls.sql`. Cosmetic only, low priority.
 
-### UX Polish (Discovered Session 10)
+### UX Polish (Discovered Session 11)
 
-These all surfaced during the Session 10 smoke test. None are blocking, all are real product gaps. Best fixed as a "Module 1/2 polish" mini-session before Module 4, or folded into whichever module touches the affected pages next.
+These all surfaced during the Session 11 smoke test. None are blocking, all are real product gaps. Best fixed as a "Module 1/2 polish" mini-session before Module 4, or folded into whichever module touches the affected pages next.
 
 24. **Row click should open read-only detail view (contacts + subcontractors)** — Currently the only way to open a contact or vendor is the Edit button. Clicking the row should open a read-only detail view; editing should still require the explicit Edit button. Prevents accidental changes when users just want to look at a record. Same fix needed in both contacts and subcontractors.
 25. **Team member edit UI** — Owner/Admin currently cannot open or edit existing team members from the team page. Need a `/dashboard/team/[id]` detail page similar to contacts.
@@ -562,21 +562,21 @@ Items 25–28 share the same fix pattern: build a `/dashboard/team/[id]` detail 
 41. **Role-check patterns repeated** — `['owner', 'admin', 'project_manager'].includes(profile.role)` in every page.tsx. Extend `canManageRole()` pattern. Helper functions like `isOwnerOrAdmin()`, `canManageProjects()` would prevent Admin role drift.
 42. **Inline style objects duplicated** across all three forms. Will be cleaned up with shadcn/ui migration.
 
-### Discovered Session 12
+### Discovered Session 13
 
-43. **Polish migration 019 needed (Module 3)** — Bundle (a) `BEFORE UPDATE` trigger on `files` to auto-set `updated_by = auth.uid()`, and (b) `CHECK (mime_type <> '')` constraint on `files.mime_type`. Both are defense-in-depth follow-ups to the Session 12 service layer build.
+43. **Polish migration 019 needed (Module 3)** — Bundle (a) `BEFORE UPDATE` trigger on `files` to auto-set `updated_by = auth.uid()`, and (b) `CHECK (mime_type <> '')` constraint on `files.mime_type`. Both are defense-in-depth follow-ups to the Session 13 service layer build.
 44. **`files-client.ts` dead code cleanup (after migration 019 lands)** — Drop manual `updated_by` and `auth.getUser()` calls from `updateFile`, `softDeleteFile`, `restoreFile`, `permanentDeleteFile` once the trigger handles it.
 45. **Service layer pattern drift between modules** — `files-client.ts` uses Postgres column defaults via migration 018; `contacts-client.ts` and `subcontractors-client.ts` still do manual auth + profile lookups on every insert. Migrate them to the defaults pattern in a polish session for consistency.
 46. **`uploadFile` still does an auth + profile lookup just to build the storage path** — Unavoidable until `company_id` is cached in JWT custom claims or session context. Bigger architectural change. Defer.
-47. **`tm_rate` column on `profiles` table (Module 6 prep)** — Decided Session 11 (per-employee T&M rates on team member detail page). Needs a Module 6 migration. Currently tracked in context prose only.
-48. **CLAUDE.md updates from Session 11 patterns** — Two patterns still undocumented in CLAUDE.md: (a) the inline subquery pattern for storage RLS policies and why helper functions can fail there, (b) the trash bin pattern (no `is_deleted` filter in RLS, service layer enforces). **First task in Session 13.**
+47. **`tm_rate` column on `profiles` table (Module 6 prep)** — Decided Session 12 (per-employee T&M rates on team member detail page). Needs a Module 6 migration. Currently tracked in context prose only.
+48. **CLAUDE.md updates from Session 12 patterns** — Two patterns still undocumented in CLAUDE.md: (a) the inline subquery pattern for storage RLS policies and why helper functions can fail there, (b) the trash bin pattern (no `is_deleted` filter in RLS, service layer enforces). **First task in Session 14.**
 49. **Heredoc warning in CLAUDE.md should cover SQL files** — Existing warning covers JSX only. Same paste-mangling failure mode hit a multi-line SQL heredoc this session. Update the warning to extend to all multi-line file content.
-50. **Migration 017 header comment is stale** — The comment block in `packages/supabase/migrations/017_project_files_bucket.sql` says `Folder structure: {company_id}/{project_id}/{category}/{filename}`, but Session 12 dropped the category segment from the path. Policies still work (they only check the first segment for `company_id`), but the comment will mislead future readers. Fix: edit the .sql file in place. No re-run needed since comments don't affect schema.
+50. **Migration 017 header comment is stale** — The comment block in `packages/supabase/migrations/017_project_files_bucket.sql` says `Folder structure: {company_id}/{project_id}/{category}/{filename}`, but Session 13 dropped the category segment from the path. Policies still work (they only check the first segment for `company_id`), but the comment will mislead future readers. Fix: edit the .sql file in place. No re-run needed since comments don't affect schema.
 51. **Verify Postgres column defaults fire correctly on first real upload** — Migration 018 sets defaults on `files.company_id`, `files.created_by`, `files.updated_by`. The defaults are confirmed to exist via `information_schema.columns`, but no INSERT has ever run against the `files` table. The first real upload after Module 5 ships must be observed to confirm the defaults populate as expected — particularly that `get_my_company_id()` evaluates correctly inside a column default context under RLS.
 52. **First import of `files.ts` / `files-client.ts` should be followed by `npm run build`** — Both service files compile in isolation under `tsc --noEmit`, but neither is imported anywhere yet. A production build may surface server/client boundary issues, missing `'use client'` directives, or tree-shaking problems that type-check alone doesn't catch. The first page or component to import either file should run `npm run build` to confirm the production bundle is clean.
 53. **Add code comment in `files.ts` explaining the trash bin pattern asymmetry** — `getFiles()` filters `is_deleted = false` by default; `getFile()` does NOT filter `is_deleted`. This is intentional and load-bearing — `getFile()` must return deleted rows so a restore-from-trash flow can fetch them by id. Without an inline comment, a future reader will see the asymmetry as a bug and either "fix" it (breaking the trash bin) or be confused. Add a 1–2 line comment above each function.
 54. **Module 3 needs a sub-status section in STATE.md** — Modules 1 and 2 have sub-status tables (1A/1B/1C, 2A/2B/2C) showing per-component progress. Module 3 is now far enough along to deserve the same treatment for convention consistency. Suggested sub-modules: 3A files table + RLS, 3B project-files storage bucket + RLS, 3C column defaults migration, 3D file upload service layer, 3E file list UI, 3F photo markup component, 3G AI auto-tagging, 3H file_favorites junction table.
-55. **Tech debt list has duplicate numbering** — The Pre-Beta section uses items 14–20 and the Code Quality (Discovered Session 8) section also uses items 18–23. Pre-existing, not introduced this session. Cosmetic only — does not affect any tracked work — but should be cleaned up next time someone is editing the list anyway.
+55. **Tech debt list has duplicate numbering** — The Pre-Beta section uses items 14–20 and the Code Quality (Discovered Session 9) section also uses items 18–23. Pre-existing, not introduced this session. Cosmetic only — does not affect any tracked work — but should be cleaned up next time someone is editing the list anyway.
 
 ---
 
@@ -604,26 +604,26 @@ All reference documents now live in the repo. Nothing is uploaded per-session an
 
 ---
 
-## Session 13 — Starting Point
+## Session 14 — Starting Point
 
-Module 3 file upload service layer is complete and committed (Session 12). Migration 018 (column defaults) + `files.ts` (server reads + signed URLs) + `files-client.ts` (upload, update, soft/restore/permanent delete) are live. End-to-end testing is blocked until Module 5 ships the `projects` table, per the Session 12 B1 decision.
+Module 3 file upload service layer is complete and committed (Session 13). Migration 018 (column defaults) + `files.ts` (server reads + signed URLs) + `files-client.ts` (upload, update, soft/restore/permanent delete) are live. End-to-end testing is blocked until Module 5 ships the `projects` table, per the Session 13 B1 decision.
 
-### Session 13 work — Module 3 build continues
+### Session 14 work — Module 3 build continues
 
-- **First task:** Update CLAUDE.md with two patterns logged in the Session 11 audit but not yet documented (tech debt #48): (a) inline subquery for storage RLS policies, (b) trash bin pattern (no `is_deleted` filter in RLS, service layer enforces). Also extend the heredoc warning to cover SQL (tech debt #49).
+- **First task:** Update CLAUDE.md with two patterns logged in the Session 12 audit but not yet documented (tech debt #48): (a) inline subquery for storage RLS policies, (b) trash bin pattern (no `is_deleted` filter in RLS, service layer enforces). Also extend the heredoc warning to cover SQL (tech debt #49).
 - Basic file list UI (web) — design and stub OK; real testing gated on Module 5
 - Photo markup component (8 tools, JSONB storage, shared with Module 6) — needs JSONB shape design first
 - AI auto-tagging via GPT-4o vision
-- `file_favorites` junction table migration (deferred from Session 11)
+- `file_favorites` junction table migration (deferred from Session 12)
 - Polish migration 019 (tech debt #43): `BEFORE UPDATE` trigger on `files.updated_by` + `CHECK (mime_type <> '')` constraint
 
-### Module 5 follow-up (logged Session 11, must not be forgotten)
+### Module 5 follow-up (logged Session 12, must not be forgotten)
 
 When Module 5 builds the `projects` table:
 1. Add FK constraint: `ALTER TABLE files ADD CONSTRAINT files_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id);`
 2. The `projects` table itself must include `contact_id UUID NOT NULL REFERENCES contacts(id)` — one client, many projects, each with its own address.
 
-### Module 9 follow-up (logged Session 11, must not be forgotten)
+### Module 9 follow-up (logged Session 12, must not be forgotten)
 
 Add a SECOND SELECT policy on the `files` table to grant clients read access to specifically-shared files. Likely via a `file_shares` junction table. Module 3 launches with files locked to internal team only.
 
@@ -639,6 +639,6 @@ Add a SECOND SELECT policy on the `files` table to grant clients read access to 
    ```
 3. Open a new Claude Chat (ideally inside a "FrameFocus" Claude Project with `CLAUDE.md`, `STATE.md`, and Quick Reference as project knowledge)
 4. Paste the output from step 2 plus `docs/sessions/context13.md`
-5. Say: **"Starting Session 13. Module 3 service layer is live (migration 018 + files.ts + files-client.ts). First task: update CLAUDE.md with the Session 11 carry-forward patterns, then evaluate next Module 3 build target."**
+5. Say: **"Starting Session 14. Module 3 service layer is live (migration 018 + files.ts + files-client.ts). First task: update CLAUDE.md with the Session 12 carry-forward patterns, then evaluate next Module 3 build target."**
 6. Switch to Claude Code in the terminal once a plan is agreed
 7. Return to Claude Chat at end of session to generate `context14.md` and update `STATE.md`
