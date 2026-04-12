@@ -1,6 +1,6 @@
 # CLAUDE.md — FrameFocus Development Guide
 
-> **Last updated:** April 9, 2026 (Session 8 — Housekeeping, repo restructure, generated types decision)
+> **Last updated:** April 12, 2026 (Session 17 — Supabase CLI migration-history fix)
 > **Purpose:** This file is the single source of truth for all development conversations. Read this before every session.
 
 ---
@@ -71,7 +71,6 @@ framefocus/
 │   │   ├── constants/        # Role hierarchy, labels, descriptions (roles.ts)
 │   │   └── utils/            # Pure business logic functions
 │   ├── supabase/             # Supabase-specific package
-│   │   ├── migrations/       # SQL migration files (001–012)
 │   │   ├── functions/        # Edge Functions
 │   │   ├── seed/             # Seed data
 │   │   └── types/            # Auto-generated database types
@@ -93,6 +92,8 @@ framefocus/
 │       ├── context8.md       # Session 8: Admin invite bug fix (Migration 015)
 │       └── context9.md       # Session 9: Housekeeping + Option C decision
 ├── scripts/                  # Dev utility scripts
+├── supabase/
+│   └── migrations/           # Supabase migrations — 14-digit timestamp format required by CLI
 ├── STATE.md                  # Live repo state dashboard (added Session 8)
 ├── .devcontainer/            # GitHub Codespaces configuration
 ├── turbo.json
@@ -661,20 +662,28 @@ OPENAI_API_KEY=(sk-... key — needed for Module 3 AI auto-tagging, set up when 
 
 ---
 
-## Migrations Run (all saved to packages/supabase/migrations/)
+## Migrations Run (all saved to supabase/migrations/)
 
-1. 001 — companies, profiles, platform_admins tables
-2. 002 — handle_new_user() trigger (original)
-3. 003 — admin role + invitations table
-4. 004 — handle_new_user() updated for invite flow
-5. 005 — RLS policies updated for admin role
-6. 006 — handle_new_user() fixed to use user_id column
-7. 007 — subscriptions table + handle_new_user() updated for auto trial creation
-8. 008 — audit fixes (trial_emails, slug generation, RLS, indexes)
-9. 009 — company settings columns + logo storage bucket
-10. 010 — contacts and subcontractors tables with RLS
-11. 011 — subcontractor extras (ein, default_hourly_rate, preferred)
-12. 012 — vendor default_markup_percent
+> **Note:** original migration 006 (fix_handle_new_user_columns) was never committed to the repo; effect superseded by what is now 20260101000014.
+
+1. 20260101000001_foundation_tables.sql — companies, profiles, platform_admins tables
+2. 20260101000002_signup_trigger.sql — handle_new_user() trigger (original)
+3. 20260101000003_admin_role_and_invitations.sql — admin role + invitations table
+4. 20260101000004_update_handle_new_user_for_invites.sql — handle_new_user() updated for invite flow
+5. 20260101000005_update_rls_for_admin_role.sql — RLS policies updated for admin role
+6. 20260101000006_subscriptions.sql — subscriptions table + handle_new_user() updated for auto trial creation
+7. 20260101000007_audit_fixes.sql — audit fixes (trial_emails, slug generation, RLS, indexes)
+8. 20260101000008_company_settings.sql — company settings columns + logo storage bucket
+9. 20260101000009_contacts_subcontractors.sql — contacts and subcontractors tables with RLS
+10. 20260101000010_subcontractor_extras.sql — subcontractor extras (ein, default_hourly_rate, preferred)
+11. 20260101000011_vendor_markup.sql — vendor default_markup_percent
+12. 20260101000012_fix_handle_new_user_invite_update.sql — fix handle_new_user() for invite flow update
+13. 20260101000013_handle_new_user_bypass_rls.sql — handle_new_user() bypass RLS via SECURITY DEFINER helper
+14. 20260101000014_handle_new_user_use_helper.sql — handle_new_user() use helper (admin invite bug fix; supersedes original migration 006)
+15. 20260101000015_files_table.sql — Module 3 files table with 4 RLS policies
+16. 20260101000016_project_files_bucket.sql — private project-files Storage bucket with 4 RLS policies
+17. 20260101000017_files_column_defaults.sql — files column defaults: created_by, updated_by, company_id
+18. 20260101000018_files_updated_by_trigger_and_mime_check.sql — files updated_by BEFORE UPDATE trigger + mime_type non-empty CHECK constraint
 
 ---
 
