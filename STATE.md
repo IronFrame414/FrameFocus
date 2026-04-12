@@ -1,6 +1,6 @@
 # STATE.md — FrameFocus Current State
 
-> **Last updated:** April 11, 2026 (end of Session 15 — CLAUDE.md carry-forward patterns documented, migration 019 applied (files updated_by trigger + mime_type CHECK), tech debt #43/#48/#49/#50/#53 closed)
+> **Last updated:** April 12, 2026 (end of Session 16 — CLAUDE.md split into CLAUDE.md + CLAUDE_MODULES.md, commit 1af5cae on branch fix/supabase-cli-migration-history)
 > **Purpose:** Snapshot of the current state of the codebase, infrastructure, and database. Lives in the repo root. Updated at the end of each session.
 >
 > **Note on Session 11:** Verification session. The Session 10 Option C refactor was verified safe in a production-equivalent environment. All 5 items in the Verification First checklist passed. Smoke testing surfaced 5 small UX/feature gaps in Modules 1 and 2 that were logged as new tech debt rather than fixed mid-session. The two open data-model decisions (T&M rate structure, photo markup format) were deferred to Session 12. See `docs/sessions/context11.md` for the full session narrative.
@@ -599,6 +599,13 @@ Items 25–28 share the same fix pattern: build a `/dashboard/team/[id]` detail 
 58. **CLAUDE.md "Migrations Run" list is stale** — List at the bottom of CLAUDE.md stops at 012. Has been stale since Session 7. Bring in sync with STATE.md's Migrations table (013–019) during next CLAUDE.md touch-up session.
 59. **CLAUDE.md "Last updated" header is stale** — Still reads "April 9, 2026 (Session 8 — Housekeeping, repo restructure, generated types decision)" despite many sessions of edits since. Also the "Migrations Run" list at the bottom of CLAUDE.md stops at 012 (already covered by tech debt #58 but noting again here for scope). Bundle both as a CLAUDE.md sync sweep in a future polish session — good pairing with tech debt #56's Monorepo Structure update.
 
+### Session 16 Accomplishments (April 12, 2026)
+
+- ✅ Split CLAUDE.md into CLAUDE.md (operational) + CLAUDE_MODULES.md (detailed module designs for Modules 3, 6, 8, 9, plus QuickBooks Strategy and Change Order Workflow). Goal: stop CLAUDE.md from consuming too much of the Project-knowledge context window.
+- ✅ Commit 1af5cae on branch fix/supabase-cli-migration-history, pushed to origin. Stacked on the existing branch for tech debt #56 so both merge to main together.
+- ❌ Tech debt #56 (Supabase CLI migration-history mismatch) NOT started — docs split consumed the session. Carries forward unchanged as Session 17's first task.
+- ❌ Cross-reference link from CLAUDE.md back to CLAUDE_MODULES.md was in a draft but dropped in the final commit. Low-priority cosmetic, add in Session 17.
+
 ---
 
 ## Reference Documents
@@ -656,11 +663,23 @@ Session 15 completed all three first-task items plus two bonus comment cleanups,
 
 ---
 
-## Session 16 — Starting Point
+## Session 16 — Aborted (Verification Only)
 
-First task: fix the Supabase CLI migration-history mismatch (tech debt #56). Move all 19 migration files from `packages/supabase/migrations/` to `supabase/migrations/` at repo root, rename to 14-digit timestamp format, backfill `supabase_migrations.schema_migrations` on remote with each version marked applied, update CLAUDE.md Monorepo Structure section. Verify with `supabase migration list` showing all 19 as Local+Remote applied. Commit atomically.
+Session 16 was ended before any code changes. Token budget ran low during verification due to oversized Claude Project knowledge (all 15 context files + both roadmap docx + full CLAUDE.md auto-loading every turn). No commits, no file moves, no remote DB changes.
 
-After that, pick next Module 3 build target from sub-status table (3F file list UI, 3G photo markup, 3H AI auto-tagging, 3I file_favorites) — or open the Pre-Module 9 Decision Gate if Josh wants to make that call before more Module 3 work.
+**Verified during session (ground truth as of April 12, 2026):**
+
+- `packages/supabase/migrations/` contains **18** files, not 19 as STATE.md previously claimed. Migration 006 was never created — intentional numbering gap, confirmed via `git log --diff-filter=D`. Files present: 001–005, 007–019.
+- `npx supabase migration list` returns empty Local AND empty Remote columns. CLI sees nothing locally (path mismatch) and nothing on remote (everything was applied via SQL Editor, never `db push`). No partial state to reconcile — tech debt #56 backfill will be from scratch.
+- CLAUDE.md Monorepo Structure (line 72) still says "SQL migration files (001–012)" — stale, will be rewritten as part of #56.
+
+**Created but unused:** branch `fix/supabase-cli-migration-history` (off `main`, no commits). Session 17+ should `git checkout` this branch rather than create a new one, OR delete it and start fresh — either is fine.
+
+## Session 17 — Starting Point
+
+First task is still tech debt #56 (Supabase CLI migration-history mismatch) — move migration files to `supabase/migrations/`, rename to 14-digit timestamp format, backfill remote `schema_migrations`, verify with `supabase migration list`, update CLAUDE.md Monorepo Structure section. Commit atomically on the same `fix/supabase-cli-migration-history` branch. After that, pick next Module 3 build target from the sub-status table, or open the Pre-Module 9 Decision Gate.
+
+**Still blocked:** Pre-Module 9 Decision Gate (unchanged from Session 15).
 
 ### Module 5 follow-up (logged Session 12, must not be forgotten)
 
@@ -680,11 +699,12 @@ Add a SECOND SELECT policy on the `files` table to grant clients read access to 
 1. Open the Codespace at `github.com/IronFrame414/FrameFocus`
 2. Run:
    ```bash
+   git checkout fix/supabase-cli-migration-history
    git pull
    bash scripts/session-start.sh
    ```
 3. Open a new Claude Chat (ideally inside a "FrameFocus" Claude Project with `CLAUDE.md`, `STATE.md`, and Quick Reference as project knowledge)
-4. Paste the output from step 2 plus `docs/sessions/context15.md`
-5. Say: **"Starting Session 16. First task: fix Supabase CLI migration-history mismatch (tech debt #56). Then evaluate next Module 3 target or open Pre-Module 9 Decision Gate."**
+4. Paste the output from step 2 plus `docs/sessions/context16.md`
+5. Say: **"Starting Session 17. First task: fix Supabase CLI migration-history mismatch (tech debt #56). Then evaluate next Module 3 target or open Pre-Module 9 Decision Gate."**
 6. Switch to Claude Code in the terminal once a plan is agreed
-7. Return to Claude Chat at end of session to generate context16.mdand updateSTATE.md`
+7. Return to Claude Chat at end of session to generate context17.md and update `STATE.md`
