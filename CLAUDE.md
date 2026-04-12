@@ -274,58 +274,6 @@ Build order follows strict dependency chain. Each module depends on the ones abo
 
 ---
 
-## Database Tables (Current)
-
-### Module 1 Tables
-
-- `companies` — tenant table with name, slug, address, phone, website, trade_type, license_number, logo_url, stripe_customer_id
-- `profiles` — company users with user_id, company_id, role (owner/admin/project_manager/foreman/crew_member/client), first_name, last_name, email
-- `platform_admins` — FrameFocus internal admin users (no company_id)
-- `subscriptions` — Stripe subscription tracking per company (plan_tier, status, seat_limit, trial dates)
-- `invitations` — token-based invite system with role, status, expiry
-- `trial_emails` — prevents trial abuse by tracking emails that have used a trial
-
-### Module 2 Tables
-
-- `contacts` — leads and clients. Fields: contact_type (lead/client), status, first_name, last_name, company_name, email, phone, mobile, address fields, source, notes, tags[]
-- `subcontractors` — subs and vendors. Fields: sub_type (subcontractor/vendor), status, company_name, contact_first_name, contact_last_name, email, phone, mobile, address fields, trade_type, license_number, insurance_expiry, rating (1-5), rating_notes, ein, default_hourly_rate, default_markup_percent, preferred, notes, tags[]
-
-### Module 3 Tables (planned)
-
-- `files` — all uploaded documents and photos. Fields: id, company_id, project_id (nullable), category, file_name, file_path, file_size, mime_type, tags[], ai_tags[], version, supersedes_id, uploaded_by, markup_data (JSONB), is_deleted, created_at, updated_at
-
-### Module 6 Tables (planned)
-
-- `time_entries` — with categorization (regular/ot/travel/drive/shop), GPS, task_id / change_order_id / tm_line_id allocation, approval tracking
-- `daily_logs` — including hazards_present bool + hazard_notes
-- `safety_incidents` — formal incident reports with OSHA fields, PDF reference
-- `mileage_entries` — per user per project
-- `material_deliveries` — with contents_file_id (receipt photo) OR contents_text (typed list), discrepancy flag
-- `crew_briefings` — daily huddle records
-
-### Module 8 Tables (planned — NEW)
-
-- `inventory_items` — catalog with category, unit, default_vendor_id, last_cost, photo, notes
-- `inventory_transactions` — adds, uses, assignments, returns-flagged with notes
-- `tools` — durables with brand, model, serial, current location (required), assigned person (optional), notes, photo
-- `tool_history` — every location or assignment change logged
-
-### Module 9 Tables (planned)
-
-- `material_selection_categories` — per project, with deadlines
-- `material_selection_options` — per category
-- `material_selections` — chosen options, finalization tracking, room grouping
-- `decision_log` — append-only timestamped client decisions
-- `photo_favorites` — client-hearted photos
-- `preconstruction_checklist` — per project
-
-### Storage Buckets
-
-- `company-logos` — public bucket for company logo uploads, organized by company_id folders
-- `project-files` — (Module 3, planned) private bucket for all project documents, photos, and files. Organized by company_id/project_id/category/.
-
----
-
 ## Database Conventions
 
 **Multi-tenancy:** Every table has a `company_id` column. All queries are filtered by company via RLS policies.
@@ -519,23 +467,6 @@ For any action not listed in the owner-only section above, assume Admin has acce
 | Invite users (non-Admin)           | ✓     | ✓     | —   | —       |
 | Delete files                       | ✓     | ✓     | ✓   | —       |
 | Edit company settings              | ✓     | ✓     | —   | —       |
-
----
-
-## Subscription Tiers
-
-User counts below refer to Company Users (Owner + Admin + PM + Foreman + Crew Member). Client portal accounts are unlimited on the Business tier.
-
-|                     | Starter ($79/mo) | Professional ($149/mo) | Business ($249/mo)            |
-| ------------------- | ---------------- | ---------------------- | ----------------------------- |
-| Company Users       | 2                | 5                      | 15                            |
-| Additional Users    | $15/user/mo      | $15/user/mo            | $12/user/mo                   |
-| Storage             | 10 GB            | 50 GB                  | 200 GB                        |
-| AI Estimates        | 5/mo             | 25/mo                  | Unlimited                     |
-| Client Portal       | —                | —                      | ✓ (unlimited client accounts) |
-| Workflow Automation | —                | Core                   | All + custom                  |
-| AI Marketing        | —                | —                      | Add-on $99/mo                 |
-| QuickBooks Sync     | ✓                | ✓                      | ✓                             |
 
 ---
 

@@ -372,6 +372,7 @@ Items #14–#17 share the same fix pattern: build `/dashboard/team/[id]` detail 
 ### High Priority — Address Next Session
 
 - **#41** Admin Role Verification against live code — before Module 3 build resumes. The Session 6 verification checklist was never confirmed run. Verify against live code: (1) sign in as Admin and click through every dashboard page (Billing blocked, Team invite dropdown excludes Admin, Settings/Contacts/Subcontractors all work); (2) audit RLS policies in Supabase — every write policy allowing Owner must also allow Admin except `subscriptions`; (3) confirm `apps/web/middleware.ts` blocks Admin from `/dashboard/billing/*`; (4) confirm `dashboard-shell.tsx` hides Billing link from Admin; (5) confirm `invite-form.tsx` INVITABLE_ROLES excludes `admin` when current user is Admin; (6) confirm seat counting includes Admin and excludes Client. Log any failures and fix before Module 3 build resumes.
+- **#42** `docs/roadmap/FrameFocus_Platform_Roadmap.docx` is 0 bytes on disk — file exists but is empty. CLAUDE.md's Reference Documents section describes it as the "Primary reference. 51-page comprehensive roadmap." Either restore from a backup, regenerate from source, or remove the pointer from CLAUDE.md. Discovered Session 20.
 
 ---
 
