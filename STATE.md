@@ -7,19 +7,19 @@
 
 ## Build Status
 
-| Module                        | Status         | Notes                                                                                                                                                                                                                                        |
-| ----------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1. Settings, Admin & Billing  | ✅ COMPLETE    | Auth, roles, Stripe billing, company settings, invites, team management                                                                                                                                                                      |
-| 2. Contacts & CRM             | ✅ COMPLETE    | Two-table design (contacts + subcontractors), full CRUD, filters, ratings, markup                                                                                                                                                            |
-| 3. Document & File Management | 🟡 IN PROGRESS | Database foundation + service layer complete. End-to-end testing blocked until Module 5 ships projects table. UI, photo markup, AI auto-tagging, file_favorites table remain.                                                                |
-| 4. Sales & Estimating         | ⚪ NOT STARTED |                                                                                                                                                                                                                                              |
-| 5. Project Management         | ⚪ NOT STARTED |                                                                                                                                                                                                                                              |
-| 6. Team & Field Operations    | ⚪ NOT STARTED | Scope expanded Session 6. Time categorization, break tracking, OT, mileage, safety logs, incident workflow, huddles, delivery tracking                                                                                                       |
-| 7. Job Finances               | ⚪ NOT STARTED |                                                                                                                                                                                                                                              |
-| 8. Inventory & Tools          | ⚪ NOT STARTED | Added Session 6. Inventory catalog + tool tracking with location, check-in/out log, bulk assignment                                                                                                                                          |
-| 9. Customer Experience Portal | ⚪ NOT STARTED | **BLOCKED by Pre-Module 9 Decision Gate.** Scope expanded Session 6: material selections, decision log, photo favorites, pre-construction checklist                                                                                          |
-| 10. Reporting & Analytics     | ⚪ NOT STARTED |                                                                                                                                                                                                                                              |
-| 11. AI Marketing & Social     | ⚪ NOT STARTED |                                                                                                                                                                                                                                              |
+| Module                        | Status         | Notes                                                                                                                                                                         |
+| ----------------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Settings, Admin & Billing  | ✅ COMPLETE    | Auth, roles, Stripe billing, company settings, invites, team management                                                                                                       |
+| 2. Contacts & CRM             | ✅ COMPLETE    | Two-table design (contacts + subcontractors), full CRUD, filters, ratings, markup                                                                                             |
+| 3. Document & File Management | 🟡 IN PROGRESS | Database foundation + service layer complete. End-to-end testing blocked until Module 5 ships projects table. UI, photo markup, AI auto-tagging, file_favorites table remain. |
+| 4. Sales & Estimating         | ⚪ NOT STARTED |                                                                                                                                                                               |
+| 5. Project Management         | ⚪ NOT STARTED |                                                                                                                                                                               |
+| 6. Team & Field Operations    | ⚪ NOT STARTED | Scope expanded Session 6. Time categorization, break tracking, OT, mileage, safety logs, incident workflow, huddles, delivery tracking                                        |
+| 7. Job Finances               | ⚪ NOT STARTED |                                                                                                                                                                               |
+| 8. Inventory & Tools          | ⚪ NOT STARTED | Added Session 6. Inventory catalog + tool tracking with location, check-in/out log, bulk assignment                                                                           |
+| 9. Customer Experience Portal | ⚪ NOT STARTED | **BLOCKED by Pre-Module 9 Decision Gate.** Scope expanded Session 6: material selections, decision log, photo favorites, pre-construction checklist                           |
+| 10. Reporting & Analytics     | ⚪ NOT STARTED |                                                                                                                                                                               |
+| 11. AI Marketing & Social     | ⚪ NOT STARTED |                                                                                                                                                                               |
 
 ### Module 3 sub-status
 
@@ -60,25 +60,25 @@
 
 ### Tables (in production Supabase)
 
-| Table             | Rows      | RLS                | Notes                                                                                                                                                                                          |
-| ----------------- | --------- | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `companies`       | Multiple  | ✅ Enabled         | `slug` (NOT NULL, auto-generated), `stripe_customer_id`, address/phone/website/trade_type/license_number/logo_url. Legacy `subscription_tier`/`subscription_status` columns unused.            |
-| `profiles`        | Multiple  | ✅ Enabled         | Linked to `auth.users` via `user_id`. Soft delete via `is_deleted`.                                                                                                                            |
-| `platform_admins` | 0         | ✅ Enabled         | No admins seeded yet                                                                                                                                                                           |
-| `invitations`     | Test rows | ✅ Enabled         | Token-based, 7-day expiry, status: pending/accepted/expired/cancelled                                                                                                                          |
-| `subscriptions`   | Multiple  | ✅ Enabled         | One per company. plan_tier, status, seat_limit, trial dates. Only service_role writes                                                                                                          |
-| `trial_emails`    | Multiple  | ❌ No RLS          | Tracks emails that have used a trial. Only accessed by SECURITY DEFINER trigger                                                                                                                |
-| `contacts`        | Test rows | ✅ Enabled         | Leads & clients. contact_type CHECK, status, name, company, email, phone, address, source, tags. Soft delete                                                                                   |
-| `subcontractors`  | Test rows | ✅ Enabled         | Subs & vendors. EIN, default_hourly_rate, default_markup_percent, preferred, rating, insurance_expiry. Soft delete                                                                             |
-| `files`           | 0         | ✅ Enabled         | Module 3. project_id nullable until Module 5. markup_data JSONB. Soft delete. 4 RLS policies. Column defaults on company_id/created_by/updated_by. BEFORE UPDATE trigger sets updated_by.      |
-| `auth.users`      | Multiple  | (Supabase managed) |                                                                                                                                                                                                |
+| Table             | Rows      | RLS                | Notes                                                                                                                                                                                     |
+| ----------------- | --------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `companies`       | Multiple  | ✅ Enabled         | `slug` (NOT NULL, auto-generated), `stripe_customer_id`, address/phone/website/trade_type/license_number/logo_url. Legacy `subscription_tier`/`subscription_status` columns unused.       |
+| `profiles`        | Multiple  | ✅ Enabled         | Linked to `auth.users` via `user_id`. Soft delete via `is_deleted`.                                                                                                                       |
+| `platform_admins` | 0         | ✅ Enabled         | No admins seeded yet                                                                                                                                                                      |
+| `invitations`     | Test rows | ✅ Enabled         | Token-based, 7-day expiry, status: pending/accepted/expired/cancelled                                                                                                                     |
+| `subscriptions`   | Multiple  | ✅ Enabled         | One per company. plan_tier, status, seat_limit, trial dates. Only service_role writes                                                                                                     |
+| `trial_emails`    | Multiple  | ❌ No RLS          | Tracks emails that have used a trial. Only accessed by SECURITY DEFINER trigger                                                                                                           |
+| `contacts`        | Test rows | ✅ Enabled         | Leads & clients. contact_type CHECK, status, name, company, email, phone, address, source, tags. Soft delete                                                                              |
+| `subcontractors`  | Test rows | ✅ Enabled         | Subs & vendors. EIN, default_hourly_rate, default_markup_percent, preferred, rating, insurance_expiry. Soft delete                                                                        |
+| `files`           | 0         | ✅ Enabled         | Module 3. project_id nullable until Module 5. markup_data JSONB. Soft delete. 4 RLS policies. Column defaults on company_id/created_by/updated_by. BEFORE UPDATE trigger sets updated_by. |
+| `auth.users`      | Multiple  | (Supabase managed) |                                                                                                                                                                                           |
 
 ### Storage Buckets
 
-| Bucket          | Public         | Notes                                                                                                               |
-| --------------- | -------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `company-logos` | ✅ Public read | Folder: `{company_id}/logo.{ext}`. RLS: members upload/update; owner/admin delete                                   |
-| `project-files` | ❌ Private     | Folder: `{company_id}/{project_id}/{uuid}-{filename}`. 4 RLS policies on storage.objects. Inline subquery pattern.  |
+| Bucket          | Public         | Notes                                                                                                              |
+| --------------- | -------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `company-logos` | ✅ Public read | Folder: `{company_id}/logo.{ext}`. RLS: members upload/update; owner/admin delete                                  |
+| `project-files` | ❌ Private     | Folder: `{company_id}/{project_id}/{uuid}-{filename}`. 4 RLS policies on storage.objects. Inline subquery pattern. |
 
 ### Helper functions
 
@@ -368,6 +368,10 @@ Items #14–#17 share the same fix pattern: build `/dashboard/team/[id]` detail 
 - **#38** Bishop Contracting may need manual subscription row — predates Migration 007
 - **#39** Role-check patterns repeated across page.tsx files — would benefit from `isOwnerOrAdmin()` / `canManageProjects()` helpers
 - **#40** Inline style objects duplicated across forms — cleanup with shadcn/ui migration
+
+### High Priority — Address Next Session
+
+- **#41** Admin Role Verification against live code — before Module 3 build resumes. The Session 6 verification checklist was never confirmed run. Verify against live code: (1) sign in as Admin and click through every dashboard page (Billing blocked, Team invite dropdown excludes Admin, Settings/Contacts/Subcontractors all work); (2) audit RLS policies in Supabase — every write policy allowing Owner must also allow Admin except `subscriptions`; (3) confirm `apps/web/middleware.ts` blocks Admin from `/dashboard/billing/*`; (4) confirm `dashboard-shell.tsx` hides Billing link from Admin; (5) confirm `invite-form.tsx` INVITABLE_ROLES excludes `admin` when current user is Admin; (6) confirm seat counting includes Admin and excludes Client. Log any failures and fix before Module 3 build resumes.
 
 ---
 
