@@ -1,6 +1,6 @@
 # STATE.md — FrameFocus Current State
 
-> **Last updated:** April 12, 2026 (end of Session 16 — CLAUDE.md split into CLAUDE.md + CLAUDE_MODULES.md, commit 1af5cae on branch fix/supabase-cli-migration-history)
+> **Last updated:** April 12, 2026 (Session 17 — migration reorg complete: 18 files moved to supabase/migrations/ with 14-digit timestamps, remote schema_migrations backfilled, CLI in sync; tech debt #56/#57 closed)
 > **Purpose:** Snapshot of the current state of the codebase, infrastructure, and database. Lives in the repo root. Updated at the end of each session.
 >
 > **Note on Session 11:** Verification session. The Session 10 Option C refactor was verified safe in a production-equivalent environment. All 5 items in the Verification First checklist passed. Smoke testing surfaced 5 small UX/feature gaps in Modules 1 and 2 that were logged as new tech debt rather than fixed mid-session. The two open data-model decisions (T&M rate structure, photo markup format) were deferred to Session 12. See `docs/sessions/context11.md` for the full session narrative.
@@ -140,27 +140,28 @@
 
 ### Migrations applied
 
-| #   | File                                              | Status                                                                                                                                                                                |
-| --- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 001 | `001_foundation_tables.sql`                       | ✅ Run in production, in repo                                                                                                                                                         |
-| 002 | `002_signup_trigger.sql`                          | ✅ Run in production, in repo                                                                                                                                                         |
-| 003 | `003_admin_role_and_invitations.sql`              | ✅ Run in production, in repo                                                                                                                                                         |
-| 004 | `004_update_handle_new_user_for_invites.sql`      | ✅ Run in production, in repo                                                                                                                                                         |
-| 005 | `005_update_rls_for_admin_role.sql`               | ✅ Run in production, in repo                                                                                                                                                         |
-| 006 | `006_fix_handle_new_user_columns.sql`             | ✅ Run in production, in repo                                                                                                                                                         |
-| 007 | `007_subscriptions.sql`                           | ✅ Run in production, in repo                                                                                                                                                         |
-| 008 | `008_audit_fixes.sql`                             | ✅ Run in production, in repo                                                                                                                                                         |
-| 009 | `009_company_settings.sql`                        | ✅ Run in production, in repo                                                                                                                                                         |
-| 010 | `010_contacts_subcontractors.sql`                 | ✅ Run in production, in repo                                                                                                                                                         |
-| 011 | `011_subcontractor_extras.sql`                    | ✅ Run in production, in repo                                                                                                                                                         |
-| 012 | `012_vendor_markup.sql`                           | ✅ Run in production, in repo                                                                                                                                                         |
-| 013 | `013_fix_handle_new_user_invite_update.sql`       | ✅ Run in production, in repo (committed as part of Session 7/9 bundle — commit `b43c9f6`)                                                                                            |
-| 014 | `014_handle_new_User_Bypass_rls.sql`              | ✅ Run in production, in repo. Filename has inconsistent capitalization — tech debt #26                                                                                               |
-| 015 | `015_handle_new_user_use_helper.sql`              | ✅ Run in production, in repo. **This is the actual fix for the admin invite bug.**                                                                                                   |
-| 016 | `016_files_table.sql`                             | ✅ Run in production, in repo (Session 12). Module 3 `files` table with 4 RLS policies.                                                                                               |
-| 017 | `017_project_files_bucket.sql`                    | ✅ Run in production, in repo (Session 12). Private `project-files` Storage bucket with 4 RLS policies.                                                                               |
-| 018 | `018_files_column_defaults.sql`                   | ✅ Run in production, in repo (Session 13). Postgres column defaults on `files` (created_by, updated_by, company_id) so the service layer skips manual auth+profile lookup on insert. |
-| 019 | `019_files_updated_by_trigger_and_mime_check.sql` | ✅ Run in production, in repo (Session 15). `BEFORE UPDATE` trigger `files_set_updated_by` + CHECK constraint `files_mime_type_not_empty` on `files` table. Tech debt #43 closed.     |
+| #                | File                                                          | Status                                                                                                                                                                                |
+| ---------------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 20260101000001   | `20260101000001_foundation_tables.sql`                        | ✅ Run in production, in repo. companies, profiles, platform_admins tables.                                                                                                           |
+| 20260101000002   | `20260101000002_signup_trigger.sql`                           | ✅ Run in production, in repo. handle_new_user() trigger (original).                                                                                                                  |
+| 20260101000003   | `20260101000003_admin_role_and_invitations.sql`               | ✅ Run in production, in repo. Admin role + invitations table.                                                                                                                        |
+| 20260101000004   | `20260101000004_update_handle_new_user_for_invites.sql`       | ✅ Run in production, in repo. handle_new_user() updated for invite flow.                                                                                                             |
+| 20260101000005   | `20260101000005_update_rls_for_admin_role.sql`                | ✅ Run in production, in repo. RLS policies updated for admin role.                                                                                                                   |
+| 20260101000006   | `20260101000006_subscriptions.sql`                            | ✅ Run in production, in repo. Subscriptions table + handle_new_user() updated for auto trial creation. (Was old 007 — old 006 never committed; see note below.)                     |
+| 20260101000007   | `20260101000007_audit_fixes.sql`                              | ✅ Run in production, in repo. Audit fixes (trial_emails, slug generation, RLS, indexes). (Was old 008.)                                                                              |
+| 20260101000008   | `20260101000008_company_settings.sql`                         | ✅ Run in production, in repo. Company settings columns + logo storage bucket. (Was old 009.)                                                                                         |
+| 20260101000009   | `20260101000009_contacts_subcontractors.sql`                  | ✅ Run in production, in repo. Contacts and subcontractors tables with RLS. (Was old 010.)                                                                                            |
+| 20260101000010   | `20260101000010_subcontractor_extras.sql`                     | ✅ Run in production, in repo. Subcontractor extras (ein, default_hourly_rate, preferred). (Was old 011.)                                                                             |
+| 20260101000011   | `20260101000011_vendor_markup.sql`                            | ✅ Run in production, in repo. Vendor default_markup_percent. (Was old 012.)                                                                                                          |
+| 20260101000012   | `20260101000012_fix_handle_new_user_invite_update.sql`        | ✅ Run in production, in repo. Fix handle_new_user() for invite flow update. (Was old 013 — committed Session 7/9 bundle, commit `b43c9f6`.)                                          |
+| 20260101000013   | `20260101000013_handle_new_user_bypass_rls.sql`               | ✅ Run in production, in repo. handle_new_user() bypass RLS via SECURITY DEFINER helper. (Was old 014 — had capitalization bug in original filename, corrected in rename.)            |
+| 20260101000014   | `20260101000014_handle_new_user_use_helper.sql`               | ✅ Run in production, in repo. handle_new_user() use helper function — **actual fix for admin invite bug**. Supersedes original migration 006. (Was old 015.)                         |
+| 20260101000015   | `20260101000015_files_table.sql`                              | ✅ Run in production, in repo (Session 12). Module 3 `files` table with 4 RLS policies. (Was old 016.)                                                                                |
+| 20260101000016   | `20260101000016_project_files_bucket.sql`                     | ✅ Run in production, in repo (Session 12). Private `project-files` Storage bucket with 4 RLS policies. (Was old 017.)                                                                |
+| 20260101000017   | `20260101000017_files_column_defaults.sql`                    | ✅ Run in production, in repo (Session 13). Postgres column defaults on `files` (created_by, updated_by, company_id). (Was old 018.)                                                  |
+| 20260101000018   | `20260101000018_files_updated_by_trigger_and_mime_check.sql`  | ✅ Run in production, in repo (Session 15). `BEFORE UPDATE` trigger `files_set_updated_by` + CHECK constraint `files_mime_type_not_empty` on `files`. Tech debt #43 closed. (Was old 019.) |
+
+> **Note:** Original migration 006 never committed to repo; its effect was superseded by what is now 20260101000014. Dropped from history Session 17.
 
 ---
 
@@ -594,8 +595,8 @@ Items 25–28 share the same fix pattern: build a `/dashboard/team/[id]` detail 
 
 ### Discovered Session 15
 
-56. **Supabase CLI migration-history tracking is broken** — `supabase migration list` returns empty Local and Remote columns. Migrations 001–019 live in `packages/supabase/migrations/` but the CLI expects `supabase/migrations/` at repo root with 14-digit timestamp-format names. Web-search-confirmed that the path is not configurable via `config.toml`. All migrations have been applied via the Supabase SQL Editor to date; `npx supabase db push` cannot be used until this is fixed. **First task for Session 16.** Proper fix: move all 19 migration files to `supabase/migrations/`, rename to timestamp format, backfill `supabase_migrations.schema_migrations` on remote with all 19 versions marked applied, update CLAUDE.md Monorepo Structure. Estimated 30–60 min of focused work; risk of a rename typo breaking future pushes.
-57. **`**Format` untracked file in repo root\*\* — Showed up in Session 15 session-start snapshot (and earlier — predates this session). Unknown origin. Either investigate contents and delete, or just delete. Cleanup — do not commit.
+56. ✅ **CLOSED Session 17** — Migrations moved to `supabase/migrations/` with 14-digit timestamp format, remote `schema_migrations` backfilled, `supabase migration list` now shows all 18 as applied. CLAUDE.md Monorepo Structure updated. **Supabase CLI migration-history tracking is broken** — `supabase migration list` returns empty Local and Remote columns. Migrations 001–019 live in `packages/supabase/migrations/` but the CLI expects `supabase/migrations/` at repo root with 14-digit timestamp-format names. Web-search-confirmed that the path is not configurable via `config.toml`. All migrations have been applied via the Supabase SQL Editor to date; `npx supabase db push` cannot be used until this is fixed. **First task for Session 16.** Proper fix: move all 19 migration files to `supabase/migrations/`, rename to timestamp format, backfill `supabase_migrations.schema_migrations` on remote with all 19 versions marked applied, update CLAUDE.md Monorepo Structure. Estimated 30–60 min of focused work; risk of a rename typo breaking future pushes.
+57. ✅ **CLOSED Session 17** — `**Format` file deleted. **`**Format` untracked file in repo root** — Showed up in Session 15 session-start snapshot (and earlier — predates this session). Unknown origin. Either investigate contents and delete, or just delete. Cleanup — do not commit.
 58. **CLAUDE.md "Migrations Run" list is stale** — List at the bottom of CLAUDE.md stops at 012. Has been stale since Session 7. Bring in sync with STATE.md's Migrations table (013–019) during next CLAUDE.md touch-up session.
 59. **CLAUDE.md "Last updated" header is stale** — Still reads "April 9, 2026 (Session 8 — Housekeeping, repo restructure, generated types decision)" despite many sessions of edits since. Also the "Migrations Run" list at the bottom of CLAUDE.md stops at 012 (already covered by tech debt #58 but noting again here for scope). Bundle both as a CLAUDE.md sync sweep in a future polish session — good pairing with tech debt #56's Monorepo Structure update.
 
@@ -605,6 +606,13 @@ Items 25–28 share the same fix pattern: build a `/dashboard/team/[id]` detail 
 - ✅ Commit 1af5cae on branch fix/supabase-cli-migration-history, pushed to origin. Stacked on the existing branch for tech debt #56 so both merge to main together.
 - ❌ Tech debt #56 (Supabase CLI migration-history mismatch) NOT started — docs split consumed the session. Carries forward unchanged as Session 17's first task.
 - ❌ Cross-reference link from CLAUDE.md back to CLAUDE_MODULES.md was in a draft but dropped in the final commit. Low-priority cosmetic, add in Session 17.
+
+### Session 17 Accomplishments (April 12, 2026)
+
+- ✅ Tech debt #56 closed — 18 migration files moved to `supabase/migrations/` with 14-digit timestamp format, remote `schema_migrations` backfilled, `supabase migration list` now shows all 18 as applied.
+- ✅ Tech debt #57 closed — `**Format` untracked file at repo root deleted.
+- ✅ Tech debt #58 closed — CLAUDE.md "Migrations Run" list updated with all 18 timestamp-format filenames and note about missing original 006.
+- ✅ Tech debt #59 closed — CLAUDE.md "Last updated" header and Monorepo Structure section synced to current state.
 
 ---
 
@@ -675,9 +683,9 @@ Session 16 was ended before any code changes. Token budget ran low during verifi
 
 **Created but unused:** branch `fix/supabase-cli-migration-history` (off `main`, no commits). Session 17+ should `git checkout` this branch rather than create a new one, OR delete it and start fresh — either is fine.
 
-## Session 17 — Starting Point
+## Session 18 — Starting Point
 
-First task is still tech debt #56 (Supabase CLI migration-history mismatch) — move migration files to `supabase/migrations/`, rename to 14-digit timestamp format, backfill remote `schema_migrations`, verify with `supabase migration list`, update CLAUDE.md Monorepo Structure section. Commit atomically on the same `fix/supabase-cli-migration-history` branch. After that, pick next Module 3 build target from the sub-status table, or open the Pre-Module 9 Decision Gate.
+Pick next Module 3 build target from the sub-status table (3F file list UI, 3G photo markup, 3H AI auto-tagging, 3I file_favorites), or open the Pre-Module 9 Decision Gate.
 
 **Still blocked:** Pre-Module 9 Decision Gate (unchanged from Session 15).
 
@@ -704,7 +712,7 @@ Add a SECOND SELECT policy on the `files` table to grant clients read access to 
    bash scripts/session-start.sh
    ```
 3. Open a new Claude Chat (ideally inside a "FrameFocus" Claude Project with `CLAUDE.md`, `STATE.md`, and Quick Reference as project knowledge)
-4. Paste the output from step 2 plus `docs/sessions/context16.md`
-5. Say: **"Starting Session 17. First task: fix Supabase CLI migration-history mismatch (tech debt #56). Then evaluate next Module 3 target or open Pre-Module 9 Decision Gate."**
+4. Paste the output from step 2 plus `docs/sessions/context17.md`
+5. Say: **"Starting Session 18. Pick next Module 3 build target or open Pre-Module 9 Decision Gate."**
 6. Switch to Claude Code in the terminal once a plan is agreed
-7. Return to Claude Chat at end of session to generate context17.md and update `STATE.md`
+7. Return to Claude Chat at end of session to generate context18.md and update `STATE.md`
