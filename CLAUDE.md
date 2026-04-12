@@ -628,6 +628,15 @@ A separate feature from selections. Timestamped record of every significant clie
 
 **Row-Level Security:** Enabled on ALL tables. No exceptions. Every policy uses a `get_my_company_id()` helper function that reads company_id from the user's profile.
 
+**Storage RLS policies: use inline subqueries, not helper functions.** `get_my_company_id()` works correctly in RLS policies on regular tables in the `public` schema. It does NOT work in `storage.objects` policies — in that context the helper silently returns NULL, which makes the policy match nothing and causes uploads/reads to fail with permission errors that appear unrelated to the policy logic.
+
+Use an inline subquery against `profiles` instead:
+```sql
+(storage.foldername(name))[1]::uuid = (SELECT company_id FROM profiles WHERE id = auth.uid())
+```
+
+`(storage.foldername(name))[1]` extracts the first folder segment of the object path, which by convention is the `company_id` (e.g., `{company_id}/project-id/filename`). Reference implementations: migration 013 (company-logos bucket) and migration 017 (project-files bucket, Session 11) both use this pattern.
+
 **Naming conventions:**
 - Tables: `snake_case`, plural (e.g., `contacts`, `estimates`, `line_items`)
 - Columns: `snake_case` (e.g., `company_id`, `created_at`, `updated_by`)
@@ -647,7 +656,14 @@ is_deleted      BOOLEAN DEFAULT false        -- soft delete, never hard delete
 deleted_at      TIMESTAMPTZ
 ```
 
-**Soft deletes only.** Never hard delete records. All queries filter `WHERE is_deleted = false`.
+**Trash-bin pattern.** Soft deletes only. Never hard delete records.
+
+- RLS policies do not filter on `is_deleted`. Filtering is enforced in the service layer, not in RLS. This is deliberate: a restore-from-trash flow must be able to read soft-deleted rows without requiring a separate RLS policy to expose them.
+- `get{Entity}s()` (the list function) filters `is_deleted = false` by default so deleted rows never appear in normal listings.
+- `get{Entity}(id)` (single-row fetch by id) does **not** filter `is_deleted`. It must return soft-deleted rows so a restore flow can fetch a deleted record by id before un-deleting it.
+- A separate `getTrash()` (or `listDeleted()`) function filters `is_deleted = true` to power the trash UI.
+
+Reference implementation: `apps/web/lib/services/files.ts` (Module 3, Session 13) is the canonical example of all three functions.
 
 ---
 
@@ -849,7 +865,7 @@ When generating code, migrations, or instructions for Josh:
 - **One thing at a time.** Don't bundle multiple changes into a single instruction block. Break them into numbered steps.
 - **Paste-ready code.** Code blocks should be complete and copy-pasteable, not fragments requiring assembly.
 - **Browser-based workflow.** All instructions assume GitHub Codespaces. Never reference local terminal, VS Code desktop, or local file system.
-- **Avoid shell heredocs for JSX files.** Use Node.js fs.writeFileSync() or create files directly in the Codespace editor. Shell heredocs eat `<a` tags and cause build failures.
+- **Avoid shell heredocs for any multi-line file content.** Known failure cases: JSX files (heredocs eat `<a` tags and cause build failures) and SQL migration files (a multi-line SQL heredoc was silently mangled on a migration in Session 12). Use Node.js fs.writeFileSync() or create files directly in the Codespace editor instead.
 
 ---
 
