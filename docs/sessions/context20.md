@@ -8,7 +8,7 @@
 
 CLAUDE.md cleanup + branch housekeeping. No code, no migrations, no DB changes. All work landed on `chore/claude-md-cleanup`, awaiting manual merge to `main`.
 
-Stale local and remote branches from Sessions 16–18 deleted. CLAUDE.md trimmed 784 → 625 lines (-20%) by cutting stale/duplicated sections. Admin Role Verification content moved to STATE.md as tech debt #41 rather than silently deleted, per Josh's call.
+Stale local and remote branches from Sessions 16–18 deleted. CLAUDE.md trimmed 784 → 556 lines (-29%) by cutting stale/duplicated sections. Admin Role Verification content moved to STATE.md as tech debt #41 rather than silently deleted, per Josh's call. Post-session audit pass surfaced two additional cuts (Database Tables duplicated with STATE.md/CLAUDE_MODULES.md, Subscription Tiers drift-prone and covered by roadmap docs) and one new tech debt item (#42 — empty Platform Roadmap file).
 
 **Commits pushed to `chore/claude-md-cleanup` this session:**
 
@@ -17,7 +17,8 @@ Stale local and remote branches from Sessions 16–18 deleted. CLAUDE.md trimmed
 | 8b67106 | docs(claude): Trim CLAUDE.md — remove stale sections, sync headers       |
 | (tbd)   | docs(state): Add tech debt #41 — Admin Role Verification for Session 21  |
 | (tbd)   | docs(sessions): Add context20.md                                         |
-
+| (tbd)   | docs: Cut Database Tables + Subscription Tiers from CLAUDE.md, add tech debt #42 |
+| (tbd)   | docs(sessions): Update context20.md with post-audit cuts                 |
 ---
 
 ## Decisions made
@@ -32,6 +33,8 @@ Cut from CLAUDE.md: "Known Technical Debt" tables (STATE.md owns tech debt), "Ad
 
 Updated in place: "Last updated" header (Session 20), Project Overview Status line ("Module 3 in progress" not "Ready for Module 3"), Monorepo tree `docs/sessions/` comment ("One file per session" — generic to prevent future drift), Reference Documents last bullet (same generic treatment).
 
+Post-session audit drove two more cuts: "Database Tables (Current)" (Module 1/2/3 duplicated in STATE.md; Modules 3/6/8/9 planned tables already in CLAUDE_MODULES.md) and "Subscription Tiers" (drift-prone pricing/features table, covered by Quick Reference + Platform Roadmap xlsx).
+
 ### 3. Admin Role Verification preserved as tech debt, not deleted
 
 Initial proposal was to cut outright (gate passed — Module 3 build already started). Josh pushed back: the verification was never confirmed to have actually run. Compromise: cut from CLAUDE.md (wrong place for a one-time audit checklist), add to STATE.md as tech debt #41, high priority, to be addressed at the start of Session 21 before Module 3 build resumes.
@@ -40,6 +43,9 @@ Initial proposal was to cut outright (gate passed — Module 3 build already sta
 
 After Step 12 cut the `## Known Technical Debt` parent heading, the audit grep showed `### Admin Role Verification` still present at line 587. The `###` subheadings survived as orphans under `## Instruction Preferences`. Fixed with Step 18. Reinforces the Session 18/19 rule: always grep the file against the plan before committing.
 
+### 5. Tech debt #42 — empty Platform Roadmap file
+
+During the audit of roadmap docs for coverage of subscription tiers, discovered `docs/roadmap/FrameFocus_Platform_Roadmap.docx` is 0 bytes. CLAUDE.md's Reference Documents section describes it as the "Primary reference. 51-page comprehensive roadmap." Captured as tech debt #42 rather than fixed this session — out of scope. Decision on fix (restore / regenerate / remove pointer) deferred.      
 ---
 
 ## What was built
@@ -58,6 +64,7 @@ Nothing. Documentation + branch housekeeping only.
 
 4. **Stale content compounds silently across sessions.** The "Claude Code: NOT YET SET UP" line was wrong for many sessions — STATE.md had it marked installed. Nobody caught it because nobody re-reads CLAUDE.md top-to-bottom between sessions. Periodic trim passes (every 5–8 sessions) are the only reliable fix.
 
+5. **Post-session audits find things mid-session audits miss.** After the "we're done" point at Step 26, one more audit pass surfaced two real cuts (Database Tables, Subscription Tiers) and a genuine data-loss issue (0-byte Platform Roadmap). Worth building a "one more audit pass before declaring done" step into the session workflow, not just as a last-resort check.
 ---
 
 ## Carry-forward to Session 21
