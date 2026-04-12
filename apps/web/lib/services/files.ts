@@ -18,6 +18,8 @@ export type FileRecord = Omit<FileRow, 'category'> & {
   category: FileCategory;
 };
 
+// Trash-bin pattern (list): filters is_deleted = false by default so deleted rows never appear in
+// normal listings. Pass include_deleted: true to surface soft-deleted rows for the trash UI. See CLAUDE.md "Trash-bin pattern".
 export async function getFiles(filters?: {
   project_id?: string;
   category?: FileCategory;
@@ -45,6 +47,8 @@ export async function getFiles(filters?: {
   return (data ?? []) as FileRecord[];
 }
 
+// Trash-bin pattern (single-row fetch): intentionally does NOT filter is_deleted so a
+// restore-from-trash flow can fetch a soft-deleted record by id. See CLAUDE.md "Trash-bin pattern".
 export async function getFile(id: string): Promise<FileRecord | null> {
   const supabase = await createClient();
 

@@ -4,7 +4,7 @@
 -- Creates the private `project-files` Supabase Storage bucket
 -- and RLS policies on storage.objects.
 --
--- Folder structure: {company_id}/{project_id}/{category}/{filename}
+-- Folder structure: {company_id}/{project_id}/{filename}  (category segment dropped in Session 13)
 -- Company isolation is enforced via (storage.foldername(name))[1]
 -- which matches the first path segment (company_id).
 -- ============================================================
