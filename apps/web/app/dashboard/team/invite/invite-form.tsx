@@ -43,9 +43,10 @@ interface InviteFormProps {
   companyId: string;
   invitedBy: string;
   seatUsage: SeatUsage | null;
+  currentUserRole: string;
 }
 
-export default function InviteForm({ companyId, invitedBy, seatUsage }: InviteFormProps) {
+export default function InviteForm({ companyId, invitedBy, seatUsage, currentUserRole }: InviteFormProps) {
   const supabase = createClient();
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('');
@@ -183,7 +184,9 @@ export default function InviteForm({ companyId, invitedBy, seatUsage }: InviteFo
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
               <div className="space-y-2">
-                {INVITABLE_ROLES.map((r) => (
+                {INVITABLE_ROLES.filter(
+                  (r) => currentUserRole === 'owner' || r.value !== 'admin'
+                ).map((r) => (
                   <label
                     key={r.value}
                     className={`flex items-start gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${

@@ -1,8 +1,26 @@
+import { createClient } from '@/lib/supabase-server';
 import { getSubscription } from '@/lib/services/billing';
 import { redirect } from 'next/navigation';
 import { PlanSelection } from './plan-selection';
 
 export default async function PlansPage() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) redirect('/sign-in');
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('user_id', user.id)
+    .single();
+
+  if (!profile || profile.role !== 'owner') {
+    redirect('/dashboard');
+  }
+
   const subscription = await getSubscription();
 
   if (!subscription) {

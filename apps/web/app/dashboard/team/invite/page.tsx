@@ -32,6 +32,7 @@ export default async function InvitePage() {
         companyId={profile.company_id}
         invitedBy={user.id}
         seatUsage={seatUsage}
+        currentUserRole={profile.role}
       />
     </div>
   );
