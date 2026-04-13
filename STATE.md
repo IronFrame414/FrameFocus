@@ -1,6 +1,6 @@
 # STATE.md — FrameFocus Current State
 
-> **Last updated:** April 12, 2026 (Session 19 — STATE.md trim applied)
+> **Last updated:** April 13, 2026 (Session 21 — Tech debt #41 Items 3 & 5 fixed; Item 2 caveat logged as #43; Item 1 manual click-through pending)
 > **Purpose:** Snapshot of current state of codebase, infrastructure, and database. Updated at end of each session. For session narrative and decisions, see `docs/sessions/contextN.md`. For conventions and patterns, see `CLAUDE.md`.
 
 ---
@@ -368,10 +368,11 @@ Items #14–#17 share the same fix pattern: build `/dashboard/team/[id]` detail 
 - **#38** Bishop Contracting may need manual subscription row — predates Migration 007
 - **#39** Role-check patterns repeated across page.tsx files — would benefit from `isOwnerOrAdmin()` / `canManageProjects()` helpers
 - **#40** Inline style objects duplicated across forms — cleanup with shadcn/ui migration
+- **#43** `profiles_update_owner` RLS policy is Owner-only. Per Admin Role Principle (Owner minus billing minus Admin promotion), Admin should be able to edit other users' profiles EXCEPT promoting them to Admin. No live impact today because no `/dashboard/team/[id]` edit UI exists yet (see #14). When #14 ships, the RLS policy needs to be updated to allow Admin writes while still preventing Admin from setting `role='admin'`. Likely a column-level grant or a CHECK in a new policy. Discovered Session 21 during tech debt #41 audit.
 
 ### High Priority — Address Next Session
 
-- **#41** Admin Role Verification against live code — before Module 3 build resumes. The Session 6 verification checklist was never confirmed run. Verify against live code: (1) sign in as Admin and click through every dashboard page (Billing blocked, Team invite dropdown excludes Admin, Settings/Contacts/Subcontractors all work); (2) audit RLS policies in Supabase — every write policy allowing Owner must also allow Admin except `subscriptions`; (3) confirm `apps/web/middleware.ts` blocks Admin from `/dashboard/billing/*`; (4) confirm `dashboard-shell.tsx` hides Billing link from Admin; (5) confirm `invite-form.tsx` INVITABLE_ROLES excludes `admin` when current user is Admin; (6) confirm seat counting includes Admin and excludes Client. Log any failures and fix before Module 3 build resumes.
+- **#41** Admin Role Verification — IN PROGRESS. Items 3 & 5 fixed in commit 5611fbd (Session 21). Items 4 & 6 passed audit. Item 2 (RLS) passed with caveat logged as #43. **Item 1 remains:** manually sign in as Admin (josh+test40@worthprop.com) and click through every dashboard page to confirm: Billing blocked at /dashboard/billing, /dashboard/billing/plans, /dashboard/billing/success; Team invite dropdown excludes Admin; Settings/Contacts/Subcontractors all work. Close #41 once Item 1 passes.
 - **#42** `docs/roadmap/FrameFocus_Platform_Roadmap.docx` is 0 bytes on disk — file exists but is empty. CLAUDE.md's Reference Documents section describes it as the "Primary reference. 51-page comprehensive roadmap." Either restore from a backup, regenerate from source, or remove the pointer from CLAUDE.md. Discovered Session 20.
 
 ---
