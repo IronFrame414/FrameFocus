@@ -7,9 +7,8 @@ export const MARKUP_SCHEMA_VERSION = 1;
 export type MarkupColor = string; // hex, e.g. "#ef4444"
 
 export interface MarkupShapeBase {
-  id: string; // uuid, assigned at creation
+  id: string;
   color: MarkupColor;
-  strokeWidth: number;
 }
 
 export interface ArrowShape extends MarkupShapeBase {
@@ -18,6 +17,7 @@ export interface ArrowShape extends MarkupShapeBase {
   y1: number;
   x2: number;
   y2: number;
+  strokeWidth: number;
 }
 
 export interface CircleShape extends MarkupShapeBase {
@@ -26,6 +26,7 @@ export interface CircleShape extends MarkupShapeBase {
   cy: number;
   rx: number;
   ry: number;
+  strokeWidth: number;
 }
 
 export interface RectangleShape extends MarkupShapeBase {
@@ -34,11 +35,13 @@ export interface RectangleShape extends MarkupShapeBase {
   y: number;
   width: number;
   height: number;
+  strokeWidth: number;
 }
 
 export interface PenShape extends MarkupShapeBase {
   type: 'pen';
   points: Array<{ x: number; y: number }>;
+  strokeWidth: number;
 }
 
 export interface TextShape extends MarkupShapeBase {
