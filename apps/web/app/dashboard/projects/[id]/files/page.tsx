@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { getFiles } from '@/lib/services/files';
+import FileRowActions from './file-row-actions';
 
 export default async function ProjectFilesPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: projectId } = await params;
@@ -51,6 +52,9 @@ export default async function ProjectFilesPage({ params }: { params: Promise<{ i
                 <td style={{ padding: '0.75rem' }}>{(f.file_size / 1024).toFixed(1)} KB</td>
                 <td style={{ padding: '0.75rem' }}>
                   {f.created_at ? new Date(f.created_at).toLocaleDateString() : '—'}
+                </td>
+                <td style={{ padding: '0.75rem' }}>
+                  <FileRowActions fileId={f.id} filePath={f.file_path} />
                 </td>
               </tr>
             ))}
