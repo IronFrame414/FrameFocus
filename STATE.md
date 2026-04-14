@@ -1,6 +1,6 @@
 # STATE.md — FrameFocus Current State
 
-> **Last updated:** April 13, 2026 (Session 21 — Tech debt #41 closed; #43 logged; #44 logged)
+> **Last updated:** April 13, 2026 Session 22 — Tech debt #42 and #11 closed
 > **Purpose:** Snapshot of current state of codebase, infrastructure, and database. Updated at end of each session. For session narrative and decisions, see `docs/sessions/contextN.md`. For conventions and patterns, see `CLAUDE.md`.
 
 ---
@@ -321,7 +321,6 @@ Add a SECOND SELECT policy on `files` to grant clients read access to specifical
 - **#8** `team-page-client.tsx` has local `ROLE_LABELS` — should import from `@framefocus/shared`
 - **#9** `invite-form.tsx` has local `INVITABLE_ROLES` — should import from `@framefocus/shared`
 - **#10** `invite-form.tsx` imports `Invitation` without `import type` — cross-boundary type import should use `import type`
-- **#11** `packages/shared/constants/index.ts` duplication (HIGH PRIORITY — latent bug) — inline `COMPANY_ROLES` and `ROLE_LABELS` missing the `admin` role. Fix: move inline `SUBSCRIPTION_TIERS` and `MODULE_STATUS` to their own files, make `index.ts` a pure barrel.
 - **#12** `packages/shared/types/index.ts` `Company` interface missing `website` and `license_number` — partially mitigated by generated types in service files
 
 ### UX Polish
@@ -371,7 +370,7 @@ Items #14–#17 share the same fix pattern: build `/dashboard/team/[id]` detail 
 - **#43** `profiles_update_owner` RLS policy is Owner-only. Per Admin Role Principle (Owner minus billing minus Admin promotion), Admin should be able to edit other users' profiles EXCEPT promoting them to Admin. No live impact today because no `/dashboard/team/[id]` edit UI exists yet (see #14). When #14 ships, the RLS policy needs to be updated to allow Admin writes while still preventing Admin from setting `role='admin'`. Likely a column-level grant or a CHECK in a new policy. Discovered Session 21 during tech debt #41 audit.
 
 ### High Priority — Address Next Session
-- **#42** `docs/roadmap/FrameFocus_Platform_Roadmap.docx` is 0 bytes on disk — file exists but is empty. CLAUDE.md's Reference Documents section describes it as the "Primary reference. 51-page comprehensive roadmap." Either restore from a backup, regenerate from source, or remove the pointer from CLAUDE.md. Discovered Session 20.
+
 - **#44** No password reset flow built. `/auth/callback` exists but no reset-password page consumes Supabase recovery tokens. Recovery emails dead-end on the home page. Discovered Session 21 when test40 password was forgotten — had to set password via SQL in Supabase Dashboard as workaround. Build a `/reset-password` page that handles recovery token from URL hash and updates the user's password.
 
 ---
