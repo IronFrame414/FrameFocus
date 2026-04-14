@@ -1,37 +1,37 @@
 # STATE.md — FrameFocus Current State
 
-> **Last updated:** April 13, 2026 Session 25 — Module 3F complete (file list UI + upload form + download/soft-delete actions)
+> **Last updated:** April 14, 2026 Session 26 — Module 3G partial (markup schema + SVG viewer + test page; editor deferred)
 > **Purpose:** Snapshot of current state of codebase, infrastructure, and database. Updated at end of each session. For session narrative and decisions, see `docs/sessions/contextN.md`. For conventions and patterns, see `CLAUDE.md`.
 
 ---
 
 ## Build Status
 
-| Module                        | Status         | Notes                                                                                                                                                                                                                                   |
-| ----------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1. Settings, Admin & Billing  | ✅ COMPLETE    | Auth, roles, Stripe billing, company settings, invites, team management                                                                                                                                                                 |
-| 2. Contacts & CRM             | ✅ COMPLETE    | Two-table design (contacts + subcontractors), full CRUD, filters, ratings, markup                                                                                                                                                       |
-| 3. Document & File Management | 🟡 IN PROGRESS | Database foundation + service layer + file list UI + upload form + download/soft-delete complete. End-to-end testing blocked until Module 5 ships projects table. Photo markup, AI auto-tagging, file_favorites table, trash UI remain. |
-| 4. Sales & Estimating         | ⚪ NOT STARTED |                                                                                                                                                                                                                                         |
-| 5. Project Management         | ⚪ NOT STARTED |                                                                                                                                                                                                                                         |
-| 6. Team & Field Operations    | ⚪ NOT STARTED | Scope expanded Session 6. Time categorization, break tracking, OT, mileage, safety logs, incident workflow, huddles, delivery tracking                                                                                                  |
-| 7. Job Finances               | ⚪ NOT STARTED |                                                                                                                                                                                                                                         |
-| 8. Inventory & Tools          | ⚪ NOT STARTED | Added Session 6. Inventory catalog + tool tracking with location, check-in/out log, bulk assignment                                                                                                                                     |
-| 9. Customer Experience Portal | ⚪ NOT STARTED | **BLOCKED by Pre-Module 9 Decision Gate.** Scope expanded Session 6: material selections, decision log, photo favorites, pre-construction checklist                                                                                     |
-| 10. Reporting & Analytics     | ⚪ NOT STARTED |                                                                                                                                                                                                                                         |
-| 11. AI Marketing & Social     | ⚪ NOT STARTED |                                                                                                                                                                                                                                         |
+| Module                        | Status         | Notes                                                                                                                                                                                                                                                                 |
+| ----------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Settings, Admin & Billing  | ✅ COMPLETE    | Auth, roles, Stripe billing, company settings, invites, team management                                                                                                                                                                                               |
+| 2. Contacts & CRM             | ✅ COMPLETE    | Two-table design (contacts + subcontractors), full CRUD, filters, ratings, markup                                                                                                                                                                                     |
+| 3. Document & File Management | 🟡 IN PROGRESS | Database foundation + service layer + file list UI + upload form + download/soft-delete + markup schema/viewer complete. End-to-end testing blocked until Module 5 ships projects table. Photo markup editor, AI auto-tagging, file_favorites table, trash UI remain. |
+| 4. Sales & Estimating         | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                       |
+| 5. Project Management         | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                       |
+| 6. Team & Field Operations    | ⚪ NOT STARTED | Scope expanded Session 6. Time categorization, break tracking, OT, mileage, safety logs, incident workflow, huddles, delivery tracking                                                                                                                                |
+| 7. Job Finances               | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                       |
+| 8. Inventory & Tools          | ⚪ NOT STARTED | Added Session 6. Inventory catalog + tool tracking with location, check-in/out log, bulk assignment                                                                                                                                                                   |
+| 9. Customer Experience Portal | ⚪ NOT STARTED | **BLOCKED by Pre-Module 9 Decision Gate.** Scope expanded Session 6: material selections, decision log, photo favorites, pre-construction checklist                                                                                                                   |
+| 10. Reporting & Analytics     | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                       |
+| 11. AI Marketing & Social     | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                       |
 
 ### Module 3 sub-status
 
 | Sub-module                                                   | Status         |
-| ------------------------------------------------------------ | -------------- |
+| ------------------------------------------------------------ | -------------- | ---------------------------------------------------------------------------------- |
 | 3A — files table + RLS                                       | ✅ COMPLETE    |
 | 3B — project-files storage bucket + RLS                      | ✅ COMPLETE    |
 | 3C — column defaults migration (018)                         | ✅ COMPLETE    |
 | 3D — file upload service layer (files.ts + client)           | ✅ COMPLETE    |
 | 3E — polish migration (019: updated_by + mime CHECK)         | ✅ COMPLETE    |
 | 3F — file list UI (web) + upload form + download/soft-delete | ✅ COMPLETE    |
-| 3G — photo markup component (shared w/ Module 6)             | ⚪ NOT STARTED |
+| 3G — photo markup component (shared w/ Module 6)             | 🟡 IN PROGRESS | Schema + shared SVG viewer done (Session 26). Web editor deferred to next session. |
 | 3H — AI auto-tagging via GPT-4o vision                       | ⚪ NOT STARTED |
 | 3I — file_favorites junction table                           | ⚪ NOT STARTED |
 | 3J — trash UI (view soft-deleted, restore, permanent delete) | ⚪ NOT STARTED |
@@ -159,6 +159,8 @@ apps/web/
 │   │       └── upload/
 │   │           ├── page.tsx               ✅ Session 25
 │   │           └── upload-form.tsx        ✅ Session 25
+│   │       └── markup-test/
+│   │           └── page.tsx               ⚠️ Throwaway test page (tech debt #50)
 │   ├── forgot-password/page.tsx           ✅ Session 23
 │   ├── reset-password/page.tsx            ✅ Session 23
 │   ├── invite/accept/                     ✅
@@ -191,9 +193,12 @@ packages/shared/
 │   ├── index.ts                            ⚠️ Tech debt #21 (High priority, latent bug — missing admin role in inline COMPANY_ROLES)
 │   ├── roles.ts                            ✅ Full role definitions with admin
 │   └── form-options.ts                     ✅ TRADE_TYPES, US_STATES, LEAD_SOURCES
+├── components/
+│   └── MarkupViewer.tsx                    ✅ Session 26 — shared SVG markup viewer (Module 3G)
 ├── types/
-│   ├── index.ts                            ⚠️ Tech debt #22 (Company interface missing website/license_number)
+│   ├── index.ts                            ⚠️ Tech debt #22 (Company interface missing website/license_number). Re-exports markup.
 │   ├── roles.ts                            ✅
+│   ├── markup.ts                           ✅ Session 26 — shape schema (arrow, circle, rectangle, pen, text) + createEmptyMarkup
 │   └── database.ts                         ✅ Auto-generated from Supabase schema (707 lines)
 ├── validation/                             (Zod schemas)
 ├── utils/
@@ -362,6 +367,8 @@ Items #14–#17 share the same fix pattern: build `/dashboard/team/[id]` detail 
 
 - **#24** `uploadFile` still does auth + profile lookup for storage path — unavoidable until `company_id` is in JWT custom claims. Defer.
 - **#25** Verify Postgres column defaults fire correctly on first real `files` INSERT — confirmed via `information_schema`, but no INSERT has run against `files` yet
+- **#50** Delete `apps/web/app/dashboard/markup-test/page.tsx` once Module 3G editor is complete — throwaway visual test for MarkupViewer
+- **#51** Add `.claude/` to `.gitignore` — Claude Code local config showing up as untracked
 
 ### Lower Priority / Existing
 
