@@ -1,5 +1,5 @@
 // ── User & Auth Types ──
-
+import type { SubscriptionTier } from '../constants/subscriptions';
 export type CompanyUserRole = 'owner' | 'project_manager' | 'foreman' | 'crew_member' | 'client';
 
 export interface Profile {
@@ -38,7 +38,6 @@ export interface Company {
   updated_at: string;
 }
 
-export type SubscriptionTier = 'starter' | 'professional' | 'business';
 export type SubscriptionStatus = 'trialing' | 'active' | 'past_due' | 'canceled' | 'unpaid';
 
 // ── Platform Admin Types ──

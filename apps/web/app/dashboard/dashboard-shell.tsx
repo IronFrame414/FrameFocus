@@ -2,11 +2,11 @@
 import { createClient } from '@/lib/supabase-browser';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ROLE_LABELS } from '@framefocus/shared';
+import { ROLE_LABELS, type CompanyRole } from '@framefocus/shared';
 interface DashboardShellProps {
   children: React.ReactNode;
   userName: string;
-  userRole: string;
+  userRole: CompanyRole;
   companyName: string;
 }
 export function DashboardShell({ children, userName, userRole, companyName }: DashboardShellProps) {
