@@ -1,6 +1,6 @@
 # STATE.md — FrameFocus Current State
 
-> **Last updated:** April 13, 2026 Session 23 — Tech debt #44 closed (password reset flow)
+> **Last updated:** April 14, 2026 Session 24 — Tech debt #22, #23, #26 closed (Postgres defaults + updated_by triggers on contacts/subs)
 > **Purpose:** Snapshot of current state of codebase, infrastructure, and database. Updated at end of each session. For session narrative and decisions, see `docs/sessions/contextN.md`. For conventions and patterns, see `CLAUDE.md`.
 
 ---
@@ -95,6 +95,8 @@
 - updated_at timestamp triggers on: companies, profiles, invitations, subscriptions, contacts, subcontractors
 - `on_auth_user_created` — fires `handle_new_user()` after insert on auth.users
 - `files_set_updated_by` — BEFORE UPDATE on files, sets updated_by = auth.uid()
+- `contacts_set_updated_by` — BEFORE UPDATE on contacts, sets updated_by = auth.uid()
+- `subcontractors_set_updated_by` — BEFORE UPDATE on subcontractors, sets updated_by = auth.uid()
 
 ### RLS policies (summary)
 
@@ -116,7 +118,7 @@
 
 ### Migrations
 
-All 18 migration files live in `supabase/migrations/` with 14-digit timestamp format. `npx supabase migration list` shows all 18 in sync (Local + Remote). Migration 006 was never created — intentional gap. Source of truth is the file list on disk.
+All 19 migration files live in `supabase/migrations/` with 14-digit timestamp format. `npx supabase migration list` shows all 19 in sync (Local + Remote). Migration 006 was never created — intentional gap. Source of truth is the file list on disk.
 
 ---
 
@@ -349,11 +351,8 @@ Items #14–#17 share the same fix pattern: build `/dashboard/team/[id]` detail 
 
 ### Module 3 Follow-Ups
 
-- **#22** `files-client.ts` dead code cleanup — drop manual `updated_by` and `auth.getUser()` calls now that migration 019 trigger handles it
-- **#23** Service layer pattern drift — `contacts-client.ts` and `subcontractors-client.ts` still do manual auth lookups; migrate to Postgres defaults pattern for consistency
 - **#24** `uploadFile` still does auth + profile lookup for storage path — unavoidable until `company_id` is in JWT custom claims. Defer.
 - **#25** Verify Postgres column defaults fire correctly on first real `files` INSERT — confirmed via `information_schema`, but no INSERT has run against `files` yet
-- **#26** First import of `files.ts` / `files-client.ts` should be followed by `npm run build` to confirm production bundle is clean
 
 ### Lower Priority / Existing
 
