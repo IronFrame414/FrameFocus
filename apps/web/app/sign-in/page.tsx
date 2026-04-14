@@ -1,5 +1,4 @@
 'use client';
-
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase-browser';
 import { useRouter } from 'next/navigation';
@@ -15,21 +14,17 @@ export default function SignInPage() {
   async function handleSignIn(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    setError('');
-
     const supabase = createClient();
-
+    setError('');
     const { error: signInError } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
-
     if (signInError) {
       setError(signInError.message);
       setLoading(false);
       return;
     }
-
     router.push('/dashboard');
     router.refresh();
   }
@@ -43,7 +38,6 @@ export default function SignInPage() {
           </h1>
           <p className="mt-2 text-gray-600">Sign in to your account</p>
         </div>
-
         <form onSubmit={handleSignIn} className="space-y-4">
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
@@ -59,7 +53,6 @@ export default function SignInPage() {
               placeholder="you@company.com"
             />
           </div>
-
           <div>
             <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
               Password
@@ -73,14 +66,16 @@ export default function SignInPage() {
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
               placeholder="Your password"
             />
-          </div>
-
-          {error && (
-            <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
-              {error}
+            <div className="mt-1 text-right">
+              <Link
+                href="/forgot-password"
+                className="text-sm font-medium text-brand-600 hover:text-brand-500"
+              >
+                Forgot password?
+              </Link>
             </div>
-          )}
-
+          </div>
+          {error && <div className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</div>}
           <button
             type="submit"
             disabled={loading}
@@ -89,7 +84,6 @@ export default function SignInPage() {
             {loading ? 'Signing in...' : 'Sign in'}
           </button>
         </form>
-
         <p className="mt-6 text-center text-sm text-gray-600">
           Don&apos;t have an account?{' '}
           <Link href="/sign-up" className="font-medium text-brand-600 hover:text-brand-500">
