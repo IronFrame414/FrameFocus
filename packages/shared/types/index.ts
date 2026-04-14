@@ -63,3 +63,4 @@ export interface BaseEntity {
   deleted_at?: string;
 }
 export * from './roles';
+export * from './markup';
