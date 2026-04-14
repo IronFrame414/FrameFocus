@@ -25,7 +25,8 @@ export async function uploadFile(
 
   const supabase = createClient();
 
-  // company_id is needed to build the storage path
+  // company_id is needed to build the storage path.
+  // Tech debt #24: unavoidable until company_id lands in JWT custom claims.
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -59,7 +60,7 @@ export async function uploadFile(
     return { success: false, error: `Upload failed: ${uploadError.message}` };
   }
 
-  // Insert row. Defaults fill in company_id, created_by, updated_by.
+  // Insert row. Postgres defaults fill in company_id, created_by, updated_by.
   const { data, error: insertError } = await supabase
     .from('files')
     .insert({
@@ -94,18 +95,8 @@ export async function updateFile(
 ): Promise<MutationResult> {
   const supabase = createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: 'Not authenticated' };
-
-  const { error } = await supabase
-    .from('files')
-    .update({
-      ...updates,
-      updated_by: user.id,
-    })
-    .eq('id', id);
+  // BEFORE UPDATE trigger `files_set_updated_by` handles updated_by automatically.
+  const { error } = await supabase.from('files').update(updates).eq('id', id);
 
   if (error) return { success: false, error: error.message };
   return { success: true };
@@ -114,17 +105,12 @@ export async function updateFile(
 export async function softDeleteFile(id: string): Promise<MutationResult> {
   const supabase = createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: 'Not authenticated' };
-
+  // BEFORE UPDATE trigger handles updated_by.
   const { error } = await supabase
     .from('files')
     .update({
       is_deleted: true,
       deleted_at: new Date().toISOString(),
-      updated_by: user.id,
     })
     .eq('id', id);
 
@@ -135,17 +121,12 @@ export async function softDeleteFile(id: string): Promise<MutationResult> {
 export async function restoreFile(id: string): Promise<MutationResult> {
   const supabase = createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: 'Not authenticated' };
-
+  // BEFORE UPDATE trigger handles updated_by.
   const { error } = await supabase
     .from('files')
     .update({
       is_deleted: false,
       deleted_at: null,
-      updated_by: user.id,
     })
     .eq('id', id);
 
