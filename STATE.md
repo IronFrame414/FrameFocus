@@ -1,6 +1,6 @@
 # STATE.md — FrameFocus Current State
 
-> **Last updated:** April 13, 2026 Session 22 — Tech debt #42 and #11 closed
+> **Last updated:** April 13, 2026 Session 23 — Tech debt #44 closed (password reset flow)
 > **Purpose:** Snapshot of current state of codebase, infrastructure, and database. Updated at end of each session. For session narrative and decisions, see `docs/sessions/contextN.md`. For conventions and patterns, see `CLAUDE.md`.
 
 ---
@@ -131,7 +131,7 @@ apps/web/
 │   │   ├── checkout/route.ts              ✅
 │   │   ├── webhook/route.ts               ✅ Lazy init, metadata fallback
 │   │   └── portal/route.ts                ✅
-│   ├── auth/callback/route.ts             ✅
+│   ├── auth/callback/route.ts             ✅ Honors ?next= param (Session 23)
 │   ├── dashboard/
 │   │   ├── layout.tsx                     ✅
 │   │   ├── dashboard-shell.tsx            ✅ Sidebar nav
@@ -148,6 +148,8 @@ apps/web/
 │   │       └── invite/
 │   │           ├── page.tsx               ✅
 │   │           └── invite-form.tsx        ⚠️ Local INVITABLE_ROLES (tech debt #19/20)
+│   ├── forgot-password/page.tsx           ✅ Session 23
+│   ├── reset-password/page.tsx            ✅ Session 23
 │   ├── invite/accept/                     ✅
 │   ├── sign-in/page.tsx                   ✅
 │   ├── sign-up/page.tsx                   ✅
@@ -233,6 +235,8 @@ Vercel env vars must match `.env.local` exactly.
 | Redirect URLs               | `https://frame-focus-eight.vercel.app/auth/callback`, `http://localhost:3000/auth/callback` |
 | Automatic RLS on new tables | ✅ Enabled                                                                                  |
 | Data API                    | ✅ Enabled                                                                                  |
+| OTP/email link expiry       | 24 hours (raised Session 23 from default)                                                   |
+| Redirect URLs               | + wildcards `/auth/callback?next=*` for prod and localhost                                  |
 
 ---
 
@@ -368,10 +372,7 @@ Items #14–#17 share the same fix pattern: build `/dashboard/team/[id]` detail 
 - **#39** Role-check patterns repeated across page.tsx files — would benefit from `isOwnerOrAdmin()` / `canManageProjects()` helpers
 - **#40** Inline style objects duplicated across forms — cleanup with shadcn/ui migration
 - **#43** `profiles_update_owner` RLS policy is Owner-only. Per Admin Role Principle (Owner minus billing minus Admin promotion), Admin should be able to edit other users' profiles EXCEPT promoting them to Admin. No live impact today because no `/dashboard/team/[id]` edit UI exists yet (see #14). When #14 ships, the RLS policy needs to be updated to allow Admin writes while still preventing Admin from setting `role='admin'`. Likely a column-level grant or a CHECK in a new policy. Discovered Session 21 during tech debt #41 audit.
-
-### High Priority — Address Next Session
-
-- **#44** No password reset flow built. `/auth/callback` exists but no reset-password page consumes Supabase recovery tokens. Recovery emails dead-end on the home page. Discovered Session 21 when test40 password was forgotten — had to set password via SQL in Supabase Dashboard as workaround. Build a `/reset-password` page that handles recovery token from URL hash and updates the user's password.
+  **#47** Customize Supabase auth emails (recovery, invite, signup confirmation) to use FrameFocus branding and copy. Currently using Supabase defaults. Set in Supabase Dashboard → Authentication → Email Templates.
 
 ---
 
