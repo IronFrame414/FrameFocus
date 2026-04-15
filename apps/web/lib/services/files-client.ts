@@ -165,3 +165,12 @@ export async function permanentDeleteFile(id: string): Promise<MutationResult> {
 
   return { success: true };
 }
+export async function toggleFavorite(id: string, isFavorite: boolean): Promise<MutationResult> {
+  const supabase = createClient();
+
+  // BEFORE UPDATE trigger handles updated_by.
+  const { error } = await supabase.from('files').update({ is_favorite: isFavorite }).eq('id', id);
+
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}

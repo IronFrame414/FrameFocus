@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { getFiles } from '@/lib/services/files';
 import FileRowActions from './file-row-actions';
+import FavoriteToggle from './favorite-toggle';
 
 export default async function ProjectFilesPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: projectId } = await params;
@@ -38,6 +39,7 @@ export default async function ProjectFilesPage({ params }: { params: Promise<{ i
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #ddd', textAlign: 'left' }}>
+              <th style={{ padding: '0.75rem', width: '2rem' }}></th>
               <th style={{ padding: '0.75rem' }}>Name</th>
               <th style={{ padding: '0.75rem' }}>Category</th>
               <th style={{ padding: '0.75rem' }}>Size</th>
@@ -47,6 +49,9 @@ export default async function ProjectFilesPage({ params }: { params: Promise<{ i
           <tbody>
             {files.map((f) => (
               <tr key={f.id} style={{ borderBottom: '1px solid #eee' }}>
+                <td style={{ padding: '0.75rem' }}>
+                  <FavoriteToggle fileId={f.id} initialIsFavorite={f.is_favorite} />
+                </td>
                 <td style={{ padding: '0.75rem' }}>{f.file_name}</td>
                 <td style={{ padding: '0.75rem' }}>{f.category}</td>
                 <td style={{ padding: '0.75rem' }}>{(f.file_size / 1024).toFixed(1)} KB</td>

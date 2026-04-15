@@ -142,7 +142,7 @@ export type Database = {
           address_line1?: string | null
           address_line2?: string | null
           city?: string | null
-          company_id: string
+          company_id?: string
           company_name?: string | null
           contact_type?: string
           created_at?: string | null
@@ -213,6 +213,7 @@ export type Database = {
           file_size: number
           id: string
           is_deleted: boolean | null
+          is_favorite: boolean
           markup_data: Json | null
           mime_type: string
           project_id: string | null
@@ -234,6 +235,7 @@ export type Database = {
           file_size: number
           id?: string
           is_deleted?: boolean | null
+          is_favorite?: boolean
           markup_data?: Json | null
           mime_type: string
           project_id?: string | null
@@ -255,6 +257,7 @@ export type Database = {
           file_size?: number
           id?: string
           is_deleted?: boolean | null
+          is_favorite?: boolean
           markup_data?: Json | null
           mime_type?: string
           project_id?: string | null
@@ -468,7 +471,7 @@ export type Database = {
           address_line1?: string | null
           address_line2?: string | null
           city?: string | null
-          company_id: string
+          company_id?: string
           company_name: string
           contact_first_name?: string | null
           contact_last_name?: string | null
