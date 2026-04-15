@@ -1,0 +1,1 @@
+-- Intentionally empty. Created accidentally during Session 29; the actual migration is 20260415182405_add_tag_options_table.sql. Left in place because it has been applied to the remote database.
