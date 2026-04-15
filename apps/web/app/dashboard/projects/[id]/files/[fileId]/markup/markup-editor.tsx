@@ -11,8 +11,18 @@ import { updateFile } from '@/lib/services/files-client';
 
 type Tool = 'arrow' | 'circle' | 'rectangle' | 'pen' | 'text' | 'select';
 
-const COLORS = ['#ef4444', '#3b82f6', '#22c55e', '#eab308', '#000000', '#ffffff'];
-const STROKE_WIDTHS = [2, 4, 6, 10];
+const COLORS = [
+  '#ffffff', // white
+  '#000000', // black
+  '#01cefd', // cyan
+  '#08da45', // green
+  '#e9f300', // yellow
+  '#fcb800', // orange
+  '#ff1489', // pink
+  '#ff2517', // red
+  '#cf22d6', // purple
+];
+const STROKE_WIDTHS = [10, 20, 30, 50];
 
 interface MarkupEditorProps {
   fileId: string;
@@ -33,7 +43,7 @@ export default function MarkupEditor({ fileId, imageUrl, initialMarkup }: Markup
   const [shapes, setShapes] = React.useState<MarkupShape[]>(initialMarkup?.shapes ?? []);
   const [tool, setTool] = React.useState<Tool>('arrow');
   const [color, setColor] = React.useState<string>(COLORS[0]);
-  const [strokeWidth, setStrokeWidth] = React.useState<number>(4);
+  const [strokeWidth, setStrokeWidth] = React.useState<number>(20);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
 
   // In-progress shape during a drag. Committed to `shapes` on pointer up.
@@ -84,8 +94,8 @@ export default function MarkupEditor({ fileId, imageUrl, initialMarkup }: Markup
         x: pos.x,
         y: pos.y,
         content,
-        // Scale font with image — 2.5% of the image's smaller dimension feels readable.
-        fontSize: Math.max(12, Math.round(Math.min(imageDims.w, imageDims.h) * 0.025)),
+        // Scale font with image — 6% of the image's smaller dimension for visibility.
+        fontSize: Math.max(24, Math.round(Math.min(imageDims.w, imageDims.h) * 0.06)),
       };
       setShapes((prev) => [...prev, newShape]);
       setDirty(true);
