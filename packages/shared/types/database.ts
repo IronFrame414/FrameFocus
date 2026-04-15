@@ -39,10 +39,65 @@ export type Database = {
   }
   public: {
     Tables: {
+      ai_tag_logs: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          error_message: string | null
+          estimated_cost_usd: number | null
+          file_id: string | null
+          id: string
+          input_tokens: number | null
+          model: string
+          output_tokens: number | null
+          success: boolean
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          error_message?: string | null
+          estimated_cost_usd?: number | null
+          file_id?: string | null
+          id?: string
+          input_tokens?: number | null
+          model: string
+          output_tokens?: number | null
+          success?: boolean
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          error_message?: string | null
+          estimated_cost_usd?: number | null
+          file_id?: string | null
+          id?: string
+          input_tokens?: number | null
+          model?: string
+          output_tokens?: number | null
+          success?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_tag_logs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_tag_logs_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       companies: {
         Row: {
           address_line1: string | null
           address_line2: string | null
+          ai_tagging_enabled: boolean
           city: string | null
           created_at: string | null
           email: string | null
@@ -66,6 +121,7 @@ export type Database = {
         Insert: {
           address_line1?: string | null
           address_line2?: string | null
+          ai_tagging_enabled?: boolean
           city?: string | null
           created_at?: string | null
           email?: string | null
@@ -89,6 +145,7 @@ export type Database = {
         Update: {
           address_line1?: string | null
           address_line2?: string | null
+          ai_tagging_enabled?: boolean
           city?: string | null
           created_at?: string | null
           email?: string | null
@@ -616,7 +673,7 @@ export type Database = {
         }
         Insert: {
           category: string
-          company_id: string
+          company_id?: string
           created_at?: string | null
           created_by?: string | null
           id?: string
@@ -692,6 +749,7 @@ export type Database = {
       get_my_company_id: { Args: never; Returns: string }
       get_my_role: { Args: never; Returns: string }
       is_platform_admin: { Args: never; Returns: boolean }
+      seed_default_tags: { Args: { p_company_id: string }; Returns: undefined }
       test_invite_lookup: {
         Args: { p_token: string }
         Returns: {
