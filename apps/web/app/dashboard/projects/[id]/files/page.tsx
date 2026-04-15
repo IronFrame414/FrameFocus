@@ -54,7 +54,12 @@ export default async function ProjectFilesPage({ params }: { params: Promise<{ i
                   {f.created_at ? new Date(f.created_at).toLocaleDateString() : '—'}
                 </td>
                 <td style={{ padding: '0.75rem' }}>
-                  <FileRowActions fileId={f.id} filePath={f.file_path} />
+                  <FileRowActions
+                    fileId={f.id}
+                    filePath={f.file_path}
+                    mimeType={f.mime_type}
+                    projectId={projectId}
+                  />
                 </td>
               </tr>
             ))}
