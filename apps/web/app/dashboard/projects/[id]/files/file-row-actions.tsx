@@ -1,5 +1,4 @@
 'use client';
-
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -8,30 +7,38 @@ import { softDeleteFile } from '@/lib/services/files-client';
 export default function FileRowActions({
   fileId,
   filePath,
+  fileName,
   mimeType,
   projectId,
 }: {
   fileId: string;
   filePath: string;
+  fileName: string;
   mimeType: string | null;
   projectId: string;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
-
   const isImage = mimeType?.startsWith('image/') ?? false;
+
+  async function getSignedUrl(): Promise<string | null> {
+    const res = await fetch(`/api/files/signed-url?path=${encodeURIComponent(filePath)}`);
+    if (!res.ok) return null;
+    const { url } = await res.json();
+    return url;
+  }
 
   async function handleDownload() {
     setBusy(true);
-    const res = await fetch(`/api/files/signed-url?path=${encodeURIComponent(filePath)}`);
+    const url = await getSignedUrl();
     setBusy(false);
-
-    if (!res.ok) {
+    if (!url) {
       alert('Could not generate download link.');
       return;
     }
-    const { url } = await res.json();
-    window.open(url, '_blank');
+    // Append ?download=<filename> to force browser to download with original name.
+    const separator = url.includes('?') ? '&' : '?';
+    window.open(`${url}${separator}download=${encodeURIComponent(fileName)}`, '_blank');
   }
 
   async function handleDelete() {
@@ -39,7 +46,6 @@ export default function FileRowActions({
     setBusy(true);
     const result = await softDeleteFile(fileId);
     setBusy(false);
-
     if (!result.success) {
       alert(`Delete failed: ${result.error}`);
       return;
@@ -47,17 +53,22 @@ export default function FileRowActions({
     router.refresh();
   }
 
+  const btnStyle = {
+    padding: '0.25rem 0.5rem',
+    fontSize: '0.8rem',
+    background: '#fff',
+    border: '1px solid #ddd',
+    borderRadius: '4px',
+    cursor: busy ? ('wait' as const) : ('pointer' as const),
+  };
+
   return (
     <div style={{ display: 'flex', gap: '0.5rem' }}>
       {isImage && (
         <Link
           href={`/dashboard/projects/${projectId}/files/${fileId}/markup`}
           style={{
-            padding: '0.25rem 0.5rem',
-            fontSize: '0.8rem',
-            background: '#fff',
-            border: '1px solid #ddd',
-            borderRadius: '4px',
+            ...btnStyle,
             textDecoration: 'none',
             color: '#000',
           }}
@@ -65,33 +76,10 @@ export default function FileRowActions({
           Markup
         </Link>
       )}
-      <button
-        onClick={handleDownload}
-        disabled={busy}
-        style={{
-          padding: '0.25rem 0.5rem',
-          fontSize: '0.8rem',
-          background: '#fff',
-          border: '1px solid #ddd',
-          borderRadius: '4px',
-          cursor: busy ? 'wait' : 'pointer',
-        }}
-      >
+      <button onClick={handleDownload} disabled={busy} style={btnStyle}>
         Download
       </button>
-      <button
-        onClick={handleDelete}
-        disabled={busy}
-        style={{
-          padding: '0.25rem 0.5rem',
-          fontSize: '0.8rem',
-          background: '#fff',
-          border: '1px solid #ddd',
-          color: '#c00',
-          borderRadius: '4px',
-          cursor: busy ? 'wait' : 'pointer',
-        }}
-      >
+      <button onClick={handleDelete} disabled={busy} style={{ ...btnStyle, color: '#c00' }}>
         Delete
       </button>
     </div>
