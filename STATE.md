@@ -1,40 +1,40 @@
 # STATE.md — FrameFocus Current State
 
-> **Last updated:** April 15, 2026 Session 30 — Module 3H service layer + settings UI + OpenAI client + ai_tag_logs
+> **Last updated:** April 16, 2026 Session 31 — Module 3H API route + ai-tagging service, all 6 validation tests passed
 > **Purpose:** Snapshot of current state of codebase, infrastructure, and database. Updated at end of each session. For session narrative and decisions, see `docs/sessions/contextN.md`. For conventions and patterns, see `CLAUDE.md`.
 
 ---
 
 ## Build Status
 
-| Module                        | Status         | Notes                                                                                                                                                                                                                                                                                                                                                                                           |
-| ----------------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1. Settings, Admin & Billing  | ✅ COMPLETE    | Auth, roles, Stripe billing, company settings, invites, team management                                                                                                                                                                                                                                                                                                                         |
-| 2. Contacts & CRM             | ✅ COMPLETE    | Two-table design (contacts + subcontractors), full CRUD, filters, ratings, markup                                                                                                                                                                                                                                                                                                               |
-| 3. Document & File Management | 🟡 IN PROGRESS | Database + service layer + file list UI + upload + download/soft-delete + markup + favorites + trash UI complete. AI auto-tagging (3H) in progress — schema, seed function, default tag list, service layer, settings UI, OpenAI client, ai_tagging_enabled flag, and ai_tag_logs table all shipped (Sessions 29–30). API route, billing toggle UI, upload wiring, display, and edit UX remain. |
-| 4. Sales & Estimating         | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                                                                                                                                                 |
-| 5. Project Management         | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                                                                                                                                                 |
-| 6. Team & Field Operations    | ⚪ NOT STARTED | Scope expanded Session 6. Time categorization, break tracking, OT, mileage, safety logs, incident workflow, huddles, delivery tracking                                                                                                                                                                                                                                                          |
-| 7. Job Finances               | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                                                                                                                                                 |
-| 8. Inventory & Tools          | ⚪ NOT STARTED | Added Session 6. Inventory catalog + tool tracking with location, check-in/out log, bulk assignment                                                                                                                                                                                                                                                                                             |
-| 9. Customer Experience Portal | ⚪ NOT STARTED | **BLOCKED by Pre-Module 9 Decision Gate.** Scope expanded Session 6: material selections, decision log, photo favorites, pre-construction checklist                                                                                                                                                                                                                                             |
-| 10. Reporting & Analytics     | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                                                                                                                                                 |
-| 11. AI Marketing & Social     | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Module                        | Status         | Notes                                                                                                                                                                                                                                                                                                                                                                                                |
+| ----------------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Settings, Admin & Billing  | ✅ COMPLETE    | Auth, roles, Stripe billing, company settings, invites, team management                                                                                                                                                                                                                                                                                                                              |
+| 2. Contacts & CRM             | ✅ COMPLETE    | Two-table design (contacts + subcontractors), full CRUD, filters, ratings, markup                                                                                                                                                                                                                                                                                                                    |
+| 3. Document & File Management | 🟡 IN PROGRESS | Database + service layer + file list UI + upload + download/soft-delete + markup + favorites + trash UI complete. AI auto-tagging (3H) in progress — schema, seed, service layer, settings UI, OpenAI client, ai_tagging_enabled flag, ai_tag_logs table, and API route + ai-tagging service all shipped and tested (Sessions 29–31). Billing toggle UI, upload wiring, display, and edit UX remain. |
+| 4. Sales & Estimating         | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                                                                                                                                                      |
+| 5. Project Management         | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                                                                                                                                                      |
+| 6. Team & Field Operations    | ⚪ NOT STARTED | Scope expanded Session 6. Time categorization, break tracking, OT, mileage, safety logs, incident workflow, huddles, delivery tracking                                                                                                                                                                                                                                                               |
+| 7. Job Finances               | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                                                                                                                                                      |
+| 8. Inventory & Tools          | ⚪ NOT STARTED | Added Session 6. Inventory catalog + tool tracking with location, check-in/out log, bulk assignment                                                                                                                                                                                                                                                                                                  |
+| 9. Customer Experience Portal | ⚪ NOT STARTED | **BLOCKED by Pre-Module 9 Decision Gate.** Scope expanded Session 6: material selections, decision log, photo favorites, pre-construction checklist                                                                                                                                                                                                                                                  |
+| 10. Reporting & Analytics     | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                                                                                                                                                      |
+| 11. AI Marketing & Social     | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                                                                                                                                                      |
 
 ### Module 3 sub-status
 
 | Sub-module                                                   | Status         |
-| ------------------------------------------------------------ | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ------------------------------------------------------------ | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 3A — files table + RLS                                       | ✅ COMPLETE    |
 | 3B — project-files storage bucket + RLS                      | ✅ COMPLETE    |
 | 3C — column defaults migration (018)                         | ✅ COMPLETE    |
 | 3D — file upload service layer (files.ts + client)           | ✅ COMPLETE    |
 | 3E — polish migration (019: updated_by + mime CHECK)         | ✅ COMPLETE    |
 | 3F — file list UI (web) + upload form + download/soft-delete | ✅ COMPLETE    |
-| 3G — photo markup component (shared w/ Module 6)             | ✅ COMPLETE    | Schema + shared SVG viewer (Session 26). Web editor with 5 tools, undo, select/delete, save (Session 27).                                                                                                                                                                              |
-| 3H — AI auto-tagging via GPT-4o vision                       | 🟡 IN PROGRESS | Schema + seeding (Session 29). Service layer, settings UI (`/dashboard/settings/tags`), OpenAI client (`apps/web/lib/openai.ts`), `ai_tagging_enabled` flag on companies, `ai_tag_logs` cost table (Session 30). API route, billing toggle UI, upload wiring, display, edit UX remain. |
-| 3I — file favorites (is_favorite column + toggle UI)         | ✅ COMPLETE    | Company-wide. Boolean column on files (not junction table). Session 28.                                                                                                                                                                                                                |
-| 3J — trash UI (view soft-deleted, restore, permanent delete) | ✅ COMPLETE    | Session 28. Permanent delete hidden from non-owner/admin.                                                                                                                                                                                                                              |
+| 3G — photo markup component (shared w/ Module 6)             | ✅ COMPLETE    | Schema + shared SVG viewer (Session 26). Web editor with 5 tools, undo, select/delete, save (Session 27).                                                                                                                                                                                                                                                                                                 |
+| 3H — AI auto-tagging via GPT-4o vision                       | 🟡 IN PROGRESS | Schema + seeding (Session 29). Service layer, settings UI (`/dashboard/settings/tags`), OpenAI client (`apps/web/lib/openai.ts`), `ai_tagging_enabled` flag on companies, `ai_tag_logs` cost table (Session 30). API route `/api/files/auto-tag` + `ai-tagging.ts` service (Session 31, all 6 validation tests passed, avg cost $0.0038/call). Billing toggle UI, upload wiring, display, edit UX remain. |
+| 3I — file favorites (is_favorite column + toggle UI)         | ✅ COMPLETE    | Company-wide. Boolean column on files (not junction table). Session 28.                                                                                                                                                                                                                                                                                                                                   |
+| 3J — trash UI (view soft-deleted, restore, permanent delete) | ✅ COMPLETE    | Session 28. Permanent delete hidden from non-owner/admin.                                                                                                                                                                                                                                                                                                                                                 |
 
 ---
 
@@ -141,7 +141,9 @@ apps/web/
 │   │   │   ├── checkout/route.ts          ✅
 │   │   │   ├── webhook/route.ts           ✅ Lazy init, metadata fallback
 │   │   │   └── portal/route.ts            ✅
-│   │   └── files/signed-url/route.ts      ✅ Session 25
+│   │   └── files/
+│   │       ├── signed-url/route.ts        ✅ Session 25
+│   │       └── auto-tag/route.ts          ✅ Session 31 — thin route, delegates to ai-tagging service
 │   ├── auth/callback/route.ts             ✅ Honors ?next= param (Session 23)
 │   ├── dashboard/
 │   │   ├── layout.tsx                     ✅
@@ -155,9 +157,7 @@ apps/web/
 │   │   │       ├── page.tsx               ✅ Session 30 — owner/admin role gate
 │   │   │       └── tags-manager.tsx       ✅ Session 30 — add/deactivate/reactivate, grouped by category
 │   │   ├── contacts/                      ✅ list, form, new, edit
-│   │   ├── subcontractors.ts / -client.ts ✅ Generated types
-│   │   ├── files.ts / -client.ts          ✅ Module 3
-│   │   └── tag-options.ts / -client.ts    ✅ Module 3H — Session 30
+│   │   ├── subcontractors/                ✅ list, form, new, edit
 │   │   ├── team/
 │   │   │   ├── page.tsx                   ✅
 │   │   │   ├── team-page-client.tsx       ⚠️ Local ROLE_LABELS (tech debt #18)
@@ -195,7 +195,8 @@ apps/web/
 │   │   ├── contacts.ts / -client.ts       ✅ Generated types
 │   │   ├── subcontractors.ts / -client.ts ✅ Generated types
 │   │   ├── files.ts / -client.ts          ✅ Module 3
-│   │   └── tag-options.ts / -client.ts    ✅ Session 30 — Module 3H
+│   │   ├── tag-options.ts / -client.ts    ✅ Session 30 — Module 3H
+│   │   └── ai-tagging.ts                  ✅ Session 31 — autoTagFile(), server-only, reference impl for all future AI features
 │   ├── openai.ts                          ✅ Module 3H — lazy getOpenAI(), Session 30
 │   ├── stripe.ts                          ✅ Lazy getStripe()
 │   ├── supabase-browser.ts                ✅
@@ -294,7 +295,7 @@ Vercel env vars must match `.env.local` exactly.
 
 ## Test Data
 
-- **Josh Bishop** (jsbishop14@gmail.com) — Owner of Bishop Contracting. Predates Migration 007, may need manual subscription row insert.
+- **Josh Bishop** (jsbishop14@gmail.com) — Owner of Bishop Contracting. Predates Migration 007, may need manual subscription row insert. `ai_tagging_enabled = true` as of Session 31 (left on for Session 32 upload-wiring testing).
 - **josh+test40@worthprop.com** — Admin of Bishop Contracting. Use for Admin role testing.
 - Various orphaned test accounts from Session 7 debugging. Optional cleanup.
 
@@ -424,6 +425,7 @@ Items #14–#17 share the same fix pattern: build `/dashboard/team/[id]` detail 
 - **#61** Platform admin dashboard not built. Foundation exists: `platform_admins` table (Migration 001) and `is_platform_admin()` helper. Build when 2nd paying customer signs up. Estimated 2–3 sessions for useful set of views (companies list, AI cost per company, subscription/MRR overview, support tools). Defer.
 - **#62** **AI tag suggestion review (post-launch).** When GPT-4o suggests a tag NOT in a company's active list, the API route discards it. Capture these discards instead — they are signals that the company's tag list has gaps. Add an `ai_tag_suggestions` table (company_id, suggested_tag, occurrence_count, status: pending/added/dismissed, first_seen_at, last_seen_at) and a platform-admin view to review aggregated suggestions across all companies. Strong product signal for default tag list improvements. Address after public launch — depends on platform admin (#61) being built first.
 - **#63** CLAUDE.md doc drift. Two sections are stale: (a) "Migrations Run" list ends at Migration 012 (Session 5); needs catch-up through 023 plus all future. (b) "Current Session Context" section still references Session 6 plans. STATE.md is the source of truth for current work — these CLAUDE.md sections should either be rewritten to reflect current state or removed entirely. Schedule a focused doc-cleanup session.
+- **#64** GPT-4o pricing constants (`INPUT_COST_PER_M`, `OUTPUT_COST_PER_M`) are hard-coded in `apps/web/lib/services/ai-tagging.ts`. Values correct as of Session 31 per OpenAI published pricing. Needs re-verification before public launch and on any OpenAI price change. Consider moving to env vars or a pricing config file before multiple AI features ship (Module 4, 6, 9, 10, 11 will all call OpenAI). Tracked so this isn't forgotten at launch.
 
 ---
 
