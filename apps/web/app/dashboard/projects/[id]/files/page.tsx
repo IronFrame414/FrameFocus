@@ -57,6 +57,7 @@ export default async function ProjectFilesPage({ params }: { params: Promise<{ i
               <th style={{ padding: '0.75rem', width: '2rem' }}></th>
               <th style={{ padding: '0.75rem' }}>Name</th>
               <th style={{ padding: '0.75rem' }}>Category</th>
+              <th style={{ padding: '0.75rem' }}>Tags</th>
               <th style={{ padding: '0.75rem' }}>Size</th>
               <th style={{ padding: '0.75rem' }}>Uploaded</th>
               <th style={{ padding: '0.75rem' }}></th>

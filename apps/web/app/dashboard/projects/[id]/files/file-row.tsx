@@ -40,6 +40,29 @@ export default function FileRow({ file, projectId }: { file: FileRecord; project
       </td>
       <td style={cellStyle}>{file.file_name}</td>
       <td style={cellStyle}>{file.category}</td>
+      <td style={cellStyle}>
+        {file.ai_tags && file.ai_tags.length > 0 && (
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+            {file.ai_tags.map((tag) => (
+              <span
+                key={tag}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.25rem',
+                  fontSize: '0.75rem',
+                  padding: '0.125rem 0.5rem',
+                  borderRadius: '9999px',
+                  background: '#EDE9FE',
+                  color: '#6D28D9',
+                }}
+              >
+                ✦ {tag}
+              </span>
+            ))}
+          </div>
+        )}
+      </td>
       <td style={cellStyle}>{(file.file_size / 1024).toFixed(1)} KB</td>
       <td style={cellStyle}>
         {file.created_at ? new Date(file.created_at).toLocaleDateString() : '—'}
