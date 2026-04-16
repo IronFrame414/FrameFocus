@@ -1,10 +1,12 @@
 import Link from 'next/link';
 import { getFiles } from '@/lib/services/files';
+import { getActiveTags } from '@/lib/services/tag-options';
 import FileRow from './file-row';
 
 export default async function ProjectFilesPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: projectId } = await params;
   const files = await getFiles({ project_id: projectId });
+  const activeTags = await getActiveTags();
 
   return (
     <div style={{ padding: '2rem' }}>
@@ -65,7 +67,7 @@ export default async function ProjectFilesPage({ params }: { params: Promise<{ i
           </thead>
           <tbody>
             {files.map((f) => (
-              <FileRow key={f.id} file={f} projectId={projectId} />
+              <FileRow key={f.id} file={f} projectId={projectId} activeTags={activeTags} />
             ))}
           </tbody>
         </table>

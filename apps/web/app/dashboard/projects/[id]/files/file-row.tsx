@@ -4,8 +4,10 @@ import { useState } from 'react';
 import type { FileRecord } from '@/lib/services/files';
 import FavoriteToggle from './favorite-toggle';
 import FileRowActions from './file-row-actions';
+import AiTagEditor from './ai-tag-editor';
+import type { TagOption } from '@/lib/services/tag-options';
 
-export default function FileRow({ file, projectId }: { file: FileRecord; projectId: string }) {
+export default function FileRow({ file, projectId, activeTags }: { file: FileRecord; projectId: string; activeTags: TagOption[] }) {
   const [hover, setHover] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -40,28 +42,12 @@ export default function FileRow({ file, projectId }: { file: FileRecord; project
       </td>
       <td style={cellStyle}>{file.file_name}</td>
       <td style={cellStyle}>{file.category}</td>
-      <td style={cellStyle}>
-        {file.ai_tags && file.ai_tags.length > 0 && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
-            {file.ai_tags.map((tag) => (
-              <span
-                key={tag}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.25rem',
-                  fontSize: '0.75rem',
-                  padding: '0.125rem 0.5rem',
-                  borderRadius: '9999px',
-                  background: '#EDE9FE',
-                  color: '#6D28D9',
-                }}
-              >
-                ✦ {tag}
-              </span>
-            ))}
-          </div>
-        )}
+      <td style={cellStyle} onClick={(e) => e.stopPropagation()}>
+        <AiTagEditor
+          fileId={file.id}
+          initialTags={file.ai_tags ?? []}
+          activeTags={activeTags.map((t) => ({ name: t.name }))}
+        />
       </td>
       <td style={cellStyle}>{(file.file_size / 1024).toFixed(1)} KB</td>
       <td style={cellStyle}>

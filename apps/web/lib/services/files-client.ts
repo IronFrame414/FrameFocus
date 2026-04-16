@@ -90,6 +90,7 @@ export async function updateFile(
     file_name?: string;
     category?: FileCategory;
     tags?: string[];
+    ai_tags?: string[] | null;
     markup_data?: Record<string, unknown> | null;
   }
 ): Promise<MutationResult> {
