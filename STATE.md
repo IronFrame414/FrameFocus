@@ -1,6 +1,6 @@
 # STATE.md — FrameFocus Current State
 
-> **Last updated:** April 16, 2026 Session 31 — Module 3H API route + ai-tagging service, all 6 validation tests passed
+> **Last updated:** April 16, 2026 Session 32 — Module 3H UI complete, Module 3 fully complete
 > **Purpose:** Snapshot of current state of codebase, infrastructure, and database. Updated at end of each session. For session narrative and decisions, see `docs/sessions/contextN.md`. For conventions and patterns, see `CLAUDE.md`.
 
 ---
@@ -11,7 +11,7 @@
 | ----------------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1. Settings, Admin & Billing  | ✅ COMPLETE    | Auth, roles, Stripe billing, company settings, invites, team management                                                                                                                                                                                                                                                                                                                              |
 | 2. Contacts & CRM             | ✅ COMPLETE    | Two-table design (contacts + subcontractors), full CRUD, filters, ratings, markup                                                                                                                                                                                                                                                                                                                    |
-| 3. Document & File Management | 🟡 IN PROGRESS | Database + service layer + file list UI + upload + download/soft-delete + markup + favorites + trash UI complete. AI auto-tagging (3H) in progress — schema, seed, service layer, settings UI, OpenAI client, ai_tagging_enabled flag, ai_tag_logs table, and API route + ai-tagging service all shipped and tested (Sessions 29–31). Billing toggle UI, upload wiring, display, and edit UX remain. |
+| 3. Document & File Management | ✅ COMPLETE | Database, service layer, file list UI, upload, download, soft-delete, markup, favorites, trash, AI auto-tagging (Sessions 11–32). |
 | 4. Sales & Estimating         | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                                                                                                                                                      |
 | 5. Project Management         | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                                                                                                                                                      |
 | 6. Team & Field Operations    | ⚪ NOT STARTED | Scope expanded Session 6. Time categorization, break tracking, OT, mileage, safety logs, incident workflow, huddles, delivery tracking                                                                                                                                                                                                                                                               |
@@ -32,7 +32,7 @@
 | 3E — polish migration (019: updated_by + mime CHECK)         | ✅ COMPLETE    |
 | 3F — file list UI (web) + upload form + download/soft-delete | ✅ COMPLETE    |
 | 3G — photo markup component (shared w/ Module 6)             | ✅ COMPLETE    | Schema + shared SVG viewer (Session 26). Web editor with 5 tools, undo, select/delete, save (Session 27).                                                                                                                                                                                                                                                                                                 |
-| 3H — AI auto-tagging via GPT-4o vision                       | 🟡 IN PROGRESS | Schema + seeding (Session 29). Service layer, settings UI (`/dashboard/settings/tags`), OpenAI client (`apps/web/lib/openai.ts`), `ai_tagging_enabled` flag on companies, `ai_tag_logs` cost table (Session 30). API route `/api/files/auto-tag` + `ai-tagging.ts` service (Session 31, all 6 validation tests passed, avg cost $0.0038/call). Billing toggle UI, upload wiring, display, edit UX remain. |
+| 3H — AI auto-tagging via GPT-4o vision                       | ✅ COMPLETE | Schema + seeding (Session 29). Service layer, settings UI, OpenAI client, add-on flag, cost log table (Session 30). API route + ai-tagging service (Session 31). Billing toggle, upload wiring, tag display, inline tag editor (Session 32). |
 | 3I — file favorites (is_favorite column + toggle UI)         | ✅ COMPLETE    | Company-wide. Boolean column on files (not junction table). Session 28.                                                                                                                                                                                                                                                                                                                                   |
 | 3J — trash UI (view soft-deleted, restore, permanent delete) | ✅ COMPLETE    | Session 28. Permanent delete hidden from non-owner/admin.                                                                                                                                                                                                                                                                                                                                                 |
 
@@ -149,7 +149,12 @@ apps/web/
 │   │   ├── layout.tsx                     ✅
 │   │   ├── dashboard-shell.tsx            ✅ Sidebar nav
 │   │   ├── page.tsx                       ✅
-│   │   ├── billing/                       ✅ All 5 files
+│   │   ├── billing/
+│   │   │   ├── page.tsx                    ✅ Session 32 — imports getAddOns, renders AddOnsSection
+│   │   │   ├── add-ons-section.tsx         ✅ Session 32 — 'use client' toggle for ai_tagging_enabled
+│   │   │   ├── manage-subscription-button.tsx ✅
+│   │   │   ├── plans/                      ✅
+│   │   │   └── success/                    ✅
 │   │   ├── settings/
 │   │   │   ├── page.tsx                   ✅
 │   │   │   ├── settings-form.tsx          ✅ Uses shared TRADE_TYPES, US_STATES
@@ -168,6 +173,7 @@ apps/web/
 │   │       ├── page.tsx                   ✅ Session 28 — list + Trash link + row-click view
 │   │       ├── file-row.tsx               ✅ Session 28 — clickable row (view on click)
 │   │       ├── file-row-actions.tsx       ✅ Session 28 — Markup (image-gated) + Download + Delete
+│   │       ├── ai-tag-editor.tsx           ✅ Session 32 — inline add/remove AI tags with dropdown
 │   │       ├── favorite-toggle.tsx        ✅ Session 28 — star/unstar button (optimistic)
 │   │       ├── upload/
 │   │       │   ├── page.tsx               ✅ Session 25
@@ -197,6 +203,7 @@ apps/web/
 │   │   ├── files.ts / -client.ts          ✅ Module 3
 │   │   ├── tag-options.ts / -client.ts    ✅ Session 30 — Module 3H
 │   │   └── ai-tagging.ts                  ✅ Session 31 — autoTagFile(), server-only, reference impl for all future AI features
+│   │   ├── add-ons.ts / -client.ts         ✅ Session 32 — read/write add-on flags (ai_tagging_enabled). Separate from company.ts by design.
 │   ├── openai.ts                          ✅ Module 3H — lazy getOpenAI(), Session 30
 │   ├── stripe.ts                          ✅ Lazy getStripe()
 │   ├── supabase-browser.ts                ✅
