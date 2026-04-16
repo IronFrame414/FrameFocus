@@ -1,40 +1,40 @@
 # STATE.md — FrameFocus Current State
 
-> **Last updated:** April 15, 2026 Session 29 — Module 3H foundation (tag_options schema + seeding)
+> **Last updated:** April 15, 2026 Session 30 — Module 3H service layer + settings UI + OpenAI client + ai_tag_logs
 > **Purpose:** Snapshot of current state of codebase, infrastructure, and database. Updated at end of each session. For session narrative and decisions, see `docs/sessions/contextN.md`. For conventions and patterns, see `CLAUDE.md`.
 
 ---
 
 ## Build Status
 
-| Module                        | Status         | Notes                                                                                                                                                                                                                                                                |
-| ----------------------------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1. Settings, Admin & Billing  | ✅ COMPLETE    | Auth, roles, Stripe billing, company settings, invites, team management                                                                                                                                                                                              |
-| 2. Contacts & CRM             | ✅ COMPLETE    | Two-table design (contacts + subcontractors), full CRUD, filters, ratings, markup                                                                                                                                                                                    |
-| 3. Document & File Management | 🟡 IN PROGRESS | Database + service layer + file list UI + upload + download/soft-delete + markup + favorites + trash UI complete. AI auto-tagging (3H) foundation done — schema + seed function + default tag list shipped Session 29. Service layer, UI, and AI integration remain. |
-| 4. Sales & Estimating         | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                      |
-| 5. Project Management         | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                      |
-| 6. Team & Field Operations    | ⚪ NOT STARTED | Scope expanded Session 6. Time categorization, break tracking, OT, mileage, safety logs, incident workflow, huddles, delivery tracking                                                                                                                               |
-| 7. Job Finances               | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                      |
-| 8. Inventory & Tools          | ⚪ NOT STARTED | Added Session 6. Inventory catalog + tool tracking with location, check-in/out log, bulk assignment                                                                                                                                                                  |
-| 9. Customer Experience Portal | ⚪ NOT STARTED | **BLOCKED by Pre-Module 9 Decision Gate.** Scope expanded Session 6: material selections, decision log, photo favorites, pre-construction checklist                                                                                                                  |
-| 10. Reporting & Analytics     | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                      |
-| 11. AI Marketing & Social     | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                      |
+| Module                        | Status         | Notes                                                                                                                                                                                                                                                                                                                                                                                           |
+| ----------------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Settings, Admin & Billing  | ✅ COMPLETE    | Auth, roles, Stripe billing, company settings, invites, team management                                                                                                                                                                                                                                                                                                                         |
+| 2. Contacts & CRM             | ✅ COMPLETE    | Two-table design (contacts + subcontractors), full CRUD, filters, ratings, markup                                                                                                                                                                                                                                                                                                               |
+| 3. Document & File Management | 🟡 IN PROGRESS | Database + service layer + file list UI + upload + download/soft-delete + markup + favorites + trash UI complete. AI auto-tagging (3H) in progress — schema, seed function, default tag list, service layer, settings UI, OpenAI client, ai_tagging_enabled flag, and ai_tag_logs table all shipped (Sessions 29–30). API route, billing toggle UI, upload wiring, display, and edit UX remain. |
+| 4. Sales & Estimating         | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                                                                                                                                                 |
+| 5. Project Management         | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                                                                                                                                                 |
+| 6. Team & Field Operations    | ⚪ NOT STARTED | Scope expanded Session 6. Time categorization, break tracking, OT, mileage, safety logs, incident workflow, huddles, delivery tracking                                                                                                                                                                                                                                                          |
+| 7. Job Finances               | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                                                                                                                                                 |
+| 8. Inventory & Tools          | ⚪ NOT STARTED | Added Session 6. Inventory catalog + tool tracking with location, check-in/out log, bulk assignment                                                                                                                                                                                                                                                                                             |
+| 9. Customer Experience Portal | ⚪ NOT STARTED | **BLOCKED by Pre-Module 9 Decision Gate.** Scope expanded Session 6: material selections, decision log, photo favorites, pre-construction checklist                                                                                                                                                                                                                                             |
+| 10. Reporting & Analytics     | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                                                                                                                                                 |
+| 11. AI Marketing & Social     | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                                                                                                                                                 |
 
 ### Module 3 sub-status
 
 | Sub-module                                                   | Status         |
-| ------------------------------------------------------------ | -------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| ------------------------------------------------------------ | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 3A — files table + RLS                                       | ✅ COMPLETE    |
 | 3B — project-files storage bucket + RLS                      | ✅ COMPLETE    |
 | 3C — column defaults migration (018)                         | ✅ COMPLETE    |
 | 3D — file upload service layer (files.ts + client)           | ✅ COMPLETE    |
 | 3E — polish migration (019: updated_by + mime CHECK)         | ✅ COMPLETE    |
 | 3F — file list UI (web) + upload form + download/soft-delete | ✅ COMPLETE    |
-| 3G — photo markup component (shared w/ Module 6)             | ✅ COMPLETE    | Schema + shared SVG viewer (Session 26). Web editor with 5 tools, undo, select/delete, save (Session 27).                  |
-| 3H — AI auto-tagging via GPT-4o vision                       | 🟡 IN PROGRESS | Schema + seeding complete (Session 29). Service layer, settings UI, API route, upload wiring, display, edit UX all remain. |
-| 3I — file favorites (is_favorite column + toggle UI)         | ✅ COMPLETE    | Company-wide. Boolean column on files (not junction table). Session 28.                                                    |
-| 3J — trash UI (view soft-deleted, restore, permanent delete) | ✅ COMPLETE    | Session 28. Permanent delete hidden from non-owner/admin.                                                                  |
+| 3G — photo markup component (shared w/ Module 6)             | ✅ COMPLETE    | Schema + shared SVG viewer (Session 26). Web editor with 5 tools, undo, select/delete, save (Session 27).                                                                                                                                                                              |
+| 3H — AI auto-tagging via GPT-4o vision                       | 🟡 IN PROGRESS | Schema + seeding (Session 29). Service layer, settings UI (`/dashboard/settings/tags`), OpenAI client (`apps/web/lib/openai.ts`), `ai_tagging_enabled` flag on companies, `ai_tag_logs` cost table (Session 30). API route, billing toggle UI, upload wiring, display, edit UX remain. |
+| 3I — file favorites (is_favorite column + toggle UI)         | ✅ COMPLETE    | Company-wide. Boolean column on files (not junction table). Session 28.                                                                                                                                                                                                                |
+| 3J — trash UI (view soft-deleted, restore, permanent delete) | ✅ COMPLETE    | Session 28. Permanent delete hidden from non-owner/admin.                                                                                                                                                                                                                              |
 
 ---
 
@@ -61,19 +61,20 @@
 
 ### Tables (in production Supabase)
 
-| Table             | Rows      | RLS                | Notes                                                                                                                                                                                                             |
-| ----------------- | --------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `companies`       | Multiple  | ✅ Enabled         | `slug` (NOT NULL, auto-generated), `stripe_customer_id`, address/phone/website/trade_type/license_number/logo_url. Legacy `subscription_tier`/`subscription_status` columns unused.                               |
-| `profiles`        | Multiple  | ✅ Enabled         | Linked to `auth.users` via `user_id`. Soft delete via `is_deleted`.                                                                                                                                               |
-| `platform_admins` | 0         | ✅ Enabled         | No admins seeded yet                                                                                                                                                                                              |
-| `invitations`     | Test rows | ✅ Enabled         | Token-based, 7-day expiry, status: pending/accepted/expired/cancelled                                                                                                                                             |
-| `subscriptions`   | Multiple  | ✅ Enabled         | One per company. plan_tier, status, seat_limit, trial dates. Only service_role writes                                                                                                                             |
-| `trial_emails`    | Multiple  | ❌ No RLS          | Tracks emails that have used a trial. Only accessed by SECURITY DEFINER trigger                                                                                                                                   |
-| `contacts`        | Test rows | ✅ Enabled         | Leads & clients. contact_type CHECK, status, name, company, email, phone, address, source, tags. Soft delete                                                                                                      |
-| `subcontractors`  | Test rows | ✅ Enabled         | Subs & vendors. EIN, default_hourly_rate, default_markup_percent, preferred, rating, insurance_expiry. Soft delete                                                                                                |
-| `files`           | 0         | ✅ Enabled         | Module 3. project_id nullable until Module 5. markup_data JSONB. Soft delete. 4 RLS policies. Column defaults on company_id/created_by/updated_by. BEFORE UPDATE trigger sets updated_by.                         |
+| Table             | Rows      | RLS                | Notes                                                                                                                                                                                                                                                                                  |
+| ----------------- | --------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
+| `companies`       | Multiple  | ✅ Enabled         | `slug` (NOT NULL, auto-generated), `stripe_customer_id`, address/phone/website/trade_type/license_number/logo_url, `ai_tagging_enabled` (boolean, default false — paid add-on flag). Legacy `subscription_tier`/`subscription_status` columns unused.                                  |
+| `profiles`        | Multiple  | ✅ Enabled         | Linked to `auth.users` via `user_id`. Soft delete via `is_deleted`.                                                                                                                                                                                                                    |
+| `platform_admins` | 0         | ✅ Enabled         | No admins seeded yet                                                                                                                                                                                                                                                                   |
+| `invitations`     | Test rows | ✅ Enabled         | Token-based, 7-day expiry, status: pending/accepted/expired/cancelled                                                                                                                                                                                                                  |
+| `subscriptions`   | Multiple  | ✅ Enabled         | One per company. plan_tier, status, seat_limit, trial dates. Only service_role writes                                                                                                                                                                                                  |
+| `trial_emails`    | Multiple  | ❌ No RLS          | Tracks emails that have used a trial. Only accessed by SECURITY DEFINER trigger                                                                                                                                                                                                        |
+| `contacts`        | Test rows | ✅ Enabled         | Leads & clients. contact_type CHECK, status, name, company, email, phone, address, source, tags. Soft delete                                                                                                                                                                           |
+| `subcontractors`  | Test rows | ✅ Enabled         | Subs & vendors. EIN, default_hourly_rate, default_markup_percent, preferred, rating, insurance_expiry. Soft delete                                                                                                                                                                     |
+| `files`           | 0         | ✅ Enabled         | Module 3. project_id nullable until Module 5. markup_data JSONB. Soft delete. 4 RLS policies. Column defaults on company_id/created_by/updated_by. BEFORE UPDATE trigger sets updated_by.                                                                                              |
 | `auth.users`      | Multiple  | (Supabase managed) |
-| `tag_options`     | 66+ rows  | ✅ Enabled         | Module 3H. Per-company tag catalog. category CHECK (trade/stage/area/condition/documentation), is_active, sort_order. UNIQUE (company_id, name). 4 RLS policies. Seeded for Bishop Contracting via Migration 021. |
+| `tag_options`     | 66+ rows  | ✅ Enabled         | Module 3H. Per-company tag catalog. category CHECK (trade/stage/area/condition/documentation), is_active, sort_order. UNIQUE (company_id, name). 4 RLS policies. Column defaults on company_id/created_by/updated_by (Migration 022). Seeded for Bishop Contracting via Migration 021. |
+| `ai_tag_logs`     | 0         | ✅ Enabled         | Module 3H. Append-only cost log for GPT-4o vision calls. NO standard audit columns by design (no updated_at, no created_by, no soft-delete). 2 RLS policies (owner/admin select, authenticated insert). Indexes on company_id and created_at DESC.                                     |     |
 
 ### Storage Buckets
 
@@ -113,6 +114,7 @@
 - **storage.objects (company-logos):** upload, update, public read, delete (owner/admin)
 - **storage.objects (project-files):** 4 policies, inline subquery pattern
 - **tag_options:** `_select_authenticated` (anyone in company, active+inactive), `_insert_owner_admin`, `_update_owner_admin`, `_delete_owner`
+- **ai_tag_logs:** `_select_owner_admin`, `_insert_authenticated`. No UPDATE/DELETE policies (append-only).
 
 ### Indexes
 
@@ -121,12 +123,11 @@
 - contacts: `idx_contacts_company_id`, `idx_contacts_contact_type`, `idx_contacts_status`
 - subcontractors: `idx_subcontractors_company_id`, `idx_subcontractors_sub_type`, `idx_subcontractors_status`, `idx_subcontractors_trade`
 - tag_options: `idx_tag_options_company_id`, `idx_tag_options_company_active` (partial WHERE is_active=true)
+- ai_tag_logs: `idx_ai_tag_logs_company_id`, `idx_ai_tag_logs_created_at` (DESC)
 
 ### Migrations
 
-All 22 migration files live in `supabase/migrations/` with 14-digit timestamp format. `npx supabase migration list` shows all 22 in sync (Local + Remote). Migration 006 was never created — intentional gap. Source of truth is the file list on disk.
-
----
+## All 24 migration files live in `supabase/migrations/` with 14-digit timestamp format. `npx supabase migration list` shows all 24 in sync (Local + Remote). Migration 006 was never created — intentional gap. Source of truth is the file list on disk.
 
 ## Codebase State
 
@@ -149,9 +150,14 @@ apps/web/
 │   │   ├── billing/                       ✅ All 5 files
 │   │   ├── settings/
 │   │   │   ├── page.tsx                   ✅
-│   │   │   └── settings-form.tsx          ✅ Uses shared TRADE_TYPES, US_STATES
+│   │   │   ├── settings-form.tsx          ✅ Uses shared TRADE_TYPES, US_STATES
+│   │   │   └── tags/
+│   │   │       ├── page.tsx               ✅ Session 30 — owner/admin role gate
+│   │   │       └── tags-manager.tsx       ✅ Session 30 — add/deactivate/reactivate, grouped by category
 │   │   ├── contacts/                      ✅ list, form, new, edit
-│   │   ├── subcontractors/                ✅ list, form, new, edit
+│   │   ├── subcontractors.ts / -client.ts ✅ Generated types
+│   │   ├── files.ts / -client.ts          ✅ Module 3
+│   │   └── tag-options.ts / -client.ts    ✅ Module 3H — Session 30
 │   │   ├── team/
 │   │   │   ├── page.tsx                   ✅
 │   │   │   ├── team-page-client.tsx       ⚠️ Local ROLE_LABELS (tech debt #18)
@@ -188,14 +194,16 @@ apps/web/
 │   │   ├── company.ts / -client.ts        ✅ Generated types
 │   │   ├── contacts.ts / -client.ts       ✅ Generated types
 │   │   ├── subcontractors.ts / -client.ts ✅ Generated types
-│   │   └── files.ts / -client.ts          ✅ Module 3
+│   │   ├── files.ts / -client.ts          ✅ Module 3
+│   │   └── tag-options.ts / -client.ts    ✅ Session 30 — Module 3H
+│   ├── openai.ts                          ✅ Module 3H — lazy getOpenAI(), Session 30
 │   ├── stripe.ts                          ✅ Lazy getStripe()
 │   ├── supabase-browser.ts                ✅
 │   ├── supabase-server.ts                 ✅
 │   └── utils.ts                           ✅
-├── middleware.ts                           ✅
-├── next.config.js                          ✅
-└── package.json                            ✅
+├── middleware.ts                          ✅
+├── next.config.js                         ✅
+└── package.json                           ✅
 ```
 
 ### packages/shared
@@ -234,7 +242,9 @@ docs/
 
 ## Environment Variables
 
-### apps/web/.env.local (Codespace, gitignored, does NOT persist across rebuilds)
+### Environment variables (stored as GitHub Codespace secrets)
+
+All env vars below are stored as **GitHub Codespace secrets** and auto-inject into the shell environment on Codespace start. `apps/web/.env.local` does NOT need to exist for the dev server to work. Verify with `printenv | grep -E "SUPABASE|STRIPE|OPENAI"` if uncertain. Vercel env vars must match these values exactly.
 
 ```
 NEXT_PUBLIC_SUPABASE_URL=https://jwkcknyuyvcwcdeskrmz.supabase.co
@@ -408,6 +418,12 @@ Items #14–#17 share the same fix pattern: build `/dashboard/team/[id]` detail 
 - **#55** Image-aware file browsing for the files page. Two coupled pieces: (a) **thumbnail grid view** for images (likely when category = Photos, or for any image mixed in the table) — investigate Supabase image transformations vs. upload-time thumbnail generation; (b) **in-app fullscreen viewer** opened by clicking a thumbnail — same window, left/right arrow navigation across the project's images (keyboard + on-screen buttons), Open Markup button, Download button, close returns to grid. Non-image files keep current behavior (table row, Download opens new tab). Estimated 400-600 lines, dedicated session.
 - **#56** SQL/TS tag list drift risk. `seed_default_tags()` in migration 021 and `DEFAULT_TAGS` in `packages/shared/constants/default-tags.ts` must be kept in sync manually. Add automated diff check before public launch. Both files have header warnings. Discovered Session 29.
 - **#57** Empty migration file `20260415182317_add_tag_options_table.sql` — kept in repo intentionally because it was applied to remote (accidental double-create during Session 29). Won't fix; documented for clarity.
+- **#58** `npm audit` reports 4 high-severity vulnerabilities in the web app's dependency tree (surfaced during `openai` install in Session 30, but pre-existing). Run `npm audit` to inspect, address before public launch. Pre-launch.
+- **#59** Document the "append-only audit log" exception to standard column conventions in CLAUDE.md. Affected tables: `ai_tag_logs` (Session 30), `trial_emails` (retroactively). Both lack `updated_at`, `created_by`, `updated_by`, `is_deleted`, `deleted_at` by design. Add to CLAUDE.md `Database Conventions` section so the next "log" table follows the same pattern. **Address at the start of Session 31 before writing the API route.**
+- **#60** AI photo auto-tagging add-on pricing structure undecided. Placeholder boolean `companies.ai_tagging_enabled` exists (default false). Needs Stripe product/price wiring + per-image quota or MB limit before paid launch. Decide pricing model (flat monthly / per-image / per-MB), then build billing path.
+- **#61** Platform admin dashboard not built. Foundation exists: `platform_admins` table (Migration 001) and `is_platform_admin()` helper. Build when 2nd paying customer signs up. Estimated 2–3 sessions for useful set of views (companies list, AI cost per company, subscription/MRR overview, support tools). Defer.
+- **#62** **AI tag suggestion review (post-launch).** When GPT-4o suggests a tag NOT in a company's active list, the API route discards it. Capture these discards instead — they are signals that the company's tag list has gaps. Add an `ai_tag_suggestions` table (company_id, suggested_tag, occurrence_count, status: pending/added/dismissed, first_seen_at, last_seen_at) and a platform-admin view to review aggregated suggestions across all companies. Strong product signal for default tag list improvements. Address after public launch — depends on platform admin (#61) being built first.
+- **#63** CLAUDE.md doc drift. Two sections are stale: (a) "Migrations Run" list ends at Migration 012 (Session 5); needs catch-up through 023 plus all future. (b) "Current Session Context" section still references Session 6 plans. STATE.md is the source of truth for current work — these CLAUDE.md sections should either be rewritten to reflect current state or removed entirely. Schedule a focused doc-cleanup session.
 
 ---
 

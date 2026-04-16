@@ -262,9 +262,10 @@ Build order follows strict dependency chain. Each module depends on the ones abo
 
 ### Phase 4: Premium Add-On (Months 10–12)
 
-| #   | Module                | Status      | Description                                                                                                                                                 |
-| --- | --------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 11  | AI Marketing & Social | NOT STARTED | Auto social posts from projects (pulling from client-favorited photos in Module 9), Facebook/Google Business integration, review requests, content calendar |
+| #                     | Module                | Status      | Description                                                                                                                                                 |
+| --------------------- | --------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 11                    | AI Marketing & Social | NOT STARTED | Auto social posts from projects (pulling from client-favorited photos in Module 9), Facebook/Google Business integration, review requests, content calendar |
+| AI Photo Auto-Tagging | —                     | —           | Add-on (pricing TBD)                                                                                                                                        |
 
 ### Cross-Cutting Systems (built incrementally)
 
