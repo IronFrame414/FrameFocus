@@ -3,6 +3,8 @@ import { getSubscription, getTrialDaysRemaining } from '@/lib/services/billing';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { ManageSubscriptionButton } from './manage-subscription-button';
+import { getAddOns } from '@/lib/services/add-ons';
+import { AddOnsSection } from './add-ons-section';
 
 export default async function BillingPage() {
   const supabase = await createClient();
@@ -23,6 +25,7 @@ export default async function BillingPage() {
   }
 
   const subscription = await getSubscription();
+  const addOns = await getAddOns();
 
   if (!subscription) {
     redirect('/dashboard');
@@ -132,6 +135,7 @@ export default async function BillingPage() {
           {hasStripeSubscription && <ManageSubscriptionButton />}
         </div>
       </div>
+      {addOns && <AddOnsSection initialEnabled={addOns.ai_tagging_enabled} />}
     </div>
   );
 }
