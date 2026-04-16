@@ -45,6 +45,15 @@ export default function UploadForm({ projectId }: { projectId: string }) {
       return;
     }
 
+    // Fire-and-forget: auto-tag images via AI
+    if (result.id && file.type.startsWith('image/')) {
+      fetch('/api/files/auto-tag', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileId: result.id }),
+      }).catch(() => {});
+    }
+
     router.push(`/dashboard/projects/${projectId}/files`);
     router.refresh();
   }
