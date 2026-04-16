@@ -311,6 +311,15 @@ updated_by      UUID REFERENCES auth.users(id)
 is_deleted      BOOLEAN DEFAULT false        -- soft delete, never hard delete
 deleted_at      TIMESTAMPTZ
 ```
+**Append-only audit log exception.** A narrow category of tables are pure append-only logs — rows are written once and never updated or deleted. These tables intentionally OMIT the following standard columns: `updated_at`, `created_by`, `updated_by`, `is_deleted`, `deleted_at`. They also have NO UPDATE or DELETE RLS policies — only SELECT (scoped appropriately) and INSERT.
+
+Columns present on an append-only log: `id`, `company_id` (where per-tenant), `created_at`, plus whatever domain-specific fields the log captures.
+
+Current examples:
+- `ai_tag_logs` — per-call cost tracking for GPT-4o vision auto-tagging (Module 3H, Session 30).
+- `trial_emails` — one row per email address that has used a free trial.
+
+Use this pattern for any future table that is a pure event log or audit trail. If the table ever needs to be edited or soft-deleted after insert, it is NOT an append-only log — use the standard columns above instead.
 
 **Trash-bin pattern.** Soft deletes only. Never hard delete records.
 
