@@ -1,10 +1,10 @@
-import type { CompanyUserRole } from '../types';
+import type { CompanyRole } from '../types/roles';
 import { ROLE_HIERARCHY } from '../constants';
 
 /**
  * Check if a role has at least the required permission level
  */
-export function hasPermission(userRole: CompanyUserRole, requiredRole: CompanyUserRole): boolean {
+export function hasPermission(userRole: CompanyRole, requiredRole: CompanyRole): boolean {
   return (ROLE_HIERARCHY[userRole] ?? 0) >= (ROLE_HIERARCHY[requiredRole] ?? 0);
 }
 
