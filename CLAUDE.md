@@ -1,6 +1,6 @@
 # CLAUDE.md — FrameFocus Development Guide
 
-> **Last updated:** April 12, 2026 (Session 20 — CLAUDE.md cleanup)
+> **Last updated:** April 20, 2026 (Session 34 — doc cleanup)
 > **Purpose:** This file is the single source of truth for all development conversations. Read this before every session.
 
 ---
@@ -12,7 +12,7 @@
 **Owner:** Josh Bishop (jsbishop14@gmail.com)
 **Repo:** github.com/IronFrame414/FrameFocus (private)
 **Live URL:** https://frame-focus-eight.vercel.app
-**Status:** Modules 1 and 2 complete. Module 3 in progress (3A–3E done; 3F–3I remaining). Platform has 11 modules total. See STATE.md for live build status.
+**Status:** Modules 1, 2, and 3 complete. Platform has 11 modules total. See STATE.md for live build status.
 
 > **See also:** [`CLAUDE_MODULES.md`](CLAUDE_MODULES.md) — Detailed module designs (Modules 3, 6, 8, 9), QuickBooks integration strategy, and change order workflow.
 
@@ -120,6 +120,10 @@ The `.devcontainer/devcontainer.json` pre-configures:
 - **RLS inside SECURITY DEFINER triggers:** `SET row_security TO 'off'` at the function level is silently ignored in Postgres unless the executing role is a superuser or table owner. Inside a `SECURITY DEFINER` trigger on `auth.users`, it does NOT bypass RLS. The working pattern is to put the RLS-protected query inside a separate `SECURITY DEFINER` **SQL** function (not plpgsql) and call that from the trigger. See `get_invitation_for_signup()` in Migration 015 for the reference implementation.
 - **Context files describe intent, git describes state.** Never trust `context-N.md` files for "is X committed?" — always run `git log --oneline -15` at the start of a session to ground truth the repo. Session 8 wasted ~30 minutes chasing phantom work because context8.md said migrations were uncommitted when git log showed they were already in.
 - **VS Code browser drag-and-drop targets are finicky.** Drop zones are ambiguous — files can end up at filesystem root (`/`) instead of the intended folder. If uploading fails with "Insufficient permissions" errors referencing `\filename.md`, the drop missed the target folder. Right-click the destination folder → "Upload..." is more reliable when available.
+- **Supabase Storage rejects `<` and `>` in object keys.** Storage paths inherit any URL segment that flows into them. If you test a route by typing a literal placeholder like `<some-uuid>` into the URL, the upload will fail with "Invalid key" and the cause is not obvious. For testing routes that need a `project_id` before Module 5 ships, use a real UUID format like `11111111-1111-1111-1111-111111111111`.
+- **Supabase signed URLs default to inline disposition.** A signed URL serves the file with `Content-Disposition: inline` by default — images and PDFs render in-browser, they don't download. To force a download with a chosen filename, append `?download=<filename>` to the signed URL. This is not in Supabase's primary docs. Check this whenever a "download" feature seems to "preview" instead.
+- **Claude Chat strips `<` characters when code is pasted into the Codespace editor.** Pasting `Pick<Database['public']['Tables']...>` will reliably drop the `<` and produce broken TypeScript. For any code containing `<`, use Claude Code, or write the file via `node -e "require('fs').writeFileSync(...)"` with single-quoted contents. Do not paste through the chat editor and assume it round-tripped.
+- **Bash history expansion eats `!` even inside double-quoted strings.** A `node -e "..."` command containing `!user` or any `!`-prefixed token triggers `event not found` and kills the command. Workarounds: use `printf '...'` with single quotes (no expansion), or run the command through Claude Code, or `set +H` first to disable history expansion for the session.
 
 ---
 
@@ -218,7 +222,7 @@ Every session should follow this pattern to avoid drift between context and real
 
 **At session end:**
 
-1. Update `STATE.md` with new state and any new tech debt discovered
+1. Update `STATE.md` with new state. New tech debt goes in `TECH_DEBT.md` (repo only, not project knowledge). Tech debt numbers are immutable — once assigned, never reused. When closing an item, move it to the `Closed Tech Debt` section in `TECH_DEBT.md` rather than deleting it. See `TECH_DEBT.md` header for full convention.
 2. Create `docs/sessions/contextN.md` with decisions made, outstanding items, and next session plan
 3. Commit and push everything, including documentation files
 4. Verify next session can be resumed by reading only `STATE.md` + the latest context file
@@ -237,21 +241,22 @@ Build order follows strict dependency chain. Each module depends on the ones abo
 
 ### Phase 1: Foundation Layer (Months 1–3)
 
-| #   | Module                     | Status      | Description                                                                                                                                                                                                                         |
-| --- | -------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Settings, Admin & Billing  | ✅ COMPLETE | Multi-tenant auth, roles/permissions (owner + admin), Stripe subscriptions (3 tiers), company settings with logo upload, trial system with abuse prevention, invite flow, team management                                           |
-| 2   | Contacts & CRM             | ✅ COMPLETE | Two-table design: `contacts` (leads & clients) + `subcontractors` (subs & vendors). Full CRUD with search, filtering, star ratings, preferred flags, EIN, default hourly rate, standard markup %, insurance tracking                |
-| 3   | Document & File Management | NOT STARTED | Supabase Storage, file tagging, project folders, upload from web + mobile camera, photo markup & annotation (desktop + mobile), AI auto-tagging of photos via GPT-4o vision, receipt attachments linked to Module 8 inventory items |
+| #   | Module                     | Status      | Description                                                                                                                                                                                                                                                     |
+| --- | -------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Settings, Admin & Billing  | ✅ COMPLETE | Multi-tenant auth, roles/permissions (owner + admin), Stripe subscriptions (3 tiers), company settings with logo upload, trial system with abuse prevention, invite flow, team management                                                                       |
+| 2   | Contacts & CRM             | ✅ COMPLETE | Two-table design: `contacts` (leads & clients) + `subcontractors` (subs & vendors). Full CRUD with search, filtering, star ratings, preferred flags, EIN, default hourly rate, standard markup %, insurance tracking                                            |
+| 3   | Document & File Management | ✅ COMPLETE | Sessions 11–32. Files table + RLS, project-files storage bucket, upload/download/soft-delete, photo markup (shared SVG component reused in Module 6), AI auto-tagging via GPT-4o vision (paid add-on), favorites, trash. See STATE.md for sub-module breakdown. |
 
 ### Phase 2: Core Business Modules (Months 3–8)
 
-| #   | Module                      | Status      | Description                                       |
-| --- | --------------------------- | ----------- | ------------------------------------------------- |
+| #   | Module                      | Status      | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| --- | --------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 4   | Sales & Estimating          | NOT STARTED | Estimate builder, cost catalog, AI line-item suggestions, proposals, e-signatures, pipeline. When a vendor is selected for a material line item, auto-populate markup from their default_markup_percent (override per line item). Estimates link to contacts (client/lead). Sub bids link to subcontractors.                                                                                                                                                                                                                                                                                                                                                                              |
 | 5   | Project Management          | NOT STARTED | Phases, milestones, Kanban tasks, scheduling, templates, change order initiation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | 6   | Team & Field Operations     | NOT STARTED | Mobile-first: clock in/out with GPS, **time categorization** (regular/OT/travel/drive/shop), **break tracking**, **overtime calculation**, **mileage tracking**, **hours allocated to tasks/change orders/T&M jobs**, daily logs with **safety hazards section** (checkbox + text), **safety incident reporting** (separate formal workflow with PDF), photo capture with markup (shared component from Module 3), punch lists, **daily huddle/crew briefing** (optional), **material delivery tracking** (checked in by anyone assigned to project, contents via receipt photo or typed list), offline mode, voice-to-text daily logs. Approved timesheets sync to QB Time/Payroll.      |
 | 7   | Job Finances                | NOT STARTED | Budget vs. actual, cost codes, change orders, invoicing (including T&M invoicing pulling hours from Module 6 and materials from Module 8), sub pay apps, retainage. Track actual vendor cost vs. marked-up client price for profit analysis. Sub pay apps reference subcontractors table (EIN for 1099s, default_hourly_rate for labor estimates). QB sync for invoices, bills, and payments.                                                                                                                                                                                                                                                                                             |
 | 8   | **Inventory & Tools (NEW)** | NOT STARTED | **Inventory:** categorized items (lumber, fasteners, drywall, electrical, plumbing, finishes, consumables, other) with unit of measure, default vendor, photo, receipt attachment, flag-for-return with notes. **Tools:** categorized durables (power tools, hand tools, ladders, safety equipment, measurement, heavy equipment, other) with brand, model, serial, photo, notes for specs (blade size, voltage, capacity). Tool location required (shop/job site/truck/custom). Tool-to-person assignment optional. Check-in/check-out log tracks every location or assignment change. Bulk assignment of multiple tools at once. All roles (Owner through Crew) can check tools in/out. |
+
 ### Phase 3: Differentiator Layer (Months 8–10)
 
 | #   | Module                     | Status      | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
@@ -310,15 +315,31 @@ updated_by      UUID REFERENCES auth.users(id)
 is_deleted      BOOLEAN DEFAULT false        -- soft delete, never hard delete
 deleted_at      TIMESTAMPTZ
 ```
+
+**Per-tenant table column-defaults checklist.** Every new per-tenant table migration must include three column defaults so client-side INSERTs pass RLS without the caller manually setting these fields:
+
+```sql
+ALTER TABLE {table_name} ALTER COLUMN company_id SET DEFAULT get_my_company_id();
+ALTER TABLE {table_name} ALTER COLUMN created_by SET DEFAULT auth.uid();
+ALTER TABLE {table_name} ALTER COLUMN updated_by SET DEFAULT auth.uid();
+```
+
+Without these, the client INSERT sends `company_id = NULL`, RLS checks `NULL = get_my_company_id()` → false, and the insert fails with a 403 that doesn't obviously point to the missing default. Migration 022 (`tag_options`) was a fix for this exact miss on first attempt; Migration 018 (`files`) caught it during build. Get the defaults in on the first migration that creates the table.
+
 **Append-only audit log exception.** A narrow category of tables are pure append-only logs — rows are written once and never updated or deleted. These tables intentionally OMIT the following standard columns: `updated_at`, `created_by`, `updated_by`, `is_deleted`, `deleted_at`. They also have NO UPDATE or DELETE RLS policies — only SELECT (scoped appropriately) and INSERT.
 
 Columns present on an append-only log: `id`, `company_id` (where per-tenant), `created_at`, plus whatever domain-specific fields the log captures.
 
 Current examples:
+
 - `ai_tag_logs` — per-call cost tracking for GPT-4o vision auto-tagging (Module 3H, Session 30).
 - `trial_emails` — one row per email address that has used a free trial.
 
 Use this pattern for any future table that is a pure event log or audit trail. If the table ever needs to be edited or soft-deleted after insert, it is NOT an append-only log — use the standard columns above instead.
+**Cost-column precision and audit-log FK behavior.** Two conventions for any table that stores money or references rows that may be deleted later:
+
+- **Cost columns use `NUMERIC(10,6)`.** Six decimal places preserves sub-cent values like a $0.00382 GPT-4o call. `NUMERIC(10,2)` rounds to zero and silently destroys cost-tracking data. Reference: `ai_tag_logs.estimated_cost` (Migration 023).
+- **Audit-log FKs to deletable rows use `ON DELETE SET NULL`, not `ON DELETE CASCADE`.** When an audit log references a row that can be permanently deleted (e.g., `ai_tag_logs.file_id` references `files.id`, and files have a permanent-delete path for owner/admin), `CASCADE` would erase the cost record along with the file. `SET NULL` preserves the cost row with the FK nulled out, keeping the financial trail intact. Default to `SET NULL` for any append-only log FK; only use `CASCADE` when the log row genuinely makes no sense without the parent.
 
 **Trash-bin pattern.** Soft deletes only. Never hard delete records.
 
@@ -349,6 +370,10 @@ Server and client Supabase clients must be in separate files to avoid Next.js bu
 - `billing.ts` — Subscription data (server only)
 - `seats.ts` — Seat usage counting (server only)
 - `team.ts` — Team member and invitation management
+- `files.ts` / `files-client.ts` — File upload, list, soft-delete, restore, markup, AI tag editing
+- `tag-options.ts` / `tag-options-client.ts` — Per-company tag catalog (Module 3H)
+- `add-ons.ts` / `add-ons-client.ts` — Per-company add-on flags (currently `ai_tagging_enabled`; future flags like `ai_marketing_enabled` slot in here, not in `company.ts`)
+- `ai-tagging.ts` — Server-only. Reference implementation for any future AI feature service. See "AI Integration Rules → Reference Implementation" below.
 
 **Lazy initialization:** Stripe client (`getStripe()`) and Supabase admin client (`getSupabaseAdmin()`) use lazy init to prevent build-time crashes. All API routes must use these.
 
@@ -510,6 +535,21 @@ For any action not listed in the owner-only section above, assume Admin has acce
 
 ---
 
+**Reference Implementation — `apps/web/lib/services/ai-tagging.ts`**
+
+Module 3H established the patterns every future AI feature must follow. When building Module 4 estimating AI, Module 9 client summaries, Module 10 NL queries, Module 11 marketing, etc., copy this shape:
+
+1. **Lazy client via `getOpenAI()`.** Same pattern as `getStripe()` and `getSupabaseAdmin()`. Never instantiate the OpenAI client at module load — it crashes the build if the env var isn't set in the build environment.
+2. **Cost log on every call.** Insert a row into the relevant `ai_*_logs` table for every call: model, input tokens, output tokens, estimated cost, success/failure, error message. Insert even on failure — failed calls still cost money, and the failure pattern is signal.
+3. **Bail-early pre-flight checks, ordered cheapest to most expensive.** Auth → DB fetch of the target row → MIME or input shape check → company add-on flag → active configuration check (e.g., active tags exist) → only then OpenAI call. Each gate that fails before OpenAI saves a real billed call.
+4. **Validate LLM output against a known allowed set; discard anything not on it.** This is the security property. The model can return whatever it wants — your code decides what survives. Session 31 Test 5 proved this prevents prompt-injection-style tag pollution.
+5. **Log `response.model`, not the request constant.** OpenAI returns the resolved version (`gpt-4o-2024-08-06`) which differs from the request alias (`gpt-4o`). Log the resolved one so future cost analysis can attribute to the actual version that ran when prices changed.
+6. **No retry logic in v1.** A retry can double-charge for partial failures (e.g., the API returned 5xx but the call did complete server-side). Add a manual "Retag" button or a dedicated background queue if production needs retries — never silent inline retries inside the request path.
+
+**Testing AI features.** GPT-4o is non-deterministic even at temperature 0.2 — two back-to-back calls on the same input can return different outputs (Session 31 saw 3 vs 4 tags on the same image, both correct). Tests cannot assert exact LLM output. Tests can assert: response is well-formed, validation filter discarded unknown values, output count is within configured cap, cost row was inserted.
+
+---
+
 ## Instruction Preferences
 
 When generating code, migrations, or instructions for Josh:
@@ -526,7 +566,7 @@ When generating code, migrations, or instructions for Josh:
 
 ## Environment Variables (apps/web/.env.local and Vercel)
 
-```
+````
 NEXT_PUBLIC_SUPABASE_URL=https://jwkcknyuyvcwcdeskrmz.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=(anon key)
 SUPABASE_SERVICE_ROLE_KEY=(service role key)
@@ -537,8 +577,7 @@ STRIPE_PRICE_STARTER=(price_ id)
 STRIPE_PRICE_PROFESSIONAL=(price_ id)
 STRIPE_PRICE_BUSINESS=(price_ id)
 NEXT_PUBLIC_APP_URL=https://frame-focus-eight.vercel.app
-OPENAI_API_KEY=(sk-... key — needed for Module 3 AI auto-tagging, set up when Module 3 build starts)
-```
+OPENAI_API_KEY=(sk-... key)```
 
 ---
 
@@ -563,3 +602,4 @@ All reference documents now live in `docs/roadmap/` in the repo (no longer uploa
 - `docs/sessions/` — One context file per session (contextN.md). Read the most recent one at the start of each new session.
 - This file (`CLAUDE.md`) — Technical development guide (update after every major session).
 - `STATE.md` — Live repo state dashboard. Codebase tree lists only annotated files; tech debt lives in `TECH_DEBT.md`.
+````
