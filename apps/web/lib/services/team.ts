@@ -13,6 +13,83 @@ export type Invitation = Pick<
   InvitationRow,
   'id' | 'email' | 'role' | 'status' | 'created_at' | 'expires_at'
 > & { token?: string };
+export type TeamMemberDetail = Pick<
+  ProfileRow,
+  | 'id'
+  | 'user_id'
+  | 'first_name'
+  | 'last_name'
+  | 'email'
+  | 'phone'
+  | 'role'
+  | 'notes'
+  | 'is_deleted'
+  | 'created_at'
+>;
+
+/** Fetch a single team member by profile id (for edit page) */
+export async function getTeamMember(supabase: SupabaseClient, id: string) {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, user_id, first_name, last_name, email, phone, role, notes, is_deleted, created_at')
+    .eq('id', id)
+    .single();
+  if (error) throw error;
+  return data as TeamMemberDetail;
+}
+
+/** Update editable fields on a team member's profile. RLS enforces who can change what. */
+export async function updateTeamMember(
+  supabase: SupabaseClient,
+  id: string,
+  updates: {
+    first_name?: string;
+    last_name?: string;
+    phone?: string | null;
+    role?: string;
+    notes?: string | null;
+  }
+) {
+  const { data, error } = await supabase
+    .from('profiles')
+    .update(updates)
+    .eq('id', id)
+    .select('id, user_id, first_name, last_name, email, phone, role, notes, is_deleted, created_at')
+    .single();
+  if (error) throw error;
+  return data as TeamMemberDetail;
+}
+
+/** Soft-delete a team member: mark profile is_deleted and ban the auth user so they cannot log in. */
+export async function softDeleteTeamMember(
+  supabase: SupabaseClient,
+  supabaseAdmin: SupabaseClient,
+  profileId: string,
+  userId: string
+) {
+  const { error: profileError } = await supabase
+    .from('profiles')
+    .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+    .eq('id', profileId);
+  if (profileError) throw profileError;
+
+  const { error: banError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+    ban_duration: '876000h',
+  });
+  if (banError) throw banError;
+}
+
+/** Send a password recovery email to a team member. Caller authorization must be checked before calling. */
+export async function resetTeamMemberPassword(
+  supabase: SupabaseClient,
+  email: string,
+  redirectTo: string
+) {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo,
+  });
+  if (error) throw error;
+}
 
 /** Fetch all active team members for the current user's company */
 export async function getTeamMembers(supabase: SupabaseClient) {
