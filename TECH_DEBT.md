@@ -55,10 +55,10 @@ Module 4 build does not begin until all six items are closed.
 ### UX Polish
 
 - **#13** Row click should open read-only detail view (contacts + subcontractors) — currently Edit button is only way in
-- **#14** Team member edit UI — no `/dashboard/team/[id]` page yet
-- **#15** Team member delete UI
-- **#16** Team member password reset (Owner/Admin action)
-- **#17** Team member notes field
+- **#14** Team member edit UI — `/dashboard/team/[id]` — IN PROGRESS Session 37. Migration 026 + service layer + server actions done. Page + form + row-click wiring remaining for Session 38.
+- **#15** Team member delete UI — IN PROGRESS Session 37 (server action `deleteTeamMemberAction` done; UI button remaining)
+- **#16** Team member password reset (Owner/Admin action) — IN PROGRESS Session 37 (server action `resetPasswordAction` done; UI button remaining)
+- **#17** Team member notes field — IN PROGRESS Session 37 (Migration 026 added column; form field remaining)
 
 Items #14–#17 share the same fix pattern: build `/dashboard/team/[id]` detail page with edit/delete/notes/reset-password actions.
 
@@ -108,6 +108,8 @@ Items #14–#17 share the same fix pattern: build `/dashboard/team/[id]` detail 
 - **#64** GPT-4o pricing constants (`INPUT_COST_PER_M`, `OUTPUT_COST_PER_M`) are hard-coded in `apps/web/lib/services/ai-tagging.ts`. Values correct as of Session 31 per OpenAI published pricing. Needs re-verification before public launch and on any OpenAI price change. Consider moving to env vars or a pricing config file before multiple AI features ship (Module 4, 6, 9, 10, 11 will all call OpenAI). Tracked so this isn't forgotten at launch.
 - **#66** Ownership transfer unbuilt. Verified Session 34 (F15) — no matches for `transferOwnership` / `transfer ownership` / `transfer_ownership` anywhere in `apps/web`, `packages/`, or `supabase/`. CLAUDE.md "The Admin Role Principle" lists ownership transfer as Owner-only action #3, but no migration, service, UI, or RLS policy exists. Cluster with team detail page work (#14–#17) — likely lives at `/dashboard/team/[id]` as an Owner-only action. Depends on #65 being fixed first (transfer to a new owner means the old owner stops being one — needs DB-level uniqueness to keep the invariant). Fix order: #65 first, then #66, then any UI work.(#65 closed Session 35.)
 - **#67** `packages/shared/utils/index.ts` contains four functions (`hasPermission`, `formatName`, `generateSlug`, `formatCurrency`) with zero callers anywhere in the codebase. Discovered Session 35 during #12 cleanup. Either delete the file (and remove `export * from './utils'` from `packages/shared/index.ts`) or wire the functions into existing call sites where they would replace inline duplicates. Address during pre-beta cleanup.
+- **#68** `getSupabaseAdmin()` was duplicated inline in the Stripe webhook before Session 37. Now extracted to `apps/web/lib/supabase-admin.ts`. CLAUDE.md mentions the lazy-init pattern but does not point to the file path. Add a Service Layer Pattern note in CLAUDE.md pointing to `@/lib/supabase-admin` so future AI features (Module 4 estimating, Module 9 summaries, Module 10 NL queries, Module 11 marketing) don't re-create their own copies. Pre-Module 4.
+- **#69** `softDeleteTeamMember` uses `ban_duration: '876000h'` (~100 years) as a stand-in for permanent ban. Supabase has no true permanent-ban API. Verify this duration is honored on auth attempts during Session 38 smoke test. If it's silently ignored or capped, switch to deleting the auth user (with the trade-off documented in Session 37 — restore would require re-invite). Verify and decide before public launch.
 
 ---
 
