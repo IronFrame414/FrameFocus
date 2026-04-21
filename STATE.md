@@ -1,6 +1,6 @@
 # STATE.md — FrameFocus Current State
 
-> **Last updated:** April 21, 2026 — Session 38 (STATE.md codebase tree trim)
+> **Last updated:** April 21, 2026 — Session 39 (team member edit page — #14, #15, #17 closed; #16 partial)
 > **Purpose:** Snapshot of current state of codebase, infrastructure, and database. Updated at end of each session. For session narrative and decisions, see `docs/sessions/contextN.md`. For conventions and patterns, see `CLAUDE.md`.
 
 ---
@@ -85,9 +85,11 @@ app/api/files/auto-tag/route.ts          Thin route, delegates to ai-tagging ser
 app/auth/callback/route.ts               Honors ?next= param (Session 23)
 app/dashboard/billing/add-ons-section.tsx  ai_tagging_enabled toggle (Session 32)
 app/dashboard/settings/tags/             Per-company tag catalog UI (Session 30)
-app/dashboard/team/team-page-client.tsx  ⚠️ Local ROLE_LABELS (#18)
+app/dashboard/team/team-page-client.tsx  Row-click to detail page (Session 39). ⚠️ Local ROLE_LABELS (#18)
 app/dashboard/team/invite/invite-form.tsx  ⚠️ Local INVITABLE_ROLES (#19)
-app/dashboard/team/[id]/actions.ts       Server actions for #14–#17 (Session 37, IN PROGRESS)
+app/dashboard/team/[id]/page.tsx         Server-rendered edit page with auth gates (Session 39)
+app/dashboard/team/[id]/edit-form.tsx    Client form — edit/delete/reset for team member (Session 39)
+app/dashboard/team/[id]/actions.ts       Server actions for #14–#17 (Session 37)
 app/dashboard/projects/[id]/files/       Module 3 file UI: list, upload, markup, trash, ai-tag editor
 app/dashboard/projects/[id]/files/markup-test/page.tsx  ⚠️ Throwaway (#50)
 

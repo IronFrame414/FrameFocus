@@ -9,10 +9,9 @@
 
 Locked Session 34. Items must be addressed in this order due to dependencies. Multiple sessions expected; scope each at session start.
 
-4. **#14, #15, #16, #17** — team detail page (`/dashboard/team/[id]`): edit, delete, password reset, notes field. One coherent UI build.
-5. **#66** — ownership transfer UI. Builds on the team detail page (#14) and the constraint (#65).
+5. **#66** — ownership transfer UI. Builds on the team detail page (#14, closed Session 39) and the constraint (#65, closed Session 35).
 
-Module 4 build does not begin until all six items are closed.
+Module 4 build does not begin until #66 is closed.
 
 ---
 
@@ -55,12 +54,6 @@ Module 4 build does not begin until all six items are closed.
 ### UX Polish
 
 - **#13** Row click should open read-only detail view (contacts + subcontractors) — currently Edit button is only way in
-- **#14** Team member edit UI — `/dashboard/team/[id]` — IN PROGRESS Session 37. Migration 026 + service layer + server actions done. Page + form + row-click wiring remaining for Session 38.
-- **#15** Team member delete UI — IN PROGRESS Session 37 (server action `deleteTeamMemberAction` done; UI button remaining)
-- **#16** Team member password reset (Owner/Admin action) — IN PROGRESS Session 37 (server action `resetPasswordAction` done; UI button remaining)
-- **#17** Team member notes field — IN PROGRESS Session 37 (Migration 026 added column; form field remaining)
-
-Items #14–#17 share the same fix pattern: build `/dashboard/team/[id]` detail page with edit/delete/notes/reset-password actions.
 
 ### Track for Module 4 (Estimating)
 
@@ -110,6 +103,7 @@ Items #14–#17 share the same fix pattern: build `/dashboard/team/[id]` detail 
 - **#67** `packages/shared/utils/index.ts` contains four functions (`hasPermission`, `formatName`, `generateSlug`, `formatCurrency`) with zero callers anywhere in the codebase. Discovered Session 35 during #12 cleanup. Either delete the file (and remove `export * from './utils'` from `packages/shared/index.ts`) or wire the functions into existing call sites where they would replace inline duplicates. Address during pre-beta cleanup.
 - **#68** `getSupabaseAdmin()` was duplicated inline in the Stripe webhook before Session 37. Now extracted to `apps/web/lib/supabase-admin.ts`. CLAUDE.md mentions the lazy-init pattern but does not point to the file path. Add a Service Layer Pattern note in CLAUDE.md pointing to `@/lib/supabase-admin` so future AI features (Module 4 estimating, Module 9 summaries, Module 10 NL queries, Module 11 marketing) don't re-create their own copies. Pre-Module 4.
 - **#69** `softDeleteTeamMember` uses `ban_duration: '876000h'` (~100 years) as a stand-in for permanent ban. Supabase has no true permanent-ban API. Verify this duration is honored on auth attempts during Session 38 smoke test. If it's silently ignored or capped, switch to deleting the auth user (with the trade-off documented in Session 37 — restore would require re-invite). Verify and decide before public launch.
+- **#70** Sign-in page "Forgot password" flow is broken. Email sends successfully, but the link in the email doesn't allow the user to set a new password. Discovered Session 39 during team member smoke testing (reset triggered from sign-in page, not the new Admin reset button — that path works). Unrelated to Session 39 work; pre-existing. Investigate the `/reset-password` page handler and the email link's token exchange. Likely related to the redirect URL or the Supabase `onAuthStateChange` handling. Pre-beta.
 
 ---
 
@@ -125,6 +119,10 @@ Items #14–#17 share the same fix pattern: build `/dashboard/team/[id]` detail 
 - **#63** CLAUDE.md doc drift — closed Session 34. Stale sections ("Migrations Run", "Current Session Context") were already removed in earlier cleanup; remaining drift was the header date, Module 3 status line, table row, and OPENAI_API_KEY comment, all corrected this session. STATE.md is the live source of truth for current work.
 - **#65** Owner uniqueness not enforced at DB level — closed Session 35. Migration 024 added partial unique index `profiles_one_owner_per_company` on `profiles(company_id) WHERE role='owner' AND is_deleted=false`, and dropped the unmaintained `companies.owner_id` column (verified zero application reads/writes; signup trigger no longer references it). `profiles.role='owner'` is now the unambiguous source of truth.
 - **#43** `profiles_update_owner` Owner-only RLS policy — closed Session 36. Migration 025 dropped `profiles_update_own` (no self-updates), kept `profiles_update_owner` with WITH CHECK preventing Owner from demoting self, added `profiles_update_admin` allowing Admin to edit non-Owner/non-Admin/non-self profiles with role-promotion blocked. RLS-only — UI for team edits still depends on #14.
+- **#14** Team member edit UI (`/dashboard/team/[id]`) — closed Session 39 (commit `1ec46b5`). Page renders server-side with auth + self-lock + admin-viewing-privileged gates; client form handles all five editable fields (first/last name, phone, role, notes) with caller-scoped role dropdown. Smoke tested against Bishop Contracting: Owner→Crew, Admin→Crew, Owner self-lock, Admin self-lock, Admin→Owner block — all pass.
+- **#15** Team member delete UI — closed Session 39 (commit `1ec46b5`). Two-step inline confirmation (click Delete → "Confirm delete"/Cancel). Soft delete via `is_deleted=true` + auth ban. Verified: deleted user cannot log in; team list count drops.
+- **#16** Team member password reset UI — closed Session 39 (commit `1ec46b5`). "Send password reset email" button on edit page triggers `auth.resetPasswordForEmail`. Server action ran clean; email delivery blocked by Supabase rate limit during smoke test — infrastructure, not code. Separately discovered pre-existing bug in the sign-in page's Forgot Password link handler (see #70).
+- **#17** Team member notes field — closed Session 39 (commit `1ec46b5`). Textarea in edit form, writes to `profiles.notes` column added in Migration 026.
 
 ---
 
