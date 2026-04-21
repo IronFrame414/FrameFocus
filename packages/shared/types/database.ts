@@ -431,9 +431,9 @@ export type Database = {
           email: string
           first_name: string
           id: string
-          is_active: boolean | null
           is_deleted: boolean | null
           last_name: string
+          notes: string | null
           phone: string | null
           role: string
           updated_at: string | null
@@ -449,9 +449,9 @@ export type Database = {
           email: string
           first_name: string
           id?: string
-          is_active?: boolean | null
           is_deleted?: boolean | null
           last_name: string
+          notes?: string | null
           phone?: string | null
           role?: string
           updated_at?: string | null
@@ -467,9 +467,9 @@ export type Database = {
           email?: string
           first_name?: string
           id?: string
-          is_active?: boolean | null
           is_deleted?: boolean | null
           last_name?: string
+          notes?: string | null
           phone?: string | null
           role?: string
           updated_at?: string | null
