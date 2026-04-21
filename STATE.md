@@ -1,6 +1,6 @@
 # STATE.md — FrameFocus Current State
 
-> **Last updated:** April 16, 2026 Session 34 — Module 3H UI complete, Module 3 fully complete
+> **Last updated:** April 20, 2026 Session 35 — Tech debt #12 closed (types barrel cleanup)
 > **Purpose:** Snapshot of current state of codebase, infrastructure, and database. Updated at end of each session. For session narrative and decisions, see `docs/sessions/contextN.md`. For conventions and patterns, see `CLAUDE.md`.
 
 ---
