@@ -105,7 +105,6 @@ export type Database = {
           license_number: string | null
           logo_url: string | null
           name: string
-          owner_id: string | null
           phone: string | null
           slug: string
           state: string | null
@@ -129,7 +128,6 @@ export type Database = {
           license_number?: string | null
           logo_url?: string | null
           name: string
-          owner_id?: string | null
           phone?: string | null
           slug: string
           state?: string | null
@@ -153,7 +151,6 @@ export type Database = {
           license_number?: string | null
           logo_url?: string | null
           name?: string
-          owner_id?: string | null
           phone?: string | null
           slug?: string
           state?: string | null
