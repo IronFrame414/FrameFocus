@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase-browser';
 import {
   getTeamMembers,
@@ -21,6 +22,7 @@ const ROLE_LABELS: Record<string, string> = {
 
 export default function TeamPageClient({ userRole }: { userRole: string }) {
   const supabase = createClient();
+  const router = useRouter();
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -117,7 +119,11 @@ export default function TeamPageClient({ userRole }: { userRole: string }) {
           </thead>
           <tbody className="divide-y divide-gray-200">
             {members.map((member) => (
-              <tr key={member.id}>
+              <tr
+                key={member.id}
+                onClick={() => router.push(`/dashboard/team/${member.id}`)}
+                className="hover:bg-gray-50 cursor-pointer"
+              >
                 <td className="px-6 py-4 whitespace-nowrap">
                   <p className="text-sm font-medium text-gray-900">
                     {member.first_name} {member.last_name}
