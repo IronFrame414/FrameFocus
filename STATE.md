@@ -1,6 +1,6 @@
 # STATE.md — FrameFocus Current State
 
-> **Last updated:** April 20, 2026 Session 35 — Tech debt #12 closed (types barrel cleanup)
+> **Last updated:** April 20, 2026 Session 35 — Tech debt #12 + #65 closed
 > **Purpose:** Snapshot of current state of codebase, infrastructure, and database. Updated at end of each session. For session narrative and decisions, see `docs/sessions/contextN.md`. For conventions and patterns, see `CLAUDE.md`.
 
 ---
@@ -127,7 +127,7 @@
 
 ### Migrations
 
-## All 24 migration files live in `supabase/migrations/` with 14-digit timestamp format. `npx supabase migration list` shows all 24 in sync (Local + Remote). Migration 006 was never created — intentional gap. Source of truth is the file list on disk.
+## All 25 migration files live in `supabase/migrations/` with 14-digit timestamp format. `npx supabase migration list` shows all 25 in sync (Local + Remote). Migration 006 was never created — intentional gap. Source of truth is the file list on disk.
 
 ## Codebase State
 
