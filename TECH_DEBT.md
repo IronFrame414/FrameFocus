@@ -9,7 +9,6 @@
 
 Locked Session 34. Items must be addressed in this order due to dependencies. Multiple sessions expected; scope each at session start.
 
-3. **#43** — `profiles_update_owner` RLS policy update (allow Admin writes except setting `role='admin'`). Pure migration. Unblocks #14.
 4. **#14, #15, #16, #17** — team detail page (`/dashboard/team/[id]`): edit, delete, password reset, notes field. One coherent UI build.
 5. **#66** — ownership transfer UI. Builds on the team detail page (#14) and the constraint (#65).
 
@@ -94,7 +93,6 @@ Items #14–#17 share the same fix pattern: build `/dashboard/team/[id]` detail 
 - **#38** Bishop Contracting may need manual subscription row — predates Migration 007
 - **#39** Role-check patterns repeated across page.tsx files — would benefit from `isOwnerOrAdmin()` / `canManageProjects()` helpers
 - **#40** Inline style objects duplicated across forms — cleanup with shadcn/ui migration
-- **#43** `profiles_update_owner` RLS policy is Owner-only. Per Admin Role Principle (Owner minus billing minus Admin promotion), Admin should be able to edit other users' profiles EXCEPT promoting them to Admin. No live impact today because no `/dashboard/team/[id]` edit UI exists yet (see #14). When #14 ships, the RLS policy needs to be updated to allow Admin writes while still preventing Admin from setting `role='admin'`. Likely a column-level grant or a CHECK in a new policy. Discovered Session 21 during tech debt #41 audit.
 - **#47** Customize Supabase auth emails (recovery, invite, signup confirmation) to use FrameFocus branding and copy. Currently using Supabase defaults. Set in Supabase Dashboard → Authentication → Email Templates.
 - **#49** Inline styles across Module 3 pages (3F, 3G, 3I, 3J: page.tsx, upload-form.tsx, file-row.tsx, file-row-actions.tsx, favorite-toggle.tsx, markup-editor.tsx, markup/page.tsx, trash/page.tsx, trash-row.tsx) — same pattern as tech debt #40. Clean up with shadcn/ui migration in one focused pass.
 - **#52** Polished markup text editor — replace `window.prompt()` in `markup-editor.tsx` with inline text input: positioned at click location, multi-line, per-shape font size control, click-to-edit existing text in select mode. Functional but unpolished in v1.
@@ -124,6 +122,7 @@ Items #14–#17 share the same fix pattern: build `/dashboard/team/[id]` detail 
 - **#59** Document the append-only audit log exception in CLAUDE.md — closed Session 31 (commit `bd6657a`). Convention added to CLAUDE.md Database Conventions section, immediately above the Trash-bin pattern block. Lists `ai_tag_logs` and `trial_emails` as current examples.
 - **#63** CLAUDE.md doc drift — closed Session 34. Stale sections ("Migrations Run", "Current Session Context") were already removed in earlier cleanup; remaining drift was the header date, Module 3 status line, table row, and OPENAI_API_KEY comment, all corrected this session. STATE.md is the live source of truth for current work.
 - **#65** Owner uniqueness not enforced at DB level — closed Session 35. Migration 024 added partial unique index `profiles_one_owner_per_company` on `profiles(company_id) WHERE role='owner' AND is_deleted=false`, and dropped the unmaintained `companies.owner_id` column (verified zero application reads/writes; signup trigger no longer references it). `profiles.role='owner'` is now the unambiguous source of truth.
+- **#43** `profiles_update_owner` Owner-only RLS policy — closed Session 36. Migration 025 dropped `profiles_update_own` (no self-updates), kept `profiles_update_owner` with WITH CHECK preventing Owner from demoting self, added `profiles_update_admin` allowing Admin to edit non-Owner/non-Admin/non-self profiles with role-promotion blocked. RLS-only — UI for team edits still depends on #14.
 
 ---
 

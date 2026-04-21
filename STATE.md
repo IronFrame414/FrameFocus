@@ -1,6 +1,6 @@
 # STATE.md — FrameFocus Current State
 
-> **Last updated:** April 20, 2026 Session 35 — Tech debt #12 + #65 closed
+> **Last updated:** April 20, 2026 Session 36 — Tech debt #43 closed
 > **Purpose:** Snapshot of current state of codebase, infrastructure, and database. Updated at end of each session. For session narrative and decisions, see `docs/sessions/contextN.md`. For conventions and patterns, see `CLAUDE.md`.
 
 ---
@@ -61,20 +61,19 @@
 
 ### Tables (in production Supabase)
 
-| Table             | Rows      | RLS                | Notes                                                                                                                                                                                                                                                                                  |
-| ----------------- | --------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
-| `companies`       | Multiple  | ✅ Enabled         | `slug` (NOT NULL, auto-generated), `stripe_customer_id`, address/phone/website/trade_type/license_number/logo_url, `ai_tagging_enabled` (boolean, default false — paid add-on flag). Legacy `subscription_tier`/`subscription_status` columns unused.                                  |
-| `profiles`        | Multiple  | ✅ Enabled         | Linked to `auth.users` via `user_id`. Soft delete via `is_deleted`.                                                                                                                                                                                                                    |
-| `platform_admins` | 0         | ✅ Enabled         | No admins seeded yet                                                                                                                                                                                                                                                                   |
-| `invitations`     | Test rows | ✅ Enabled         | Token-based, 7-day expiry, status: pending/accepted/expired/cancelled                                                                                                                                                                                                                  |
-| `subscriptions`   | Multiple  | ✅ Enabled         | One per company. plan_tier, status, seat_limit, trial dates. Only service_role writes                                                                                                                                                                                                  |
-| `trial_emails`    | Multiple  | ❌ No RLS          | Tracks emails that have used a trial. Only accessed by SECURITY DEFINER trigger                                                                                                                                                                                                        |
-| `contacts`        | Test rows | ✅ Enabled         | Leads & clients. contact_type CHECK, status, name, company, email, phone, address, source, tags. Soft delete                                                                                                                                                                           |
-| `subcontractors`  | Test rows | ✅ Enabled         | Subs & vendors. EIN, default_hourly_rate, default_markup_percent, preferred, rating, insurance_expiry. Soft delete                                                                                                                                                                     |
-| `files`           | 0         | ✅ Enabled         | Module 3. project_id nullable until Module 5. markup_data JSONB. Soft delete. 4 RLS policies. Column defaults on company_id/created_by/updated_by. BEFORE UPDATE trigger sets updated_by.                                                                                              |
-| `auth.users`      | Multiple  | (Supabase managed) |
-| `tag_options`     | 66+ rows  | ✅ Enabled         | Module 3H. Per-company tag catalog. category CHECK (trade/stage/area/condition/documentation), is_active, sort_order. UNIQUE (company_id, name). 4 RLS policies. Column defaults on company_id/created_by/updated_by (Migration 022). Seeded for Bishop Contracting via Migration 021. |
-| `ai_tag_logs`     | 0         | ✅ Enabled         | Module 3H. Append-only cost log for GPT-4o vision calls. NO standard audit columns by design (no updated_at, no created_by, no soft-delete). 2 RLS policies (owner/admin select, authenticated insert). Indexes on company_id and created_at DESC.                                     |     |
+| Table            | Rows      | RLS                | Notes                                                                                                                                                                                                                                                                                  |
+| ---------------- | --------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- | ----------------- | --- | ---------- | -------------------- |
+| `companies`      | Multiple  | ✅ Enabled         | `slug` (NOT NULL, auto-generated), `stripe_customer_id`, address/phone/website/trade_type/license_number/logo_url, `ai_tagging_enabled` (boolean, default false — paid add-on flag). Legacy `subscription_tier`/`subscription_status` columns unused.                                  |
+| `profiles`       | Multiple  | ✅ Enabled         | Linked to `auth.users` via `user_id`. Soft delete via `is_deleted`. UPDATE policies: Owner edits all (cannot demote self); Admin edits non-Owner/non-Admin/non-self profiles, cannot promote to admin/owner; PM/Foreman/Crew cannot update profiles (Migration 025).                   |     | `platform_admins` | 0   | ✅ Enabled | No admins seeded yet |
+| `invitations`    | Test rows | ✅ Enabled         | Token-based, 7-day expiry, status: pending/accepted/expired/cancelled                                                                                                                                                                                                                  |
+| `subscriptions`  | Multiple  | ✅ Enabled         | One per company. plan_tier, status, seat_limit, trial dates. Only service_role writes                                                                                                                                                                                                  |
+| `trial_emails`   | Multiple  | ❌ No RLS          | Tracks emails that have used a trial. Only accessed by SECURITY DEFINER trigger                                                                                                                                                                                                        |
+| `contacts`       | Test rows | ✅ Enabled         | Leads & clients. contact_type CHECK, status, name, company, email, phone, address, source, tags. Soft delete                                                                                                                                                                           |
+| `subcontractors` | Test rows | ✅ Enabled         | Subs & vendors. EIN, default_hourly_rate, default_markup_percent, preferred, rating, insurance_expiry. Soft delete                                                                                                                                                                     |
+| `files`          | 0         | ✅ Enabled         | Module 3. project_id nullable until Module 5. markup_data JSONB. Soft delete. 4 RLS policies. Column defaults on company_id/created_by/updated_by. BEFORE UPDATE trigger sets updated_by.                                                                                              |
+| `auth.users`     | Multiple  | (Supabase managed) |
+| `tag_options`    | 66+ rows  | ✅ Enabled         | Module 3H. Per-company tag catalog. category CHECK (trade/stage/area/condition/documentation), is_active, sort_order. UNIQUE (company_id, name). 4 RLS policies. Column defaults on company_id/created_by/updated_by (Migration 022). Seeded for Bishop Contracting via Migration 021. |
+| `ai_tag_logs`    | 0         | ✅ Enabled         | Module 3H. Append-only cost log for GPT-4o vision calls. NO standard audit columns by design (no updated_at, no created_by, no soft-delete). 2 RLS policies (owner/admin select, authenticated insert). Indexes on company_id and created_at DESC.                                     |     |
 
 ### Storage Buckets
 
@@ -108,7 +107,7 @@
 - **invitations:** `_select_owner_admin`, `_insert_owner_admin`, `_update_owner_admin`. Trigger bypasses via `get_invitation_for_signup()` helper.
 - **companies:** `_update_owner_admin`
 - **subscriptions:** `_select_owner_admin`. Only service_role (webhook) writes
-- **profiles:** `_select_authenticated`
+- **profiles:** `_select_authenticated`, `_select_company`, `_insert_authenticated`, `_update_owner`, `_update_admin`
 - **contacts / subcontractors:** `_select_authenticated`, `_insert_authorized`, `_update_authorized` (owner/admin/PM can write)
 - **files:** 4 policies — non-client read/write, owner+admin permanent delete
 - **storage.objects (company-logos):** upload, update, public read, delete (owner/admin)
@@ -127,7 +126,7 @@
 
 ### Migrations
 
-## All 25 migration files live in `supabase/migrations/` with 14-digit timestamp format. `npx supabase migration list` shows all 25 in sync (Local + Remote). Migration 006 was never created — intentional gap. Source of truth is the file list on disk.
+## All 26 migration files live in `supabase/migrations/` with 14-digit timestamp format. `npx supabase migration list` shows all 26 in sync (Local + Remote). Migration 006 was never created — intentional gap. Source of truth is the file list on disk.
 
 ## Codebase State
 
