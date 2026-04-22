@@ -1,7 +1,8 @@
 import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
-import { getTeamMember } from '@/lib/services/team';
+import { getTeamMember, getCompanyAdmins } from '@/lib/services/team';
 import EditForm from './edit-form';
+import TransferForm from './transfer-form';
 
 export default async function TeamMemberEditPage({ params }: { params: { id: string } }) {
   const supabase = await createClient();
@@ -32,14 +33,23 @@ export default async function TeamMemberEditPage({ params }: { params: { id: str
     redirect('/dashboard');
   }
 
+  const admins =
+    isSelf && caller.role === 'owner'
+      ? await getCompanyAdmins(supabase, caller.company_id, caller.id)
+      : [];
+
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">Edit Team Member</h1>
       {isSelf ? (
-        <p style={{ color: '#b45309', background: '#fef3c7', padding: 12, borderRadius: 4 }}>
-          You can't edit your own profile from this page. Contact your account owner to make
-          changes.
-        </p>
+        caller.role === 'owner' ? (
+          <TransferForm admins={admins} />
+        ) : (
+          <p style={{ color: '#b45309', background: '#fef3c7', padding: 12, borderRadius: 4 }}>
+            You can't edit your own profile from this page. Contact your account owner to make
+            changes.
+          </p>
+        )
       ) : (
         <EditForm
           target={{

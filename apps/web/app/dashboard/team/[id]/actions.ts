@@ -1,7 +1,9 @@
 'use server';
 
 import { createClient } from '@/lib/supabase-server';
+import { createClient as createPlainClient } from '@supabase/supabase-js';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { getStripe } from '@/lib/stripe';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import {
@@ -73,4 +75,85 @@ export async function resetPasswordAction(targetId: string) {
 
   const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL}/reset-password`;
   await resetTeamMemberPassword(supabase, target.email, redirectTo);
+}
+
+export async function transferOwnershipAction(
+  formData: FormData
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const newOwnerId = String(formData.get('new_owner_id') ?? '');
+  const password = String(formData.get('password') ?? '');
+  if (!newOwnerId || !password) {
+    return { ok: false, error: 'Missing fields' };
+  }
+
+  let caller: Awaited<ReturnType<typeof getCallerProfile>>;
+  try {
+    caller = await getCallerProfile();
+  } catch {
+    return { ok: false, error: 'Not authenticated' };
+  }
+  if (caller.profile.role !== 'owner') {
+    return { ok: false, error: 'Only the Owner can transfer ownership' };
+  }
+  const { supabase } = caller;
+  const { id: profileId, company_id: companyId } = caller.profile;
+
+  const { data: callerRow, error: callerErr } = await supabase
+    .from('profiles')
+    .select('email')
+    .eq('id', profileId)
+    .single();
+  if (callerErr || !callerRow?.email) {
+    return { ok: false, error: 'Caller email not found' };
+  }
+  const callerEmail = callerRow.email;
+
+  const { data: company, error: companyErr } = await supabase
+    .from('companies')
+    .select('id, stripe_customer_id')
+    .eq('id', companyId)
+    .single();
+  if (companyErr || !company) {
+    return { ok: false, error: 'Company not found' };
+  }
+
+  let target;
+  try {
+    target = await getTeamMember(supabase, newOwnerId);
+  } catch {
+    return { ok: false, error: 'Target not found' };
+  }
+
+  const plain = createPlainClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
+  const { error: pwErr } = await plain.auth.signInWithPassword({
+    email: callerEmail,
+    password,
+  });
+  if (pwErr) {
+    return { ok: false, error: 'Incorrect password' };
+  }
+
+  const { error: rpcErr } = await supabase.rpc('transfer_ownership', {
+    p_new_owner_id: newOwnerId,
+  });
+  if (rpcErr) {
+    return { ok: false, error: rpcErr.message };
+  }
+
+  try {
+    if (company.stripe_customer_id) {
+      await getStripe().customers.update(company.stripe_customer_id, {
+        email: target.email,
+        name: `${target.first_name ?? ''} ${target.last_name ?? ''}`.trim(),
+      });
+    }
+  } catch (e) {
+    console.error('[transferOwnership] Stripe update failed:', e);
+  }
+
+  revalidatePath('/dashboard/team');
+  redirect('/dashboard');
 }

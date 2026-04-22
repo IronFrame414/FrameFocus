@@ -27,6 +27,8 @@ export type TeamMemberDetail = Pick<
   | 'created_at'
 >;
 
+export type CompanyAdmin = Pick<ProfileRow, 'id' | 'email' | 'first_name' | 'last_name'>;
+
 /** Fetch a single team member by profile id (for edit page) */
 export async function getTeamMember(supabase: SupabaseClient, id: string) {
   const { data, error } = await supabase
@@ -124,6 +126,25 @@ export async function cancelInvitation(supabase: SupabaseClient, invitationId: s
     .eq('id', invitationId);
 
   if (error) throw error;
+}
+
+/** Fetch all active Admins for a company. Used by the ownership-transfer form. */
+export async function getCompanyAdmins(
+  supabase: SupabaseClient,
+  companyId: string,
+  excludeProfileId?: string
+): Promise<CompanyAdmin[]> {
+  let q = supabase
+    .from('profiles')
+    .select('id, email, first_name, last_name')
+    .eq('company_id', companyId)
+    .eq('role', 'admin')
+    .eq('is_deleted', false)
+    .order('first_name', { ascending: true });
+  if (excludeProfileId) q = q.neq('id', excludeProfileId);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data as CompanyAdmin[];
 }
 
 /** Create a new invitation and return the record (including token) */
