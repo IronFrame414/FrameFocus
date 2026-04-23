@@ -1,6 +1,6 @@
 # STATE.md — FrameFocus Current State
 
-> **Last updated:** April 21, 2026 — Session 39 (team member edit page — #14, #15, #17 closed; #16 partial)
+> **Last updated:** April 22, 2026 — Session 40 (#66 closed — ownership transfer shipped; Module 4 unblocked)
 > **Purpose:** Snapshot of current state of codebase, infrastructure, and database. Updated at end of each session. For session narrative and decisions, see `docs/sessions/contextN.md`. For conventions and patterns, see `CLAUDE.md`.
 
 ---
@@ -72,7 +72,7 @@
 
 ### Migrations
 
-## All 26 migration files live in `supabase/migrations/` with 14-digit timestamp format. `npx supabase migration list` shows all 26 in sync (Local + Remote). Migration 006 was never created — intentional gap. Source of truth is the file list on disk.
+## All 27 migration files live in `supabase/migrations/` with 14-digit timestamp format. `npx supabase migration list` shows all 27 in sync (Local + Remote). Migration 006 was never created — intentional gap. Source of truth is the file list on disk.
 
 ## Codebase State
 
@@ -87,15 +87,16 @@ app/dashboard/billing/add-ons-section.tsx  ai_tagging_enabled toggle (Session 32
 app/dashboard/settings/tags/             Per-company tag catalog UI (Session 30)
 app/dashboard/team/team-page-client.tsx  Row-click to detail page (Session 39). ⚠️ Local ROLE_LABELS (#18)
 app/dashboard/team/invite/invite-form.tsx  ⚠️ Local INVITABLE_ROLES (#19)
-app/dashboard/team/[id]/page.tsx         Server-rendered edit page with auth gates (Session 39)
+app/dashboard/team/[id]/page.tsx         Server-rendered edit page; Owner-self renders TransferForm (Session 40), Admin-self shows amber notice
 app/dashboard/team/[id]/edit-form.tsx    Client form — edit/delete/reset for team member (Session 39)
-app/dashboard/team/[id]/actions.ts       Server actions for #14–#17 (Session 37)
+app/dashboard/team/[id]/transfer-form.tsx  Client form — ownership transfer for Owner-self only (Session 40, #66)
+app/dashboard/team/[id]/actions.ts       Server actions for #14–#17 + transferOwnershipAction (Session 40)
 app/dashboard/projects/[id]/files/       Module 3 file UI: list, upload, markup, trash, ai-tag editor
 app/dashboard/projects/[id]/files/markup-test/page.tsx  ⚠️ Throwaway (#50)
 
 lib/services/ai-tagging.ts               Reference impl for all future AI features (Session 31)
 lib/services/add-ons.ts / -client.ts     Add-on flag reads/writes — separate from company.ts (Session 32)
-lib/services/files.ts / -client.ts       Canonical trash-bin pattern reference
+lib/services/team.ts                     Team detail + getCompanyAdmins() for ownership transfer (Session 40, #66)
 lib/supabase-admin.ts                    Shared getSupabaseAdmin(), used by Stripe webhook + team actions (Session 37, #68)
 lib/openai.ts                            Lazy getOpenAI()
 lib/stripe.ts                            Lazy getStripe()

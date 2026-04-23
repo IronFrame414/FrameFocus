@@ -1,17 +1,13 @@
 # TECH_DEBT.md — FrameFocus
 
-> **Last updated:** April 20, 2026 — Session 34 (split from STATE.md)
+> **Last updated:** April 22, 2026 — Session 40 (#66 closed, ownership transfer shipped)
 > **Purpose:** Tracks all known tech debt — open and closed. Lives in the repo, not in project knowledge. Read on demand when working on items, planning a polish session, or auditing.
 
 ---
 
 ## Polish Session Plan — Before Module 4 Build
 
-Locked Session 34. Items must be addressed in this order due to dependencies. Multiple sessions expected; scope each at session start.
-
-5. **#66** — ownership transfer UI. Builds on the team detail page (#14, closed Session 39) and the constraint (#65, closed Session 35).
-
-Module 4 build does not begin until #66 is closed.
+Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
 ---
 
@@ -99,11 +95,15 @@ Module 4 build does not begin until #66 is closed.
 - **#61** Platform admin dashboard not built. Foundation exists: `platform_admins` table (Migration 001) and `is_platform_admin()` helper. Build when 2nd paying customer signs up. Estimated 2–3 sessions for useful set of views (companies list, AI cost per company, subscription/MRR overview, support tools). Defer.
 - **#62** AI tag suggestion review (post-launch). When GPT-4o suggests a tag NOT in a company's active list, the API route discards it. Capture these discards instead — they are signals that the company's tag list has gaps. Add an `ai_tag_suggestions` table (company_id, suggested_tag, occurrence_count, status: pending/added/dismissed, first_seen_at, last_seen_at) and a platform-admin view to review aggregated suggestions across all companies. Strong product signal for default tag list improvements. Address after public launch — depends on platform admin (#61) being built first.
 - **#64** GPT-4o pricing constants (`INPUT_COST_PER_M`, `OUTPUT_COST_PER_M`) are hard-coded in `apps/web/lib/services/ai-tagging.ts`. Values correct as of Session 31 per OpenAI published pricing. Needs re-verification before public launch and on any OpenAI price change. Consider moving to env vars or a pricing config file before multiple AI features ship (Module 4, 6, 9, 10, 11 will all call OpenAI). Tracked so this isn't forgotten at launch.
-- **#66** Ownership transfer unbuilt. Verified Session 34 (F15) — no matches for `transferOwnership` / `transfer ownership` / `transfer_ownership` anywhere in `apps/web`, `packages/`, or `supabase/`. CLAUDE.md "The Admin Role Principle" lists ownership transfer as Owner-only action #3, but no migration, service, UI, or RLS policy exists. Cluster with team detail page work (#14–#17) — likely lives at `/dashboard/team/[id]` as an Owner-only action. Depends on #65 being fixed first (transfer to a new owner means the old owner stops being one — needs DB-level uniqueness to keep the invariant). Fix order: #65 first, then #66, then any UI work.(#65 closed Session 35.)
 - **#67** `packages/shared/utils/index.ts` contains four functions (`hasPermission`, `formatName`, `generateSlug`, `formatCurrency`) with zero callers anywhere in the codebase. Discovered Session 35 during #12 cleanup. Either delete the file (and remove `export * from './utils'` from `packages/shared/index.ts`) or wire the functions into existing call sites where they would replace inline duplicates. Address during pre-beta cleanup.
 - **#68** `getSupabaseAdmin()` was duplicated inline in the Stripe webhook before Session 37. Now extracted to `apps/web/lib/supabase-admin.ts`. CLAUDE.md mentions the lazy-init pattern but does not point to the file path. Add a Service Layer Pattern note in CLAUDE.md pointing to `@/lib/supabase-admin` so future AI features (Module 4 estimating, Module 9 summaries, Module 10 NL queries, Module 11 marketing) don't re-create their own copies. Pre-Module 4.
 - **#69** `softDeleteTeamMember` uses `ban_duration: '876000h'` (~100 years) as a stand-in for permanent ban. Supabase has no true permanent-ban API. Verify this duration is honored on auth attempts during Session 38 smoke test. If it's silently ignored or capped, switch to deleting the auth user (with the trade-off documented in Session 37 — restore would require re-invite). Verify and decide before public launch.
 - **#70** Sign-in page "Forgot password" flow is broken. Email sends successfully, but the link in the email doesn't allow the user to set a new password. Discovered Session 39 during team member smoke testing (reset triggered from sign-in page, not the new Admin reset button — that path works). Unrelated to Session 39 work; pre-existing. Investigate the `/reset-password` page handler and the email link's token exchange. Likely related to the redirect URL or the Supabase `onAuthStateChange` handling. Pre-beta.
+- **#71** Payment method handover not enforced after ownership transfer. Old Owner's card stays attached to the Stripe Customer until new Owner updates it via Customer Portal — could result in old Owner being charged at next billing cycle. Pre-beta: add a banner on the new Owner's billing page ("Update payment method to complete transfer") and consider a force-add-card-before-transfer flow as v2. Discovered Session 40 during #66 build.
+- **#72** No email notification to new Owner confirming ownership transfer. Pre-beta polish. Discovered Session 40.
+- **#73** No append-only audit log for ownership transfer events. Add `ownership_transfers` table (company_id, from_user_id, to_user_id, performed_at) following the append-only convention. Pre-beta — needed for any company doing real account handoffs. Discovered Session 40.
+- **#74** Stripe Customer email drift on Owner profile edit. If the Owner edits their own profile email at any point, the Stripe Customer's email is not updated to match. Pre-existing issue, surfaced during #66 build. Pre-beta. Discovered Session 40.
+- **#75** Reusing an email alias for invitations fails silently. When a user is soft-deleted, the underlying `auth.users` row remains (correct for audit), but re-inviting the same email collides with the lingering auth user. Currently the invite flow does not surface an error to the user — the new invite has no visible effect. Either detect collision and surface a clear error ("This email was previously used; choose a different alias"), or design a path to re-invite a soft-deleted email. Discovered Session 40 during #66 testing. Pre-beta.
 
 ---
 
@@ -123,8 +123,7 @@ Module 4 build does not begin until #66 is closed.
 - **#15** Team member delete UI — closed Session 39 (commit `1ec46b5`). Two-step inline confirmation (click Delete → "Confirm delete"/Cancel). Soft delete via `is_deleted=true` + auth ban. Verified: deleted user cannot log in; team list count drops.
 - **#16** Team member password reset UI — closed Session 39 (commit `1ec46b5`). "Send password reset email" button on edit page triggers `auth.resetPasswordForEmail`. Server action ran clean; email delivery blocked by Supabase rate limit during smoke test — infrastructure, not code. Separately discovered pre-existing bug in the sign-in page's Forgot Password link handler (see #70).
 - **#17** Team member notes field — closed Session 39 (commit `1ec46b5`). Textarea in edit form, writes to `profiles.notes` column added in Migration 026.
-
----
+- **#66** Ownership transfer — closed Session 40 (commit pending). Migration 027 + transfer-form on Owner-self team detail page. Spawned #71–#75.---
 
 ## Process notes
 
