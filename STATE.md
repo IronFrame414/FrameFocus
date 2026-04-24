@@ -1,25 +1,25 @@
 # STATE.md — FrameFocus Current State
 
-> **Last updated:** April 22, 2026 — Session 40 (#66 closed — ownership transfer shipped; Module 4 unblocked)
+> **Last updated:** April 24, 2026 — Session 41 (Module 4 architecture refined; v1 scope locked; design saved to docs/module4-architecture.md)
 > **Purpose:** Snapshot of current state of codebase, infrastructure, and database. Updated at end of each session. For session narrative and decisions, see `docs/sessions/contextN.md`. For conventions and patterns, see `CLAUDE.md`.
 
 ---
 
 ## Build Status
 
-| Module                        | Status         | Notes                                                                                                                                               |
-| ----------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1. Settings, Admin & Billing  | ✅ COMPLETE    | Auth, roles, Stripe billing, company settings, invites, team management                                                                             |
-| 2. Contacts & CRM             | ✅ COMPLETE    | Two-table design (contacts + subcontractors), full CRUD, filters, ratings, markup                                                                   |
-| 3. Document & File Management | ✅ COMPLETE    | Database, service layer, file list UI, upload, download, soft-delete, markup, favorites, trash, AI auto-tagging (Sessions 11–32).                   |
-| 4. Sales & Estimating         | ⚪ NOT STARTED |                                                                                                                                                     |
-| 5. Project Management         | ⚪ NOT STARTED |                                                                                                                                                     |
-| 6. Team & Field Operations    | ⚪ NOT STARTED | Scope expanded Session 6. Time categorization, break tracking, OT, mileage, safety logs, incident workflow, huddles, delivery tracking              |
-| 7. Job Finances               | ⚪ NOT STARTED |                                                                                                                                                     |
-| 8. Inventory & Tools          | ⚪ NOT STARTED | Added Session 6. Inventory catalog + tool tracking with location, check-in/out log, bulk assignment                                                 |
-| 9. Customer Experience Portal | ⚪ NOT STARTED | **BLOCKED by Pre-Module 9 Decision Gate.** Scope expanded Session 6: material selections, decision log, photo favorites, pre-construction checklist |
-| 10. Reporting & Analytics     | ⚪ NOT STARTED |                                                                                                                                                     |
-| 11. AI Marketing & Social     | ⚪ NOT STARTED |                                                                                                                                                     |
+| Module                        | Status         | Notes                                                                                                                                                                                                                                                                                               |
+| ----------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
+| 1. Settings, Admin & Billing  | ✅ COMPLETE    | Auth, roles, Stripe billing, company settings, invites, team management                                                                                                                                                                                                                             |
+| 2. Contacts & CRM             | ✅ COMPLETE    | Two-table design (contacts + subcontractors), full CRUD, filters, ratings, markup                                                                                                                                                                                                                   |
+| 3. Document & File Management | ✅ COMPLETE    | Database, service layer, file list UI, upload, download, soft-delete, markup, favorites, trash, AI auto-tagging (Sessions 11–32).                                                                                                                                                                   |
+| 4. Sales & Estimating         | 📋 DESIGNED    | Architecture in `docs/module4-architecture.md` (Sessions 33 + 41). v1 scope: 3-way markups, discounts, allowances, sub-bid tracking, file attachments, structured terms, configurable estimate-number prefix. AI assistant (4I) deferred to post-launch but design-ready. ~18–22 sessions to build. |     |
+| 5. Project Management         | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                                                     |
+| 6. Team & Field Operations    | ⚪ NOT STARTED | Scope expanded Session 6. Time categorization, break tracking, OT, mileage, safety logs, incident workflow, huddles, delivery tracking                                                                                                                                                              |
+| 7. Job Finances               | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                                                     |
+| 8. Inventory & Tools          | ⚪ NOT STARTED | Added Session 6. Inventory catalog + tool tracking with location, check-in/out log, bulk assignment                                                                                                                                                                                                 |
+| 9. Customer Experience Portal | ⚪ NOT STARTED | **BLOCKED by Pre-Module 9 Decision Gate.** Scope expanded Session 6: material selections, decision log, photo favorites, pre-construction checklist                                                                                                                                                 |
+| 10. Reporting & Analytics     | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                                                     |
+| 11. AI Marketing & Social     | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                                                     |
 
 ---
 
@@ -203,6 +203,8 @@ DELETE FROM auth.users;
 
 1. **Selection deadline enforcement (Module 9)** — Soft reminder only or auto-block project progress? Decide before Module 9.
 2. **Decision log edit history policy (Module 9)** — Append-only (legally defensible) or editable? Leaning append-only. Decide before Module 9.
+3. **E-signature provider (Module 4F)** — DocuSign vs. BoldSign. Decide at 4F build based on cost and feature needs.
+4. **Catalog price refresh on template clone (Module 4K)** — When "New estimate from existing" copies materials, snapshot from source estimate or refresh from current cost catalog? Decide at 4K build.
 
 ---
 
@@ -210,9 +212,14 @@ DELETE FROM auth.users;
 
 These are design questions surfaced during planning that need answers before the relevant module's design phase, not its build phase. Tracked here so they don't get forgotten and don't drift into tech debt.
 
-### Module 3 (ongoing)
+### ### Module 3 (ongoing)
 
 - **Photo storage at scale.** 200 GB Business cap may not be enough for high-volume commercial contractors. Decide before pricing changes or first overage complaint.
+
+### Module 4
+
+- **Per-line discount visibility on proposal.** Show original price next to discounted, or just show net? Pure render decision, decide at 4E build.
+- **Allowance UX in builder.** When a material row's unit is set to `'allowance'`, what happens to the quantity field — hide it, grey it out, or leave it editable but ignored? Decide at 4D build.
 
 ### Module 6
 
@@ -246,12 +253,14 @@ These are design questions surfaced during planning that need answers before the
 
 ---
 
-## Module 5 follow-up (must not be forgotten)
+## ## Module 5 follow-up (must not be forgotten)
 
 When Module 5 builds the `projects` table:
 
 1. Add FK: `ALTER TABLE files ADD CONSTRAINT files_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id);`
-2. `projects` table must include `contact_id UUID NOT NULL REFERENCES contacts(id)` — one client, many projects, each with its own address.
+2. Add FK: `ALTER TABLE estimates ADD CONSTRAINT estimates_project_id_fkey FOREIGN KEY (project_id) REFERENCES projects(id);` (for accepted-estimate-to-project conversion).
+3. `projects` table must include `contact_id UUID NOT NULL REFERENCES contacts(id)` — one client, many projects, each with its own address.
+4. Build the estimate-to-project conversion logic in Module 5 (Module 4 provides the data and FK, Module 5 owns the conversion).
 
 ## Module 9 follow-up (must not be forgotten)
 

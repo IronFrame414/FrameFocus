@@ -1,6 +1,6 @@
 # CLAUDE.md — FrameFocus Development Guide
 
-> **Last updated:** April 20, 2026 (Session 34 — doc cleanup)
+> **Last updated:** April 24, 2026 (Session 41 — Module 4 architecture reference added)
 > **Purpose:** This file is the single source of truth for all development conversations. Read this before every session.
 
 ---
@@ -14,8 +14,7 @@
 **Live URL:** https://frame-focus-eight.vercel.app
 **Status:** Modules 1, 2, and 3 complete. Platform has 11 modules total. See STATE.md for live build status.
 
-> **See also:** [`CLAUDE_MODULES.md`](CLAUDE_MODULES.md) — Detailed module designs (Modules 3, 6, 8, 9), QuickBooks integration strategy, and change order workflow.
-
+> **See also:** [`CLAUDE_MODULES.md`](CLAUDE_MODULES.md) — Detailed module designs (Modules 3, 6, 8, 9), QuickBooks integration strategy, and change order workflow. [`docs/module4-architecture.md`](docs/module4-architecture.md) — Module 4 (Sales & Estimating) architecture (separate file due to size).
 ---
 
 ## Technology Stack
