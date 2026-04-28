@@ -326,6 +326,44 @@ ALTER TABLE {table_name} ALTER COLUMN updated_by SET DEFAULT auth.uid();
 
 Without these, the client INSERT sends `company_id = NULL`, RLS checks `NULL = get_my_company_id()` → false, and the insert fails with a 403 that doesn't obviously point to the missing default. Migration 022 (`tag_options`) was a fix for this exact miss on first attempt; Migration 018 (`files`) caught it during build. Get the defaults in on the first migration that creates the table.
 
+**Standard triggers on every per-tenant table.** Every per-tenant table needs two BEFORE UPDATE triggers so `updated_at` and `updated_by` advance correctly on every UPDATE. Both must be installed in the same migration that creates the table, not added later.
+
+```sql
+-- 1. updated_at — reuses the shared function from Migration 001. Do NOT redefine it.
+CREATE TRIGGER {table_name}_updated_at
+  BEFORE UPDATE ON {table_name}
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+-- 2. updated_by — per-table function, created in the same migration as the table.
+CREATE OR REPLACE FUNCTION set_{table_name}_updated_by()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_by = auth.uid();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER {table_name}_set_updated_by
+  BEFORE UPDATE ON {table_name}
+  FOR EACH ROW EXECUTE FUNCTION set_{table_name}_updated_by();
+```
+
+**Naming convention:** trigger names are `{table_name}_updated_at` and `{table_name}_set_updated_by`. The per-table function is `set_{table_name}_updated_by()`. Confirmed across `tag_options`, `companies`, `profiles`, `files`, `contacts`, `subcontractors`, `contact_addresses`.
+
+**Service-layer contract:** because these triggers exist, service code MUST NOT set `updated_at` or `updated_by` explicitly in update payloads. Mirror the comment style used in `contacts-client.ts`:
+
+```typescript
+// BEFORE UPDATE trigger `{table}_set_updated_by` handles updated_by.
+// updated_at is handled by the existing updated_at trigger.
+const { error } = await supabase.from('{table}').update(updates).eq('id', id);
+```
+
+Without the triggers, `updated_at` and `updated_by` never advance after the original INSERT — a silent data-quality bug that won't surface until an audit needs the timestamps.
+
+**Reference implementations:** Migration 018 (`files`), Migration 023 (`tag_options`), Migration 028 (`contact_addresses`).
+
+**Known holdover:** `companies` table is missing `companies_set_updated_by` and `company-client.ts` sets `updated_at` explicitly. Pre-trigger pattern. Tracked in TECH_DEBT.md — do not copy this file's pattern when building new tables.
+
 **Append-only audit log exception.** A narrow category of tables are pure append-only logs — rows are written once and never updated or deleted. These tables intentionally OMIT the following standard columns: `updated_at`, `created_by`, `updated_by`, `is_deleted`, `deleted_at`. They also have NO UPDATE or DELETE RLS policies — only SELECT (scoped appropriately) and INSERT.
 
 Columns present on an append-only log: `id`, `company_id` (where per-tenant), `created_at`, plus whatever domain-specific fields the log captures.
