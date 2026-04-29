@@ -227,57 +227,15 @@ Every session should follow this pattern to avoid drift between context and real
 3. Commit and push everything, including documentation files
 4. Verify next session can be resumed by reading only `STATE.md` + the latest context file
 
-**Chat vs. Claude Code:**
-
-- **Claude Chat:** Strategy, architecture decisions, product planning, document generation (roadmaps, context files, CLAUDE.md updates), product research with web search, explaining concepts
-- **Claude Code:** Multi-file edits, investigation (`grep`, file reads), refactors across the codebase, running migrations and verifying results, debugging builds, anything that involves touching code in the repo
-- **Hybrid:** Plan in Chat → execute in Claude Code → review in Chat → close session in Chat
-
 ---
 
-## Platform Modules (11 total)
+## Platform Modules
 
-Build order follows strict dependency chain. Each module depends on the ones above it. **Module 8 (Inventory & Tools) was added during Session 6 planning, which bumped the previous Modules 8, 9, 10 to 9, 10, 11.**
+11 modules total, built in a strict dependency chain. **Module 8 (Inventory & Tools) was inserted in Session 6 planning, bumping the previous 8/9/10 to 9/10/11.**
 
-### Phase 1: Foundation Layer (Months 1–3)
+Status → [STATE.md](STATE.md). Module list and details → [CLAUDE_MODULES.md](CLAUDE_MODULES.md), [docs/module4-architecture.md](docs/module4-architecture.md), [docs/roadmap/FrameFocus_Quick_Reference.docx](docs/roadmap/FrameFocus_Quick_Reference.docx).
 
-| #   | Module                     | Status      | Description                                                                                                                                                                                                                                                     |
-| --- | -------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Settings, Admin & Billing  | ✅ COMPLETE | Multi-tenant auth, roles/permissions (owner + admin), Stripe subscriptions (3 tiers), company settings with logo upload, trial system with abuse prevention, invite flow, team management                                                                       |
-| 2   | Contacts & CRM             | ✅ COMPLETE | Two-table design: `contacts` (leads & clients) + `subcontractors` (subs & vendors). Full CRUD with search, filtering, star ratings, preferred flags, EIN, default hourly rate, standard markup %, insurance tracking                                            |
-| 3   | Document & File Management | ✅ COMPLETE | Sessions 11–32. Files table + RLS, project-files storage bucket, upload/download/soft-delete, photo markup (shared SVG component reused in Module 6), AI auto-tagging via GPT-4o vision (paid add-on), favorites, trash. See STATE.md for sub-module breakdown. |
-
-### Phase 2: Core Business Modules (Months 3–8)
-
-| #   | Module                      | Status      | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| --- | --------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 4   | Sales & Estimating          | NOT STARTED | Estimate builder, cost catalog, AI line-item suggestions, proposals, e-signatures, pipeline. When a vendor is selected for a material line item, auto-populate markup from their default_markup_percent (override per line item). Estimates link to contacts (client/lead). Sub bids link to subcontractors.                                                                                                                                                                                                                                                                                                                                                                              |
-| 5   | Project Management          | NOT STARTED | Phases, milestones, Kanban tasks, scheduling, templates, change order initiation                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| 6   | Team & Field Operations     | NOT STARTED | Mobile-first: clock in/out with GPS, **time categorization** (regular/OT/travel/drive/shop), **break tracking**, **overtime calculation**, **mileage tracking**, **hours allocated to tasks/change orders/T&M jobs**, daily logs with **safety hazards section** (checkbox + text), **safety incident reporting** (separate formal workflow with PDF), photo capture with markup (shared component from Module 3), punch lists, **daily huddle/crew briefing** (optional), **material delivery tracking** (checked in by anyone assigned to project, contents via receipt photo or typed list), offline mode, voice-to-text daily logs. Approved timesheets sync to QB Time/Payroll.      |
-| 7   | Job Finances                | NOT STARTED | Budget vs. actual, cost codes, change orders, invoicing (including T&M invoicing pulling hours from Module 6 and materials from Module 8), sub pay apps, retainage. Track actual vendor cost vs. marked-up client price for profit analysis. Sub pay apps reference subcontractors table (EIN for 1099s, default_hourly_rate for labor estimates). QB sync for invoices, bills, and payments.                                                                                                                                                                                                                                                                                             |
-| 8   | **Inventory & Tools (NEW)** | NOT STARTED | **Inventory:** categorized items (lumber, fasteners, drywall, electrical, plumbing, finishes, consumables, other) with unit of measure, default vendor, photo, receipt attachment, flag-for-return with notes. **Tools:** categorized durables (power tools, hand tools, ladders, safety equipment, measurement, heavy equipment, other) with brand, model, serial, photo, notes for specs (blade size, voltage, capacity). Tool location required (shop/job site/truck/custom). Tool-to-person assignment optional. Check-in/check-out log tracks every location or assignment change. Bulk assignment of multiple tools at once. All roles (Owner through Crew) can check tools in/out. |
-
-### Phase 3: Differentiator Layer (Months 8–10)
-
-| #   | Module                     | Status      | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| --- | -------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 9   | Customer Experience Portal | NOT STARTED | Client login, project timeline, AI weekly summaries (owner-approved), **material selections workflow** (separate pages by category, grouped by room, finalized list auto-logs to decision log), **decision log** (timestamped record of every significant client decision, exportable as PDF), **photo gallery with client favorites** (clients heart photos, favorites feed Module 11 marketing), **pre-construction checklist** (permits, insurance, deposit, HOA, selections, start date), selection deadlines with reminders, change order e-signature, invoice viewing + payment via Stripe Connect, PM messaging thread |
-| 10  | Reporting & Analytics      | NOT STARTED | Profitability, estimating accuracy, pipeline metrics, AI natural language queries, anomaly detection, custom dashboards. Vendor cost vs. markup analysis for profit tracking. (Crew productivity, estimate accuracy by type, sub scorecards, cash flow forecast all deferred to post-launch.)                                                                                                                                                                                                                                                                                                                                 |
-
-### Phase 4: Premium Add-On (Months 10–12)
-
-| #                     | Module                | Status      | Description                                                                                                                                                 |
-| --------------------- | --------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 11                    | AI Marketing & Social | NOT STARTED | Auto social posts from projects (pulling from client-favorited photos in Module 9), Facebook/Google Business integration, review requests, content calendar |
-| AI Photo Auto-Tagging | —                     | —           | Add-on (pricing TBD)                                                                                                                                        |
-
-### Cross-Cutting Systems (built incrementally)
-
-- **AI Layer** — Woven into modules 3, 4, 5, 6 (post-launch), 7, 9, 10, 11. Uses OpenAI GPT-4o (text + vision) + pgvector. Core principle: AI drafts, humans approve. First AI feature: photo auto-tagging in Module 3. Exception to the approval rule: photo auto-tags apply instantly since they are internal organization only.
-- **Workflow Engine** — Event-driven automation via Supabase Webhooks + Edge Functions. Built during Phase 2, extended in Phase 3.
-- **QuickBooks Integration** — Cross-cutting sync layer built during Modules 6 and 7. See dedicated section below.
-
----
+**Cross-cutting:** AI Layer (see AI Integration Rules below), Workflow Engine (Supabase Webhooks + Edge Functions, Phase 2+), QuickBooks Integration (Modules 6 & 7 — see CLAUDE_MODULES.md).
 
 ## Database Conventions
 
@@ -500,23 +458,6 @@ Each subscribing company is an isolated tenant. Within that company, there are 6
 7. **Approving marketing content for publishing** — AI-generated social posts, review request emails, and any marketing content going out under the company name must be Owner-approved before publishing. Admin cannot approve these.
 8. **Deleting the company account** — only Owner can close the company account (this is a billing-adjacent action).
 
-**What Admin CAN do (non-exhaustive — this is the default, not the list):**
-
-- Full access to all modules (1 through 11) except the Billing page
-- Invite and remove users at all levels EXCEPT Admin (cannot invite at Admin level)
-- Edit company settings (name, logo, address, trade type, etc.)
-- Create, edit, and approve estimates
-- Create and edit projects, tasks, phases, milestones
-- Create change orders (but Owner gives final approval)
-- Approve timesheets (Foreman and below)
-- Review and approve sub pay applications (but Owner releases final payment)
-- Manage contacts, subcontractors, vendors, inventory, and tools
-- Upload, edit, and delete files
-- View all project finances, budgets, and reports
-- File and manage safety incident reports
-- Message clients through the portal (Admin, PM, and Owner all can)
-- Approve AI estimate suggestions, AI punch list proposals, AI anomaly flags, AI-drafted daily log summaries (everything except client-facing AI and marketing AI)
-
 ### Role Permissions Quick Reference (By Action)
 
 For any action not listed in the owner-only section above, assume Admin has access. When building a new feature, if a permission decision needs to be made, default to "Owner + Admin can do it" unless there is a specific reason (financial sign-off, billing, or client-facing owner-approval) to restrict it to Owner only.
@@ -544,21 +485,9 @@ For any action not listed in the owner-only section above, assume Admin has acce
 
 ## Built-In Workflow Automations
 
-**Note on Admin role in workflows:** Admin has the same access as Owner throughout these workflows EXCEPT for (a) final payment release, (b) owner-only approval of client-facing AI content, and (c) billing/subscription actions. Admin receives all notifications that Owner receives and can take most actions on Owner's behalf for operational matters.
+See [docs/roadmap/FrameFocus_Quick_Reference.docx](docs/roadmap/FrameFocus_Quick_Reference.docx) → "Automated Workflows" for the full list.
 
-1. **Lien Release on Sub Completion** — Sub marks work complete → system generates lien release → e-signature request → signed release unlocks payment approval → payment recorded → QB sync
-2. **Change Order Approval Chain** — PM or Admin creates CO → Owner (and Admin) notified → Owner approves (owner-only final approval) → client signs via portal → budget/schedule updated → auto-log to Decision Log → QB sync
-3. **Milestone Client Notification** — Milestone complete → portal updated → client notified → invoice generated if billing milestone → Owner, Admin, and PM notified
-4. **Estimate Follow-Up** — No response in 3 days → Owner and Admin reminder → optional auto follow-up to client
-5. **Insurance Expiration Alert** — Sub cert within 30 days of expiry → Owner, Admin, and assigned PM notified → auto-request to sub → block from new work if expired
-6. **Project Completion Closeout** — All tasks/punch done → final invoice with retainage → satisfaction survey → portfolio prompt → archive. Owner, Admin, and PM involved in closeout steps.
-7. **Daily Log Auto-Report** (NEW) — End of day → compile log entries, photos, time, safety hazards → PDF → file to Module 3 → notify PM and Admin
-8. **Safety Incident Report** (NEW) — Incident reported → PDF generated → filed to Module 3 → **Owner, Admin, and assigned PM notified immediately** → company incident log updated
-9. **New Client Welcome Package** (NEW) — Lead → Client conversion → portal account created (Business tier) → welcome email → signed proposal auto-filed → PM and Admin notified → QB Customer sync
-10. **Sub Payment Processing** (NEW) — Pay app submitted → PM or Admin reviews → PM or Admin approves pay app → **Owner releases payment (owner-only final approval)** → payment recorded → QB sync → retainage tracked
-11. **Material Delivery Arrival** (NEW) — Scheduled delivery arrives → any project member checks in via mobile → receipt photo or typed list → discrepancies flagged → flow to Module 8 inventory returns → PM and Admin notified of discrepancies
-12. **Material Selection Finalization** (NEW) — Client finalizes a selection category → auto-log to Decision Log → contributes to approved material list → PM and Admin notified
-
+**Admin role in workflows:** Admin matches Owner throughout EXCEPT (a) final payment release, (b) owner-only approval of client-facing AI content, (c) billing/subscription actions. Admin receives all Owner notifications and can act on Owner's behalf for operational matters.
 ---
 
 ## AI Integration Rules
@@ -585,9 +514,7 @@ Module 3H established the patterns every future AI feature must follow. When bui
 6. **No retry logic in v1.** A retry can double-charge for partial failures (e.g., the API returned 5xx but the call did complete server-side). Add a manual "Retag" button or a dedicated background queue if production needs retries — never silent inline retries inside the request path.
 
 **Testing AI features.** GPT-4o is non-deterministic even at temperature 0.2 — two back-to-back calls on the same input can return different outputs (Session 31 saw 3 vs 4 tags on the same image, both correct). Tests cannot assert exact LLM output. Tests can assert: response is well-formed, validation filter discarded unknown values, output count is within configured cap, cost row was inserted.
-
 ---
-
 ## Instruction Preferences
 
 When generating code, migrations, or instructions for Josh:
@@ -599,11 +526,8 @@ When generating code, migrations, or instructions for Josh:
 - **Paste-ready code.** Code blocks should be complete and copy-pasteable, not fragments requiring assembly.
 - **Browser-based workflow.** All instructions assume GitHub Codespaces. Never reference local terminal, VS Code desktop, or local file system.
 - **Avoid shell heredocs for any multi-line file content.** Known failure cases: JSX files (heredocs eat `<a` tags and cause build failures) and SQL migration files (a multi-line SQL heredoc was silently mangled on a migration in Session 12). Use Node.js fs.writeFileSync() or create files directly in the Codespace editor instead.
-
 ---
-
 ## Environment Variables (apps/web/.env.local and Vercel)
-
 ````
 NEXT_PUBLIC_SUPABASE_URL=https://jwkcknyuyvcwcdeskrmz.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=(anon key)
