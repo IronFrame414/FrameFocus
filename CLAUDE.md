@@ -142,90 +142,22 @@ SQL functions with `SECURITY DEFINER` reliably bypass RLS in this context. See `
 
 ## Generated Types Workflow
 
-**Single source of truth:** `packages/shared/types/database.ts` is auto-generated from the live Supabase schema. All service files import from this file — never hand-write database type shapes.
-
-**Regenerate after every migration that adds, removes, or renames a column or table:**
+`packages/shared/types/database.ts` is auto-generated from the live Supabase schema. All service files import from this — never hand-write database type shapes. Regenerate after every migration that adds, removes, or renames a column or table:
 
 ```bash
-npm run db:types
+npm run db:types && npm run type-check
 ```
 
-Then run `npm run type-check` to surface any callers that need updating. Commit the updated `database.ts` alongside the migration.
+Commit the updated `database.ts` alongside the migration.
 
-**Two patterns for deriving service types:**
+**Two patterns for service types:**
 
-**Pattern 1 — `Pick<>` (use when the query selects specific columns):**
+- **`Pick<>`** when the query selects specific columns (`select('col1, col2')`). Reference: `apps/web/lib/services/company.ts`.
+- **`Omit<Row> + intersection`** when `select('*')` AND the table has CHECK-constrained columns (e.g., `status`, `contact_type`, `sub_type`, `role`). The intersection re-narrows the loose `string` from the generator back to a string literal union. References: `apps/web/lib/services/contacts.ts`, `subcontractors.ts`.
 
-```typescript
-// apps/web/lib/services/company.ts
-import type { Database } from '@framefocus/shared/types/database';
+**Rule:** always preserve string literal unions on CHECK-constrained columns. The Supabase generator can't see CHECK constraints; it emits `string`. Restore the union via intersection rather than using the loose `string`.
 
-export type CompanyData = Pick<
-  Database['public']['Tables']['companies']['Row'],
-  'id' | 'name' | 'address_line1' | 'logo_url' // ... only selected columns
->;
-```
-
-Use `Pick<>` when the query uses `select('col1, col2, ...')`. The type is honest about what the query actually returns.
-
-**Pattern 2 — `Omit<Row> + intersection` (use when `select('*')` AND the table has CHECK-constrained columns):**
-
-```typescript
-// apps/web/lib/services/contacts.ts
-import type { Database } from '@framefocus/shared/types/database';
-
-type ContactRow = Database['public']['Tables']['contacts']['Row'];
-export type Contact = Omit<ContactRow, 'contact_type' | 'status'> & {
-  contact_type: 'lead' | 'client';
-  status: 'active' | 'inactive' | 'archived';
-};
-```
-
-Use this when `select('*')` returns the full Row but the generated types use `string` for CHECK-constrained columns. The intersection re-narrows those fields to string literal unions so discriminated checks (`if (contact.contact_type === 'lead')`) remain type-safe.
-
-**Rule: always preserve string literal unions on CHECK-constrained columns.** The Supabase type generator cannot see CHECK constraints, so it emits `string` for columns like `contact_type`, `status`, `sub_type`, `role`. Restore them via intersection rather than using the loose `string`. Current examples: `contact_type`/`status` in `contacts.ts`, `sub_type`/`status` in `subcontractors.ts`.
-
-**Client files re-export, never redefine:**
-
-```typescript
-// apps/web/lib/services/company-client.ts
-import type { CompanyData } from '@/lib/services/company';
-export type { CompanyData }; // re-export preserves public API
-```
-
-Client-side service files (`*-client.ts`) must never redefine types already in the server service file. Use `import type` (not `import`) to avoid pulling server-only code into client bundles.
-
-**Refactored files (Phase 4, Session 9) — use as reference implementations:**
-
-- `Pick<>` pattern: `apps/web/lib/services/company.ts`
-- `Omit + intersection` pattern: `apps/web/lib/services/contacts.ts`, `apps/web/lib/services/subcontractors.ts`
-- `Pick<>` with multiple tables: `apps/web/lib/services/team.ts`
-- Re-export pattern: `apps/web/lib/services/company-client.ts`
-
----
-
-## Session Workflow
-
-Every session should follow this pattern to avoid drift between context and reality:
-
-**At session start:**
-
-1. Run the ground-truth snapshot (`scripts/session-start.sh` once created, or run the commands manually) and paste the output
-2. State a definition-of-done for the session (3–5 specific, verifiable outcomes)
-3. Review `STATE.md` for current status and open items
-
-**During the session:**
-
-- Commit often, even for WIP (prefix messages with `WIP:`)
-- Use `// TODO(session-N):` comments for anything deferred to a later session
-- Don't chase rabbit holes — log new tech debt to `STATE.md` and keep moving
-
-**At session end:**
-
-1. Update `STATE.md` with new state. New tech debt goes in `TECH_DEBT.md` (repo only, not project knowledge). Tech debt numbers are immutable — once assigned, never reused. When closing an item, move it to the `Closed Tech Debt` section in `TECH_DEBT.md` rather than deleting it. See `TECH_DEBT.md` header for full convention.
-2. Create `docs/sessions/contextN.md` with decisions made, outstanding items, and next session plan
-3. Commit and push everything, including documentation files
-4. Verify next session can be resumed by reading only `STATE.md` + the latest context file
+**Client files re-export, never redefine.** In `*-client.ts` files, use `import type { Foo } from '@/lib/services/foo'; export type { Foo };`. Never redefine types already in the server service file. Reference: `apps/web/lib/services/company-client.ts`.
 
 ---
 
@@ -358,18 +290,7 @@ Server and client Supabase clients must be in separate files to avoid Next.js bu
 - `lib/services/{entity}-client.ts` — Client-side functions (imports from `@/lib/supabase-browser`). Used in `'use client'` form components. Contains write operations (create, update, delete).
 - Client components must use `import type { ... }` when importing interfaces from server service files.
 
-**Current service files:**
-
-- `company.ts` / `company-client.ts` — Company settings CRUD + logo upload
-- `contacts.ts` / `contacts-client.ts` — Contacts (leads & clients) CRUD
-- `subcontractors.ts` / `subcontractors-client.ts` — Subs & vendors CRUD
-- `billing.ts` — Subscription data (server only)
-- `seats.ts` — Seat usage counting (server only)
-- `team.ts` — Team member and invitation management
-- `files.ts` / `files-client.ts` — File upload, list, soft-delete, restore, markup, AI tag editing
-- `tag-options.ts` / `tag-options-client.ts` — Per-company tag catalog (Module 3H)
-- `add-ons.ts` / `add-ons-client.ts` — Per-company add-on flags (currently `ai_tagging_enabled`; future flags like `ai_marketing_enabled` slot in here, not in `company.ts`)
-- `ai-tagging.ts` — Server-only. Reference implementation for any future AI feature service. See "AI Integration Rules → Reference Implementation" below.
+**Current service files:** see [STATE.md](STATE.md) → "Codebase State" for the annotated active list. Convention: future add-on flags (e.g., `ai_marketing_enabled`) belong in `add-ons.ts`, not `company.ts`.
 
 **Lazy initialization:** Stripe client (`getStripe()`) and Supabase admin client (`getSupabaseAdmin()`) use lazy init to prevent build-time crashes. All API routes must use these.
 
@@ -487,8 +408,7 @@ For any action not listed in the owner-only section above, assume Admin has acce
 
 See [docs/roadmap/FrameFocus_Quick_Reference.docx](docs/roadmap/FrameFocus_Quick_Reference.docx) → "Automated Workflows" for the full list.
 
-**Admin role in workflows:** Admin matches Owner throughout EXCEPT (a) final payment release, (b) owner-only approval of client-facing AI content, (c) billing/subscription actions. Admin receives all Owner notifications and can act on Owner's behalf for operational matters.
----
+## **Admin role in workflows:** Admin matches Owner throughout EXCEPT (a) final payment release, (b) owner-only approval of client-facing AI content, (c) billing/subscription actions. Admin receives all Owner notifications and can act on Owner's behalf for operational matters.
 
 ## AI Integration Rules
 
@@ -504,17 +424,17 @@ See [docs/roadmap/FrameFocus_Quick_Reference.docx](docs/roadmap/FrameFocus_Quick
 
 **Reference Implementation — `apps/web/lib/services/ai-tagging.ts`**
 
-Module 3H established the patterns every future AI feature must follow. When building Module 4 estimating AI, Module 9 client summaries, Module 10 NL queries, Module 11 marketing, etc., copy this shape:
+Module 3H patterns for every future AI feature (Module 4 estimating, 9 client summaries, 10 NL queries, 11 marketing):
 
-1. **Lazy client via `getOpenAI()`.** Same pattern as `getStripe()` and `getSupabaseAdmin()`. Never instantiate the OpenAI client at module load — it crashes the build if the env var isn't set in the build environment.
-2. **Cost log on every call.** Insert a row into the relevant `ai_*_logs` table for every call: model, input tokens, output tokens, estimated cost, success/failure, error message. Insert even on failure — failed calls still cost money, and the failure pattern is signal.
-3. **Bail-early pre-flight checks, ordered cheapest to most expensive.** Auth → DB fetch of the target row → MIME or input shape check → company add-on flag → active configuration check (e.g., active tags exist) → only then OpenAI call. Each gate that fails before OpenAI saves a real billed call.
-4. **Validate LLM output against a known allowed set; discard anything not on it.** This is the security property. The model can return whatever it wants — your code decides what survives. Session 31 Test 5 proved this prevents prompt-injection-style tag pollution.
-5. **Log `response.model`, not the request constant.** OpenAI returns the resolved version (`gpt-4o-2024-08-06`) which differs from the request alias (`gpt-4o`). Log the resolved one so future cost analysis can attribute to the actual version that ran when prices changed.
-6. **No retry logic in v1.** A retry can double-charge for partial failures (e.g., the API returned 5xx but the call did complete server-side). Add a manual "Retag" button or a dedicated background queue if production needs retries — never silent inline retries inside the request path.
+1. Lazy client via `getOpenAI()` — never instantiate at module load (build crash if env var missing).
+2. Cost log on every call (success and failure) into `ai_*_logs` — failed calls still cost money.
+3. Bail-early pre-flight ordered cheapest → most expensive: auth → DB row → MIME → add-on flag → config → OpenAI.
+4. Validate LLM output against a known allowed set; discard anything else (security property — prevents prompt-injection-style pollution).
+5. Log `response.model` (the resolved version like `gpt-4o-2024-08-06`), not the request alias.
+6. No retry logic in v1 — risk of double-charging. Use a manual retry button or background queue if needed.
 
-**Testing AI features.** GPT-4o is non-deterministic even at temperature 0.2 — two back-to-back calls on the same input can return different outputs (Session 31 saw 3 vs 4 tags on the same image, both correct). Tests cannot assert exact LLM output. Tests can assert: response is well-formed, validation filter discarded unknown values, output count is within configured cap, cost row was inserted.
----
+**Testing AI features.** GPT-4o is non-deterministic even at temperature 0.2. Tests assert structure (well-formed, validation discarded unknowns, output ≤ cap, cost row inserted), not exact content.
+
 ## Instruction Preferences
 
 When generating code, migrations, or instructions for Josh:
@@ -526,42 +446,21 @@ When generating code, migrations, or instructions for Josh:
 - **Paste-ready code.** Code blocks should be complete and copy-pasteable, not fragments requiring assembly.
 - **Browser-based workflow.** All instructions assume GitHub Codespaces. Never reference local terminal, VS Code desktop, or local file system.
 - **Avoid shell heredocs for any multi-line file content.** Known failure cases: JSX files (heredocs eat `<a` tags and cause build failures) and SQL migration files (a multi-line SQL heredoc was silently mangled on a migration in Session 12). Use Node.js fs.writeFileSync() or create files directly in the Codespace editor instead.
----
-## Environment Variables (apps/web/.env.local and Vercel)
-````
-NEXT_PUBLIC_SUPABASE_URL=https://jwkcknyuyvcwcdeskrmz.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=(anon key)
-SUPABASE_SERVICE_ROLE_KEY=(service role key)
-STRIPE_SECRET_KEY=(sk_test_ key)
-NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=(pk_test_ key)
-STRIPE_WEBHOOK_SECRET=(whsec_ key)
-STRIPE_PRICE_STARTER=(price_ id)
-STRIPE_PRICE_PROFESSIONAL=(price_ id)
-STRIPE_PRICE_BUSINESS=(price_ id)
-NEXT_PUBLIC_APP_URL=https://frame-focus-eight.vercel.app
-OPENAI_API_KEY=(sk-... key)```
 
 ---
 
-## Known Accounts
+## Environment & Accounts
 
-- **Supabase:** josh@worthprop.com, FrameFocus project at jwkcknyuyvcwcdeskrmz.supabase.co
-- **GitHub:** IronFrame414, repo: FrameFocus
-- **Vercel:** Connected via GitHub, project: FrameFocus, URL: https://frame-focus-eight.vercel.app
-- **Stripe:** FrameFocus sandbox (test mode), webhook + customer portal configured
-- **Test users:** Josh Bishop (jsbishop14@gmail.com) Owner of Bishop Contracting
-
----
+## See [STATE.md](STATE.md) → "Environment Variables" and "Infrastructure" / "Test Data" sections. Single source of truth lives there.
 
 ## Reference Documents
 
-All reference documents now live in `docs/roadmap/` in the repo (no longer uploaded per session):
+- `docs/roadmap/FrameFocus_Platform_Roadmap.docx` — primary roadmap (all 11 modules, workflows, AI, roles, dependencies)
+- `docs/roadmap/FrameFocus_Quick_Reference.docx` — scannable summary of features and workflows
+- `docs/roadmap/FrameFocus_Platform_Roadmap.xlsx` — planning spreadsheet
+- `docs/sessions/contextN.md` — one per session; read the most recent at session start
+- `STATE.md` — live repo state; tech debt in `TECH_DEBT.md`
 
-- `docs/roadmap/FrameFocus_Platform_Roadmap.docx` — **Primary reference.** 51-page comprehensive roadmap with all 11 modules, workflows, AI features, roles, dependencies, data flow, success metrics, known risks, beta plan placeholder, and post-launch roadmap. 10th grade reading level. Updated during Session 6.
-- `docs/roadmap/FrameFocus_Quick_Reference.docx` — 5-page scannable summary of all features and workflows. For sharing with reviewers or quick refreshers.
-- `docs/roadmap/FrameFocus_Platform_Roadmap.xlsx` — 8-tab planning spreadsheet with integrations, workflows, AI features, roles/permissions, QB sync, and future ideas.
-- `docs/roadmap/FrameFocus_Development_Roadmap.docx` — Original Session 1 business roadmap (superseded by the docs above; kept for historical reference).
-- `docs/sessions/` — One context file per session (contextN.md). Read the most recent one at the start of each new session.
-- This file (`CLAUDE.md`) — Technical development guide (update after every major session).
-- `STATE.md` — Live repo state dashboard. Codebase tree lists only annotated files; tech debt lives in `TECH_DEBT.md`.
-````
+```
+
+```
