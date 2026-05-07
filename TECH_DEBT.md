@@ -104,6 +104,8 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 - **#73** No append-only audit log for ownership transfer events. Add `ownership_transfers` table (company_id, from_user_id, to_user_id, performed_at) following the append-only convention. Pre-beta — needed for any company doing real account handoffs. Discovered Session 40.
 - **#74** Stripe Customer email drift on Owner profile edit. If the Owner edits their own profile email at any point, the Stripe Customer's email is not updated to match. Pre-existing issue, surfaced during #66 build. Pre-beta. Discovered Session 40.
 - **#75** Reusing an email alias for invitations fails silently. When a user is soft-deleted, the underlying `auth.users` row remains (correct for audit), but re-inviting the same email collides with the lingering auth user. Currently the invite flow does not surface an error to the user — the new invite has no visible effect. Either detect collision and surface a clear error ("This email was previously used; choose a different alias"), or design a path to re-invite a soft-deleted email. Discovered Session 40 during #66 testing. Pre-beta.
+- **#76** Validation schema naming inconsistency. companySettingsSchema uses camelCase keys (addressLine1) and requires a manual remap somewhere in the company write path. New contactAddressSchema uses snake_case so the parsed object flows straight into the service layer with no remap. Resolves when companies writes get migrated to the standard pattern (related to the existing companies pre-trigger holdover item — but a separate code path).
+- **#77** Optional-address vs empty-string-vs-NULL. label and address_line2 use .optional() in Zod, which accepts both undefined and "". An empty form field will insert "" into the DB rather than NULL. Consistent with existing schemas, not blocking, flagged for awareness if data quality matters later.
 
 ---
 
@@ -124,6 +126,7 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 - **#16** Team member password reset UI — closed Session 39 (commit `1ec46b5`). "Send password reset email" button on edit page triggers `auth.resetPasswordForEmail`. Server action ran clean; email delivery blocked by Supabase rate limit during smoke test — infrastructure, not code. Separately discovered pre-existing bug in the sign-in page's Forgot Password link handler (see #70).
 - **#17** Team member notes field — closed Session 39 (commit `1ec46b5`). Textarea in edit form, writes to `profiles.notes` column added in Migration 026.
 - **#66** Ownership transfer — closed Session 40 (commit pending). Migration 027 + transfer-form on Owner-self team detail page. Spawned #71–#75.---
+
 
 ## Process notes
 

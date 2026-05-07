@@ -1,6 +1,6 @@
 # STATE.md — FrameFocus Current State
 
-> **Last updated:** May 6, 2026 — Session 43 (CLAUDE.md backfill + tightening: 605→466 lines; 4A Step 2+ unchanged from S42, pending S44)
+> **Last updated:** May 6, 2026 — Session 44 (4A complete: types regen + server/client services + Zod schema + contact form refactor; commit `[Estimating] 4A`)
 > **Purpose:** Snapshot of current state of codebase, infrastructure, and database. Updated at end of each session. For session narrative and decisions, see `docs/sessions/contextN.md`. For conventions and patterns, see `CLAUDE.md`.
 
 ---
@@ -12,7 +12,7 @@
 | 1. Settings, Admin & Billing  | ✅ COMPLETE    | Auth, roles, Stripe billing, company settings, invites, team management                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | 2. Contacts & CRM             | ✅ COMPLETE    | Two-table design (contacts + subcontractors), full CRUD, filters, ratings, markup                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | 3. Document & File Management | ✅ COMPLETE    | Database, service layer, file list UI, upload, download, soft-delete, markup, favorites, trash, AI auto-tagging (Sessions 11–32).                                                                                                                                                                                                                                                                                                                                                                                       |
-| 4. Sales & Estimating         | 🚧 IN PROGRESS | Architecture in `docs/module4-architecture.md` (Sessions 33 + 41). Sub-module 4A in progress (Session 42): Migration 028 applied to remote (`contact_addresses` table + drop `contacts` address columns); service files, Zod schema, form refactor, type regen all pending Session 44. v1 scope: 3-way markups, discounts, allowances, sub-bid tracking, file attachments, structured terms, configurable estimate-number prefix. AI assistant (4I) deferred to post-launch but design-ready. ~18–22 sessions to build. |     |
+| 4. Sales & Estimating | 🚧 IN PROGRESS | Architecture in `docs/module4-architecture.md` (Sessions 33 + 41). **Sub-module 4A complete (Session 44):** `contact_addresses` table + service layer + Zod schema + contact form refactored for two-step submit. v1 scope: 3-way markups, discounts, allowances, sub-bid tracking, file attachments, structured terms, configurable estimate-number prefix. AI assistant (4I) deferred to post-launch but design-ready. ~17–21 sessions remaining. |
 | 5. Project Management         | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | 6. Team & Field Operations    | ⚪ NOT STARTED | Scope expanded Session 6. Time categorization, break tracking, OT, mileage, safety logs, incident workflow, huddles, delivery tracking                                                                                                                                                                                                                                                                                                                                                                                  |
 | 7. Job Finances               | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
@@ -60,8 +60,7 @@
 | `auth.users`        | Multiple  | (Supabase managed) |
 | `tag_options`       | 66+ rows  | ✅ Enabled         |
 | `ai_tag_logs`       | 0         | ✅ Enabled         |
-| `contact_addresses` | 0         | ✅ Enabled         | Per-contact addresses (label, line1/2, city, state, zip, is_primary). Partial unique index ensures one active primary per contact. Standard triggers wired (`contact_addresses_updated_at` reuses shared `update_updated_at()`; `contact_addresses_set_updated_by` is per-table). Migration 028. |
-
+| `contact_addresses` | Test rows | ✅ Enabled | Per-contact addresses (label, line1/2, city, state, zip, is_primary). Partial unique index ensures one active primary per contact. Standard triggers wired. Migration 028. |
 ### Storage Buckets
 
 | Bucket          | Public         | Notes                                                                                                              |
@@ -101,6 +100,9 @@ lib/services/team.ts                     Team detail + getCompanyAdmins() for ow
 lib/supabase-admin.ts                    Shared getSupabaseAdmin(), used by Stripe webhook + team actions (Session 37, #68)
 lib/openai.ts                            Lazy getOpenAI()
 lib/stripe.ts                            Lazy getStripe()
+lib/services/contact-addresses.ts        Server — getPrimaryAddress() with .maybeSingle() (Session 44, 4A)
+lib/services/contact-addresses-client.ts Client — createAddress() + updatePrimaryAddress() upsert (Session 44, 4A)
+app/dashboard/contacts/contact-form.tsx  Refactored for two-step submit (create) / two-call save (edit); accepts existingAddress prop; address optional per Step 14 decision (Session 44, 4A)
 ```
 
 ### packages/shared
@@ -111,6 +113,7 @@ packages/shared/ — annotated files only
 components/MarkupViewer.tsx              Shared SVG viewer, portable to React Native (Session 26)
 types/markup.ts                          Shape schema + createEmptyMarkup (Session 26)
 types/database.ts                        Auto-generated, never hand-edit. Run `npm run db:types` after migrations.
+validation/contact-address.ts            Zod schema — contactAddressSchema, snake_case to match service inputs (Session 44, 4A)
 ```
 
 ### apps/mobile (Expo)
