@@ -3,15 +3,22 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createContact, updateContact } from '@/lib/services/contacts-client';
+import {
+  createAddress,
+  updatePrimaryAddress,
+} from '@/lib/services/contact-addresses-client';
+import type { PrimaryAddress } from '@/lib/services/contact-addresses-client';
 import type { Contact } from '@/lib/services/contacts';
+import { contactAddressSchema } from '@framefocus/shared/validation/contact-address';
 
 import { LEAD_SOURCES, US_STATES } from '@framefocus/shared/constants';
 
 interface ContactFormProps {
   existing?: Contact;
+  existingAddress?: PrimaryAddress | null;
 }
 
-export function ContactForm({ existing }: ContactFormProps) {
+export function ContactForm({ existing, existingAddress }: ContactFormProps) {
   const router = useRouter();
   const isEdit = !!existing;
 
@@ -24,11 +31,12 @@ export function ContactForm({ existing }: ContactFormProps) {
     email: existing?.email || '',
     phone: existing?.phone || '',
     mobile: existing?.mobile || '',
-    address_line1: existing?.address_line1 || '',
-    address_line2: existing?.address_line2 || '',
-    city: existing?.city || '',
-    state: existing?.state || '',
-    zip: existing?.zip || '',
+    label: existingAddress?.label || '',
+    address_line1: existingAddress?.address_line1 || '',
+    address_line2: existingAddress?.address_line2 || '',
+    city: existingAddress?.city || '',
+    state: existingAddress?.state || '',
+    zip: existingAddress?.zip || '',
     source: existing?.source || '',
     notes: existing?.notes || '',
   });
@@ -51,7 +59,7 @@ export function ContactForm({ existing }: ContactFormProps) {
     setSaving(true);
     setError('');
 
-    const payload = {
+    const contactPayload = {
       contact_type: form.contact_type,
       status: form.status,
       first_name: form.first_name.trim(),
@@ -60,30 +68,71 @@ export function ContactForm({ existing }: ContactFormProps) {
       email: form.email.trim() || null,
       phone: form.phone.trim() || null,
       mobile: form.mobile.trim() || null,
-      address_line1: form.address_line1.trim() || null,
-      address_line2: form.address_line2.trim() || null,
-      city: form.city.trim() || null,
-      state: form.state || null,
-      zip: form.zip.trim() || null,
       source: form.source || null,
       notes: form.notes.trim() || null,
     };
 
-    let result;
+    let parsedAddress: ReturnType<typeof contactAddressSchema.safeParse> | null = null;
+    if (form.address_line1.trim()) {
+      parsedAddress = contactAddressSchema.safeParse({
+        label: form.label.trim() || undefined,
+        address_line1: form.address_line1.trim(),
+        address_line2: form.address_line2.trim() || undefined,
+        city: form.city.trim(),
+        state: form.state,
+        zip: form.zip.trim(),
+        is_primary: true,
+      });
+      if (!parsedAddress.success) {
+        setError(parsedAddress.error.issues[0]?.message ?? 'Address is invalid.');
+        setSaving(false);
+        return;
+      }
+    }
+
     if (isEdit && existing) {
-      result = await updateContact(existing.id, payload);
+      const contactResult = await updateContact(existing.id, contactPayload);
+      if (!contactResult.success) {
+        setError(contactResult.error || 'Failed to save contact.');
+        setSaving(false);
+        return;
+      }
+
+      if (parsedAddress?.success) {
+        const { is_primary: _is_primary, ...addressFields } = parsedAddress.data;
+        const addressResult = await updatePrimaryAddress(existing.id, addressFields);
+        if (!addressResult.success) {
+          setError(addressResult.error || 'Failed to save address.');
+          setSaving(false);
+          return;
+        }
+      }
     } else {
-      result = await createContact(payload);
+      const contactResult = await createContact(contactPayload);
+      if (!contactResult.success || !contactResult.id) {
+        setError(contactResult.error || 'Failed to save contact.');
+        setSaving(false);
+        return;
+      }
+
+      if (parsedAddress?.success) {
+        const addressResult = await createAddress({
+          ...parsedAddress.data,
+          contact_id: contactResult.id,
+        });
+        if (!addressResult.success) {
+          setError(
+            `Contact created, but address failed: ${addressResult.error ?? 'unknown error'}. Edit the contact to retry the address.`
+          );
+          setSaving(false);
+          return;
+        }
+      }
     }
 
     setSaving(false);
-
-    if (result.success) {
-      router.push('/dashboard/contacts');
-      router.refresh();
-    } else {
-      setError(result.error || 'Failed to save contact.');
-    }
+    router.push('/dashboard/contacts');
+    router.refresh();
   }
 
   const inputStyle: React.CSSProperties = {
@@ -232,6 +281,16 @@ export function ContactForm({ existing }: ContactFormProps) {
       {/* Address */}
       <div style={sectionStyle}>
         <div style={sectionTitleStyle}>Address</div>
+        <div style={{ marginBottom: '1rem' }}>
+          <label style={labelStyle}>Label</label>
+          <input
+            name="label"
+            value={form.label}
+            onChange={handleChange}
+            style={inputStyle}
+            placeholder="e.g., Main Residence"
+          />
+        </div>
         <div style={{ marginBottom: '1rem' }}>
           <label style={labelStyle}>Address Line 1</label>
           <input

@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getContact } from '@/lib/services/contacts';
+import { getPrimaryAddress } from '@/lib/services/contact-addresses';
 import { ContactForm } from '../../contact-form';
 
 export default async function EditContactPage({ params }: { params: Promise<{ id: string }> }) {
@@ -23,7 +24,10 @@ export default async function EditContactPage({ params }: { params: Promise<{ id
     redirect('/dashboard/contacts');
   }
 
-  const contact = await getContact(id);
+  const [contact, primaryAddress] = await Promise.all([
+    getContact(id),
+    getPrimaryAddress(id),
+  ]);
   if (!contact) redirect('/dashboard/contacts');
 
   return (
@@ -34,7 +38,7 @@ export default async function EditContactPage({ params }: { params: Promise<{ id
       <p style={{ color: '#6b7280', marginBottom: '2rem', fontSize: '0.875rem' }}>
         Update {contact.first_name} {contact.last_name}
       </p>
-      <ContactForm existing={contact} />
+      <ContactForm existing={contact} existingAddress={primaryAddress} />
     </div>
   );
 }

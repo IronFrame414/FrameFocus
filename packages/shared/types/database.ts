@@ -165,11 +165,80 @@ export type Database = {
         }
         Relationships: []
       }
+      contact_addresses: {
+        Row: {
+          address_line1: string
+          address_line2: string | null
+          city: string
+          company_id: string
+          contact_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          is_deleted: boolean | null
+          is_primary: boolean
+          label: string | null
+          state: string
+          updated_at: string | null
+          updated_by: string | null
+          zip: string
+        }
+        Insert: {
+          address_line1: string
+          address_line2?: string | null
+          city: string
+          company_id?: string
+          contact_id: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          is_primary?: boolean
+          label?: string | null
+          state: string
+          updated_at?: string | null
+          updated_by?: string | null
+          zip: string
+        }
+        Update: {
+          address_line1?: string
+          address_line2?: string | null
+          city?: string
+          company_id?: string
+          contact_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          is_primary?: boolean
+          label?: string | null
+          state?: string
+          updated_at?: string | null
+          updated_by?: string | null
+          zip?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contact_addresses_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contact_addresses_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contacts: {
         Row: {
-          address_line1: string | null
-          address_line2: string | null
-          city: string | null
           company_id: string
           company_name: string | null
           contact_type: string
@@ -185,17 +254,12 @@ export type Database = {
           notes: string | null
           phone: string | null
           source: string | null
-          state: string | null
           status: string
           tags: string[] | null
           updated_at: string | null
           updated_by: string | null
-          zip: string | null
         }
         Insert: {
-          address_line1?: string | null
-          address_line2?: string | null
-          city?: string | null
           company_id?: string
           company_name?: string | null
           contact_type?: string
@@ -211,17 +275,12 @@ export type Database = {
           notes?: string | null
           phone?: string | null
           source?: string | null
-          state?: string | null
           status?: string
           tags?: string[] | null
           updated_at?: string | null
           updated_by?: string | null
-          zip?: string | null
         }
         Update: {
-          address_line1?: string | null
-          address_line2?: string | null
-          city?: string | null
           company_id?: string
           company_name?: string | null
           contact_type?: string
@@ -237,12 +296,10 @@ export type Database = {
           notes?: string | null
           phone?: string | null
           source?: string | null
-          state?: string | null
           status?: string
           tags?: string[] | null
           updated_at?: string | null
           updated_by?: string | null
-          zip?: string | null
         }
         Relationships: [
           {
@@ -755,6 +812,10 @@ export type Database = {
           found_role: string
           found_status: string
         }[]
+      }
+      transfer_ownership: {
+        Args: { p_new_owner_id: string }
+        Returns: undefined
       }
     }
     Enums: {
