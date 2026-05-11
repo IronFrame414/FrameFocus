@@ -142,13 +142,13 @@ SQL functions with `SECURITY DEFINER` reliably bypass RLS in this context. See `
 
 ## Generated Types Workflow
 
-`packages/shared/types/database.ts` is auto-generated from the live Supabase schema. All service files import from this — never hand-write database type shapes. Regenerate after every migration that adds, removes, or renames a column or table:
+`packages/shared/types/database.ts` is auto-generated from the live Supabase schema. All service files import from this — never hand-write database type shapes. After every migration that adds, removes, or renames a column or table, run:
 
 ```bash
-npm run db:types && npm run type-check
+npm run db:push
 ```
 
-Commit the updated `database.ts` alongside the migration.
+This chains `supabase db push`, `npm run db:types`, and `npm run type-check`. Commit the updated `database.ts` alongside the migration.
 
 **Two patterns for service types:**
 
