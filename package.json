@@ -12,6 +12,7 @@
     "lint": "turbo run lint",
     "type-check": "turbo run type-check",
     "clean": "turbo run clean",
+    "db:push": "supabase db push && npm run db:types && npm run type-check",
     "db:types": "supabase gen types typescript --linked 2>/dev/null > packages/shared/types/database.ts"
   },
   "devDependencies": {
