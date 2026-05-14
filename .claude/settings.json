@@ -13,7 +13,11 @@
       "Bash(grep:*)",
       "Bash(rg:*)",
       "Bash(turbo:*)",
-      "Read(*)"
+      "Read(*)",
+      "mcp__supabase__list_*",
+      "mcp__supabase__get_*",
+      "mcp__supabase__search_*",
+      "mcp__supabase__generate_typescript_types"
     ]
   }
 }
