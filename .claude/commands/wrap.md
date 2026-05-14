@@ -8,7 +8,7 @@ You are ending a FrameFocus development session. Do the following in order:
    - Add any new pending items.
    - Update the "Next session priorities" section.
 3. If anything came up that's worth tracking but not fixing now, append it to TECH_DEBT.md with today's date and a short description.
-4. Create a recap file at `docs/sessions/session-NN-recap.md` (use the same NN as the plan you worked from). Include:
+4. Create a context file at `docs/sessions/contextN.md` (use the next sequential N). Include:4. Create a context file at `docs/sessions/contextN.md` (use the next sequential N). Include:
    - **What shipped:** bullet list.
    - **What's still pending:** anything started but not finished.
    - **Gotchas / lessons learned:** anything I should remember next session.
