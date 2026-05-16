@@ -26,20 +26,45 @@ Last updated: May 14, 2026 — Session 46 (4A smoke test passed — standard tri
 
 ## Infrastructure
 
-| Component          | Status           | Details                                                                |
-| ------------------ | ---------------- | ---------------------------------------------------------------------- |
-| GitHub repo        | ✅ Live          | github.com/IronFrame414/FrameFocus (private)                           |
-| GitHub Codespaces  | ✅ Configured    | Current: "fantastic trout"                                             |
-| Turborepo monorepo | ✅ Scaffolded    | apps/web, apps/mobile, packages/shared, packages/supabase, packages/ui |
-| Supabase project   | ✅ Live          | jwkcknyuyvcwcdeskrmz.supabase.co                                       |
-| Supabase Storage   | ✅ Live          | `company-logos` public, `project-files` private                        |
-| Vercel deployment  | ✅ Live          | https://frame-focus-eight.vercel.app (auto-deploy from main)           |
-| GitHub Actions CI  | ✅ Configured    | Lint + type-check on push to main/dev                                  |
-| Stripe             | ✅ Live          | Test mode. 3 products + webhook + Customer Portal configured           |
-| Supabase CLI       | ✅ Installed     | Linked to jwkcknyuyvcwcdeskrmz. Migration history in sync (Session 17) |
-| QuickBooks Online  | ⚪ Not connected | Strategy in CLAUDE_MODULES.md. Build during Modules 6 & 7              |
-| OpenAI API         | ✅ Configured    | Key in `.env.local` and Vercel. Ready for Module 3                     |
-| Claude Code        | ✅ Installed     | CLI in Codespace terminal                                              |
+| Component               | Status                        | Details                                                                                                                                                       |
+| ----------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GitHub repo             | ✅ Live                       | github.com/IronFrame414/FrameFocus (private)                                                                                                                  |
+| GitHub Codespaces       | ✅ Configured                 | Current: "fantastic trout"                                                                                                                                    |
+| Turborepo monorepo      | ✅ Scaffolded                 | apps/web, apps/mobile, packages/shared, packages/supabase, packages/ui                                                                                        |
+| Supabase project        | ✅ Live                       | jwkcknyuyvcwcdeskrmz.supabase.co                                                                                                                              |
+| Supabase Storage        | ✅ Live                       | `company-logos` public, `project-files` private                                                                                                               |
+| Vercel deployment       | ✅ Live                       | https://frame-focus-eight.vercel.app (auto-deploy from main)                                                                                                  |
+| GitHub Actions CI       | ✅ Configured                 | Lint + type-check on push to main/dev                                                                                                                         |
+| Stripe                  | ✅ Live                       | Test mode. 3 products + webhook + Customer Portal configured                                                                                                  |
+| Supabase CLI            | ✅ Installed                  | Linked to jwkcknyuyvcwcdeskrmz. Migration history in sync (Session 17)                                                                                        |
+| QuickBooks Online       | ⚪ Not connected              | Strategy in CLAUDE_MODULES.md. Build during Modules 6 & 7                                                                                                     |
+| OpenAI API              | ✅ Configured                 | Key in `.env.local` and Vercel. Ready for Module 3                                                                                                            |
+| Claude Code             | ✅ Installed                  | CLI in Codespace terminal                                                                                                                                     |
+| Claude Code MCP servers | 📋 Decision logged 2026-05-15 | Standard tooling: Serena (symbol nav) + Context7 (live stack docs). Project-scoped config in `.mcp.json`. Install pending. See "Claude Code MCP setup" below. |
+
+## Claude Code MCP setup
+
+**Decision (2026-05-15):** Serena + Context7 are standard MCP servers for Claude Code. Triggers in CLAUDE.md → "Claude Code MCP Servers." Project-scoped via `--scope project` → config lives in `.mcp.json` (in git, survives Codespace rebuilds).
+
+**Install (run once at repo root):**
+
+```bash
+# Prereq — install uv (not in default Codespaces image; re-run after each rebuild)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Serena
+claude mcp add --scope project serena -- \
+  uvx --from git+https://github.com/oraios/serena serena-mcp-server \
+  --context ide-assistant --project "$(pwd)"
+
+# Context7
+claude mcp add --scope project context7 -- npx -y @upstash/context7-mcp@latest
+
+# Confirm
+claude mcp list
+```
+
+**Context7 API key (optional, higher rate limits):** sign up at context7.com/dashboard, store as Codespace secret, verify env-var pass-through syntax against Context7 docs before re-adding.
 
 ---
 

@@ -16,7 +16,14 @@
 
 > **See also:** [`CLAUDE_MODULES.md`](CLAUDE_MODULES.md) — Detailed module designs (Modules 3, 6, 8, 9), QuickBooks integration strategy, and change order workflow. [`docs/module4-architecture.md`](docs/module4-architecture.md) — Module 4 (Sales & Estimating) architecture (separate file due to size).
 
----
+## Claude Code MCP Servers
+
+Two MCP servers are standard for this repo:
+
+- **Context7** — fetches live, version-specific docs at query time. **Trigger:** before writing or modifying code that touches Next.js, Supabase, Stripe, Tailwind, or Turborepo APIs. Solves training-cutoff hallucinations on the stack.
+- **Serena** — symbol-level code navigation (find_symbol, find_referencing_symbols, insert_after_symbol). **Trigger:** before reading whole files for cross-file refactors, renames, or "where is this used" lookups. Cuts token use; catches references whole-file reads miss.
+
+## Install commands and Codespace rebuild behavior: see STATE.md → "Claude Code MCP setup."
 
 ## Technology Stack
 
