@@ -1,0 +1,69 @@
+import { z } from 'zod';
+
+// Enums mirror the CHECK constraints on estimates exactly
+// (migration 20260611102749). Free text is intentionally
+// under-constrained per CLAUDE.md validation guidance.
+
+export const estimateStatuses = [
+  'draft',
+  'review',
+  'sent',
+  'viewed',
+  'accepted',
+  'declined',
+  'expired',
+  'revised',
+] as const;
+
+export const discountTypes = ['percent', 'fixed'] as const;
+
+export const proposalPricingLevels = ['total_only', 'category_totals', 'line_items'] as const;
+
+export const declineReasonCodes = [
+  'too_expensive',
+  'chose_competitor',
+  'project_canceled',
+  'timing',
+  'scope_changed',
+  'other',
+] as const;
+
+export const termsSectionSchema = z.object({
+  name: z.string().min(1, 'Section name is required').max(200),
+  content: z.string(),
+});
+
+export const createEstimateSchema = z.object({
+  name: z.string().min(1, 'Estimate name is required').max(200),
+  contact_id: z.string().uuid('A client is required'),
+  contact_address_id: z.string().uuid().optional(),
+});
+
+export const updateEstimateSchema = z.object({
+  name: z.string().min(1, 'Estimate name is required').max(200).optional(),
+  contact_id: z.string().uuid().optional(),
+  contact_address_id: z.string().uuid().nullable().optional(),
+  tax_rate: z.number().min(0, 'Tax rate cannot be negative').optional(),
+  subcontractor_markup_percent: z.number().min(0).nullable().optional(),
+  material_markup_percent: z.number().min(0).nullable().optional(),
+  labor_markup_percent: z.number().min(0).nullable().optional(),
+  discount_type: z.enum(discountTypes).nullable().optional(),
+  discount_amount: z
+    .number()
+    .min(0, 'Discount cannot be negative')
+    .nullable()
+    .optional(),
+  proposal_pricing_level: z.enum(proposalPricingLevels).optional(),
+  cover_letter: z.string().optional(),
+  scope_of_work: z.array(z.string()).optional(),
+  terms_sections: z.array(termsSectionSchema).optional(),
+  expiration_days: z
+    .number()
+    .int('Expiration must be a whole number of days')
+    .positive('Expiration must be at least 1 day')
+    .optional(),
+});
+
+export type CreateEstimateFormInput = z.infer<typeof createEstimateSchema>;
+export type UpdateEstimateFormInput = z.infer<typeof updateEstimateSchema>;
+export type TermsSectionInput = z.infer<typeof termsSectionSchema>;
