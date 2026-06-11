@@ -1,6 +1,6 @@
 # STATE.md — FrameFocus Current State
 
-Last updated: May 14, 2026 — Session 46 (4A smoke test passed — standard triggers on contact_addresses verified; slash command naming convention reverted to contextN.md)
+Last updated: 2026-06-11 — Session 48 (4B + 4C complete, merged to main; 4D next; Context7 + Serena MCP connected)
 
 > **Purpose:** Snapshot of current state of codebase, infrastructure, and database. Updated at end of each session. For session narrative and decisions, see `docs/sessions/contextN.md`. For conventions and patterns, see `CLAUDE.md`.
 
@@ -9,11 +9,11 @@ Last updated: May 14, 2026 — Session 46 (4A smoke test passed — standard tri
 ## Build Status
 
 | Module                        | Status         | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| ----------------------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ----------------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1. Settings, Admin & Billing  | ✅ COMPLETE    | Auth, roles, Stripe billing, company settings, invites, team management                                                                                                                                                                                                                                                                                                                                                                                   |
 | 2. Contacts & CRM             | ✅ COMPLETE    | Two-table design (contacts + subcontractors), full CRUD, filters, ratings, markup                                                                                                                                                                                                                                                                                                                                                                         |
 | 3. Document & File Management | ✅ COMPLETE    | Database, service layer, file list UI, upload, download, soft-delete, markup, favorites, trash, AI auto-tagging (Sessions 11–32).                                                                                                                                                                                                                                                                                                                         |
-| 4. Sales & Estimating         | 🚧 IN PROGRESS | Architecture in `docs/module4-architecture.md` (Sessions 33 + 41). **Sub-module 4A complete (Sessions 44 + 46):** `contact_addresses` table + service layer + Zod schema + contact form refactored for two-step submit. v1 scope: 3-way markups, discounts, allowances, sub-bid tracking, file attachments, structured terms, configurable estimate-number prefix. AI assistant (4I) deferred to post-launch but design-ready. ~17–21 sessions remaining. |
+| 4. Sales & Estimating         | 🚧 IN PROGRESS | **4A ✅, 4B ✅, 4C ✅ — current sub-module: 4D NEXT.** 4B + 4C complete, merged to main. 4D next (`docs/specs/4D-spec.md`); its additive migration requires 4C on main (satisfied). Launch scope locked Session 48 — IN: 4B–4F, 4J, 4K, 4M (+ Module 5); OUT (deferred): 4G versioning, 4H analytics, 4I AI assistant, 4L attachments UI. Architecture in `docs/module4-architecture.md` (Sessions 33 + 41). v1 scope: 3-way markups, discounts, allowances, sub-bid tracking, file attachments, structured terms, configurable estimate-number prefix. |
 | 5. Project Management         | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | 6. Team & Field Operations    | ⚪ NOT STARTED | Scope expanded Session 6. Time categorization, break tracking, OT, mileage, safety logs, incident workflow, huddles, delivery tracking                                                                                                                                                                                                                                                                                                                    |
 | 7. Job Finances               | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
@@ -26,32 +26,36 @@ Last updated: May 14, 2026 — Session 46 (4A smoke test passed — standard tri
 
 ## Infrastructure
 
-| Component               | Status                        | Details                                                                                                                                                       |
-| ----------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GitHub repo             | ✅ Live                       | github.com/IronFrame414/FrameFocus (private)                                                                                                                  |
-| GitHub Codespaces       | ✅ Configured                 | Current: "fantastic trout"                                                                                                                                    |
-| Turborepo monorepo      | ✅ Scaffolded                 | apps/web, apps/mobile, packages/shared, packages/supabase, packages/ui                                                                                        |
-| Supabase project        | ✅ Live                       | jwkcknyuyvcwcdeskrmz.supabase.co                                                                                                                              |
-| Supabase Storage        | ✅ Live                       | `company-logos` public, `project-files` private                                                                                                               |
-| Vercel deployment       | ✅ Live                       | https://frame-focus-eight.vercel.app (auto-deploy from main)                                                                                                  |
-| GitHub Actions CI       | ✅ Configured                 | Lint + type-check on push to main/dev                                                                                                                         |
-| Stripe                  | ✅ Live                       | Test mode. 3 products + webhook + Customer Portal configured                                                                                                  |
-| Supabase CLI            | ✅ Installed                  | Linked to jwkcknyuyvcwcdeskrmz. Migration history in sync (Session 17)                                                                                        |
-| QuickBooks Online       | ⚪ Not connected              | Strategy in CLAUDE_MODULES.md. Build during Modules 6 & 7                                                                                                     |
-| OpenAI API              | ✅ Configured                 | Key in `.env.local` and Vercel. Ready for Module 3                                                                                                            |
-| Claude Code             | ✅ Installed                  | CLI in Codespace terminal                                                                                                                                     |
-| Claude Code MCP servers | 📋 Decision logged 2026-05-15 | Standard tooling: Serena (symbol nav) + Context7 (live stack docs). Project-scoped config in `.mcp.json`. Install pending. See "Claude Code MCP setup" below. |
+| Component               | Status        | Details                                                                                                                                                                              |
+| ----------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| GitHub repo             | ✅ Live       | github.com/IronFrame414/FrameFocus (private)                                                                                                                                         |
+| GitHub Codespaces       | ✅ Configured | Current: "fantastic trout"                                                                                                                                                           |
+| Turborepo monorepo      | ✅ Scaffolded | apps/web, apps/mobile, packages/shared, packages/supabase, packages/ui                                                                                                               |
+| Supabase project        | ✅ Live       | jwkcknyuyvcwcdeskrmz.supabase.co (was paused; un-paused Session 48)                                                                                                                  |
+| Supabase Storage        | ✅ Live       | `company-logos` public, `project-files` private                                                                                                                                      |
+| Vercel deployment       | ✅ Live       | https://frame-focus-eight.vercel.app (auto-deploy from main)                                                                                                                         |
+| GitHub Actions CI       | ✅ Configured | Lint + type-check on push to main/dev                                                                                                                                                |
+| Stripe                  | ✅ Live       | Test mode. 3 products + webhook + Customer Portal configured                                                                                                                         |
+| Supabase CLI            | ✅ Installed  | Linked to jwkcknyuyvcwcdeskrmz. Migration history in sync (re-verified Session 48). Re-link after Codespace rebuild.                                                                 |
+| QuickBooks Online       | ⚪ Not connected | Strategy in CLAUDE_MODULES.md. Build during Modules 6 & 7                                                                                                                         |
+| OpenAI API              | ✅ Configured | Key in `.env.local` and Vercel. Ready for Module 3                                                                                                                                   |
+| Claude Code             | ✅ Installed  | CLI in Codespace terminal. Reinstall after each Codespace rebuild (`npm install -g @anthropic-ai/claude-code`).                                                                      |
+| Claude Code MCP servers | ✅ Connected  | Context7 + Serena connected (project-scoped `.mcp.json`); Serena needs `uv` after each Codespace rebuild. Supabase MCP unused — CLI handles DB. See "Claude Code MCP setup" below.   |
 
 ## Claude Code MCP setup
 
-**Decision (2026-05-15):** Serena + Context7 are standard MCP servers for Claude Code. Triggers in CLAUDE.md → "Claude Code MCP Servers." Project-scoped via `--scope project` → config lives in `.mcp.json` (in git, survives Codespace rebuilds).
+**Decision (2026-05-15), installed + connected Session 48:** Serena + Context7 are standard MCP servers for Claude Code. Triggers in CLAUDE.md → "Claude Code MCP Servers." Project-scoped via `--scope project` → config lives in `.mcp.json` (in git, survives Codespace rebuilds).
 
-**Install (run once at repo root):**
+**Prereq after each Codespace rebuild** (`.mcp.json` itself survives in git, but `uv` does not):
 
 ```bash
-# Prereq — install uv (not in default Codespaces image; re-run after each rebuild)
+# Reinstall uv (not in default Codespaces image; Serena won't connect without it)
 curl -LsSf https://astral.sh/uv/install.sh | sh
+```
 
+**Original install (already done — only needed if `.mcp.json` is ever lost):**
+
+```bash
 # Serena
 claude mcp add --scope project serena -- \
   uvx --from git+https://github.com/oraios/serena serena-mcp-server \
@@ -73,8 +77,8 @@ claude mcp list
 ### Tables (in production Supabase)
 
 | Table               | Rows      | RLS                | Notes                                                                                                                                                                                                                                                 |
-| ------------------- | --------- | ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `companies`         | Multiple  | ✅ Enabled         | `slug` (NOT NULL, auto-generated), `stripe_customer_id`, address/phone/website/trade_type/license_number/logo_url, `ai_tagging_enabled` (boolean, default false — paid add-on flag). Legacy `subscription_tier`/`subscription_status` columns unused. |
+| ------------------- | --------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `companies`         | Multiple  | ✅ Enabled         | `slug` (NOT NULL, auto-generated), `stripe_customer_id`, address/phone/website/trade_type/license_number/logo_url, `ai_tagging_enabled` (boolean, default false — paid add-on flag). 4C ALTER added estimate settings (markups, default terms, estimate-number prefix, tax). Legacy `subscription_tier`/`subscription_status` columns unused. |
 | `profiles`          | Multiple  | ✅ Enabled         |
 | `platform_admins`   | 0         | ✅ Enabled         | No admins seeded yet                                                                                                                                                                                                                                  |
 | `invitations`       | Test rows | ✅ Enabled         |
@@ -87,6 +91,9 @@ claude mcp list
 | `tag_options`       | 66+ rows  | ✅ Enabled         |
 | `ai_tag_logs`       | 0         | ✅ Enabled         |
 | `contact_addresses` | Test rows | ✅ Enabled         | Per-contact addresses (label, line1/2, city, state, zip, is_primary). Partial unique index ensures one active primary per contact. Standard triggers wired. Migration 028.                                                                            |
+| `cost_catalog`      | Test rows | ✅ Enabled         | Per-company cost item catalog (4B). Column defaults + standard triggers. ⚠️ Tech debt #78: `set_cost_catalog_updated_by()` omits SECURITY DEFINER.                                                                                                    |
+| `estimates`         | Test rows | ✅ Enabled         | 4C header table. `next_estimate_number()` row-locking numbering fn (per-company EST-NNN). `project_id` nullable UUID, **no FK until Module 5**. Frozen-when-Sent enforced in service + RLS. PM sees own only. `set_winning_bid()` RPC.                |
+| `estimate_*` (6)    | Test rows | ✅ Enabled         | 4C children: `estimate_categories`, `estimate_subcategories`, `estimate_line_items`, `estimate_line_materials`, `estimate_sub_bids`, `estimate_files`. Child RLS = company scope + `EXISTS(parent visible)`. Partial unique index allows one winning sub-bid per line item; sub-bid FK `ON DELETE CASCADE` on `line_item_id`. |
 
 ### Storage Buckets
 
@@ -99,7 +106,7 @@ claude mcp list
 
 ### Migrations
 
-## All 28 migration files live in `supabase/migrations/` with 14-digit timestamp format. `npx supabase migration list` shows all 28 in sync (Local + Remote). Migration 006 was never created — intentional gap. Source of truth is the file list on disk.
+## All 32 migration files live in `supabase/migrations/` with 14-digit timestamp format. `npx supabase migration list` shows all 32 in sync (Local + Remote; re-verified Session 48). Latest two: `20260611002451` (cost_catalog, 4B) and `20260611102749` (estimates module, 4C) — both applied to prod. Migration 006 was never created — intentional gap in the historical ordinal numbering. Source of truth is the file list on disk.
 
 ## Codebase State
 
@@ -119,7 +126,8 @@ app/dashboard/team/[id]/edit-form.tsx    Client form — edit/delete/reset for t
 app/dashboard/team/[id]/transfer-form.tsx  Client form — ownership transfer for Owner-self only (Session 40, #66)
 app/dashboard/team/[id]/actions.ts       Server actions for #14–#17 + transferOwnershipAction (Session 40)
 app/dashboard/projects/[id]/files/       Module 3 file UI: list, upload, markup, trash, ai-tag editor
-app/dashboard/projects/[id]/files/markup-test/page.tsx  ⚠️ Throwaway (#50)
+app/dashboard/projects/[id]/files/markup-test/page.tsx  ⚪ Throwaway (#50)
+app/dashboard/catalog/                   4B cost-catalog UI — page, list, form, labels, [id] edit, new (Session 48)
 
 lib/services/ai-tagging.ts               Reference impl for all future AI features (Session 31)
 lib/services/add-ons.ts / -client.ts     Add-on flag reads/writes — separate from company.ts (Session 32)
@@ -129,6 +137,9 @@ lib/openai.ts                            Lazy getOpenAI()
 lib/stripe.ts                            Lazy getStripe()
 lib/services/contact-addresses.ts        Server — getPrimaryAddress() with .maybeSingle() (Session 44, 4A)
 lib/services/contact-addresses-client.ts Client — createAddress() + updatePrimaryAddress() upsert (Session 44, 4A)
+lib/services/cost-catalog-client.ts      4B catalog CRUD + search/filter (Session 48)
+lib/services/estimates-client.ts         4C estimate CRUD; frozen-when-Sent enforced in service layer (Session 48)
+lib/services/estimate-items-client.ts    4C categories / subcategories / line items / materials / sub-bids (Session 48)
 app/dashboard/contacts/contact-form.tsx  Refactored for two-step submit (create) / two-call save (edit); accepts existingAddress prop; address optional per Step 14 decision (Session 44, 4A)
 ```
 
@@ -141,6 +152,10 @@ components/MarkupViewer.tsx              Shared SVG viewer, portable to React Na
 types/markup.ts                          Shape schema + createEmptyMarkup (Session 26)
 types/database.ts                        Auto-generated, never hand-edit. Run `npm run db:types` after migrations.
 validation/contact-address.ts            Zod schema — contactAddressSchema, snake_case to match service inputs (Session 44, 4A)
+validation/cost-catalog.ts               Zod schema — 4B (Session 48)
+validation/estimate.ts                   Zod schema — 4C estimates, mirrors CHECK constraints (Session 48)
+validation/estimate-items.ts             Zod schema — 4C child tables, mirrors CHECK constraints (Session 48)
+utils/estimate-totals.ts                 Shared estimate totals math, pure functions used by 4C services (Session 48)
 ```
 
 ### apps/mobile (Expo)
@@ -152,7 +167,8 @@ Placeholder. Phase 2 work.
 ```
 docs/
 ├── roadmap/                                ✅ All roadmap docx/xlsx
-└── sessions/                               ✅ context1.md through context17.md
+├── specs/                                  4A–4D specs (4D-spec.md covers 4M + 4D + 4K + additive 4C migration)
+└── sessions/                               ✅ context1.md through context48.md
 ```
 
 ---
@@ -213,6 +229,7 @@ Vercel env vars must match `.env.local` exactly.
 
 - **Josh Bishop** (jsbishop14@gmail.com) — Owner of Bishop Contracting. Predates Migration 007, may need manual subscription row insert. `ai_tagging_enabled = true` as of Session 31 (left on for Session 32 upload-wiring testing).
 - **josh+test40@worthprop.com** — Admin of Bishop Contracting. Use for Admin role testing.
+- Bishop Contracting cost catalog test items (`2x6 Joist`, `Romex 12/2`, `Drywall Sheet`; soft-deleted `2x4 Stud`) — intentionally kept (Session 48).
 - Various orphaned test accounts from Session 7 debugging. Optional cleanup.
 
 Clear all test data:
@@ -316,6 +333,6 @@ Add a SECOND SELECT policy on `files` to grant clients read access to specifical
    ```
 3. Open a new Claude Chat (inside the FrameFocus Claude Project with `CLAUDE.md`, `STATE.md`, `CLAUDE_MODULES.md`, and Quick Reference as project knowledge)
 4. Paste the snapshot output plus the latest `docs/sessions/contextN.md`
-5. State goal for the session (pick next Module 4 build target, OR open Pre-Module 9 Decision Gate, OR polish work)
+5. State goal for the session — next Module 4 build target is **4D (Estimate Builder UI)**, spec in `docs/specs/4D-spec.md`; OR open Pre-Module 9 Decision Gate, OR polish work
 6. Switch to Claude Code in the terminal once a plan is agreed
 7. Return to Claude Chat at end of session to generate next context file and update `STATE.md`
