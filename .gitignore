@@ -47,3 +47,4 @@ supabase/.temp/
 # TypeScript
 *.tsbuildinfo
 .claude/settings.local.json
+.serena/
