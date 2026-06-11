@@ -45,6 +45,14 @@ export function DashboardShell({ children, userName, userRole, companyName }: Da
           >
             Subs & Vendors
           </Link>
+          {(userRole === 'owner' || userRole === 'admin' || userRole === 'project_manager') && (
+            <Link
+              href="/dashboard/catalog"
+              className="flex items-center rounded-lg px-3 py-2 text-sm font-medium text-brand-100 hover:bg-brand-800"
+            >
+              Cost Catalog
+            </Link>
+          )}
           {(userRole === 'owner' || userRole === 'admin') && (
             <Link
               href="/dashboard/settings"
