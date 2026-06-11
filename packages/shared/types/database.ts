@@ -100,7 +100,14 @@ export type Database = {
           ai_tagging_enabled: boolean
           city: string | null
           created_at: string | null
+          default_labor_markup_percent: number | null
+          default_material_markup_percent: number | null
+          default_subcontractor_markup_percent: number | null
+          default_tax_rate: number | null
+          default_terms_sections: Json | null
           email: string | null
+          estimate_number_prefix: string
+          estimate_number_sequence: number
           id: string
           license_number: string | null
           logo_url: string | null
@@ -123,7 +130,14 @@ export type Database = {
           ai_tagging_enabled?: boolean
           city?: string | null
           created_at?: string | null
+          default_labor_markup_percent?: number | null
+          default_material_markup_percent?: number | null
+          default_subcontractor_markup_percent?: number | null
+          default_tax_rate?: number | null
+          default_terms_sections?: Json | null
           email?: string | null
+          estimate_number_prefix?: string
+          estimate_number_sequence?: number
           id?: string
           license_number?: string | null
           logo_url?: string | null
@@ -146,7 +160,14 @@ export type Database = {
           ai_tagging_enabled?: boolean
           city?: string | null
           created_at?: string | null
+          default_labor_markup_percent?: number | null
+          default_material_markup_percent?: number | null
+          default_subcontractor_markup_percent?: number | null
+          default_tax_rate?: number | null
+          default_terms_sections?: Json | null
           email?: string | null
+          estimate_number_prefix?: string
+          estimate_number_sequence?: number
           id?: string
           license_number?: string | null
           logo_url?: string | null
@@ -379,6 +400,653 @@ export type Database = {
             columns: ["default_vendor_id"]
             isOneToOne: false
             referencedRelation: "subcontractors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      estimate_categories: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          estimate_id: string
+          id: string
+          name: string
+          sort_order: number
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          estimate_id: string
+          id?: string
+          name: string
+          sort_order: number
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          estimate_id?: string
+          id?: string
+          name?: string
+          sort_order?: number
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimate_categories_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_categories_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      estimate_files: {
+        Row: {
+          attachment_type: string
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          estimate_id: string
+          file_id: string
+          id: string
+          notes: string | null
+          sort_order: number
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          attachment_type: string
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          estimate_id: string
+          file_id: string
+          id?: string
+          notes?: string | null
+          sort_order?: number
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          attachment_type?: string
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          estimate_id?: string
+          file_id?: string
+          id?: string
+          notes?: string | null
+          sort_order?: number
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimate_files_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_files_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_files_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      estimate_line_items: {
+        Row: {
+          category_id: string
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          discount_amount: number | null
+          discount_type: string | null
+          estimate_id: string
+          id: string
+          labor_cost: number | null
+          labor_markup_percent: number | null
+          line_type: string
+          material_cost_subtotal: number | null
+          material_markup_percent: number | null
+          name: string
+          notes: string | null
+          sort_order: number
+          sub_bid_amount: number | null
+          subcategory_id: string | null
+          subcontractor_id: string | null
+          subcontractor_markup_percent: number | null
+          tax_amount: number | null
+          total_price: number
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          category_id: string
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          discount_amount?: number | null
+          discount_type?: string | null
+          estimate_id: string
+          id?: string
+          labor_cost?: number | null
+          labor_markup_percent?: number | null
+          line_type: string
+          material_cost_subtotal?: number | null
+          material_markup_percent?: number | null
+          name: string
+          notes?: string | null
+          sort_order: number
+          sub_bid_amount?: number | null
+          subcategory_id?: string | null
+          subcontractor_id?: string | null
+          subcontractor_markup_percent?: number | null
+          tax_amount?: number | null
+          total_price?: number
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          category_id?: string
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          discount_amount?: number | null
+          discount_type?: string | null
+          estimate_id?: string
+          id?: string
+          labor_cost?: number | null
+          labor_markup_percent?: number | null
+          line_type?: string
+          material_cost_subtotal?: number | null
+          material_markup_percent?: number | null
+          name?: string
+          notes?: string | null
+          sort_order?: number
+          sub_bid_amount?: number | null
+          subcategory_id?: string | null
+          subcontractor_id?: string | null
+          subcontractor_markup_percent?: number | null
+          tax_amount?: number | null
+          total_price?: number
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimate_line_items_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_line_items_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_line_items_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_line_items_subcategory_id_fkey"
+            columns: ["subcategory_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_subcategories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_line_items_subcontractor_id_fkey"
+            columns: ["subcontractor_id"]
+            isOneToOne: false
+            referencedRelation: "subcontractors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      estimate_line_materials: {
+        Row: {
+          catalog_item_id: string | null
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          line_item_id: string
+          name: string
+          quantity: number | null
+          total_cost: number
+          unit_cost: number
+          unit_of_measure: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          catalog_item_id?: string | null
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          line_item_id: string
+          name: string
+          quantity?: number | null
+          total_cost?: number
+          unit_cost: number
+          unit_of_measure: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          catalog_item_id?: string | null
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          line_item_id?: string
+          name?: string
+          quantity?: number | null
+          total_cost?: number
+          unit_cost?: number
+          unit_of_measure?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimate_line_materials_catalog_item_id_fkey"
+            columns: ["catalog_item_id"]
+            isOneToOne: false
+            referencedRelation: "cost_catalog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_line_materials_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_line_materials_line_item_id_fkey"
+            columns: ["line_item_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_line_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      estimate_sub_bids: {
+        Row: {
+          bid_amount: number
+          bid_document_file_id: string | null
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          estimate_id: string
+          id: string
+          is_deleted: boolean | null
+          is_winner: boolean
+          line_item_id: string
+          notes: string | null
+          received_at: string | null
+          subcontractor_id: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          bid_amount: number
+          bid_document_file_id?: string | null
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          estimate_id: string
+          id?: string
+          is_deleted?: boolean | null
+          is_winner?: boolean
+          line_item_id: string
+          notes?: string | null
+          received_at?: string | null
+          subcontractor_id: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          bid_amount?: number
+          bid_document_file_id?: string | null
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          estimate_id?: string
+          id?: string
+          is_deleted?: boolean | null
+          is_winner?: boolean
+          line_item_id?: string
+          notes?: string | null
+          received_at?: string | null
+          subcontractor_id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimate_sub_bids_bid_document_file_id_fkey"
+            columns: ["bid_document_file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_sub_bids_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_sub_bids_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_sub_bids_line_item_id_fkey"
+            columns: ["line_item_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_line_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_sub_bids_subcontractor_id_fkey"
+            columns: ["subcontractor_id"]
+            isOneToOne: false
+            referencedRelation: "subcontractors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      estimate_subcategories: {
+        Row: {
+          category_id: string
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          estimate_id: string
+          id: string
+          name: string
+          sort_order: number
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          category_id: string
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          estimate_id: string
+          id?: string
+          name: string
+          sort_order: number
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          category_id?: string
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          estimate_id?: string
+          id?: string
+          name?: string
+          sort_order?: number
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimate_subcategories_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_subcategories_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_subcategories_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      estimates: {
+        Row: {
+          accepted_at: string | null
+          cloned_from_estimate_id: string | null
+          company_id: string
+          contact_address_id: string | null
+          contact_id: string
+          cover_letter: string | null
+          created_at: string | null
+          created_by: string | null
+          created_by_role: string
+          decline_reason_code: string | null
+          decline_reason_notes: string | null
+          declined_at: string | null
+          deleted_at: string | null
+          discount_amount: number | null
+          discount_total: number
+          discount_type: string | null
+          estimate_number: string
+          expiration_days: number
+          expires_at: string | null
+          grand_total: number
+          id: string
+          is_deleted: boolean | null
+          labor_markup_percent: number | null
+          material_markup_percent: number | null
+          name: string
+          parent_estimate_id: string | null
+          project_id: string | null
+          proposal_pricing_level: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+          scope_of_work: string[] | null
+          sent_at: string | null
+          signed_proposal_file_id: string | null
+          status: string
+          subcontractor_markup_percent: number | null
+          subtotal: number
+          tax_rate: number | null
+          tax_total: number
+          terms_sections: Json | null
+          updated_at: string | null
+          updated_by: string | null
+          version_number: string
+          viewed_at: string | null
+        }
+        Insert: {
+          accepted_at?: string | null
+          cloned_from_estimate_id?: string | null
+          company_id?: string
+          contact_address_id?: string | null
+          contact_id: string
+          cover_letter?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          created_by_role?: string
+          decline_reason_code?: string | null
+          decline_reason_notes?: string | null
+          declined_at?: string | null
+          deleted_at?: string | null
+          discount_amount?: number | null
+          discount_total?: number
+          discount_type?: string | null
+          estimate_number?: string
+          expiration_days?: number
+          expires_at?: string | null
+          grand_total?: number
+          id?: string
+          is_deleted?: boolean | null
+          labor_markup_percent?: number | null
+          material_markup_percent?: number | null
+          name: string
+          parent_estimate_id?: string | null
+          project_id?: string | null
+          proposal_pricing_level?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          scope_of_work?: string[] | null
+          sent_at?: string | null
+          signed_proposal_file_id?: string | null
+          status?: string
+          subcontractor_markup_percent?: number | null
+          subtotal?: number
+          tax_rate?: number | null
+          tax_total?: number
+          terms_sections?: Json | null
+          updated_at?: string | null
+          updated_by?: string | null
+          version_number?: string
+          viewed_at?: string | null
+        }
+        Update: {
+          accepted_at?: string | null
+          cloned_from_estimate_id?: string | null
+          company_id?: string
+          contact_address_id?: string | null
+          contact_id?: string
+          cover_letter?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          created_by_role?: string
+          decline_reason_code?: string | null
+          decline_reason_notes?: string | null
+          declined_at?: string | null
+          deleted_at?: string | null
+          discount_amount?: number | null
+          discount_total?: number
+          discount_type?: string | null
+          estimate_number?: string
+          expiration_days?: number
+          expires_at?: string | null
+          grand_total?: number
+          id?: string
+          is_deleted?: boolean | null
+          labor_markup_percent?: number | null
+          material_markup_percent?: number | null
+          name?: string
+          parent_estimate_id?: string | null
+          project_id?: string | null
+          proposal_pricing_level?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          scope_of_work?: string[] | null
+          sent_at?: string | null
+          signed_proposal_file_id?: string | null
+          status?: string
+          subcontractor_markup_percent?: number | null
+          subtotal?: number
+          tax_rate?: number | null
+          tax_total?: number
+          terms_sections?: Json | null
+          updated_at?: string | null
+          updated_by?: string | null
+          version_number?: string
+          viewed_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimates_cloned_from_estimate_id_fkey"
+            columns: ["cloned_from_estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimates_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimates_contact_address_id_fkey"
+            columns: ["contact_address_id"]
+            isOneToOne: false
+            referencedRelation: "contact_addresses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimates_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimates_parent_estimate_id_fkey"
+            columns: ["parent_estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimates_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimates_signed_proposal_file_id_fkey"
+            columns: ["signed_proposal_file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
             referencedColumns: ["id"]
           },
         ]
@@ -875,7 +1543,12 @@ export type Database = {
       get_my_company_id: { Args: never; Returns: string }
       get_my_role: { Args: never; Returns: string }
       is_platform_admin: { Args: never; Returns: boolean }
+      next_estimate_number: { Args: never; Returns: string }
       seed_default_tags: { Args: { p_company_id: string }; Returns: undefined }
+      set_winning_bid: {
+        Args: { p_line_item_id: string; p_sub_bid_id: string }
+        Returns: undefined
+      }
       test_invite_lookup: {
         Args: { p_token: string }
         Returns: {
