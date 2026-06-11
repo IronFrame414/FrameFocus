@@ -311,6 +311,78 @@ export type Database = {
           },
         ]
       }
+      cost_catalog: {
+        Row: {
+          category: string
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          default_vendor_id: string | null
+          deleted_at: string | null
+          id: string
+          is_deleted: boolean | null
+          last_verified_at: string | null
+          name: string
+          notes: string | null
+          product_url: string | null
+          unit_cost: number
+          unit_of_measure: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          category: string
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          default_vendor_id?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          last_verified_at?: string | null
+          name: string
+          notes?: string | null
+          product_url?: string | null
+          unit_cost: number
+          unit_of_measure: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          category?: string
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          default_vendor_id?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          last_verified_at?: string | null
+          name?: string
+          notes?: string | null
+          product_url?: string | null
+          unit_cost?: number
+          unit_of_measure?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cost_catalog_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cost_catalog_default_vendor_id_fkey"
+            columns: ["default_vendor_id"]
+            isOneToOne: false
+            referencedRelation: "subcontractors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       files: {
         Row: {
           ai_tags: string[] | null
