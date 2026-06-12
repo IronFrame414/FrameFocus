@@ -98,10 +98,22 @@ export type Database = {
           address_line1: string | null
           address_line2: string | null
           ai_tagging_enabled: boolean
+          brand_color: string | null
           city: string | null
           created_at: string | null
+          default_expiration_days: number
+          default_labor_margin_percent: number | null
           default_labor_markup_percent: number | null
+          default_material_margin_percent: number | null
           default_material_markup_percent: number | null
+          default_pricing_mode: string
+          default_proposal_email_body: string | null
+          default_proposal_email_subject: string | null
+          default_proposal_pricing_level: string
+          default_reminder_email_body: string | null
+          default_reminder_email_subject: string | null
+          default_reminder_schedule: Json | null
+          default_subcontractor_margin_percent: number | null
           default_subcontractor_markup_percent: number | null
           default_tax_rate: number | null
           default_terms_sections: Json | null
@@ -128,10 +140,22 @@ export type Database = {
           address_line1?: string | null
           address_line2?: string | null
           ai_tagging_enabled?: boolean
+          brand_color?: string | null
           city?: string | null
           created_at?: string | null
+          default_expiration_days?: number
+          default_labor_margin_percent?: number | null
           default_labor_markup_percent?: number | null
+          default_material_margin_percent?: number | null
           default_material_markup_percent?: number | null
+          default_pricing_mode?: string
+          default_proposal_email_body?: string | null
+          default_proposal_email_subject?: string | null
+          default_proposal_pricing_level?: string
+          default_reminder_email_body?: string | null
+          default_reminder_email_subject?: string | null
+          default_reminder_schedule?: Json | null
+          default_subcontractor_margin_percent?: number | null
           default_subcontractor_markup_percent?: number | null
           default_tax_rate?: number | null
           default_terms_sections?: Json | null
@@ -158,10 +182,22 @@ export type Database = {
           address_line1?: string | null
           address_line2?: string | null
           ai_tagging_enabled?: boolean
+          brand_color?: string | null
           city?: string | null
           created_at?: string | null
+          default_expiration_days?: number
+          default_labor_margin_percent?: number | null
           default_labor_markup_percent?: number | null
+          default_material_margin_percent?: number | null
           default_material_markup_percent?: number | null
+          default_pricing_mode?: string
+          default_proposal_email_body?: string | null
+          default_proposal_email_subject?: string | null
+          default_proposal_pricing_level?: string
+          default_reminder_email_body?: string | null
+          default_reminder_email_subject?: string | null
+          default_reminder_schedule?: Json | null
+          default_subcontractor_margin_percent?: number | null
           default_subcontractor_markup_percent?: number | null
           default_tax_rate?: number | null
           default_terms_sections?: Json | null
@@ -404,6 +440,88 @@ export type Database = {
           },
         ]
       }
+      email_logs: {
+        Row: {
+          bounced_at: string | null
+          company_id: string
+          created_at: string
+          delivered_at: string | null
+          email_type: string
+          estimate_id: string | null
+          id: string
+          metadata: Json | null
+          opened_at: string | null
+          recipient_email: string
+          resend_message_id: string | null
+          sender_email: string
+          sent_at: string
+          signing_session_id: string | null
+          status: string
+          subject: string
+          updated_at: string
+        }
+        Insert: {
+          bounced_at?: string | null
+          company_id: string
+          created_at?: string
+          delivered_at?: string | null
+          email_type: string
+          estimate_id?: string | null
+          id?: string
+          metadata?: Json | null
+          opened_at?: string | null
+          recipient_email: string
+          resend_message_id?: string | null
+          sender_email: string
+          sent_at?: string
+          signing_session_id?: string | null
+          status?: string
+          subject: string
+          updated_at?: string
+        }
+        Update: {
+          bounced_at?: string | null
+          company_id?: string
+          created_at?: string
+          delivered_at?: string | null
+          email_type?: string
+          estimate_id?: string | null
+          id?: string
+          metadata?: Json | null
+          opened_at?: string | null
+          recipient_email?: string
+          resend_message_id?: string | null
+          sender_email?: string
+          sent_at?: string
+          signing_session_id?: string | null
+          status?: string
+          subject?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_logs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_logs_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_logs_signing_session_id_fkey"
+            columns: ["signing_session_id"]
+            isOneToOne: false
+            referencedRelation: "signing_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       estimate_categories: {
         Row: {
           company_id: string
@@ -544,6 +662,7 @@ export type Database = {
           subcontractor_markup_percent: number | null
           tax_amount: number | null
           total_price: number
+          total_price_override: number | null
           updated_at: string | null
           updated_by: string | null
         }
@@ -571,6 +690,7 @@ export type Database = {
           subcontractor_markup_percent?: number | null
           tax_amount?: number | null
           total_price?: number
+          total_price_override?: number | null
           updated_at?: string | null
           updated_by?: string | null
         }
@@ -598,6 +718,7 @@ export type Database = {
           subcontractor_markup_percent?: number | null
           tax_amount?: number | null
           total_price?: number
+          total_price_override?: number | null
           updated_at?: string | null
           updated_by?: string | null
         }
@@ -641,6 +762,7 @@ export type Database = {
       }
       estimate_line_materials: {
         Row: {
+          apply_tax: boolean
           catalog_item_id: string | null
           company_id: string
           created_at: string | null
@@ -656,6 +778,7 @@ export type Database = {
           updated_by: string | null
         }
         Insert: {
+          apply_tax?: boolean
           catalog_item_id?: string | null
           company_id?: string
           created_at?: string | null
@@ -671,6 +794,7 @@ export type Database = {
           updated_by?: string | null
         }
         Update: {
+          apply_tax?: boolean
           catalog_item_id?: string | null
           company_id?: string
           created_at?: string | null
@@ -866,6 +990,7 @@ export type Database = {
       estimates: {
         Row: {
           accepted_at: string | null
+          client_unsubscribed_at: string | null
           cloned_from_estimate_id: string | null
           company_id: string
           contact_address_id: string | null
@@ -886,13 +1011,18 @@ export type Database = {
           expires_at: string | null
           grand_total: number
           id: string
+          internal_notes: string | null
           is_deleted: boolean | null
           labor_markup_percent: number | null
+          last_reminder_sent_at: string | null
           material_markup_percent: number | null
           name: string
           parent_estimate_id: string | null
+          pricing_mode: string
           project_id: string | null
           proposal_pricing_level: string
+          reminder_count: number
+          reminder_schedule: Json | null
           reviewed_at: string | null
           reviewed_by: string | null
           scope_of_work: string[] | null
@@ -911,6 +1041,7 @@ export type Database = {
         }
         Insert: {
           accepted_at?: string | null
+          client_unsubscribed_at?: string | null
           cloned_from_estimate_id?: string | null
           company_id?: string
           contact_address_id?: string | null
@@ -931,13 +1062,18 @@ export type Database = {
           expires_at?: string | null
           grand_total?: number
           id?: string
+          internal_notes?: string | null
           is_deleted?: boolean | null
           labor_markup_percent?: number | null
+          last_reminder_sent_at?: string | null
           material_markup_percent?: number | null
           name: string
           parent_estimate_id?: string | null
+          pricing_mode?: string
           project_id?: string | null
           proposal_pricing_level?: string
+          reminder_count?: number
+          reminder_schedule?: Json | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           scope_of_work?: string[] | null
@@ -956,6 +1092,7 @@ export type Database = {
         }
         Update: {
           accepted_at?: string | null
+          client_unsubscribed_at?: string | null
           cloned_from_estimate_id?: string | null
           company_id?: string
           contact_address_id?: string | null
@@ -976,13 +1113,18 @@ export type Database = {
           expires_at?: string | null
           grand_total?: number
           id?: string
+          internal_notes?: string | null
           is_deleted?: boolean | null
           labor_markup_percent?: number | null
+          last_reminder_sent_at?: string | null
           material_markup_percent?: number | null
           name?: string
           parent_estimate_id?: string | null
+          pricing_mode?: string
           project_id?: string | null
           proposal_pricing_level?: string
+          reminder_count?: number
+          reminder_schedule?: Json | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           scope_of_work?: string[] | null
@@ -1283,6 +1425,93 @@ export type Database = {
           },
         ]
       }
+      signing_sessions: {
+        Row: {
+          company_id: string
+          consent_given: boolean
+          consent_text: string | null
+          created_at: string
+          decline_notes: string | null
+          decline_reason: string | null
+          declined_at: string | null
+          estimate_id: string
+          expires_at: string
+          id: string
+          recipient_email: string
+          recipient_name: string | null
+          signature_data: string | null
+          signature_type: string | null
+          signed_at: string | null
+          signer_ip: string | null
+          signer_name: string | null
+          signer_user_agent: string | null
+          status: string
+          token: string
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          consent_given?: boolean
+          consent_text?: string | null
+          created_at?: string
+          decline_notes?: string | null
+          decline_reason?: string | null
+          declined_at?: string | null
+          estimate_id: string
+          expires_at: string
+          id?: string
+          recipient_email: string
+          recipient_name?: string | null
+          signature_data?: string | null
+          signature_type?: string | null
+          signed_at?: string | null
+          signer_ip?: string | null
+          signer_name?: string | null
+          signer_user_agent?: string | null
+          status?: string
+          token: string
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          consent_given?: boolean
+          consent_text?: string | null
+          created_at?: string
+          decline_notes?: string | null
+          decline_reason?: string | null
+          declined_at?: string | null
+          estimate_id?: string
+          expires_at?: string
+          id?: string
+          recipient_email?: string
+          recipient_name?: string | null
+          signature_data?: string | null
+          signature_type?: string | null
+          signed_at?: string | null
+          signer_ip?: string | null
+          signer_name?: string | null
+          signer_user_agent?: string | null
+          status?: string
+          token?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "signing_sessions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "signing_sessions_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subcontractors: {
         Row: {
           address_line1: string | null
@@ -1522,6 +1751,28 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      clone_estimate: {
+        Args: {
+          p_contact_address_id: string
+          p_contact_id: string
+          p_name: string
+          p_source_id: string
+        }
+        Returns: {
+          new_estimate_id: string
+          new_estimate_number: string
+        }[]
+      }
+      clone_estimate_line: {
+        Args: {
+          p_company_id: string
+          p_line: Database["public"]["Tables"]["estimate_line_items"]["Row"]
+          p_new_category_id: string
+          p_new_estimate_id: string
+          p_new_subcategory_id: string
+        }
+        Returns: string
+      }
       get_invitation_by_token: {
         Args: { invite_token: string }
         Returns: {
@@ -1547,6 +1798,10 @@ export type Database = {
       seed_default_tags: { Args: { p_company_id: string }; Returns: undefined }
       set_winning_bid: {
         Args: { p_line_item_id: string; p_sub_bid_id: string }
+        Returns: undefined
+      }
+      switch_pricing_mode: {
+        Args: { p_estimate_id: string; p_new_mode: string }
         Returns: undefined
       }
       test_invite_lookup: {
