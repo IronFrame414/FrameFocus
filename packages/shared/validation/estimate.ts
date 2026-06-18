@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { reminderScheduleSchema } from './email';
 
 // Enums mirror the CHECK constraints on estimates exactly
 // (migration 20260611102749). Free text is intentionally
@@ -17,6 +18,8 @@ export const estimateStatuses = [
 
 export const discountTypes = ['percent', 'fixed'] as const;
 
+export const pricingModes = ['markup', 'margin'] as const;
+
 export const proposalPricingLevels = ['total_only', 'category_totals', 'line_items'] as const;
 
 export const declineReasonCodes = [
@@ -29,14 +32,16 @@ export const declineReasonCodes = [
 ] as const;
 
 export const termsSectionSchema = z.object({
-  name: z.string().min(1, 'Section name is required').max(200),
+  name: z.string().min(1, 'Section name is required').max(100),
   content: z.string(),
 });
 
+// contact_address_id became required in 4D — the /new form requires
+// a job-site address (column stays nullable; old rows unaffected).
 export const createEstimateSchema = z.object({
   name: z.string().min(1, 'Estimate name is required').max(200),
   contact_id: z.string().uuid('A client is required'),
-  contact_address_id: z.string().uuid().optional(),
+  contact_address_id: z.string().uuid('A job-site address is required'),
 });
 
 export const updateEstimateSchema = z.object({
@@ -62,7 +67,26 @@ export const updateEstimateSchema = z.object({
     .int('Expiration must be a whole number of days')
     .positive('Expiration must be at least 1 day')
     .optional(),
+  internal_notes: z.string().nullable().optional(),
+  // 4J: NULL = use company default; [] = reminders off for this
+  // estimate. Strict shape (≥ 1, ascending, ≤ 10) lives in
+  // email.ts's reminderScheduleSchema.
+  reminder_schedule: reminderScheduleSchema.nullable().optional(),
 });
+
+// pricing_mode is intentionally NOT on updateEstimateSchema — mode
+// changes go through the switch_pricing_mode RPC (sticky-value swap
+// + recompute), never a plain column update.
+
+// 4K — clone from existing
+export const cloneEstimateSchema = z.object({
+  source_estimate_id: z.string().uuid(),
+  contact_id: z.string().uuid('A client is required'),
+  contact_address_id: z.string().uuid('A job-site address is required'),
+  name: z.string().min(1, 'Estimate name is required').max(200),
+});
+
+export type CloneEstimateInput = z.infer<typeof cloneEstimateSchema>;
 
 export type CreateEstimateFormInput = z.infer<typeof createEstimateSchema>;
 export type UpdateEstimateFormInput = z.infer<typeof updateEstimateSchema>;

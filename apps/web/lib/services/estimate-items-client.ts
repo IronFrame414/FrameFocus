@@ -6,6 +6,7 @@ import {
   computeLineTaxAmount,
   computeLumpSumLineTotal,
   computeMaterialTotalCost,
+  computeTaxableMaterialSubtotal,
   roundMoney,
 } from '@framefocus/shared/utils/estimate-totals';
 import type {
@@ -13,6 +14,7 @@ import type {
   EstimateAttachmentType,
   LineType,
   MaterialUnitOfMeasure,
+  PricingMode,
 } from '@/lib/services/estimates-client';
 
 // Child-table writes are RLS-guarded (D4): company scope + parent
@@ -169,7 +171,10 @@ export type CreateLineItemInput = Pick<
   discount_type?: DiscountType | null;
 };
 
-export type UpdateLineItemInput = Partial<Omit<CreateLineItemInput, 'estimate_id'>>;
+export type UpdateLineItemInput = Partial<
+  Omit<CreateLineItemInput, 'estimate_id'> &
+    Pick<LineItemInsert, 'total_price_override'>
+>;
 
 export async function createEstimateLineItem(input: CreateLineItemInput): Promise<CreateResult> {
   const supabase = createClient();
@@ -224,7 +229,7 @@ export async function deleteEstimateLineItem(id: string): Promise<Result> {
 
 export type CreateLineMaterialInput = Pick<
   LineMaterialInsert,
-  'line_item_id' | 'catalog_item_id' | 'name' | 'unit_cost' | 'quantity'
+  'line_item_id' | 'catalog_item_id' | 'name' | 'unit_cost' | 'quantity' | 'apply_tax'
 > & {
   unit_of_measure: MaterialUnitOfMeasure;
 };
@@ -461,8 +466,12 @@ export async function detachEstimateFile(id: string): Promise<Result> {
 /**
  * Recomputes every line's derived values and the estimate's totals.
  * Call after any edit that affects pricing (line/material/markup/
- * discount/tax changes, winner flips). Markup cascade: line-level
- * value if set, else the estimate-level value (§4.4a).
+ * discount/tax changes, winner flips, mode switches). Cascade:
+ * line-level % if set, else the estimate-level value (§4.4a),
+ * interpreted by the estimate's pricing_mode (markup or margin).
+ * Tax (Spec 1): only material rows with apply_tax = true contribute
+ * to tax_amount. A non-NULL total_price_override always wins over
+ * the computed line total.
  */
 export async function recalculateEstimateTotals(estimateId: string): Promise<Result> {
   const supabase = createClient();
@@ -470,16 +479,18 @@ export async function recalculateEstimateTotals(estimateId: string): Promise<Res
   const { data: estimate, error: estimateError } = await supabase
     .from('estimates')
     .select(
-      'id, tax_rate, subcontractor_markup_percent, material_markup_percent, labor_markup_percent, discount_type, discount_amount'
+      'id, pricing_mode, tax_rate, subcontractor_markup_percent, material_markup_percent, labor_markup_percent, discount_type, discount_amount'
     )
     .eq('id', estimateId)
     .single();
 
   if (estimateError || !estimate) return { success: false, error: 'Estimate not found' };
 
+  const pricingMode = estimate.pricing_mode as PricingMode;
+
   const { data: lines, error: linesError } = await supabase
     .from('estimate_line_items')
-    .select('id, line_type, labor_cost, sub_bid_amount, subcontractor_markup_percent, labor_markup_percent, material_markup_percent, discount_type, discount_amount')
+    .select('id, line_type, labor_cost, sub_bid_amount, subcontractor_markup_percent, labor_markup_percent, material_markup_percent, discount_type, discount_amount, total_price_override')
     .eq('estimate_id', estimateId);
 
   if (linesError) return { success: false, error: linesError.message };
@@ -489,16 +500,20 @@ export async function recalculateEstimateTotals(estimateId: string): Promise<Res
     lineIds.length > 0
       ? await supabase
           .from('estimate_line_materials')
-          .select('line_item_id, total_cost')
+          .select('line_item_id, total_cost, apply_tax')
           .in('line_item_id', lineIds)
       : { data: [] };
 
   const materialSubtotals = new Map<string, number>();
+  const taxableMaterials = new Map<string, Array<{ total_cost: number; apply_tax: boolean }>>();
   for (const m of materials ?? []) {
     materialSubtotals.set(
       m.line_item_id,
       roundMoney((materialSubtotals.get(m.line_item_id) ?? 0) + m.total_cost)
     );
+    const list = taxableMaterials.get(m.line_item_id) ?? [];
+    list.push({ total_cost: m.total_cost, apply_tax: m.apply_tax });
+    taxableMaterials.set(m.line_item_id, list);
   }
 
   const computedLines: Array<{ total_price: number; tax_amount: number | null }> = [];
@@ -510,6 +525,7 @@ export async function recalculateEstimateTotals(estimateId: string): Promise<Res
 
     if (line.line_type === 'lump_sum') {
       totalPrice = computeLumpSumLineTotal({
+        pricing_mode: pricingMode,
         sub_bid_amount: line.sub_bid_amount,
         subcontractor_markup_percent:
           line.subcontractor_markup_percent ?? estimate.subcontractor_markup_percent,
@@ -518,8 +534,12 @@ export async function recalculateEstimateTotals(estimateId: string): Promise<Res
       });
     } else {
       materialCostSubtotal = materialSubtotals.get(line.id) ?? 0;
-      taxAmount = computeLineTaxAmount(materialCostSubtotal, estimate.tax_rate);
+      taxAmount = computeLineTaxAmount(
+        computeTaxableMaterialSubtotal(taxableMaterials.get(line.id) ?? []),
+        estimate.tax_rate
+      );
       totalPrice = computeDetailedLineTotal({
+        pricing_mode: pricingMode,
         labor_cost: line.labor_cost,
         material_cost_subtotal: materialCostSubtotal,
         tax_amount: taxAmount,
@@ -529,6 +549,11 @@ export async function recalculateEstimateTotals(estimateId: string): Promise<Res
         discount_type: line.discount_type as DiscountType | null,
         discount_amount: line.discount_amount,
       });
+    }
+
+    // A user-entered total override always wins (Spec 1).
+    if (line.total_price_override != null) {
+      totalPrice = line.total_price_override;
     }
 
     const { error: lineUpdateError } = await supabase

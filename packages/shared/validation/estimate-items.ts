@@ -72,6 +72,8 @@ export const estimateLineMaterialSchema = z.object({
   unit_of_measure: z.enum(materialUnitsOfMeasure),
   unit_cost: z.number().min(0, 'Unit cost cannot be negative'),
   quantity: z.number().min(0).nullable().optional(),
+  // Spec 1: each material row decides whether tax applies to it.
+  apply_tax: z.boolean().default(true),
 });
 
 export const estimateSubBidSchema = z.object({

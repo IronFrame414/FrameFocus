@@ -22,8 +22,33 @@
 
 export type DiscountType = 'percent' | 'fixed';
 
+export type PricingMode = 'markup' | 'margin';
+
 export function roundMoney(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+/**
+ * Applies a markup or margin percent to a cost (§4.4a + Session 48
+ * margin equations):
+ *   markup: cost × (1 + pct/100)
+ *   margin: cost / (1 − pct/100)
+ * Margin is Zod-capped at 99.99; the divisor guard is defensive
+ * against bad stored data (returns the raw cost rather than
+ * Infinity/negative).
+ */
+export function applyPricing(
+  cost: number,
+  pct: number | null | undefined,
+  mode: PricingMode
+): number {
+  const p = pct ?? 0;
+  if (mode === 'margin') {
+    const divisor = 1 - p / 100;
+    if (divisor <= 0) return cost;
+    return cost / divisor;
+  }
+  return cost * (1 + p / 100);
 }
 
 export function applyDiscount(
@@ -49,20 +74,37 @@ export function computeMaterialTotalCost(input: {
   return roundMoney((input.quantity ?? 0) * input.unit_cost);
 }
 
-/** tax_amount for a detailed line: material_cost_subtotal × tax_rate (§4.4). */
+/**
+ * tax_amount for a detailed line (§4.4 + Spec 1 apply_tax):
+ * taxable material subtotal × tax_rate. The caller sums total_cost
+ * over material rows with apply_tax = true only. Allowance rows
+ * participate via their total_cost (= unit_cost, quantity ignored)
+ * when apply_tax is on.
+ */
 export function computeLineTaxAmount(
-  materialCostSubtotal: number,
+  taxableMaterialSubtotal: number,
   taxRatePercent: number | null | undefined
 ): number {
-  return roundMoney(materialCostSubtotal * ((taxRatePercent ?? 0) / 100));
+  return roundMoney(taxableMaterialSubtotal * ((taxRatePercent ?? 0) / 100));
+}
+
+/** Σ total_cost over material rows where apply_tax = true. */
+export function computeTaxableMaterialSubtotal(
+  materials: Array<{ total_cost: number; apply_tax: boolean }>
+): number {
+  return roundMoney(
+    materials.reduce((sum, m) => sum + (m.apply_tax ? m.total_cost : 0), 0)
+  );
 }
 
 /**
- * Detailed line (§4.4a):
- * labor × (1 + labor markup) + (materials + tax) × (1 + material markup),
- * then the per-line discount (§4.4b).
+ * Detailed line (§4.4a + margin mode):
+ * pricing(labor) + pricing(materials + tax), then the per-line
+ * discount (§4.4b). `pricing` is markup or margin per the estimate's
+ * pricing_mode.
  */
 export function computeDetailedLineTotal(input: {
+  pricing_mode: PricingMode;
   labor_cost: number | null | undefined;
   material_cost_subtotal: number | null | undefined;
   tax_amount: number | null | undefined;
@@ -71,25 +113,31 @@ export function computeDetailedLineTotal(input: {
   discount_type?: DiscountType | null;
   discount_amount?: number | null;
 }): number {
-  const labor = (input.labor_cost ?? 0) * (1 + (input.labor_markup_percent ?? 0) / 100);
-  const material =
-    ((input.material_cost_subtotal ?? 0) + (input.tax_amount ?? 0)) *
-    (1 + (input.material_markup_percent ?? 0) / 100);
+  const labor = applyPricing(input.labor_cost ?? 0, input.labor_markup_percent, input.pricing_mode);
+  const material = applyPricing(
+    (input.material_cost_subtotal ?? 0) + (input.tax_amount ?? 0),
+    input.material_markup_percent,
+    input.pricing_mode
+  );
   return roundMoney(applyDiscount(labor + material, input.discount_type, input.discount_amount));
 }
 
 /**
- * Lump-sum line (§4.4a):
- * sub bid × (1 + subcontractor markup), then the per-line discount.
+ * Lump-sum line (§4.4a + margin mode):
+ * pricing(sub bid), then the per-line discount.
  */
 export function computeLumpSumLineTotal(input: {
+  pricing_mode: PricingMode;
   sub_bid_amount: number | null | undefined;
   subcontractor_markup_percent: number | null | undefined;
   discount_type?: DiscountType | null;
   discount_amount?: number | null;
 }): number {
-  const total =
-    (input.sub_bid_amount ?? 0) * (1 + (input.subcontractor_markup_percent ?? 0) / 100);
+  const total = applyPricing(
+    input.sub_bid_amount ?? 0,
+    input.subcontractor_markup_percent,
+    input.pricing_mode
+  );
   return roundMoney(applyDiscount(total, input.discount_type, input.discount_amount));
 }
 
