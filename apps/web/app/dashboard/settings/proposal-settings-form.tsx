@@ -1,0 +1,431 @@
+'use client';
+
+import { useRef, useState } from 'react';
+import {
+  ProposalSettings,
+  UpdateProposalSettingsInput,
+  updateProposalSettings,
+} from '@/lib/services/company-client';
+import {
+  brandColorSchema,
+  expirationDaysSchema,
+} from '@framefocus/shared/validation/company-settings';
+import { reminderScheduleSchema } from '@framefocus/shared/validation/email';
+import {
+  DEFAULT_PROPOSAL_BODY,
+  DEFAULT_PROPOSAL_SUBJECT,
+  DEFAULT_REMINDER_BODY,
+  DEFAULT_REMINDER_SUBJECT,
+  TEMPLATE_VARIABLES,
+} from '@/lib/proposal/proposal-defaults';
+
+// Spec 2 — "Proposals & Email" settings section (extends 4M's
+// Estimating settings page). Owner/Admin only (page-level gate).
+// Same autosave-on-blur pattern as the estimating form.
+
+const SAVE_DEBOUNCE_MS = 1000;
+
+const PRICING_LEVEL_OPTIONS = [
+  { value: 'total_only', label: 'Total Only' },
+  { value: 'category_totals', label: 'Category Totals' },
+  { value: 'line_items', label: 'Full Line Items' },
+] as const;
+
+interface ProposalSettingsFormProps {
+  settings: ProposalSettings;
+}
+
+export function ProposalSettingsForm({ settings }: ProposalSettingsFormProps) {
+  const [brandColor, setBrandColor] = useState(settings.brand_color || '#1a56db');
+  const [pricingLevel, setPricingLevel] = useState(settings.default_proposal_pricing_level);
+  const [expirationDays, setExpirationDays] = useState(String(settings.default_expiration_days));
+  const [proposalSubject, setProposalSubject] = useState(
+    settings.default_proposal_email_subject ?? ''
+  );
+  const [proposalBody, setProposalBody] = useState(settings.default_proposal_email_body ?? '');
+  const [reminderSubject, setReminderSubject] = useState(
+    settings.default_reminder_email_subject ?? ''
+  );
+  const [reminderBody, setReminderBody] = useState(settings.default_reminder_email_body ?? '');
+  const [scheduleDays, setScheduleDays] = useState<number[]>(
+    settings.default_reminder_schedule ?? [3, 7, 14]
+  );
+  const [newDay, setNewDay] = useState('');
+
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [savedKey, setSavedKey] = useState<string | null>(null);
+  const timersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function setFieldError(key: string, message: string | null) {
+    setErrors((prev) => {
+      const next = { ...prev };
+      if (message) next[key] = message;
+      else delete next[key];
+      return next;
+    });
+  }
+
+  function scheduleSave(key: string, updates: UpdateProposalSettingsInput) {
+    if (timersRef.current[key]) clearTimeout(timersRef.current[key]);
+    timersRef.current[key] = setTimeout(async () => {
+      const result = await updateProposalSettings(settings.id, updates);
+      if (result.success) {
+        setSavedKey(key);
+        if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+        savedTimerRef.current = setTimeout(() => setSavedKey(null), 2000);
+      } else {
+        setFieldError(key, result.error || 'Save failed — try again.');
+      }
+    }, SAVE_DEBOUNCE_MS);
+  }
+
+  function handleBrandColorBlur() {
+    const value = brandColor.trim();
+    const parsed = brandColorSchema.safeParse(value);
+    if (!parsed.success) {
+      setFieldError('brand_color', parsed.error.errors[0].message);
+      return;
+    }
+    setFieldError('brand_color', null);
+    scheduleSave('brand_color', { brand_color: value });
+  }
+
+  function handleExpirationBlur() {
+    const num = Number(expirationDays);
+    const parsed = expirationDaysSchema.safeParse(num);
+    if (!parsed.success) {
+      setFieldError('default_expiration_days', parsed.error.errors[0].message);
+      return;
+    }
+    setFieldError('default_expiration_days', null);
+    scheduleSave('default_expiration_days', { default_expiration_days: num });
+  }
+
+  function saveSchedule(days: number[]) {
+    const sorted = [...days].sort((a, b) => a - b);
+    const parsed = reminderScheduleSchema.safeParse(sorted);
+    if (!parsed.success) {
+      setFieldError('default_reminder_schedule', parsed.error.errors[0].message);
+      return;
+    }
+    setFieldError('default_reminder_schedule', null);
+    setScheduleDays(sorted);
+    scheduleSave('default_reminder_schedule', { default_reminder_schedule: sorted });
+  }
+
+  function addScheduleDay() {
+    const num = Number(newDay);
+    if (!Number.isInteger(num) || num < 1) {
+      setFieldError('default_reminder_schedule', 'Enter a whole day number ≥ 1');
+      return;
+    }
+    if (scheduleDays.includes(num)) {
+      setFieldError('default_reminder_schedule', 'That day is already in the schedule');
+      return;
+    }
+    setNewDay('');
+    saveSchedule([...scheduleDays, num]);
+  }
+
+  function textField(
+    key: string,
+    label: string,
+    value: string,
+    setValue: (v: string) => void,
+    column:
+      | 'default_proposal_email_subject'
+      | 'default_reminder_email_subject',
+    placeholder: string
+  ) {
+    return (
+      <div style={{ marginBottom: '0.75rem' }}>
+        <label style={labelStyle}>{label}</label>
+        <input
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onBlur={() => scheduleSave(key, { [column]: value.trim() || null })}
+          maxLength={200}
+          placeholder={placeholder}
+          style={inputStyle}
+        />
+        {errors[key] && <div style={errorStyle}>{errors[key]}</div>}
+        {savedKey === key && <div style={savedStyle}>Saved</div>}
+      </div>
+    );
+  }
+
+  function bodyField(
+    key: string,
+    label: string,
+    value: string,
+    setValue: (v: string) => void,
+    column: 'default_proposal_email_body' | 'default_reminder_email_body',
+    placeholder: string
+  ) {
+    return (
+      <div style={{ marginBottom: '0.75rem' }}>
+        <label style={labelStyle}>{label}</label>
+        <textarea
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onBlur={() => scheduleSave(key, { [column]: value.trim() || null })}
+          rows={6}
+          maxLength={5000}
+          placeholder={placeholder}
+          style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
+        />
+        {errors[key] && <div style={errorStyle}>{errors[key]}</div>}
+        {savedKey === key && <div style={savedStyle}>Saved</div>}
+      </div>
+    );
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '0.5rem 0.75rem',
+    border: '1px solid #d1d5db',
+    borderRadius: '0.375rem',
+    fontSize: '0.875rem',
+    boxSizing: 'border-box',
+  };
+  const labelStyle: React.CSSProperties = {
+    display: 'block',
+    fontSize: '0.875rem',
+    fontWeight: 500,
+    marginBottom: '0.25rem',
+    color: '#374151',
+  };
+  const sectionStyle: React.CSSProperties = { marginBottom: '2rem' };
+  const sectionTitleStyle: React.CSSProperties = {
+    fontSize: '1.1rem',
+    fontWeight: 600,
+    marginBottom: '1rem',
+    paddingBottom: '0.5rem',
+    borderBottom: '1px solid #e5e7eb',
+  };
+  const errorStyle: React.CSSProperties = {
+    color: '#991b1b',
+    fontSize: '0.75rem',
+    marginTop: '0.25rem',
+  };
+  const savedStyle: React.CSSProperties = {
+    color: '#166534',
+    fontSize: '0.75rem',
+    marginTop: '0.25rem',
+  };
+
+  return (
+    <div style={{ maxWidth: '640px', marginTop: '3rem' }}>
+      <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem' }}>
+        Proposals &amp; Email
+      </h2>
+      <p style={{ color: '#6b7280', marginBottom: '2rem', fontSize: '0.875rem' }}>
+        Branding and defaults for proposal delivery and follow-up reminders. Changes save
+        automatically. Available template variables:{' '}
+        {TEMPLATE_VARIABLES.map((v) => (
+          <code
+            key={v}
+            style={{
+              fontSize: '0.6875rem',
+              backgroundColor: '#f3f4f6',
+              borderRadius: '0.25rem',
+              padding: '0 0.25rem',
+              marginRight: '0.25rem',
+            }}
+          >
+            {v}
+          </code>
+        ))}
+      </p>
+
+      {/* Branding */}
+      <div style={sectionStyle}>
+        <div style={sectionTitleStyle}>Branding</div>
+        <label style={labelStyle}>Brand color</label>
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <input
+            type="color"
+            value={/^#[0-9a-fA-F]{6}$/.test(brandColor) ? brandColor : '#1a56db'}
+            onChange={(e) => {
+              setBrandColor(e.target.value);
+              setFieldError('brand_color', null);
+              scheduleSave('brand_color', { brand_color: e.target.value });
+            }}
+            style={{ width: '48px', height: '36px', padding: 0, border: '1px solid #d1d5db' }}
+          />
+          <input
+            value={brandColor}
+            onChange={(e) => setBrandColor(e.target.value)}
+            onBlur={handleBrandColorBlur}
+            style={{ ...inputStyle, maxWidth: '140px' }}
+            placeholder="#1a56db"
+          />
+        </div>
+        {errors.brand_color && <div style={errorStyle}>{errors.brand_color}</div>}
+        {savedKey === 'brand_color' && <div style={savedStyle}>Saved</div>}
+      </div>
+
+      {/* Proposal defaults */}
+      <div style={sectionStyle}>
+        <div style={sectionTitleStyle}>Proposal Defaults</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '0.75rem' }}>
+          <div>
+            <label style={labelStyle}>Default pricing detail</label>
+            <select
+              value={pricingLevel}
+              onChange={(e) => {
+                const value = e.target.value as ProposalSettings['default_proposal_pricing_level'];
+                setPricingLevel(value);
+                scheduleSave('default_proposal_pricing_level', {
+                  default_proposal_pricing_level: value,
+                });
+              }}
+              style={inputStyle}
+            >
+              {PRICING_LEVEL_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+            {savedKey === 'default_proposal_pricing_level' && <div style={savedStyle}>Saved</div>}
+          </div>
+          <div>
+            <label style={labelStyle}>Default expiration (days)</label>
+            <input
+              inputMode="numeric"
+              value={expirationDays}
+              onChange={(e) => setExpirationDays(e.target.value)}
+              onBlur={handleExpirationBlur}
+              style={inputStyle}
+            />
+            {errors.default_expiration_days && (
+              <div style={errorStyle}>{errors.default_expiration_days}</div>
+            )}
+            {savedKey === 'default_expiration_days' && <div style={savedStyle}>Saved</div>}
+          </div>
+        </div>
+        {textField(
+          'default_proposal_email_subject',
+          'Proposal email subject',
+          proposalSubject,
+          setProposalSubject,
+          'default_proposal_email_subject',
+          DEFAULT_PROPOSAL_SUBJECT
+        )}
+        {bodyField(
+          'default_proposal_email_body',
+          'Proposal email body',
+          proposalBody,
+          setProposalBody,
+          'default_proposal_email_body',
+          DEFAULT_PROPOSAL_BODY
+        )}
+      </div>
+
+      {/* Reminders */}
+      <div style={sectionStyle}>
+        <div style={sectionTitleStyle}>Follow-Up Reminders</div>
+        <label style={labelStyle}>Reminder schedule (days after sending)</label>
+        <div
+          style={{
+            display: 'flex',
+            gap: '0.5rem',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            marginBottom: '0.5rem',
+          }}
+        >
+          {scheduleDays.length === 0 && (
+            <span style={{ fontSize: '0.8125rem', color: '#9ca3af' }}>
+              No reminders (opted out)
+            </span>
+          )}
+          {scheduleDays.map((day) => (
+            <span
+              key={day}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.375rem',
+                padding: '0.25rem 0.625rem',
+                backgroundColor: '#eff6ff',
+                border: '1px solid #bfdbfe',
+                borderRadius: '9999px',
+                fontSize: '0.8125rem',
+              }}
+            >
+              Day {day}
+              <button
+                type="button"
+                onClick={() => saveSchedule(scheduleDays.filter((d) => d !== day))}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#991b1b',
+                  cursor: 'pointer',
+                  padding: 0,
+                  fontSize: '0.8125rem',
+                }}
+                aria-label={`Remove day ${day}`}
+              >
+                ✕
+              </button>
+            </span>
+          ))}
+          <input
+            inputMode="numeric"
+            value={newDay}
+            onChange={(e) => setNewDay(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                addScheduleDay();
+              }
+            }}
+            placeholder="Add day…"
+            style={{ ...inputStyle, width: '90px' }}
+          />
+          <button
+            type="button"
+            onClick={addScheduleDay}
+            style={{
+              padding: '0.375rem 0.75rem',
+              fontSize: '0.8125rem',
+              backgroundColor: '#f3f4f6',
+              border: '1px solid #d1d5db',
+              borderRadius: '0.375rem',
+              cursor: 'pointer',
+            }}
+          >
+            Add
+          </button>
+        </div>
+        {errors.default_reminder_schedule && (
+          <div style={errorStyle}>{errors.default_reminder_schedule}</div>
+        )}
+        {savedKey === 'default_reminder_schedule' && <div style={savedStyle}>Saved</div>}
+
+        <div style={{ marginTop: '1rem' }}>
+          {textField(
+            'default_reminder_email_subject',
+            'Reminder email subject',
+            reminderSubject,
+            setReminderSubject,
+            'default_reminder_email_subject',
+            DEFAULT_REMINDER_SUBJECT
+          )}
+          {bodyField(
+            'default_reminder_email_body',
+            'Reminder email body',
+            reminderBody,
+            setReminderBody,
+            'default_reminder_email_body',
+            DEFAULT_REMINDER_BODY
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
