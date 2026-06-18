@@ -43,3 +43,25 @@ export async function deleteSubcontractor(
   if (error) return { success: false, error: error.message };
   return { success: true };
 }
+
+
+// ── Picker options (4D bidding tab) ──
+
+export interface SubcontractorOption {
+  id: string;
+  company_name: string;
+  default_markup_percent: number | null;
+}
+
+export async function listSubcontractorOptions(): Promise<SubcontractorOption[]> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from('subcontractors')
+    .select('id, company_name, default_markup_percent')
+    .eq('is_deleted', false)
+    .order('company_name', { ascending: true });
+
+  if (error) return [];
+  return data ?? [];
+}
