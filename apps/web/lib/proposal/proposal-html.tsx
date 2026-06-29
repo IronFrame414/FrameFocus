@@ -127,17 +127,29 @@ export function ProposalHtml({ data }: { data: ProposalData }) {
         </div>
       )}
 
-      {/* Scope */}
-      {estimate.scopeOfWork.length > 0 && (
+      {/* Scope — summary + nested sections (4D-rev) */}
+      {(estimate.scopeSummary || estimate.scopeSections.length > 0) && (
         <div>
           <div style={sectionTitle}>Scope of Work</div>
-          <ul style={{ margin: 0, paddingLeft: '1.25rem', fontSize: '0.9375rem' }}>
-            {estimate.scopeOfWork.map((item, i) => (
-              <li key={i} style={{ marginBottom: '0.25rem' }}>
-                {item}
-              </li>
-            ))}
-          </ul>
+          {estimate.scopeSummary && (
+            <p style={{ margin: '0 0 0.5rem', fontSize: '0.9375rem' }}>{estimate.scopeSummary}</p>
+          )}
+          {estimate.scopeSections.map((section, i) => (
+            <div key={i} style={{ marginBottom: '0.5rem' }}>
+              {section.title.trim().length > 0 && (
+                <div style={{ fontWeight: 700, fontSize: '0.9375rem', marginBottom: '0.25rem' }}>
+                  {section.title}
+                </div>
+              )}
+              <ul style={{ margin: 0, paddingLeft: '1.25rem', fontSize: '0.9375rem' }}>
+                {section.bullets.map((b, j) => (
+                  <li key={j} style={{ marginBottom: '0.25rem' }}>
+                    {b}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
         </div>
       )}
 
@@ -162,45 +174,69 @@ export function ProposalHtml({ data }: { data: ProposalData }) {
             <div style={{ fontWeight: 700, fontSize: '0.9375rem', margin: '0.5rem 0 0.25rem' }}>
               {cat.name}
             </div>
-            {cat.lines.map((line, j) => (
-              <div key={j}>
-                <div style={row}>
-                  <span>
-                    {line.name}
-                    {line.description && (
-                      <span
+            {/* 4D-rev: a lump_sum category collapses to one number */}
+            {cat.collapsed ? (
+              <div style={row}>
+                <span>Included scope</span>
+                <span>{fmtMoney(cat.subtotal)}</span>
+              </div>
+            ) : (
+              cat.lines.map((line, j) => (
+                <div key={j}>
+                  <div style={row}>
+                    <span>
+                      {line.name}
+                      {line.description && (
+                        <span
+                          style={{
+                            display: 'block',
+                            fontSize: '0.75rem',
+                            color: '#6b7280',
+                          }}
+                        >
+                          {line.description}
+                        </span>
+                      )}
+                    </span>
+                    <span>
+                      {line.originalTotal != null
+                        ? fmtMoney(line.originalTotal)
+                        : fmtMoney(line.total)}
+                    </span>
+                  </div>
+                  {/* 4D-rev: itemized lines reveal their marked-up rows */}
+                  {line.rows &&
+                    line.rows.map((r, k) => (
+                      <div
+                        key={k}
                         style={{
-                          display: 'block',
-                          fontSize: '0.75rem',
+                          ...row,
+                          borderBottom: 'none',
                           color: '#6b7280',
+                          fontSize: '0.8125rem',
                         }}
                       >
-                        {line.description}
-                      </span>
-                    )}
-                  </span>
-                  <span>
-                    {line.originalTotal != null
-                      ? fmtMoney(line.originalTotal)
-                      : fmtMoney(line.total)}
-                  </span>
+                        <span style={{ paddingLeft: '0.75rem' }}>{r.name}</span>
+                        <span>{fmtMoney(r.total)}</span>
+                      </div>
+                    ))}
+                  {line.originalTotal != null && (
+                    <>
+                      <div style={{ ...row, borderBottom: 'none', color: '#16a34a' }}>
+                        <span style={{ flex: 1, textAlign: 'right' }}>
+                          Discount ({line.discountLabel}):
+                        </span>
+                        <span>−{fmtMoney(line.originalTotal - line.total)}</span>
+                      </div>
+                      <div style={{ ...row, fontWeight: 700 }}>
+                        <span style={{ flex: 1, textAlign: 'right' }}>Line total:</span>
+                        <span>{fmtMoney(line.total)}</span>
+                      </div>
+                    </>
+                  )}
                 </div>
-                {line.originalTotal != null && (
-                  <>
-                    <div style={{ ...row, borderBottom: 'none', color: '#16a34a' }}>
-                      <span style={{ flex: 1, textAlign: 'right' }}>
-                        Discount ({line.discountLabel}):
-                      </span>
-                      <span>−{fmtMoney(line.originalTotal - line.total)}</span>
-                    </div>
-                    <div style={{ ...row, fontWeight: 700 }}>
-                      <span style={{ flex: 1, textAlign: 'right' }}>Line total:</span>
-                      <span>{fmtMoney(line.total)}</span>
-                    </div>
-                  </>
-                )}
-              </div>
-            ))}
+              ))
+            )}
           </div>
         ))}
 

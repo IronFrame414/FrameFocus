@@ -17,12 +17,28 @@ export interface ProposalLine {
   /** Pre-discount amount — present only when a per-line discount applies (E1). */
   originalTotal: number | null;
   discountLabel: string | null;
+  /**
+   * 4D-rev: marked-up rows shown to the client when this line resolves
+   * to `itemized` at the line_items pricing level. null = render as a
+   * single number (lump_sum or default).
+   */
+  rows: Array<{ name: string; total: number }> | null;
 }
 
 export interface ProposalCategory {
   name: string;
   subtotal: number;
   lines: ProposalLine[];
+  /**
+   * 4D-rev: at line_items level, a category set to `lump_sum` renders
+   * as a single rolled-up number (its lines are not listed).
+   */
+  collapsed: boolean;
+}
+
+export interface ProposalScopeSection {
+  title: string;
+  bullets: string[];
 }
 
 export interface ProposalAllowance {
@@ -56,7 +72,8 @@ export interface ProposalData {
     expirationDays: number;
     pricingLevel: ProposalPricingLevel;
     coverLetter: string | null;
-    scopeOfWork: string[];
+    scopeSummary: string | null;
+    scopeSections: ProposalScopeSection[];
     termsSections: Array<{ name: string; content: string }>;
     subtotal: number;
     taxTotal: number;
@@ -112,13 +129,13 @@ export async function getProposalData(
       : Promise.resolve({ data: null }),
     supabase
       .from('estimate_categories')
-      .select('id, name, sort_order')
+      .select('id, name, sort_order, presentation_mode')
       .eq('estimate_id', estimateId)
       .order('sort_order', { ascending: true }),
     supabase
       .from('estimate_line_items')
       .select(
-        'id, category_id, name, description, total_price, total_price_override, discount_type, discount_amount, sort_order'
+        'id, category_id, name, description, presentation_mode, total_price, total_price_override, discount_type, discount_amount, sort_order'
       )
       .eq('estimate_id', estimateId)
       .order('sort_order', { ascending: true }),
@@ -128,18 +145,38 @@ export async function getProposalData(
   const contact = contactRes.data;
   if (!company || !contact) return null;
 
+  const pricingLevel = estimate.proposal_pricing_level as ProposalPricingLevel;
   const lineItems = lineItemsRes.data ?? [];
   const lineIds = lineItems.map((l) => l.id);
-  const { data: allowanceMaterials } =
+  const { data: allRows } =
     lineIds.length > 0
       ? await supabase
-          .from('estimate_line_materials')
-          .select('line_item_id, name, total_cost')
+          .from('estimate_line_rows')
+          .select('line_item_id, row_type, name, total, unit_of_measure, unit_cost, sort_order')
           .in('line_item_id', lineIds)
-          .eq('unit_of_measure', 'allowance')
+          .order('sort_order', { ascending: true })
       : { data: [] };
 
+  type ProposalRowRec = {
+    line_item_id: string;
+    row_type: string;
+    name: string;
+    total: number;
+    unit_of_measure: string | null;
+    unit_cost: number | null;
+    sort_order: number;
+  };
+  const rowsByLine = new Map<string, ProposalRowRec[]>();
+  for (const r of (allRows ?? []) as ProposalRowRec[]) {
+    const list = rowsByLine.get(r.line_item_id) ?? [];
+    list.push(r);
+    rowsByLine.set(r.line_item_id, list);
+  }
+
   const categories: ProposalCategory[] = (categoriesRes.data ?? []).map((cat) => {
+    // 4D-rev: presentation override only bites at line_items level.
+    const collapsed = pricingLevel === 'line_items' && cat.presentation_mode === 'lump_sum';
+
     const lines: ProposalLine[] = lineItems
       .filter((l) => l.category_id === cat.id)
       .map((l) => {
@@ -164,12 +201,24 @@ export async function getProposalData(
             discountLabel = `$${l.discount_amount.toFixed(2)}`;
           }
         }
+
+        // Resolution: line override → category override. Only an
+        // explicit `itemized` (and only at line_items level, in a
+        // non-collapsed category) reveals the line's rows to the client.
+        const resolvedMode = l.presentation_mode ?? cat.presentation_mode ?? null;
+        const showRows =
+          pricingLevel === 'line_items' && !collapsed && resolvedMode === 'itemized';
+        const rows = showRows
+          ? (rowsByLine.get(l.id) ?? []).map((r) => ({ name: r.name, total: r.total }))
+          : null;
+
         return {
           name: l.name,
           description: l.description,
           total: l.total_price,
           originalTotal,
           discountLabel,
+          rows,
         };
       });
 
@@ -177,15 +226,18 @@ export async function getProposalData(
       name: cat.name,
       subtotal: roundMoney(lines.reduce((sum, l) => sum + l.total, 0)),
       lines,
+      collapsed,
     };
   });
 
   const lineNameById = new Map(lineItems.map((l) => [l.id, l.name]));
-  const allowances: ProposalAllowance[] = (allowanceMaterials ?? []).map((m) => ({
-    name: m.name,
-    lineName: lineNameById.get(m.line_item_id) ?? '',
-    amount: m.total_cost,
-  }));
+  const allowances: ProposalAllowance[] = (allRows ?? [])
+    .filter((r) => r.row_type === 'material' && r.unit_of_measure === 'allowance')
+    .map((r) => ({
+      name: r.name,
+      lineName: lineNameById.get(r.line_item_id) ?? '',
+      amount: r.unit_cost ?? 0,
+    }));
 
   return {
     company: {
@@ -210,9 +262,11 @@ export async function getProposalData(
       date: estimate.created_at ?? new Date().toISOString(),
       expiresAt: estimate.expires_at,
       expirationDays: estimate.expiration_days,
-      pricingLevel: estimate.proposal_pricing_level as ProposalPricingLevel,
+      pricingLevel,
       coverLetter: estimate.cover_letter,
-      scopeOfWork: estimate.scope_of_work ?? [],
+      scopeSummary: estimate.scope_summary,
+      scopeSections:
+        (estimate.scope_sections as unknown as ProposalScopeSection[] | null) ?? [],
       termsSections:
         (estimate.terms_sections as Array<{ name: string; content: string }> | null) ?? [],
       subtotal: estimate.subtotal,

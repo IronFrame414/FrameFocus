@@ -194,14 +194,26 @@ export function ProposalDocument({ data }: { data: ProposalData }) {
           </View>
         )}
 
-        {/* 5. Scope of work */}
-        {estimate.scopeOfWork.length > 0 && (
+        {/* 5. Scope of work — summary + nested sections (4D-rev) */}
+        {(estimate.scopeSummary || estimate.scopeSections.length > 0) && (
           <View>
             <Text style={[styles.sectionTitle, { color: accent }]}>Scope of Work</Text>
-            {estimate.scopeOfWork.map((item, i) => (
-              <View key={i} style={styles.bullet}>
-                <Text style={{ marginRight: 6 }}>•</Text>
-                <Text style={[styles.paragraph, { flex: 1 }]}>{item}</Text>
+            {estimate.scopeSummary && (
+              <Text style={[styles.paragraph, { marginBottom: 6 }]}>{estimate.scopeSummary}</Text>
+            )}
+            {estimate.scopeSections.map((section, i) => (
+              <View key={i} style={{ marginBottom: 6 }}>
+                {section.title.trim().length > 0 && (
+                  <Text style={{ fontFamily: 'Helvetica-Bold', fontSize: 10, marginBottom: 2 }}>
+                    {section.title}
+                  </Text>
+                )}
+                {section.bullets.map((b, j) => (
+                  <View key={j} style={[styles.bullet, { marginLeft: 8 }]}>
+                    <Text style={{ marginRight: 6 }}>•</Text>
+                    <Text style={[styles.paragraph, { flex: 1 }]}>{b}</Text>
+                  </View>
+                ))}
               </View>
             ))}
           </View>
@@ -226,7 +238,14 @@ export function ProposalDocument({ data }: { data: ProposalData }) {
           categories.map((cat, i) => (
             <View key={i} style={{ marginBottom: 8 }}>
               <Text style={{ fontFamily: 'Helvetica-Bold', marginBottom: 2 }}>{cat.name}</Text>
-              {cat.lines.map((line, j) => (
+              {/* 4D-rev: a lump_sum category collapses to one number */}
+              {cat.collapsed ? (
+                <View style={styles.row}>
+                  <Text style={{ flex: 1 }}>Included scope</Text>
+                  <Text>{fmtMoney(cat.subtotal)}</Text>
+                </View>
+              ) : (
+                cat.lines.map((line, j) => (
                 <View key={j} wrap={false}>
                   <View style={styles.row}>
                     <View style={{ flex: 1, paddingRight: 12 }}>
@@ -239,6 +258,16 @@ export function ProposalDocument({ data }: { data: ProposalData }) {
                       {line.originalTotal != null ? fmtMoney(line.originalTotal) : fmtMoney(line.total)}
                     </Text>
                   </View>
+                  {/* 4D-rev: itemized lines reveal their marked-up rows */}
+                  {line.rows &&
+                    line.rows.map((r, k) => (
+                      <View key={k} style={[styles.row, { borderBottomWidth: 0, paddingVertical: 1 }]}>
+                        <Text style={{ flex: 1, paddingLeft: 12, fontSize: 9, color: '#6b7280' }}>
+                          {r.name}
+                        </Text>
+                        <Text style={{ fontSize: 9, color: '#6b7280' }}>{fmtMoney(r.total)}</Text>
+                      </View>
+                    ))}
                   {/* E1: original → discount sub-line → line total */}
                   {line.originalTotal != null && (
                     <>
@@ -263,7 +292,8 @@ export function ProposalDocument({ data }: { data: ProposalData }) {
                     </>
                   )}
                 </View>
-              ))}
+                ))
+              )}
             </View>
           ))}
 

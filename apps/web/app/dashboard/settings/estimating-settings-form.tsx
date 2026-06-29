@@ -32,6 +32,7 @@ type FieldKey =
   | 'default_material_margin_percent'
   | 'default_labor_margin_percent'
   | 'default_tax_rate'
+  | 'default_labor_rate'
   | 'default_terms_sections';
 
 const SAVE_DEBOUNCE_MS = 1000;
@@ -51,6 +52,7 @@ export function EstimatingSettingsForm({ settings }: EstimatingSettingsFormProps
     default_material_margin_percent: toInputValue(settings.default_material_margin_percent),
     default_labor_margin_percent: toInputValue(settings.default_labor_margin_percent),
     default_tax_rate: toInputValue(settings.default_tax_rate),
+    default_labor_rate: toInputValue(settings.default_labor_rate),
   });
   const [terms, setTerms] = useState<TermsSection[]>(settings.default_terms_sections ?? []);
 
@@ -141,6 +143,32 @@ export function EstimatingSettingsForm({ settings }: EstimatingSettingsFormProps
     }
     setFieldError(field, null);
     scheduleSave(field, { [field]: num });
+  }
+
+  // ── Labor rate (money, 4D-rev) ──
+
+  function handleLaborRateBlur() {
+    const raw = percents.default_labor_rate.trim();
+    if (raw === '') {
+      setFieldError('default_labor_rate', null);
+      scheduleSave('default_labor_rate', { default_labor_rate: null });
+      return;
+    }
+    const num = Number(raw);
+    if (Number.isNaN(num)) {
+      setFieldError('default_labor_rate', 'Enter a number');
+      return;
+    }
+    if (num < 0) {
+      setFieldError('default_labor_rate', 'Cannot be negative');
+      return;
+    }
+    if (num > 100000) {
+      setFieldError('default_labor_rate', 'Labor rate looks too high');
+      return;
+    }
+    setFieldError('default_labor_rate', null);
+    scheduleSave('default_labor_rate', { default_labor_rate: num });
   }
 
   // ── Terms sections ──
@@ -342,6 +370,26 @@ export function EstimatingSettingsForm({ settings }: EstimatingSettingsFormProps
         <div style={sectionTitleStyle}>Default Tax Rate (%)</div>
         <div style={{ maxWidth: '200px' }}>
           {percentField('default_tax_rate', 'Applied to materials', 'tax')}
+        </div>
+      </div>
+
+      {/* Labor rate (4D-rev) */}
+      <div style={sectionStyle}>
+        <div style={sectionTitleStyle}>Default Labor Rate ($)</div>
+        <div style={{ maxWidth: '200px' }}>
+          <label style={labelStyle}>Pre-fills new labor rows</label>
+          <input
+            inputMode="decimal"
+            value={percents.default_labor_rate}
+            onChange={(e) =>
+              setPercents((prev) => ({ ...prev, default_labor_rate: e.target.value }))
+            }
+            onBlur={handleLaborRateBlur}
+            style={inputStyle}
+            placeholder="—"
+          />
+          {errors.default_labor_rate && <div style={errorStyle}>{errors.default_labor_rate}</div>}
+          {savedField === 'default_labor_rate' && <div style={savedStyle}>Saved</div>}
         </div>
       </div>
 

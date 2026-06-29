@@ -69,7 +69,8 @@ export type UpdateEstimateInput = Partial<
     | 'labor_markup_percent'
     | 'discount_amount'
     | 'cover_letter'
-    | 'scope_of_work'
+    | 'scope_summary'
+    | 'scope_sections'
     | 'terms_sections'
     | 'expiration_days'
     | 'internal_notes'
@@ -88,11 +89,17 @@ export interface ListEstimatesFilters {
 type CategoryRow = Database['public']['Tables']['estimate_categories']['Row'];
 type SubcategoryRow = Database['public']['Tables']['estimate_subcategories']['Row'];
 type LineItemRow = Database['public']['Tables']['estimate_line_items']['Row'];
-type LineMaterialRow = Database['public']['Tables']['estimate_line_materials']['Row'];
+type LineRowRow = Database['public']['Tables']['estimate_line_rows']['Row'];
 type SubBidRow = Database['public']['Tables']['estimate_sub_bids']['Row'];
 type EstimateFileRow = Database['public']['Tables']['estimate_files']['Row'];
 
-export type LineType = 'detailed' | 'lump_sum';
+// 4D-rev: per-line / per-category proposal presentation override.
+export type PresentationMode = 'itemized' | 'lump_sum';
+
+// 4D-rev: a line item is composed of typed rows.
+export type RowType = 'labor' | 'material' | 'subcontractor' | 'other';
+
+export type LaborUnit = 'hours' | 'days';
 
 export type MaterialUnitOfMeasure =
   | 'each'
@@ -109,14 +116,18 @@ export type MaterialUnitOfMeasure =
 
 export type EstimateAttachmentType = 'site_photo' | 'plan' | 'sub_bid' | 'other';
 
-export type EstimateCategory = CategoryRow;
-export type EstimateSubcategory = SubcategoryRow;
-export type EstimateLineItem = Omit<LineItemRow, 'line_type' | 'discount_type'> & {
-  line_type: LineType;
-  discount_type: DiscountType | null;
+export type EstimateCategory = Omit<CategoryRow, 'presentation_mode'> & {
+  presentation_mode: PresentationMode | null;
 };
-export type EstimateLineMaterial = Omit<LineMaterialRow, 'unit_of_measure'> & {
-  unit_of_measure: MaterialUnitOfMeasure;
+export type EstimateSubcategory = SubcategoryRow;
+export type EstimateLineItem = Omit<LineItemRow, 'discount_type' | 'presentation_mode'> & {
+  discount_type: DiscountType | null;
+  presentation_mode: PresentationMode | null;
+};
+export type EstimateLineRow = Omit<LineRowRow, 'row_type' | 'unit_of_measure' | 'labor_unit'> & {
+  row_type: RowType;
+  unit_of_measure: MaterialUnitOfMeasure | null;
+  labor_unit: LaborUnit | null;
 };
 export type EstimateSubBid = SubBidRow;
 export type EstimateFile = Omit<EstimateFileRow, 'attachment_type'> & {
@@ -128,7 +139,7 @@ export interface EstimateWithChildren {
   categories: EstimateCategory[];
   subcategories: EstimateSubcategory[];
   lineItems: EstimateLineItem[];
-  materials: EstimateLineMaterial[];
+  rows: EstimateLineRow[];
   subBids: EstimateSubBid[];
   files: EstimateFile[];
 }
@@ -203,13 +214,13 @@ export async function getEstimate(id: string): Promise<EstimateWithChildren | nu
   ]);
 
   const lineItemIds = (lineItems.data ?? []).map((li) => li.id);
-  const materials =
+  const rows =
     lineItemIds.length > 0
       ? await supabase
-          .from('estimate_line_materials')
+          .from('estimate_line_rows')
           .select('*')
           .in('line_item_id', lineItemIds)
-          .order('created_at', { ascending: true })
+          .order('sort_order', { ascending: true })
       : { data: [] };
 
   return {
@@ -217,7 +228,7 @@ export async function getEstimate(id: string): Promise<EstimateWithChildren | nu
     categories: (categories.data ?? []) as EstimateCategory[],
     subcategories: (subcategories.data ?? []) as EstimateSubcategory[],
     lineItems: (lineItems.data ?? []) as EstimateLineItem[],
-    materials: (materials.data ?? []) as EstimateLineMaterial[],
+    rows: (rows.data ?? []) as EstimateLineRow[],
     subBids: (subBids.data ?? []) as EstimateSubBid[],
     files: (files.data ?? []) as EstimateFile[],
   };

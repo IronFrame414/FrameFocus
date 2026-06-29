@@ -188,85 +188,211 @@ export function TermsTab({ data, canEdit, reload }: TabProps) {
 }
 
 // ── Scope of Work tab ──
+// 4D-rev: a free-text summary at the top, then one level of nesting —
+// named sub-category sections, each with its own bullets.
+
+type ScopeSection = { title: string; bullets: string[] };
 
 export function ScopeTab({ data, canEdit, reload }: TabProps) {
-  const [bullets, setBullets] = useState<string[]>(data.estimate.scope_of_work ?? []);
+  const initialSections =
+    (data.estimate.scope_sections as unknown as ScopeSection[] | null) ?? [];
+  const [summary, setSummary] = useState(data.estimate.scope_summary ?? '');
+  const [sections, setSections] = useState<ScopeSection[]>(initialSections);
   const { error, saved, run } = useSaveState();
 
-  async function persist(next: string[]) {
-    setBullets(next);
+  async function persist(nextSummary: string, nextSections: ScopeSection[]) {
+    setSummary(nextSummary);
+    setSections(nextSections);
     await run(async () => {
-      const result = await updateEstimate(data.estimate.id, { scope_of_work: next });
+      const result = await updateEstimate(data.estimate.id, {
+        scope_summary: nextSummary.trim() || null,
+        scope_sections: nextSections,
+      });
       if (result.success) await reload();
       return result;
     });
   }
 
-  function move(index: number, direction: -1 | 1) {
+  function moveSection(index: number, direction: -1 | 1) {
     const target = index + direction;
-    if (target < 0 || target >= bullets.length) return;
-    const next = [...bullets];
+    if (target < 0 || target >= sections.length) return;
+    const next = [...sections];
     [next[index], next[target]] = [next[target], next[index]];
-    persist(next);
+    persist(summary, next);
+  }
+
+  function moveBullet(si: number, bi: number, direction: -1 | 1) {
+    const bullets = sections[si].bullets;
+    const target = bi + direction;
+    if (target < 0 || target >= bullets.length) return;
+    const nextBullets = [...bullets];
+    [nextBullets[bi], nextBullets[target]] = [nextBullets[target], nextBullets[bi]];
+    persist(summary, sections.map((s, i) => (i === si ? { ...s, bullets: nextBullets } : s)));
   }
 
   return (
     <div style={{ maxWidth: '640px' }}>
       <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}>Scope of Work</h2>
       {error && <div style={errorBoxStyle}>{error}</div>}
-      {bullets.length === 0 && (
+
+      {/* Summary — rendered at the top of the proposal scope block */}
+      <label style={{ display: 'block', fontSize: '0.8125rem', color: '#6b7280', marginBottom: '0.25rem' }}>
+        Summary (shown at the top of the scope on the proposal)
+      </label>
+      <textarea
+        value={summary}
+        disabled={!canEdit}
+        onChange={(e) => setSummary(e.target.value)}
+        onBlur={() => persist(summary, sections)}
+        rows={3}
+        placeholder="A short high-level overview of the work…"
+        style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit', marginBottom: '1.25rem' }}
+      />
+
+      {sections.length === 0 && (
         <p style={{ fontSize: '0.875rem', color: '#9ca3af', marginBottom: '1rem' }}>
-          No scope bullets yet.
+          No scope sections yet.
         </p>
       )}
-      {bullets.map((bullet, i) => (
+
+      {sections.map((section, si) => (
         <div
-          key={i}
-          style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem' }}
+          key={si}
+          style={{
+            border: '1px solid #e5e7eb',
+            borderRadius: '0.375rem',
+            padding: '0.75rem',
+            marginBottom: '0.75rem',
+          }}
         >
-          <span style={{ color: '#9ca3af' }}>•</span>
-          <input
-            value={bullet}
-            disabled={!canEdit}
-            onChange={(e) =>
-              setBullets(bullets.map((b, j) => (j === i ? e.target.value : b)))
-            }
-            onBlur={() => persist(bullets)}
-            style={{ ...inputStyle, flex: 1 }}
-            placeholder="Scope item"
-          />
-          <button
-            type="button"
-            onClick={() => move(i, -1)}
-            disabled={!canEdit || i === 0}
-            style={{ ...iconButtonStyle, opacity: !canEdit || i === 0 ? 0.4 : 1 }}
-          >
-            ▲
-          </button>
-          <button
-            type="button"
-            onClick={() => move(i, 1)}
-            disabled={!canEdit || i === bullets.length - 1}
-            style={{
-              ...iconButtonStyle,
-              opacity: !canEdit || i === bullets.length - 1 ? 0.4 : 1,
-            }}
-          >
-            ▼
-          </button>
-          <button
-            type="button"
-            onClick={() => persist(bullets.filter((_, j) => j !== i))}
-            disabled={!canEdit}
-            style={{ ...iconButtonStyle, color: '#991b1b', opacity: canEdit ? 1 : 0.4 }}
-          >
-            ✕
-          </button>
+          {/* Section title + reorder/delete */}
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem' }}>
+            <button
+              type="button"
+              onClick={() => moveSection(si, -1)}
+              disabled={!canEdit || si === 0}
+              style={{ ...iconButtonStyle, opacity: !canEdit || si === 0 ? 0.4 : 1 }}
+            >
+              ▲
+            </button>
+            <button
+              type="button"
+              onClick={() => moveSection(si, 1)}
+              disabled={!canEdit || si === sections.length - 1}
+              style={{ ...iconButtonStyle, opacity: !canEdit || si === sections.length - 1 ? 0.4 : 1 }}
+            >
+              ▼
+            </button>
+            <input
+              value={section.title}
+              disabled={!canEdit}
+              onChange={(e) =>
+                setSections(sections.map((s, i) => (i === si ? { ...s, title: e.target.value } : s)))
+              }
+              onBlur={() => persist(summary, sections)}
+              maxLength={200}
+              placeholder="Section title (e.g. Demolition)"
+              style={{ ...inputStyle, flex: 1, fontWeight: 600 }}
+            />
+            <button
+              type="button"
+              onClick={() => {
+                if (!window.confirm(`Remove section "${section.title || 'Untitled'}"?`)) return;
+                persist(summary, sections.filter((_, i) => i !== si));
+              }}
+              disabled={!canEdit}
+              style={{ ...iconButtonStyle, color: '#991b1b', opacity: canEdit ? 1 : 0.4 }}
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Bullets */}
+          {section.bullets.map((bullet, bi) => (
+            <div
+              key={bi}
+              style={{
+                display: 'flex',
+                gap: '0.5rem',
+                alignItems: 'center',
+                marginBottom: '0.375rem',
+                marginLeft: '1rem',
+              }}
+            >
+              <span style={{ color: '#9ca3af' }}>•</span>
+              <input
+                value={bullet}
+                disabled={!canEdit}
+                onChange={(e) =>
+                  setSections(
+                    sections.map((s, i) =>
+                      i === si
+                        ? { ...s, bullets: s.bullets.map((b, j) => (j === bi ? e.target.value : b)) }
+                        : s
+                    )
+                  )
+                }
+                onBlur={() => persist(summary, sections)}
+                style={{ ...inputStyle, flex: 1 }}
+                placeholder="Scope item"
+              />
+              <button
+                type="button"
+                onClick={() => moveBullet(si, bi, -1)}
+                disabled={!canEdit || bi === 0}
+                style={{ ...iconButtonStyle, opacity: !canEdit || bi === 0 ? 0.4 : 1 }}
+              >
+                ▲
+              </button>
+              <button
+                type="button"
+                onClick={() => moveBullet(si, bi, 1)}
+                disabled={!canEdit || bi === section.bullets.length - 1}
+                style={{ ...iconButtonStyle, opacity: !canEdit || bi === section.bullets.length - 1 ? 0.4 : 1 }}
+              >
+                ▼
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  persist(
+                    summary,
+                    sections.map((s, i) =>
+                      i === si ? { ...s, bullets: s.bullets.filter((_, j) => j !== bi) } : s
+                    )
+                  )
+                }
+                disabled={!canEdit}
+                style={{ ...iconButtonStyle, color: '#991b1b', opacity: canEdit ? 1 : 0.4 }}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() =>
+                setSections(
+                  sections.map((s, i) => (i === si ? { ...s, bullets: [...s.bullets, ''] } : s))
+                )
+              }
+              style={{ ...iconButtonStyle, marginLeft: '1rem' }}
+            >
+              + Add Bullet
+            </button>
+          )}
         </div>
       ))}
+
       {canEdit && (
-        <button type="button" onClick={() => setBullets([...bullets, ''])} style={buttonStyle}>
-          + Add Bullet
+        <button
+          type="button"
+          onClick={() => setSections([...sections, { title: '', bullets: [] }])}
+          style={buttonStyle}
+        >
+          + Add Section
         </button>
       )}
       {saved && <div style={savedStyle}>Saved</div>}

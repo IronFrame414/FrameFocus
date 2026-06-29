@@ -13,14 +13,15 @@ import {
 import { fmtMoney } from '../labels';
 import type { TabProps } from './estimate-builder';
 
-// 4D Bidding tab — grouped by lump-sum line item across the whole
-// estimate. Winner selection is atomic via the set_winning_bid RPC
-// (partial unique index enforces one winner per line; bid_amount +
-// subcontractor copy onto the line item). bid_document_file_id is
-// read-only until 4L ships the attachments UI (build decision Q1-b).
+// 4D-rev Bidding tab — grouped by line item that carries a
+// subcontractor row across the whole estimate. Winner selection is
+// atomic via the set_winning_bid RPC (partial unique index enforces
+// one winner per line; the winning bid upserts the line's single
+// subcontractor row). bid_document_file_id is read-only until 4L
+// ships the attachments UI (build decision Q1-b).
 
 export function BiddingTab({ data, canEdit, reload }: TabProps) {
-  const { lineItems, subBids } = data;
+  const { lineItems, subBids, rows } = data;
   const [subs, setSubs] = useState<SubcontractorOption[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [addingFor, setAddingFor] = useState<string | null>(null);
@@ -29,7 +30,13 @@ export function BiddingTab({ data, canEdit, reload }: TabProps) {
     listSubcontractorOptions().then(setSubs);
   }, []);
 
-  const lumpSumLines = lineItems.filter((l) => l.line_type === 'lump_sum');
+  // A line is biddable once it carries a subcontractor row, or already
+  // has bids recorded (set_winning_bid upserts the sub row on win).
+  const subRowFor = (lineItemId: string) =>
+    rows.find((r) => r.line_item_id === lineItemId && r.row_type === 'subcontractor');
+  const biddableLines = lineItems.filter(
+    (l) => subRowFor(l.id) != null || subBids.some((b) => b.line_item_id === l.id)
+  );
   const subName = (id: string | null) =>
     subs.find((s) => s.id === id)?.company_name ?? 'Unknown sub';
 
@@ -64,8 +71,8 @@ export function BiddingTab({ data, canEdit, reload }: TabProps) {
     <div style={{ maxWidth: '760px' }}>
       <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.25rem' }}>Sub Bidding</h2>
       <p style={{ fontSize: '0.8125rem', color: '#6b7280', marginBottom: '1.5rem' }}>
-        Track every bid received per lump-sum line. Picking a winner copies its amount and
-        subcontractor onto the line item.
+        Track every bid received per line. Picking a winner updates that line&rsquo;s subcontractor
+        row with the winning amount and subcontractor.
       </p>
 
       {error && (
@@ -83,7 +90,7 @@ export function BiddingTab({ data, canEdit, reload }: TabProps) {
         </div>
       )}
 
-      {lumpSumLines.length === 0 ? (
+      {biddableLines.length === 0 ? (
         <div
           style={{
             padding: '3rem',
@@ -94,11 +101,13 @@ export function BiddingTab({ data, canEdit, reload }: TabProps) {
             fontSize: '0.875rem',
           }}
         >
-          No lump-sum line items yet. Add one in the Items tab to start collecting bids.
+          No lines with a subcontractor row yet. Add a Subcontractor row to a line in the Items tab
+          to start collecting bids.
         </div>
       ) : (
-        lumpSumLines.map((line) => {
+        biddableLines.map((line) => {
           const bids = subBids.filter((b) => b.line_item_id === line.id);
+          const subRow = subRowFor(line.id);
           return (
             <div
               key={line.id}
@@ -119,7 +128,7 @@ export function BiddingTab({ data, canEdit, reload }: TabProps) {
               >
                 <span style={{ fontWeight: 600, fontSize: '0.9375rem' }}>{line.name}</span>
                 <span style={{ fontSize: '0.8125rem', color: '#6b7280' }}>
-                  Current sub bid: <strong>{fmtMoney(line.sub_bid_amount)}</strong>
+                  Current sub bid: <strong>{subRow ? fmtMoney(subRow.amount) : '—'}</strong>
                 </span>
               </div>
 
