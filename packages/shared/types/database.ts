@@ -104,6 +104,7 @@ export type Database = {
           default_expiration_days: number
           default_labor_margin_percent: number | null
           default_labor_markup_percent: number | null
+          default_labor_rate: number | null
           default_material_margin_percent: number | null
           default_material_markup_percent: number | null
           default_pricing_mode: string
@@ -146,6 +147,7 @@ export type Database = {
           default_expiration_days?: number
           default_labor_margin_percent?: number | null
           default_labor_markup_percent?: number | null
+          default_labor_rate?: number | null
           default_material_margin_percent?: number | null
           default_material_markup_percent?: number | null
           default_pricing_mode?: string
@@ -188,6 +190,7 @@ export type Database = {
           default_expiration_days?: number
           default_labor_margin_percent?: number | null
           default_labor_markup_percent?: number | null
+          default_labor_rate?: number | null
           default_material_margin_percent?: number | null
           default_material_markup_percent?: number | null
           default_pricing_mode?: string
@@ -530,6 +533,7 @@ export type Database = {
           estimate_id: string
           id: string
           name: string
+          presentation_mode: string | null
           sort_order: number
           updated_at: string | null
           updated_by: string | null
@@ -541,6 +545,7 @@ export type Database = {
           estimate_id: string
           id?: string
           name: string
+          presentation_mode?: string | null
           sort_order: number
           updated_at?: string | null
           updated_by?: string | null
@@ -552,6 +557,7 @@ export type Database = {
           estimate_id?: string
           id?: string
           name?: string
+          presentation_mode?: string | null
           sort_order?: number
           updated_at?: string | null
           updated_by?: string | null
@@ -648,19 +654,11 @@ export type Database = {
           discount_type: string | null
           estimate_id: string
           id: string
-          labor_cost: number | null
-          labor_markup_percent: number | null
-          line_type: string
-          material_cost_subtotal: number | null
-          material_markup_percent: number | null
           name: string
           notes: string | null
+          presentation_mode: string | null
           sort_order: number
-          sub_bid_amount: number | null
           subcategory_id: string | null
-          subcontractor_id: string | null
-          subcontractor_markup_percent: number | null
-          tax_amount: number | null
           total_price: number
           total_price_override: number | null
           updated_at: string | null
@@ -676,19 +674,11 @@ export type Database = {
           discount_type?: string | null
           estimate_id: string
           id?: string
-          labor_cost?: number | null
-          labor_markup_percent?: number | null
-          line_type: string
-          material_cost_subtotal?: number | null
-          material_markup_percent?: number | null
           name: string
           notes?: string | null
+          presentation_mode?: string | null
           sort_order: number
-          sub_bid_amount?: number | null
           subcategory_id?: string | null
-          subcontractor_id?: string | null
-          subcontractor_markup_percent?: number | null
-          tax_amount?: number | null
           total_price?: number
           total_price_override?: number | null
           updated_at?: string | null
@@ -704,19 +694,11 @@ export type Database = {
           discount_type?: string | null
           estimate_id?: string
           id?: string
-          labor_cost?: number | null
-          labor_markup_percent?: number | null
-          line_type?: string
-          material_cost_subtotal?: number | null
-          material_markup_percent?: number | null
           name?: string
           notes?: string | null
+          presentation_mode?: string | null
           sort_order?: number
-          sub_bid_amount?: number | null
           subcategory_id?: string | null
-          subcontractor_id?: string | null
-          subcontractor_markup_percent?: number | null
-          tax_amount?: number | null
           total_price?: number
           total_price_override?: number | null
           updated_at?: string | null
@@ -751,84 +733,105 @@ export type Database = {
             referencedRelation: "estimate_subcategories"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "estimate_line_items_subcontractor_id_fkey"
-            columns: ["subcontractor_id"]
-            isOneToOne: false
-            referencedRelation: "subcontractors"
-            referencedColumns: ["id"]
-          },
         ]
       }
-      estimate_line_materials: {
+      estimate_line_rows: {
         Row: {
+          amount: number | null
           apply_tax: boolean
           catalog_item_id: string | null
           company_id: string
           created_at: string | null
           created_by: string | null
           id: string
+          labor_unit: string | null
           line_item_id: string
+          markup_percent: number | null
           name: string
           quantity: number | null
-          total_cost: number
-          unit_cost: number
-          unit_of_measure: string
+          rate: number | null
+          row_type: string
+          sort_order: number
+          subcontractor_id: string | null
+          total: number
+          unit_cost: number | null
+          unit_of_measure: string | null
           updated_at: string | null
           updated_by: string | null
         }
         Insert: {
+          amount?: number | null
           apply_tax?: boolean
           catalog_item_id?: string | null
           company_id?: string
           created_at?: string | null
           created_by?: string | null
           id?: string
+          labor_unit?: string | null
           line_item_id: string
+          markup_percent?: number | null
           name: string
           quantity?: number | null
-          total_cost?: number
-          unit_cost: number
-          unit_of_measure: string
+          rate?: number | null
+          row_type: string
+          sort_order: number
+          subcontractor_id?: string | null
+          total?: number
+          unit_cost?: number | null
+          unit_of_measure?: string | null
           updated_at?: string | null
           updated_by?: string | null
         }
         Update: {
+          amount?: number | null
           apply_tax?: boolean
           catalog_item_id?: string | null
           company_id?: string
           created_at?: string | null
           created_by?: string | null
           id?: string
+          labor_unit?: string | null
           line_item_id?: string
+          markup_percent?: number | null
           name?: string
           quantity?: number | null
-          total_cost?: number
-          unit_cost?: number
-          unit_of_measure?: string
+          rate?: number | null
+          row_type?: string
+          sort_order?: number
+          subcontractor_id?: string | null
+          total?: number
+          unit_cost?: number | null
+          unit_of_measure?: string | null
           updated_at?: string | null
           updated_by?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "estimate_line_materials_catalog_item_id_fkey"
+            foreignKeyName: "estimate_line_rows_catalog_item_id_fkey"
             columns: ["catalog_item_id"]
             isOneToOne: false
             referencedRelation: "cost_catalog"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "estimate_line_materials_company_id_fkey"
+            foreignKeyName: "estimate_line_rows_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "estimate_line_materials_line_item_id_fkey"
+            foreignKeyName: "estimate_line_rows_line_item_id_fkey"
             columns: ["line_item_id"]
             isOneToOne: false
             referencedRelation: "estimate_line_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_line_rows_subcontractor_id_fkey"
+            columns: ["subcontractor_id"]
+            isOneToOne: false
+            referencedRelation: "subcontractors"
             referencedColumns: ["id"]
           },
         ]
@@ -1025,7 +1028,8 @@ export type Database = {
           reminder_schedule: Json | null
           reviewed_at: string | null
           reviewed_by: string | null
-          scope_of_work: string[] | null
+          scope_sections: Json | null
+          scope_summary: string | null
           sent_at: string | null
           signed_proposal_file_id: string | null
           status: string
@@ -1076,7 +1080,8 @@ export type Database = {
           reminder_schedule?: Json | null
           reviewed_at?: string | null
           reviewed_by?: string | null
-          scope_of_work?: string[] | null
+          scope_sections?: Json | null
+          scope_summary?: string | null
           sent_at?: string | null
           signed_proposal_file_id?: string | null
           status?: string
@@ -1127,7 +1132,8 @@ export type Database = {
           reminder_schedule?: Json | null
           reviewed_at?: string | null
           reviewed_by?: string | null
-          scope_of_work?: string[] | null
+          scope_sections?: Json | null
+          scope_summary?: string | null
           sent_at?: string | null
           signed_proposal_file_id?: string | null
           status?: string
