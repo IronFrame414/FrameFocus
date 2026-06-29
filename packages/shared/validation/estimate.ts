@@ -20,11 +20,16 @@ export const discountTypes = ['percent', 'fixed'] as const;
 
 export const pricingModes = ['markup', 'margin'] as const;
 
-export const proposalPricingLevels = ['total_only', 'category_totals', 'line_items'] as const;
-
-// 4D-rev: per-line / per-category proposal presentation override.
-// NULL = inherit (category, then the estimate's proposal_pricing_level).
-export const presentationModes = ['itemized', 'lump_sum'] as const;
+// 4D-rev3: single estimate-level five-value proposal presentation. Quantity is
+// shown at the detail level only; the two *_no_price levels suppress the
+// per-row/line/category breakdown but the proposal still shows the grand total.
+export const proposalPricingLevels = [
+  'lump_sum',
+  'category_with_price',
+  'category_no_price',
+  'detail_with_price_qty',
+  'detail_no_price',
+] as const;
 
 // 4D-rev: Scope of Work is now one level of nesting — a parent
 // sub-category title with child bullets — plus a free-text summary.

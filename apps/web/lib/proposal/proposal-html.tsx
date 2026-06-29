@@ -153,35 +153,40 @@ export function ProposalHtml({ data }: { data: ProposalData }) {
         </div>
       )}
 
-      {/* Pricing */}
+      {/* Pricing — 4D-rev3: five estimate-level presentation levels.
+          The Subtotal/Discount/Total block below always renders, so the
+          *_no_price levels still show the grand total. */}
       <div style={sectionTitle}>Pricing</div>
-      {estimate.pricingLevel === 'total_only' && (
+      {estimate.pricingLevel === 'lump_sum' && (
         <div style={{ ...row, fontWeight: 700 }}>
           <span>Project Total</span>
           <span>{fmtMoney(estimate.grandTotal)}</span>
         </div>
       )}
-      {estimate.pricingLevel === 'category_totals' &&
+      {estimate.pricingLevel === 'category_with_price' &&
         categories.map((cat, i) => (
           <div key={i} style={row}>
             <span>{cat.name}</span>
             <span>{fmtMoney(cat.subtotal)}</span>
           </div>
         ))}
-      {estimate.pricingLevel === 'line_items' &&
+      {estimate.pricingLevel === 'category_no_price' &&
         categories.map((cat, i) => (
-          <div key={i} style={{ marginBottom: '0.75rem' }}>
-            <div style={{ fontWeight: 700, fontSize: '0.9375rem', margin: '0.5rem 0 0.25rem' }}>
-              {cat.name}
-            </div>
-            {/* 4D-rev: a lump_sum category collapses to one number */}
-            {cat.collapsed ? (
-              <div style={row}>
-                <span>Included scope</span>
-                <span>{fmtMoney(cat.subtotal)}</span>
+          <div key={i} style={{ ...row, borderBottom: 'none' }}>
+            <span>{cat.name}</span>
+          </div>
+        ))}
+      {(estimate.pricingLevel === 'detail_with_price_qty' ||
+        estimate.pricingLevel === 'detail_no_price') &&
+        (() => {
+          const showPrices = estimate.pricingLevel === 'detail_with_price_qty';
+          return categories.map((cat, i) => (
+            <div key={i} style={{ marginBottom: '0.75rem' }}>
+              <div style={{ ...row, fontWeight: 700, fontSize: '0.9375rem', margin: '0.5rem 0 0.25rem' }}>
+                <span>{cat.name}</span>
+                {showPrices && <span>{fmtMoney(cat.subtotal)}</span>}
               </div>
-            ) : (
-              cat.lines.map((line, j) => (
+              {cat.lines.map((line, j) => (
                 <div key={j}>
                   <div style={row}>
                     <span>
@@ -198,29 +203,31 @@ export function ProposalHtml({ data }: { data: ProposalData }) {
                         </span>
                       )}
                     </span>
-                    <span>
-                      {line.originalTotal != null
-                        ? fmtMoney(line.originalTotal)
-                        : fmtMoney(line.total)}
-                    </span>
+                    {showPrices && (
+                      <span>
+                        {line.originalTotal != null
+                          ? fmtMoney(line.originalTotal)
+                          : fmtMoney(line.total)}
+                      </span>
+                    )}
                   </div>
-                  {/* 4D-rev: itemized lines reveal their marked-up rows */}
-                  {line.rows &&
-                    line.rows.map((r, k) => (
-                      <div
-                        key={k}
-                        style={{
-                          ...row,
-                          borderBottom: 'none',
-                          color: '#6b7280',
-                          fontSize: '0.8125rem',
-                        }}
-                      >
-                        <span style={{ paddingLeft: '0.75rem' }}>{r.name}</span>
-                        <span>{fmtMoney(r.total)}</span>
-                      </div>
-                    ))}
-                  {line.originalTotal != null && (
+                  {/* 4D-rev3: every line lists its rows. Row prices show only
+                      at detail_with_price_qty. */}
+                  {line.rows.map((r, k) => (
+                    <div
+                      key={k}
+                      style={{
+                        ...row,
+                        borderBottom: 'none',
+                        color: '#6b7280',
+                        fontSize: '0.8125rem',
+                      }}
+                    >
+                      <span style={{ paddingLeft: '0.75rem' }}>{r.name}</span>
+                      {showPrices && <span>{fmtMoney(r.total)}</span>}
+                    </div>
+                  ))}
+                  {showPrices && line.originalTotal != null && (
                     <>
                       <div style={{ ...row, borderBottom: 'none', color: '#16a34a' }}>
                         <span style={{ flex: 1, textAlign: 'right' }}>
@@ -235,10 +242,10 @@ export function ProposalHtml({ data }: { data: ProposalData }) {
                     </>
                   )}
                 </div>
-              ))
-            )}
-          </div>
-        ))}
+              ))}
+            </div>
+          ));
+        })()}
 
       {/* Totals block */}
       <div style={{ maxWidth: '320px', marginLeft: 'auto', marginTop: '1rem' }}>

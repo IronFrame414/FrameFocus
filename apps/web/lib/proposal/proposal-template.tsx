@@ -219,83 +219,100 @@ export function ProposalDocument({ data }: { data: ProposalData }) {
           </View>
         )}
 
-        {/* 6. Pricing (by pricing level) */}
+        {/* 6. Pricing — 4D-rev3: five estimate-level presentation levels.
+            The Subtotal/Discount/Total block below always renders, so the
+            *_no_price levels still show the grand total. */}
         <Text style={[styles.sectionTitle, { color: accent }]}>Pricing</Text>
-        {estimate.pricingLevel === 'total_only' && (
+        {estimate.pricingLevel === 'lump_sum' && (
           <View style={styles.row}>
             <Text style={{ flex: 1, fontFamily: 'Helvetica-Bold' }}>Project Total</Text>
             <Text style={{ fontFamily: 'Helvetica-Bold' }}>{fmtMoney(estimate.grandTotal)}</Text>
           </View>
         )}
-        {estimate.pricingLevel === 'category_totals' &&
+        {estimate.pricingLevel === 'category_with_price' &&
           categories.map((cat, i) => (
             <View key={i} style={styles.row} wrap={false}>
               <Text style={{ flex: 1 }}>{cat.name}</Text>
               <Text>{fmtMoney(cat.subtotal)}</Text>
             </View>
           ))}
-        {estimate.pricingLevel === 'line_items' &&
+        {estimate.pricingLevel === 'category_no_price' &&
           categories.map((cat, i) => (
-            <View key={i} style={{ marginBottom: 8 }}>
-              <Text style={{ fontFamily: 'Helvetica-Bold', marginBottom: 2 }}>{cat.name}</Text>
-              {/* 4D-rev: a lump_sum category collapses to one number */}
-              {cat.collapsed ? (
+            <View key={i} style={[styles.row, { borderBottomWidth: 0 }]} wrap={false}>
+              <Text style={{ flex: 1 }}>{cat.name}</Text>
+            </View>
+          ))}
+        {(estimate.pricingLevel === 'detail_with_price_qty' ||
+          estimate.pricingLevel === 'detail_no_price') &&
+          (() => {
+            const showPrices = estimate.pricingLevel === 'detail_with_price_qty';
+            return categories.map((cat, i) => (
+              <View key={i} style={{ marginBottom: 8 }}>
                 <View style={styles.row}>
-                  <Text style={{ flex: 1 }}>Included scope</Text>
-                  <Text>{fmtMoney(cat.subtotal)}</Text>
+                  <Text style={{ flex: 1, fontFamily: 'Helvetica-Bold', marginBottom: 2 }}>
+                    {cat.name}
+                  </Text>
+                  {showPrices && (
+                    <Text style={{ fontFamily: 'Helvetica-Bold' }}>{fmtMoney(cat.subtotal)}</Text>
+                  )}
                 </View>
-              ) : (
-                cat.lines.map((line, j) => (
-                <View key={j} wrap={false}>
-                  <View style={styles.row}>
-                    <View style={{ flex: 1, paddingRight: 12 }}>
-                      <Text>{line.name}</Text>
-                      {line.description && (
-                        <Text style={{ fontSize: 8, color: '#6b7280' }}>{line.description}</Text>
+                {cat.lines.map((line, j) => (
+                  <View key={j} wrap={false}>
+                    <View style={styles.row}>
+                      <View style={{ flex: 1, paddingRight: 12 }}>
+                        <Text>{line.name}</Text>
+                        {line.description && (
+                          <Text style={{ fontSize: 8, color: '#6b7280' }}>{line.description}</Text>
+                        )}
+                      </View>
+                      {showPrices && (
+                        <Text>
+                          {line.originalTotal != null
+                            ? fmtMoney(line.originalTotal)
+                            : fmtMoney(line.total)}
+                        </Text>
                       )}
                     </View>
-                    <Text>
-                      {line.originalTotal != null ? fmtMoney(line.originalTotal) : fmtMoney(line.total)}
-                    </Text>
-                  </View>
-                  {/* 4D-rev: itemized lines reveal their marked-up rows */}
-                  {line.rows &&
-                    line.rows.map((r, k) => (
+                    {/* 4D-rev3: every line lists its rows. Row prices show only
+                        at detail_with_price_qty. */}
+                    {line.rows.map((r, k) => (
                       <View key={k} style={[styles.row, { borderBottomWidth: 0, paddingVertical: 1 }]}>
                         <Text style={{ flex: 1, paddingLeft: 12, fontSize: 9, color: '#6b7280' }}>
                           {r.name}
                         </Text>
-                        <Text style={{ fontSize: 9, color: '#6b7280' }}>{fmtMoney(r.total)}</Text>
+                        {showPrices && (
+                          <Text style={{ fontSize: 9, color: '#6b7280' }}>{fmtMoney(r.total)}</Text>
+                        )}
                       </View>
                     ))}
-                  {/* E1: original → discount sub-line → line total */}
-                  {line.originalTotal != null && (
-                    <>
-                      <View style={[styles.row, { borderBottomWidth: 0 }]}>
-                        <Text style={{ flex: 1, textAlign: 'right', color: '#16a34a' }}>
-                          Discount ({line.discountLabel}):
-                        </Text>
-                        <Text style={{ color: '#16a34a' }}>
-                          −{fmtMoney(line.originalTotal - line.total)}
-                        </Text>
-                      </View>
-                      <View style={styles.row}>
-                        <Text
-                          style={{ flex: 1, textAlign: 'right', fontFamily: 'Helvetica-Bold' }}
-                        >
-                          Line total:
-                        </Text>
-                        <Text style={{ fontFamily: 'Helvetica-Bold' }}>
-                          {fmtMoney(line.total)}
-                        </Text>
-                      </View>
-                    </>
-                  )}
-                </View>
-                ))
-              )}
-            </View>
-          ))}
+                    {/* E1: original → discount sub-line → line total */}
+                    {showPrices && line.originalTotal != null && (
+                      <>
+                        <View style={[styles.row, { borderBottomWidth: 0 }]}>
+                          <Text style={{ flex: 1, textAlign: 'right', color: '#16a34a' }}>
+                            Discount ({line.discountLabel}):
+                          </Text>
+                          <Text style={{ color: '#16a34a' }}>
+                            −{fmtMoney(line.originalTotal - line.total)}
+                          </Text>
+                        </View>
+                        <View style={styles.row}>
+                          <Text
+                            style={{ flex: 1, textAlign: 'right', fontFamily: 'Helvetica-Bold' }}
+                          >
+                            Line total:
+                          </Text>
+                          <Text style={{ fontFamily: 'Helvetica-Bold' }}>
+                            {fmtMoney(line.total)}
+                          </Text>
+                        </View>
+                      </>
+                    )}
+                  </View>
+                ))}
+              </View>
+            ));
+          })()}
 
         {/* 7. Subtotal / Discount / Total block — always shown */}
         <View style={styles.totalsBlock} wrap={false}>

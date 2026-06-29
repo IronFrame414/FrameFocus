@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { discountTypes, presentationModes } from './estimate';
+import { discountTypes } from './estimate';
 
 // Enums mirror the CHECK constraints on the estimate child tables
 // (migration 20260618120000). `allowance` IS valid here — unlike the
@@ -31,8 +31,6 @@ export const estimateCategorySchema = z.object({
   estimate_id: z.string().uuid(),
   name: z.string().min(1, 'Category name is required').max(200),
   sort_order: z.number().int(),
-  // 4D-rev: per-category proposal presentation override (NULL inherits).
-  presentation_mode: z.enum(presentationModes).nullable().optional(),
 });
 
 export const estimateSubcategorySchema = z.object({
@@ -42,16 +40,15 @@ export const estimateSubcategorySchema = z.object({
   sort_order: z.number().int(),
 });
 
-// 4D-rev: a line item is a named unit with a per-line discount, an
-// optional total override, and a presentation override. Costs and
-// markups live on its rows (estimateLineRowSchema), not here.
+// 4D-rev: a line item is a named unit with a per-line discount and an
+// optional total override. Costs and markups live on its rows
+// (estimateLineRowSchema), not here.
 export const estimateLineItemSchema = z.object({
   estimate_id: z.string().uuid(),
   category_id: z.string().uuid(),
   subcategory_id: z.string().uuid().nullable().optional(),
   name: z.string().min(1, 'Line item name is required').max(200),
   description: z.string().optional(),
-  presentation_mode: z.enum(presentationModes).nullable().optional(),
   discount_type: z.enum(discountTypes).nullable().optional(),
   discount_amount: z.number().min(0).nullable().optional(),
   total_price_override: z.number().min(0).nullable().optional(),

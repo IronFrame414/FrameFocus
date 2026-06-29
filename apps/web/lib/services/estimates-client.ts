@@ -20,7 +20,26 @@ export type DiscountType = 'percent' | 'fixed';
 
 export type PricingMode = 'markup' | 'margin';
 
-export type ProposalPricingLevel = 'total_only' | 'category_totals' | 'line_items';
+// 4D-rev3: single estimate-level five-value proposal presentation.
+export type ProposalPricingLevel =
+  | 'lump_sum'
+  | 'category_with_price'
+  | 'category_no_price'
+  | 'detail_with_price_qty'
+  | 'detail_no_price';
+
+// Shared labels for the five proposal detail levels — reused by the Details tab
+// selector, the proposal preview selector, and the company-default settings form.
+export const PROPOSAL_PRICING_LEVEL_OPTIONS: ReadonlyArray<{
+  value: ProposalPricingLevel;
+  label: string;
+}> = [
+  { value: 'lump_sum', label: 'Lump sum (one total)' },
+  { value: 'category_with_price', label: 'Category totals' },
+  { value: 'category_no_price', label: 'Category names only' },
+  { value: 'detail_with_price_qty', label: 'Full detail (price & qty)' },
+  { value: 'detail_no_price', label: 'Full detail (no price)' },
+];
 
 export type DeclineReasonCode =
   | 'too_expensive'
@@ -93,9 +112,6 @@ type LineRowRow = Database['public']['Tables']['estimate_line_rows']['Row'];
 type SubBidRow = Database['public']['Tables']['estimate_sub_bids']['Row'];
 type EstimateFileRow = Database['public']['Tables']['estimate_files']['Row'];
 
-// 4D-rev: per-line / per-category proposal presentation override.
-export type PresentationMode = 'itemized' | 'lump_sum';
-
 // 4D-rev: a line item is composed of typed rows.
 export type RowType = 'labor' | 'material' | 'subcontractor' | 'other';
 
@@ -116,13 +132,10 @@ export type MaterialUnitOfMeasure =
 
 export type EstimateAttachmentType = 'site_photo' | 'plan' | 'sub_bid' | 'other';
 
-export type EstimateCategory = Omit<CategoryRow, 'presentation_mode'> & {
-  presentation_mode: PresentationMode | null;
-};
+export type EstimateCategory = CategoryRow;
 export type EstimateSubcategory = SubcategoryRow;
-export type EstimateLineItem = Omit<LineItemRow, 'discount_type' | 'presentation_mode'> & {
+export type EstimateLineItem = Omit<LineItemRow, 'discount_type'> & {
   discount_type: DiscountType | null;
-  presentation_mode: PresentationMode | null;
 };
 export type EstimateLineRow = Omit<LineRowRow, 'row_type' | 'unit_of_measure' | 'labor_unit'> & {
   row_type: RowType;

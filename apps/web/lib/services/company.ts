@@ -104,7 +104,13 @@ export async function getEstimatingSettings(): Promise<EstimatingSettings | null
 
 // ── Spec 2 (4E/4J) — proposals & email settings ──
 
-export type ProposalPricingLevel = 'total_only' | 'category_totals' | 'line_items';
+// 4D-rev3: single estimate-level five-value proposal presentation.
+export type ProposalPricingLevel =
+  | 'lump_sum'
+  | 'category_with_price'
+  | 'category_no_price'
+  | 'detail_with_price_qty'
+  | 'detail_no_price';
 
 export type ProposalSettings = Omit<
   Pick<

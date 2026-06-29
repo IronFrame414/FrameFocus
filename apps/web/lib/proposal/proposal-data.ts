@@ -8,7 +8,15 @@ import { roundMoney, type DiscountType } from '@framefocus/shared/utils/estimate
 // it works under RLS (dashboard preview / generate route) AND with
 // the service-role client (public signing page, email send).
 
-export type ProposalPricingLevel = 'total_only' | 'category_totals' | 'line_items';
+// 4D-rev3: single estimate-level five-value proposal presentation. The renderer
+// (template + html) decides what each level shows; the data layer always
+// supplies the full category → line → row tree and lets the renderer hide.
+export type ProposalPricingLevel =
+  | 'lump_sum'
+  | 'category_with_price'
+  | 'category_no_price'
+  | 'detail_with_price_qty'
+  | 'detail_no_price';
 
 export interface ProposalLine {
   name: string;
@@ -18,22 +26,16 @@ export interface ProposalLine {
   originalTotal: number | null;
   discountLabel: string | null;
   /**
-   * 4D-rev: marked-up rows shown to the client when this line resolves
-   * to `itemized` at the line_items pricing level. null = render as a
-   * single number (lump_sum or default).
+   * 4D-rev3: the line's marked-up rows. Always populated; the renderer shows
+   * them only at the detail levels (detail_with_price_qty / detail_no_price).
    */
-  rows: Array<{ name: string; total: number }> | null;
+  rows: Array<{ name: string; total: number }>;
 }
 
 export interface ProposalCategory {
   name: string;
   subtotal: number;
   lines: ProposalLine[];
-  /**
-   * 4D-rev: at line_items level, a category set to `lump_sum` renders
-   * as a single rolled-up number (its lines are not listed).
-   */
-  collapsed: boolean;
 }
 
 export interface ProposalScopeSection {
@@ -129,13 +131,13 @@ export async function getProposalData(
       : Promise.resolve({ data: null }),
     supabase
       .from('estimate_categories')
-      .select('id, name, sort_order, presentation_mode')
+      .select('id, name, sort_order')
       .eq('estimate_id', estimateId)
       .order('sort_order', { ascending: true }),
     supabase
       .from('estimate_line_items')
       .select(
-        'id, category_id, name, description, presentation_mode, total_price, total_price_override, discount_type, discount_amount, sort_order'
+        'id, category_id, name, description, total_price, total_price_override, discount_type, discount_amount, sort_order'
       )
       .eq('estimate_id', estimateId)
       .order('sort_order', { ascending: true }),
@@ -174,9 +176,6 @@ export async function getProposalData(
   }
 
   const categories: ProposalCategory[] = (categoriesRes.data ?? []).map((cat) => {
-    // 4D-rev: presentation override only bites at line_items level.
-    const collapsed = pricingLevel === 'line_items' && cat.presentation_mode === 'lump_sum';
-
     const lines: ProposalLine[] = lineItems
       .filter((l) => l.category_id === cat.id)
       .map((l) => {
@@ -202,15 +201,9 @@ export async function getProposalData(
           }
         }
 
-        // Resolution: line override → category override. Only an
-        // explicit `itemized` (and only at line_items level, in a
-        // non-collapsed category) reveals the line's rows to the client.
-        const resolvedMode = l.presentation_mode ?? cat.presentation_mode ?? null;
-        const showRows =
-          pricingLevel === 'line_items' && !collapsed && resolvedMode === 'itemized';
-        const rows = showRows
-          ? (rowsByLine.get(l.id) ?? []).map((r) => ({ name: r.name, total: r.total }))
-          : null;
+        // 4D-rev3: always supply the line's marked-up rows. The renderer
+        // shows them only at the detail levels.
+        const rows = (rowsByLine.get(l.id) ?? []).map((r) => ({ name: r.name, total: r.total }));
 
         return {
           name: l.name,
@@ -226,7 +219,6 @@ export async function getProposalData(
       name: cat.name,
       subtotal: roundMoney(lines.reduce((sum, l) => sum + l.total, 0)),
       lines,
-      collapsed,
     };
   });
 

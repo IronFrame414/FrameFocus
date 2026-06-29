@@ -11,7 +11,6 @@ import type {
   EstimateAttachmentType,
   LaborUnit,
   MaterialUnitOfMeasure,
-  PresentationMode,
   PricingMode,
   RowType,
 } from '@/lib/services/estimates-client';
@@ -43,14 +42,8 @@ export async function getCompanyDefaultLaborRate(): Promise<number | null> {
 export type CreateCategoryInput = Pick<
   CategoryInsert,
   'estimate_id' | 'name' | 'sort_order'
-> & {
-  presentation_mode?: PresentationMode | null;
-};
-export type UpdateCategoryInput = Partial<
-  Pick<CategoryInsert, 'name' | 'sort_order'> & {
-    presentation_mode: PresentationMode | null;
-  }
 >;
+export type UpdateCategoryInput = Partial<Pick<CategoryInsert, 'name' | 'sort_order'>>;
 
 export async function createEstimateCategory(input: CreateCategoryInput): Promise<CreateResult> {
   const supabase = createClient();
@@ -177,7 +170,6 @@ export type CreateLineItemInput = Pick<
   | 'sort_order'
 > & {
   discount_type?: DiscountType | null;
-  presentation_mode?: PresentationMode | null;
 };
 
 export type UpdateLineItemInput = Partial<
