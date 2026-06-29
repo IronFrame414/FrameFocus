@@ -24,7 +24,7 @@ Three-level hierarchy with optional middle layer:
 - **Subcategory** (optional) — middle grouping when needed. Examples: "Walls," "Cabinetry." Skipped on simpler jobs.
 - **Line Item** — the actual work item. Examples: "Demo Wood," "Cabinet Install," "Shell"
 
-**[4D-rev]** The `line_type` (`detailed` / `lump_sum`) concept is **removed**. A line item is a named unit composed of one or more **typed rows** — see §4.2a. "Lump sum" is no longer an input mode; it is a proposal presentation choice (see §4.5 / `presentation_mode`). The same line can be built with full internal detail and still render to the client as a single rolled-up number.
+**[4D-rev]** The `line_type` (`detailed` / `lump_sum`) concept is **removed**. A line item is a named unit composed of one or more **typed rows** — see §4.2a. "Lump sum" is no longer an input mode; it is one of the estimate-level proposal detail levels (see §4.5 / `proposal_pricing_level`). The same line can be built with full internal detail and still render to the client as part of a single rolled-up number when the estimate uses a lump-sum or category presentation.
 
 A kitchen remodel estimate might have an "Electrical" line built from a single subcontractor row (a pure sub bid), a "Cabinet Install" line built from labor + material rows, and a "Tile Install" line whose tile material row is an allowance — all using the same unified row-based editor.
 
@@ -91,11 +91,13 @@ Generated from the estimate. Contains:
 - Estimate number (configurable prefix, e.g., "BISHOP-001") and version number (v1.1) **[S41 — prefix is configurable per company]**
 - Cover letter (editable text per proposal)
 - Scope of work (editable bullet points per proposal)
-- Pricing — configurable detail level per proposal via `proposal_pricing_level` (default from `companies.default_proposal_pricing_level`):
-  - **Total only** (`total_only`) — single project price. **[4D-rev]** This IS the "single final number" mode (no separate column).
-  - **Category totals** (`category_totals`) — one line per category with subtotal
-  - **Full line items** (`line_items`) — every line item with its price (no labor/material/markup split — that is always internal)
-- **[4D-rev] Per-line / per-category presentation override.** `estimate_line_items.presentation_mode` and `estimate_categories.presentation_mode` (`itemized` | `lump_sum`, NULL = inherit) let a single line or category render as a rolled-up number (`lump_sum`) or forced detail (`itemized`). **The override only takes effect when `proposal_pricing_level = line_items`** — the only level that otherwise shows line/category detail to override. At `category_totals` / `total_only` the estimate-level setting wins and overrides are moot. Resolution: line override → category override → (otherwise the level's default rendering). This is the "electrical as one number while the kitchen is itemized" capability. This is **not** a parallel system to `proposal_pricing_level`; it layers on top of it.
+- Pricing — **[4D-rev3]** configurable detail level per proposal via a single estimate-level five-value `proposal_pricing_level` (default from `companies.default_proposal_pricing_level`). Quantity is shown only at the detail level, never at the category level:
+  - **Lump sum** (`lump_sum`) — one whole-estimate total (the single final number). (Was `total_only`.)
+  - **Category with price** (`category_with_price`) — each category name + its summed line-item total. No quantity. (Was `category_totals`.)
+  - **Category no price** (`category_no_price`) — category names only; no per-category prices. The proposal still shows the bottom-line grand total (and the Subtotal/Discount/Total block when a discount applies).
+  - **Detail with price & qty** (`detail_with_price_qty`) — every line item with its rows; price and quantity shown. For subcontractor/other rows, price only (no qty). (Was `line_items`, with no labor/material/markup split — that is always internal.)
+  - **Detail no price** (`detail_no_price`) — every line item with its rows; names only, no price or quantity per row/line/category. The proposal still shows the bottom-line grand total (and the Subtotal/Discount/Total block when a discount applies).
+- **[4D-rev3]** The per-line / per-category `presentation_mode` override (Rev 2) is **removed entirely** — presentation is one estimate-wide choice, not a per-line/per-category override.
 - **[S41]** Subtotal / Discount / Total block whenever any discount applies
 - **[S41]** Allowance summary box near the bottom listing every material row flagged as an allowance, with description and amount
 - Terms and conditions — **[S41]** structured into named sections (e.g., Payment Terms, Warranty, Change Orders, Permits, Cancellation). Defaults pulled from company settings, editable per proposal.
@@ -257,7 +259,7 @@ One-click conversion of an accepted estimate into a Module 5 project:
 - tax_total NUMERIC (sum of all line item tax amounts)
 - **[S41]** discount_total NUMERIC (computed whole-estimate discount in dollars)
 - grand_total NUMERIC (subtotal + tax_total − discount_total)
-- proposal_pricing_level CHECK (total_only, category_totals, line_items)
+- **[4D-rev3]** proposal_pricing_level CHECK (lump_sum, category_with_price, category_no_price, detail_with_price_qty, detail_no_price)
 - cover_letter TEXT (nullable)
 - **[4D-rev]** scope_summary TEXT (nullable — free-text summary rendered at the top of the proposal scope block)
 - **[4D-rev]** scope_sections JSONB (nullable — one level of nesting: array of `{ title, bullets: [] }`. Replaces the former flat `scope_of_work TEXT[]`.)
@@ -301,7 +303,6 @@ Note: Optional — only created when the user adds a subcategory. Same hard-dele
 - subcategory_id (FK estimate_subcategories, nullable)
 - name TEXT NOT NULL
 - description TEXT (nullable — optional detail for proposals)
-- **[4D-rev]** presentation_mode CHECK (itemized, lump_sum) (nullable — NULL inherits category, then estimate's proposal_pricing_level; see §4.5)
 - **[S41]** discount_type CHECK (percent, fixed) (nullable — per-line discount)
 - **[S41]** discount_amount NUMERIC (nullable — per-line discount)
 - **[4D-rev]** total_price_override NUMERIC (nullable — user-entered line total; when non-NULL, wins over the computed total and survives pricing-mode switches)

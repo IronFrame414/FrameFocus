@@ -533,7 +533,6 @@ export type Database = {
           estimate_id: string
           id: string
           name: string
-          presentation_mode: string | null
           sort_order: number
           updated_at: string | null
           updated_by: string | null
@@ -545,7 +544,6 @@ export type Database = {
           estimate_id: string
           id?: string
           name: string
-          presentation_mode?: string | null
           sort_order: number
           updated_at?: string | null
           updated_by?: string | null
@@ -557,7 +555,6 @@ export type Database = {
           estimate_id?: string
           id?: string
           name?: string
-          presentation_mode?: string | null
           sort_order?: number
           updated_at?: string | null
           updated_by?: string | null
@@ -656,7 +653,6 @@ export type Database = {
           id: string
           name: string
           notes: string | null
-          presentation_mode: string | null
           sort_order: number
           subcategory_id: string | null
           total_price: number
@@ -676,7 +672,6 @@ export type Database = {
           id?: string
           name: string
           notes?: string | null
-          presentation_mode?: string | null
           sort_order: number
           subcategory_id?: string | null
           total_price?: number
@@ -696,7 +691,6 @@ export type Database = {
           id?: string
           name?: string
           notes?: string | null
-          presentation_mode?: string | null
           sort_order?: number
           subcategory_id?: string | null
           total_price?: number
