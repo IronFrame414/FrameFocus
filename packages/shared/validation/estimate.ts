@@ -22,6 +22,19 @@ export const pricingModes = ['markup', 'margin'] as const;
 
 export const proposalPricingLevels = ['total_only', 'category_totals', 'line_items'] as const;
 
+// 4D-rev: per-line / per-category proposal presentation override.
+// NULL = inherit (category, then the estimate's proposal_pricing_level).
+export const presentationModes = ['itemized', 'lump_sum'] as const;
+
+// 4D-rev: Scope of Work is now one level of nesting — a parent
+// sub-category title with child bullets — plus a free-text summary.
+export const scopeSectionSchema = z.object({
+  title: z.string().min(1, 'Section title is required').max(200),
+  bullets: z.array(z.string().min(1).max(2000)),
+});
+
+export type ScopeSectionInput = z.infer<typeof scopeSectionSchema>;
+
 export const declineReasonCodes = [
   'too_expensive',
   'chose_competitor',
@@ -60,7 +73,10 @@ export const updateEstimateSchema = z.object({
     .optional(),
   proposal_pricing_level: z.enum(proposalPricingLevels).optional(),
   cover_letter: z.string().optional(),
-  scope_of_work: z.array(z.string()).optional(),
+  // 4D-rev: nested scope sections + free-text summary replace the
+  // former flat scope_of_work TEXT[].
+  scope_summary: z.string().nullable().optional(),
+  scope_sections: z.array(scopeSectionSchema).nullable().optional(),
   terms_sections: z.array(termsSectionSchema).optional(),
   expiration_days: z
     .number()

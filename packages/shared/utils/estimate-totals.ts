@@ -3,26 +3,34 @@
 // these helpers and writes the results — the DB never computes totals
 // because estimate totals aggregate across child rows.
 //
+// 4D-rev: a line item is composed of typed rows (labor, material,
+// subcontractor, other). Each row carries its own markup (defaulting
+// from the estimate when NULL) and its own per-row tax flag. The line
+// total is the sum of its row totals, less the per-line discount,
+// unless a total_price_override is set (then the override wins).
+//
 // Conventions:
 // - tax_rate and all markup percents are stored as percentages
 //   (8.25 means 8.25%), matching how contractors enter them.
 // - Money is rounded to 2 decimals at every stored boundary.
+// - Tax is computed on the row's pre-markup cost and folded into the
+//   markup base (cost + tax) × markup — preserving the 4C material
+//   behavior. Labor rows are never taxed.
 //
-// Totals model (per §4.4b — whole-estimate discount reduces the
-// post-tax, post-line-discount subtotal):
-//   line total_price = costs + markups − line discount (tax included
-//     in the material portion per §4.4a)
-//   estimate subtotal   = Σ line total_price
-//   estimate tax_total  = Σ line tax_amount (informational breakdown)
+// Totals model (§4.4b — whole-estimate discount reduces the post-line
+// subtotal):
+//   row total      = pricing(row_cost + row_tax)   [labor: tax = 0]
+//   line total_price = Σ row total − line discount  (or override)
+//   estimate subtotal     = Σ line total_price
+//   estimate tax_total    = Σ row tax (informational breakdown)
 //   estimate discount_total = whole-estimate discount in dollars
-//   estimate grand_total = subtotal − discount_total
-// Note: §4.14's "grand_total = subtotal + tax_total − discount_total"
-// predates the S41 markup model, where tax is already inside line
-// totals (§4.4a); adding tax_total again would double-count it.
+//   estimate grand_total  = subtotal − discount_total
 
 export type DiscountType = 'percent' | 'fixed';
 
 export type PricingMode = 'markup' | 'margin';
+
+export type RowType = 'labor' | 'material' | 'subcontractor' | 'other';
 
 export function roundMoney(value: number): number {
   return Math.round(value * 100) / 100;
@@ -61,84 +69,136 @@ export function applyDiscount(
   return total - discountAmount;
 }
 
-/**
- * total_cost for a material row. For allowance rows the unit cost IS
- * the allowance amount and quantity is ignored (§4.14).
- */
-export function computeMaterialTotalCost(input: {
-  unit_of_measure: string;
-  unit_cost: number;
-  quantity: number | null | undefined;
-}): number {
-  if (input.unit_of_measure === 'allowance') return roundMoney(input.unit_cost);
-  return roundMoney((input.quantity ?? 0) * input.unit_cost);
+export interface RowPricingInput {
+  row_type: RowType;
+  // Labor
+  rate?: number | null;
+  quantity?: number | null;
+  // Material (also uses quantity)
+  unit_of_measure?: string | null;
+  unit_cost?: number | null;
+  // Subcontractor / Other
+  amount?: number | null;
+  // Shared
+  markup_percent?: number | null;
+  apply_tax?: boolean | null;
+}
+
+export interface EstimateMarkupDefaults {
+  subcontractor_markup_percent?: number | null;
+  material_markup_percent?: number | null;
+  labor_markup_percent?: number | null;
 }
 
 /**
- * tax_amount for a detailed line (§4.4 + Spec 1 apply_tax):
- * taxable material subtotal × tax_rate. The caller sums total_cost
- * over material rows with apply_tax = true only. Allowance rows
- * participate via their total_cost (= unit_cost, quantity ignored)
- * when apply_tax is on.
+ * Pre-markup, pre-tax cost of a single row. For allowance material
+ * rows the unit cost IS the allowance amount and quantity is ignored
+ * (§4.14).
  */
-export function computeLineTaxAmount(
-  taxableMaterialSubtotal: number,
-  taxRatePercent: number | null | undefined
-): number {
-  return roundMoney(taxableMaterialSubtotal * ((taxRatePercent ?? 0) / 100));
-}
-
-/** Σ total_cost over material rows where apply_tax = true. */
-export function computeTaxableMaterialSubtotal(
-  materials: Array<{ total_cost: number; apply_tax: boolean }>
-): number {
-  return roundMoney(
-    materials.reduce((sum, m) => sum + (m.apply_tax ? m.total_cost : 0), 0)
-  );
+export function computeRowCost(row: RowPricingInput): number {
+  switch (row.row_type) {
+    case 'labor':
+      return roundMoney((row.rate ?? 0) * (row.quantity ?? 0));
+    case 'material':
+      if (row.unit_of_measure === 'allowance') return roundMoney(row.unit_cost ?? 0);
+      return roundMoney((row.quantity ?? 0) * (row.unit_cost ?? 0));
+    case 'subcontractor':
+    case 'other':
+      return roundMoney(row.amount ?? 0);
+    default:
+      return 0;
+  }
 }
 
 /**
- * Detailed line (§4.4a + margin mode):
- * pricing(labor) + pricing(materials + tax), then the per-line
- * discount (§4.4b). `pricing` is markup or margin per the estimate's
- * pricing_mode.
+ * Effective markup for a row: its own markup_percent if set, else the
+ * estimate-level default for the row's type (labor → labor default,
+ * material → material default, subcontractor/other → subcontractor
+ * default).
  */
-export function computeDetailedLineTotal(input: {
+export function resolveRowMarkupPercent(
+  rowType: RowType,
+  rowMarkup: number | null | undefined,
+  defaults: EstimateMarkupDefaults
+): number | null {
+  if (rowMarkup != null) return rowMarkup;
+  switch (rowType) {
+    case 'labor':
+      return defaults.labor_markup_percent ?? null;
+    case 'material':
+      return defaults.material_markup_percent ?? null;
+    case 'subcontractor':
+    case 'other':
+      return defaults.subcontractor_markup_percent ?? null;
+    default:
+      return null;
+  }
+}
+
+export interface RowPricing {
+  cost: number;
+  tax_amount: number;
+  total: number;
+}
+
+/**
+ * Full pricing for one row: cost, tax (0 for labor or untaxed rows),
+ * and the marked-up/margined total. Tax is folded into the markup
+ * base (cost + tax) to preserve the 4C material behavior.
+ */
+export function computeRowPricing(input: {
+  row: RowPricingInput;
   pricing_mode: PricingMode;
-  labor_cost: number | null | undefined;
-  material_cost_subtotal: number | null | undefined;
-  tax_amount: number | null | undefined;
-  labor_markup_percent: number | null | undefined;
-  material_markup_percent: number | null | undefined;
+  tax_rate: number | null | undefined;
+  defaults: EstimateMarkupDefaults;
+}): RowPricing {
+  const cost = computeRowCost(input.row);
+  const taxable = input.row.row_type !== 'labor' && !!input.row.apply_tax;
+  const tax = taxable ? roundMoney(cost * ((input.tax_rate ?? 0) / 100)) : 0;
+  const markup = resolveRowMarkupPercent(input.row.row_type, input.row.markup_percent, input.defaults);
+  const total = roundMoney(applyPricing(cost + tax, markup, input.pricing_mode));
+  return { cost, tax_amount: tax, total };
+}
+
+export interface LineTotals {
+  total_price: number;
+  tax_amount: number;
+  /** Per-row marked-up totals, in input order (for storing row.total). */
+  rowTotals: number[];
+}
+
+/**
+ * Line total from its rows (§4.4a/§4.4b): Σ row total, then the
+ * per-line discount. A non-NULL total_price_override always wins over
+ * the computed total. tax_amount is the informational sum of row tax.
+ */
+export function computeLineTotalsFromRows(input: {
+  rows: RowPricingInput[];
+  pricing_mode: PricingMode;
+  tax_rate: number | null | undefined;
+  defaults: EstimateMarkupDefaults;
   discount_type?: DiscountType | null;
   discount_amount?: number | null;
-}): number {
-  const labor = applyPricing(input.labor_cost ?? 0, input.labor_markup_percent, input.pricing_mode);
-  const material = applyPricing(
-    (input.material_cost_subtotal ?? 0) + (input.tax_amount ?? 0),
-    input.material_markup_percent,
-    input.pricing_mode
-  );
-  return roundMoney(applyDiscount(labor + material, input.discount_type, input.discount_amount));
-}
-
-/**
- * Lump-sum line (§4.4a + margin mode):
- * pricing(sub bid), then the per-line discount.
- */
-export function computeLumpSumLineTotal(input: {
-  pricing_mode: PricingMode;
-  sub_bid_amount: number | null | undefined;
-  subcontractor_markup_percent: number | null | undefined;
-  discount_type?: DiscountType | null;
-  discount_amount?: number | null;
-}): number {
-  const total = applyPricing(
-    input.sub_bid_amount ?? 0,
-    input.subcontractor_markup_percent,
-    input.pricing_mode
-  );
-  return roundMoney(applyDiscount(total, input.discount_type, input.discount_amount));
+  total_price_override?: number | null;
+}): LineTotals {
+  let sum = 0;
+  let tax = 0;
+  const rowTotals: number[] = [];
+  for (const row of input.rows) {
+    const p = computeRowPricing({
+      row,
+      pricing_mode: input.pricing_mode,
+      tax_rate: input.tax_rate,
+      defaults: input.defaults,
+    });
+    rowTotals.push(p.total);
+    sum += p.total;
+    tax += p.tax_amount;
+  }
+  const computed = roundMoney(applyDiscount(roundMoney(sum), input.discount_type, input.discount_amount));
+  const total_price =
+    input.total_price_override != null ? roundMoney(input.total_price_override) : computed;
+  return { total_price, tax_amount: roundMoney(tax), rowTotals };
 }
 
 export interface EstimateTotals {

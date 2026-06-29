@@ -53,6 +53,14 @@ export const estimatingSettingsSchema = z.object({
   default_material_margin_percent: marginPercentSchema.nullable().optional(),
   default_labor_margin_percent: marginPercentSchema.nullable().optional(),
   default_tax_rate: taxRateSchema.nullable().optional(),
+  // 4D-rev: single company-wide default labor rate (per hour/day),
+  // pre-fills new labor rows. Editable per row.
+  default_labor_rate: z
+    .number()
+    .min(0, 'Cannot be negative')
+    .max(100000, 'Labor rate looks too high')
+    .nullable()
+    .optional(),
   default_terms_sections: z.array(termsSectionSchema).optional(),
 });
 

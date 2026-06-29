@@ -1,12 +1,15 @@
 import { z } from 'zod';
-import { discountTypes } from './estimate';
+import { discountTypes, presentationModes } from './estimate';
 
 // Enums mirror the CHECK constraints on the estimate child tables
-// exactly (migration 20260611102749). `allowance` IS valid here —
-// unlike the cost catalog — because allowance is an estimate-time
-// concept on a material row (§4.5/§4.14).
+// (migration 20260618120000). `allowance` IS valid here — unlike the
+// cost catalog — because allowance is an estimate-time concept on a
+// material row (§4.5/§4.14).
 
-export const lineTypes = ['detailed', 'lump_sum'] as const;
+// 4D-rev: a line item is composed of typed rows; no more line_type.
+export const rowTypes = ['labor', 'material', 'subcontractor', 'other'] as const;
+
+export const laborUnits = ['hours', 'days'] as const;
 
 export const materialUnitsOfMeasure = [
   'each',
@@ -28,6 +31,8 @@ export const estimateCategorySchema = z.object({
   estimate_id: z.string().uuid(),
   name: z.string().min(1, 'Category name is required').max(200),
   sort_order: z.number().int(),
+  // 4D-rev: per-category proposal presentation override (NULL inherits).
+  presentation_mode: z.enum(presentationModes).nullable().optional(),
 });
 
 export const estimateSubcategorySchema = z.object({
@@ -37,44 +42,81 @@ export const estimateSubcategorySchema = z.object({
   sort_order: z.number().int(),
 });
 
-export const estimateLineItemSchema = z
+// 4D-rev: a line item is a named unit with a per-line discount, an
+// optional total override, and a presentation override. Costs and
+// markups live on its rows (estimateLineRowSchema), not here.
+export const estimateLineItemSchema = z.object({
+  estimate_id: z.string().uuid(),
+  category_id: z.string().uuid(),
+  subcategory_id: z.string().uuid().nullable().optional(),
+  name: z.string().min(1, 'Line item name is required').max(200),
+  description: z.string().optional(),
+  presentation_mode: z.enum(presentationModes).nullable().optional(),
+  discount_type: z.enum(discountTypes).nullable().optional(),
+  discount_amount: z.number().min(0).nullable().optional(),
+  total_price_override: z.number().min(0).nullable().optional(),
+  notes: z.string().optional(),
+  sort_order: z.number().int(),
+});
+
+// 4D-rev: one schema for all four row types, refined so only the
+// columns valid for the row_type are present (mirrors the DB CHECK
+// `estimate_line_rows_type_columns`).
+export const estimateLineRowSchema = z
   .object({
-    estimate_id: z.string().uuid(),
-    category_id: z.string().uuid(),
-    subcategory_id: z.string().uuid().nullable().optional(),
-    name: z.string().min(1, 'Line item name is required').max(200),
-    description: z.string().optional(),
-    line_type: z.enum(lineTypes),
-    sub_bid_amount: z.number().min(0).nullable().optional(),
-    subcontractor_id: z.string().uuid().nullable().optional(),
-    labor_cost: z.number().min(0).nullable().optional(),
-    subcontractor_markup_percent: z.number().min(0).nullable().optional(),
-    labor_markup_percent: z.number().min(0).nullable().optional(),
-    material_markup_percent: z.number().min(0).nullable().optional(),
-    discount_type: z.enum(discountTypes).nullable().optional(),
-    discount_amount: z.number().min(0).nullable().optional(),
-    notes: z.string().optional(),
+    line_item_id: z.string().uuid(),
+    row_type: z.enum(rowTypes),
+    name: z.string().min(1, 'Row name is required').max(200),
     sort_order: z.number().int(),
+    markup_percent: z.number().min(0).nullable().optional(),
+    apply_tax: z.boolean().default(false),
+    // Labor
+    rate: z.number().min(0).nullable().optional(),
+    quantity: z.number().min(0).nullable().optional(),
+    labor_unit: z.enum(laborUnits).nullable().optional(),
+    // Material
+    catalog_item_id: z.string().uuid().nullable().optional(),
+    unit_of_measure: z.enum(materialUnitsOfMeasure).nullable().optional(),
+    unit_cost: z.number().min(0).nullable().optional(),
+    // Subcontractor / Other
+    amount: z.number().min(0).nullable().optional(),
+    subcontractor_id: z.string().uuid().nullable().optional(),
+  })
+  .refine((r) => r.row_type !== 'labor' || r.apply_tax === false, {
+    message: 'Labor rows are never taxed',
+    path: ['apply_tax'],
   })
   .refine(
-    (item) => item.line_type === 'lump_sum' || item.sub_bid_amount == null,
-    { message: 'Sub bid amount applies only to lump-sum lines', path: ['sub_bid_amount'] }
+    (r) =>
+      r.row_type !== 'labor' ||
+      (r.amount == null &&
+        r.subcontractor_id == null &&
+        r.catalog_item_id == null &&
+        r.unit_of_measure == null &&
+        r.unit_cost == null),
+    { message: 'Labor rows only use rate, quantity, and unit', path: ['row_type'] }
   )
   .refine(
-    (item) => item.line_type === 'detailed' || item.labor_cost == null,
-    { message: 'Labor cost applies only to detailed lines', path: ['labor_cost'] }
-  );
-
-export const estimateLineMaterialSchema = z.object({
-  line_item_id: z.string().uuid(),
-  catalog_item_id: z.string().uuid().nullable().optional(),
-  name: z.string().min(1, 'Material name is required').max(200),
-  unit_of_measure: z.enum(materialUnitsOfMeasure),
-  unit_cost: z.number().min(0, 'Unit cost cannot be negative'),
-  quantity: z.number().min(0).nullable().optional(),
-  // Spec 1: each material row decides whether tax applies to it.
-  apply_tax: z.boolean().default(true),
-});
+    (r) =>
+      r.row_type !== 'material' ||
+      (r.rate == null && r.labor_unit == null && r.amount == null && r.subcontractor_id == null),
+    { message: 'Material rows only use quantity, unit, and unit cost', path: ['row_type'] }
+  )
+  .refine(
+    (r) =>
+      (r.row_type !== 'subcontractor' && r.row_type !== 'other') ||
+      (r.rate == null &&
+        r.quantity == null &&
+        r.labor_unit == null &&
+        r.catalog_item_id == null &&
+        r.unit_of_measure == null &&
+        r.unit_cost == null),
+    { message: 'This row type only uses a single amount', path: ['row_type'] }
+  )
+  .refine((r) => r.row_type !== 'other' || r.subcontractor_id == null, {
+    message: 'Only subcontractor rows take a subcontractor',
+    path: ['subcontractor_id'],
+  });
 
 export const estimateSubBidSchema = z.object({
   estimate_id: z.string().uuid(),
@@ -97,6 +139,6 @@ export const estimateFileSchema = z.object({
 export type EstimateCategoryInput = z.infer<typeof estimateCategorySchema>;
 export type EstimateSubcategoryInput = z.infer<typeof estimateSubcategorySchema>;
 export type EstimateLineItemInput = z.infer<typeof estimateLineItemSchema>;
-export type EstimateLineMaterialInput = z.infer<typeof estimateLineMaterialSchema>;
+export type EstimateLineRowInput = z.infer<typeof estimateLineRowSchema>;
 export type EstimateSubBidInput = z.infer<typeof estimateSubBidSchema>;
 export type EstimateFileInput = z.infer<typeof estimateFileSchema>;
