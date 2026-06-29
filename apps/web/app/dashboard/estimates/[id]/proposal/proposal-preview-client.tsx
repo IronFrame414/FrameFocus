@@ -5,7 +5,11 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { ProposalData, ProposalPricingLevel } from '@/lib/proposal/proposal-data';
-import { markAsSent, updateEstimate } from '@/lib/services/estimates-client';
+import {
+  markAsSent,
+  PROPOSAL_PRICING_LEVEL_OPTIONS,
+  updateEstimate,
+} from '@/lib/services/estimates-client';
 import { SendProposalModal } from '../../send-proposal-modal';
 
 // Spec 2 (4E E4/E5) — full-page preview. The pricing-level toggle
@@ -19,12 +23,6 @@ const PdfPreview = dynamic(() => import('./pdf-preview'), {
     <p style={{ color: '#9ca3af', fontSize: '0.875rem', padding: '2rem' }}>Rendering preview…</p>
   ),
 });
-
-const PRICING_LEVELS: Array<{ value: ProposalPricingLevel; label: string }> = [
-  { value: 'total_only', label: 'Total Only' },
-  { value: 'category_totals', label: 'Category Totals' },
-  { value: 'line_items', label: 'Full Line Items' },
-];
 
 interface ProposalPreviewClientProps {
   data: ProposalData;
@@ -153,7 +151,7 @@ export function ProposalPreviewClient({
                 fontSize: '0.875rem',
               }}
             >
-              {PRICING_LEVELS.map((level) => (
+              {PROPOSAL_PRICING_LEVEL_OPTIONS.map((level) => (
                 <option key={level.value} value={level.value}>
                   {level.label}
                 </option>

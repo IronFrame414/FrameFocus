@@ -9,7 +9,6 @@ import {
   EstimateSubcategory,
   LaborUnit,
   MaterialUnitOfMeasure,
-  PresentationMode,
   RowType,
 } from '@/lib/services/estimates-client';
 import {
@@ -68,11 +67,6 @@ const ROW_TYPE_DEFAULT_NAME: Record<RowType, string> = {
   other: 'Other cost',
 };
 
-const PRESENTATION_LABELS: Record<PresentationMode, string> = {
-  itemized: 'Itemized',
-  lump_sum: 'Lump sum',
-};
-
 export function ItemsTab({ data, canEdit, reload }: TabProps) {
   const { estimate, categories, subcategories, lineItems, rows } = data;
   const [error, setError] = useState<string | null>(null);
@@ -85,7 +79,6 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
 
   const mode = estimate.pricing_mode;
   const modeNoun = mode === 'markup' ? 'markup' : 'margin';
-  const isLineItemLevel = estimate.proposal_pricing_level === 'line_items';
 
   // pricing-affecting writes recompute, then everything reloads
   async function mutate(fn: () => Promise<Result>, recalc: boolean): Promise<Result> {
@@ -205,40 +198,19 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
 
   // ── Row renderers ──
 
-  function rowDetailCell(row: EstimateLineRow) {
+  // 4D-rev3: the former single "Detail" cell is split into Price + Qty.
+  // Price = unit price (rate / unit_cost / amount); Qty = quantity (+ unit).
+
+  function rowPriceCell(row: EstimateLineRow) {
     if (row.row_type === 'labor') {
       return (
-        <span style={{ display: 'inline-flex', gap: '0.375rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <InlineNumber
-            value={row.rate}
-            disabled={!canEdit}
-            format={fmtMoney}
-            validate={(v) => (v == null || v < 0 ? 'Rate ≥ 0' : null)}
-            onSave={(v) => mutate(() => updateEstimateLineRow(row.id, { rate: v }), true)}
-          />
-          <span style={rowLabel}>×</span>
-          <InlineNumber
-            value={row.quantity}
-            disabled={!canEdit}
-            validate={(v) => (v == null || v < 0 ? 'Qty ≥ 0' : null)}
-            onSave={(v) => mutate(() => updateEstimateLineRow(row.id, { quantity: v }), true)}
-          />
-          <select
-            value={row.labor_unit ?? 'hours'}
-            disabled={!canEdit}
-            onChange={async (e) => {
-              const r = await mutate(
-                () => updateEstimateLineRow(row.id, { labor_unit: e.target.value as LaborUnit }),
-                true
-              );
-              if (!r.success) setError(r.error || 'Save failed');
-            }}
-            style={selectStyle}
-          >
-            <option value="hours">hours</option>
-            <option value="days">days</option>
-          </select>
-        </span>
+        <InlineNumber
+          value={row.rate}
+          disabled={!canEdit}
+          format={fmtMoney}
+          validate={(v) => (v == null || v < 0 ? 'Rate ≥ 0' : null)}
+          onSave={(v) => mutate(() => updateEstimateLineRow(row.id, { rate: v }), true)}
+        />
       );
     }
 
@@ -246,17 +218,6 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
       const isAllowance = row.unit_of_measure === 'allowance';
       return (
         <span style={{ display: 'inline-flex', gap: '0.375rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          {!isAllowance && (
-            <>
-              <InlineNumber
-                value={row.quantity}
-                disabled={!canEdit}
-                validate={(v) => (v == null || v < 0 ? 'Qty ≥ 0' : null)}
-                onSave={(v) => mutate(() => updateEstimateLineRow(row.id, { quantity: v }), true)}
-              />
-              <span style={rowLabel}>×</span>
-            </>
-          )}
           <InlineNumber
             value={row.unit_cost}
             disabled={!canEdit}
@@ -268,28 +229,9 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
                 : mutate(() => updateEstimateLineRow(row.id, { unit_cost: v }), true)
             }
           />
-          <select
-            value={row.unit_of_measure ?? 'each'}
-            disabled={!canEdit}
-            onChange={async (e) => {
-              const r = await mutate(
-                () =>
-                  updateEstimateLineRow(row.id, {
-                    unit_of_measure: e.target.value as MaterialUnitOfMeasure,
-                  }),
-                true
-              );
-              if (!r.success) setError(r.error || 'Save failed');
-            }}
-            style={selectStyle}
-          >
-            {materialUnitsOfMeasure.map((u) => (
-              <option key={u} value={u}>
-                {UNIT_LABELS[u]}
-              </option>
-            ))}
-          </select>
-          {isAllowance && <span style={{ fontSize: '0.625rem', color: '#92400e' }}>allowance = unit cost</span>}
+          {isAllowance && (
+            <span style={{ fontSize: '0.625rem', color: '#92400e' }}>allowance = unit cost</span>
+          )}
           {canEdit && (
             <button
               type="button"
@@ -337,6 +279,80 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
     );
   }
 
+  function rowQtyCell(row: EstimateLineRow) {
+    if (row.row_type === 'labor') {
+      return (
+        <span style={{ display: 'inline-flex', gap: '0.375rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <InlineNumber
+            value={row.quantity}
+            disabled={!canEdit}
+            validate={(v) => (v == null || v < 0 ? 'Qty ≥ 0' : null)}
+            onSave={(v) => mutate(() => updateEstimateLineRow(row.id, { quantity: v }), true)}
+          />
+          <select
+            value={row.labor_unit ?? 'hours'}
+            disabled={!canEdit}
+            onChange={async (e) => {
+              const r = await mutate(
+                () => updateEstimateLineRow(row.id, { labor_unit: e.target.value as LaborUnit }),
+                true
+              );
+              if (!r.success) setError(r.error || 'Save failed');
+            }}
+            style={selectStyle}
+          >
+            <option value="hours">hours</option>
+            <option value="days">days</option>
+          </select>
+        </span>
+      );
+    }
+
+    if (row.row_type === 'material') {
+      const isAllowance = row.unit_of_measure === 'allowance';
+      return (
+        <span style={{ display: 'inline-flex', gap: '0.375rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          {isAllowance ? (
+            <span style={rowLabel} title="Allowance rows have no quantity">
+              —
+            </span>
+          ) : (
+            <InlineNumber
+              value={row.quantity}
+              disabled={!canEdit}
+              validate={(v) => (v == null || v < 0 ? 'Qty ≥ 0' : null)}
+              onSave={(v) => mutate(() => updateEstimateLineRow(row.id, { quantity: v }), true)}
+            />
+          )}
+          <select
+            value={row.unit_of_measure ?? 'each'}
+            disabled={!canEdit}
+            onChange={async (e) => {
+              const r = await mutate(
+                () =>
+                  updateEstimateLineRow(row.id, {
+                    unit_of_measure: e.target.value as MaterialUnitOfMeasure,
+                  }),
+                true
+              );
+              if (!r.success) setError(r.error || 'Save failed');
+            }}
+            style={selectStyle}
+          >
+            {materialUnitsOfMeasure.map((u) => (
+              <option key={u} value={u}>
+                {UNIT_LABELS[u]}
+              </option>
+            ))}
+          </select>
+        </span>
+      );
+    }
+
+    // subcontractor / other — no quantity
+    return <span style={rowLabel}>—</span>;
+  }
+
   function lineRowTr(row: EstimateLineRow) {
     return (
       <tr key={row.id}>
@@ -365,7 +381,8 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
             }
           />
         </td>
-        <td style={{ padding: '0.25rem 0.5rem' }}>{rowDetailCell(row)}</td>
+        <td style={{ padding: '0.25rem 0.5rem' }}>{rowPriceCell(row)}</td>
+        <td style={{ padding: '0.25rem 0.5rem' }}>{rowQtyCell(row)}</td>
         <td style={{ padding: '0.25rem 0.5rem', textAlign: 'right' }}>
           <InlineNumber
             value={row.markup_percent}
@@ -463,33 +480,6 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
     );
   }
 
-  function presentationSelect(
-    value: PresentationMode | null,
-    onChange: (v: PresentationMode | null) => Promise<Result>
-  ) {
-    return (
-      <select
-        value={value ?? ''}
-        disabled={!canEdit}
-        title={
-          isLineItemLevel
-            ? 'How this renders on the proposal'
-            : 'Only applies when the proposal pricing level is "Full line items"'
-        }
-        onChange={async (e) => {
-          const v = (e.target.value || null) as PresentationMode | null;
-          const r = await onChange(v);
-          if (!r.success) setError(r.error || 'Save failed');
-        }}
-        style={{ ...selectStyle, opacity: isLineItemLevel ? 1 : 0.6 }}
-      >
-        <option value="">Proposal: inherit</option>
-        <option value="itemized">Proposal: {PRESENTATION_LABELS.itemized}</option>
-        <option value="lump_sum">Proposal: {PRESENTATION_LABELS.lump_sum}</option>
-      </select>
-    );
-  }
-
   function lineItemBlock(line: EstimateLineItem) {
     const lineRows = rows
       .filter((r) => r.line_item_id === line.id)
@@ -538,9 +528,6 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
                 }
               />
             </span>
-            {presentationSelect(line.presentation_mode, (v) =>
-              mutate(() => updateEstimateLineItem(line.id, { presentation_mode: v }), false)
-            )}
           </div>
           <div style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
             <span style={rowLabel}>Total </span>
@@ -609,7 +596,8 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
             <tr style={{ fontSize: '0.6875rem', color: '#6b7280', textAlign: 'left' }}>
               <th style={{ padding: '0.25rem 0.5rem' }}>Type</th>
               <th style={{ padding: '0.25rem 0.5rem' }}>Name</th>
-              <th style={{ padding: '0.25rem 0.5rem' }}>Detail</th>
+              <th style={{ padding: '0.25rem 0.5rem' }}>Price</th>
+              <th style={{ padding: '0.25rem 0.5rem' }}>Qty</th>
               <th style={{ padding: '0.25rem 0.5rem', textAlign: 'right' }}>{modeNoun} %</th>
               <th style={{ padding: '0.25rem 0.5rem', textAlign: 'center' }}>Tax</th>
               <th style={{ padding: '0.25rem 0.5rem', textAlign: 'right' }}>Total</th>
@@ -772,9 +760,6 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
               }
             />
           </span>
-          {presentationSelect(category.presentation_mode, (v) =>
-            mutate(() => updateEstimateCategory(category.id, { presentation_mode: v }), false)
-          )}
           {canEdit && (
             <>
               <button type="button" onClick={() => addSubcategory(category.id)} style={smallButton}>
@@ -821,24 +806,6 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
           }}
         >
           {error}
-        </div>
-      )}
-
-      {!isLineItemLevel && (
-        <div
-          style={{
-            padding: '0.5rem 0.75rem',
-            borderRadius: '0.375rem',
-            marginBottom: '1rem',
-            backgroundColor: '#f8fafc',
-            color: '#475569',
-            fontSize: '0.75rem',
-          }}
-        >
-          Proposal pricing level is &ldquo;
-          {estimate.proposal_pricing_level === 'total_only' ? 'Total only' : 'Category totals'}
-          &rdquo; — per-line/category presentation overrides only take effect at &ldquo;Full line
-          items.&rdquo; Change it on the Cover Sheet tab.
         </div>
       )}
 

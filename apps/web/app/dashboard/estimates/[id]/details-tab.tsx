@@ -5,6 +5,8 @@ import Link from 'next/link';
 import {
   DiscountType,
   PricingMode,
+  PROPOSAL_PRICING_LEVEL_OPTIONS,
+  ProposalPricingLevel,
   updateEstimate,
   updatePricingMode,
 } from '@/lib/services/estimates-client';
@@ -177,6 +179,32 @@ export function DetailsTab({
                 </label>
               ))}
             </span>
+          </div>
+          {/* 4D-rev3: estimate-level proposal detail level. Defaults from the
+              company default at creation; this edits the persisted value. */}
+          <div style={rowStyle}>
+            <span style={fieldLabel}>Proposal detail level</span>
+            <select
+              value={estimate.proposal_pricing_level}
+              disabled={!canEdit}
+              onChange={async (e) => {
+                const value = e.target.value as ProposalPricingLevel;
+                const result = await saveField({ proposal_pricing_level: value });
+                if (!result.success) setError(result.error || 'Save failed');
+              }}
+              style={{
+                padding: '0.25rem 0.5rem',
+                border: '1px solid #d1d5db',
+                borderRadius: '0.25rem',
+                fontSize: '0.875rem',
+              }}
+            >
+              {PROPOSAL_PRICING_LEVEL_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
           </div>
           <div style={rowStyle}>
             <span style={fieldLabel}>Subcontractor {modeNoun} %</span>

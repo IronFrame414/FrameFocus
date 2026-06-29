@@ -6,6 +6,7 @@ import {
   UpdateProposalSettingsInput,
   updateProposalSettings,
 } from '@/lib/services/company-client';
+import { PROPOSAL_PRICING_LEVEL_OPTIONS } from '@/lib/services/estimates-client';
 import {
   brandColorSchema,
   expirationDaysSchema,
@@ -24,12 +25,6 @@ import {
 // Same autosave-on-blur pattern as the estimating form.
 
 const SAVE_DEBOUNCE_MS = 1000;
-
-const PRICING_LEVEL_OPTIONS = [
-  { value: 'total_only', label: 'Total Only' },
-  { value: 'category_totals', label: 'Category Totals' },
-  { value: 'line_items', label: 'Full Line Items' },
-] as const;
 
 interface ProposalSettingsFormProps {
   settings: ProposalSettings;
@@ -283,7 +278,7 @@ export function ProposalSettingsForm({ settings }: ProposalSettingsFormProps) {
               }}
               style={inputStyle}
             >
-              {PRICING_LEVEL_OPTIONS.map((o) => (
+              {PROPOSAL_PRICING_LEVEL_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
                 </option>
