@@ -24,12 +24,20 @@ Three-level hierarchy with optional middle layer:
 - **Subcategory** (optional) — middle grouping when needed. Examples: "Walls," "Cabinetry." Skipped on simpler jobs.
 - **Line Item** — the actual work item. Examples: "Demo Wood," "Cabinet Install," "Shell"
 
-Each line item has a `line_type`:
+**[4D-rev]** The `line_type` (`detailed` / `lump_sum`) concept is **removed**. A line item is a named unit composed of one or more **typed rows** — see §4.2a. "Lump sum" is no longer an input mode; it is a proposal presentation choice (see §4.5 / `presentation_mode`). The same line can be built with full internal detail and still render to the client as a single rolled-up number.
 
-- **Lump sum** — a sub bid. Single dollar amount + your subcontractor markup. Optionally linked to a subcontractor record. Can be expanded to a detailed breakdown internally if the user wants, but the client only sees the final price.
-- **Detailed** — in-house work. Composed of multiple rows (typically one labor row + N material rows). Labor and materials use separate markups (see §4.4a). **[S41]** Material rows can have their `unit_of_measure` set to `'allowance'`, which marks that specific row as a placeholder amount for client-selected items; the row's quantity is ignored, the unit_cost field becomes the allowance amount, and the row is aggregated into a proposal-level allowance summary box.
+A kitchen remodel estimate might have an "Electrical" line built from a single subcontractor row (a pure sub bid), a "Cabinet Install" line built from labor + material rows, and a "Tile Install" line whose tile material row is an allowance — all using the same unified row-based editor.
 
-Both line types coexist on the same estimate. A kitchen remodel estimate might have "Electrical" as a lump-sum sub bid and "Cabinet Install" as a detailed in-house line, and a "Tile Install" detailed line whose tile material row is an allowance.
+### 4.2a Line Rows **[4D-rev — new section]**
+
+Each line item contains one or more typed rows (`estimate_line_rows`). The `row_type` is required and is one of:
+
+- **labor** — `rate` × `quantity`, where `quantity` is in `hours` (default) or `days` (selector). Per-row markup applies. **Never taxed.** Multiple labor rows per line allowed (different crews/rates).
+- **material** — `quantity` × `unit_cost`. Existing `unit_of_measure` set including `allowance` (allowance rows: quantity ignored, `unit_cost` is the allowance amount, aggregated into the proposal allowance summary). Optional `catalog_item_id` link. Per-row markup. Optional per-row tax (defaults on).
+- **subcontractor** — single `amount`. Optional `subcontractor_id` FK. Per-row markup/margin. Optional per-row tax (opt-in). A line with exactly one subcontractor row is a pure sub bid; the Bidding tab + `set_winning_bid()` feed this row (see §2.5 / §4.14).
+- **other** — single `amount` (permits, dumpster, fees). Per-row markup/margin. Optional per-row tax (opt-in).
+
+Markup vs. margin on every row follows the estimate-level pricing-mode toggle (§4.4a). Each row carries its own `markup_percent` (defaulting estimate → row).
 
 ### 4.3 Cost Catalog
 
@@ -49,27 +57,21 @@ Reusable library of materials with known unit costs. Used when building detailed
 
 - Company sets a single tax rate in company settings (default for all estimates)
 - Tax rate overridable per estimate
-- Tax applies to materials only (not labor, not sub bids)
-- Tax calculated per detailed line item: material_cost_subtotal × tax_rate = tax_amount
+- **[4D-rev]** Tax is an **optional per-row flag** (`estimate_line_rows.apply_tax`) on **material, subcontractor, and other** rows. **Labor rows are never taxed** (`apply_tax` forced false). Default behavior: material rows default to taxed; subcontractor/other rows default to untaxed (opt-in).
+- **[4D-rev]** Tax on a taxed row = (row pre-markup cost) × estimate `tax_rate`. Estimate `tax_total` sums every taxed row's tax.
 
-### 4.4a Markup Handling **[S41 — new section]**
+### 4.4a Markup Handling **[S41 — section; 4D-rev — moved to per-row]**
 
-The original design used a single `markup_percent` per line item. Replaced with a three-way model that mirrors how contractors actually price work:
+**[4D-rev]** Markup is now **per-row**, not per-line. Each `estimate_line_rows` row carries its own `markup_percent`. The three line-level columns (`subcontractor_markup_percent`, `labor_markup_percent`, `material_markup_percent`) are **removed** from `estimate_line_items`.
 
-- **Subcontractor markup** — applied to lump-sum lines (sub bids).
-- **Labor markup** — applied to the labor portion of detailed lines.
-- **Material markup** — applied to the material portion (including tax) of detailed lines.
+The estimate still carries the three company defaults (`subcontractor_markup_percent`, `material_markup_percent`, `labor_markup_percent`) plus the margin equivalents, copied from the company on creation. When a row is added, its `markup_percent` defaults from the matching estimate-level value for its row type (labor → labor default, material → material default, subcontractor/other → subcontractor default). The pricing-mode toggle (`markup` / `margin`) governs how the percent is interpreted; the `switch_pricing_mode()` RPC swaps row percents with sticky-value semantics.
 
-Defaults cascade: company → estimate → line item.
+Row total (before line discount). Tax is computed on the **pre-markup** row cost and folded into the markup base (preserving the 4C material behavior), so `base = row_cost + row_tax` where `row_tax = row_cost × tax_rate` when `apply_tax` (0 for labor or untaxed rows):
 
-- **Company level:** `default_subcontractor_markup_percent`, `default_material_markup_percent`, `default_labor_markup_percent` set in company settings.
-- **Estimate level:** copies the three from the company on new estimate, editable per estimate.
-- **Line item level:** defaults from the estimate, editable per line. Only the relevant column is used (subcontractor markup for lump-sum lines; labor + material markups for detailed lines). Unused columns are NULL.
+- **markup mode:** `base × (1 + markup_percent / 100)`
+- **margin mode:** `base / (1 − margin_percent / 100)`
 
-Line totals:
-
-- **Lump-sum line:** `total = sub_bid_amount × (1 + subcontractor_markup_percent / 100)`
-- **Detailed line:** `total = labor_cost × (1 + labor_markup_percent / 100) + (material_cost_subtotal + tax_amount) × (1 + material_markup_percent / 100)`
+where `row_cost` is `rate × quantity` (labor), `quantity × unit_cost` (material; the allowance amount for allowance rows), or `amount` (subcontractor/other). Labor rows are never taxed. **Line total** = sum of row totals − per-line discount, unless `total_price_override` is set (then the override wins). Estimate `tax_total` is the informational sum of all row taxes. See §4.13 / `estimate-totals`.
 
 ### 4.4b Discounts **[S41 — new section]**
 
@@ -89,10 +91,11 @@ Generated from the estimate. Contains:
 - Estimate number (configurable prefix, e.g., "BISHOP-001") and version number (v1.1) **[S41 — prefix is configurable per company]**
 - Cover letter (editable text per proposal)
 - Scope of work (editable bullet points per proposal)
-- Pricing — configurable detail level per proposal:
-  - **Total only** — single project price
-  - **Category totals** — one line per category with subtotal
-  - **Full line items** — every line item with its price (no labor/material/markup split — that is always internal)
+- Pricing — configurable detail level per proposal via `proposal_pricing_level` (default from `companies.default_proposal_pricing_level`):
+  - **Total only** (`total_only`) — single project price. **[4D-rev]** This IS the "single final number" mode (no separate column).
+  - **Category totals** (`category_totals`) — one line per category with subtotal
+  - **Full line items** (`line_items`) — every line item with its price (no labor/material/markup split — that is always internal)
+- **[4D-rev] Per-line / per-category presentation override.** `estimate_line_items.presentation_mode` and `estimate_categories.presentation_mode` (`itemized` | `lump_sum`, NULL = inherit) let a single line or category render as a rolled-up number (`lump_sum`) or forced detail (`itemized`). **The override only takes effect when `proposal_pricing_level = line_items`** — the only level that otherwise shows line/category detail to override. At `category_totals` / `total_only` the estimate-level setting wins and overrides are moot. Resolution: line override → category override → (otherwise the level's default rendering). This is the "electrical as one number while the kitchen is itemized" capability. This is **not** a parallel system to `proposal_pricing_level`; it layers on top of it.
 - **[S41]** Subtotal / Discount / Total block whenever any discount applies
 - **[S41]** Allowance summary box near the bottom listing every material row flagged as an allowance, with description and amount
 - Terms and conditions — **[S41]** structured into named sections (e.g., Payment Terms, Warranty, Change Orders, Permits, Cancellation). Defaults pulled from company settings, editable per proposal.
@@ -256,7 +259,8 @@ One-click conversion of an accepted estimate into a Module 5 project:
 - grand_total NUMERIC (subtotal + tax_total − discount_total)
 - proposal_pricing_level CHECK (total_only, category_totals, line_items)
 - cover_letter TEXT (nullable)
-- scope_of_work TEXT[] (bullet points, nullable)
+- **[4D-rev]** scope_summary TEXT (nullable — free-text summary rendered at the top of the proposal scope block)
+- **[4D-rev]** scope_sections JSONB (nullable — one level of nesting: array of `{ title, bullets: [] }`. Replaces the former flat `scope_of_work TEXT[]`.)
 - **[S41]** terms_sections JSONB (array of `{ name, content }` objects, copied from companies.default_terms_sections on creation, editable per estimate)
 - expiration_days INTEGER DEFAULT 30
 - expires_at TIMESTAMPTZ (computed from sent_at + expiration_days)
@@ -297,31 +301,31 @@ Note: Optional — only created when the user adds a subcategory. Same hard-dele
 - subcategory_id (FK estimate_subcategories, nullable)
 - name TEXT NOT NULL
 - description TEXT (nullable — optional detail for proposals)
-- line_type CHECK (detailed, lump_sum)
-- Lump sum fields: sub_bid_amount NUMERIC, subcontractor_id (FK subcontractors, nullable — represents the WINNING bid)
-- Detailed fields: labor_cost NUMERIC, material_cost_subtotal NUMERIC (computed from materials rows), tax_amount NUMERIC (material_cost_subtotal × estimate tax_rate)
-- **[S41]** subcontractor_markup_percent NUMERIC (nullable — used only when line_type = lump_sum, defaults from estimate)
-- **[S41]** labor_markup_percent NUMERIC (nullable — used only when line_type = detailed, defaults from estimate)
-- **[S41]** material_markup_percent NUMERIC (nullable — used only when line_type = detailed, defaults from estimate)
+- **[4D-rev]** presentation_mode CHECK (itemized, lump_sum) (nullable — NULL inherits category, then estimate's proposal_pricing_level; see §4.5)
 - **[S41]** discount_type CHECK (percent, fixed) (nullable — per-line discount)
 - **[S41]** discount_amount NUMERIC (nullable — per-line discount)
-- total_price NUMERIC (the final client-facing price for this line, computed from costs + markups − line discount)
+- **[4D-rev]** total_price_override NUMERIC (nullable — user-entered line total; when non-NULL, wins over the computed total and survives pricing-mode switches)
+- total_price NUMERIC (the final client-facing price for this line, computed from row totals − line discount, or `total_price_override` when set)
 - notes TEXT (internal, not client-facing)
 - sort_order INTEGER NOT NULL
 - Standard columns (created_at, updated_at, created_by, updated_by)
 
-Note: Same hard-delete logic as categories/subcategories. **[S41]** Original single `markup_percent` column replaced by the three nullable markup columns above.
+**[4D-rev]** Columns **removed**: `line_type`, `sub_bid_amount`, `subcontractor_id`, `labor_cost`, `material_cost_subtotal`, `tax_amount`, `subcontractor_markup_percent`, `labor_markup_percent`, `material_markup_percent`. Costs and markups now live on `estimate_line_rows`. Note: Same hard-delete logic as categories/subcategories.
 
-**`estimate_line_materials`**
+**`estimate_line_rows`** **[4D-rev — generalizes `estimate_line_materials`]**
 
-- id, company_id, line_item_id (FK estimate_line_items)
-- catalog_item_id (FK cost_catalog, nullable — null for ad-hoc entries)
-- name TEXT NOT NULL (snapshotted from catalog or manually entered)
-- **[S41]** unit_of_measure CHECK (each, sq_ft, linear_ft, box, bundle, bag, gallon, pair, set, allowance, other) — `'allowance'` flags this row as a placeholder amount aggregated into the proposal allowance summary
-- unit_cost NUMERIC (snapshotted at time of addition; for allowance rows, this IS the allowance amount)
-- quantity NUMERIC (ignored when unit_of_measure = 'allowance')
-- total_cost NUMERIC (quantity × unit_cost; for allowance rows, equals unit_cost)
-- Standard columns (created_at, updated_at, created_by, updated_by)
+A line item's typed rows. Replaces the materials-only `estimate_line_materials` table (which is dropped).
+
+- id, company_id, line_item_id (FK estimate_line_items, ON DELETE CASCADE)
+- row_type CHECK (labor, material, subcontractor, other)
+- name TEXT NOT NULL (row description / material name / sub scope)
+- sort_order INTEGER NOT NULL
+- Shared pricing: markup_percent NUMERIC (nullable — per-row, defaults from estimate), apply_tax BOOLEAN NOT NULL DEFAULT false (forced false for labor; material defaults true / sub+other default false at add-time in the service), total NUMERIC (app-maintained row total)
+- Labor: rate NUMERIC, quantity NUMERIC, labor_unit CHECK (hours, days)
+- Material: catalog_item_id (FK cost_catalog, nullable), unit_of_measure CHECK (each, sq_ft, linear_ft, box, bundle, bag, gallon, pair, set, allowance, other), unit_cost NUMERIC, quantity NUMERIC (ignored when allowance; unit_cost is the allowance amount)
+- Subcontractor/Other: amount NUMERIC; subcontractor only: subcontractor_id (FK subcontractors, nullable)
+- CHECK: only the columns valid for `row_type` are non-null.
+- Standard columns + BEFORE UPDATE triggers (`estimate_line_rows_updated_at`, `estimate_line_rows_set_updated_by`) + column defaults (company_id, created_by, updated_by).
 
 Note: Same hard-delete logic.
 
@@ -357,6 +361,7 @@ Files attached directly to an estimate (site photos, marked-up plans, sub bid PD
 - **[S41]** Add `default_labor_markup_percent NUMERIC` — default markup for labor on new estimates.
 - **[S41]** Add `default_terms_sections JSONB` — default terms structure (array of `{ name, content }`), seeded with standard sections (Payment Terms, Warranty, Change Orders, Permits & Inspections, Cancellation) on company creation.
 - Add `default_tax_rate NUMERIC` — default tax rate for materials on new estimates, overridable per estimate.
+- **[4D-rev]** Add `default_labor_rate NUMERIC` — single company-wide default labor rate (per hour/day), pre-fills new labor rows, editable per row. Per-trade/per-role rates deferred (likely ties to Module 6 `tm_rate`). (`default_proposal_pricing_level` already exists from the 4E migration.)
 
 ### 4.15 UI Pages
 
