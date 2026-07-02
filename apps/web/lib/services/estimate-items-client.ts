@@ -1,18 +1,18 @@
 import { createClient } from '@/lib/supabase-browser';
 import type { Database } from '@framefocus/shared/types/database';
 import {
-  computeDetailedLineTotal,
   computeEstimateTotals,
-  computeLineTaxAmount,
-  computeLumpSumLineTotal,
-  computeMaterialTotalCost,
-  roundMoney,
+  computeLineTotalsFromRows,
+  type EstimateMarkupDefaults,
+  type RowPricingInput,
 } from '@framefocus/shared/utils/estimate-totals';
 import type {
   DiscountType,
   EstimateAttachmentType,
-  LineType,
+  LaborUnit,
   MaterialUnitOfMeasure,
+  PricingMode,
+  RowType,
 } from '@/lib/services/estimates-client';
 
 // Child-table writes are RLS-guarded (D4): company scope + parent
@@ -23,16 +23,26 @@ import type {
 type CategoryInsert = Database['public']['Tables']['estimate_categories']['Insert'];
 type SubcategoryInsert = Database['public']['Tables']['estimate_subcategories']['Insert'];
 type LineItemInsert = Database['public']['Tables']['estimate_line_items']['Insert'];
-type LineMaterialInsert = Database['public']['Tables']['estimate_line_materials']['Insert'];
+type LineRowInsert = Database['public']['Tables']['estimate_line_rows']['Insert'];
 type SubBidInsert = Database['public']['Tables']['estimate_sub_bids']['Insert'];
 type EstimateFileInsert = Database['public']['Tables']['estimate_files']['Insert'];
 
 type Result = { success: boolean; error?: string };
 type CreateResult = { success: boolean; id?: string; error?: string };
 
+/** Company-wide default labor rate (4D-rev) — pre-fills new labor rows. */
+export async function getCompanyDefaultLaborRate(): Promise<number | null> {
+  const supabase = createClient();
+  const { data } = await supabase.from('companies').select('default_labor_rate').single();
+  return data?.default_labor_rate ?? null;
+}
+
 // ── Categories ──
 
-export type CreateCategoryInput = Pick<CategoryInsert, 'estimate_id' | 'name' | 'sort_order'>;
+export type CreateCategoryInput = Pick<
+  CategoryInsert,
+  'estimate_id' | 'name' | 'sort_order'
+>;
 export type UpdateCategoryInput = Partial<Pick<CategoryInsert, 'name' | 'sort_order'>>;
 
 export async function createEstimateCategory(input: CreateCategoryInput): Promise<CreateResult> {
@@ -155,21 +165,17 @@ export type CreateLineItemInput = Pick<
   | 'subcategory_id'
   | 'name'
   | 'description'
-  | 'sub_bid_amount'
-  | 'subcontractor_id'
-  | 'labor_cost'
-  | 'subcontractor_markup_percent'
-  | 'labor_markup_percent'
-  | 'material_markup_percent'
   | 'discount_amount'
   | 'notes'
   | 'sort_order'
 > & {
-  line_type: LineType;
   discount_type?: DiscountType | null;
 };
 
-export type UpdateLineItemInput = Partial<Omit<CreateLineItemInput, 'estimate_id'>>;
+export type UpdateLineItemInput = Partial<
+  Omit<CreateLineItemInput, 'estimate_id'> &
+    Pick<LineItemInsert, 'total_price_override'>
+>;
 
 export async function createEstimateLineItem(input: CreateLineItemInput): Promise<CreateResult> {
   const supabase = createClient();
@@ -203,7 +209,7 @@ export async function updateEstimateLineItem(
   return { success: true };
 }
 
-/** Hard delete — cascades to materials and sub bids. */
+/** Hard delete — cascades to rows and sub bids. */
 export async function deleteEstimateLineItem(id: string): Promise<Result> {
   const supabase = createClient();
 
@@ -220,38 +226,86 @@ export async function deleteEstimateLineItem(id: string): Promise<Result> {
   return { success: true };
 }
 
-// ── Line materials ──
+// ── Line rows (labor / material / subcontractor / other) ──
 
-export type CreateLineMaterialInput = Pick<
-  LineMaterialInsert,
-  'line_item_id' | 'catalog_item_id' | 'name' | 'unit_cost' | 'quantity'
+export type CreateLineRowInput = Pick<
+  LineRowInsert,
+  | 'line_item_id'
+  | 'name'
+  | 'sort_order'
+  | 'markup_percent'
+  | 'apply_tax'
+  | 'rate'
+  | 'quantity'
+  | 'catalog_item_id'
+  | 'unit_cost'
+  | 'amount'
+  | 'subcontractor_id'
 > & {
-  unit_of_measure: MaterialUnitOfMeasure;
+  row_type: RowType;
+  labor_unit?: LaborUnit | null;
+  unit_of_measure?: MaterialUnitOfMeasure | null;
 };
 
-export type UpdateLineMaterialInput = Partial<Omit<CreateLineMaterialInput, 'line_item_id'>>;
+// row_type is immutable after creation (different column validity).
+export type UpdateLineRowInput = Partial<Omit<CreateLineRowInput, 'line_item_id' | 'row_type'>>;
 
 /**
- * total_cost is computed here (app-maintained): quantity × unit_cost,
- * or just unit_cost for allowance rows. Catalog unit costs are
- * snapshotted by the caller passing unit_cost — catalog edits never
- * retro-change existing estimates.
+ * Builds an insert payload with only the columns valid for the row
+ * type non-null (mirrors the DB CHECK `estimate_line_rows_type_columns`),
+ * so a sloppy caller can never violate it. `total` is left to the
+ * recompute (recalculateEstimateTotals) which has the pricing context.
  */
-export async function createEstimateLineMaterial(
-  input: CreateLineMaterialInput
-): Promise<CreateResult> {
+function rowInsertPayload(input: CreateLineRowInput): LineRowInsert {
+  const base = {
+    line_item_id: input.line_item_id,
+    row_type: input.row_type,
+    name: input.name,
+    sort_order: input.sort_order,
+    markup_percent: input.markup_percent ?? null,
+  };
+
+  switch (input.row_type) {
+    case 'labor':
+      return {
+        ...base,
+        apply_tax: false, // labor is never taxed
+        rate: input.rate ?? null,
+        quantity: input.quantity ?? null,
+        labor_unit: input.labor_unit ?? 'hours',
+      };
+    case 'material':
+      return {
+        ...base,
+        apply_tax: input.apply_tax ?? true, // materials taxed by default
+        unit_of_measure: input.unit_of_measure ?? 'each',
+        unit_cost: input.unit_cost ?? null,
+        quantity: input.quantity ?? null,
+        catalog_item_id: input.catalog_item_id ?? null,
+      };
+    case 'subcontractor':
+      return {
+        ...base,
+        apply_tax: input.apply_tax ?? false, // opt-in
+        amount: input.amount ?? null,
+        subcontractor_id: input.subcontractor_id ?? null,
+      };
+    case 'other':
+    default:
+      return {
+        ...base,
+        apply_tax: input.apply_tax ?? false, // opt-in
+        amount: input.amount ?? null,
+      };
+  }
+}
+
+export async function createEstimateLineRow(input: CreateLineRowInput): Promise<CreateResult> {
   const supabase = createClient();
 
   const { data, error } = await supabase
-    .from('estimate_line_materials')
-    .insert({
-      ...input,
-      total_cost: computeMaterialTotalCost({
-        unit_of_measure: input.unit_of_measure,
-        unit_cost: input.unit_cost,
-        quantity: input.quantity,
-      }),
-    })
+    .from('estimate_line_rows')
+    .insert(rowInsertPayload(input))
     .select('id')
     .single();
 
@@ -259,57 +313,39 @@ export async function createEstimateLineMaterial(
   return { success: true, id: data.id };
 }
 
-export async function updateEstimateLineMaterial(
+export async function updateEstimateLineRow(
   id: string,
-  input: UpdateLineMaterialInput
+  input: UpdateLineRowInput
 ): Promise<Result> {
   const supabase = createClient();
 
-  // Re-fetch so total_cost recomputes from the merged row, not just
-  // the fields present in this update.
-  const { data: current, error: fetchError } = await supabase
-    .from('estimate_line_materials')
-    .select('unit_of_measure, unit_cost, quantity')
-    .eq('id', id)
-    .single();
-
-  if (fetchError || !current) {
-    return { success: false, error: 'Material not found' };
-  }
-
-  const merged = { ...current, ...input };
+  // BEFORE UPDATE trigger handles updated_by. `total` is recomputed by
+  // recalculateEstimateTotals, which the caller invokes after.
   const { data, error } = await supabase
-    .from('estimate_line_materials')
-    .update({
-      ...input,
-      total_cost: computeMaterialTotalCost({
-        unit_of_measure: merged.unit_of_measure,
-        unit_cost: merged.unit_cost,
-        quantity: merged.quantity,
-      }),
-    })
+    .from('estimate_line_rows')
+    .update(input)
     .eq('id', id)
     .select('id');
 
   if (error) return { success: false, error: error.message };
   if (!data || data.length === 0) {
-    return { success: false, error: 'Material not found or estimate not editable' };
+    return { success: false, error: 'Row not found or estimate not editable' };
   }
   return { success: true };
 }
 
-export async function deleteEstimateLineMaterial(id: string): Promise<Result> {
+export async function deleteEstimateLineRow(id: string): Promise<Result> {
   const supabase = createClient();
 
   const { data, error } = await supabase
-    .from('estimate_line_materials')
+    .from('estimate_line_rows')
     .delete()
     .eq('id', id)
     .select('id');
 
   if (error) return { success: false, error: error.message };
   if (!data || data.length === 0) {
-    return { success: false, error: 'Material not found or estimate not editable' };
+    return { success: false, error: 'Row not found or estimate not editable' };
   }
   return { success: true };
 }
@@ -385,11 +421,10 @@ export async function softDeleteEstimateSubBid(id: string): Promise<Result> {
 }
 
 /**
- * Atomic winner flip via the set_winning_bid RPC (Q4): clears any
- * previous winner, marks the new one, and copies bid_amount +
- * subcontractor onto the line item — all in one transaction, with
- * role/draft/ownership checks inside the function. Totals are then
- * recomputed here because the line's sub_bid_amount changed.
+ * Atomic winner flip via the set_winning_bid RPC (Rev 2 §2.5): clears
+ * any previous winner, marks the new one, and upserts a single
+ * subcontractor row on the line (insert if none, update if one, error
+ * if 2+). Totals are then recomputed here because a row changed.
  */
 export async function setWinningBid(
   lineItemId: string,
@@ -459,10 +494,14 @@ export async function detachEstimateFile(id: string): Promise<Result> {
 // ── Totals recompute (§4.4a/§4.4b — app-maintained) ──
 
 /**
- * Recomputes every line's derived values and the estimate's totals.
- * Call after any edit that affects pricing (line/material/markup/
- * discount/tax changes, winner flips). Markup cascade: line-level
- * value if set, else the estimate-level value (§4.4a).
+ * Recomputes every row total, every line's total_price, and the
+ * estimate's totals. Call after any edit that affects pricing
+ * (row/markup/discount/tax changes, winner flips, mode switches).
+ * A row's markup defaults from the estimate value for its type when
+ * NULL (§4.4a), interpreted by the estimate's pricing_mode. Per-row
+ * tax applies to material/subcontractor/other rows; labor is never
+ * taxed. A non-NULL total_price_override always wins over the
+ * computed line total.
  */
 export async function recalculateEstimateTotals(estimateId: string): Promise<Result> {
   const supabase = createClient();
@@ -470,78 +509,89 @@ export async function recalculateEstimateTotals(estimateId: string): Promise<Res
   const { data: estimate, error: estimateError } = await supabase
     .from('estimates')
     .select(
-      'id, tax_rate, subcontractor_markup_percent, material_markup_percent, labor_markup_percent, discount_type, discount_amount'
+      'id, pricing_mode, tax_rate, subcontractor_markup_percent, material_markup_percent, labor_markup_percent, discount_type, discount_amount'
     )
     .eq('id', estimateId)
     .single();
 
   if (estimateError || !estimate) return { success: false, error: 'Estimate not found' };
 
+  const pricingMode = estimate.pricing_mode as PricingMode;
+  const defaults: EstimateMarkupDefaults = {
+    subcontractor_markup_percent: estimate.subcontractor_markup_percent,
+    material_markup_percent: estimate.material_markup_percent,
+    labor_markup_percent: estimate.labor_markup_percent,
+  };
+
   const { data: lines, error: linesError } = await supabase
     .from('estimate_line_items')
-    .select('id, line_type, labor_cost, sub_bid_amount, subcontractor_markup_percent, labor_markup_percent, material_markup_percent, discount_type, discount_amount')
+    .select('id, discount_type, discount_amount, total_price_override')
     .eq('estimate_id', estimateId);
 
   if (linesError) return { success: false, error: linesError.message };
 
   const lineIds = (lines ?? []).map((l) => l.id);
-  const { data: materials } =
+  const { data: rows } =
     lineIds.length > 0
       ? await supabase
-          .from('estimate_line_materials')
-          .select('line_item_id, total_cost')
+          .from('estimate_line_rows')
+          .select(
+            'id, line_item_id, row_type, markup_percent, apply_tax, rate, quantity, unit_of_measure, unit_cost, amount'
+          )
           .in('line_item_id', lineIds)
+          .order('sort_order', { ascending: true })
       : { data: [] };
 
-  const materialSubtotals = new Map<string, number>();
-  for (const m of materials ?? []) {
-    materialSubtotals.set(
-      m.line_item_id,
-      roundMoney((materialSubtotals.get(m.line_item_id) ?? 0) + m.total_cost)
-    );
+  // Group rows by line, preserving sort order.
+  type RowRec = NonNullable<typeof rows>[number];
+  const rowsByLine = new Map<string, RowRec[]>();
+  for (const r of rows ?? []) {
+    const list = rowsByLine.get(r.line_item_id) ?? [];
+    list.push(r);
+    rowsByLine.set(r.line_item_id, list);
   }
 
   const computedLines: Array<{ total_price: number; tax_amount: number | null }> = [];
 
   for (const line of lines ?? []) {
-    let materialCostSubtotal: number | null = null;
-    let taxAmount: number | null = null;
-    let totalPrice: number;
+    const lineRows = rowsByLine.get(line.id) ?? [];
+    const rowInputs: RowPricingInput[] = lineRows.map((r) => ({
+      row_type: r.row_type as RowType,
+      rate: r.rate,
+      quantity: r.quantity,
+      unit_of_measure: r.unit_of_measure,
+      unit_cost: r.unit_cost,
+      amount: r.amount,
+      markup_percent: r.markup_percent,
+      apply_tax: r.apply_tax,
+    }));
 
-    if (line.line_type === 'lump_sum') {
-      totalPrice = computeLumpSumLineTotal({
-        sub_bid_amount: line.sub_bid_amount,
-        subcontractor_markup_percent:
-          line.subcontractor_markup_percent ?? estimate.subcontractor_markup_percent,
-        discount_type: line.discount_type as DiscountType | null,
-        discount_amount: line.discount_amount,
-      });
-    } else {
-      materialCostSubtotal = materialSubtotals.get(line.id) ?? 0;
-      taxAmount = computeLineTaxAmount(materialCostSubtotal, estimate.tax_rate);
-      totalPrice = computeDetailedLineTotal({
-        labor_cost: line.labor_cost,
-        material_cost_subtotal: materialCostSubtotal,
-        tax_amount: taxAmount,
-        labor_markup_percent: line.labor_markup_percent ?? estimate.labor_markup_percent,
-        material_markup_percent:
-          line.material_markup_percent ?? estimate.material_markup_percent,
-        discount_type: line.discount_type as DiscountType | null,
-        discount_amount: line.discount_amount,
-      });
+    const lineTotals = computeLineTotalsFromRows({
+      rows: rowInputs,
+      pricing_mode: pricingMode,
+      tax_rate: estimate.tax_rate,
+      defaults,
+      discount_type: line.discount_type as DiscountType | null,
+      discount_amount: line.discount_amount,
+      total_price_override: line.total_price_override,
+    });
+
+    // Persist each row's marked-up total.
+    for (let i = 0; i < lineRows.length; i++) {
+      const { error: rowUpdateError } = await supabase
+        .from('estimate_line_rows')
+        .update({ total: lineTotals.rowTotals[i] })
+        .eq('id', lineRows[i].id);
+      if (rowUpdateError) return { success: false, error: rowUpdateError.message };
     }
 
     const { error: lineUpdateError } = await supabase
       .from('estimate_line_items')
-      .update({
-        material_cost_subtotal: materialCostSubtotal,
-        tax_amount: taxAmount,
-        total_price: totalPrice,
-      })
+      .update({ total_price: lineTotals.total_price })
       .eq('id', line.id);
 
     if (lineUpdateError) return { success: false, error: lineUpdateError.message };
-    computedLines.push({ total_price: totalPrice, tax_amount: taxAmount });
+    computedLines.push({ total_price: lineTotals.total_price, tax_amount: lineTotals.tax_amount });
   }
 
   const totals = computeEstimateTotals(

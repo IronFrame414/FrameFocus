@@ -73,3 +73,34 @@ export async function updatePrimaryAddress(
   if (error) return { success: false, error: error.message };
   return { success: true };
 }
+
+
+// ── 4D — address picker ──
+
+export interface ContactAddressOption {
+  id: string;
+  label: string | null;
+  address_line1: string;
+  address_line2: string | null;
+  city: string;
+  state: string;
+  zip: string;
+  is_primary: boolean;
+}
+
+export async function listAddressesForContact(
+  contactId: string
+): Promise<ContactAddressOption[]> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from('contact_addresses')
+    .select('id, label, address_line1, address_line2, city, state, zip, is_primary')
+    .eq('contact_id', contactId)
+    .eq('is_deleted', false)
+    .order('is_primary', { ascending: false })
+    .order('created_at', { ascending: true });
+
+  if (error) return [];
+  return data ?? [];
+}

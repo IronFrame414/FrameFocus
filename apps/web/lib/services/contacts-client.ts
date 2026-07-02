@@ -41,3 +41,27 @@ export async function deleteContact(id: string): Promise<{ success: boolean; err
   if (error) return { success: false, error: error.message };
   return { success: true };
 }
+
+
+// ── Picker options (4D estimate builder) ──
+
+export interface ContactOption {
+  id: string;
+  first_name: string;
+  last_name: string;
+  company_name: string | null;
+  email: string | null;
+}
+
+export async function listContactOptions(): Promise<ContactOption[]> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from('contacts')
+    .select('id, first_name, last_name, company_name, email')
+    .eq('is_deleted', false)
+    .order('last_name', { ascending: true });
+
+  if (error) return [];
+  return data ?? [];
+}

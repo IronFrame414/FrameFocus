@@ -1,7 +1,9 @@
 import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
-import { getCompany } from '@/lib/services/company';
+import { getCompany, getEstimatingSettings, getProposalSettings } from '@/lib/services/company';
 import { SettingsForm } from './settings-form';
+import { EstimatingSettingsForm } from './estimating-settings-form';
+import { ProposalSettingsForm } from './proposal-settings-form';
 
 export default async function SettingsPage() {
   const supabase = await createClient();
@@ -26,6 +28,9 @@ export default async function SettingsPage() {
   const company = await getCompany();
   if (!company) redirect('/dashboard');
 
+  const estimatingSettings = await getEstimatingSettings();
+  const proposalSettings = await getProposalSettings();
+
   return (
     <div>
       <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.5rem' }}>
@@ -36,6 +41,8 @@ export default async function SettingsPage() {
         documents.
       </p>
       <SettingsForm company={company} />
+      {estimatingSettings && <EstimatingSettingsForm settings={estimatingSettings} />}
+      {proposalSettings && <ProposalSettingsForm settings={proposalSettings} />}
     </div>
   );
 }
