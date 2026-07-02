@@ -14,7 +14,7 @@
 
 Four coherent deliverables on one branch:
 
-1. **Resend email infrastructure.** Domain verification (`frames-focus.com`), React Email templates, email-sending service, delivery-tracking webhook, `email_logs` table. Foundation for all email features across the platform.
+1. **Resend email infrastructure.** Domain verification (`rafterworks.com`), React Email templates, email-sending service, delivery-tracking webhook, `email_logs` table. Foundation for all email features across the platform.
 2. **4E — Proposal Generation & Email Delivery.** Server-side React-PDF branded proposal output. Full-page preview at `/dashboard/estimates/[id]/proposal`. "Send Proposal" flow: customizable email editor → Resend delivery with PDF attachment + signing link → auto-sets `sent_at` and status. Manual "Mark as Sent" (from 4D) remains for hand-delivery scenarios.
 3. **4F — Built-in Signature Capture.** Public signing page at `/sign/[token]` (no authentication required). Client reviews HTML-rendered proposal, then accepts (draw or type signature) or declines (with reason code). On accept: `pdf-lib` composites signature onto PDF, stores signed copy in Module 3, updates estimate status. Full ESIGN Act audit trail.
 4. **4J — Follow-up Reminders & Auto-Expiration.** Vercel Cron daily job. Configurable multi-step reminder schedule (company default + per-estimate override). Reminder emails to client via Resend. Heads-up emails to Owner/Admin on sign/decline/expiration. Auto-expiration when `expires_at` passes (estimate data preserved, status set to `expired`).
@@ -28,7 +28,7 @@ Plus an additive migration extending `companies` (branding + email defaults + re
 ### Email infrastructure
 
 - **Provider:** Resend.
-- **Sending domain:** `frames-focus.com` (registered at Cloudflare, owned by Josh). Sender address per tenant: `companyname@frames-focus.com` (dynamic local part, single verified domain).
+- **Sending domain:** `rafterworks.com` (registered at Cloudflare, owned by Josh). Sender address per tenant: `companyname@rafterworks.com` (dynamic local part, single verified domain).
 - **Send mechanism:** Next.js API routes (consistent with Module 3H GPT-4o pattern). No Edge Functions.
 - **Email templates:** Branded HTML via React Email. Template variables supported: `{{company_name}}`, `{{contact_name}}`, `{{estimate_number}}`, `{{estimate_name}}`, `{{signing_link}}`, `{{expiration_date}}`, `{{sent_date}}`.
 - **Delivery tracking:** Resend webhooks → `email_logs` table. Track sent, delivered, opened, bounced, complained, failed.
@@ -219,7 +219,7 @@ Resend client wrapper. Core functions:
 - **`sendProposalEmail(estimateId, customSubject, customBody)`** — generates PDF, creates signing session, sends email via Resend, logs to `email_logs`, returns `{ signingSessionId, emailLogId }`. Does NOT update estimate status (caller handles that).
 - **`sendReminderEmail(estimateId, signingSession)`** — sends reminder to client using company's reminder template + variables. Logs to `email_logs`.
 - **`sendNotificationEmail(estimateId, eventType, recipientUserId)`** — sends heads-up to Owner/Admin on sign/decline/expiration. Logs to `email_logs`.
-- **`buildSenderAddress(company)`** — returns `companyname@frames-focus.com` (slugified company name).
+- **`buildSenderAddress(company)`** — returns `companyname@rafterworks.com` (slugified company name).
 - **`replaceTemplateVariables(template, variables)`** — string replacement for `{{var}}` tokens.
 
 ### New: `apps/web/lib/services/proposal-service.ts`
@@ -425,7 +425,7 @@ React-PDF document component. Layout:
 
 ## Build order
 
-1. **Prerequisite: Resend domain verification.** Josh verifies `frames-focus.com` in the Resend dashboard, adds DNS records at Cloudflare. Manual step — not code.
+1. **Prerequisite: Resend domain verification.** Josh verifies `rafterworks.com` in the Resend dashboard, adds DNS records at Cloudflare. Manual step — not code.
 2. **Prerequisite: Environment variables.** Add `RESEND_API_KEY`, `RESEND_SIGNING_SECRET`, `CRON_SECRET` to Codespaces secrets and Vercel env vars.
 3. **Migration** — two new tables + two ALTERs + RLS + triggers + indexes. Apply via `npx supabase db push`.
 4. **Type regen verified;** `npx tsc --noEmit` clean from `apps/web/`.
@@ -499,7 +499,7 @@ Run from `apps/web/` before merge. Order matters — schema first, then settings
 - 14. Click "Send Proposal" → email editor modal opens pre-filled with company defaults.
 - 15. Edit subject + body, click Send → estimate status moves to `sent`, `sent_at` set, `expires_at` computed.
 - 16. Check Resend dashboard (or email inbox): email received with PDF attachment + signing link.
-- 17. Email sender shows as `companyname@frames-focus.com`.
+- 17. Email sender shows as `companyname@rafterworks.com`.
 - 18. "Mark as Sent" (manual) still works and does NOT create a signing session or send email.
 - 19. After Send: estimate fields frozen (existing 4D behavior).
 - 20. `email_logs` row created with correct `resend_message_id`, type `proposal`, status `sent`.
