@@ -448,7 +448,6 @@ When generating code, migrations, or instructions for Josh:
 
 - **Step-by-step, click-level guidance.** Don't assume familiarity with dev tooling.
 - **Explicit file paths.** Always state exactly which file to create/edit and where.
-- **Success/failure indicators.** After each step, describe what Josh should see if it worked and what to check if it didn't.
 - **One thing at a time.** Don't bundle multiple changes into a single instruction block. Break them into numbered steps.
 - **Paste-ready code.** Code blocks should be complete and copy-pasteable, not fragments requiring assembly.
 - **Browser-based workflow.** All instructions assume GitHub Codespaces. Never reference local terminal, VS Code desktop, or local file system.
