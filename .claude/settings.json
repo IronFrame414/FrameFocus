@@ -14,10 +14,13 @@
       "Bash(rg:*)",
       "Bash(turbo:*)",
       "Read(*)",
+      "Edit",
+      "Write",
       "mcp__supabase__list_*",
       "mcp__supabase__get_*",
       "mcp__supabase__search_*",
       "mcp__supabase__generate_typescript_types"
-    ]
+    ],
+    "deny": ["Read(./.env)", "Read(./.env.*)"]
   }
 }
