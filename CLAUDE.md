@@ -147,6 +147,22 @@ SQL functions with `SECURITY DEFINER` reliably bypass RLS in this context. See `
 
 ---
 
+## Claude Code — run protocol
+
+LAUNCH REQUIREMENT: start CC with `claude --dangerously-skip-permissions`
+(set at launch, NOT mid-session). Permissions also come from `.claude/settings.json`.
+
+Phase 0 — BRANCH: run `git branch --show-current`. If on `main`, create and switch
+to a new feature branch (`git checkout -b feature/<short-task-name>`) BEFORE any
+edit. Never edit, create, or migrate on `main` — `main` auto-deploys to production.
+Merging to `main` is Josh's call, done manually.
+Phase 1 — ANALYZE: read the prompt and every file it references; build full
+understanding. No edits in this phase.
+Phase 2 — QUESTIONS: surface ALL questions / ambiguities / spec↔schema conflicts
+at once, then STOP and wait. If none, say so and continue.
+Phase 3 — BUILD: perform all reads/edits/creates autonomously; show diffs at the
+end; never commit — Josh commits manually.
+
 ## Generated Types Workflow
 
 `packages/shared/types/database.ts` is auto-generated from the live Supabase schema. All service files import from this — never hand-write database type shapes. After every migration that adds, removes, or renames a column or table, run:
@@ -364,7 +380,7 @@ Each subscribing company is an isolated tenant. Within that company, there are 6
 
 | Role            | DB Value          | Web Access                         | Mobile Access     | Key Permissions                                                                                                                                                   |
 | --------------- | ----------------- | ---------------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Owner           | `owner`           | Full                               | Full              | All features, billing/subscription management, user invitations, approval authority on change orders/payments/AI content, company settings, QuickBooks connection |
+| Owner           | `owner`           | Full                               | Full              | All features, billing/subscription management, user invitations, approval authority on change orders/payments/AI content, company settings, QuickBooks connection — [SUPERSEDED for COs — Owner-final-approval gate removed; see module5-architecture.md §5.7c AMENDMENT (Session 55). Owner/Admin/PM all create+send.] |
 | Admin           | `admin`           | Full                               | Full              | Everything Owner can do EXCEPT items in the owner-only list below                                                                                                 |
 | Project Manager | `project_manager` | Full (scoped to assigned projects) | Full              | Create/manage estimates, manage assigned projects, assign tasks, create change orders, view job finances, manage client communication                             |
 | Foreman         | `foreman`         | Limited                            | Full              | Manage assigned field crews, daily logs, schedule crew tasks, review Crew Member submissions, punch lists, quality control                                        |
@@ -400,7 +416,7 @@ For any action not listed in the owner-only section above, assume Admin has acce
 | Release sub payments               | ✓     | —     | —   | —       |
 | Approve AI weekly summaries        | ✓     | —     | —   | —       |
 | Approve marketing content          | ✓     | —     | —   | —       |
-| Approve change orders (final)      | ✓     | —     | —   | —       |
+| Approve change orders (final)      | ✓     | —     | —   | —       | — [SUPERSEDED for COs — Owner-final-approval gate removed; see module5-architecture.md §5.7c AMENDMENT (Session 55). Owner/Admin/PM all create+send.]
 | Approve sub pay apps (review step) | ✓     | ✓     | ✓   | —       |
 | Approve estimates for sending      | ✓     | ✓     | ✓   | —       |
 | Approve foreman timesheets         | ✓     | ✓     | ✓   | —       |
