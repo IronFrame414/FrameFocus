@@ -56,7 +56,8 @@ target_end_date        DATE
 actual_end_date        DATE
 
 -- Carryover content (from estimate)
-scope_of_work          TEXT
+scope_summary          TEXT
+scope_sections         JSONB          -- mirrors estimate scope (§8 §6); replaces scope_of_work
 cover_letter           TEXT
 terms_sections         JSONB
 internal_notes         TEXT
@@ -73,7 +74,7 @@ change_order_sequence  INTEGER NOT NULL DEFAULT 0
 
 **Status lifecycle (§5.2a):** `active` (default) → `on_hold` ↔ `active` (reversible); `active` → `complete`; any → `cancelled`; `complete` → `archived`. Status drives platform-wide dashboards and filtering.
 
-**Punch-close gate (folded in per `future_module_architecture` §5.3):** the `active → complete` transition is **blocked until every `punch_list_items` row for the project is closed** (`complete` or `verified`). `punch_list_items` ships in **5C** (which builds after 5A), so 5A **defines and owns** the gate; its enforcement is **wired when 5C lands** and is recorded here as a 5C build obligation.
+**Punch-close gate (folded in per `future_module_architecture` §5.3):** the `active → complete` transition is **blocked until every `punch_list_items` row for the project is closed** — an item is closed when **verified** (if verification is required on it) **or complete** (if verification is unchecked), per **5C §6** (the authoritative definition). `punch_list_items` ships in **5C** (which builds after 5A), so 5A **defines and owns** the gate; its enforcement is **wired when 5C lands** and is recorded here as a 5C build obligation.
 
 ---
 
@@ -211,9 +212,9 @@ Conversion (single `convert_estimate_to_project()` transaction — §8, held) wr
 - **`projects`:** `project_number` **PRJ-0001** (copied from EST-0001), `project_internal_seq` 1, `name`, `contact_id`, `contact_address_id`, `source_estimate_id` → EST-0001, `project_type` `fixed_price`, `status` `active`, `contract_value` **17236.00**; tax / markups / scope / terms / notes carried.
 - **`estimates`:** `project_id` → the new project; `status` → `converted`.
 - **`client_contracts`:** one row, `status` `signed`, `signed_proposal_file_id` → the signed proposal, `contract_value` 17236.00.
-- **`project_budget_items`** _(§8, held — line-model dependent):_ one row per **final** line item, `budgeted_amount` from the estimate, `committed_amount` / `actual_amount` = 0 (M7 fills), `source_line_item_id` → its estimate line.
+- **`project_budget_items`** (per §8): one row per **final typed row** (from `estimate_line_rows`); `budgeted_amount` = its pre-markup cost; `committed_amount` / `actual_amount` = 0 (M7 fills); `source_line_row_id` → its row, `source_line_item_id` → its parent line, `row_type` carried.
 - **Module 3** project folders auto-created; **`project_assignments`** keyed on `member_id`.
 
-**Explicit rule:** the added **$600** line has **no** `source_line_item_id` — the budget baseline mirrors the **final** (post-revise) estimate, not the originally-signed one.
+**Explicit rule:** the added **$600** line's rows carry `source_line_row_id` to the new rows and have **no** link to the originally-signed estimate — the budget baseline mirrors the **final** (post-revise) estimate.
 
 — End of 5A spec (§8 held) —

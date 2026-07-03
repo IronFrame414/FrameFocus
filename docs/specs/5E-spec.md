@@ -2,7 +2,7 @@
 
 > **Design authority:** `docs/specs/module5-architecture.md` (committed `7eaaaa3`), §5.6. Cites it by section. Immutable once its build starts — post-build changes are additive blocks, never edits.
 >
-> **Status:** Fully specced. 5E is a **read / display layer** over `project_budget_items`; it defines **no new table** and adds no migration. **Spec-writable now**; its _build_ is blocked on **5A §8** having built (it needs the table + baseline rows). 5E's spec content is **not** line-model-dependent — it reads stable columns and never touches `source_line_item_id`. No open build-time decisions (no Q-N questions assigned to 5E in §5.12).
+> **Status:** Fully specced. 5E is a **read / display layer** over `project_budget_items`; it defines **no new table** and adds no migration. **Spec-writable now**; its _build_ is blocked on **5A §8** having built (it needs the table + baseline rows). 5E's spec content is **not** line-model-dependent — it reads stable columns and never touches the `source_*` columns. No open build-time decisions (no Q-N questions assigned to 5E in §5.12).
 
 ---
 
@@ -20,7 +20,7 @@
 
 **Conventions (CLAUDE.md):** RLS via `get_my_company_id()` + project visibility; server / client service split; read-only (no writes from this module).
 
-> **Open, belongs to §8 (flagged, not resolved here):** the **basis** of `budgeted_amount` — each line's **cost** vs its **price** (cost + markup). This determines whether the budget grand total is a cost baseline or ties to `contract_value`. It's a §8 conversion-mapping decision (held); 5E displays whichever value §8 stores.
+> **Budget basis (resolved in §8):** `budgeted_amount` is the per-row **pre-markup, pre-tax cost** — labor `rate×quantity`, material `unit_cost×quantity` (allowance rows: `unit_cost`), sub/other `amount`. It is a **cost baseline**, so the budget grand total is **below** `contract_value` by the markup — the two do NOT tie out. 5E displays what §8 stores.
 
 ---
 
@@ -29,12 +29,14 @@
 Created and populated by **5A §8** — shown here for reference only; **5E does not define this table.**
 
 ```sql
--- Canonical definition: 5A §8 (per §5.6a). Reproduced for reference.
+-- Canonical definition: 5A §8 (per-row model). Reproduced for reference.
 project_budget_items
   id                  UUID PK
   company_id          UUID NOT NULL REFERENCES companies(id)
   project_id          UUID NOT NULL REFERENCES projects(id)
-  source_line_item_id UUID            -- provenance; 5E does NOT read or display this
+  source_line_row_id  UUID            -- row provenance (§8); 5E does NOT read this
+  source_line_item_id UUID            -- line provenance (§8); 5E does NOT read this
+  row_type            TEXT            -- labor|material|subcontractor|other (§8); available for optional by-trade grouping
   cost_code           TEXT            -- grouping key (§3)
   description         TEXT NOT NULL
   budgeted_amount     NUMERIC NOT NULL DEFAULT 0   -- the baseline (from estimate at conversion)
@@ -43,8 +45,8 @@ project_budget_items
   -- standard columns
 ```
 
-- 5E reads: `cost_code`, `description`, `budgeted_amount`, `committed_amount`, `actual_amount`.
-- 5E ignores `source_line_item_id` — which is exactly why the held line-model detail in §8 does not affect this module.
+- 5E reads: `cost_code`, `description`, `budgeted_amount`, `committed_amount`, `actual_amount`, with `row_type` available for optional by-trade grouping.
+- 5E ignores `source_line_row_id` / `source_line_item_id` — which is why §8's line-model detail doesn't affect this module.
 
 ---
 
@@ -54,7 +56,7 @@ A per-project **Budget** tab. Budget items are grouped by `cost_code`.
 
 - **Grouping:** rows are grouped by `cost_code`; each group renders its items plus a **subtotal** = Σ `budgeted_amount` within the group. Items with a NULL `cost_code` collect under an **"Uncategorized"** group.
 - **Columns per row:** `Description | Budgeted | Committed | Actual | Variance`.
-- **Grand total:** Σ `budgeted_amount` across all items = the project budget total. (Computed from the line items — not read from `projects.contract_value`. Whether the two match depends on the §8 `budgeted_amount` basis flagged in §1.)
+- **Grand total:** Σ `budgeted_amount` across all items = the project budget total. (Computed from the line items — not read from `projects.contract_value`. This is a **cost** total; it is below `contract_value` by the markup — not expected to match — per §8.)
 - **Module 7 columns at launch:** `committed_amount` and `actual_amount` render as **0** (M7 fills them later — no schema change). **Variance** = `budgeted_amount − actual_amount`, so at launch **Variance = Budgeted** for every row (actuals are zero). Columns are rendered now so the view is M7-ready with no rework.
 - **Read-only:** no add / edit / delete of budget items in 5E at launch. Manual budget lines (`source_line_item_id` NULL) are a schema affordance for Module 7, not a 5E-launch feature.
 - **Change-order budget impact:** approved COs adjusting the budget are **Module 7** mechanics (§5.6a). 5E displays the **baseline only** — it does not fold CO `cost_impact` into the rollup.
@@ -77,6 +79,6 @@ Project **PRJ-0001** (converted from EST-0001 — see 5A §9). Its `project_budg
 - **Committed** and **Actual** columns show **$0.00** for every row; **Variance = Budgeted** for every row (actuals zero at launch).
 - **Read-only** — no add / edit / delete controls.
 
-The exact row count and `cost_code` labels are produced by 5A §8's population (line-model-dependent); the display behavior above is independent of it. Whether the grand total reads as a cost baseline or as **$17,236** (the contract value) depends on the §8 `budgeted_amount` basis flagged in §1 — not resolved in 5E.
+The exact row count and `cost_code` labels are produced by 5A §8's population (line-model-dependent); the display behavior above is independent of it. The grand total is the **cost baseline** (below the $17,236 contract value by the markup) per §8; the $17,236 remains the contract price in `projects.contract_value` + `client_contracts`.
 
 — End of 5E spec —

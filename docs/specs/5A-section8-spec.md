@@ -58,6 +58,7 @@ project_budget_items
 | `subcontractor` | `amount`               |
 | `other`         | `amount`               |
 
+- **Allowance material rows** (`unit_of_measure = 'allowance'`): `budgeted_amount` = `unit_cost` (the allowance amount); `quantity` is ignored (module4-architecture §4.2a / 4D-rev spec). So material cost = `unit_of_measure = 'allowance' ? unit_cost : unit_cost × quantity`.
 - **Explicitly not** the row's `total` column — `total` is the marked-up price (feeds the proposal / `contract_value`, not the cost budget).
 - **Pre-tax:** `apply_tax` is ignored for the budget (base cost only). **[FLAG — flippable in one line]** if you want material tax folded into `budgeted_amount`, say so.
 - `cost_code` derives from the source row's parent **line item's category** (§5.6b).
