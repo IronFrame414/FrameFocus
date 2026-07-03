@@ -112,6 +112,8 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   - Both tables exist in prod (later ALTERs succeed; contacts has rows), but migration history cannot rebuild them.
   - Impact: any future migration touching these tables (e.g. company_members, RLS changes) has no committed schema baseline.
   - Fix: recover true DDL via `supabase db dump` and add as a baseline migration. Do not reconstruct from database.ts — it omits constraints, RLS, and indexes.
+  ### Track for Module 7
+- **#80** M7: wire signed-CO deltas into `contract_value` reconciliation. Per the Session 55 5D decision, approved change orders are **display-only** — the project budget view derives `projects.contract_value + sum(approved COs) = revised total`, but CO sign-off does **not** mutate `contract_value`. Module 7 (financials / draw schedules) owns the write-through: reconcile the revised total into the money surfaces (draw schedule, headline contract value) at build time. The signed COs are the source of record, so nothing is lost by deferring — this item exists solely so the write-through isn't forgotten when M7 is built. Decided Session 55 (5D change-orders interview).
 
 ---
 
