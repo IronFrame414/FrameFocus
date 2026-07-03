@@ -428,7 +428,7 @@ change_orders
   -- standard columns
 ```
 
-### §5.7b — `change_order_line_items` table
+### §5.7b — `change_order_line_items` table — **[SUPERSEDED — see AMENDMENT (Session 55) below.]**
 
 ```
 change_order_line_items
@@ -446,6 +446,17 @@ change_order_line_items
 
 - References original estimate line items where the CO modifies existing scope (per roadmap CO design); net-new lines leave `source_line_item_id` NULL.
 
+**AMENDMENT — Session 55 (5D): supersedes §5.7b.** A change order is written identically to an
+estimate: it owns its own line items, each with typed rows (labor / material / subcontractor /
+other), using the same cost roll-up and the same §4.4a tax-then-markup as estimates. The §5.7b
+design (before/after quantity + unit_price referencing an original estimate_line_items row) is
+superseded. Changed or removed scope is expressed as a normal row with a NEGATIVE number; the
+row description carries the "credit" meaning (no is_credit flag). Credits flow through §4.4a like
+any other row — e.g. a −$8,000 credit surfaces as −$10,272 at an illustrative 7% tax + 20%
+markup. This resolves the same qty/unit-price grain mismatch §8 hit: qty and unit_price live on
+the typed rows, not the line item. Schema shape (build-deferred): change_order_line_items →
+change_order_line_rows mirrors estimate_line_items → estimate_line_rows.
+
 ### §5.7c — `change_order_approvals` table + approval chain
 
 ```
@@ -460,9 +471,17 @@ change_order_approvals
 ```
 
 **Internal approval chain (Module 5 portion only):**
-PM/Admin/Owner creates CO → Owner (and Admin, if Admin didn't create it) notified → **Owner approves** (final authority stays with Owner — COs affect contract value, per roadmap). On approval, status → `approved`. The roadmap's `executed` state and budget auto-update are reached after Module 7 budget impact + (if client-facing) Module 9 client signature; at Module 5 launch, a CO can reach `approved` and the `executed` transition is reserved.
+PM/Admin/Owner creates CO → Owner (and Admin, if Admin didn't create it) notified → **Owner approves** (final authority stays with Owner — COs affect contract value, per roadmap). On approval, status → `approved`. The roadmap's `executed` state and budget auto-update are reached after Module 7 budget impact + (if client-facing) Module 9 client signature; at Module 5 launch, a CO can reach `approved` and the `executed` transition is reserved. **[SUPERSEDED for COs — see AMENDMENT (Session 55) below.]**
 
-- **Admin** can create COs and is notified of all CO activity, but **final approval authority stays with the Owner** (consistent with Admin lacking direct financial sign-off).
+- **Admin** can create COs and is notified of all CO activity, but **final approval authority stays with the Owner** (consistent with Admin lacking direct financial sign-off). **[SUPERSEDED for COs — see AMENDMENT (Session 55) below.]**
+
+**AMENDMENT — Session 55 (5D):** Change-order authority. Owner, Admin, AND PM may all create
+AND send change orders (the existing creator list is unchanged). What is superseded is the
+separate Owner-final-approval / Owner-release gate: there is NO distinct approval step after a
+CO is written. Sending a CO is itself the internal (contractor-side) acceptance; from there the
+client signs and the CO is binding. RLS implication: CO create/send authorized for role in
+(owner, admin, pm).
+
 - **OPEN QUESTION Q-N7:** at Module 5 launch (no Module 7/9 yet), should an approved CO immediately apply `cost_impact` to `projects.contract_value` and the budget, or stay display-only until Module 7? **Recommendation:** display-only at launch — store the impact, show it, but don't mutate contract_value until Module 7 owns budget mechanics. Decide at 5D.
 
 ---
