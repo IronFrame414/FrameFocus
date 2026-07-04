@@ -107,17 +107,14 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 - **#76** Validation schema naming inconsistency. companySettingsSchema uses camelCase keys (addressLine1) and requires a manual remap somewhere in the company write path. New contactAddressSchema uses snake_case so the parsed object flows straight into the service layer with no remap. Resolves when companies writes get migrated to the standard pattern (related to the existing companies pre-trigger holdover item — but a separate code path).
 - **#77** Optional-address vs empty-string-vs-NULL. label and address_line2 use .optional() in Zod, which accepts both undefined and "". An empty form field will insert "" into the DB rather than NULL. Consistent with existing schemas, not blocking, flagged for awareness if data quality matters later.
 - **#78** 4B `set_cost_catalog_updated_by()` trigger function omits SECURITY DEFINER, deviating from the CLAUDE.md per-table updated_by template. Functionally harmless (the trigger passed 4B acceptance tests) but a pattern deviation. Fix: add SECURITY DEFINER to match the template. Found during 4B/4C build wrap.
-- **#79** contacts/subcontractors base tables have no committed CREATE TABLE
-  - Migration 20260101000009_contacts_subcontractors.sql is a 2-line placeholder ("paste same SQL as above"); the real CREATE TABLE was never committed.
-  - Both tables exist in prod (later ALTERs succeed; contacts has rows), but migration history cannot rebuild them.
-  - Impact: any future migration touching these tables (e.g. company_members, RLS changes) has no committed schema baseline.
-  - Fix: recover true DDL via `supabase db dump` and add as a baseline migration. Do not reconstruct from database.ts — it omits constraints, RLS, and indexes.
   ### Track for Module 7
 - **#80** M7: wire signed-CO deltas into `contract_value` reconciliation. Per the Session 55 5D decision, approved change orders are **display-only** — the project budget view derives `projects.contract_value + sum(approved COs) = revised total`, but CO sign-off does **not** mutate `contract_value`. Module 7 (financials / draw schedules) owns the write-through: reconcile the revised total into the money surfaces (draw schedule, headline contract value) at build time. The signed COs are the source of record, so nothing is lost by deferring — this item exists solely so the write-through isn't forgotten when M7 is built. Decided Session 55 (5D change-orders interview).
 
 ---
 
 ## Closed Tech Debt
+
+- **#79** contacts/subcontractors had no committed CREATE TABLE baseline (migration ...009 was a 2-line placeholder) — closed Session 56 (commit `c041afa`). Resolved via Option C: squashed all 37 prior migrations to a single prod-verified baseline (`20260101000000_baseline_schema.sql`, pg_dump of prod public schema), old migrations archived to `supabase/migrations_archive/`. Acceptance: clean `db push` to an empty project + prod/throwaway parity (tables 22, policies 64, functions 29, triggers 32).
 
 > One line per closed item: number, brief description, session closed, commit reference (where available). Full context lives in the commit and the matching `docs/sessions/contextN.md`.
 >
