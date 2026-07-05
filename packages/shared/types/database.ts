@@ -1,8 +1,3 @@
-// STOPGAP — Module 5 build (Session 57): the company_members / Module 5 table
-// entries below were hand-authored in generator format because migrations are
-// written to disk but NOT yet applied (no db push this session). Run
-// `npm run db:types` after the supervised migration apply to regenerate this
-// file and confirm parity.
 export type Json =
   | string
   | number
@@ -249,9 +244,9 @@ export type Database = {
       change_orders: {
         Row: {
           author_member_id: string
+          co_number: string
           co_type: string
           company_id: string
-          co_number: string
           created_at: string | null
           created_by: string | null
           deleted_at: string | null
@@ -277,9 +272,9 @@ export type Database = {
         }
         Insert: {
           author_member_id?: string
+          co_number: string
           co_type?: string
           company_id?: string
-          co_number: string
           created_at?: string | null
           created_by?: string | null
           deleted_at?: string | null
@@ -305,9 +300,9 @@ export type Database = {
         }
         Update: {
           author_member_id?: string
+          co_number?: string
           co_type?: string
           company_id?: string
-          co_number?: string
           created_at?: string | null
           created_by?: string | null
           deleted_at?: string | null
@@ -1660,6 +1655,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "estimates_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "estimates_reviewed_by_fkey"
             columns: ["reviewed_by"]
             isOneToOne: false
@@ -1748,6 +1750,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "files_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
           {
@@ -1904,30 +1913,6 @@ export type Database = {
           },
         ]
       }
-      platform_admins: {
-        Row: {
-          created_at: string | null
-          email: string
-          id: string
-          name: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string | null
-          email: string
-          id?: string
-          name: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string | null
-          email?: string
-          id?: string
-          name?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       phases: {
         Row: {
           company_id: string
@@ -1984,6 +1969,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      platform_admins: {
+        Row: {
+          created_at: string | null
+          email: string
+          id: string
+          name: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          email: string
+          id?: string
+          name: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          email?: string
+          id?: string
+          name?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       profiles: {
         Row: {
@@ -3152,6 +3161,7 @@ export type Database = {
           due_date?: string | null
           id?: string
           is_deleted?: boolean | null
+          is_scheduled?: boolean | null
           percent_complete?: number | null
           phase_id?: string | null
           priority?: string | null
@@ -3174,6 +3184,7 @@ export type Database = {
           due_date?: string | null
           id?: string
           is_deleted?: boolean | null
+          is_scheduled?: boolean | null
           percent_complete?: number | null
           phase_id?: string | null
           priority?: string | null
@@ -3190,6 +3201,13 @@ export type Database = {
             columns: ["assignee_id"]
             isOneToOne: false
             referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_change_order_id_fkey"
+            columns: ["change_order_id"]
+            isOneToOne: false
+            referencedRelation: "change_orders"
             referencedColumns: ["id"]
           },
           {
@@ -3238,6 +3256,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_view_project: { Args: { p_project_id: string }; Returns: boolean }
       clone_estimate: {
         Args: {
           p_contact_address_id: string
@@ -3259,10 +3278,6 @@ export type Database = {
           p_new_subcategory_id: string
         }
         Returns: string
-      }
-      can_view_project: {
-        Args: { p_project_id: string }
-        Returns: boolean
       }
       convert_estimate_to_project: {
         Args: { p_estimate_id: string }
@@ -3295,10 +3310,8 @@ export type Database = {
         Returns: boolean
       }
       is_platform_admin: { Args: never; Returns: boolean }
-      next_co_number: {
-        Args: { p_project_id: string }
-        Returns: string
-      }
+      is_project_creator: { Args: { p_project_id: string }; Returns: boolean }
+      next_co_number: { Args: { p_project_id: string }; Returns: string }
       next_estimate_number: { Args: never; Returns: string }
       next_project_internal_seq: { Args: never; Returns: number }
       next_project_number: { Args: never; Returns: string }
