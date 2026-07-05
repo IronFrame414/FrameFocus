@@ -14,7 +14,8 @@ export type EstimateStatus =
   | 'accepted'
   | 'declined'
   | 'expired'
-  | 'revised';
+  | 'revised'
+  | 'converted'; // Module 5 (5A §8): terminal state after estimate → project conversion
 
 export type DiscountType = 'percent' | 'fixed';
 

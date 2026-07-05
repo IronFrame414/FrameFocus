@@ -34,6 +34,12 @@ export function DashboardShell({ children, userName, userRole, companyName }: Da
             Dashboard
           </Link>
           <Link
+            href="/dashboard/projects"
+            className="flex items-center rounded-lg px-3 py-2 text-sm font-medium text-brand-100 hover:bg-brand-800"
+          >
+            Projects
+          </Link>
+          <Link
             href="/dashboard/contacts"
             className="flex items-center rounded-lg px-3 py-2 text-sm font-medium text-brand-100 hover:bg-brand-800"
           >

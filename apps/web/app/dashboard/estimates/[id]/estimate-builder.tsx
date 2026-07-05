@@ -17,6 +17,7 @@ import { StatusBadge } from '../estimates-list';
 import { InlineText } from '../inline-edit';
 import { CloneModal } from '../clone-modal';
 import { DetailsTab } from './details-tab';
+import { ConvertToProject } from './convert-to-project';
 import { ItemsTab } from './items-tab';
 import { BiddingTab } from './bidding-tab';
 import { CoverTab, FilesTab, NotesTab, ScopeTab, TermsTab } from './text-tabs';
@@ -281,8 +282,28 @@ export function EstimateBuilder({ estimateId, role, userId }: EstimateBuilderPro
               <StatusBadge status={estimate.status} />
             </div>
           </div>
-          <div style={{ flexShrink: 0 }}>{statusActionButton()}</div>
+          <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+            {statusActionButton()}
+            {estimate.status !== 'accepted' && (
+              <ConvertToProject
+                estimateId={estimate.id}
+                estimateNumber={estimate.estimate_number}
+                status={estimate.status}
+                projectId={estimate.project_id}
+                variant="button"
+              />
+            )}
+          </div>
         </div>
+
+        {/* Post-signature conversion prompt (5A §8; also shows the converted link) */}
+        <ConvertToProject
+          estimateId={estimate.id}
+          estimateNumber={estimate.estimate_number}
+          status={estimate.status}
+          projectId={estimate.project_id}
+          variant="banner"
+        />
 
         {actionError && (
           <div

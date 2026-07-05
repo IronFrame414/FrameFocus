@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { Contact } from '@/lib/services/contacts';
+import { CONTACT_TYPE_LABELS } from '@framefocus/shared/constants';
 import { deleteContact } from '@/lib/services/contacts-client';
 import { useRouter } from 'next/navigation';
 
@@ -149,7 +150,7 @@ export function ContactsList({ contacts, canEdit }: ContactsListProps) {
                   </td>
                   <td style={{ padding: '0.75rem 0.5rem' }}>
                     <span style={typeBadge(c.contact_type)}>
-                      {c.contact_type === 'client' ? 'Client' : 'Lead'}
+                      {CONTACT_TYPE_LABELS[c.contact_type] ?? c.contact_type}
                     </span>
                   </td>
                   <td style={{ padding: '0.75rem 0.5rem' }}>

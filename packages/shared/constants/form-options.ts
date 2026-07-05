@@ -84,6 +84,27 @@ export const US_STATES = [
 
 export type USState = (typeof US_STATES)[number];
 
+// ── Contact Types ──
+// Widened in Module 5 (5A §7a): external project stakeholders (architect,
+// inspector, building dept, vendor) live in the CRM list but never surface
+// in the lead/client pipeline.
+
+export const CONTACT_TYPES = [
+  { value: 'lead', label: 'Lead' },
+  { value: 'client', label: 'Client' },
+  { value: 'vendor', label: 'Vendor' },
+  { value: 'architect', label: 'Architect' },
+  { value: 'inspector', label: 'Inspector' },
+  { value: 'building_dept', label: 'Building Dept' },
+  { value: 'other_external', label: 'Other (External)' },
+] as const;
+
+export type ContactType = (typeof CONTACT_TYPES)[number]['value'];
+
+export const CONTACT_TYPE_LABELS: Record<ContactType, string> = Object.fromEntries(
+  CONTACT_TYPES.map((t) => [t.value, t.label])
+) as Record<ContactType, string>;
+
 // ── Lead Sources ──
 // Where a lead came from (Module 2 contacts)
 

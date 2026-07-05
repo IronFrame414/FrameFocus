@@ -11,7 +11,7 @@ import type { PrimaryAddress } from '@/lib/services/contact-addresses-client';
 import type { Contact } from '@/lib/services/contacts';
 import { contactAddressSchema } from '@framefocus/shared/validation/contact-address';
 
-import { LEAD_SOURCES, US_STATES } from '@framefocus/shared/constants';
+import { CONTACT_TYPES, LEAD_SOURCES, US_STATES } from '@framefocus/shared/constants';
 
 interface ContactFormProps {
   existing?: Contact;
@@ -181,8 +181,11 @@ export function ContactForm({ existing, existingAddress }: ContactFormProps) {
               onChange={handleChange}
               style={inputStyle}
             >
-              <option value="lead">Lead</option>
-              <option value="client">Client</option>
+              {CONTACT_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
             </select>
           </div>
           <div>
