@@ -9,10 +9,16 @@ export type CompanyRole =
   | 'project_manager'
   | 'foreman'
   | 'crew_member'
-  | 'client';
+  | 'client'
+  | 'subcontractor';
 
 /** Roles that can be assigned via invitation (owner excluded — only created at sign-up) */
-export type InvitableRole = 'admin' | 'project_manager' | 'foreman' | 'crew_member' | 'client';
+export type InvitableRole =
+  | 'admin'
+  | 'project_manager'
+  | 'foreman'
+  | 'crew_member'
+  | 'client';
 
 /** Internal team roles (excludes client) */
 export type TeamRole = 'owner' | 'admin' | 'project_manager' | 'foreman' | 'crew_member';
