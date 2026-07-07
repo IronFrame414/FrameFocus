@@ -8,7 +8,7 @@ import {
   transitionProjectStatus,
   deleteProject,
 } from '@/lib/services/projects-client';
-import { PROJECT_STATUS_LABELS } from '@/lib/services/projects';
+import { PROJECT_STATUS_LABELS } from '@/lib/services/projects-client';
 
 interface StatusControlProps {
   projectId: string;

@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ProjectWithContact } from '@/lib/services/projects';
-import { PROJECT_STATUS_LABELS } from '@/lib/services/projects';
+import { PROJECT_STATUS_LABELS } from '@/lib/services/projects-client';
 
 interface ProjectHeaderProps {
   project: ProjectWithContact;

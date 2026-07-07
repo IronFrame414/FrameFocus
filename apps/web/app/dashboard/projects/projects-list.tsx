@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import type { ProjectStatus, ProjectWithContact } from '@/lib/services/projects';
-import { PROJECT_STATUS_LABELS, PROJECT_TYPE_LABELS } from '@/lib/services/projects';
+import { PROJECT_STATUS_LABELS, PROJECT_TYPE_LABELS } from '@/lib/services/projects-client';
 
 interface ProjectsListProps {
   projects: ProjectWithContact[];

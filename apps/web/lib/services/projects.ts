@@ -23,19 +23,10 @@ export type ProjectWithContact = Project & {
   } | null;
 };
 
-export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
-  active: 'Active',
-  on_hold: 'On Hold',
-  complete: 'Complete',
-  archived: 'Archived',
-  cancelled: 'Cancelled',
-};
-
-export const PROJECT_TYPE_LABELS: Record<ProjectType, string> = {
-  fixed_price: 'Fixed Price',
-  time_and_materials: 'Time & Materials',
-  cost_plus: 'Cost Plus',
-};
+// Presentation constants live in the client-safe sibling so client components
+// can import them without dragging this server module (next/headers) into the
+// client bundle. Re-exported here for server-side consumers.
+export { PROJECT_STATUS_LABELS, PROJECT_TYPE_LABELS } from './projects-client';
 
 const CONTACT_JOIN = 'contact:contacts(id, first_name, last_name, company_name, email, phone)';
 

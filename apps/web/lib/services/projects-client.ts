@@ -19,6 +19,23 @@ export function allowedStatusTransitions(from: ProjectStatus): ProjectStatus[] {
   return STATUS_TRANSITIONS[from] ?? [];
 }
 
+// Presentation label maps. Kept in this client-safe module (not projects.ts,
+// which imports the server Supabase client) so client components can import
+// them directly. projects.ts re-exports both for server-side consumers.
+export const PROJECT_STATUS_LABELS: Record<ProjectStatus, string> = {
+  active: 'Active',
+  on_hold: 'On Hold',
+  complete: 'Complete',
+  archived: 'Archived',
+  cancelled: 'Cancelled',
+};
+
+export const PROJECT_TYPE_LABELS: Record<ProjectType, string> = {
+  fixed_price: 'Fixed Price',
+  time_and_materials: 'Time & Materials',
+  cost_plus: 'Cost Plus',
+};
+
 export async function createProject(project: {
   name: string;
   contact_id: string;
