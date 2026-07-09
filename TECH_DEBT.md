@@ -149,6 +149,8 @@ non-role portal identity; then build the sub-facing surface that issues these in
 
 ---
 
+**#82** Punch-complete gate has no DB-level backstop. `checkPunchGate` and `updateProject` (`apps/web/lib/services/projects-client.ts`) were hardened in Session 63 (commit `59a696f`): the gate now fails closed on query error or null count, and `updateProject` rejects `status` writes. The invariant is still enforced only in the service layer — CLAUDE.md documents this as "service-layer only by design." Josh chose Option 3 (full robustness) in Session 62; the DB trigger is the remaining piece, **deferred to pre-launch**. Open design question when built: whether the trigger enforces the punch gate alone, or the whole `allowedStatusTransitions` state machine. The latter forces a decision on the currently-unresolved `complete` → reversal path (no legal transition out of `complete` except `archived`, flagged twice as a problem). Building the trigger reverses a documented CLAUDE.md decision — treat as a spec change, migration required.
+
 ## Closed Tech Debt
 
 - **#79** contacts/subcontractors had no committed CREATE TABLE baseline (migration ...009 was a 2-line placeholder) — closed Session 56 (commit `c041afa`). Resolved via Option C: squashed all 37 prior migrations to a single prod-verified baseline (`20260101000000_baseline_schema.sql`, pg_dump of prod public schema), old migrations archived to `supabase/migrations_archive/`. Acceptance: clean `db push` to an empty project + prod/throwaway parity (tables 22, policies 64, functions 29, triggers 32).
