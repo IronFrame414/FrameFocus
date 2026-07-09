@@ -110,6 +110,43 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   ### Track for Module 7
 - **#80** M7: wire signed-CO deltas into `contract_value` reconciliation. Per the Session 55 5D decision, approved change orders are **display-only** — the project budget view derives `projects.contract_value + sum(approved COs) = revised total`, but CO sign-off does **not** mutate `contract_value`. Module 7 (financials / draw schedules) owns the write-through: reconcile the revised total into the money surfaces (draw schedule, headline contract value) at build time. The signed COs are the source of record, so nothing is lost by deferring — this item exists solely so the write-through isn't forgotten when M7 is built. Decided Session 55 (5D change-orders interview).
 
+#### #81 — Dormant subcontractor invite path (parked, not dead)
+
+**Status:** Open — reactivate with the subcontractor portal / sub-invite surface
+(Module 6+, behind the Pre-M9 external-surface gate).
+
+**Origin:** Module 5 review. Removed `subcontractor` as a _company role value_
+(decision B): subs are architecturally outside the role system — identity lives on
+`company_members.member_type='subcontractor'`, and the future sub portal will be its
+own limited-access mechanism, not a CompanyRole. B intentionally KEPT the partial
+sub-invite scaffolding (rather than full removal, "A") to preserve the started
+account mechanism to build on later.
+
+**Parked — present, coherent, currently unreachable** (migration
+`20260704210000_company_members_foundation.sql`):
+
+- `invitations.member_id` column + FK → `company_members(id)` (§5)
+- `handle_new_user()` linking branch: `IF v_invitation.member_id IS NOT NULL THEN
+UPDATE company_members SET profile_id = v_profile_id …` (§8)
+- `get_invitation_for_signup()` `member_id` return column (§8)
+- `create_member_for_new_profile()` §7a skip — the `subcontractor` arm of
+  `IF NEW.role IN ('client','subcontractor')`
+
+**Why unreachable:** `member_id` is populated only by an invite with
+`role='subcontractor'`, which `invitations_role_check` no longer permits. The
+linking branch therefore never fires today. Dormant, NOT dead — reactivates cleanly
+when a sub-invite path/role returns. The §7a `subcontractor` skip must stay even
+while dormant: without it, a future sub profile would get a crew member row (from the
+trigger) AND its linked sub member row — a double member.
+
+**NOT debt — live, correct M2 plumbing, do not touch:**
+`member_type='subcontractor'`, `subcontractors_create_member` trigger, the sub
+backfill, and `sub_type` on the subcontractors table.
+
+**On reactivation:** re-add `subcontractor` to `invitations_role_check`; decide
+whether it re-enters `profiles_role_check` + app role machinery or stays a pure
+non-role portal identity; then build the sub-facing surface that issues these invites.
+
 ---
 
 ## Closed Tech Debt
@@ -131,7 +168,6 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 - **#16** Team member password reset UI — closed Session 39 (commit `1ec46b5`). "Send password reset email" button on edit page triggers `auth.resetPasswordForEmail`. Server action ran clean; email delivery blocked by Supabase rate limit during smoke test — infrastructure, not code. Separately discovered pre-existing bug in the sign-in page's Forgot Password link handler (see #70).
 - **#17** Team member notes field — closed Session 39 (commit `1ec46b5`). Textarea in edit form, writes to `profiles.notes` column added in Migration 026.
 - **#66** Ownership transfer — closed Session 40 (commit pending). Migration 027 + transfer-form on Owner-self team detail page. Spawned #71–#75.---
-
 
 ## Process notes
 
