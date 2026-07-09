@@ -22,21 +22,21 @@ export async function getSeatUsage(): Promise<SeatUsage | null> {
 
   if (!profile) return null;
 
-  // Count active team members (exclude clients — they don't count toward seats)
+  // Count active team members (exclude clients and subcontractors — no paid seat)
   const { count: memberCount } = await supabase
     .from('profiles')
     .select('*', { count: 'exact', head: true })
     .eq('company_id', profile.company_id)
     .eq('is_deleted', false)
-    .neq('role', 'client');
+    .not('role', 'in', '("client","subcontractor")');
 
-  // Count pending invitations (exclude client invites)
+  // Count pending invitations (exclude client and subcontractor invites)
   const { count: pendingCount } = await supabase
     .from('invitations')
     .select('*', { count: 'exact', head: true })
     .eq('company_id', profile.company_id)
     .eq('status', 'pending')
-    .neq('role', 'client');
+    .not('role', 'in', '("client","subcontractor")');
 
   // Get seat limit from subscription
   const { data: subscription } = await supabase

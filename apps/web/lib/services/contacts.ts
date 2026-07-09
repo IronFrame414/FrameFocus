@@ -1,9 +1,15 @@
 import { createClient } from '@/lib/supabase-server';
 import type { Database } from '@framefocus/shared/types/database';
 
+import type { ContactType } from '@framefocus/shared/constants';
+export type { ContactType };
+
 type ContactRow = Database['public']['Tables']['contacts']['Row'];
+
+// contact_type widened in Module 5 (5A §7a) — see CONTACT_TYPES in
+// @framefocus/shared/constants/form-options.
 export type Contact = Omit<ContactRow, 'contact_type' | 'status'> & {
-  contact_type: 'lead' | 'client';
+  contact_type: ContactType;
   status: 'active' | 'inactive' | 'archived';
 };
 

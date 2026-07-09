@@ -14,6 +14,7 @@ export const ROLE_HIERARCHY: Record<CompanyRole, number> = {
   project_manager: 70,
   foreman: 50,
   crew_member: 30,
+  subcontractor: 20,
   client: 10,
 };
 
@@ -24,6 +25,7 @@ export const ROLE_LABELS: Record<CompanyRole, string> = {
   project_manager: 'Project Manager',
   foreman: 'Foreman',
   crew_member: 'Crew Member',
+  subcontractor: 'Subcontractor',
   client: 'Client',
 };
 

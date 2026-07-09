@@ -46,7 +46,7 @@ export default async function TeamMemberEditPage({ params }: { params: { id: str
           <TransferForm admins={admins} />
         ) : (
           <p style={{ color: '#b45309', background: '#fef3c7', padding: 12, borderRadius: 4 }}>
-            You can't edit your own profile from this page. Contact your account owner to make
+            You can&apos;t edit your own profile from this page. Contact your account owner to make
             changes.
           </p>
         )

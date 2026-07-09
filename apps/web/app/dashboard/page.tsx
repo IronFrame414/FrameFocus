@@ -1,8 +1,15 @@
 import { createClient } from '@/lib/supabase-server';
+import Link from 'next/link';
+import { getCalendarEvents } from '@/lib/services/schedule';
+import { getMyMember } from '@/lib/services/members';
+import { getProjects } from '@/lib/services/projects';
+import { CompanyCalendar } from './company-calendar';
 
 export default async function DashboardPage() {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
   const { data: profile } = await supabase
     .from('profiles')
@@ -10,39 +17,70 @@ export default async function DashboardPage() {
     .eq('user_id', user?.id ?? '')
     .single();
 
+  const isCrew = profile?.role === 'crew_member' || profile?.role === 'subcontractor';
+  const myMember = isCrew ? await getMyMember() : null;
+
+  // Company-wide calendar (5B §8): the "who's free / who's slammed" view.
+  // Crew sees own assignments only (§5.5b).
+  const [events, activeProjects] = await Promise.all([
+    getCalendarEvents({ ownMemberId: myMember?.id }),
+    getProjects({ status: 'active' }),
+  ]);
+
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900">
-        Welcome back, {profile?.first_name ?? 'there'}
-      </h1>
-      <p className="mt-2 text-gray-600">
-        This is your FrameFocus dashboard. Modules will appear here as they&apos;re built.
-      </p>
-
-      <div className="mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-        <div className="rounded-xl border border-gray-200 bg-white p-6">
-          <div className="text-sm font-medium text-gray-500">Module 1</div>
-          <div className="mt-1 text-lg font-semibold text-gray-900">Settings &amp; Admin</div>
-          <div className="mt-2 inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800">
-            In Progress
-          </div>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '1.5rem',
+        }}
+      >
+        <div>
+          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.25rem' }}>
+            Welcome back, {profile?.first_name ?? 'there'}
+          </h1>
+          <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>
+            {activeProjects.length} active project{activeProjects.length === 1 ? '' : 's'}
+          </p>
         </div>
+        <Link
+          href="/dashboard/projects"
+          style={{
+            padding: '0.5rem 1rem',
+            fontSize: '0.875rem',
+            fontWeight: 600,
+            color: '#fff',
+            backgroundColor: '#2563eb',
+            borderRadius: '0.375rem',
+            textDecoration: 'none',
+          }}
+        >
+          View Projects
+        </Link>
+      </div>
 
-        <div className="rounded-xl border border-gray-200 bg-white p-6">
-          <div className="text-sm font-medium text-gray-500">Module 2</div>
-          <div className="mt-1 text-lg font-semibold text-gray-900">Contacts &amp; CRM</div>
-          <div className="mt-2 inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600">
-            Not Started
-          </div>
+      <div
+        style={{
+          backgroundColor: '#fff',
+          border: '1px solid #e5e7eb',
+          borderRadius: '0.5rem',
+          padding: '1.25rem',
+        }}
+      >
+        <div
+          style={{
+            fontSize: '0.8125rem',
+            fontWeight: 600,
+            color: '#6b7280',
+            textTransform: 'uppercase',
+            marginBottom: '0.75rem',
+          }}
+        >
+          {isCrew ? 'My Schedule' : 'Employee Calendar — All Jobs'}
         </div>
-
-        <div className="rounded-xl border border-gray-200 bg-white p-6">
-          <div className="text-sm font-medium text-gray-500">Module 4</div>
-          <div className="mt-1 text-lg font-semibold text-gray-900">Sales &amp; Estimating</div>
-          <div className="mt-2 inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600">
-            Not Started
-          </div>
-        </div>
+        <CompanyCalendar events={events} />
       </div>
     </div>
   );
