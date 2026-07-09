@@ -92,6 +92,10 @@ export async function updateProject(
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = createClient();
 
+  if ('status' in updates) {
+    return { success: false, error: 'Status changes must go through transitionProjectStatus().' };
+  }
+
   // BEFORE UPDATE trigger `projects_set_updated_by` handles updated_by.
   // updated_at is handled by the existing updated_at trigger.
   const { error } = await supabase.from('projects').update(updates).eq('id', id);
@@ -141,20 +145,26 @@ export async function transitionProjectStatus(
 async function checkPunchGate(projectId: string): Promise<{ ok: boolean; error?: string }> {
   const supabase = createClient();
 
-  const { count: openCount } = await supabase
+  const { count: openCount, error: openError } = await supabase
     .from('punch_list_items')
     .select('*', { count: 'exact', head: true })
     .eq('project_id', projectId)
     .eq('is_deleted', false)
     .in('status', ['open', 'in_progress']);
 
-  const { count: unverifiedCount } = await supabase
+  const { count: unverifiedCount, error: unverifiedError } = await supabase
     .from('punch_list_items')
     .select('*', { count: 'exact', head: true })
     .eq('project_id', projectId)
     .eq('is_deleted', false)
     .eq('status', 'complete')
     .eq('requires_verification', true);
+
+  // Fail closed: a failed or null count must not be read as "zero open items"
+  // and silently permit completion.
+  if (openError || unverifiedError || openCount === null || unverifiedCount === null) {
+    return { ok: false, error: 'Could not verify punch list status. Try again.' };
+  }
 
   const blocking = (openCount ?? 0) + (unverifiedCount ?? 0);
   if (blocking > 0) {
