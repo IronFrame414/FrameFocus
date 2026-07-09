@@ -45,12 +45,10 @@ export type ChangeOrderWithChildren = ChangeOrderWithAuthor & {
 
 export type CoSigningSession = CoSigningSessionRow;
 
-export const CO_STATUS_LABELS: Record<ChangeOrderStatus, string> = {
-  draft: 'Draft',
-  sent: 'Sent',
-  signed: 'Signed',
-  voided: 'Voided',
-};
+// CO_STATUS_LABELS lives in the client-safe sibling so client components can
+// import it without dragging this server module (next/headers) into the client
+// bundle. Re-exported here for server-side consumers.
+export { CO_STATUS_LABELS } from './change-orders-client';
 
 const AUTHOR_JOIN =
   'author:company_members!change_orders_author_member_id_fkey(id, display_name)';

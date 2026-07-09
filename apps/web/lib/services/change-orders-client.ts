@@ -34,7 +34,15 @@ export type {
   CoRowType,
   CoSigningSession,
 };
-export { CO_STATUS_LABELS } from '@/lib/services/change-orders';
+// Presentation label map. Kept in this client-safe module (not change-orders.ts,
+// which imports the server Supabase client) so client components can import it
+// directly. change-orders.ts re-exports it for server-side consumers.
+export const CO_STATUS_LABELS: Record<ChangeOrderStatus, string> = {
+  draft: 'Draft',
+  sent: 'Sent',
+  signed: 'Signed',
+  voided: 'Voided',
+};
 
 // 5D — client-side CO writes. A CO mirrors an estimate: typed rows with
 // SIGNED values — a credit is a normal row with a negative rate /
