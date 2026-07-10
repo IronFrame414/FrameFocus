@@ -55,10 +55,10 @@ Consequence: an orderless delivery has **no ordered quantities to compare agains
 
 ## 5. Split deliveries — one PO, many trucks
 
-**A PO stays open until every ordered quantity is received.** Each truck is its own `deliveries` row.
+**A PO stays open until every ordered quantity is filled by usable material, not merely received.** Each truck is its own `deliveries` row.
 
-- Received quantity per PO line is the **sum across all its deliveries**.
-- The PO's status derives from that sum. It is never typed.
+- Usable quantity per PO line is the sum of `qty_received` **minus** `qty_damaged` across all that line's deliveries.
+- The PO's status derives from that sum. It is never typed. See §5.1 for the case where auto-close cannot fire.
 - The "order complete" signal therefore cannot fire on the first of two trucks — which is the failure this rule exists to prevent.
 
 ### 5.1 A PO closes on usable quantity, and may need closing by hand
