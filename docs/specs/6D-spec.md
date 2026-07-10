@@ -61,6 +61,20 @@ Consequence: an orderless delivery has **no ordered quantities to compare agains
 - The PO's status derives from that sum. It is never typed.
 - The "order complete" signal therefore cannot fire on the first of two trucks — which is the failure this rule exists to prevent.
 
+### 5.1 A PO closes on usable quantity, and may need closing by hand
+
+**Received is not the same as usable.** A PO's ordered quantity is filled by the sum of `qty_received` **minus** `qty_damaged` across all its deliveries. Twelve joists received with two split leaves ten usable, so the line is short by two. (Josh, this session — usable over received.)
+
+**Consequence: auto-close cannot always fire.** If the vendor issues a credit instead of a replacement, no further delivery arrives, and the PO would sit open forever.
+
+**Manual close.** Owner and Admin may close an open PO. `closed_reason` is required — e.g. `"Jones credited us, not replacing."`
+
+```sql
+CHECK (status <> 'closed' OR closed_reason IS NOT NULL)
+```
+
+Rationale: an open PO and an unexplained closed PO look identical to the person who did not order the material.
+
 ---
 
 ## 6. Data model
@@ -171,6 +185,6 @@ PO status → **see open item #1.** Plywood is fully received; joists were fully
 
 | #   | Item                                                                                                                                                                                                                                                                | Owner |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
-| 1   | **PO closes on `received` or on `usable`?** The trace (§8) receives 12 joists and returns 2. Under _received_, the PO closes with 2 joists that don't exist on site. Under _usable_, it stays open forever unless a replacement delivery arrives. **Blocks build.** | Josh  |
+| 1   | **PO-close semantics — resolved (§5.1).** Closes on _usable_ quantity (`qty_received − qty_damaged` summed across deliveries); auto-close can't always fire, so Owner or Admin may close by hand with a required `closed_reason`.                                     | Closed |
 | 2   | Damaged-goods return has no record of its own. A return that never comes back is invisible. Add a `returns` concept, or is the `qty_damaged` + note enough for v1?                                                                                                  | Josh  |
 | 3   | Acceptance trace (§8) is PROPOSED — verify against a real Bishop delivery before build.                                                                                                                                                                             |
