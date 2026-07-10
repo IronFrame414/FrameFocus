@@ -63,7 +63,7 @@ Each was decided in the interview. Listed so the architecture-doc rewrite is mec
 4. **`break_minutes` / `break_paid` — REMOVED from the session.** A break is a `segment_type`. A session-level break number would float outside the segment chain and break the reconciliation invariant (§7).
 5. **Approval is HIERARCHICAL, not flat.** §7.1's "flat approval (any Foreman/Owner/Admin; PM excluded)" is reversed. See §8. This also **moots** §7.1's open self-approval question: nobody approves themselves.
 
-> **Consequence for §7.9.** The "conscious divergence — flat hour-approval replaces the roadmap's two-tier chain" entry no longer holds. The approval model now _substantially returns_ to the committed `CLAUDE_MODULES.md` §6.1 chain, with differences (PM included; strictly-below rule; no self-approval; Owner has no timeclock). Rewrite, don't patch.
+> **Consequence for §7.9.** The "conscious divergence — flat hour-approval replaces the roadmap's two-tier chain" entry no longer holds. The approval model now _substantially returns_ to the committed `CLAUDE_MODULES.md` §6.1 chain, with differences (PM included; strictly-below rule; no self-approval; ~~Owner has no timeclock~~ **Owner _has_ a timeclock but Owner hours carry no approval state — Session 64, §8**). Rewrite, don't patch.
 
 ---
 
@@ -89,7 +89,7 @@ time_clock_sessions
 
 - **No `project_id`.** **No `category`.** **No break columns.** (§3)
 - One open session per member at a time — enforce in the service layer; consider a partial unique index on `(member_id) WHERE clock_out IS NULL AND is_deleted = false`.
-- **Owner has no timeclock.** No session rows exist for an Owner. **Admin** has a timeclock only when the company setting is ON (default OFF).
+- **Owner has a timeclock (Session 64 reversal).** The Owner clocks in/out and attributes segments to projects like anyone else — **Owner labor is a real job cost.** _Supersedes the original rule "Owner has no timeclock; no session rows exist for an Owner."_ **Admin** has a timeclock only when the company setting is ON (default OFF).
 - `gps_in`/`gps_out` column type (PostGIS `geography` vs. `jsonb` lat/lng) is a **build decision** — 6A has no spatial queries, so `jsonb` is likely sufficient and avoids a PostGIS dependency. Flagged, not decided.
 
 ---
@@ -163,8 +163,9 @@ Per §7.1: a task must be assigned to the member **or** unassigned. Confirm agai
 
 1. Segments of a session are **contiguous, non-overlapping**, and span exactly `clock_in → clock_out`.
 2. **Σ segment durations = session duration.** No gaps. (This is why §3.4 removes the session break columns.)
-3. **Paid hours = session duration − unpaid `break` segments.** Whether breaks are unpaid is a company setting.
+3. **Paid hours = session duration − unpaid `break` segments.** Whether breaks are **paid** is a company setting; when **paid breaks** are ON, break duration up to the **paid-break-minutes-per-day** cap counts toward paid hours (Session 64, §13). Paid or not, a `break` segment carries no `project_id`, so it never lands on a job's cost.
 4. `warranty` hours are excluded from the active-budget rollup (M5 §5.6 / 5E).
+5. **Paid hours ≠ worked hours (Session 64).** **Paid hours** (session duration less unpaid breaks) drive **payroll and OT**. **Worked hours** — the duration of segments carrying a `project_id` (`work`, `material_run`, `warranty`) — drive **job cost**. With **paid breaks ON** the two diverge: a paid lunch adds to paid hours but to no job's worked hours. This split is the heart of the model.
 
 ---
 
@@ -180,10 +181,18 @@ Per §7.1: a task must be assigned to the member **or** unassigned. Confirm agai
 | Foreman  | Crew                     |
 | Crew     | nobody                   |
 
-- Owner has no timeclock → no one approves an Owner (no rows exist).
+- **Owner hours have no approval state (Session 64).** Approval is strictly-below and nobody outranks the Owner, so an Owner's session is **never pending and never approved — it simply exists. Do not auto-approve it.** _Supersedes "Owner has no timeclock → no one approves an Owner (no rows exist)"; the Owner now clocks in (§4)._ **Schema flag:** the session `status` column is currently `NOT NULL DEFAULT 'pending'`; an Owner session must be able to carry no approval state (nullable, or an `n/a` value) — resolve at build.
 - Admin's hours (setting ON) → approvable by **Owner only**, which falls out of the strictly-below rule.
 - Only `approved` sessions are eligible for QuickBooks export (Module 7).
 - Approval is on the **session** (payroll), not the segment.
+
+### 8.1 Editing hours (Session 64)
+
+People forget to clock in and out, so hours need an edit path — the spec previously had **none**.
+
+- **Only Owner and Admin may edit hours** (sessions and segments). **Crew and Foreman cannot edit hours — including their own.**
+- **Consequence, stated explicitly:** a **Foreman may approve hours he cannot correct.** Approval and correction are distinct powers held by different roles.
+- **An edit does not clear approval.** When an Owner or Admin edits already-approved hours, the timesheet **stays approved** — editing does not re-open the approval. Tradeoff recorded as an open item (§12).
 
 ---
 
@@ -199,40 +208,42 @@ Per §7.1: a task must be assigned to the member **or** unassigned. Confirm agai
 
 ---
 
-## 10. Acceptance example — **PROPOSED, UNVERIFIED**
+## 10. Acceptance example — **PROPOSED**
 
-> ⚠️ **Names, times, and job sites below are invented.** Josh confirmed the _shape_ of the day; no real Bishop numbers have been supplied. **Assumes the break is unpaid** (a default, not a Bishop fact). Per the interview-first mandate this stays **PROPOSED** until traced against a real Bishop job, at which point it becomes the acceptance example.
+> **Reconstructed against a real Bishop day (Session 64).** A real day's shape and values; the employee names are reconstructed. Labelled **PROPOSED** until finally traced. Exercises the Session-64 reversals: an Owner with a timeclock, paid breaks, and the paid-hours ≠ worked-hours split.
 
-**Input** — Dave (Crew), one day, mobile:
+**INPUT** — Project _Willow Ridge_, `2026-07-08`. Four `time_clock_sessions`, all `clock_in 08:00`, `clock_out 16:00`: three employees and **Josh (Owner)**.
 
-| Time  | Action                                          |
-| ----- | ----------------------------------------------- |
-| 7:00  | Clock in; picks Miller + task "Frame east wall" |
-| 11:00 | Leaves for Ortiz                                |
-| 11:30 | Arrives Ortiz; verbal direction, no task        |
-| 12:30 | Lunch                                           |
-| 13:00 | Store run, returns to Ortiz                     |
-| 14:00 | Back on Ortiz                                   |
-| 15:30 | Clock out                                       |
+- **Employee A** and **Employee B**, each: `work` on Willow Ridge 08:00–12:00 · `break` 12:00–12:30 · `work` on Willow Ridge 12:30–16:00.
+- **Employee C**: `work` on Willow Ridge 08:00–16:00, no break.
+- **Josh (Owner)**: `work` on Willow Ridge 08:00–15:00 · `travel` 15:00–16:00, driving to an estimate.
 
-**Store** — 1 `time_clock_sessions` row (`clock_in` 7:00, `clock_out` 15:30, **no project**) + 6 `time_segments` rows:
+**Company setting:** paid breaks **ON**, **30 minutes per day**.
 
-| #   | type           | project | task            | start–end   | hrs |
-| --- | -------------- | ------- | --------------- | ----------- | --- |
-| 1   | `work`         | Miller  | Frame east wall | 7:00–11:00  | 4.0 |
-| 2   | `travel`       | —       | —               | 11:00–11:30 | 0.5 |
-| 3   | `work`         | Ortiz   | —               | 11:30–12:30 | 1.0 |
-| 4   | `break`        | —       | —               | 12:30–13:00 | 0.5 |
-| 5   | `material_run` | Ortiz   | —               | 13:00–14:00 | 1.0 |
-| 6   | `work`         | Ortiz   | —               | 14:00–15:30 | 1.5 |
+**STORE** — Four sessions. Nine `time_segments`:
 
-**Output**
+| Session | #   | type       | project      | start–end   | hrs |
+| ------- | --- | ---------- | ------------ | ----------- | --- |
+| A       | 1   | `work`     | Willow Ridge | 08:00–12:00 | 4.0 |
+| A       | 2   | `break`    | —            | 12:00–12:30 | 0.5 |
+| A       | 3   | `work`     | Willow Ridge | 12:30–16:00 | 3.5 |
+| B       | 4   | `work`     | Willow Ridge | 08:00–12:00 | 4.0 |
+| B       | 5   | `break`    | —            | 12:00–12:30 | 0.5 |
+| B       | 6   | `work`     | Willow Ridge | 12:30–16:00 | 3.5 |
+| C       | 7   | `work`     | Willow Ridge | 08:00–16:00 | 8.0 |
+| Josh    | 8   | `work`     | Willow Ridge | 08:00–15:00 | 7.0 |
+| Josh    | 9   | `travel`   | —            | 15:00–16:00 | 1.0 |
 
-- Session duration **8.5 h**; unpaid break 0.5 h → **paid hours 8.0**
-- Miller **4.0** · Ortiz **3.5** (of which material run **1.0**) · travel **0.5** unattributed · break 0.5 unpaid
-- Σ segments = 8.5 = session duration ✓ (invariant 2)
-- If segment 1 ended `completion = 'complete'` → `tasks."Frame east wall".status` → Complete in M5
-- Paid-break variant: paid hours 8.5; all attribution identical
+- `break` segments carry **no `project_id`**.
+- Josh's `travel` segment carries **no `project_id`** — he is driving to an estimate and **no project exists yet**.
+
+**OUTPUT**
+
+- **Paid hours = 8.0 for all four people** (paid breaks ON, ≤ 30 min/day → A's and B's half-hour lunch is paid; C and Josh took no break).
+- **Worked hours on Willow Ridge** (segments carrying a `project_id`): A **7.5**, B **7.5**, C **8.0**, Josh **7.0** → **30.0 hours** of labor cost to the job.
+- Josh's **travel hour is paid but lands on no job** (no `project_id`).
+- **No overtime:** 32 paid hours across the week to date, under the **40** threshold.
+- Employee A/B/C hours are **pending approval** by Josh or the Foreman. **Josh's (Owner) hours have no approval state** (§8).
 
 ---
 
@@ -242,7 +253,7 @@ Per §7.1: a task must be assigned to the member **or** unassigned. Confirm agai
 - A member reads and writes **their own** sessions and segments: `member_id = get_my_member_id()`.
 - Owner/Admin/PM/Foreman read all sessions in the company (needed for approval queues and job costing).
 - **Approval UPDATE** is gated by the §8 matrix — the approver's role vs. the _subject's_ role. This is a role-comparison predicate, not a simple ownership check; it likely needs a SQL helper (e.g. `can_approve_member(target_member_id)`).
-- Segments are **immutable after the session is approved** — reallocating cost after payroll has run is a Module 7 concern, not a 6A edit.
+- ~~Segments are **immutable after the session is approved**~~ **[SUPERSEDED — Session 64, §8.1: Owner and Admin may edit hours even after approval, and the edit does not clear approval.]** Reallocating cost after payroll has run remains a Module 7 concern, not a 6A edit.
 - Soft-delete per convention.
 
 ---
@@ -261,6 +272,8 @@ Per §7.1: a task must be assigned to the member **or** unassigned. Confirm agai
 | 8   | What happens to an open session at midnight / a forgotten clock-out?                                                                                                                                                                                           | 6A build              |
 | 9   | `time_segments` FK to `tasks` — confirm 5B task table shape                                                                                                                                                                                                    | Build                 |
 | 10  | Warranty exclusion from budget rollup — coordinate with 5E                                                                                                                                                                                                     | 5E                    |
+| 11  | **An edit does not clear approval (§8.1).** An approved timesheet no longer guarantees the approver saw those exact numbers. Accepted; reversible later.                                                                                                        | Josh / 6A build       |
+| 12  | **Estimate travel** carries no `project_id` and lands on no job. A future `estimate_id` on `time_segments` would let estimate travel be costed per bid. Deferred — Josh chose this (Session 64).                                                                 | Deferred              |
 
 ---
 
@@ -270,7 +283,7 @@ Land in the **batched** Company Settings pass, not in 6A.
 
 - **Overtime rules** — weekly threshold (default 40 h/wk); optional daily threshold (open, #4)
 - **GPS clock-in** — capture/enforce toggle, default **OFF**
-- **Breaks paid/unpaid** — default **unpaid** (open, #2/#3)
+- **Breaks paid/unpaid** — default **unpaid** (open, #2/#3). **(Session 64 — Bishop pays for lunch.)** Two settings: **(a) breaks paid** on/off; **(b) paid break minutes per day** (a daily cap, e.g. 30 min). When ON, break-segment duration up to the cap counts toward paid hours — and thus toward the weekly OT threshold (§9). Break segments still carry no `project_id`, so paid-break time never lands on a job's cost. Batched settings pass, **not a 6A migration.**
 - **Admin timeclock** — enable/disable, default **OFF**
 
 ---
@@ -281,3 +294,4 @@ Land in the **batched** Company Settings pass, not in 6A.
 - `future_module_architecture.md` §7.9 — rewrite the flat-approval divergence entry.
 - `future_module_architecture.md` §7.4 — delivery check-in is **not** gated by project assignment (Josh, this session).
 - `CLAUDE_MODULES.md` §6.1 and §6.9 — mark superseded by §7 (same treatment §6.4 received for punch lists). §6.1's "when clocking in, crew picks which task" is contradicted by the real workflow.
+- **(Session 64)** `future_module_architecture.md` §7.1 **and** `CLAUDE_MODULES.md` §6.1 — apply the Session-64 reversals: **Owner has a timeclock** (Owner labor is job cost; Owner hours carry no approval state) and **breaks may be paid** per company setting (add paid-break-minutes-per-day). Both docs still carry the superseded "Owner has no timeclock" and unpaid-break assumptions.
