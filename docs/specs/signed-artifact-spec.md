@@ -8,7 +8,7 @@ This spec is cross-cutting by design. It amends Module 5D (change orders) but al
 
 ---
 
-## 1. Ground truth (verified Session 64, HEAD `899c647`)
+## 1. Ground truth (verified Session 64 at HEAD `899c647`; still valid at HEAD `9beef70` — docs-only changes since)
 
 Every line below was confirmed by reading the repo, not by trusting a context file.
 
@@ -123,7 +123,7 @@ change_orders  ADD COLUMN contractor_signed_by uuid       -- company_members(id)
 
 Column names are design-level. Confirm against live schema at build.
 
-**Open — not decided in this session:** where the saved signature image lives (company settings row? `project-files` bucket? a dedicated bucket?), and whether Company Settings needs a new pass to hold it. Fold into the existing batched Company Settings pass if that is still open.
+**Decided (Josh, Session 64):** the saved signature image **bytes** live in the existing `project-files` bucket at `{companyId}/signatures/`; a new **nullable column on the company settings row stores that storage path** — the bytes are **not** base64 in the settings row. _Rationale: this reuses the bucket and RLS that `storeSignedPDF` already writes to, and keeps a binary blob out of a row read on nearly every page load._ The company settings **column** belongs to the batched Company Settings pass (§4.4); the upload and read path can be built without waiting for that pass.
 
 ### 4.3 `email_logs` — three additive changes
 
@@ -147,6 +147,17 @@ email_logs  ADD CONSTRAINT email_logs_email_type_check CHECK (
 `signing_session_id` **cannot** be reused for CO sessions — its FK points at `signing_sessions`, the wrong table. A separate column is required.
 
 Add `idx_email_logs_change_order_id` to match the existing `idx_email_logs_estimate_id`.
+
+### 4.4 Company settings — saved contractor signature path
+
+A nullable column on the company settings row holds the `project-files` storage path decided in §4.2. It stores the **path only** — never the image bytes.
+
+```
+<company settings table>  ADD COLUMN contractor_signature_path text
+                            -- nullable; storage path {companyId}/signatures/... in project-files
+```
+
+Table and column names are design-level. Confirm against live schema at build. The column lands with the batched Company Settings pass; the bucket upload/read path can be built ahead of it.
 
 ---
 
@@ -282,7 +293,6 @@ Step 8 is not optional. The migration adds the column to `signing_sessions`; not
 
 ## 10. Open items
 
-- Where the saved contractor signature image lives. Company Settings pass.
 - Whether declined COs email the client as well as the contractor.
 - Reminder cadence for COs. Estimates have one; match it or diverge deliberately.
 - Retention policy for v1 artifacts once v2 exists. Counsel.
