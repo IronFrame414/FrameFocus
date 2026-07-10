@@ -133,6 +133,8 @@ Module 6 is mobile-first and is where most of the new session 6 planning decisio
 
 ### 6.1 Time Tracking (Enhanced)
 
+> **SUPERSEDED by `docs/specs/6A-spec.md` (via `future_module_architecture.md` §7.1 as amended), Session 63 — the spec wins.** Reversed/replaced below: the single-table model → two tables (`time_clock_sessions` payroll + `time_segments` attribution); `category` on the entry → `segment_type` values with **derived** overtime (never user-selected); session-level break columns → a `break` segment type; **"when clocking in, crew picks which task" is contradicted by the real workflow** (clock-in opens a segment; a task is optional under verbal direction); mileage → deferred to v2; approval is **hierarchical** (strictly-below, no self/peer approval, PM included), not flat. See 6A-spec §3.
+
 - **Clock in/out with GPS** — crew taps to clock in, location captured for verification
 - **Time categorization** — every time entry tagged as: `regular`, `overtime`, `travel`, `drive`, `shop`. Categories may bill at different rates on T&M jobs.
 - **Break tracking** — paid vs. unpaid breaks, lunch tracking. Configurable per company (state labor law varies).
@@ -145,6 +147,8 @@ Module 6 is mobile-first and is where most of the new session 6 planning decisio
 
 ### 6.2 Daily Logs
 
+> **SUPERSEDED by `docs/specs/6B-spec.md` (via `future_module_architecture.md` §7.2 as amended), Session 63 — the spec wins.** Corrections: **"hours" is not a log field** — employee hours are read-only, owned by 6A (`time_segments`); **"materials delivered" is not a typed field** — owned by 6D and rendered read-only; **crew present derives from `time_segments`, not clock-ins**; **"one per project per day" is dead** — multiple logs per project-day are allowed. New free-text fields: material used, material needed, equipment used, tasks for tomorrow; weather stays manual. See 6B-spec §3.
+
 - Standard fields: date, project, crew present, weather, work performed, hours, materials delivered, issues
 - **Safety Hazards section** — checkbox ("hazards present today?") + text field for description. This is quick in-the-moment hazard logging, NOT a formal incident report.
 - Photos auto-pulled from day's captures
@@ -152,6 +156,8 @@ Module 6 is mobile-first and is where most of the new session 6 planning decisio
 - End-of-day: auto-generated PDF saved to Module 3
 
 ### 6.3 Safety Incident Reporting (Separate from Daily Log Hazards)
+
+> **SUPERSEDED in part by `docs/specs/6C-spec.md` (§6), Session 63 — the spec wins.** **"OSHA fields" is superseded.** v1 captures only _what happened, who, when, and treatment_ — there are **no** days-away, job-transfer, or restricted-duty columns, and no OSHA 300 recordkeeping. **OSHA compliance is handled outside the app in v1.** The "Required fields for OSHA compliance" bullet below is therefore dead. See 6C-spec §6.
 
 A dedicated formal workflow for when something actually happens on site (injury, property damage, near miss). Distinct from the daily log's hazard section.
 
@@ -171,6 +177,8 @@ A dedicated formal workflow for when something actually happens on site (injury,
 
 ### 6.5 Material Delivery Tracking
 
+> **RECONCILED with `docs/specs/6D-spec.md` (§3.1), Session 63 — the spec wins.** **Delivery check-in is NOT gated by project assignment.** The "Anyone assigned to the project" rule below is superseded — **any company member may check in a delivery on any project they can see** (Josh, Session 63): whoever is on site signs for the truck. (6D also adds purchase orders, orderless check-in, per-item received/damaged quantities, split deliveries, and PO-close-on-usable-quantity — see 6D-spec §§4–6.)
+
 - Scheduled deliveries tracked with date, vendor, expected contents
 - **Anyone assigned to the project** (Owner through Crew, excluding Client) can check in a delivery when it arrives
 - Delivery contents recorded two ways: photo of the receipt/packing slip, OR typed list
@@ -178,6 +186,8 @@ A dedicated formal workflow for when something actually happens on site (injury,
 - Discrepancies flow into Module 8 inventory as items flagged for return
 
 ### 6.6 Daily Huddle / Crew Briefing
+
+> **SUPERSEDED where it differs from `docs/specs/6E-spec.md`, Session 63 — the spec wins.** Corrections: the briefing **authors no task list of its own** — it displays yesterday's 6B `tasks_tomorrow` **read-only** (6E §5); it carries a free-text safety topic + plan notes. **Who can create: any member** on any project they can see (not Foreman-only). Attendance is **hand-checked from the project roster, members only** — there is **no push-notification ack tap** (a briefing happens before anyone clocks in). No email, no PDF, no signatures. The record's evidentiary value is proof a safety topic was delivered and who heard it. See 6E-spec §§1–5.
 
 - Simple morning briefing tool: Foreman sends daily task list + safety note to crew before work starts
 - Crew sees it on their phone via push notification
@@ -195,6 +205,8 @@ Uses the shared markup component from Module 3. Same tool set, same non-destruct
 - Last-write-wins for conflict resolution (needs validation in testing)
 
 ### 6.9 Data Model Concepts (Planned)
+
+> **SUPERSEDED by the `docs/specs/6A`–`6E` specs (via `future_module_architecture.md` §7 as amended), Session 63 — the specs win.** Every planned shape below is revised: **`time_entries` never existed** (verified this session — no such table or migration was ever committed on any branch) and is replaced by **`time_clock_sessions` + `time_segments`** (6A); `daily_logs` loses the `hours` and `materials delivered` fields and gains material/equipment/tasks free-text (6B); `safety_incidents` drops OSHA columns to what/who/when/treatment (6C); **`material_deliveries` is replaced by `purchase_orders` / `purchase_order_items` / `deliveries` / `delivery_items`** (6D); `crew_briefings` gains `crew_briefing_attendees` + `led_by` and loses `task_list`/`sent_by` push semantics (6E); `mileage_entries` is deferred to v2 (6A). Use each spec's data model as authoritative.
 
 - `time_entries` — user_id, task_id (optional), change_order_id (optional), tm_line_id (optional), category (regular/ot/travel/drive/shop), clock_in, clock_out, gps_in, gps_out, break_minutes, approved_by, approved_at
 - `daily_logs` — project_id, date, weather, crew_present[], work_performed, hazards_present (bool), hazard_notes, pdf_file_id
