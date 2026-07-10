@@ -2,7 +2,7 @@
 
 > **Design authority:** `docs/specs/future_module_architecture.md` §7.2. **This spec amends §7.2 in four places** (§3). Amendments are decisions taken in the Module 6 interview, not drift — §7.2 and `CLAUDE_MODULES.md` §6.2 must be rewritten in the same commit that lands this spec.
 >
-> **Status:** DRAFT — not reviewed, not committed, not built. **No acceptance trace exists** (§10) — unlike 6A, no worked example was walked through. This spec is **not build-ready** until one is.
+> **Status:** DRAFT — not built. The acceptance trace (§10) is **PROPOSED/UNVERIFIED** — mirrored from settled interview rules, not yet walked against a real Bishop daily log. Verify before build.
 >
 > **Written against stale project knowledge.** All Module 3 / Module 5 / 6A column references are **design-level** and carry a _confirm against live schema at build_ obligation.
 >
