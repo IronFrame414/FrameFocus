@@ -92,6 +92,62 @@ export async function uploadCompanyLogo(
 }
 
 
+// Signed-artifact spec §4.2 — the saved contractor signature image. The bytes
+// live in the PRIVATE project-files bucket at {companyId}/signatures/; only the
+// storage PATH is persisted on companies.contractor_signature_path (never the
+// bytes, and never base64 in the row). The CO send flow reads the bytes
+// server-side to composite the contractor signature onto v1.
+// (contractor_signature_path is a new column — expected type errors against the
+// un-regenerated database.ts / CompanyData until the migration is applied.)
+export async function uploadContractorSignature(
+  companyId: string,
+  file: File
+): Promise<{ success: boolean; path?: string; error?: string }> {
+  const supabase = createClient();
+
+  const fileExt = file.name.split('.').pop()?.toLowerCase() || 'png';
+  const filePath = `${companyId}/signatures/signature.${fileExt}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('project-files')
+    .upload(filePath, file, { upsert: true, contentType: file.type || 'image/png' });
+  if (uploadError) {
+    return { success: false, error: uploadError.message };
+  }
+
+  const { error: updateError } = await supabase
+    .from('companies')
+    .update({ contractor_signature_path: filePath, updated_at: new Date().toISOString() })
+    .eq('id', companyId);
+  if (updateError) {
+    return { success: false, error: updateError.message };
+  }
+
+  return { success: true, path: filePath };
+}
+
+export async function clearContractorSignature(
+  companyId: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from('companies')
+    .update({ contractor_signature_path: null, updated_at: new Date().toISOString() })
+    .eq('id', companyId);
+  if (error) {
+    return { success: false, error: error.message };
+  }
+  return { success: true };
+}
+
+/** Short-lived signed URL to preview the saved signature (private bucket). */
+export async function getContractorSignatureUrl(path: string): Promise<string | null> {
+  const supabase = createClient();
+  const { data } = await supabase.storage.from('project-files').createSignedUrl(path, 600);
+  return data?.signedUrl ?? null;
+}
+
+
 // Spec 2 — proposals & email defaults. Same autosave path as the
 // estimating settings; companies pre-trigger holdover applies.
 export type UpdateProposalSettingsInput = Partial<Omit<ProposalSettings, 'id'>>;
