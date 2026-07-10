@@ -2,7 +2,7 @@
 
 > **Design authority:** `docs/specs/future_module_architecture.md` §7.1. **This spec amends §7.1 in five places** (§3 below). Amendments are decisions taken in the Module 6 interview session, not drift — §7.1 and `CLAUDE_MODULES.md` §6.1/§6.9 must be rewritten in the same commit that lands this spec.
 >
-> **Status:** DRAFT — not reviewed, not committed, not built. Interview complete; schema shape settled from the interview. **Acceptance example is PROPOSED** (§10) — invented numbers, never checked against a real Bishop job.
+> **Status:** DRAFT — not reviewed, not committed, not built. Interview complete; schema shape settled from the interview. **Acceptance example is PROPOSED** (§10) — reconstructed against a real Bishop day in Session 64, with employee names reconstructed; verify against payroll before build.
 >
 > **Written against stale project knowledge.** The repo copies of `STATE.md` and `future_module_architecture.md` available while drafting were provably out of date. Every column reference to Module 5 below is **design-level** and carries a _confirm against live schema at build_ obligation.
 >
@@ -80,7 +80,7 @@ time_clock_sessions
   clock_out       TIMESTAMPTZ          -- NULL while open
   gps_in          GEOGRAPHY / JSONB    -- NULL unless company enables GPS
   gps_out         GEOGRAPHY / JSONB    -- NULL unless company enables GPS
-  status          TEXT NOT NULL DEFAULT 'pending'   -- pending | approved
+  status          TEXT DEFAULT 'pending'   -- pending | approved | NULL = no approval state applies (the Owner case, §8)
   approved_by     UUID REFERENCES company_members(id)
   approved_at     TIMESTAMPTZ
   qb_export_status TEXT                -- stub, Module 7
@@ -267,8 +267,8 @@ People forget to clock in and out, so hours need an edit path — the spec previ
 | 3   | Legal: short rest breaks (<20 min) are generally paid; bona fide meal periods (30 min+) unpaid. A single company toggle may permit an unlawful setting. Consider splitting `break` into `rest` / `meal`. **Not a 6A decision — route to professional review.** | Settings pass         |
 | 4   | Optional **daily** OT threshold (e.g. >8 h/day) — §7.1 offers it; undecided                                                                                                                                                                                    | Settings pass         |
 | 5   | GPS: capture vs. enforce; column type (`jsonb` vs. PostGIS)                                                                                                                                                                                                    | Settings pass / build |
-| 6   | Can a member edit a segment after clock-out but before approval?                                                                                                                                                                                               | 6A build              |
-| 7   | Editing/splitting a segment (mis-tapped type) — allowed, and by whom?                                                                                                                                                                                          | 6A build              |
+| 6   | **Resolved by §8.1** — Owner and Admin only may edit hours, before or after approval; a member cannot edit their own. | Closed                |
+| 7   | **Resolved by §8.1** — editing/splitting a segment is Owner/Admin only, before or after approval; an edit does not clear approval. | Closed                |
 | 8   | What happens to an open session at midnight / a forgotten clock-out?                                                                                                                                                                                           | 6A build              |
 | 9   | `time_segments` FK to `tasks` — confirm 5B task table shape                                                                                                                                                                                                    | Build                 |
 | 10  | Warranty exclusion from budget rollup — coordinate with 5E                                                                                                                                                                                                     | 5E                    |
