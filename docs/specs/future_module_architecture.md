@@ -130,35 +130,52 @@ M5's assignment targets (`project_assignments`, `tasks.assignee_id`, `punch_list
 
 Mobile-first, internal. Reconciles committed `CLAUDE_MODULES.md` §6 with this session's decisions. Punch lists removed (owned by M5). Worker identity = `company_members.member_id`. Depends on M5 (tasks, project_assignments) and M3 (files/markup, reused).
 
-### 7.1 Time tracking — two-table model (supersedes committed single `time_entries`)
+### 7.1 Time tracking — two-table model
+
+> **AMENDED by `docs/specs/6A-spec.md` (§3), Session 63 — the spec wins over this section.** Five amendments below.
+> **Correction:** this section previously read "supersedes committed single `time_entries`." **There was never a committed `time_entries` table, type, or migration** — verified by pickaxe across all branches and all history (`git log --all -S "time_entries" -- '*.sql' '*.ts'` → empty; only markdown mentions it). The two-table model supersedes a **planning concept only, never shipped code.**
+>
+> 1. **`time_clock_sessions.project_id` — REMOVED.** The clock is pure payroll, independent of any project; this is what lets one paid day span two job sites without a second clock-in. All project attribution moves to segments. (6A §3.1)
+> 2. **`task_time_segments` → renamed `time_segments`**; it gains **`segment_type`** and **`project_id`**, and `task_id` becomes **nullable**. It no longer describes only task work — it holds travel, breaks, material runs, and taskless verbal work. (6A §3.2)
+> 3. **`time_clock_sessions.category` — REMOVED.** Its values split: `travel`/`drive`/`shop` became `segment_type` values; `overtime` is **derived** from weekly paid hours and never user-selected; `regular` alone is not an enum. This **resolves** the "category grain" open question below — the grain is neither session nor segment, because OT is a property of **hours**. (6A §3.3)
+> 4. **`break_minutes` / `break_paid` — REMOVED from the session.** A break is a `segment_type`; a session-level break number floats outside the segment chain and breaks the reconciliation invariant. (6A §3.4)
+> 5. **Approval is HIERARCHICAL, not flat** (strictly-below, no self/peer approval, PM included, Owner has no timeclock) — reverses the flat-approval rule below and the §7.9 divergence entry. (6A §3.5, §8)
 
 Both tables offline-ready (client-generated UUIDs, device timestamps).
 
 **`time_clock_sessions`** — paid hours (payroll truth); never altered by task activity.
-`member_id` · `project_id` (optional; must be a project the member is assigned to) · `clock_in` · `clock_out` · `category` (regular|overtime|travel|drive|shop, default regular) · `break_minutes`, `break_paid` · `gps_in`, `gps_out` (nullable; only if company enables GPS) · approval `status` (pending→approved), `approved_by`, `approved_at` · `qb_export_status` stub (M7) · standard columns.
+`member_id` · ~~`project_id`~~ **[DEAD — removed, 6A §3.1]** · `clock_in` · `clock_out` · ~~`category`~~ **[DEAD — removed, 6A §3.3; OT is derived, not a column]** · ~~`break_minutes`, `break_paid`~~ **[DEAD — removed, 6A §3.4; break is a `segment_type`]** · `gps_in`, `gps_out` (nullable; only if company enables GPS) · approval `status` (pending→approved), `approved_by`, `approved_at` · `qb_export_status` stub (M7) · standard columns.
 
-**`task_time_segments`** — cost allocation only, NOT payroll; nested in a session.
-`session_id` · `task_id` (must be assigned to the member OR unassigned) · `segment_start`, `segment_end` · `completion` (complete|incomplete, set on end) · `note` TEXT NOT NULL (mandatory on end) · standard columns.
+**`task_time_segments` → `time_segments`** (renamed, 6A §3.2) — cost allocation, NOT payroll; nested in a session.
+`session_id` · **`segment_type`** (`work|material_run|warranty|travel|shop|break` — NEW, 6A §3.2) · **`project_id`** (gated by `segment_type` — NEW, 6A §3.2) · `task_id` (**now nullable**; assigned to the member OR unassigned) · `segment_start`, `segment_end` · `completion` (complete|incomplete; required iff `task_id IS NOT NULL`) · `note` TEXT (mandatory on end for every type except `break`) · standard columns.
 
 **Locked rules:**
 
 - Paid hours = clock session; task activity never changes them.
-- Task switch = end current segment (completion + mandatory note), optionally start another; gaps allowed (clocked in, no active task).
+- Task switch = end current segment (completion + mandatory note), optionally start another. ~~gaps allowed (clocked in, no active task).~~ **[DEAD — 6A §6/§7: clock-in opens the first segment, there is no clocked-in-with-no-segment state, and segments are contiguous/non-overlapping with Σ segment durations = session duration. Gaps are NOT allowed.]**
 - Marking a segment complete writes task status → Complete in M5 (cross-module write).
-- Approval is **flat**: any Foreman/Owner/Admin can approve any member's hours. PM is **not** an hour-approver. (Supersedes committed two-tier chain.)
-- OT auto-flag built now, driven by company-configurable thresholds (§6).
+- ~~Approval is **flat**: any Foreman/Owner/Admin can approve any member's hours. PM is **not** an hour-approver.~~ **[DEAD — superseded by 6A §8. Approval is HIERARCHICAL (`Owner > Admin > PM > Foreman > Crew`): approve strictly below you, no self-approval, no peer approval. PM approves Foreman/Crew. Owner has no timeclock; Admin's hours (setting ON) are approvable by Owner only.]**
+- OT ~~auto-flag~~ **derived at read time** from weekly paid hours (default 40 h/wk threshold, §6); **never stored** on a session or segment (6A §9).
 - QuickBooks: schema-ready now; connector built with M7. No half-integration in M6.
 - Mileage: deferred to v2 (standalone `mileage_entries`, low re-work later).
 
-**Open spec/§2a questions (not blocking):** category grain (per-session vs. intra-day spans — lean per-session); self-approval (may a Foreman approve own hours?).
+**Open spec/§2a questions:** ~~category grain (per-session vs. intra-day spans — lean per-session)~~ **[RESOLVED — 6A §3.3: neither; OT is a property of hours.]** ~~self-approval (may a Foreman approve own hours?)~~ **[RESOLVED — 6A §8: no self-approval, ever.]**
 
 ### 7.2 Daily logs
 
-One per project per day; any member may author. Committed fields (weather, work performed, materials, issues) + hazard checkbox/notes + photos auto-pulled from the day + voice-to-text + end-of-day auto-PDF to M3. Offline-ready.
+> **AMENDED by `docs/specs/6B-spec.md` (§3), Session 63 — the spec wins over this section.** Four amendments:
+> 1. **"One per project per day" — DEAD/REMOVED.** Multiple daily logs may exist for the same project on the same date (Josh: "no harm in having more than 1"). Creator-only-edit survives; "highest-ranking person on site writes it" reverts to a Bishop convention, not a system constraint — no rank gate. (6B §3.1)
+> 2. **Crew present derives from `time_segments`, NOT clock-ins.** 6A removed `project_id` from `time_clock_sessions`, so a clock-in no longer knows its project; instead, distinct members with a segment on this project on this date. (6B §3.2) — the "auto-fills from that day's clock-ins" rule below is DEAD.
+> 3. **Hours are derived, not typed.** Employee hours are read-only, computed from `time_segments` (6A owns hours) — a typed field would be a second source of truth. **Subcontractor hours and notes are manual.** (6B §3.3)
+> 4. **"Materials delivered" is not a typed field** — 6D owns the delivery record; 6B renders that project-day's deliveries **read-only**. (6B §3.4, §6.3)
+>
+> **New fields (from the interview, not in this doc or `CLAUDE_MODULES.md` §6.2):** `material_used`, `material_needed`, `equipment_used` (free text), `tasks_tomorrow`. **Weather stays MANUAL** — an auto-fetch was considered and rejected (no weather vendor in-stack; needs the project address; no offline path). (6B §3)
 
-- **Crew present:** auto-fills from that day's clock-ins; editable.
-- **Edit rights:** only the creator can edit.
-- **Locking:** never locks (always editable). Accepted consequence: first author owns the day's log; if unavailable no one else can edit it. End-of-day PDF is a point-in-time snapshot (regenerate-on-edit = spec detail).
+~~One per project per day~~ **[DEAD — amendment 1; multiple allowed]**; any member may author. Committed fields (weather, work performed, materials, issues) + hazard checkbox/notes + photos auto-pulled from the day + voice-to-text + end-of-day auto-PDF to M3. Offline-ready.
+
+- **Crew present:** ~~auto-fills from that day's clock-ins~~ **[DEAD — amendment 2; derives from `time_segments`]**; editable.
+- **Edit rights:** only the creator can edit. **[6B §8: a PM who arrives after a Crew member wrote the log cannot edit it — the PM writes their own log instead (a consequence of amendment 1).]**
+- **Locking:** never locks (always editable). Accepted consequence: first author owns their log. End-of-day PDF is a point-in-time snapshot. **[6B §9: two logs on the same project-date produce two PDFs, same date, filename disambiguated by author; regenerate-on-edit vs. version-on-edit is open — 6B §11 item 2.]**
 
 ### 7.3 Safety incident reporting
 
@@ -168,11 +185,18 @@ Formal incident form, separate from the daily-log hazard flag; OSHA fields; auto
 
 ### 7.4 Material deliveries
 
-Both scheduled and walk-up arrivals. **Who checks in:** any assigned member. Contents via packing-slip photo OR typed list; discrepancies flagged. **M8 hook:** discrepancy → Inventory & Tools return flag stored now, consumed when M8 is built.
+> **AMENDED by `docs/specs/6D-spec.md` (§3.1), Session 63 — the spec wins over this section.** **Delivery check-in is NOT gated by project assignment.** The "any assigned member" rule below is DEAD — **any company member may check in a delivery on any project they can see** (Josh, Session 63). The person who happens to be on site signs for the truck.
+
+Both scheduled and walk-up arrivals. **Who checks in:** ~~any assigned member~~ **[DEAD — any member who can see the project; not assignment-gated, 6D §3.1]**. Contents via packing-slip photo OR typed list; discrepancies flagged. **M8 hook:** discrepancy → Inventory & Tools return flag stored now, consumed when M8 is built.
 
 ### 7.5 Crew briefing / huddle
 
-Optional morning task list + safety note pushed to crew. **Who can send:** Foreman/PM/Owner/Admin. **Acknowledgment:** optional ack tap, captured (not required to clock in).
+> **RECONCILED with `docs/specs/6E-spec.md`, Session 63 — where they differ, the spec wins.** The "huddle" description here is superseded on three points:
+> - **Not a task list of its own.** 6E authors **no** tasks — it displays yesterday's 6B `tasks_tomorrow` **read-only** (6E §5, §1 out-of-scope). The "morning task list pushed to crew" framing is superseded; the briefing carries a free-text `safety_topic` and free-text `plan_notes`.
+> - **Who can create:** ~~Foreman/PM/Owner/Admin~~ — **any member, on any project they can see** (6E §4). Superseded.
+> - **No acknowledgment tap.** Attendance is **hand-checked from the project roster** (a briefing happens before anyone clocks in, so there are no `time_segments` to read yet), not an ack tap. **Members only — no typed-in outsiders** (6E §3.1, §3.2). No email, no PDF, no signatures (6E §1). The record's value is proof a safety topic was delivered and evidence of who heard it (6E §2).
+
+Optional morning briefing: a free-text safety topic + plan notes, with hand-checked attendance from the roster, plus a read-only view of yesterday's 6B tasks. **[Original text — "Optional morning task list + safety note pushed to crew; who can send Foreman/PM/Owner/Admin; optional ack tap captured (not required to clock in)" — superseded per the note above.]**
 
 ### 7.6 Photo markup
 
@@ -188,7 +212,9 @@ Sync engine deferred to v2. v1 is offline-READY only (append-friendly events, cl
 
 ### 7.9 Conscious divergences from the platform roadmap (by decision, not drift)
 
-- **Flat hour-approval** (any Foreman/Owner/Admin) replaces the roadmap's two-tier chain (Foreman→PM/Admin→Owner). PM is not an approver.
+> **AMENDED by `docs/specs/6A-spec.md` (§3.5, §8, and the §3 consequence note), Session 63.** The flat-approval divergence below is retired — see the first bullet.
+
+- ~~**Flat hour-approval** (any Foreman/Owner/Admin) replaces the roadmap's two-tier chain (Foreman→PM/Admin→Owner). PM is not an approver.~~ **[DEAD — reversed by 6A §8.** Approval is now **hierarchical**: `Owner > Admin > PM > Foreman > Crew`; approve strictly below you, no self-approval, no peer approval. **PM is included** (approves Foreman, Crew); **Owner has no timeclock** so no one approves an Owner; Admin's hours (setting ON) are approvable by Owner only. This **substantially returns** to the committed `CLAUDE_MODULES.md` §6.1 two-tier chain rather than diverging from it, so it is no longer a "conscious divergence."]
 - **Offline sync engine deferred to v2** — roadmap describes offline-first as in-scope; v1 ships offline-_ready_ only.
 - **Mileage deferred to v2** — roadmap lists it in M6 scope.
 - **Punch lists owned by M5** — roadmap §6.4 _and_ `CLAUDE_MODULES.md` §6.4 both still place them in M6; the M5 architecture doc (newer) is the authority.
