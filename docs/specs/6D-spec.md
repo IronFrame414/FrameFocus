@@ -65,6 +65,7 @@ Consequence: an orderless delivery has **no ordered quantities to compare agains
 
 ## 6. Data model
 
+```sql
 purchase_orders
 id UUID PK
 company_id UUID NOT NULL REFERENCES companies(id)
@@ -73,7 +74,12 @@ vendor_name TEXT NOT NULL -- free text in v1 (§1)
 po_number TEXT -- vendor's or ours; nullable
 status TEXT NOT NULL -- 'open' | 'closed' | 'cancelled'
 ordered_at DATE
+closed_reason TEXT
+closed_by UUID REFERENCES company_members(id)
 -- standard columns (created_by = the office member who entered it)
+```
+
+```sql
 purchase_order_items
 id UUID PK
 company_id UUID NOT NULL REFERENCES companies(id)
@@ -83,6 +89,9 @@ qty_ordered NUMERIC(10,2) NOT NULL
 unit TEXT -- "each", "sheet", "lf" — free text v1
 sort_order INT NOT NULL DEFAULT 0
 -- standard columns
+```
+
+```sql
 deliveries
 id UUID PK -- client-generated (offline-ready)
 company_id UUID NOT NULL REFERENCES companies(id)
@@ -94,6 +103,9 @@ has_exceptions BOOLEAN NOT NULL DEFAULT false
 notes TEXT -- "2 splits, returned with driver."
 received_by UUID NOT NULL REFERENCES company_members(id)
 -- standard columns
+```
+
+```sql
 delivery_items
 id UUID PK
 company_id UUID NOT NULL REFERENCES companies(id)
@@ -104,6 +116,7 @@ qty_received NUMERIC(10,2) NOT NULL DEFAULT 0
 qty_damaged NUMERIC(10,2) NOT NULL DEFAULT 0
 -- standard columns
 CHECK (qty_damaged <= qty_received)
+```
 
 - `has_exceptions` is **derived at write time**, not typed: true when any child item has `qty_damaged > 0`, or `qty_received <> qty_ordered` on its PO line. Store it so the notification and the list view don't recompute.
 - `qty_damaged <= qty_received` — you cannot damage what didn't arrive. Damaged goods that leave on the truck were still _received_ first; that's what makes them a return.

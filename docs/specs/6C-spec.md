@@ -28,6 +28,7 @@ The formal record of something that actually happened: injury, property damage, 
 
 ## 2. `safety_incidents`
 
+```sql
 safety_incidents
 id UUID PK
 company_id UUID NOT NULL REFERENCES companies(id)
@@ -41,6 +42,7 @@ treatment_sought BOOLEAN NOT NULL DEFAULT false
 treatment_notes TEXT
 pdf_file_id UUID REFERENCES files(id) -- M3
 -- standard columns (created_by = reporter)
+```
 
 - `incident_type` is a CHECK-constrained enum. See §9 open item #1.
 - `treatment_notes` is free text (e.g. `"Urgent care, stitches."`). Costs, co-pays, and clinic names are **not** structured in v1.
@@ -49,14 +51,18 @@ pdf_file_id UUID REFERENCES files(id) -- M3
 ### 2.1 Injured party — member or outsider
 
 At most one of `injured_member_id` / `injured_name` is populated. Both may be NULL for a `property_damage` or `near_miss` with nobody hurt — but **an `injury` must name someone.**
+
+```sql
 CHECK (num_nonnulls(injured_member_id, injured_name) <= 1)
 CHECK (incident_type <> 'injury'
 OR num_nonnulls(injured_member_id, injured_name) = 1)
+```
 
 Rationale: the homeowner who trips over an extension cord is the incident most worth recording, and will never appear in the roster. The second constraint stops an injury being filed with nobody injured.
 
 ### 2.2 `safety_incident_witnesses`
 
+```sql
 safety_incident_witnesses
 id UUID PK
 company_id UUID NOT NULL REFERENCES companies(id)
@@ -65,6 +71,7 @@ member_id UUID REFERENCES company_members(id) -- nullable
 witness_name TEXT -- nullable
 -- standard columns
 CHECK (num_nonnulls(member_id, witness_name) = 1)
+```
 
 Junction table, mirroring `daily_log_crew`. Same member-or-outsider rule as §2.1 — two tables that disagree about who counts as a person will drift.
 
