@@ -1,6 +1,6 @@
 # 6E — Crew Briefings — Spec (DRAFT, for review)
 
-> **Design authority:** `docs/specs/future_module_architecture.md` §7.5 (called "huddles" there) / `CLAUDE_MODULES.md` §6.5.
+> **Design authority:** `docs/specs/future_module_architecture.md` §7.5 (called "huddles" there) / `CLAUDE_MODULES.md` §6.6.
 >
 > **Status:** DRAFT — not built. Acceptance trace (§6) is **INVENTED/UNVERIFIED** — a designed workflow with **no field basis**. Josh has never run a crew briefing at Bishop Contracting. Unlike 6A–6D, whose traces are PROPOSED from a real workflow, 6E's trace was invented for this spec.
 >
@@ -127,5 +127,5 @@ No email. No PDF.
 ## 8. Doc corrections owed (same commit as this spec)
 
 - `docs/specs/future_module_architecture.md` §7.5 — confirm the "huddle" description matches this spec; mark **superseded** where it does not.
-- `CLAUDE_MODULES.md` §6.5 — same.
+- `CLAUDE_MODULES.md` §6.6 — same.
 - `docs/specs/6B-spec.md` §11 open item 5 — mark **resolved**: 6E displays 6B's tasks-for-tomorrow read-only and stores nothing (§5).
