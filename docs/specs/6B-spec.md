@@ -230,7 +230,7 @@ Sub hours: `6.0`. Deliveries: empty (6D unbuilt). PDF filed to Willow Ridge → 
 | 2   | PDF regenerate-on-edit vs. version-on-edit; filename disambiguation for same-project same-date logs        | 6B build          |
 | 3   | **Voice-to-text vendor** — new external dependency, no offline path                                        | 6B build          |
 | 4   | **Sub double-count** — a subcontractor with a login who clocks in via 6A _and_ is entered manually in §4.2 | 6B build          |
-| 5   | "Tasks for tomorrow" overlaps 6E's briefing task list and M5 tasks. Linked, or free text forever?          | 6E spec           |
+| 5   | "Tasks for tomorrow" ↔ 6E briefing: **resolved** — 6E displays this field read-only and stores nothing (no FK, no link), per 6E-spec §5. (M5 tasks overlap still open.) | Closed            |
 | 6   | Crew-present snapshot staleness for late arrivals (§5)                                                     | Accepted; revisit |
 | 7   | Which `segment_type`s count as "on site" (§5)                                                              | Build             |
 | 8   | Photo auto-pull predicate — project + date, or explicit attach?                                            | Build             |
