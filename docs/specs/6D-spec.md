@@ -12,6 +12,18 @@
 
 ---
 
+> ## ⚠️ AS-BUILT RECONCILIATION vs. 6A (added this pass — verified against migrations, not spec prose)
+>
+> Checked against 6A (`supabase/migrations/20260710130000_module6_6a_time_tracking.sql` on `feat/module-6a`, read via `git show`) and the M5 `change_orders` (5D) / projects (5A) migrations. 6D does not read 6A's tables, but inherits its **identity/audit** and **RLS** conventions. Each drift is flagged **[DRIFT]** at the point of use.
+>
+> 1. **Domain member ≠ audit column.** `closed_by` and `received_by` are already correct `company_members` FKs (good — matches the convention). But `purchase_orders`' "`created_by` = the office member who entered it" is a **[DRIFT]**: `created_by` is the audit `auth.uid()` column (FK `auth.users`); the office author should be an explicit `entered_by_member_id` (`company_members`, default `get_my_member_id()`), exactly as `change_orders.author_member_id` (5D). See §6.
+> 2. **No permissions/RLS section exists.** 6B and 6C each have one; 6D has none, yet it makes real authority claims (check-in = any member on a visible project, §3; manual PO close = Owner/Admin, §5.1). A flagged **§6a** is added below to align these to 6A/M5 patterns — including the same PM/Foreman read-visibility question 6B/6C raise. See §6a / Q1.
+> 3. **`received_by` has no default.** Convention (and 6A's `member_id DEFAULT get_my_member_id()`) suggests `received_by` should default to `get_my_member_id()` so the client INSERT need not set it. Recommended in §6; confirm at build.
+> 4. **Open item #2 (damaged-goods return) is left OPEN by explicit instruction** — flagged, not resolved. See §9 and Q2.
+> 5. **Acceptance trace stays PROPOSED.** See the NEEDS INTERVIEW blocker in §8.
+
+---
+
 ## 1. Scope
 
 The office orders material. The crew receives it, compares it against the order, documents damage, and the office finds out immediately.
@@ -90,8 +102,11 @@ status TEXT NOT NULL -- 'open' | 'closed' | 'cancelled'
 ordered_at DATE
 closed_reason TEXT
 closed_by UUID REFERENCES company_members(id)
--- standard columns (created_by = the office member who entered it)
+entered_by_member_id UUID NOT NULL DEFAULT get_my_member_id() REFERENCES company_members(id) -- domain author (§6a)
+-- standard columns (created_by / updated_by are AUDIT = auth.uid(), NOT the office author)
 ```
+
+> **[DRIFT — corrected]** the office author is **`entered_by_member_id`** (a `company_members` FK defaulting to `get_my_member_id()`), **not** `created_by`. `created_by`/`updated_by` are audit columns defaulting to `auth.uid()` (FK `auth.users`), per 6A and `change_orders.author_member_id` (5D). `closed_by` and `deliveries.received_by` are already correct `company_members` FKs.
 
 ```sql
 purchase_order_items
@@ -115,8 +130,8 @@ vendor_name TEXT NOT NULL -- copied from PO, or typed if orderless
 delivery_date DATE NOT NULL
 has_exceptions BOOLEAN NOT NULL DEFAULT false
 notes TEXT -- "2 splits, returned with driver."
-received_by UUID NOT NULL REFERENCES company_members(id)
--- standard columns
+received_by UUID NOT NULL DEFAULT get_my_member_id() REFERENCES company_members(id) -- the on-site member; default per convention (§6a)
+-- standard columns (created_by / updated_by = audit auth.uid())
 ```
 
 ```sql
@@ -138,6 +153,20 @@ CHECK (qty_damaged <= qty_received)
 
 ---
 
+## 6a. Permissions & RLS — [ADDED this pass; align to 6A/M5, confirm at build]
+
+> This section did not exist. 6D made authority claims (§3, §5.1) without a home for them. Written to match how 6A/M5 actually did RLS; **none of it is finalized** — the read-visibility line carries the same flag 6B/6C raise (Q1).
+
+- Company-scoped: `company_id = get_my_company_id()` on all four tables.
+- **Create PO:** office roles — Owner/Admin/PM (mirrors who creates `change_orders`); on a project they can see (`can_view_project`).
+- **Check in a delivery:** **any company member on a project they can see** (§3 amendment) — `can_view_project(project_id)`. `received_by` defaults to `get_my_member_id()`.
+- **Manual PO close:** **Owner/Admin only** (§5.1), with `closed_reason` required by CHECK. `closed_by = get_my_member_id()`.
+- **Read:** **[CONFLICT — flag, do not resolve]** same PM/Foreman question as 6B §8 / 6C §5 — all company POs/deliveries, or only those on projects the caller can see (`can_view_project`, which restricts PM/Foreman to assigned)? Crew read is assigned-only regardless. Q1.
+- **Delete:** soft-delete, Owner/Admin only, per convention.
+- Child tables (`purchase_order_items`, `delivery_items`) inherit their parent's visibility via the parent FK, `ON DELETE CASCADE` as written (consistent with 6A's `time_segments → time_clock_sessions`).
+
+---
+
 ## 7. Notification
 
 **Every check-in emails Owner, Admin, and PM.** One template, one code path. The subject line states whether the delivery was clean or flagged. (Josh, this session — option A over "only flag exceptions.")
@@ -149,6 +178,8 @@ Sent via Resend, from `companyname@rafterworks.com`. **Failure to send must not 
 ---
 
 ## 8. Acceptance example — PROPOSED / UNVERIFIED
+
+> 🚧 **NEEDS INTERVIEW — Josh must narrate a real Bishop material delivery with real numbers before this trace is authoritative.** A real Jones-Lumber workflow seeded it, but the project, date, and quantities are reconstructed; this pass did **not** promote any of it to fact. The values below remain the pre-existing PROPOSED draft, unchanged.
 
 > Derived from a real Bishop workflow (Jones Lumber delivers; crew compares driver's slip to the office's order slip; photos; damage returned with the driver). Project, date, and quantities are reconstructed. Verify before build.
 
@@ -181,6 +212,14 @@ Plywood is fully received and undamaged: `40/40` usable — that line is filled.
 Joists: 12 received, 2 damaged, so `10/12` usable — that line is short by 2 and remains unfilled.
 The PO therefore does **not** auto-close on Thursday; it stays `open`.
 It closes only when Jones delivers 2 replacement joists, or when an Owner or Admin closes it by hand with a required `closed_reason` (§5.1).
+
+---
+
+## 8a. Questions for Josh (raised by the 6A as-built reconciliation — resolve nothing silently)
+
+- **Q1 — PO/delivery read visibility for PM/Foreman.** All company POs/deliveries, or only those on projects they can see (`can_view_project`, matching M5)? Same question 6B/6C raise — answer all three consistently.
+- **Q2 — Damaged-goods return has no record of its own (existing open item #2 — LEFT OPEN by instruction, not resolved here).** A return that never comes back is invisible: `qty_damaged` + a note record that goods *were* damaged, but nothing tracks the return itself (did the driver take them? was a credit issued? a replacement promised?). §5.1's manual PO close partly covers the credit case via `closed_reason`, but there is no first-class `returns` concept. **Decision deferred to you — do not let this pass be read as resolving it.**
+- **Q3 — Author/audit split sign-off.** Confirm `entered_by_member_id` (office author) and defaulted `received_by` as corrected in §6/§6a, distinct from audit `created_by = auth.uid()`.
 
 ---
 

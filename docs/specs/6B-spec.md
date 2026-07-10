@@ -12,6 +12,18 @@
 
 ---
 
+> ## ⚠️ AS-BUILT RECONCILIATION vs. 6A (added this pass — verified against the migration, not against what a spec calls it)
+>
+> Checked against the **as-built** 6A migration `supabase/migrations/20260710130000_module6_6a_time_tracking.sql` on branch `feat/module-6a` (read via `git show`, not merged), its shared derivation `packages/shared/utils/time-tracking.ts`, and the M5 `change_orders` (5D) / projects (5A) migrations. Drifts corrected below are each flagged **[DRIFT]** at the point of use.
+>
+> 1. **`time_segments` has NO `member_id` and NO date column.** Member identity lives only on the parent session: `time_segments.session_id → time_clock_sessions.member_id`. And a segment has `segment_start` / `segment_end` (`timestamptz`), not a `date`. **Every 6B auto-fill that reads "a member's segment on this project on this date" must (a) join `time_segments → time_clock_sessions` to get `member_id`, and (b) bucket `segment_start` to a calendar day — and 6A stores no timezone, so the day boundary is undefined.** See §5 and Questions Q1/Q2.
+> 2. **Domain author ≠ audit column.** In 6A and in `change_orders` (5D), `created_by` / `updated_by` are audit columns defaulting to `auth.uid()` (FK `auth.users`). The *domain* "who did this" is a separate `*_member_id` column defaulting to `get_my_member_id()` (FK `company_members`) — `change_orders.author_member_id` is the reference. **This spec's "`created_by` = the author" / "`created_by = get_my_member_id()`" is a [DRIFT].** See §4 and §8.
+> 3. **On-site segment types are CONFIRMED, not "confirm at build."** 6A's CHECK gates `project_id` to exactly `work | material_run | warranty` (constant `PROJECT_BEARING_TYPES`). `travel | shop | break` carry no `project_id` and are structurally excluded. See §5.
+> 4. **No per-member-per-day hours helper exists in 6A.** `workedHoursByProject()` groups by **project**, and `getProjectWorkedHours()` selects only `segment_type, project_id, segment_start, segment_end` — it never joins the session, so it cannot attribute to a member. 6B's derived employee hours is **new derivation work that 6B owns**, not a 6A function it can call. See §5 / §6.1 and Questions Q3.
+> 5. **Acceptance trace stays PROPOSED.** Not reconciled into fact; see the NEEDS INTERVIEW blocker in §10.
+
+---
+
 ## 1. Scope
 
 The end-of-day field record for a project. Mobile-first, offline-ready.
@@ -73,12 +85,13 @@ daily_logs
   hazards_present   BOOLEAN NOT NULL DEFAULT false
   hazard_notes      TEXT                 -- required when hazards_present (§7)
   pdf_file_id       UUID REFERENCES files(id)   -- M3
-  -- standard columns (created_by = the author)
+  author_member_id  UUID NOT NULL DEFAULT get_my_member_id() REFERENCES company_members(id)  -- domain author (§8)
+  -- standard columns (created_by / updated_by are AUDIT = auth.uid(), NOT the author)
 ```
 
 - **No unique constraint** on `(project_id, log_date)` — multiple logs per project-day are legal (§3.1).
 - **Never locks.** Always editable by its creator, per §7.2. The PDF is a point-in-time snapshot.
-- `created_by` is the author. Edit rights: creator only (§8).
+- **[DRIFT — corrected]** The author is **`author_member_id`** (a `company_members` FK defaulting to `get_my_member_id()`), **not** `created_by`. `created_by`/`updated_by` are audit columns defaulting to `auth.uid()` (FK `auth.users`) per 6A and `change_orders.author_member_id` (5D). Edit rights: creator only, keyed on `author_member_id = get_my_member_id()` (§8).
 
 ### 4.1 `daily_log_crew` — who was on site
 
@@ -115,13 +128,15 @@ Subs are `company_members` (login optional). Hours here are **not payroll** and 
 
 ## 5. Auto-fill rules (both read `time_segments`)
 
-**Crew present** — distinct `member_id` where a segment exists with `project_id = <this project>` and the segment's date = `log_date`. Snapshot at creation, editable.
+> **[DRIFT — corrected] `time_segments` carries no `member_id` and no date.** "A member's segment" is only reachable by joining `time_segments.session_id → time_clock_sessions.member_id`; "on this date" must be derived by bucketing `segment_start` (`timestamptz`) to a calendar day. 6A stores no timezone, so **the day boundary is undefined** — Q2. Both predicates below are rewritten accordingly.
 
-**Employee hours** — sum of segment durations per member, same predicate. **Read-only, never stored on the log.** Recomputed on read.
+**Crew present** — distinct `time_clock_sessions.member_id` for sessions whose `time_segments` include one with `project_id = <this project>` and `segment_start` falling on `log_date` (in the company day, Q2). Snapshot at creation, editable.
+
+**Employee hours** — sum of on-site segment durations (`segment_end − segment_start`) per member, same predicate, via the session join. **Read-only, never stored on the log.** Recomputed on read. **[DEPENDENCY — 6A] No 6A function returns hours per member per project per day** — `workedHoursByProject()` groups by project and `getProjectWorkedHours()` never joins the session. This grouping is **new derivation 6B must build** (see the reconciliation banner item 4, Q3).
 
 > **Known staleness.** Both are snapshots. A crew member arriving at 3pm does not appear in a log opened at noon. Employee hours, being recomputed, self-correct; crew present does not, once edited. Accepted — the author can add them. Flagged in §10 as the item most likely to surprise in the field.
 
-**Which segment types count as "on site"?** Recommendation: `work`, `material_run`, `warranty` (all carry `project_id`). `travel`, `shop`, `break` carry none and are structurally excluded. **Confirm at build.**
+**Which segment types count as "on site"? — CONFIRMED against 6A (was "confirm at build").** Exactly `work`, `material_run`, `warranty` (6A's CHECK gates `project_id` to these three; constant `PROJECT_BEARING_TYPES`). `travel`, `shop`, `break` carry no `project_id` and are structurally excluded. **Open sub-question (Q4):** a `warranty` callback carries a `project_id` and would count someone as "crew present," yet warranty hours are budget-excluded (6A §7.4) — is a warranty-only visit "on site" for the daily log? (Physically yes; flagging because it is a presence-vs-cost distinction the author may not expect.)
 
 ---
 
@@ -184,9 +199,9 @@ Foreman speaks, app transcribes (§7.2). **New external dependency** — no tran
 
 - Company-scoped: `company_id = get_my_company_id()`.
 - **Create:** any member, on any project they can see. No rank gate (§3.1).
-- **Edit / delete:** **creator only** — `created_by = get_my_member_id()`. Never locks (§7.2).
-- **Read:** Owner/Admin/PM/Foreman read all company logs. Crew read logs on projects they are assigned to — **mirrors the M5 §5.2a project-visibility rule; confirm it landed that way at build.**
-- Soft-delete per convention.
+- **Edit / delete:** **creator only** — **[DRIFT — corrected]** keyed on **`author_member_id = get_my_member_id()`**, not `created_by` (which is the audit `auth.uid()` column, §4). Never locks (§7.2).
+- **Read:** **[CONFLICT — flag, do not resolve]** this spec grants Owner/Admin/**PM/Foreman** read of **all** company logs, but M5 ships `can_view_project()` = "owner/admin see all **OR** the caller is assigned" — which restricts **PM/Foreman to assigned projects**, not company-wide. 6A's *session* reads did grant PM/Foreman company-wide (for approval/costing), but daily logs are project-scoped content, not payroll. Pick one at build — Q5. Crew read is assigned-only regardless (use `can_view_project(project_id)`).
+- Soft-delete per convention (Owner/Admin only for delete, mirroring 6A/M5 — Q5).
 
 > A PM who arrives after a Crew member wrote the log **cannot edit it**. Accepted consequence of §3.1 — the PM writes their own log instead.
 
@@ -202,6 +217,8 @@ Foreman speaks, app transcribes (§7.2). **New external dependency** — no tran
 ---
 
 ## 10. Acceptance example — PROPOSED / UNVERIFIED
+
+> 🚧 **NEEDS INTERVIEW — Josh must narrate a real Bishop daily log with real numbers before this trace is authoritative.** The interview is Josh's to give; this pass did **not** substitute a guess or promote any number to fact. The values below remain the pre-existing PROPOSED draft, unchanged.
 
 > Mirrored from settled rules, not yet walked against a real Bishop day. Verify before build.
 
@@ -235,6 +252,17 @@ Sub hours: `6.0`. Deliveries: empty (6D unbuilt). PDF filed to Willow Ridge → 
 | 7   | Which `segment_type`s count as "on site" (§5)                                                              | Build             |
 | 8   | Photo auto-pull predicate — project + date, or explicit attach?                                            | Build             |
 | 9   | Crew read-visibility depends on the M5 §5.2a decision actually shipping as recommended                     | Build             |
+
+---
+
+## 11a. Questions for Josh (raised by the 6A as-built reconciliation — resolve nothing silently)
+
+- **Q1 — Employee-hours member join.** Confirmed: `time_segments` has no `member_id`; hours-per-member requires joining through `time_clock_sessions`. This is a build fact, not a decision — flagged so it is not missed when 6B's derivation is written.
+- **Q2 — Day boundary / timezone.** 6A stores no timezone and segments are `timestamptz`. What defines "`segment_start` on `log_date`" — the company's local day (from where is that timezone read?), UTC, or the author's device? A segment spanning midnight lands in one day only; which? This governs both crew-present and employee-hours auto-fill.
+- **Q3 — Who owns the per-member-per-day hours derivation?** 6A exposes only project-grouped hours. Does 6B build its own member-grouped read, or should 6A grow a shared helper (e.g. `hoursByMemberForProjectDay`) so 6B and any future consumer share one source of truth? Recommend the latter to avoid a second derivation drifting from 6A's.
+- **Q4 — Does a `warranty`-only visit count as "crew present"?** Warranty carries a `project_id` (so the person was on that job) but is budget-excluded. Include in crew-present, exclude, or include-but-label?
+- **Q5 — Daily-log read visibility for PM/Foreman.** All company logs (as this spec says, matching 6A sessions) or only logs on projects they can see (`can_view_project`, matching M5 content-visibility)? And confirm delete is Owner/Admin-only.
+- **Q6 — Sub double-count (existing open item #4).** A subcontractor with a login who clocks in via 6A *and* is entered manually in §4.2 is counted twice. Surfaced here because 6A makes sub clock-in real (subs are `company_members` and rank with crew for approval).
 
 ---
 
