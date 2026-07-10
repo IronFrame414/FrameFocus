@@ -22,7 +22,7 @@ Every line below was confirmed by reading the repo, not by trusting a context fi
 | One mailer, no drift                                     | `lib/services/email-service.ts` is the sole definition of `sendEmail` and the sole Resend SDK import                                              |
 | Estimate email already ships attachment + tokenized link | `api/proposals/send/route.ts` — `attachments: [{ filename, content: generated.buffer }]` and `signingUrl` passed into `ProposalEmail`             |
 | Estimate email is company-templated                      | `replaceTemplateVariables(input.subject, ...)`, `buildSenderAddress(company)`                                                                     |
-| `ip_address` exists nowhere                              | `git grep -n "ip_address" -- supabase/` returns exit 1                                                                                            |
+| Signer IP **is** captured — as `signer_ip`, not `ip_address` | Both tables carry `signer_ip text`: `signing_sessions` (`baseline_schema.sql` L1475), `co_signing_sessions` (`20260704215000_module5_5d_change_orders.sql` L250). Both services write it: `co-signing-service.ts` L126/L179, `signing-service.ts` L204/L278. The earlier "exists nowhere" was a `git grep` for the wrong column name. |
 | `email_logs` cannot record a CO                          | CHECK allows only `proposal, reminder, signature_complete, signature_declined, estimate_expired`; FKs point at `estimates` and `signing_sessions` |
 | CO status enum                                           | `draft, sent, signed, voided` — there is no `approved`                                                                                            |
 | CO session status enum                                   | `pending, completed, declined, expired, invalidated`                                                                                              |
@@ -88,18 +88,13 @@ Printing the IP address below the signature (per Josh, Session 64) is a **conven
 
 One migration. Production migrations via CLI only (`npx supabase db push` from repo root). Never the SQL Editor.
 
-**Not purely additive.** §4.1 and §4.2 add columns. §4.3 drops and re-adds a CHECK constraint on `email_logs`, a **baseline-schema table**. That single operation is the only destructive step in this spec and must be reviewed on its own before it goes near production. An earlier draft of this section claimed the migration was additive only. It is not.
+**Not purely additive, and it no longer touches `signing_sessions` at all.** §4.1 is now **DEAD** — signer IP already exists and is written, so this migration touches `signing_sessions` **not at all**. What remains: §4.2 adds columns to `change_orders`; §4.3 drops and re-adds a CHECK constraint on `email_logs`, a **baseline-schema table** — that single operation is the only destructive step in this spec and must be reviewed on its own before it goes near production. An earlier draft claimed the migration was additive only and had it touching `signing_sessions`; it is neither.
 
 ### 4.1 IP capture — both session tables
 
-```
-signing_sessions      ADD COLUMN ip_address inet
-co_signing_sessions   ADD COLUMN ip_address inet
-```
+> **DEAD — the column already exists and is already written; there is nothing to add.** Both session tables carry **`signer_ip text`** — `signing_sessions` (`baseline_schema.sql` L1475) and `co_signing_sessions` (`20260704215000_module5_5d_change_orders.sql` L250) — and both signing services populate it at signature completion: `co-signing-service.ts` L126/L179, `signing-service.ts` L204/L278. Adding `ip_address inet` would create a **second, duplicate, unpopulated** column beside the live one. The existing column is **`text`, not `inet`**; changing its type is a separate decision nobody has asked for and is out of scope here.
 
-Nullable. Captured at signature completion, alongside `signed_at` and `signer_user_agent`.
-
-**Rationale for both:** the same client signs both document types. Recording the signer's IP on one and not the other produces asymmetric evidence for the same kind of event.
+~~`signing_sessions ADD COLUMN ip_address inet`; `co_signing_sessions ADD COLUMN ip_address inet`; nullable, captured at signature completion; recorded symmetrically because the same client signs both document types.~~ — moot: see above.
 
 ### 4.2 Contractor signature on `change_orders`
 
@@ -169,8 +164,8 @@ Table and column names are design-level. Confirm against live schema at build. T
 | Signature           | Drawn, stored as data URL                            | Saved image or typed name |
 | `signed_at`         | Yes                                                  | Yes                       |
 | `signer_user_agent` | Yes                                                  | No                        |
-| `ip_address`        | Yes                                                  | No                        |
-| Consent text shown  | Assumed yes — `CONSENT_TEXT` is exported, never read | Not specified             |
+| `signer_ip`         | Yes — stored in `signer_ip` (both tables)            | No                        |
+| Consent text shown  | Yes — `CONSENT_TEXT` rendered; `consent_given` + `consent_text` stored | Not specified |
 | Session expiry      | 30 days                                              | N/A                       |
 
 This is a design choice, not an oversight. The contractor is the party who created the document and is authenticated by the system itself. The client is not.
@@ -191,7 +186,7 @@ Two independent reasons, either sufficient:
 Follow the existing pipeline exactly:
 
 - `generateProposalPDF` equivalent produces the CO document
-- `compositeSignedPDF` equivalent stamps the signature image, printed name, date, **and IP address** onto the signature block
+- `compositeSignedPDF` equivalent stamps the signature image, printed name, date, **and the signer's IP (read from `signer_ip`, not `ip_address`)** onto the signature block
 - `storeSignedPDF` equivalent uploads to `project-files/{companyId}/change-orders/{uuid}-{fileName}` and inserts a `files` row
 
 Two artifacts per signed CO:
@@ -230,7 +225,7 @@ Estimates have `api/cron/estimate-reminders/route.ts`. Change orders need the eq
 
 ### 7.4 In-person signing
 
-Costs nothing new. `send` already returns `signingUrl` to the contractor's own browser. Opening that link on the contractor's device is existing behavior. Same token, same page, no email involved. The client signs on the contractor's device; `ip_address` and `signer_user_agent` will reflect the contractor's device, correctly.
+Costs nothing new. `send` already returns `signingUrl` to the contractor's own browser. Opening that link on the contractor's device is existing behavior. Same token, same page, no email involved. The client signs on the contractor's device; `signer_ip` and `signer_user_agent` will reflect the contractor's device, correctly.
 
 ---
 
@@ -260,7 +255,7 @@ INPUT  (sign)   Jill opens the link, consents, signs.
                 Or signs in person on Josh's device — same token, no email.
 
 STORE           co_signing_sessions: signature data URL, signed_at,
-                                     signer_user_agent, ip_address,
+                                     signer_user_agent, signer_ip,
                                      status 'completed'
                 CO PDF v2 = v1 + Jill's signature + printed name + date + IP
                   -> new storage object + files row
@@ -285,9 +280,9 @@ Note: the status transition is `sent -> signed`. There is no `approved` value in
 5. Wire `send` route: generate v1, attach, mail, log.
 6. Wire `completeCoSignature`: composite v2, store, mail both parties, log.
 7. CO reminder cron.
-8. Backfill: estimate-side `ip_address` capture in `completeSignature`.
+8. ~~Backfill: estimate-side `ip_address` capture in `completeSignature`.~~ **DEAD** — `signer_ip` is already written by both services (`signing-service.ts` L204/L278, `co-signing-service.ts` L126/L179). No column to add, nothing to backfill.
 
-Step 8 is not optional. The migration adds the column to `signing_sessions`; nothing writes to it until step 8 lands.
+~~Step 8 is not optional. The migration adds the column to `signing_sessions`; nothing writes to it until step 8 lands.~~ **Struck — the premise was false: the column exists and is populated.**
 
 ---
 
@@ -297,6 +292,7 @@ Step 8 is not optional. The migration adds the column to `signing_sessions`; not
 - Reminder cadence for COs. Estimates have one; match it or diverge deliberately.
 - Retention policy for v1 artifacts once v2 exists. Counsel.
 - `TECH_DEBT` entry: two signing services are structural clones. Divergence risk. Not consolidated by this spec. **Named here, not yet filed in `TECH_DEBT.md`.**
+- **Legal-text defect (not schema).** `CONSENT_TEXT` reads "I have reviewed **this proposal**…" and is rendered verbatim to change-order signers by `co-signing-client.tsx` L358 — a CO signer attests to reviewing a *proposal*, not a change order. Route to counsel per §3.
 - `apps/web/.claude/` is untracked and not gitignored. Decide.
 
 ---
@@ -305,6 +301,8 @@ Step 8 is not optional. The migration adds the column to `signing_sessions`; not
 
 Drafted Session 64 from live repo reads at HEAD `899c647`. Revised same session after audit.
 
-The audit corrected the spec's founding premises. Two of the three gaps in the session brief were wrong: `pdf-lib` and `@react-pdf/renderer` are **built and in production**, not planned; and estimate email **already ships** an attached PDF plus a tokenized link to a portal-less client. Only the `ip_address` gap held.
+The audit corrected the spec's founding premises. Two of the three gaps in the session brief were wrong: `pdf-lib` and `@react-pdf/renderer` are **built and in production**, not planned; and estimate email **already ships** an attached PDF plus a tokenized link to a portal-less client. A later Session 64 read found the IP gap did not hold either: both session tables already carry `signer_ip text`, and both signing services already write it. The original grep searched for `ip_address`, a column name that does not exist in this codebase. **All three of the session brief's claimed gaps were wrong.**
+
+This is the second time in one session that a grep for a guessed column name produced a false finding. Verify column names against the migration, not against what a spec calls them.
 
 The acceptance example in §8 was approved in conversation with `sent -> approved`, a status value the CHECK constraint rejects. It was corrected to `sent -> signed` only because the enum was read afterward. Treat §8 as PROPOSED accordingly — an approved trace is not a verified one.
