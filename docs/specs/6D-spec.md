@@ -177,7 +177,10 @@ One `delivery_items` row: plywood `qty_received 20.00, qty_damaged 0.00`.
 Plywood now sums to `40/40`.
 
 **OUTPUT.** Email to Owner, Admin, PM; subject states clean.
-PO status → **see open item #1.** Plywood is fully received; joists were fully received but 2 went back damaged.
+Plywood is fully received and undamaged: `40/40` usable — that line is filled.
+Joists: 12 received, 2 damaged, so `10/12` usable — that line is short by 2 and remains unfilled.
+The PO therefore does **not** auto-close on Thursday; it stays `open`.
+It closes only when Jones delivers 2 replacement joists, or when an Owner or Admin closes it by hand with a required `closed_reason` (§5.1).
 
 ---
 
