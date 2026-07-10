@@ -201,11 +201,24 @@ Foreman speaks, app transcribes (§7.2). **New external dependency** — no tran
 
 ---
 
-## 10. Acceptance example — **MISSING**
+## 10. Acceptance example — PROPOSED / UNVERIFIED
 
-> ⛔ **No `input → store → output` trace has been walked through for 6B.** 6A has one (PROPOSED); 6B has none. Per the interview-first mandate, **this spec is not build-ready.** A real Bishop daily log — real project, real date, real crew, real sub hours, real accomplished text — must be traced and approved, and that trace becomes the acceptance example.
->
-> The two things a trace would most likely expose: (a) whether crew-present auto-fill matches who Josh would actually list, and (b) whether the read-only employee-hours block is what he expects to see, given 6A splits a day across projects.
+> Mirrored from settled rules, not yet walked against a real Bishop day. Verify before build.
+
+**INPUT** — Foreman opens a log on project _Willow Ridge_, `log_date = 2026-07-08`.
+Weather: `"92°, humid, brief rain 2pm"`. Work performed: `"Framed east wall, set headers."`
+Material used: `"14 sheets 5/8 ply"`. Material needed: `"more 16d nails"`.
+Equipment used: `"mini-ex, 3 hrs"`. Tasks tomorrow: `"Sheath east wall"`.
+Hazards: unchecked. One sub entry: _Ortiz Electric_, `6.0` hrs, `"rough-in second floor"`.
+
+**STORE** — One `daily_logs` row; `hazards_present = false`, `hazard_notes` NULL.
+`daily_log_crew`: two rows, auto-filled — the two members holding a `work` segment on this project on this date.
+`daily_log_sub_entries`: one row, `hours = 6.00`.
+Employee hours are **not stored**.
+
+**OUTPUT** — Crew present: two names. Employee hours, read-only and recomputed from `time_segments`:
+member A `8.0`, member B `4.5` (his afternoon was on another project).
+Sub hours: `6.0`. Deliveries: empty (6D unbuilt). PDF filed to Willow Ridge → Daily Logs.
 
 ---
 
@@ -213,7 +226,7 @@ Foreman speaks, app transcribes (§7.2). **New external dependency** — no tran
 
 | #   | Item                                                                                                       | Owner             |
 | --- | ---------------------------------------------------------------------------------------------------------- | ----------------- |
-| 1   | **No acceptance trace (§10).** Blocks build.                                                               | Josh              |
+| 1   | Acceptance trace (§10) is PROPOSED — verify against a real Bishop day before build.                        | Josh              |
 | 2   | PDF regenerate-on-edit vs. version-on-edit; filename disambiguation for same-project same-date logs        | 6B build          |
 | 3   | **Voice-to-text vendor** — new external dependency, no offline path                                        | 6B build          |
 | 4   | **Sub double-count** — a subcontractor with a login who clocks in via 6A _and_ is entered manually in §4.2 | 6B build          |
