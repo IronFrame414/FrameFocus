@@ -62,7 +62,7 @@ The end-of-day field record for a project. Mobile-first, offline-ready.
 3. **Hours are derived, not typed.** §7.2 lists "hours" as a log field. 6A owns hours. A typed hours field would be a second, conflicting source of truth for the same day. **Employee hours are read-only, computed from `time_segments`.** **Subcontractor hours and notes are manual** — subs run their own systems and are unlikely to clock in.
 4. **"Materials delivered" is not a typed field.** 6D owns the delivery record. 6B renders that project-day's deliveries **read-only** (§6.3).
 
-**New fields not in §7.2 or `CLAUDE_MODULES.md` §6.2** (from the interview): _material used_, _material needed_, _equipment used_, _tasks for tomorrow_.
+**New fields not in §7.2 or `CLAUDE_MODULES.md` §6.2** (from the interview): _material used_, _material needed_, _equipment used_, _tasks for tomorrow_, _notes_.
 
 > **Also confirmed unchanged:** weather stays a **manual** field. An auto-fetch was considered and rejected — it introduces a weather-API vendor (none exists in this stack), requires the project's address, cannot work offline, and reads a nearby station that may be wrong about the job site.
 
@@ -82,6 +82,7 @@ daily_logs
   material_needed   TEXT                 -- free text; Module 8 structures later
   equipment_used    TEXT                 -- free text, e.g. "mini-ex, 3 hrs"
   tasks_tomorrow    TEXT
+  notes             TEXT                 -- conversations, decisions, "he said/she said"; Module 8 may structure later
   hazards_present   BOOLEAN NOT NULL DEFAULT false
   hazard_notes      TEXT                 -- required when hazards_present (§7)
   pdf_file_id       UUID REFERENCES files(id)   -- M3
@@ -170,6 +171,10 @@ Free text. See §3.
 
 Overlaps 6E (crew briefing task list) and M5 tasks. **Not linked to either in v1.** Open item #5.
 
+### 6.7a Notes — free text
+
+Conversations, decisions, and "he said / she said" records not covered by the structured fields — e.g. a countertop/stone-selection discussion with the owner's rep. Dated by the log's `log_date`. Text so a Module 8 structuring migration is additive. Satisfies the legal/insurance record need (§10 interview).
+
 ### 6.8 Photos
 
 Auto-pulled from that day's captures for that project (M3). Markup reuses the M3 component unchanged (§7.6) — no new build.
@@ -200,7 +205,7 @@ Foreman speaks, app transcribes (§7.2). **New external dependency** — no tran
 - Company-scoped: `company_id = get_my_company_id()`.
 - **Create:** any member, on any project they can see. No rank gate (§3.1).
 - **Edit / delete:** **creator only** — **[DRIFT — corrected]** keyed on **`author_member_id = get_my_member_id()`**, not `created_by` (which is the audit `auth.uid()` column, §4). Never locks (§7.2).
-- **Read:** **[CONFLICT — flag, do not resolve]** this spec grants Owner/Admin/**PM/Foreman** read of **all** company logs, but M5 ships `can_view_project()` = "owner/admin see all **OR** the caller is assigned" — which restricts **PM/Foreman to assigned projects**, not company-wide. 6A's *session* reads did grant PM/Foreman company-wide (for approval/costing), but daily logs are project-scoped content, not payroll. Pick one at build — Q5. Crew read is assigned-only regardless (use `can_view_project(project_id)`).
+- **Read:** **[RESOLVED — assigned-only via `can_view_project()`]** read visibility follows M5 content-visibility: `can_view_project()` = "owner/admin see all **OR** the caller is assigned" — restricting **PM/Foreman to assigned projects**, not company-wide. 6A's *session* reads granted PM/Foreman company-wide (for approval/costing), but daily logs are project-scoped content, not payroll, so they do not diverge. Crew read is assigned-only likewise (use `can_view_project(project_id)`). This is the module-wide decision (Q5).
 - Soft-delete per convention (Owner/Admin only for delete, mirroring 6A/M5 — Q5).
 
 > A PM who arrives after a Crew member wrote the log **cannot edit it**. Accepted consequence of §3.1 — the PM writes their own log instead.
@@ -216,26 +221,26 @@ Foreman speaks, app transcribes (§7.2). **New external dependency** — no tran
 
 ---
 
-## 10. Acceptance example — PROPOSED / UNVERIFIED
+## 10. Acceptance example — VERIFIED against a real Bishop day
 
-> 🚧 **NEEDS INTERVIEW — Josh must narrate a real Bishop daily log with real numbers before this trace is authoritative.** The interview is Josh's to give; this pass did **not** substitute a guess or promote any number to fact. The values below remain the pre-existing PROPOSED draft, unchanged.
+> Walked against a real Bishop townhouse-remodel day (finishing phase) in the Module 6B interview. This trace is authoritative. Open item #1 CLOSED.
 
-> Mirrored from settled rules, not yet walked against a real Bishop day. Verify before build.
+**INPUT** — Townhouse remodel, finishing phase, `log_date` = the work day. Author: the on-site owner.
+- weather: `"Hot and sunny"` (manual)
+- work_performed: `"Laid flooring, set tile, grouted, and cleaned — hallway, secondary bath, primary bath. Flooring only partially completed; required tools were not on site."`
+- material_used: `"Flooring, tile, grout"`
+- tasks_tomorrow: `"Finish flooring"`
+- notes: `"Discussed countertop and stone selection with owner's rep."`
+- hazards_present: unchecked. No subcontractors, no delivery, no inspection.
 
-**INPUT** — Foreman opens a log on project _Willow Ridge_, `log_date = 2026-07-08`.
-Weather: `"92°, humid, brief rain 2pm"`. Work performed: `"Framed east wall, set headers."`
-Material used: `"14 sheets 5/8 ply"`. Material needed: `"more 16d nails"`.
-Equipment used: `"mini-ex, 3 hrs"`. Tasks tomorrow: `"Sheath east wall"`.
-Hazards: unchecked. One sub entry: _Ortiz Electric_, `6.0` hrs, `"rough-in second floor"`.
+**STORE** — one `daily_logs` row; `hazards_present = false`, `hazard_notes` NULL, `notes` set.
+`daily_log_crew`: auto-filled — the members holding a `work` segment on this project on this local day, resolved via `time_segments.session_id → time_clock_sessions.member_id`. The owner clocked a partial (~3 hr) day; if that segment is on this project, the owner appears too.
+`daily_log_sub_entries`: none.
+Employee hours: **not stored** — derived on read.
 
-**STORE** — One `daily_logs` row; `hazards_present = false`, `hazard_notes` NULL.
-`daily_log_crew`: two rows, auto-filled — the two members holding a `work` segment on this project on this date.
-`daily_log_sub_entries`: one row, `hours = 6.00`.
-Employee hours are **not stored**.
+**OUTPUT** — Crew present: the on-site members. Employee hours: read-only, recomputed from `time_segments` (the owner's partial day; each employee's clocked full day). Sub hours: none. Deliveries: empty (6D unbuilt). Notes render the countertop conversation, dated by `log_date`. One PDF filed to the project's Daily Logs folder.
 
-**OUTPUT** — Crew present: two names. Employee hours, read-only and recomputed from `time_segments`:
-member A `8.0`, member B `4.5` (his afternoon was on another project).
-Sub hours: `6.0`. Deliveries: empty (6D unbuilt). PDF filed to Willow Ridge → Daily Logs.
+> **Interview note.** An earlier walk of a real day surfaced zero employee hours because no one had clocked in — an artifact of testing before the system was live, not a defect. Confirmed with Josh: crew clock in daily via 6A, so auto-fill and derived hours behave as designed. The hours model is unchanged; no typed-hours field was added.
 
 ---
 
@@ -243,7 +248,7 @@ Sub hours: `6.0`. Deliveries: empty (6D unbuilt). PDF filed to Willow Ridge → 
 
 | #   | Item                                                                                                       | Owner             |
 | --- | ---------------------------------------------------------------------------------------------------------- | ----------------- |
-| 1   | Acceptance trace (§10) is PROPOSED — verify against a real Bishop day before build.                        | Josh              |
+| 1   | **CLOSED** — acceptance trace (§10) verified against a real Bishop day.                                     | Closed            |
 | 2   | PDF regenerate-on-edit vs. version-on-edit; filename disambiguation for same-project same-date logs        | 6B build          |
 | 3   | **Voice-to-text vendor** — new external dependency, no offline path                                        | 6B build          |
 | 4   | **Sub double-count** — a subcontractor with a login who clocks in via 6A _and_ is entered manually in §4.2 | 6B build          |
@@ -258,10 +263,10 @@ Sub hours: `6.0`. Deliveries: empty (6D unbuilt). PDF filed to Willow Ridge → 
 ## 11a. Questions for Josh (raised by the 6A as-built reconciliation — resolve nothing silently)
 
 - **Q1 — Employee-hours member join.** Confirmed: `time_segments` has no `member_id`; hours-per-member requires joining through `time_clock_sessions`. This is a build fact, not a decision — flagged so it is not missed when 6B's derivation is written.
-- **Q2 — Day boundary / timezone.** 6A stores no timezone and segments are `timestamptz`. What defines "`segment_start` on `log_date`" — the company's local day (from where is that timezone read?), UTC, or the author's device? A segment spanning midnight lands in one day only; which? This governs both crew-present and employee-hours auto-fill.
+- **Q2 — Day boundary / timezone. RESOLVED — the company's local calendar day.** Build dependency: a company-level timezone must exist (company settings) as the source; without it the day boundary is undefined. This governs both crew-present and employee-hours auto-fill.
 - **Q3 — Who owns the per-member-per-day hours derivation?** 6A exposes only project-grouped hours. Does 6B build its own member-grouped read, or should 6A grow a shared helper (e.g. `hoursByMemberForProjectDay`) so 6B and any future consumer share one source of truth? Recommend the latter to avoid a second derivation drifting from 6A's.
-- **Q4 — Does a `warranty`-only visit count as "crew present"?** Warranty carries a `project_id` (so the person was on that job) but is budget-excluded. Include in crew-present, exclude, or include-but-label?
-- **Q5 — Daily-log read visibility for PM/Foreman.** All company logs (as this spec says, matching 6A sessions) or only logs on projects they can see (`can_view_project`, matching M5 content-visibility)? And confirm delete is Owner/Admin-only.
+- **Q4 — Does a `warranty`-only visit count as "crew present"? RESOLVED — yes, include in crew-present, but label.** Warranty carries a `project_id` (person was physically on the job) so they count as present; label to preserve the presence-vs-cost distinction, since warranty hours are budget-excluded.
+- **Q5 — Daily-log read visibility for PM/Foreman. RESOLVED — assigned-only, matching M5.** Daily-log read visibility uses `can_view_project()`; PM/Foreman read logs only for projects they are assigned to. No divergent RLS rule. This is the module-wide answer (also governs 6C/6D). Delete is Owner/Admin-only.
 - **Q6 — Sub double-count (existing open item #4).** A subcontractor with a login who clocks in via 6A *and* is entered manually in §4.2 is counted twice. Surfaced here because 6A makes sub clock-in real (subs are `company_members` and rank with crew for approval).
 
 ---
