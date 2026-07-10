@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.4"
+    PostgrestVersion: "14.5"
   }
   graphql_public: {
     Tables: {
@@ -247,6 +247,11 @@ export type Database = {
           co_number: string
           co_type: string
           company_id: string
+          contractor_signature_mode: string | null
+          contractor_signature_name: string | null
+          contractor_signature_ref: string | null
+          contractor_signed_at: string | null
+          contractor_signed_by: string | null
           created_at: string | null
           created_by: string | null
           deleted_at: string | null
@@ -254,11 +259,14 @@ export type Database = {
           id: string
           is_deleted: boolean | null
           labor_markup_percent: number | null
+          last_reminder_sent_at: string | null
           material_markup_percent: number | null
           net_delta: number
           pricing_mode: string
           project_id: string
           reason_category: string | null
+          reminder_count: number
+          reminder_schedule: Json | null
           requires_client_signature: boolean | null
           schedule_impact_days: number | null
           sent_at: string | null
@@ -275,6 +283,11 @@ export type Database = {
           co_number: string
           co_type?: string
           company_id?: string
+          contractor_signature_mode?: string | null
+          contractor_signature_name?: string | null
+          contractor_signature_ref?: string | null
+          contractor_signed_at?: string | null
+          contractor_signed_by?: string | null
           created_at?: string | null
           created_by?: string | null
           deleted_at?: string | null
@@ -282,11 +295,14 @@ export type Database = {
           id?: string
           is_deleted?: boolean | null
           labor_markup_percent?: number | null
+          last_reminder_sent_at?: string | null
           material_markup_percent?: number | null
           net_delta?: number
           pricing_mode?: string
           project_id: string
           reason_category?: string | null
+          reminder_count?: number
+          reminder_schedule?: Json | null
           requires_client_signature?: boolean | null
           schedule_impact_days?: number | null
           sent_at?: string | null
@@ -303,6 +319,11 @@ export type Database = {
           co_number?: string
           co_type?: string
           company_id?: string
+          contractor_signature_mode?: string | null
+          contractor_signature_name?: string | null
+          contractor_signature_ref?: string | null
+          contractor_signed_at?: string | null
+          contractor_signed_by?: string | null
           created_at?: string | null
           created_by?: string | null
           deleted_at?: string | null
@@ -310,11 +331,14 @@ export type Database = {
           id?: string
           is_deleted?: boolean | null
           labor_markup_percent?: number | null
+          last_reminder_sent_at?: string | null
           material_markup_percent?: number | null
           net_delta?: number
           pricing_mode?: string
           project_id?: string
           reason_category?: string | null
+          reminder_count?: number
+          reminder_schedule?: Json | null
           requires_client_signature?: boolean | null
           schedule_impact_days?: number | null
           sent_at?: string | null
@@ -339,6 +363,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "change_orders_contractor_signed_by_fkey"
+            columns: ["contractor_signed_by"]
+            isOneToOne: false
+            referencedRelation: "company_members"
             referencedColumns: ["id"]
           },
           {
@@ -514,6 +545,7 @@ export type Database = {
           ai_tagging_enabled: boolean
           brand_color: string | null
           city: string | null
+          contractor_signature_path: string | null
           created_at: string | null
           default_expiration_days: number
           default_labor_margin_percent: number | null
@@ -558,6 +590,7 @@ export type Database = {
           ai_tagging_enabled?: boolean
           brand_color?: string | null
           city?: string | null
+          contractor_signature_path?: string | null
           created_at?: string | null
           default_expiration_days?: number
           default_labor_margin_percent?: number | null
@@ -602,6 +635,7 @@ export type Database = {
           ai_tagging_enabled?: boolean
           brand_color?: string | null
           city?: string | null
+          contractor_signature_path?: string | null
           created_at?: string | null
           default_expiration_days?: number
           default_labor_margin_percent?: number | null
@@ -923,6 +957,8 @@ export type Database = {
       email_logs: {
         Row: {
           bounced_at: string | null
+          change_order_id: string | null
+          co_signing_session_id: string | null
           company_id: string
           created_at: string
           delivered_at: string | null
@@ -942,6 +978,8 @@ export type Database = {
         }
         Insert: {
           bounced_at?: string | null
+          change_order_id?: string | null
+          co_signing_session_id?: string | null
           company_id: string
           created_at?: string
           delivered_at?: string | null
@@ -961,6 +999,8 @@ export type Database = {
         }
         Update: {
           bounced_at?: string | null
+          change_order_id?: string | null
+          co_signing_session_id?: string | null
           company_id?: string
           created_at?: string
           delivered_at?: string | null
@@ -979,6 +1019,20 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "email_logs_change_order_id_fkey"
+            columns: ["change_order_id"]
+            isOneToOne: false
+            referencedRelation: "change_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_logs_co_signing_session_id_fkey"
+            columns: ["co_signing_session_id"]
+            isOneToOne: false
+            referencedRelation: "co_signing_sessions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "email_logs_company_id_fkey"
             columns: ["company_id"]
