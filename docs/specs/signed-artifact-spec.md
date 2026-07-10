@@ -1,6 +1,6 @@
 # Signed Artifact Spec — Estimates and Change Orders
 
-**Status:** BUILT — implemented on branch `feat/signed-artifacts` (uncommitted at time of writing). Drafted Session 64; re-read against the working tree and rewritten as a built record. Every "confirm at build" item in the draft's §1 has been read and implemented — see the migration `supabase/migrations/20260710120000_signed_artifacts.sql` and the services and routes cited below. Not yet run end-to-end against production (see §8).
+**Status:** BUILT — implemented on branch `feat/signed-artifacts`, committed across five commits: `2ebdb21` the spec itself, `bfe5635` the migration, `7b2a8c5` the PDF pipeline and signing service, `16d257d` the email and reminder cron, `afd1c0c` the send route, signature capture, and settings UI. Drafted Session 64; re-read against the working tree and rewritten as a built record. Every "confirm at build" item in the draft's §1 has been read and implemented — see the migration `supabase/migrations/20260710120000_signed_artifacts.sql` and the services and routes cited below. Not yet run end-to-end against production (see §8).
 **Scope:** What a signed estimate proposal and a signed change order _are_ — as documents, as records, and as things that leave the building by email.
 **Not in scope:** Team invites, auth mail (separate system, already built). Client portal (does not exist).
 
