@@ -99,6 +99,8 @@ When a daily log's `hazards_present` is ticked, 6B surfaces a **"File an inciden
 
 Sent via Resend, from `companyname@rafterworks.com`, per the existing convention. Failure to send must not roll back the incident insert.
 
+**On send failure (Josh, this session): log the failure _and_ surface a retry affordance to the Owner.** Silent-log is rejected — a swallowed email on an injury means the Owner never learns it happened. The retry is Owner-visible, not a background-only reattempt, so the failure cannot pass unnoticed. (Resolves §9 item #5.)
+
 ---
 
 ## 5. Permissions & RLS
@@ -122,7 +124,7 @@ Sent via Resend, from `companyname@rafterworks.com`, per the existing convention
 ## 7. PDF
 
 - One PDF per incident, filed to the project's **Safety** folder in M3.
-- Generated on create. Because incidents never lock, an edited incident's PDF goes stale — **regenerate-on-edit vs. version-on-edit is undecided,** same open question as 6B §11 item 2. Resolve both the same way.
+- Generated on create. Because incidents never lock, an edited incident's PDF goes stale — **regenerate (overwrite) on edit.** Josh, this session. Edits only ever add data (treatment learned later, a witness remembered); nothing is deleted, so one always-current PDF is correct and there is no versioning. The stored PDF is replaced in place on every edit.
 - Generation reuses React-PDF (per repo tooling).
 
 ---
@@ -157,10 +159,10 @@ Had this been opened from a daily log's hazard flag, `project_id` and `incident_
 | #   | Item                                                                                                                                                                           | Owner    |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
 | 1   | `incident_type` enum — declare it once. The `row_type` enum is already hand-declared in five separate files; do not repeat that here. Not currently tracked in `TECH_DEBT.md`. | 6C build |
-| 2   | PDF regenerate-on-edit vs. version-on-edit. **Resolve identically to 6B §11 item 2.**                                                                                          | 6C build |
+| 2   | **RESOLVED** — PDF regenerate (overwrite) on edit; no versioning (§7). Edits only add data, so one always-current PDF is correct.                                              | Closed   |
 | 3   | **RESOLVED** — acceptance trace (§8) verified against a real Bishop incident this session.                                     | Closed   |
 | 4   | Crew read-visibility depends on the M5 §5.2a decision actually shipping as recommended.                                                                                        | Build    |
-| 5   | Notification failure handling — retry, dead-letter, or silent log?                                                                                                             | 6C build |
+| 5   | **RESOLVED** — on send failure: log it **and** surface a retry affordance to the Owner (§4). Silent-log rejected — a swallowed injury email means the Owner never learns. Insert never rolls back on send failure. | Closed   |
 | 6   | OSHA (§6) — confirm with insurer before any OSHA claim is made in marketing.                                                                                                   | Josh     |
 | 7   | No FK from a 6B hazard flag to the incident it escalated into. Add later if the link proves useful.                                                                            | Deferred |
 | 8   | `num_nonnulls()` is Postgres-native — confirm it's available for the §2.1 / §2.2 member-or-outsider identity CHECKs.                                                            | Build    |
