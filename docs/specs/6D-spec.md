@@ -16,11 +16,11 @@
 >
 > Checked against 6A (`supabase/migrations/20260710130000_module6_6a_time_tracking.sql` on `feat/module-6a`, read via `git show`) and the M5 `change_orders` (5D) / projects (5A) migrations. 6D does not read 6A's tables, but inherits its **identity/audit** and **RLS** conventions. Each drift is flagged **[DRIFT]** at the point of use.
 >
-> 1. **Domain member ≠ audit column.** `closed_by` and `received_by` are already correct `company_members` FKs (good — matches the convention). But `purchase_orders`' "`created_by` = the office member who entered it" is a **[DRIFT]**: `created_by` is the audit `auth.uid()` column (FK `auth.users`); the office author should be an explicit `entered_by_member_id` (`company_members`, default `get_my_member_id()`), exactly as `change_orders.author_member_id` (5D). See §6.
+> 1. **Domain member ≠ audit column.** `closed_by` and `received_by` are already correct `company_members` FKs (good — matches the convention). But `purchase_orders`' "`created_by` = the office member who entered it" is a **[DRIFT]**: `created_by` is the audit `auth.uid()` column (FK `auth.users`); the office author should be an explicit `author_member_id` (`company_members`, default `get_my_member_id()`), exactly as `change_orders.author_member_id` (5D). See §6.
 > 2. **No permissions/RLS section exists.** 6B and 6C each have one; 6D has none, yet it makes real authority claims (check-in = any member on a visible project, §3; manual PO close = Owner/Admin, §5.1). A flagged **§6a** is added below to align these to 6A/M5 patterns — including the same PM/Foreman read-visibility question 6B/6C raise. See §6a / Q1.
 > 3. **`received_by` has no default.** Convention (and 6A's `member_id DEFAULT get_my_member_id()`) suggests `received_by` should default to `get_my_member_id()` so the client INSERT need not set it. Recommended in §6; confirm at build.
 > 4. **Open item #2 (damaged-goods return) is left OPEN by explicit instruction** — flagged, not resolved. See §9 and Q2.
-> 5. **Acceptance trace stays PROPOSED.** See the NEEDS INTERVIEW blocker in §8.
+> 5. **Acceptance trace — RESOLVED.** Josh narrated a real Sherwin-Williams paint delivery (project 414, 2026-06-29); §8 now carries that approved trace, with the former reconstructed Jones Lumber draft retained as §8.1 (illustrative exception path).
 
 ---
 
@@ -65,6 +65,14 @@ Consequence: an orderless delivery has **no ordered quantities to compare agains
 
 ---
 
+### 4.1 "Issue with delivery" — explicit crew flag
+
+The item list carries an **"Issue with delivery"** action. The crew taps it, selects the specific problem line(s), and adds a per-item `issue_note` on each (e.g. `"2 split, returned with driver"`).
+
+This is additive to the numeric derivation in §6, not a replacement. `has_exceptions` still trips automatically whenever `qty_damaged > 0` or `qty_received <> qty_ordered` on a PO line — the arithmetic cannot be suppressed by a crew that forgets the button. The button's job is to (1) let the crew flag a problem the numbers don't capture, and (2) attach the `issue_note` that explains what went wrong. A short or damaged line is flagged either way; the note is what the button adds.
+
+---
+
 ## 5. Split deliveries — one PO, many trucks
 
 **A PO stays open until every ordered quantity is filled by usable material, not merely received.** Each truck is its own `deliveries` row.
@@ -102,11 +110,11 @@ status TEXT NOT NULL -- 'open' | 'closed' | 'cancelled'
 ordered_at DATE
 closed_reason TEXT
 closed_by UUID REFERENCES company_members(id)
-entered_by_member_id UUID NOT NULL DEFAULT get_my_member_id() REFERENCES company_members(id) -- domain author (§6a)
+author_member_id UUID NOT NULL DEFAULT get_my_member_id() REFERENCES company_members(id) -- domain author (§6a)
 -- standard columns (created_by / updated_by are AUDIT = auth.uid(), NOT the office author)
 ```
 
-> **[DRIFT — corrected]** the office author is **`entered_by_member_id`** (a `company_members` FK defaulting to `get_my_member_id()`), **not** `created_by`. `created_by`/`updated_by` are audit columns defaulting to `auth.uid()` (FK `auth.users`), per 6A and `change_orders.author_member_id` (5D). `closed_by` and `deliveries.received_by` are already correct `company_members` FKs.
+> **[DRIFT — corrected]** the office author is **`author_member_id`** (a `company_members` FK defaulting to `get_my_member_id()`), **not** `created_by`. `created_by`/`updated_by` are audit columns defaulting to `auth.uid()` (FK `auth.users`), per 6A and `change_orders.author_member_id` (5D). `closed_by` and `deliveries.received_by` are already correct `company_members` FKs.
 
 ```sql
 purchase_order_items
@@ -143,13 +151,15 @@ po_item_id UUID REFERENCES purchase_order_items(id) -- NULL when orderless (§4)
 description TEXT NOT NULL -- copied from PO item, or typed
 qty_received NUMERIC(10,2) NOT NULL DEFAULT 0
 qty_damaged NUMERIC(10,2) NOT NULL DEFAULT 0
+issue_note TEXT                       -- per-item note when crew flags an issue (§4.1)
 -- standard columns
 CHECK (qty_damaged <= qty_received)
 ```
 
-- `has_exceptions` is **derived at write time**, not typed: true when any child item has `qty_damaged > 0`, or `qty_received <> qty_ordered` on its PO line. Store it so the notification and the list view don't recompute.
+- `has_exceptions` is set true by either path (§4.1): **auto-derived at write time** when any child item has `qty_damaged > 0` or `qty_received <> qty_ordered` on its PO line, **or** set by the crew's explicit "Issue with delivery" flag. The numeric path cannot be suppressed. Store it so the notification and the list view don't recompute.
 - `qty_damaged <= qty_received` — you cannot damage what didn't arrive. Damaged goods that leave on the truck were still _received_ first; that's what makes them a return.
 - Photos attach via M3 against the `deliveries` row.
+- **Offline caveat on `received_by`.** The `DEFAULT get_my_member_id()` is correct for online check-in (the person receiving the truck is the one submitting). But on the offline-ready path (§1), a synced-later insert would fire the default as whoever *syncs*, not who received. The offline client must therefore set `received_by` explicitly at capture time; the server default is a convenience for the online case only.
 
 ---
 
@@ -177,41 +187,40 @@ Sent via Resend, from `companyname@rafterworks.com`. **Failure to send must not 
 
 ---
 
-## 8. Acceptance example — PROPOSED / UNVERIFIED
+## 8. Acceptance example — from a real Bishop delivery
 
-> 🚧 **NEEDS INTERVIEW — Josh must narrate a real Bishop material delivery with real numbers before this trace is authoritative.** A real Jones-Lumber workflow seeded it, but the project, date, and quantities are reconstructed; this pass did **not** promote any of it to fact. The values below remain the pre-existing PROPOSED draft, unchanged.
+> Bishop paint order, narrated by Josh and mirrored to an approved input→store→output trace (this session). This replaces the earlier reconstructed Jones Lumber draft, which is retained below (§8.1) as an illustrative exception-path example only. Column references remain design-level — confirm against live schema at build.
 
-> Derived from a real Bishop workflow (Jones Lumber delivers; crew compares driver's slip to the office's order slip; photos; damage returned with the driver). Project, date, and quantities are reconstructed. Verify before build.
+**INPUT — office.** Phones in a paint order to Sherwin-Williams, receives the written PO, enters it. One PO, vendor _Sherwin-Williams_, project _414_. Ten line items:
+- 5-gal primer — qty 3
+- 5-gal paint — qty 1
+- eight 1-gal paints, one color each — qty 1 each
 
-**INPUT — office.** Creates a PO for project _Willow Ridge_, vendor _Jones Lumber_.
-Two items: `40 × 5/8 plywood sheet`, `12 × 2x10-16'`.
+**INPUT — truck, `2026-06-29`.** Crew opens the PO on a phone and checks each line for **quantity and color**. All ten match — nothing short, nothing damaged, no wrong colors. Submits.
 
-**INPUT — truck one, Tuesday `2026-07-07`.** Crew opens the PO on a phone.
-Driver's slip: 20 sheets, 12 joists. Crew counts: 20 sheets present; 12 joists present, **2 split**.
-Photos of the split ends. Marks plywood `received 20, damaged 0`; joists `received 12, damaged 2`.
-Notes: `"2 splits, returned with driver."` Submits.
+**STORE.** One `deliveries` row: `purchase_order_id` set, `delivery_date = 2026-06-29`, `has_exceptions = false`, `received_by` = the crew member (set explicitly at capture, per the §6 offline caveat). Ten `delivery_items` rows, each `qty_received = qty_ordered`, `qty_damaged = 0`, `po_item_id` → its PO line. No `issue_note` on any row.
 
-**STORE.** One `deliveries` row: `purchase_order_id` set, `delivery_date = 2026-07-07`,
-`has_exceptions = true`, `received_by = <crew member>`.
-Two `delivery_items` rows: plywood `qty_received 20.00, qty_damaged 0.00` (`po_item_id` → plywood line);
-joists `qty_received 12.00, qty_damaged 2.00` (`po_item_id` → joist line).
-Photos filed to M3 against the delivery. PO remains `open` — 20 of 40 sheets outstanding (§5).
+**OUTPUT.** Email to Owner, Admin, PM; subject states clean. Delivery renders read-only in project 414's daily log for `2026-06-29` (6B §6.3). PO view shows all ten lines fully received. Every line is filled by usable quantity, so the PO **auto-closes** that day (§5.1).
 
-**OUTPUT.** Email to Owner, Admin, PM; subject flags exceptions.
-The delivery renders read-only inside Willow Ridge's daily log for `2026-07-07` (6B §6.3).
-PO view shows plywood `20/40`, joists `12/12 received, 2 damaged`.
+---
 
-**INPUT — truck two, Thursday `2026-07-09`.** Remaining 20 sheets. Clean, no damage.
+### 8.1 Illustrative exception path (reconstructed — NOT a real delivery)
 
-**STORE.** Second `deliveries` row against the same PO, `has_exceptions = false`.
-One `delivery_items` row: plywood `qty_received 20.00, qty_damaged 0.00`.
-Plywood now sums to `40/40`.
+> Kept to show the split-truck / damaged / manual-close behavior the clean paint trace above does not exercise. Project, date, and quantities are reconstructed; do not treat as fact.
 
-**OUTPUT.** Email to Owner, Admin, PM; subject states clean.
-Plywood is fully received and undamaged: `40/40` usable — that line is filled.
-Joists: 12 received, 2 damaged, so `10/12` usable — that line is short by 2 and remains unfilled.
-The PO therefore does **not** auto-close on Thursday; it stays `open`.
-It closes only when Jones delivers 2 replacement joists, or when an Owner or Admin closes it by hand with a required `closed_reason` (§5.1).
+**INPUT — office.** A PO for project _Willow Ridge_, vendor _Jones Lumber_. Two items: `40 × 5/8 plywood sheet`, `12 × 2x10-16'`.
+
+**INPUT — truck one, `2026-07-07`.** Crew opens the PO. Driver's slip: 20 sheets, 12 joists. Crew counts 20 sheets present; 12 joists present, **2 split**. Photos of the split ends. Marks plywood `received 20, damaged 0`; joists `received 12, damaged 2`. Hits "Issue with delivery," flags the joist line, per-item `issue_note`: `"2 split, returned with driver."` Submits.
+
+**STORE.** One `deliveries` row: `purchase_order_id` set, `has_exceptions = true`. Two `delivery_items` rows: plywood `qty_received 20.00, qty_damaged 0.00`; joists `qty_received 12.00, qty_damaged 2.00`, `issue_note` set. Photos filed to M3. PO remains `open` — 20 of 40 sheets outstanding (§5).
+
+**OUTPUT.** Email to Owner, Admin, PM; subject flags exceptions. Delivery renders read-only in Willow Ridge's daily log for `2026-07-07`. PO view shows plywood `20/40`, joists `12/12 received, 2 damaged`.
+
+**INPUT — truck two, `2026-07-09`.** Remaining 20 sheets. Clean, no damage.
+
+**STORE.** Second `deliveries` row against the same PO, `has_exceptions = false`. One `delivery_items` row: plywood `qty_received 20.00, qty_damaged 0.00`. Plywood now sums to `40/40`.
+
+**OUTPUT.** Email to Owner, Admin, PM; subject states clean. Plywood is `40/40` usable — filled. Joists are `10/12` usable (12 received, 2 damaged) — short by 2, unfilled. The PO does **not** auto-close on Thursday; it stays `open`. It closes only when Jones delivers 2 replacement joists, or when an Owner or Admin closes it by hand with a required `closed_reason` (§5.1).
 
 ---
 
@@ -219,7 +228,7 @@ It closes only when Jones delivers 2 replacement joists, or when an Owner or Adm
 
 - **Q1 — PO/delivery read visibility for PM/Foreman.** All company POs/deliveries, or only those on projects they can see (`can_view_project`, matching M5)? Same question 6B/6C raise — answer all three consistently.
 - **Q2 — Damaged-goods return has no record of its own (existing open item #2 — LEFT OPEN by instruction, not resolved here).** A return that never comes back is invisible: `qty_damaged` + a note record that goods *were* damaged, but nothing tracks the return itself (did the driver take them? was a credit issued? a replacement promised?). §5.1's manual PO close partly covers the credit case via `closed_reason`, but there is no first-class `returns` concept. **Decision deferred to you — do not let this pass be read as resolving it.**
-- **Q3 — Author/audit split sign-off.** Confirm `entered_by_member_id` (office author) and defaulted `received_by` as corrected in §6/§6a, distinct from audit `created_by = auth.uid()`.
+- **Q3 — Author/audit split — RESOLVED (this session).** Josh confirmed `author_member_id` (office author, `company_members` FK defaulting to `get_my_member_id()`, named to match `change_orders` 5D) and the defaulted `received_by`, both distinct from audit `created_by = auth.uid()`. Verified against migrations. Q1 (read-visibility) remains the only open question.
 
 ---
 
