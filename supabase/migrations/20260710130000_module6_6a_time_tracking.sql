@@ -73,47 +73,6 @@ CREATE FUNCTION public.can_approve_member(p_target_member_id uuid) RETURNS boole
 $$;
 
 -- ----------------------------------------------------------------------------
--- 2. Session-visibility helpers
---    Owner/Admin/PM/Foreman read every company session (approval queues + job
---    costing, §11); a member reads their own. owns_open_session() gates the
---    live clock-out / segment-open flow to the member's own OPEN session.
--- ----------------------------------------------------------------------------
-
-CREATE FUNCTION public.can_view_time_session(p_session_id uuid) RETURNS boolean
-    LANGUAGE sql STABLE SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-  SELECT EXISTS (
-    SELECT 1
-    FROM time_clock_sessions s
-    WHERE s.id = p_session_id
-      AND s.company_id = get_my_company_id()
-      AND (
-        get_my_role() = ANY (ARRAY['owner'::text, 'admin'::text, 'project_manager'::text, 'foreman'::text])
-        OR s.member_id = get_my_member_id()
-      )
-  );
-$$;
-
--- True iff the session belongs to the caller AND is still open. This is what
--- lets a crew/foreman member run the LIVE clock (clock-out, open/close their
--- current segment) while being unable to edit hours after the fact (§8.1 —
--- retroactive edits are Owner/Admin only).
-CREATE FUNCTION public.owns_open_session(p_session_id uuid) RETURNS boolean
-    LANGUAGE sql STABLE SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-  SELECT EXISTS (
-    SELECT 1
-    FROM time_clock_sessions s
-    WHERE s.id = p_session_id
-      AND s.member_id = get_my_member_id()
-      AND s.clock_out IS NULL
-      AND s.is_deleted = false
-  );
-$$;
-
--- ----------------------------------------------------------------------------
 -- 3. time_clock_sessions — payroll truth (§4)
 --    No project_id. No category. No break columns (§3). status is NULLABLE:
 --    NULL means no approval state applies (the Owner case, §8).
@@ -183,6 +142,47 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE TRIGGER time_clock_sessions_set_updated_by
   BEFORE UPDATE ON public.time_clock_sessions
   FOR EACH ROW EXECUTE FUNCTION public.set_time_clock_sessions_updated_by();
+
+-- ----------------------------------------------------------------------------
+-- 2. Session-visibility helpers
+--    Owner/Admin/PM/Foreman read every company session (approval queues + job
+--    costing, §11); a member reads their own. owns_open_session() gates the
+--    live clock-out / segment-open flow to the member's own OPEN session.
+-- ----------------------------------------------------------------------------
+
+CREATE FUNCTION public.can_view_time_session(p_session_id uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM time_clock_sessions s
+    WHERE s.id = p_session_id
+      AND s.company_id = get_my_company_id()
+      AND (
+        get_my_role() = ANY (ARRAY['owner'::text, 'admin'::text, 'project_manager'::text, 'foreman'::text])
+        OR s.member_id = get_my_member_id()
+      )
+  );
+$$;
+
+-- True iff the session belongs to the caller AND is still open. This is what
+-- lets a crew/foreman member run the LIVE clock (clock-out, open/close their
+-- current segment) while being unable to edit hours after the fact (§8.1 —
+-- retroactive edits are Owner/Admin only).
+CREATE FUNCTION public.owns_open_session(p_session_id uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  SELECT EXISTS (
+    SELECT 1
+    FROM time_clock_sessions s
+    WHERE s.id = p_session_id
+      AND s.member_id = get_my_member_id()
+      AND s.clock_out IS NULL
+      AND s.is_deleted = false
+  );
+$$;
 
 -- ----------------------------------------------------------------------------
 -- 4. time_segments — attribution (§5)
