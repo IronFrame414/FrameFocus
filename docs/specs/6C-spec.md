@@ -17,7 +17,7 @@
 > Checked against 6A (`supabase/migrations/20260710130000_module6_6a_time_tracking.sql` on `feat/module-6a`, read via `git show`) and the M5 `change_orders` (5D) / projects (5A) migrations. 6C does not read 6A's tables (correct — it stands alone), but it inherits the same **identity/audit** and **RLS** conventions 6A established, and drifts from them below. Each is flagged **[DRIFT]** at the point of use.
 >
 > 1. **Domain reporter ≠ audit column.** `created_by` / `updated_by` are audit columns defaulting to `auth.uid()` (FK `auth.users`), in 6A and in `change_orders` (5D). The "who filed this" identity is a separate `*_member_id` column defaulting to `get_my_member_id()` (FK `company_members`) — `change_orders.author_member_id` is the reference. **This spec's "`created_by` = reporter" / "`created_by = get_my_member_id()`" is a [DRIFT].** See §2 and §5.
-> 2. **Read-visibility helper exists and is narrower than this spec.** M5 ships `can_view_project()` = "owner/admin see all **OR** the caller is assigned," i.e. **PM/Foreman are assigned-only**. This spec grants PM/Foreman company-wide incident read — a **[CONFLICT]**, flagged not resolved. See §5 / Q2.
+> 2. **Read-visibility helper exists; 6C now aligns with it.** M5 ships `can_view_project()` = "owner/admin see all **OR** the caller is assigned," i.e. **PM/Foreman are assigned-only**. This spec originally granted PM/Foreman company-wide incident read — that **[CONFLICT] is RESOLVED (Josh, this session): assigned-only, matching `can_view_project()`**. PM/Foreman (and Crew) read incidents only on projects they are assigned to; Owner/Admin read all. See §5 / Q2.
 > 3. **`num_nonnulls()` is Postgres-native and unused elsewhere in this repo's migrations** (verified). The §2.1 conditional CHECKs are valid SQL; kept as-is. Still tracked as open item #8.
 > 4. **Acceptance trace stays PROPOSED.** See the NEEDS INTERVIEW blocker in §8.
 
@@ -27,7 +27,7 @@
 
 The formal record of something that actually happened: injury, property damage, or near miss. Distinct from 6B's hazard _flag_, which records a concern (6B §7).
 
-**In scope (v1):** incident creation + edit; injured parties (members or outsiders, one row each — §2.1); witnesses (members or outsiders); treatment captured per injured party; photos; auto-PDF to M3; email notification to Owner/Admin/PM/Foreman; company-wide incident log; pre-fill from a 6B hazard flag.
+**In scope (v1):** incident creation + edit; injured parties (members or outsiders, one row each — §2.1); witnesses (members or outsiders); treatment captured per injured party; photos; auto-PDF to M3; email notification to Owner/Admin/PM/Foreman; an incident log scoped by read-visibility (Owner/Admin see all; PM/Foreman/Crew see incidents on assigned projects — §5); pre-fill from a 6B hazard flag.
 
 **Out of scope:**
 
@@ -110,6 +110,8 @@ When a daily log's `hazards_present` is ticked, 6B surfaces a **"File an inciden
 
 **Every incident, regardless of type or severity, emails Owner, Admin, PM, and Foreman.** (Josh, this session — option A over a narrower Owner/Admin-only alternative.) Matches the promise already written into 6B §7, so no divergence entry is owed.
 
+**Notification is independent of read-visibility (§5):** a PM or Foreman is notified of every incident — including one on a project they are **not** assigned to and therefore cannot browse in the incident log. The email reaches them; the log listing stays assigned-scoped.
+
 Sent via Resend, from `companyname@rafterworks.com`, per the existing convention. Failure to send must not roll back the incident insert.
 
 **On send failure (Josh, this session): log the failure _and_ surface a retry affordance to the Owner.** Silent-log is rejected — a swallowed email on an injury means the Owner never learns it happened. The retry is Owner-visible, not a background-only reattempt, so the failure cannot pass unnoticed. (Resolves §9 item #5.)
@@ -121,7 +123,7 @@ Sent via Resend, from `companyname@rafterworks.com`, per the existing convention
 - Company-scoped: `company_id = get_my_company_id()`.
 - **Create:** any member, on any project they can see.
 - **Edit:** **creator only** — **[DRIFT — corrected]** keyed on **`reported_by_member_id = get_my_member_id()`**, not `created_by` (the audit `auth.uid()` column, §2). Treatment details arrive late; the record never locks.
-- **Read:** **[CONFLICT — flag, do not resolve]** this spec grants Owner/Admin/**PM/Foreman** read of **all** company incidents, but M5's `can_view_project()` restricts **PM/Foreman to assigned projects**. Safety incidents may warrant broader visibility than ordinary project content (an injury the whole leadership should see) — but that is Josh's call, not a silent default. Pick one at build — Q2. Crew read is assigned-only regardless (`can_view_project(project_id)`).
+- **Read:** **[RESOLVED — assigned-only via `can_view_project()`]** Owner/Admin read **all** company incidents; **PM/Foreman and Crew read only incidents on projects they are assigned to**, via `can_view_project(project_id)`. This aligns 6C with M5 content-visibility — no divergent rule. (Josh, this session: safety incidents get **no** broader read grant than ordinary project content. What reaches leadership about an injury on a project they cannot browse is the **notification**, not the log listing — see §4. Q2.)
 - **Delete:** soft-delete, Owner/Admin only. An incident a crew member can erase is not a record.
 
 ---
@@ -186,7 +188,7 @@ Had this been opened from a daily log's hazard flag, `project_id` and `incident_
 ## 9a. Questions for Josh (raised by the 6A as-built reconciliation — resolve nothing silently)
 
 - **Q1 — Reporter identity.** Confirm the reporter is a `company_members` FK (`reported_by_member_id`, default `get_my_member_id()`), distinct from the audit `created_by = auth.uid()` — matching 6A and `change_orders.author_member_id`. (Correction applied in §2/§5; flagging for sign-off.)
-- **Q2 — Incident read visibility for PM/Foreman.** All company incidents (as this spec says) or only incidents on projects they can see (`can_view_project`, matching M5)? Safety may deserve the broader grant, but it is your call.
+- **Q2 — Incident read visibility for PM/Foreman. RESOLVED — assigned-only, matching `can_view_project()`.** PM/Foreman (and Crew) read incidents only on projects they are assigned to; Owner/Admin read all. No broader safety grant — notification (§4), not the log listing, is what reaches leadership about an off-project injury. Applied in §5 and the §0 reconciliation block.
 - **Q3 — `incident_type` enum home (existing open item #1).** Declare once and add to `TECH_DEBT.md` (the `row_type` enum is already hand-duplicated across five files — don't repeat that). Where should the single declaration live?
 
 ---
