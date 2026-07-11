@@ -243,3 +243,13 @@ Sub hours: `6.0`. Deliveries: empty (6D unbuilt). PDF filed to Willow Ridge → 
 - `future_module_architecture.md` §7.2 — apply the four amendments (§3); the "one per project per day" and "crew auto-fills from clock-ins" rules are both dead.
 - `CLAUDE_MODULES.md` §6.2 — mark superseded by §7.2 as amended. Its "hours" and "materials delivered" fields are now owned by 6A and 6D respectively.
 - Carried from the 6A spec, still owed: §7.1 (five amendments), §7.9 (flat-approval divergence entry), §7.4 (delivery check-in not assignment-gated), `CLAUDE_MODULES.md` §6.1/§6.9, and the correction that **no `time_entries` was ever committed**.
+
+---
+
+## 13. Build Notes
+
+> Build-time implementation directives, kept separate from the design-level body above. These bind the build, not the design review.
+
+1. **Employee-hours helper — shared, not 6B-local.** The per-member-per-day hours computation (the "sum of on-site segment durations per member" logic in §5 / §6.1) MUST be implemented as a **single shared helper in `packages/shared/utils/time-tracking.ts`**, imported by **both 6A and 6B**. It is **not** a 6B-local copy. Reason: this is a legal-record number — payroll-adjacent, and it appears on a **signed daily log** — so it must have exactly **one source of truth**. Consequence: the 6B build **touches 6A**. That is additive work on an already-merged module — **expected, not drift**; call it out explicitly in the 6B build commit so it does not read as scope creep.
+
+2. **Company timezone — verify or add before building §5.** §5's crew-present and employee-hours predicates match a segment's date to `log_date`. That date comparison is **undefined without a company-level timezone**: a segment at 11pm local can fall on a different **UTC** calendar day, so the same clock-in would land in the wrong daily log. **Before building §5, verify whether a company/settings-level timezone column exists** — via the Supabase SQL editor or a schema query that does **not** require Docker (a `supabase db dump` will not run in Codespaces). **If none exists, add one.** The crew-present and employee-hours day boundary depends on it; §5 cannot be built until this is settled.
