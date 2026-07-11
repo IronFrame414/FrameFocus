@@ -12,6 +12,17 @@
 
 ---
 
+> ## ⚠️ AS-BUILT RECONCILIATION vs. 6A (added this pass — verified against migrations, not spec prose)
+>
+> Checked against 6A (`supabase/migrations/20260710130000_module6_6a_time_tracking.sql` on `feat/module-6a`, read via `git show`) and the M5 `change_orders` (5D) / projects (5A) migrations. 6C does not read 6A's tables (correct — it stands alone), but it inherits the same **identity/audit** and **RLS** conventions 6A established, and drifts from them below. Each is flagged **[DRIFT]** at the point of use.
+>
+> 1. **Domain reporter ≠ audit column.** `created_by` / `updated_by` are audit columns defaulting to `auth.uid()` (FK `auth.users`), in 6A and in `change_orders` (5D). The "who filed this" identity is a separate `*_member_id` column defaulting to `get_my_member_id()` (FK `company_members`) — `change_orders.author_member_id` is the reference. **This spec's "`created_by` = reporter" / "`created_by = get_my_member_id()`" is a [DRIFT].** See §2 and §5.
+> 2. **Read-visibility helper exists and is narrower than this spec.** M5 ships `can_view_project()` = "owner/admin see all **OR** the caller is assigned," i.e. **PM/Foreman are assigned-only**. This spec grants PM/Foreman company-wide incident read — a **[CONFLICT]**, flagged not resolved. See §5 / Q2.
+> 3. **`num_nonnulls()` is Postgres-native and unused elsewhere in this repo's migrations** (verified). The §2.1 conditional CHECKs are valid SQL; kept as-is. Still tracked as open item #8.
+> 4. **Acceptance trace stays PROPOSED.** See the NEEDS INTERVIEW blocker in §8.
+
+---
+
 ## 1. Scope
 
 The formal record of something that actually happened: injury, property damage, or near miss. Distinct from 6B's hazard _flag_, which records a concern (6B §7).
@@ -37,9 +48,11 @@ incident_date DATE NOT NULL
 incident_type TEXT NOT NULL -- 'injury' | 'property_damage' | 'near_miss'
 description TEXT NOT NULL
 pdf_file_id UUID REFERENCES files(id) -- M3
--- standard columns (created_by = reporter)
+reported_by_member_id UUID NOT NULL DEFAULT get_my_member_id() REFERENCES company_members(id) -- domain reporter (§5)
+-- standard columns (created_by / updated_by are AUDIT = auth.uid(), NOT the reporter)
 ```
 
+- **[DRIFT — corrected]** the reporter is **`reported_by_member_id`** (a `company_members` FK defaulting to `get_my_member_id()`), **not** `created_by`. `created_by`/`updated_by` are audit columns defaulting to `auth.uid()` (FK `auth.users`), per 6A and `change_orders.author_member_id` (5D).
 - `incident_type` is a CHECK-constrained enum. See §9 open item #1.
 - Never locks. Editable by creator (§5), because treatment is usually learned a day later.
 
@@ -107,8 +120,8 @@ Sent via Resend, from `companyname@rafterworks.com`, per the existing convention
 
 - Company-scoped: `company_id = get_my_company_id()`.
 - **Create:** any member, on any project they can see.
-- **Edit:** **creator only** — `created_by = get_my_member_id()`. Treatment details arrive late; the record never locks.
-- **Read:** Owner/Admin/PM/Foreman read all company incidents. Crew read incidents on projects they are assigned to — **mirrors the M5 §5.2a project-visibility rule; confirm it landed that way at build.**
+- **Edit:** **creator only** — **[DRIFT — corrected]** keyed on **`reported_by_member_id = get_my_member_id()`**, not `created_by` (the audit `auth.uid()` column, §2). Treatment details arrive late; the record never locks.
+- **Read:** **[CONFLICT — flag, do not resolve]** this spec grants Owner/Admin/**PM/Foreman** read of **all** company incidents, but M5's `can_view_project()` restricts **PM/Foreman to assigned projects**. Safety incidents may warrant broader visibility than ordinary project content (an injury the whole leadership should see) — but that is Josh's call, not a silent default. Pick one at build — Q2. Crew read is assigned-only regardless (`can_view_project(project_id)`).
 - **Delete:** soft-delete, Owner/Admin only. An incident a crew member can erase is not a record.
 
 ---
@@ -167,6 +180,14 @@ Had this been opened from a daily log's hazard flag, `project_id` and `incident_
 | 7   | No FK from a 6B hazard flag to the incident it escalated into. Add later if the link proves useful.                                                                            | Deferred |
 | 8   | `num_nonnulls()` is Postgres-native — confirm it's available for the §2.1 / §2.2 member-or-outsider identity CHECKs.                                                            | Build    |
 | 9   | Enforcement mechanism for the injury cross-table invariant (`incident_type = 'injury'` ⇒ ≥1 `safety_incident_injuries` row) — application logic vs. DB trigger. Decide at build. | 6C build |
+
+---
+
+## 9a. Questions for Josh (raised by the 6A as-built reconciliation — resolve nothing silently)
+
+- **Q1 — Reporter identity.** Confirm the reporter is a `company_members` FK (`reported_by_member_id`, default `get_my_member_id()`), distinct from the audit `created_by = auth.uid()` — matching 6A and `change_orders.author_member_id`. (Correction applied in §2/§5; flagging for sign-off.)
+- **Q2 — Incident read visibility for PM/Foreman.** All company incidents (as this spec says) or only incidents on projects they can see (`can_view_project`, matching M5)? Safety may deserve the broader grant, but it is your call.
+- **Q3 — `incident_type` enum home (existing open item #1).** Declare once and add to `TECH_DEBT.md` (the `row_type` enum is already hand-duplicated across five files — don't repeat that). Where should the single declaration live?
 
 ---
 
