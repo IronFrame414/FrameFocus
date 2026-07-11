@@ -2,7 +2,7 @@
 
 > **Design authority:** `docs/specs/future_module_architecture.md` §7.2. **This spec amends §7.2 in four places** (§3). Amendments are decisions taken in the Module 6 interview, not drift — §7.2 and `CLAUDE_MODULES.md` §6.2 must be rewritten in the same commit that lands this spec.
 >
-> **Status:** DRAFT — not built. The acceptance trace (§10) is **PROPOSED/UNVERIFIED** — mirrored from settled interview rules, not yet walked against a real Bishop daily log. Verify before build.
+> **Status:** DRAFT — not built. The acceptance trace (§10) is **VERIFIED** — walked against a real Bishop day this session (open item #1 CLOSED).
 >
 > **Written against stale project knowledge.** All Module 3 / Module 5 / 6A column references are **design-level** and carry a _confirm against live schema at build_ obligation.
 >
@@ -20,7 +20,7 @@
 > 2. **Domain author ≠ audit column.** In 6A and in `change_orders` (5D), `created_by` / `updated_by` are audit columns defaulting to `auth.uid()` (FK `auth.users`). The *domain* "who did this" is a separate `*_member_id` column defaulting to `get_my_member_id()` (FK `company_members`) — `change_orders.author_member_id` is the reference. **This spec's "`created_by` = the author" / "`created_by = get_my_member_id()`" is a [DRIFT].** See §4 and §8.
 > 3. **On-site segment types are CONFIRMED, not "confirm at build."** 6A's CHECK gates `project_id` to exactly `work | material_run | warranty` (constant `PROJECT_BEARING_TYPES`). `travel | shop | break` carry no `project_id` and are structurally excluded. See §5.
 > 4. **No per-member-per-day hours helper exists in 6A.** `workedHoursByProject()` groups by **project**, and `getProjectWorkedHours()` selects only `segment_type, project_id, segment_start, segment_end` — it never joins the session, so it cannot attribute to a member. 6B's derived employee hours is **new derivation work that 6B owns**, not a 6A function it can call. See §5 / §6.1 and Questions Q3.
-> 5. **Acceptance trace stays PROPOSED.** Not reconciled into fact; see the NEEDS INTERVIEW blocker in §10.
+> 5. **Acceptance trace is VERIFIED.** Walked against a real Bishop day this session; the NEEDS INTERVIEW blocker in §10 is cleared (open item #1 CLOSED).
 
 ---
 
@@ -264,7 +264,7 @@ Employee hours: **not stored** — derived on read.
 
 - **Q1 — Employee-hours member join.** Confirmed: `time_segments` has no `member_id`; hours-per-member requires joining through `time_clock_sessions`. This is a build fact, not a decision — flagged so it is not missed when 6B's derivation is written.
 - **Q2 — Day boundary / timezone. RESOLVED — the company's local calendar day.** Build dependency: a company-level timezone must exist (company settings) as the source; without it the day boundary is undefined. This governs both crew-present and employee-hours auto-fill.
-- **Q3 — Who owns the per-member-per-day hours derivation?** 6A exposes only project-grouped hours. Does 6B build its own member-grouped read, or should 6A grow a shared helper (e.g. `hoursByMemberForProjectDay`) so 6B and any future consumer share one source of truth? Recommend the latter to avoid a second derivation drifting from 6A's.
+- **Q3 — Who owns the per-member-per-day hours derivation? RESOLVED — a single shared helper, per §13 Build Note #1.** The per-member-per-day hours computation lives in one place — `packages/shared/utils/time-tracking.ts` — imported by both 6A and 6B, not a 6B-local copy. One source of truth for a legal-record (signed-daily-log) number. See §13 for the full directive and its consequence (the 6B build touches 6A, additively).
 - **Q4 — Does a `warranty`-only visit count as "crew present"? RESOLVED — yes, include in crew-present, but label.** Warranty carries a `project_id` (person was physically on the job) so they count as present; label to preserve the presence-vs-cost distinction, since warranty hours are budget-excluded.
 - **Q5 — Daily-log read visibility for PM/Foreman. RESOLVED — assigned-only, matching M5.** Daily-log read visibility uses `can_view_project()`; PM/Foreman read logs only for projects they are assigned to. No divergent RLS rule. This is the module-wide answer (also governs 6C/6D). Delete is Owner/Admin-only.
 - **Q6 — Sub double-count (existing open item #4).** A subcontractor with a login who clocks in via 6A *and* is entered manually in §4.2 is counted twice. Surfaced here because 6A makes sub clock-in real (subs are `company_members` and rank with crew for approval).
