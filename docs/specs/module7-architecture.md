@@ -101,7 +101,7 @@ signed-artifact branch merge and their schemas can be read directly.
 
 1. **Signed change-order deltas do not write through to `projects.contract_value`.** M5 made change
    orders display-only on the budget side. M7 owns the write-through. (Prior chat cited this as
-   TECH_DEBT #80 — the _number_ is UNVERIFIED until `TECH_DEBT.md` is read.)
+   TECH*DEBT #80 — the \_number* is UNVERIFIED until `TECH_DEBT.md` is read.)
 2. **QuickBooks connector is M7's.** Module 6's time tracking carries a `qb_export_status` stub and
    an "only approved sessions export" rule. The connector that consumes them is here. (Column/stub
    names UNVERIFIED — Module 6 has no code yet.)
@@ -350,10 +350,10 @@ the relevant sub-module is specced.
    used elsewhere. This is a **known, accepted imprecision**, recorded so it is not later mistaken
    for a bug to chase.
 
-7. **Orphaned-commitment closeout — sub-record side undecided.** Releasing an orphaned commitment
-   (a sub who walked on his final stage) requires a reason and corrects the job's "what's left."
-   Whether it _also_ flags the sub's record (marks him incomplete) is undecided — the founder did
-   not say, and it is not invented here.
+7. **Orphaned-commitment closeout — RESOLVED: marks the sub's record.** Releasing an orphaned
+   commitment (a sub who walked on his final stage) requires a reason and corrects the job's
+   "what's left." It **also flags the sub's own profile as "did not finish"** — the record carries
+   that history forward, visible next time the sub is considered for hire. (Founder, resolved.)
 
 8. **Phone-push approval depends on mobile infrastructure that may not exist.** The 7D invoice-
    approval flow specifies that the approval notice pings owner/admin on their phone for quick action
@@ -598,7 +598,7 @@ ORPHANED-COMMITMENT CLOSEOUT
   A sub signs $24k, is paid $16k in stages, then walks — never does the final $8k.
   The remaining $8k committed is MANUALLY CLOSED OUT. Closeout REQUIRES A REASON
   (auditable later). It drops the commitment so the job's "what's left" corrects.
-  Whether it also flags the sub's record is UNDECIDED (§7.7 #7).
+  It ALSO flags the sub's record as "did not finish" (§7.7 #7, resolved).
 
 THE NUMBER
   Not tracked today. 7C exists to make "what do I still owe on this job" real:
