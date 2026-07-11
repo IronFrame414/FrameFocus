@@ -171,7 +171,7 @@ CHECK (qty_damaged <= qty_received)
 - **Create PO:** office roles — Owner/Admin/PM (mirrors who creates `change_orders`); on a project they can see (`can_view_project`).
 - **Check in a delivery:** **any company member on a project they can see** (§3 amendment) — `can_view_project(project_id)`. `received_by` defaults to `get_my_member_id()`.
 - **Manual PO close:** **Owner/Admin only** (§5.1), with `closed_reason` required by CHECK. `closed_by = get_my_member_id()`.
-- **Read:** **[CONFLICT — flag, do not resolve]** same PM/Foreman question as 6B §8 / 6C §5 — all company POs/deliveries, or only those on projects the caller can see (`can_view_project`, which restricts PM/Foreman to assigned)? Crew read is assigned-only regardless. Q1.
+- **Read:** **RESOLVED — inherits `can_view_project(project_id)`.** POs and deliveries are visible exactly as their project is: Owner/Admin see all company records; PM/Foreman/Crew see only projects they are assigned to. This is not a new rule — it matches the `projects_select_visible` SELECT policy verified in migrations (`module5_5a_projects.sql`), so a PO/delivery can never be visible for a project the caller cannot see. Child tables inherit via parent FK.
 - **Delete:** soft-delete, Owner/Admin only, per convention.
 - Child tables (`purchase_order_items`, `delivery_items`) inherit their parent's visibility via the parent FK, `ON DELETE CASCADE` as written (consistent with 6A's `time_segments → time_clock_sessions`).
 
@@ -226,7 +226,7 @@ Sent via Resend, from `companyname@rafterworks.com`. **Failure to send must not 
 
 ## 8a. Questions for Josh (raised by the 6A as-built reconciliation — resolve nothing silently)
 
-- **Q1 — PO/delivery read visibility for PM/Foreman.** All company POs/deliveries, or only those on projects they can see (`can_view_project`, matching M5)? Same question 6B/6C raise — answer all three consistently.
+- **Q1 — Read visibility — RESOLVED (this session).** Verified against migrations: `can_view_project()` and the `projects_select_visible` policy both gate Owner/Admin → all company projects, everyone else → assigned-only. 6D adopts the identical rule (§6a Read). 6B/6C are being updated to the same rule this session; the answer is consistent across all three.
 - **Q2 — Damaged-goods return has no record of its own (existing open item #2 — LEFT OPEN by instruction, not resolved here).** A return that never comes back is invisible: `qty_damaged` + a note record that goods *were* damaged, but nothing tracks the return itself (did the driver take them? was a credit issued? a replacement promised?). §5.1's manual PO close partly covers the credit case via `closed_reason`, but there is no first-class `returns` concept. **Decision deferred to you — do not let this pass be read as resolving it.**
 - **Q3 — Author/audit split — RESOLVED (this session).** Josh confirmed `author_member_id` (office author, `company_members` FK defaulting to `get_my_member_id()`, named to match `change_orders` 5D) and the defaulted `received_by`, both distinct from audit `created_by = auth.uid()`. Verified against migrations. Q1 (read-visibility) remains the only open question.
 
