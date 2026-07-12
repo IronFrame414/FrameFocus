@@ -44,6 +44,7 @@ export function SettingsForm({ company }: SettingsFormProps) {
   );
   const [signatureUrl, setSignatureUrl] = useState<string | null>(null);
   const [sigUploading, setSigUploading] = useState(false);
+  const [typedName, setTypedName] = useState('');
   const sigInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -164,6 +165,62 @@ export function SettingsForm({ company }: SettingsFormProps) {
       setMessage({ type: 'success', text: 'Saved signature removed.' });
     } else {
       setMessage({ type: 'error', text: result.error || 'Failed to remove signature.' });
+    }
+  }
+
+  // Typed-name signature (signed-artifact spec §4.2 alt): render the name to a
+  // transparent PNG in a script font and save it through the SAME path as an
+  // uploaded image (uploadContractorSignature). PNG-only by design.
+  async function handleTypedSignatureSave() {
+    const name = typedName.trim();
+    if (!name) {
+      setMessage({ type: 'error', text: 'Enter a name to render as your signature.' });
+      return;
+    }
+
+    setSigUploading(true);
+    setMessage(null);
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = 600;
+      canvas.height = 200;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        setMessage({ type: 'error', text: 'Could not render the signature.' });
+        return;
+      }
+      // Transparent background (no fillRect); black script text, shrunk to fit.
+      ctx.fillStyle = '#111827';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      let fontSize = 72;
+      const scriptStack = "'Segoe Script', 'Brush Script MT', cursive";
+      ctx.font = `${fontSize}px ${scriptStack}`;
+      while (ctx.measureText(name).width > canvas.width - 40 && fontSize > 24) {
+        fontSize -= 4;
+        ctx.font = `${fontSize}px ${scriptStack}`;
+      }
+      ctx.fillText(name, canvas.width / 2, canvas.height / 2);
+
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob((b) => resolve(b), 'image/png')
+      );
+      if (!blob) {
+        setMessage({ type: 'error', text: 'Could not render the signature image.' });
+        return;
+      }
+
+      const file = new File([blob], 'signature.png', { type: 'image/png' });
+      const result = await uploadContractorSignature(company.id, file);
+      if (result.success && result.path) {
+        setSignaturePath(result.path);
+        setTypedName('');
+        setMessage({ type: 'success', text: 'Signature saved.' });
+      } else {
+        setMessage({ type: 'error', text: result.error || 'Failed to save signature.' });
+      }
+    } finally {
+      setSigUploading(false);
     }
   }
 
@@ -338,6 +395,36 @@ export function SettingsForm({ company }: SettingsFormProps) {
               PNG or JPG, max 2 MB. Transparent PNG recommended.
             </p>
           </div>
+        </div>
+
+        <div style={{ marginTop: '1rem' }}>
+          <label style={{ ...labelStyle, marginBottom: '0.375rem' }}>Or type your name</label>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <input
+              value={typedName}
+              onChange={(e) => setTypedName(e.target.value)}
+              placeholder="Full name as it should appear"
+              style={{ ...inputStyle, maxWidth: '320px' }}
+            />
+            <button
+              onClick={handleTypedSignatureSave}
+              disabled={sigUploading || !typedName.trim()}
+              style={{
+                padding: '0.5rem 1rem',
+                fontSize: '0.875rem',
+                whiteSpace: 'nowrap',
+                backgroundColor: '#f3f4f6',
+                border: '1px solid #d1d5db',
+                borderRadius: '0.375rem',
+                cursor: sigUploading || !typedName.trim() ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {sigUploading ? 'Working...' : 'Save typed signature'}
+            </button>
+          </div>
+          <p style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.25rem' }}>
+            Rendered in a script font as a transparent PNG and saved as your signature image.
+          </p>
         </div>
       </div>
 
