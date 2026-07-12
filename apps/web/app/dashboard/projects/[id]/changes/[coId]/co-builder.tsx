@@ -393,7 +393,7 @@ export function CoBuilder({
               <input
                 value={recipientEmail}
                 onChange={(e) => setRecipientEmail(e.target.value)}
-                placeholder="For your records — no email is sent"
+                placeholder="Leave blank to use the project's primary contact"
                 style={{ ...inputStyle, width: '260px' }}
               />
             </div>
@@ -463,8 +463,8 @@ export function CoBuilder({
               {busy ? 'Sending…' : 'Confirm Send'}
             </button>
             <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: 0, flexBasis: '100%' }}>
-              Sending is your internal acceptance. You&apos;ll get a signing link to share with the
-              client — no email goes out automatically.
+              On send, a signed PDF is emailed to the client with a link to review and sign. The
+              signing link also appears here so you can share it manually.
             </p>
           </div>
         )}
