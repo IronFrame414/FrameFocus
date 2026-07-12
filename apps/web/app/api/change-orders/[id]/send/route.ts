@@ -273,19 +273,31 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   const bodyText = replaceTemplateVariables(input.body ?? DEFAULT_CO_BODY, variables);
   const sender = buildSenderAddress(company);
 
-  const { messageId, error: sendError } = await sendEmail({
-    from: sender,
-    to: recipientEmail,
-    subject,
-    react: ChangeOrderEmail({
-      companyName: company.name,
-      logoUrl: company.logo_url,
-      brandColor: company.brand_color || '#1a56db',
-      bodyText,
-      signingUrl,
-    }),
-    attachments: [{ filename: `${co.co_number}.pdf`, content: v1 }],
-  });
+  // The CO is already `sent` and v1 is stored, so a broken email must degrade to
+  // a warning — never a 500. sendEmail can THROW (e.g. getResend() when
+  // RESEND_API_KEY is unset), so fold a thrown error into the same shape as a
+  // returned sendError and let the existing logEmail + warning path handle it.
+  let messageId: string | null = null;
+  let sendError: string | null = null;
+  try {
+    const sent = await sendEmail({
+      from: sender,
+      to: recipientEmail,
+      subject,
+      react: ChangeOrderEmail({
+        companyName: company.name,
+        logoUrl: company.logo_url,
+        brandColor: company.brand_color || '#1a56db',
+        bodyText,
+        signingUrl,
+      }),
+      attachments: [{ filename: `${co.co_number}.pdf`, content: v1 }],
+    });
+    messageId = sent.messageId;
+    sendError = sent.error;
+  } catch (err) {
+    sendError = err instanceof Error ? err.message : 'Email send failed';
+  }
 
   await logEmail(admin, {
     company_id: co.company_id,
