@@ -35,6 +35,7 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 - **#6** Source CHECK constraint may be too restrictive (real contractors may want yard sign, trade show, Angi, HomeAdvisor, etc.)
 - **#7** Optional cleanup of Session 7 debugging artifacts — orphaned test users
 
+- **#83** Typed contractor signature stored as rendered PNG only — consider also persisting the typed text string (new column) to allow clean re-rendering later. Currently image-only to match uploaded-signature shape.
 ### Code Quality
 
 - **#8** `team-page-client.tsx` has local `ROLE_LABELS` — should import from `@framefocus/shared`
