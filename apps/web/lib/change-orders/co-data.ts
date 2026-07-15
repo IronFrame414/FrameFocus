@@ -1,14 +1,24 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
 
-// Signed-artifact spec §6 — assembles everything the CO renderers need
-// (React-PDF document + signed-PDF composite) as one serializable object.
-// Mirrors proposal-data.ts: takes the Supabase client as a parameter so it
-// works under RLS (dashboard / send route) AND with the service-role client
-// (public signing completion, cron). The CO document STANDS ALONE — it embeds
-// neither the original estimate nor the contract (spec §6): CO number, title,
-// description, its own line items/pricing, net delta, schedule impact, and two
-// signature blocks (stamped by the composite, not rendered here).
+// Signed-artifact spec §6 — assembles everything the CO renderer needs as one
+// serializable object. Mirrors proposal-data.ts: takes the Supabase client as a
+// parameter so it works under RLS (dashboard / send route) AND with the
+// service-role client (public signing completion, cron). The CO document STANDS
+// ALONE — it embeds neither the original estimate nor the contract (spec §6):
+// CO number, title, description, its own line items/pricing, net delta,
+// schedule impact, and two signature blocks. The signatures are rendered
+// natively by co-template.tsx (React-PDF), not stamped afterward.
+//
+// Signature data comes from two places:
+//   * Contractor block — reconstructed from the change_orders row (mode / ref /
+//     name / signed_at), which is written at send BEFORE the PDF renders, so it
+//     is always in the DB at both v1 and v2 render time. A saved-image
+//     signature is downloaded to a base64 data-URI here (admin client).
+//   * Client block — supplied by the caller via `signatureOverride`. At v2
+//     render time the client signature is NOT yet persisted (completeCoSignature
+//     renders before it writes the session/CO rows, keeping a failed render
+//     retryable), so it is passed in from the in-memory signing payload.
 
 export interface CoLineRow {
   name: string;
@@ -45,10 +55,26 @@ export interface ChangeOrderData {
     date: string;
     netDelta: number;
     scheduleImpactDays: number | null;
-    contractorSignatureName: string | null;
-    contractorSignedAt: string | null;
     signedAt: string | null;
   };
+  // Contractor signature block, reconstructed from the change_orders row. Null
+  // until the CO has been sent (contractor signs at send). `imageDataUri` is
+  // populated only for the saved_image mode; typed_name renders `name`.
+  contractorSignature: {
+    mode: 'typed_name' | 'saved_image';
+    name: string;
+    imageDataUri: string | null;
+    signedAt: string;
+  } | null;
+  // Client signature block. Always an image (PNG data-URI — the signing UI
+  // renders both drawn and typed marks to a canvas). Supplied via the caller's
+  // `signatureOverride` at v2 render time; null for v1.
+  clientSignature: {
+    name: string;
+    imageDataUri: string;
+    signedAt: string;
+    ip: string | null;
+  } | null;
   project: { name: string } | null;
   client: {
     name: string;
@@ -58,9 +84,23 @@ export interface ChangeOrderData {
   lineItems: CoLineItem[];
 }
 
+// Client signature block supplied by the caller (v2), since it is not yet
+// persisted when completeCoSignature renders the fully-signed PDF.
+export interface ClientSignatureOverride {
+  name: string;
+  imageDataUri: string; // PNG data-URL
+  signedAt: string;
+  ip: string | null;
+}
+
+export interface ChangeOrderDataOptions {
+  clientSignature?: ClientSignatureOverride;
+}
+
 export async function getChangeOrderData(
   supabase: SupabaseClient<Database>,
-  changeOrderId: string
+  changeOrderId: string,
+  options: ChangeOrderDataOptions = {}
 ): Promise<ChangeOrderData | null> {
   const { data: co } = await supabase
     .from('change_orders')
@@ -134,6 +174,41 @@ export async function getChangeOrderData(
     }
   }
 
+  // Contractor signature block — reconstructed from the CO row. Present only
+  // once the CO has been sent (contractor signs at send). Type casts guard the
+  // new columns against the un-regenerated database.ts (see note below).
+  const contractorSignedAt = co.contractor_signed_at as string | null;
+  const contractorMode = co.contractor_signature_mode as 'typed_name' | 'saved_image' | null;
+  const contractorName = co.contractor_signature_name as string | null;
+  const contractorRef = co.contractor_signature_ref as string | null;
+  let contractorSignature: ChangeOrderData['contractorSignature'] = null;
+  if (contractorSignedAt && contractorMode && contractorName) {
+    // Saved-image mode: download the stored PNG to a base64 data-URI for the
+    // React-PDF <Image>. A missing image degrades to null (the block still
+    // renders the printed name as a fallback mark), never blocking the render.
+    let imageDataUri: string | null = null;
+    if (contractorMode === 'saved_image' && contractorRef) {
+      const base64 = await downloadImageBase64(supabase, 'project-files', contractorRef);
+      if (base64) imageDataUri = `data:image/png;base64,${base64}`;
+    }
+    contractorSignature = {
+      mode: contractorMode,
+      name: contractorName,
+      imageDataUri,
+      signedAt: contractorSignedAt,
+    };
+  }
+
+  // Client signature block — supplied by the caller (v2 render); null for v1.
+  const clientSignature: ChangeOrderData['clientSignature'] = options.clientSignature
+    ? {
+        name: options.clientSignature.name,
+        imageDataUri: options.clientSignature.imageDataUri,
+        signedAt: options.clientSignature.signedAt,
+        ip: options.clientSignature.ip,
+      }
+    : null;
+
   return {
     company: {
       name: company.name,
@@ -157,14 +232,30 @@ export async function getChangeOrderData(
       date: co.created_at ?? new Date().toISOString(),
       netDelta: co.net_delta,
       scheduleImpactDays: co.schedule_impact_days,
-      // New columns (this spec's migration) — expected type errors against the
-      // un-regenerated database.ts until the migration is applied.
-      contractorSignatureName: co.contractor_signature_name,
-      contractorSignedAt: co.contractor_signed_at,
       signedAt: co.signed_at,
     },
+    contractorSignature,
+    clientSignature,
     project: project ? { name: project.name } : null,
     client,
     lineItems,
   };
+}
+
+/**
+ * Downloads a stored image (e.g. the company's saved contractor signature) as
+ * base64. Returns null on any failure — a missing image must not block the
+ * render (the typed-name / printed-name path is always available). Lives here
+ * because co-data is its sole consumer; co-pdf-service re-exports it so the
+ * historical import path stays valid.
+ */
+export async function downloadImageBase64(
+  admin: SupabaseClient<Database>,
+  bucket: 'project-files',
+  path: string
+): Promise<string | null> {
+  const { data, error } = await admin.storage.from(bucket).download(path);
+  if (error || !data) return null;
+  const buf = Buffer.from(await data.arrayBuffer());
+  return buf.toString('base64');
 }

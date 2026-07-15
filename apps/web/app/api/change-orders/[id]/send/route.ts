@@ -8,12 +8,7 @@ import {
   createCoSigningSession,
   invalidateSessionsForChangeOrder,
 } from '@/lib/services/co-signing-service';
-import {
-  compositeSignedCoPDF,
-  downloadImageBase64,
-  generateChangeOrderPDF,
-  storeSignedCoPDF,
-} from '@/lib/services/co-pdf-service';
+import { generateChangeOrderPDF, storeSignedCoPDF } from '@/lib/services/co-pdf-service';
 import {
   buildSenderAddress,
   DEFAULT_CO_BODY,
@@ -92,12 +87,15 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
   const admin = getSupabaseAdmin() as SupabaseClient<Database>;
 
-  const { data: company } = await admin
+  const { data: company, error: companyError } = await admin
     .from('companies')
     .select('name, slug, logo_url, brand_color, contractor_signature_path')
     .eq('id', co.company_id)
     .single();
-  if (!company) return NextResponse.json({ error: 'Company not found' }, { status: 500 });
+  if (!company) {
+    console.error('COMPANY LOOKUP FAILED', { company_id: co.company_id, companyError });
+    return NextResponse.json({ error: 'Company not found' }, { status: 500 });
+  }
 
   // ── Contractor signature (spec §4.2) ─────────────────────────────────────
   // Required only when the CO carries no contractor signature yet (first send).
@@ -226,25 +224,16 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
   }
 
-  // Generate v1 (contractor-signed, client-unsigned). Read via admin so it
-  // reflects the update just applied.
+  // Render v1 (contractor-signed, client-unsigned). The contractor signature
+  // columns were written to the CO row just above, so the native render picks
+  // them up — including downloading the saved-image mark. Read via admin so it
+  // reflects the update just applied. No client override → client line stays blank.
   const generated = await generateChangeOrderPDF(admin, co.id);
   if (!generated) {
     await invalidateSessionsForChangeOrder(admin, co.id);
     return NextResponse.json({ error: 'Could not generate the change order PDF' }, { status: 500 });
   }
-
-  const contractorImage =
-    sigMode === 'saved_image' && sigRef
-      ? await downloadImageBase64(admin, 'project-files', sigRef)
-      : null;
-
-  const v1 = await compositeSignedCoPDF(generated.buffer, {
-    block: 'contractor',
-    signatureImageBase64: contractorImage,
-    signerName: sigName ?? company.name,
-    signedAtIso: sigSignedAt ?? sentAt.toISOString(),
-  });
+  const v1 = generated.buffer;
 
   const stored = await storeSignedCoPDF(admin, {
     companyId: co.company_id,

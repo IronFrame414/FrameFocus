@@ -9,12 +9,7 @@ import {
   logEmail,
   sendEmail,
 } from '@/lib/services/email-service';
-import {
-  compositeSignedCoPDF,
-  downloadImageBase64,
-  generateChangeOrderPDF,
-  storeSignedCoPDF,
-} from '@/lib/services/co-pdf-service';
+import { generateChangeOrderPDF, storeSignedCoPDF } from '@/lib/services/co-pdf-service';
 import { ChangeOrderEmail } from '@/lib/email/templates/change-order-email';
 
 // 5D §6 — CO signing-session lifecycle, mirroring the M4 pattern
@@ -134,32 +129,23 @@ export async function completeCoSignature(
 
   const signedAt = new Date().toISOString();
 
-  // Generate + composite + store the fully-signed v2 first (spec §6 — PDF
-  // before the row flip, mirroring completeSignature). v2 = base CO + the
-  // contractor block (reconstructed from the CO row) + the client block (this
-  // signature, with signer_ip). If any of this fails the session stays pending
-  // and the client can retry.
-  const generated = await generateChangeOrderPDF(admin, co.id);
+  // Render + store the fully-signed v2 first (spec §6 — PDF before the row
+  // flip, mirroring completeSignature). v2 = the CO rendered with the contractor
+  // block (reconstructed from the CO row) PLUS the client block, passed in via
+  // signatureOverride because it is NOT yet persisted at this point. Rendering
+  // before the write keeps a failed render retryable (session stays pending).
+  const generated = await generateChangeOrderPDF(admin, co.id, {
+    clientSignature: {
+      name: params.signerName,
+      imageDataUri: params.signatureData,
+      signedAt,
+      ip: params.signerIp,
+    },
+  });
   if (!generated) {
     return { success: false, error: 'Could not generate the change order document.' };
   }
-  const contractorImage =
-    co.contractor_signature_mode === 'saved_image' && co.contractor_signature_ref
-      ? await downloadImageBase64(admin, 'project-files', co.contractor_signature_ref)
-      : null;
-  const withContractor = await compositeSignedCoPDF(generated.buffer, {
-    block: 'contractor',
-    signatureImageBase64: contractorImage,
-    signerName: co.contractor_signature_name ?? '',
-    signedAtIso: co.contractor_signed_at ?? signedAt,
-  });
-  const v2 = await compositeSignedCoPDF(withContractor, {
-    block: 'client',
-    signatureImageBase64: params.signatureData,
-    signerName: params.signerName,
-    signedAtIso: signedAt,
-    signerIp: params.signerIp,
-  });
+  const v2 = generated.buffer;
   const stored = await storeSignedCoPDF(admin, {
     companyId: co.company_id,
     projectId: co.project_id,

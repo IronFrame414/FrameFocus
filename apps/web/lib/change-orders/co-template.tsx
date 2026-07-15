@@ -5,9 +5,11 @@ import type { ChangeOrderData } from './co-data';
 // proposal-template.tsx (same branding + layout language). The CO stands
 // alone (spec §6): it shows the CO number, title, description, its own line
 // items and pricing, the net delta, and schedule impact — it does NOT embed
-// the original estimate or contract. Two signature blocks are reserved at the
-// bottom (Contractor + Client); the actual signatures are stamped onto them by
-// co-pdf-service.compositeSignedCoPDF, not rendered here.
+// the original estimate or contract. Two signature blocks sit at the bottom
+// (Contractor + Client). The signatures are rendered NATIVELY here as in-flow
+// marks above each ruled line — the contractor's at send (v1), the client's at
+// completion (v2) — so a mark always aligns to its line regardless of CO length
+// or page count. Each mark renders only when its signature data is present.
 
 function fmtMoney(value: number): string {
   const sign = value < 0 ? '-' : '';
@@ -68,8 +70,22 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   signatureBlock: { marginTop: 28 },
-  signatureLine: { flexDirection: 'row', gap: 32, marginTop: 48 },
-  signatureField: { flex: 1, borderTopWidth: 1, borderTopColor: '#111827', paddingTop: 4 },
+  signatureLine: { flexDirection: 'row', gap: 32, marginTop: 36 },
+  signatureCol: { flex: 1 },
+  // Bottom-bordered box; content bottom-justified so the mark rests on the line.
+  // Fixed minHeight keeps v1 (contractor only) and v2 (both) geometry identical.
+  signatureField: {
+    minHeight: 44,
+    borderBottomWidth: 1,
+    borderBottomColor: '#111827',
+    justifyContent: 'flex-end',
+    paddingBottom: 3,
+  },
+  typedSignature: { fontSize: 18, fontFamily: 'Helvetica-Oblique', color: '#12151f' },
+  sigImage: { height: 40, maxWidth: 160, objectFit: 'contain' },
+  signatureCaption: { marginTop: 4 },
+  captionLabel: { fontSize: 9, fontFamily: 'Helvetica-Bold', color: '#12151f' },
+  captionMeta: { fontSize: 7, color: '#6b7280', marginTop: 1 },
   footer: {
     position: 'absolute',
     bottom: 24,
@@ -85,13 +101,31 @@ const styles = StyleSheet.create({
 });
 
 export function ChangeOrderDocument({ data }: { data: ChangeOrderData }) {
-  const { company, changeOrder, project, client, lineItems } = data;
+  const { company, changeOrder, project, client, lineItems, contractorSignature, clientSignature } =
+    data;
   const accent = company.brandColor;
 
   const companyAddress = [
     [company.addressLine1, company.addressLine2].filter(Boolean).join(', '),
     [company.city, company.state, company.zip].filter(Boolean).join(', '),
   ].filter((s) => s.length > 0);
+
+  // Signature marks — in-flow children rendered above each ruled line. Guarded
+  // as (x ? <el> : null) so a missing signature leaves a blank line, never a
+  // stray falsy child inside a Text/View. Contractor: image for saved_image
+  // (falls back to the printed name if the image failed to load), else the
+  // typed name. Client: always the captured PNG.
+  const contractorMark = contractorSignature ? (
+    contractorSignature.mode === 'saved_image' && contractorSignature.imageDataUri ? (
+      <Image style={styles.sigImage} src={contractorSignature.imageDataUri} />
+    ) : (
+      <Text style={styles.typedSignature}>{contractorSignature.name}</Text>
+    )
+  ) : null;
+
+  const clientMark = clientSignature ? (
+    <Image style={styles.sigImage} src={clientSignature.imageDataUri} />
+  ) : null;
 
   return (
     <Document title={`${changeOrder.number} — ${changeOrder.title}`} author={company.name}>
@@ -193,22 +227,42 @@ export function ChangeOrderDocument({ data }: { data: ChangeOrderData }) {
           </View>
         </View>
 
-        {/* 7. Signature blocks — two reserved fields. The contractor signs at
-            send (v1); the client signs via the tokenized link (v2). Actual
-            signatures/dates are stamped onto these fields by
-            compositeSignedCoPDF. */}
-        <View style={styles.signatureBlock} wrap={false}>
+        {/* 7. Signature blocks — the contractor signs at send (v1); the client
+            signs via the tokenized link (v2). Marks render natively in flow
+            above each ruled line. wrap={false} keeps the block intact;
+            minPresenceAhead reserves space so it is never orphaned at a page
+            boundary (no fixed, no break — it flows to whichever page it fits). */}
+        <View style={styles.signatureBlock} wrap={false} minPresenceAhead={40}>
           <Text style={[styles.sectionTitle, { color: accent }]}>Acceptance</Text>
           <Text style={styles.paragraph}>
             By signing below, the parties accept this change order and the resulting adjustment to
             the contract.
           </Text>
           <View style={styles.signatureLine}>
-            <View style={styles.signatureField}>
-              <Text>Contractor</Text>
+            <View style={styles.signatureCol}>
+              <View style={styles.signatureField}>{contractorMark}</View>
+              <View style={styles.signatureCaption}>
+                <Text style={styles.captionLabel}>Contractor</Text>
+                {contractorSignature ? (
+                  <Text style={styles.captionMeta}>
+                    {contractorSignature.name} · {fmtDate(contractorSignature.signedAt)}
+                  </Text>
+                ) : null}
+              </View>
             </View>
-            <View style={styles.signatureField}>
-              <Text>Client</Text>
+            <View style={styles.signatureCol}>
+              <View style={styles.signatureField}>{clientMark}</View>
+              <View style={styles.signatureCaption}>
+                <Text style={styles.captionLabel}>Client</Text>
+                {clientSignature ? (
+                  <Text style={styles.captionMeta}>
+                    {clientSignature.name} · {fmtDate(clientSignature.signedAt)}
+                  </Text>
+                ) : null}
+                {clientSignature && clientSignature.ip ? (
+                  <Text style={styles.captionMeta}>IP: {clientSignature.ip}</Text>
+                ) : null}
+              </View>
             </View>
           </View>
         </View>
