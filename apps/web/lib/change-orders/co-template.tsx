@@ -31,7 +31,7 @@ function fmtDate(iso: string | null): string {
 const styles = StyleSheet.create({
   page: {
     paddingTop: 40,
-    paddingBottom: 120, // reserve room for the two signature blocks stamped at the bottom
+    paddingBottom: 48, // clears the absolute-positioned footer; signatures render in flow
     paddingHorizontal: 48,
     fontSize: 10,
     fontFamily: 'Helvetica',
@@ -69,8 +69,8 @@ const styles = StyleSheet.create({
     borderTopColor: '#111827',
     marginTop: 2,
   },
-  signatureBlock: { marginTop: 28 },
-  signatureLine: { flexDirection: 'row', gap: 32, marginTop: 36 },
+  signatureBlock: { marginTop: 14 },
+  signatureLine: { flexDirection: 'row', gap: 32, marginTop: 18 },
   signatureCol: { flex: 1 },
   // Bottom-bordered box; content bottom-justified so the mark rests on the line.
   // Fixed minHeight keeps v1 (contractor only) and v2 (both) geometry identical.
