@@ -1,5 +1,19 @@
-import { Document, Image, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
+import { Document, Font, Image, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
+import path from 'node:path';
 import type { ChangeOrderData } from './co-data';
+
+// The typed-name signature mark renders in Dancing Script so it reads as a
+// handwritten signature rather than a printed name. This template renders ONLY
+// server-side (renderToBuffer in co-pdf-service.ts, which is `server-only`), so
+// the face is loaded off the filesystem — a public URL would not work here:
+// there is no browser to fetch it and no HTTP origin is guaranteed to be
+// serving /fonts at render time. The path is resolved against process.cwd(),
+// which is the Next.js app root (apps/web), under which the TTF lives at
+// public/fonts/DancingScript-Regular.ttf.
+Font.register({
+  family: 'DancingScript',
+  src: path.join(process.cwd(), 'public', 'fonts', 'DancingScript-Regular.ttf'),
+});
 
 // Signed-artifact spec §6 — branded React-PDF change order, modelled on
 // proposal-template.tsx (same branding + layout language). The CO stands
@@ -81,7 +95,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
     paddingBottom: 3,
   },
-  typedSignature: { fontSize: 18, fontFamily: 'Helvetica-Oblique', color: '#12151f' },
+  typedSignature: { fontSize: 18, fontFamily: 'DancingScript', color: '#12151f' },
   sigImage: { height: 40, maxWidth: 160, objectFit: 'contain' },
   signatureCaption: { marginTop: 4 },
   captionLabel: { fontSize: 9, fontFamily: 'Helvetica-Bold', color: '#12151f' },
