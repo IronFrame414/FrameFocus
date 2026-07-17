@@ -10,15 +10,7 @@ import {
   type TeamMember,
   type Invitation,
 } from '@/lib/services/team';
-
-const ROLE_LABELS: Record<string, string> = {
-  owner: 'Owner',
-  admin: 'Admin',
-  project_manager: 'Project Manager',
-  foreman: 'Foreman',
-  crew_member: 'Crew Member',
-  client: 'Client',
-};
+import { ROLE_LABELS, type CompanyRole } from '@framefocus/shared';
 
 export default function TeamPageClient({ userRole }: { userRole: string }) {
   const supabase = createClient();
@@ -131,7 +123,7 @@ export default function TeamPageClient({ userRole }: { userRole: string }) {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-700">
-                    {ROLE_LABELS[member.role] || member.role}
+                    {ROLE_LABELS[member.role as CompanyRole] || member.role}
                   </span>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -172,7 +164,7 @@ export default function TeamPageClient({ userRole }: { userRole: string }) {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-700">
-                        {ROLE_LABELS[inv.role] || inv.role}
+                        {ROLE_LABELS[inv.role as CompanyRole] || inv.role}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
