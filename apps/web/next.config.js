@@ -13,8 +13,8 @@ const nextConfig = {
     //   /api/sign-co/[token]/complete  → v2 (fully signed) at client completion
     // Paths are relative to the app root (apps/web).
     outputFileTracingIncludes: {
-      '/api/change-orders/[id]/send': ['./public/fonts/DancingScript-Regular.ttf'],
-      '/api/sign-co/[token]/complete': ['./public/fonts/DancingScript-Regular.ttf'],
+      '/api/change-orders/[id]/send': ['./public/fonts/DancingScript-Variable.ttf'],
+      '/api/sign-co/[token]/complete': ['./public/fonts/DancingScript-Variable.ttf'],
     },
     ...(isDev && {
       serverActions: {

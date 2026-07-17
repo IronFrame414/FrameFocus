@@ -9,10 +9,10 @@ import type { ChangeOrderData } from './co-data';
 // there is no browser to fetch it and no HTTP origin is guaranteed to be
 // serving /fonts at render time. The path is resolved against process.cwd(),
 // which is the Next.js app root (apps/web), under which the TTF lives at
-// public/fonts/DancingScript-Regular.ttf.
+// public/fonts/DancingScript-Variable.ttf.
 Font.register({
   family: 'DancingScript',
-  src: path.join(process.cwd(), 'public', 'fonts', 'DancingScript-Regular.ttf'),
+  src: path.join(process.cwd(), 'public', 'fonts', 'DancingScript-Variable.ttf'),
 });
 
 // Signed-artifact spec §6 — branded React-PDF change order, modelled on
