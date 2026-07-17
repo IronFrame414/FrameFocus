@@ -37,6 +37,7 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
 - **#83** Typed contractor signature stored as rendered PNG only — consider also persisting the typed text string (new column) to allow clean re-rendering later. Currently image-only to match uploaded-signature shape.
 - **#84** Sent change orders cannot be edited. Correct flow is void → edit → resend, not direct edit of a sent CO — a sent CO is a record the client has seen, so mutating it in place is wrong. Needs a void action that supersedes the sent CO and unlocks a new editable revision. Identified Session 76.
+- **#86** Client typed signatures have no typed-name mode — co-data.ts always rasterizes the client's mark to a PNG data-URI whether drawn or typed. The contractor's typed mark renders as native <Text> in Dancing Script (18pt), so the two marks cannot be size-matched: one is point-sized vector text, the other an aspect-fit bitmap. Fix: pass the client's typed text + mode through the signing payload and render as <Text>, mirroring the contractor path. Cross-ref #83. Batch with the typed-name signature UI work. Discovered Session 76.
 
 ### Code Quality
 
