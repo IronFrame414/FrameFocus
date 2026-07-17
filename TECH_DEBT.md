@@ -174,6 +174,9 @@ non-role portal identity; then build the sub-facing surface that issues these in
 - **#16** Team member password reset UI — closed Session 39 (commit `1ec46b5`). "Send password reset email" button on edit page triggers `auth.resetPasswordForEmail`. Server action ran clean; email delivery blocked by Supabase rate limit during smoke test — infrastructure, not code. Separately discovered pre-existing bug in the sign-in page's Forgot Password link handler (see #70).
 - **#17** Team member notes field — closed Session 39 (commit `1ec46b5`). Textarea in edit form, writes to `profiles.notes` column added in Migration 026.
 - **#66** Ownership transfer — closed Session 40 (commit pending). Migration 027 + transfer-form on Owner-self team detail page. Spawned #71–#75.---
+- **#8** team-page-client.tsx local ROLE_LABELS — closed Session 76 (commit c5ac222). Now imports from @framefocus/shared; shared constant is a superset, all overlapping values identical, behavior unchanged.
+- **#10** invite-form.tsx Invitation import missing import type — closed Session 76 as stale. No Invitation import exists in invite-form.tsx; the only one (in team-page-client.tsx) already uses an inline type qualifier. Condition described never existed in current code.
+- **#50** Delete markup-test/page.tsx — closed Session 76 (commit e8ca00d). Module 3G complete; no references anywhere in codebase.
 
 ## Process notes
 
