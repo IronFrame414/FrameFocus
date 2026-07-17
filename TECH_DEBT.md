@@ -36,6 +36,8 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 - **#7** Optional cleanup of Session 7 debugging artifacts — orphaned test users
 
 - **#83** Typed contractor signature stored as rendered PNG only — consider also persisting the typed text string (new column) to allow clean re-rendering later. Currently image-only to match uploaded-signature shape.
+- **#84** Sent change orders cannot be edited. Correct flow is void → edit → resend, not direct edit of a sent CO — a sent CO is a record the client has seen, so mutating it in place is wrong. Needs a void action that supersedes the sent CO and unlocks a new editable revision. Identified Session 76.
+
 ### Code Quality
 
 - **#8** `team-page-client.tsx` has local `ROLE_LABELS` — should import from `@framefocus/shared`
@@ -51,6 +53,7 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 ### UX Polish
 
 - **#13** Row click should open read-only detail view (contacts + subcontractors) — currently Edit button is only way in
+- **#85** One line-item row renders bold in the CO PDF while its neighbors render normal weight. Unclear whether this is an intentional section subtotal or a styling bug. Observed Session 76 in apps/web/lib/change-orders/co-template.tsx output; not investigated.
 
 ### Track for Module 4 (Estimating)
 
