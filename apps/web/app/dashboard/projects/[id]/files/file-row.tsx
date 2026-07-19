@@ -50,7 +50,7 @@ export default function FileRow({ file, projectId, activeTags }: { file: FileRec
         />
       </td>
       <td style={cellStyle}>{(file.file_size / 1024).toFixed(1)} KB</td>
-      <td style={cellStyle}>
+      <td style={cellStyle} suppressHydrationWarning>
         {file.created_at ? new Date(file.created_at).toLocaleDateString() : '—'}
       </td>
       <td style={cellStyle} onClick={(e) => e.stopPropagation()}>
