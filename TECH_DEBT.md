@@ -54,6 +54,7 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 ### UX Polish
 
 - **#13** Row click should open read-only detail view (contacts + subcontractors) — currently Edit button is only way in
+- **#89** Vendors are mislabeled "(Sub)" in the project-scheduling New Task assignee dropdown. Both subcontractors and vendors from the Subs & Vendors list render with a "(Sub)" suffix, so a vendor (member_type='vendor') shows as "(Sub)" — the label doesn't match the record's type. Assignment itself works correctly; this is a display bug only. Fix: label each assignee by its actual type — "(Sub)" for subcontractors, "(Vendor)" for vendors. Likely a single dropdown-builder that hardcodes the "(Sub)" suffix instead of reading member_type. Observed Session 79 during manual testing.
 
 ### Track for Module 4 (Estimating)
 
