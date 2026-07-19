@@ -66,8 +66,12 @@ ALTER TABLE public.email_logs ADD CONSTRAINT email_logs_email_type_check
     'signature_complete'::text,
     'signature_declined'::text,
     'estimate_expired'::text,
-    'material_delivery'::text,
-    'safety_incident'::text
+    'change_order'::text,
+    'co_reminder'::text,
+    'co_signature_complete'::text,
+    'co_signature_declined'::text,
+    'safety_incident'::text,
+    'material_delivery'::text
   ]));
 -- files: add the 'safety' category for incident PDFs.
 ALTER TABLE public.files DROP CONSTRAINT files_category_check;
