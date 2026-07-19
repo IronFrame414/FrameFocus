@@ -57,4 +57,20 @@ describe('getChangeOrderData signatures', () => {
     const data = await getChangeOrderData(makeSupabase(rows), 'co1');
     expect(data?.contractorSignature).toMatchObject({ mode: 'typed_name', name: 'Bob', imageDataUri: null });
   });
+
+  it('legacy CO with null created_at → date falls back to a valid ISO string', async () => {
+    const rows = { ...baseRows, change_orders: [{
+      ...baseRows.change_orders[0], created_at: null,
+    }] };
+    const data = await getChangeOrderData(makeSupabase(rows), 'co1');
+    expect(typeof data?.changeOrder.date).toBe('string');
+    expect(Number.isNaN(Date.parse(data!.changeOrder.date))).toBe(false);
+  });
+
+  it('legacy CO with no line items and no project → empty lineItems, null project, no throw', async () => {
+    const rows = { ...baseRows, change_order_line_items: [], projects: [] };
+    const data = await getChangeOrderData(makeSupabase(rows), 'co1');
+    expect(data?.lineItems).toEqual([]);
+    expect(data?.project).toBeNull();
+  });
 });
