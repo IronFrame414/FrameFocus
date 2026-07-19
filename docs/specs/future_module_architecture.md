@@ -139,23 +139,27 @@ Mobile-first, internal. Reconciles committed `CLAUDE_MODULES.md` §6 with this s
 > 2. **`task_time_segments` → renamed `time_segments`**; it gains **`segment_type`** and **`project_id`**, and `task_id` becomes **nullable**. It no longer describes only task work — it holds travel, breaks, material runs, and taskless verbal work. (6A §3.2)
 > 3. **`time_clock_sessions.category` — REMOVED.** Its values split: `travel`/`drive`/`shop` became `segment_type` values; `overtime` is **derived** from weekly paid hours and never user-selected; `regular` alone is not an enum. This **resolves** the "category grain" open question below — the grain is neither session nor segment, because OT is a property of **hours**. (6A §3.3)
 > 4. **`break_minutes` / `break_paid` — REMOVED from the session.** A break is a `segment_type`; a session-level break number floats outside the segment chain and breaks the reconciliation invariant. (6A §3.4)
-> 5. **Approval is HIERARCHICAL, not flat** (strictly-below, no self/peer approval, PM included, Owner has no timeclock) — reverses the flat-approval rule below and the §7.9 divergence entry. (6A §3.5, §8)
+> 5. **Approval is HIERARCHICAL, not flat** (strictly-below, no self/peer approval, PM included; **Owner _has_ a timeclock but Owner hours carry no approval state — Session 64**) — reverses the flat-approval rule below and the §7.9 divergence entry. (6A §3.5, §8)
+
+> **BUILT — Session 64 (branch `feat/module-6a`).** 6A is no longer spec-only: migration `20260710130000_module6_6a_time_tracking.sql` creates the **two tables** (`time_clock_sessions` + `time_segments`), their CHECK-enforced field gating, the approval-hierarchy SQL helpers (`can_approve_member`, strictly-below, subcontractor ranked **with** crew), RLS, and standard triggers. Migration is **written, not yet applied to any database**; service layer (`time-tracking.ts` / `-client.ts`) and pure derivation (`packages/shared/utils/time-tracking.ts`) landed alongside.
+> **Session-64 reversals now reflected:** (a) **Owner has a timeclock** — Owner labor is real job cost; the Owner attributes segments to projects like anyone else. (b) **Owner hours carry no approval state** — `time_clock_sessions.status` is **nullable**; an Owner session is never pending and never approved, it simply exists. (c) **Breaks may be paid** per a company setting (paid-break-minutes-per-day cap); paid break time counts toward paid hours and the weekly OT threshold but a `break` segment still carries no `project_id`, so it never lands on a job. This forces the **paid-hours ≠ worked-hours** split (§7.5 of 6A): paid hours drive payroll/OT, project-bearing segment hours drive job cost. (d) **Only Owner/Admin may edit hours** (a Foreman may approve hours he cannot correct); an edit does **not** clear approval.
+> **Deferred out of 6A (batched Company Settings pass, not a 6A migration):** the four settings columns — weekly OT threshold, paid-break toggle + minutes/day cap, GPS capture/enforce, admin-timeclock enable. 6A derives paid/worked/OT hours from pure functions that take these as parameters, defaulting to unpaid breaks + 40 h/wk until the columns exist.
 
 Both tables offline-ready (client-generated UUIDs, device timestamps).
 
 **`time_clock_sessions`** — paid hours (payroll truth); never altered by task activity.
-`member_id` · ~~`project_id`~~ **[DEAD — removed, 6A §3.1]** · `clock_in` · `clock_out` · ~~`category`~~ **[DEAD — removed, 6A §3.3; OT is derived, not a column]** · ~~`break_minutes`, `break_paid`~~ **[DEAD — removed, 6A §3.4; break is a `segment_type`]** · `gps_in`, `gps_out` (nullable; only if company enables GPS) · approval `status` (pending→approved), `approved_by`, `approved_at` · `qb_export_status` stub (M7) · standard columns.
+`member_id` · ~~`project_id`~~ **[DEAD — removed, 6A §3.1]** · `clock_in` · `clock_out` · ~~`category`~~ **[DEAD — removed, 6A §3.3; OT is derived, not a column]** · ~~`break_minutes`, `break_paid`~~ **[DEAD — removed, 6A §3.4; break is a `segment_type`]** · `gps_in`, `gps_out` (`jsonb`, nullable; only if company enables GPS) · approval `status` (pending→approved; **nullable — NULL = no approval state applies, the Owner case, Session 64**), `approved_by`, `approved_at` · `qb_export_status` stub (M7) · standard columns.
 
 **`task_time_segments` → `time_segments`** (renamed, 6A §3.2) — cost allocation, NOT payroll; nested in a session.
 `session_id` · **`segment_type`** (`work|material_run|warranty|travel|shop|break` — NEW, 6A §3.2) · **`project_id`** (gated by `segment_type` — NEW, 6A §3.2) · `task_id` (**now nullable**; assigned to the member OR unassigned) · `segment_start`, `segment_end` · `completion` (complete|incomplete; required iff `task_id IS NOT NULL`) · `note` TEXT (mandatory on end for every type except `break`) · standard columns.
 
 **Locked rules:**
 
-- Paid hours = clock session; task activity never changes them.
+- Paid hours = clock session; task activity never changes them. **Paid hours (session duration less unpaid breaks) drive payroll + OT; worked hours (project-bearing segment durations) drive job cost — the two diverge when breaks are paid (Session 64, 6A §7.5).**
 - Task switch = end current segment (completion + mandatory note), optionally start another. ~~gaps allowed (clocked in, no active task).~~ **[DEAD — 6A §6/§7: clock-in opens the first segment, there is no clocked-in-with-no-segment state, and segments are contiguous/non-overlapping with Σ segment durations = session duration. Gaps are NOT allowed.]**
 - Marking a segment complete writes task status → Complete in M5 (cross-module write).
-- ~~Approval is **flat**: any Foreman/Owner/Admin can approve any member's hours. PM is **not** an hour-approver.~~ **[DEAD — superseded by 6A §8. Approval is HIERARCHICAL (`Owner > Admin > PM > Foreman > Crew`): approve strictly below you, no self-approval, no peer approval. PM approves Foreman/Crew. Owner has no timeclock; Admin's hours (setting ON) are approvable by Owner only.]**
-- OT ~~auto-flag~~ **derived at read time** from weekly paid hours (default 40 h/wk threshold, §6); **never stored** on a session or segment (6A §9).
+- ~~Approval is **flat**: any Foreman/Owner/Admin can approve any member's hours. PM is **not** an hour-approver.~~ **[DEAD — superseded by 6A §8. Approval is HIERARCHICAL (`Owner > Admin > PM > Foreman > Crew`): approve strictly below you, no self-approval, no peer approval. PM approves Foreman/Crew. **Owner _has_ a timeclock (Session 64) but Owner hours carry no approval state** (never pending, never approved); Admin's hours (setting ON) are approvable by Owner only.]**
+- OT ~~auto-flag~~ **derived at read time** from weekly paid hours (default 40 h/wk threshold, §6); **never stored** on a session or segment (6A §9). Travel, shop, and **paid** break hours count toward the threshold — they are paid hours.
 - QuickBooks: schema-ready now; connector built with M7. No half-integration in M6.
 - Mileage: deferred to v2 (standalone `mileage_entries`, low re-work later).
 
@@ -208,13 +212,13 @@ Sync engine deferred to v2. v1 is offline-READY only (append-friendly events, cl
 
 ### 7.8 M6 table set (reconciled)
 
-`time_clock_sessions`, `task_time_segments`, `daily_logs` (extended), `safety_incidents`, `material_deliveries`, `crew_briefings` (+ optional ack). Dropped from v1: `mileage_entries` (→ v2). All per-tenant, `member_id`-based, offline-ready where applicable; photos/markup reuse M3.
+`time_clock_sessions`, ~~`task_time_segments`~~ **`time_segments`** (renamed, 6A §3.2 — **both 6A tables BUILT, Session 64**), `daily_logs` (extended), `safety_incidents`, `material_deliveries`, `crew_briefings` (+ optional ack). Dropped from v1: `mileage_entries` (→ v2). All per-tenant, `member_id`-based, offline-ready where applicable; photos/markup reuse M3.
 
 ### 7.9 Conscious divergences from the platform roadmap (by decision, not drift)
 
 > **AMENDED by `docs/specs/6A-spec.md` (§3.5, §8, and the §3 consequence note), Session 63.** The flat-approval divergence below is retired — see the first bullet.
 
-- ~~**Flat hour-approval** (any Foreman/Owner/Admin) replaces the roadmap's two-tier chain (Foreman→PM/Admin→Owner). PM is not an approver.~~ **[DEAD — reversed by 6A §8.** Approval is now **hierarchical**: `Owner > Admin > PM > Foreman > Crew`; approve strictly below you, no self-approval, no peer approval. **PM is included** (approves Foreman, Crew); **Owner has no timeclock** so no one approves an Owner; Admin's hours (setting ON) are approvable by Owner only. This **substantially returns** to the committed `CLAUDE_MODULES.md` §6.1 two-tier chain rather than diverging from it, so it is no longer a "conscious divergence."]
+- ~~**Flat hour-approval** (any Foreman/Owner/Admin) replaces the roadmap's two-tier chain (Foreman→PM/Admin→Owner). PM is not an approver.~~ **[DEAD — reversed by 6A §8.** Approval is now **hierarchical**: `Owner > Admin > PM > Foreman > Crew`; approve strictly below you, no self-approval, no peer approval. **PM is included** (approves Foreman, Crew); **Owner _has_ a timeclock (Session 64) but Owner hours carry no approval state**, so no one approves an Owner; Admin's hours (setting ON) are approvable by Owner only. This **substantially returns** to the committed `CLAUDE_MODULES.md` §6.1 two-tier chain rather than diverging from it, so it is no longer a "conscious divergence."]
 - **Offline sync engine deferred to v2** — roadmap describes offline-first as in-scope; v1 ships offline-_ready_ only.
 - **Mileage deferred to v2** — roadmap lists it in M6 scope.
 - **Punch lists owned by M5** — roadmap §6.4 _and_ `CLAUDE_MODULES.md` §6.4 both still place them in M6; the M5 architecture doc (newer) is the authority.

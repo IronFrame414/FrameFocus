@@ -2,7 +2,7 @@
 
 > **Design authority:** `docs/specs/future_module_architecture.md` §7.3 / `CLAUDE_MODULES.md` §6.3.
 >
-> **Status:** DRAFT — not built. Acceptance trace (§8) is **PROPOSED/UNVERIFIED**, derived from a real Bishop incident but with reconstructed details.
+> **Status:** DRAFT — not built. Acceptance trace (§8) is **VERIFIED** against a real Bishop incident this session.
 >
 > **Written against stale project knowledge.** All column references are **design-level** — confirm against live schema at build.
 >
@@ -12,16 +12,27 @@
 
 ---
 
+> ## ⚠️ AS-BUILT RECONCILIATION vs. 6A (added this pass — verified against migrations, not spec prose)
+>
+> Checked against 6A (`supabase/migrations/20260710130000_module6_6a_time_tracking.sql` on `feat/module-6a`, read via `git show`) and the M5 `change_orders` (5D) / projects (5A) migrations. 6C does not read 6A's tables (correct — it stands alone), but it inherits the same **identity/audit** and **RLS** conventions 6A established, and drifts from them below. Each is flagged **[DRIFT]** at the point of use.
+>
+> 1. **Domain reporter ≠ audit column.** `created_by` / `updated_by` are audit columns defaulting to `auth.uid()` (FK `auth.users`), in 6A and in `change_orders` (5D). The "who filed this" identity is a separate `*_member_id` column defaulting to `get_my_member_id()` (FK `company_members`) — `change_orders.author_member_id` is the reference. **This spec's "`created_by` = reporter" / "`created_by = get_my_member_id()`" is a [DRIFT].** See §2 and §5.
+> 2. **Read-visibility helper exists; 6C now aligns with it.** M5 ships `can_view_project()` = "owner/admin see all **OR** the caller is assigned," i.e. **PM/Foreman are assigned-only**. This spec originally granted PM/Foreman company-wide incident read — that **[CONFLICT] is RESOLVED (Josh, this session): assigned-only, matching `can_view_project()`**. PM/Foreman (and Crew) read incidents only on projects they are assigned to; Owner/Admin read all. See §5 / Q2.
+> 3. **`num_nonnulls()` is Postgres-native and unused elsewhere in this repo's migrations** (verified). The §2.1 conditional CHECKs are valid SQL; kept as-is. Still tracked as open item #8.
+> 4. **Acceptance trace stays PROPOSED.** See the NEEDS INTERVIEW blocker in §8.
+
+---
+
 ## 1. Scope
 
 The formal record of something that actually happened: injury, property damage, or near miss. Distinct from 6B's hazard _flag_, which records a concern (6B §7).
 
-**In scope (v1):** incident creation + edit; injured party (member or outsider); witnesses (members or outsiders); treatment captured as fields; photos; auto-PDF to M3; email notification to Owner/Admin/PM/Foreman; company-wide incident log; pre-fill from a 6B hazard flag.
+**In scope (v1):** incident creation + edit; injured parties (members or outsiders, one row each — §2.1); witnesses (members or outsiders); treatment captured per injured party; photos; auto-PDF to M3; email notification to Owner/Admin/PM/Foreman; an incident log scoped by read-visibility (Owner/Admin see all; PM/Foreman/Crew see incidents on assigned projects — §5); pre-fill from a 6B hazard flag.
 
 **Out of scope:**
 
 - **OSHA 300 recordkeeping** (§6). No days-away, job-transfer, or restricted-duty columns. **OSHA compliance is handled outside the app in v1.**
-- **Follow-up timeline** (§5). Treatment is a field on the incident, not a child record. Josh: "no follow up for now."
+- **Follow-up timeline** (§5). Treatment is captured once as fields on the injured-party row (§2.1), not an evolving multi-row follow-up log. Josh: "no follow up for now."
 - **Workers' comp / insurance claim workflow** — later, and likely Module 7-adjacent.
 
 ---
@@ -36,29 +47,39 @@ project_id UUID NOT NULL REFERENCES projects(id)
 incident_date DATE NOT NULL
 incident_type TEXT NOT NULL -- 'injury' | 'property_damage' | 'near_miss'
 description TEXT NOT NULL
-injured_member_id UUID REFERENCES company_members(id) -- nullable (§2.1)
-injured_name TEXT -- nullable (§2.1)
-treatment_sought BOOLEAN NOT NULL DEFAULT false
-treatment_notes TEXT
 pdf_file_id UUID REFERENCES files(id) -- M3
--- standard columns (created_by = reporter)
+reported_by_member_id UUID NOT NULL DEFAULT get_my_member_id() REFERENCES company_members(id) -- domain reporter (§5)
+-- standard columns (created_by / updated_by are AUDIT = auth.uid(), NOT the reporter)
 ```
 
+- **[DRIFT — corrected]** the reporter is **`reported_by_member_id`** (a `company_members` FK defaulting to `get_my_member_id()`), **not** `created_by`. `created_by`/`updated_by` are audit columns defaulting to `auth.uid()` (FK `auth.users`), per 6A and `change_orders.author_member_id` (5D).
 - `incident_type` is a CHECK-constrained enum. See §9 open item #1.
-- `treatment_notes` is free text (e.g. `"Urgent care, stitches."`). Costs, co-pays, and clinic names are **not** structured in v1.
 - Never locks. Editable by creator (§5), because treatment is usually learned a day later.
 
-### 2.1 Injured party — member or outsider
+### 2.1 `safety_incident_injuries` — injured party (member or outsider)
 
-At most one of `injured_member_id` / `injured_name` is populated. Both may be NULL for a `property_damage` or `near_miss` with nobody hurt — but **an `injury` must name someone.**
+A single incident can hurt more than one person, so injured parties are a **child table**, not columns on `safety_incidents`. Treatment is captured **per injured person**.
 
 ```sql
-CHECK (num_nonnulls(injured_member_id, injured_name) <= 1)
-CHECK (incident_type <> 'injury'
-OR num_nonnulls(injured_member_id, injured_name) = 1)
+safety_incident_injuries
+id UUID PK
+company_id UUID NOT NULL REFERENCES companies(id)
+incident_id UUID NOT NULL REFERENCES safety_incidents(id) ON DELETE CASCADE
+member_id UUID REFERENCES company_members(id) -- nullable
+injured_name TEXT -- nullable
+treatment_sought BOOLEAN NOT NULL DEFAULT false
+treatment_notes TEXT
+-- standard columns
+CHECK (num_nonnulls(member_id, injured_name) = 1)
 ```
 
-Rationale: the homeowner who trips over an extension cord is the incident most worth recording, and will never appear in the roster. The second constraint stops an injury being filed with nobody injured.
+Junction table mirroring `safety_incident_witnesses` (§2.2) — exactly one of `member_id` / `injured_name` per row, so member-or-outsider stays consistent across the two tables (they must not drift on who counts as a person).
+
+`treatment_notes` is free text (e.g. `"Urgent care, stitches."`). Costs, co-pays, and clinic names are **not** structured in v1.
+
+Rationale: the homeowner who trips over an extension cord is the incident most worth recording, and will never appear in the roster — this table is where such outsiders live.
+
+> **Injury invariant (cross-table).** `incident_type = 'injury'` ⇒ **at least one** `safety_incident_injuries` row. This replaces the old column-level "an injury must name someone" CHECK, which can no longer be expressed on `safety_incidents` now that injured parties are a separate table. Enforce as a **build-time invariant (application logic or a trigger)**, not a column CHECK. See §9 open item #9.
 
 ### 2.2 `safety_incident_witnesses`
 
@@ -89,7 +110,11 @@ When a daily log's `hazards_present` is ticked, 6B surfaces a **"File an inciden
 
 **Every incident, regardless of type or severity, emails Owner, Admin, PM, and Foreman.** (Josh, this session — option A over a narrower Owner/Admin-only alternative.) Matches the promise already written into 6B §7, so no divergence entry is owed.
 
+**Notification is independent of read-visibility (§5):** a PM or Foreman is notified of every incident — including one on a project they are **not** assigned to and therefore cannot browse in the incident log. The email reaches them; the log listing stays assigned-scoped.
+
 Sent via Resend, from `companyname@rafterworks.com`, per the existing convention. Failure to send must not roll back the incident insert.
+
+**On send failure (Josh, this session): log the failure _and_ surface a retry affordance to the Owner.** Silent-log is rejected — a swallowed email on an injury means the Owner never learns it happened. The retry is Owner-visible, not a background-only reattempt, so the failure cannot pass unnoticed. (Resolves §9 item #5.)
 
 ---
 
@@ -97,8 +122,8 @@ Sent via Resend, from `companyname@rafterworks.com`, per the existing convention
 
 - Company-scoped: `company_id = get_my_company_id()`.
 - **Create:** any member, on any project they can see.
-- **Edit:** **creator only** — `created_by = get_my_member_id()`. Treatment details arrive late; the record never locks.
-- **Read:** Owner/Admin/PM/Foreman read all company incidents. Crew read incidents on projects they are assigned to — **mirrors the M5 §5.2a project-visibility rule; confirm it landed that way at build.**
+- **Edit:** **creator only** — **[DRIFT — corrected]** keyed on **`reported_by_member_id = get_my_member_id()`**, not `created_by` (the audit `auth.uid()` column, §2). Treatment details arrive late; the record never locks.
+- **Read:** **[RESOLVED — assigned-only via `can_view_project()`]** Owner/Admin read **all** company incidents; **PM/Foreman and Crew read only incidents on projects they are assigned to**, via `can_view_project(project_id)`. This aligns 6C with M5 content-visibility — no divergent rule. (Josh, this session: safety incidents get **no** broader read grant than ordinary project content. What reaches leadership about an injury on a project they cannot browse is the **notification**, not the log listing — see §4. Q2.)
 - **Delete:** soft-delete, Owner/Admin only. An incident a crew member can erase is not a record.
 
 ---
@@ -114,30 +139,32 @@ Sent via Resend, from `companyname@rafterworks.com`, per the existing convention
 ## 7. PDF
 
 - One PDF per incident, filed to the project's **Safety** folder in M3.
-- Generated on create. Because incidents never lock, an edited incident's PDF goes stale — **regenerate-on-edit vs. version-on-edit is undecided,** same open question as 6B §11 item 2. Resolve both the same way.
+- Generated on create. Because incidents never lock, an edited incident's PDF goes stale — **regenerate (overwrite) on edit.** Josh, this session. Edits only ever add data (treatment learned later, a witness remembered); nothing is deleted, so one always-current PDF is correct and there is no versioning. The stored PDF is replaced in place on every edit.
 - Generation reuses React-PDF (per repo tooling).
 
 ---
 
-## 8. Acceptance example — PROPOSED / UNVERIFIED
+## 8. Acceptance example — VERIFIED
 
-> Derived from a real Bishop incident (two employees on site; one slipped off a platform and cut his hand; urgent care, stitches; co-pay paid by Josh). Names, project, and date are reconstructed. Verify before build.
+> Confirmed against a real Bishop incident this session: two employees on site; one slipped off a platform and cut his hand on metal framing; urgent care, stitches; co-pay paid by Josh.
 
-**INPUT** — On project _Willow Ridge_, `2026-07-08`, Josh opens an incident.
-`incident_type = 'injury'`. Description: `"Slipped off platform, cut hand."`
-Injured party: selected from roster — member _Dave_.
-`treatment_sought = true`. Treatment notes: `"Urgent care, stitches."`
-Witness: the second employee on site, selected from roster. No photos.
+**INPUT** — On project _Stevens_, `2026-01-15`, Josh opens an incident.
+`incident_type = 'injury'`. Description: `"Slipped off platform, cut hand on metal framing."`
+Injured party: selected from roster — the injured employee.
+Treatment: `treatment_sought = true`, notes `"Urgent care, stitches."`
+Witness: the second employee on site, selected from roster. Photos attached.
 
-**STORE** — One `safety_incidents` row: `project_id`, `incident_date = 2026-07-08`,
-`incident_type = 'injury'`, `description`, `injured_member_id = <Dave>`, `injured_name` NULL,
-`treatment_sought = true`, `treatment_notes = 'Urgent care, stitches.'`, `created_by = <Josh>`.
+**STORE** — One `safety_incidents` row: `project_id`, `incident_date = 2026-01-15`,
+`incident_type = 'injury'`, `description`, `created_by = <Josh>` — **no injured or treatment columns; they live in §2.1 now.**
+One `safety_incident_injuries` row: `member_id = <injured employee>`, `injured_name` NULL,
+`treatment_sought = true`, `treatment_notes = 'Urgent care, stitches.'`.
 One `safety_incident_witnesses` row: `member_id = <second employee>`, `witness_name` NULL.
-No follow-up rows. No OSHA columns.
+Photos stored per M3. No OSHA columns.
+The injury invariant (§2.1) is satisfied — one injury row exists for an `injury`-type incident.
 
 **OUTPUT** — Incident appears in the company-wide incident log.
 Email fires to Owner, Admin, PM, Foreman.
-PDF generated and filed to Willow Ridge → Safety.
+PDF generated and filed to Stevens → Safety.
 Had this been opened from a daily log's hazard flag, `project_id` and `incident_date` would have arrived pre-filled (§3).
 
 ---
@@ -147,13 +174,22 @@ Had this been opened from a daily log's hazard flag, `project_id` and `incident_
 | #   | Item                                                                                                                                                                           | Owner    |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- |
 | 1   | `incident_type` enum — declare it once. The `row_type` enum is already hand-declared in five separate files; do not repeat that here. Not currently tracked in `TECH_DEBT.md`. | 6C build |
-| 2   | PDF regenerate-on-edit vs. version-on-edit. **Resolve identically to 6B §11 item 2.**                                                                                          | 6C build |
-| 3   | Acceptance trace (§8) is PROPOSED — verify against a real Bishop incident before build.                                                                                        | Josh     |
+| 2   | **RESOLVED** — PDF regenerate (overwrite) on edit; no versioning (§7). Edits only add data, so one always-current PDF is correct.                                              | Closed   |
+| 3   | **RESOLVED** — acceptance trace (§8) verified against a real Bishop incident this session.                                     | Closed   |
 | 4   | Crew read-visibility depends on the M5 §5.2a decision actually shipping as recommended.                                                                                        | Build    |
-| 5   | Notification failure handling — retry, dead-letter, or silent log?                                                                                                             | 6C build |
+| 5   | **RESOLVED** — on send failure: log it **and** surface a retry affordance to the Owner (§4). Silent-log rejected — a swallowed injury email means the Owner never learns. Insert never rolls back on send failure. | Closed   |
 | 6   | OSHA (§6) — confirm with insurer before any OSHA claim is made in marketing.                                                                                                   | Josh     |
 | 7   | No FK from a 6B hazard flag to the incident it escalated into. Add later if the link proves useful.                                                                            | Deferred |
-| 8   | `num_nonnulls()` is Postgres-native — confirm it's available and that the conditional CHECK in §2.1 is accepted by the migration.                                              | Build    |
+| 8   | `num_nonnulls()` is Postgres-native — confirm it's available for the §2.1 / §2.2 member-or-outsider identity CHECKs.                                                            | Build    |
+| 9   | Enforcement mechanism for the injury cross-table invariant (`incident_type = 'injury'` ⇒ ≥1 `safety_incident_injuries` row) — application logic vs. DB trigger. Decide at build. | 6C build |
+
+---
+
+## 9a. Questions for Josh (raised by the 6A as-built reconciliation — resolve nothing silently)
+
+- **Q1 — Reporter identity.** Confirm the reporter is a `company_members` FK (`reported_by_member_id`, default `get_my_member_id()`), distinct from the audit `created_by = auth.uid()` — matching 6A and `change_orders.author_member_id`. (Correction applied in §2/§5; flagging for sign-off.)
+- **Q2 — Incident read visibility for PM/Foreman. RESOLVED — assigned-only, matching `can_view_project()`.** PM/Foreman (and Crew) read incidents only on projects they are assigned to; Owner/Admin read all. No broader safety grant — notification (§4), not the log listing, is what reaches leadership about an off-project injury. Applied in §5 and the §0 reconciliation block.
+- **Q3 — `incident_type` enum home (existing open item #1).** Declare once and add to `TECH_DEBT.md` (the `row_type` enum is already hand-duplicated across five files — don't repeat that). Where should the single declaration live?
 
 ---
 
