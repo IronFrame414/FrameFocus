@@ -54,7 +54,7 @@
 -- ----------------------------------------------------------------------------
 
 ALTER TABLE public.companies
-  ADD COLUMN timezone text DEFAULT 'America/New_York' NOT NULL;
+  ADD COLUMN IF NOT EXISTS timezone text DEFAULT 'America/New_York' NOT NULL;
 -- ----------------------------------------------------------------------------
 -- 1. daily_logs (§4)
 -- ----------------------------------------------------------------------------
