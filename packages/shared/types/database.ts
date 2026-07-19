@@ -3290,6 +3290,174 @@ export type Database = {
           },
         ]
       }
+      time_clock_sessions: {
+        Row: {
+          approved_at: string | null
+          approved_by: string | null
+          clock_in: string
+          clock_out: string | null
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          gps_in: Json | null
+          gps_out: Json | null
+          id: string
+          is_deleted: boolean | null
+          member_id: string
+          qb_export_status: string | null
+          status: string | null
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          approved_at?: string | null
+          approved_by?: string | null
+          clock_in?: string
+          clock_out?: string | null
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          gps_in?: Json | null
+          gps_out?: Json | null
+          id?: string
+          is_deleted?: boolean | null
+          member_id?: string
+          qb_export_status?: string | null
+          status?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          approved_at?: string | null
+          approved_by?: string | null
+          clock_in?: string
+          clock_out?: string | null
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          gps_in?: Json | null
+          gps_out?: Json | null
+          id?: string
+          is_deleted?: boolean | null
+          member_id?: string
+          qb_export_status?: string | null
+          status?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "time_clock_sessions_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "time_clock_sessions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "time_clock_sessions_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      time_segments: {
+        Row: {
+          company_id: string
+          completion: string | null
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          is_deleted: boolean | null
+          note: string | null
+          project_id: string | null
+          segment_end: string | null
+          segment_start: string
+          segment_type: string
+          session_id: string
+          task_id: string | null
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          completion?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          note?: string | null
+          project_id?: string | null
+          segment_end?: string | null
+          segment_start?: string
+          segment_type: string
+          session_id: string
+          task_id?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          completion?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          note?: string | null
+          project_id?: string | null
+          segment_end?: string | null
+          segment_start?: string
+          segment_type?: string
+          session_id?: string
+          task_id?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "time_segments_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "time_segments_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "time_segments_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "time_clock_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "time_segments_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trial_emails: {
         Row: {
           created_at: string | null
@@ -3313,7 +3481,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_approve_member: {
+        Args: { p_target_member_id: string }
+        Returns: boolean
+      }
       can_view_project: { Args: { p_project_id: string }; Returns: boolean }
+      can_view_time_session: {
+        Args: { p_session_id: string }
+        Returns: boolean
+      }
       clone_estimate: {
         Args: {
           p_contact_address_id: string
@@ -3372,6 +3548,7 @@ export type Database = {
       next_estimate_number: { Args: never; Returns: string }
       next_project_internal_seq: { Args: never; Returns: number }
       next_project_number: { Args: never; Returns: string }
+      owns_open_session: { Args: { p_session_id: string }; Returns: boolean }
       seed_default_tags: { Args: { p_company_id: string }; Returns: undefined }
       set_winning_bid: {
         Args: { p_line_item_id: string; p_sub_bid_id: string }
@@ -3390,6 +3567,7 @@ export type Database = {
           found_status: string
         }[]
       }
+      time_role_rank: { Args: { p_role: string }; Returns: number }
       transfer_ownership: {
         Args: { p_new_owner_id: string }
         Returns: undefined
