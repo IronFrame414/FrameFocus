@@ -54,7 +54,6 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 ### UX Polish
 
 - **#13** Row click should open read-only detail view (contacts + subcontractors) — currently Edit button is only way in
-- **#85** One line-item row renders bold in the CO PDF while its neighbors render normal weight. Unclear whether this is an intentional section subtotal or a styling bug. Observed Session 76 in apps/web/lib/change-orders/co-template.tsx output; not investigated.
 
 ### Track for Module 4 (Estimating)
 
@@ -180,6 +179,7 @@ non-role portal identity; then build the sub-facing surface that issues these in
 - **#8** team-page-client.tsx local ROLE_LABELS — closed Session 76 (commit c5ac222). Now imports from @framefocus/shared; shared constant is a superset, all overlapping values identical, behavior unchanged.
 - **#10** invite-form.tsx Invitation import missing import type — closed Session 76 as stale. No Invitation import exists in invite-form.tsx; the only one (in team-page-client.tsx) already uses an inline type qualifier. Condition described never existed in current code.
 - **#50** Delete markup-test/page.tsx — closed Session 76 (commit e8ca00d). Module 3G complete; no references anywhere in codebase.
+- **#85** CO PDF bold line-item row — closed Session 79 (UI verification, no code change — bold row confirmed intentional, it is the line item vs. its detail breakdown, not a bug).
 
 ## Process notes
 
