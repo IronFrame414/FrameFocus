@@ -50,6 +50,7 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   - `Company` interface inline, missing `website`, `license_number`, and `ai_tagging_enabled` (added Session 30, Migration 023). Also has `owner_id` and `stripe_subscription_id` fields that may not exist in the actual schema — verify against `database.ts` before trusting them.
   - `Company` forward-references `SubscriptionStatus` before it's declared. Works via TS hoisting but fragile.
   - Fix: delete all inline interfaces. Consumers import from `database.ts` (auto-generated, source of truth) or per-entity service files using the existing Pick/Omit patterns. Same fix shape as old #11.
+- **#90** Crew-role RLS gates not yet verified end-to-end via UI. Session 79 verified project_manager RLS gates fully (team-detail blocked, billing/settings hidden, projects correctly scoped to assigned-only). Crew (crew_member) tier was NOT tested because no working Crew login could be established: the password-reset email link is broken (#70) and Supabase magic-link/reset hit the email rate limit. Crew is more restricted than PM, so PM passing all gates makes a Crew failure unlikely but not impossible — verify when a Crew login path exists. Blocked on #70. Observed Session 79.
 
 ### UX Polish
 
