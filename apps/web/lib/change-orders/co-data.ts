@@ -45,6 +45,7 @@ export interface ChangeOrderData {
     phone: string | null;
     email: string | null;
     licenseNumber: string | null;
+    timezone: string;
   };
   changeOrder: {
     id: string;
@@ -113,7 +114,7 @@ export async function getChangeOrderData(
     supabase
       .from('companies')
       .select(
-        'name, logo_url, brand_color, address_line1, address_line2, city, state, zip, phone, email, license_number'
+        'name, logo_url, brand_color, address_line1, address_line2, city, state, zip, phone, email, license_number, timezone'
       )
       .eq('id', co.company_id)
       .single(),
@@ -222,6 +223,7 @@ export async function getChangeOrderData(
       phone: company.phone,
       email: company.email,
       licenseNumber: company.license_number,
+      timezone: company.timezone,
     },
     changeOrder: {
       id: co.id,

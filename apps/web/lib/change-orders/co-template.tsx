@@ -33,12 +33,13 @@ function fmtMoney(value: number): string {
   })}`;
 }
 
-function fmtDate(iso: string | null): string {
+function fmtDate(iso: string | null, tz: string): string {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('en-US', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
+    timeZone: tz,
   });
 }
 
@@ -171,7 +172,7 @@ export function ChangeOrderDocument({ data }: { data: ChangeOrderData }) {
           <View style={styles.infoBlock}>
             <Text style={styles.infoLabel}>Change Order</Text>
             <Text>{changeOrder.number}</Text>
-            <Text>Date: {fmtDate(changeOrder.date)}</Text>
+            <Text>Date: {fmtDate(changeOrder.date, company.timezone)}</Text>
             {changeOrder.scheduleImpactDays != null && (
               <Text>
                 Schedule impact: {changeOrder.scheduleImpactDays}{' '}
@@ -259,7 +260,7 @@ export function ChangeOrderDocument({ data }: { data: ChangeOrderData }) {
                 <Text style={styles.captionLabel}>Contractor</Text>
                 {contractorSignature ? (
                   <Text style={styles.captionMeta}>
-                    {contractorSignature.name} · {fmtDate(contractorSignature.signedAt)}
+                    {contractorSignature.name} · {fmtDate(contractorSignature.signedAt, company.timezone)}
                   </Text>
                 ) : null}
               </View>
@@ -270,7 +271,7 @@ export function ChangeOrderDocument({ data }: { data: ChangeOrderData }) {
                 <Text style={styles.captionLabel}>Client</Text>
                 {clientSignature ? (
                   <Text style={styles.captionMeta}>
-                    {clientSignature.name} · {fmtDate(clientSignature.signedAt)}
+                    {clientSignature.name} · {fmtDate(clientSignature.signedAt, company.timezone)}
                   </Text>
                 ) : null}
                 {clientSignature && clientSignature.ip ? (
