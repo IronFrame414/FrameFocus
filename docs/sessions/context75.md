@@ -1,4 +1,4 @@
-# Session 76 — Signed-Artifacts PDF Polish + Cursive Font + Debt Sweep
+# Session 75 — Signed-Artifacts PDF Polish + Cursive Font + Debt Sweep
 
 **Branch at close:** `codespace-effective-palm-tree-x5jv575j9gjj364j4` (export branch,
 pushed to origin). See CRITICAL below — this is NOT `feat/signed-artifacts`.
