@@ -1429,6 +1429,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "email_logs_email_type_fkey"
+            columns: ["email_type"]
+            isOneToOne: false
+            referencedRelation: "email_types"
+            referencedColumns: ["email_type"]
+          },
+          {
             foreignKeyName: "email_logs_estimate_id_fkey"
             columns: ["estimate_id"]
             isOneToOne: false
@@ -1443,6 +1450,18 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      email_types: {
+        Row: {
+          email_type: string
+        }
+        Insert: {
+          email_type: string
+        }
+        Update: {
+          email_type?: string
+        }
+        Relationships: []
       }
       estimate_categories: {
         Row: {
