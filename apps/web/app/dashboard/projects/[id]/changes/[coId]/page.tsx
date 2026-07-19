@@ -36,6 +36,19 @@ export default async function ChangeOrderPage({
 
   const canManage = ['owner', 'admin', 'project_manager'].includes(profile.role);
 
+  // Company name (printed-name prefill) + whether a saved signature image is on
+  // file (gates the 'saved_image' send mode). contractor_signature_path is a new
+  // column — expected type errors vs. un-regenerated database.ts until applied.
+  const { data: company } = await supabase
+    .from('companies')
+    .select('name, contractor_signature_path')
+    .eq('id', changeOrder.company_id)
+    .maybeSingle();
+  const companyName = company?.name ?? '';
+  const hasSavedSignature = Boolean(
+    (company as { contractor_signature_path?: string | null } | null)?.contractor_signature_path
+  );
+
   const [subcontractors, sessions] = await Promise.all([
     getSubcontractors({ status: 'active' }),
     canManage && changeOrder.status === 'sent'
@@ -55,6 +68,8 @@ export default async function ChangeOrderPage({
       subcontractors={subcontractors.map((s) => ({ id: s.id, name: s.company_name }))}
       canManage={canManage}
       pendingSigningToken={pendingSession?.token ?? null}
+      companyName={companyName}
+      hasSavedSignature={hasSavedSignature}
     />
   );
 }

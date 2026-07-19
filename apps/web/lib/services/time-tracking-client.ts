@@ -17,7 +17,7 @@ export type {
 };
 
 type Result<T = undefined> = { success: boolean; error?: string } & (T extends undefined
-  ? Record<string, never>
+  ? {}
   : Partial<T>);
 
 interface GpsFix {

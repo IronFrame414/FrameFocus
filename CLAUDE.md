@@ -350,6 +350,9 @@ Server and client Supabase clients must be in separate files to avoid Next.js bu
 - All database calls go through service modules: `services/contacts.ts`, `services/estimates.ts`, etc.
 - Never call Supabase directly from components — always through a service function
 - Edge Functions for server-side logic that can't run on client (webhook handlers, AI calls, PDF generation)
+- API errors never name a cause that hasn't been verified. Auth and permission failures return 401/403 with their own message — never fall
+  through to a "not found" path. A "not found" response means auth passed and the record genuinely doesn't exist.
+- Every error response logs the real cause server-side with the route and the failing check. The client message may be generic; the log never is.
 
 ### Git Workflow
 
@@ -378,14 +381,14 @@ These users manage the FrameFocus platform itself. They are NOT tied to any comp
 
 Each subscribing company is an isolated tenant. Within that company, there are 6 roles with descending access levels. The Owner is always the billing contact.
 
-| Role            | DB Value          | Web Access                         | Mobile Access     | Key Permissions                                                                                                                                                   |
-| --------------- | ----------------- | ---------------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Role            | DB Value          | Web Access                         | Mobile Access     | Key Permissions                                                                                                                                                                                                                                                                                                         |
+| --------------- | ----------------- | ---------------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Owner           | `owner`           | Full                               | Full              | All features, billing/subscription management, user invitations, approval authority on change orders/payments/AI content, company settings, QuickBooks connection — [SUPERSEDED for COs — Owner-final-approval gate removed; see module5-architecture.md §5.7c AMENDMENT (Session 55). Owner/Admin/PM all create+send.] |
-| Admin           | `admin`           | Full                               | Full              | Everything Owner can do EXCEPT items in the owner-only list below                                                                                                 |
-| Project Manager | `project_manager` | Full (scoped to assigned projects) | Full              | Create/manage estimates, manage assigned projects, assign tasks, create change orders, view job finances, manage client communication                             |
-| Foreman         | `foreman`         | Limited                            | Full              | Manage assigned field crews, daily logs, schedule crew tasks, review Crew Member submissions, punch lists, quality control                                        |
-| Crew Member     | `crew_member`     | Minimal                            | Full              | Clock in/out with GPS, daily log entries, photo capture, task status updates, view assigned tasks and schedule                                                    |
-| Client          | `client`          | Portal only                        | No (future phase) | View project timeline, photo gallery, approve selections, sign documents, make payments, message PM, view AI weekly summaries                                     |
+| Admin           | `admin`           | Full                               | Full              | Everything Owner can do EXCEPT items in the owner-only list below                                                                                                                                                                                                                                                       |
+| Project Manager | `project_manager` | Full (scoped to assigned projects) | Full              | Create/manage estimates, manage assigned projects, assign tasks, create change orders, view job finances, manage client communication                                                                                                                                                                                   |
+| Foreman         | `foreman`         | Limited                            | Full              | Manage assigned field crews, daily logs, schedule crew tasks, review Crew Member submissions, punch lists, quality control                                                                                                                                                                                              |
+| Crew Member     | `crew_member`     | Minimal                            | Full              | Clock in/out with GPS, daily log entries, photo capture, task status updates, view assigned tasks and schedule                                                                                                                                                                                                          |
+| Client          | `client`          | Portal only                        | No (future phase) | View project timeline, photo gallery, approve selections, sign documents, make payments, message PM, view AI weekly summaries                                                                                                                                                                                           |
 
 ### The Admin Role Principle (authoritative)
 
@@ -409,14 +412,14 @@ For any action not listed in the owner-only section above, assume Admin has acce
 **Who can approve what (summary):**
 
 | Approval                           | Owner | Admin | PM  | Foreman |
-| ---------------------------------- | ----- | ----- | --- | ------- |
+| ---------------------------------- | ----- | ----- | --- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Billing changes                    | ✓     | —     | —   | —       |
 | Promote to Admin                   | ✓     | —     | —   | —       |
 | Connect QuickBooks                 | ✓     | —     | —   | —       |
 | Release sub payments               | ✓     | —     | —   | —       |
 | Approve AI weekly summaries        | ✓     | —     | —   | —       |
 | Approve marketing content          | ✓     | —     | —   | —       |
-| Approve change orders (final)      | ✓     | —     | —   | —       | — [SUPERSEDED for COs — Owner-final-approval gate removed; see module5-architecture.md §5.7c AMENDMENT (Session 55). Owner/Admin/PM all create+send.]
+| Approve change orders (final)      | ✓     | —     | —   | —       | — [SUPERSEDED for COs — Owner-final-approval gate removed; see module5-architecture.md §5.7c AMENDMENT (Session 55). Owner/Admin/PM all create+send.] |
 | Approve sub pay apps (review step) | ✓     | ✓     | ✓   | —       |
 | Approve estimates for sending      | ✓     | ✓     | ✓   | —       |
 | Approve foreman timesheets         | ✓     | ✓     | ✓   | —       |

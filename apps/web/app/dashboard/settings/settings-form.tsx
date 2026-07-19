@@ -1,7 +1,14 @@
 'use client';
 
-import { useState, useRef } from 'react';
-import { CompanyData, updateCompany, uploadCompanyLogo } from '@/lib/services/company-client';
+import { useState, useRef, useEffect } from 'react';
+import {
+  CompanyData,
+  updateCompany,
+  uploadCompanyLogo,
+  uploadContractorSignature,
+  clearContractorSignature,
+  getContractorSignatureUrl,
+} from '@/lib/services/company-client';
 
 import { TRADE_TYPES, US_STATES } from '@framefocus/shared/constants';
 
@@ -28,6 +35,31 @@ export function SettingsForm({ company }: SettingsFormProps) {
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Signed-artifact spec §4.2 — saved contractor signature image. The column is
+  // new (this spec's migration), so it is read off CompanyData with a cast
+  // until database.ts is regenerated.
+  const [signaturePath, setSignaturePath] = useState<string | null>(
+    (company as { contractor_signature_path?: string | null }).contractor_signature_path ?? null
+  );
+  const [signatureUrl, setSignatureUrl] = useState<string | null>(null);
+  const [sigUploading, setSigUploading] = useState(false);
+  const [typedName, setTypedName] = useState('');
+  const sigInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let active = true;
+    if (signaturePath) {
+      getContractorSignatureUrl(signaturePath).then((url) => {
+        if (active) setSignatureUrl(url);
+      });
+    } else {
+      setSignatureUrl(null);
+    }
+    return () => {
+      active = false;
+    };
+  }, [signaturePath]);
 
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -87,6 +119,109 @@ export function SettingsForm({ company }: SettingsFormProps) {
     }
 
     if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
+  async function handleSignatureUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setMessage({ type: 'error', text: 'Please select an image file (PNG or JPG).' });
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setMessage({ type: 'error', text: 'Signature image must be under 2 MB.' });
+      return;
+    }
+
+    setSigUploading(true);
+    setMessage(null);
+
+    const result = await uploadContractorSignature(company.id, file);
+
+    setSigUploading(false);
+
+    if (result.success && result.path) {
+      setSignaturePath(result.path);
+      setMessage({ type: 'success', text: 'Signature uploaded successfully.' });
+    } else {
+      setMessage({ type: 'error', text: result.error || 'Failed to upload signature.' });
+    }
+
+    if (sigInputRef.current) sigInputRef.current.value = '';
+  }
+
+  async function handleSignatureClear() {
+    setSigUploading(true);
+    setMessage(null);
+
+    const result = await clearContractorSignature(company.id);
+
+    setSigUploading(false);
+
+    if (result.success) {
+      setSignaturePath(null);
+      setSignatureUrl(null);
+      setMessage({ type: 'success', text: 'Saved signature removed.' });
+    } else {
+      setMessage({ type: 'error', text: result.error || 'Failed to remove signature.' });
+    }
+  }
+
+  // Typed-name signature (signed-artifact spec §4.2 alt): render the name to a
+  // transparent PNG in a script font and save it through the SAME path as an
+  // uploaded image (uploadContractorSignature). PNG-only by design.
+  async function handleTypedSignatureSave() {
+    const name = typedName.trim();
+    if (!name) {
+      setMessage({ type: 'error', text: 'Enter a name to render as your signature.' });
+      return;
+    }
+
+    setSigUploading(true);
+    setMessage(null);
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = 600;
+      canvas.height = 200;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        setMessage({ type: 'error', text: 'Could not render the signature.' });
+        return;
+      }
+      // Transparent background (no fillRect); black script text, shrunk to fit.
+      ctx.fillStyle = '#111827';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      let fontSize = 72;
+      const scriptStack = "'Segoe Script', 'Brush Script MT', cursive";
+      ctx.font = `${fontSize}px ${scriptStack}`;
+      while (ctx.measureText(name).width > canvas.width - 40 && fontSize > 24) {
+        fontSize -= 4;
+        ctx.font = `${fontSize}px ${scriptStack}`;
+      }
+      ctx.fillText(name, canvas.width / 2, canvas.height / 2);
+
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob((b) => resolve(b), 'image/png')
+      );
+      if (!blob) {
+        setMessage({ type: 'error', text: 'Could not render the signature image.' });
+        return;
+      }
+
+      const file = new File([blob], 'signature.png', { type: 'image/png' });
+      const result = await uploadContractorSignature(company.id, file);
+      if (result.success && result.path) {
+        setSignaturePath(result.path);
+        setTypedName('');
+        setMessage({ type: 'success', text: 'Signature saved.' });
+      } else {
+        setMessage({ type: 'error', text: result.error || 'Failed to save signature.' });
+      }
+    } finally {
+      setSigUploading(false);
+    }
   }
 
   const inputStyle: React.CSSProperties = {
@@ -179,6 +314,117 @@ export function SettingsForm({ company }: SettingsFormProps) {
               PNG or JPG, max 2 MB
             </p>
           </div>
+        </div>
+      </div>
+
+      {/* Contractor signature (signed-artifact spec §4.2) */}
+      <div style={sectionStyle}>
+        <div style={sectionTitleStyle}>Contractor Signature</div>
+        <p style={{ fontSize: '0.8125rem', color: '#6b7280', marginBottom: '0.75rem' }}>
+          A saved signature image applied to change orders you send. You can also choose to type a
+          printed name at send time instead of using this image.
+        </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+          <div
+            style={{
+              width: '160px',
+              height: '64px',
+              borderRadius: '0.5rem',
+              border: '2px dashed #d1d5db',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              overflow: 'hidden',
+              backgroundColor: '#f9fafb',
+              flexShrink: 0,
+            }}
+          >
+            {signatureUrl ? (
+              <img
+                src={signatureUrl}
+                alt="Contractor signature"
+                style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+              />
+            ) : (
+              <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
+                {signaturePath ? 'Signature on file' : 'No signature'}
+              </span>
+            )}
+          </div>
+          <div>
+            <input
+              ref={sigInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleSignatureUpload}
+              style={{ display: 'none' }}
+            />
+            <button
+              onClick={() => sigInputRef.current?.click()}
+              disabled={sigUploading}
+              style={{
+                padding: '0.5rem 1rem',
+                fontSize: '0.875rem',
+                backgroundColor: '#f3f4f6',
+                border: '1px solid #d1d5db',
+                borderRadius: '0.375rem',
+                cursor: sigUploading ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {sigUploading ? 'Working...' : signaturePath ? 'Replace' : 'Upload Signature'}
+            </button>
+            {signaturePath && (
+              <button
+                onClick={handleSignatureClear}
+                disabled={sigUploading}
+                style={{
+                  marginLeft: '0.5rem',
+                  padding: '0.5rem 1rem',
+                  fontSize: '0.875rem',
+                  backgroundColor: '#ffffff',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '0.375rem',
+                  color: '#b91c1c',
+                  cursor: sigUploading ? 'not-allowed' : 'pointer',
+                }}
+              >
+                Remove
+              </button>
+            )}
+            <p style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.25rem' }}>
+              PNG or JPG, max 2 MB. Transparent PNG recommended.
+            </p>
+          </div>
+        </div>
+
+        <div style={{ marginTop: '1rem' }}>
+          <label style={{ ...labelStyle, marginBottom: '0.375rem' }}>Or type your name</label>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <input
+              value={typedName}
+              onChange={(e) => setTypedName(e.target.value)}
+              placeholder="Full name as it should appear"
+              style={{ ...inputStyle, maxWidth: '320px' }}
+            />
+            <button
+              onClick={handleTypedSignatureSave}
+              disabled={sigUploading || !typedName.trim()}
+              style={{
+                padding: '0.5rem 1rem',
+                fontSize: '0.875rem',
+                whiteSpace: 'nowrap',
+                backgroundColor: '#f3f4f6',
+                border: '1px solid #d1d5db',
+                borderRadius: '0.375rem',
+                cursor: sigUploading || !typedName.trim() ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {sigUploading ? 'Working...' : 'Save typed signature'}
+            </button>
+          </div>
+          <p style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.25rem' }}>
+            Rendered in a script font as a transparent PNG and saved as your signature image.
+          </p>
         </div>
       </div>
 

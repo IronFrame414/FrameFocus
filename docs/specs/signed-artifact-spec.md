@@ -1,6 +1,6 @@
 # Signed Artifact Spec — Estimates and Change Orders
 
-**Status:** DRAFT — not built. Written Session 64.
+**Status:** BUILT — implemented on branch `feat/signed-artifacts`, committed across five commits: `2ebdb21` the spec itself, `bfe5635` the migration, `7b2a8c5` the PDF pipeline and signing service, `16d257d` the email and reminder cron, `afd1c0c` the send route, signature capture, and settings UI. Drafted Session 64; re-read against the working tree and rewritten as a built record. Every "confirm at build" item in the draft's §1 has been read and implemented — see the migration `supabase/migrations/20260710120000_signed_artifacts.sql` and the services and routes cited below. Not yet run end-to-end against production (see §8).
 **Scope:** What a signed estimate proposal and a signed change order _are_ — as documents, as records, and as things that leave the building by email.
 **Not in scope:** Team invites, auth mail (separate system, already built). Client portal (does not exist).
 
@@ -31,17 +31,17 @@ Every line below was confirmed by reading the repo, not by trusting a context fi
 
 **Consequence:** change orders do not need a separate `resend` route. Estimates have one; COs fold it into `send`. Do not build parity that the code already has.
 
-### Confirm at build — NOT VERIFIED, do not treat as fact
+### Read at build — all seven verified, all now implemented
 
-Widened after the Session 64 audit. Every item below was assumed, inferred, or taken on a claim. None was read.
+The draft flagged these seven as unread — assumed, inferred, or taken on a claim. Every one has since been read against the working tree and built on `feat/signed-artifacts`. None remains an assumption.
 
-- **`change_orders` column list.** Only its `status` CHECK was ever read. Whether any column could already hold a contractor signature is unknown.
-- **`co_signing_sessions` columns.** `signed_at` and `signer_user_agent` are asserted throughout this spec. Their existence comes from Josh's session brief, **not from reading the migration.** Verify before §4.1 or §8 is trusted.
-- **`signing_sessions` columns.** Never read at all. §4.1 adds a column to a table whose shape is unknown.
-- **`CONSENT_TEXT` contents.** Exported from both signing services. Never opened. §5 asserts consent text is shown to the client; that is an inference from the export name. This bears directly on §3.
-- **`files` table insert shape** in `storeSignedPDF` (L111–147), before reusing it for COs.
-- **`ProposalEmail`** — path and props unknown.
-- **Reminder cron cadence.** `api/cron/estimate-reminders/route.ts` was confirmed to exist **by filename only.** Its schedule, trigger conditions, and `vercel.json` entry were never read. §7.3 specifies a CO equivalent without knowing what it is an equivalent _of_.
+- **`change_orders` column list.** Read in full (`20260704215000_module5_5d_change_orders.sql` L23–73). **No column in the 5D migration can hold a contractor signature** — `signed_at`/`sent_at` are timestamps, `author_member_id`/`created_by` record authorship. The five contractor-signature columns are added by `20260710120000_signed_artifacts.sql` (§4.2) and are already selected by `co-signing-service.ts` and `api/change-orders/[id]/send/route.ts`.
+- **`co_signing_sessions` columns.** Read (same file L235–260). `signed_at` (L244) and `signer_user_agent` (L251) both exist; `ip_address` is **absent** — the column is `signer_ip text` (L250). §4.1 and §8 hold.
+- **`signing_sessions` columns.** Read (`20260101000000_baseline_schema.sql` L1459–1484). `signed_at` (L1468), `signer_user_agent` (L1476), `signer_ip` (L1475); no `ip_address`. Confirms §4.1 is DEAD — nothing to add.
+- **`CONSENT_TEXT` contents.** Read: a **single constant** in `lib/proposal/proposal-defaults.ts` L33, re-exported by both signing services — the two are byte-identical, not clones. It is shown to and stored for the client (§5). It reads "this proposal," which is the §10 defect.
+- **`files` table insert shape** in `storeSignedPDF` (L111–147): `company_id, project_id (NULL), category:'contracts', file_name, file_path, file_size, mime_type`. The CO twin `storeSignedCoPDF` (`co-pdf-service.ts` L141) mirrors it with `project_id` set and `category:'change_orders'` — both valid `files_category_check` values (baseline L1388).
+- **`ProposalEmail`** — `apps/web/lib/email/templates/proposal-email.tsx`; props `companyName, logoUrl (string|null), brandColor, bodyText, signingUrl`. The `ChangeOrderEmail` twin exists at `.../change-order-email.tsx` with a nullable/optional `signingUrl`.
+- **Reminder cron cadence.** `api/cron/estimate-reminders/route.ts` runs on `vercel.json` cron `"0 13 * * *"` (daily 13:00 UTC), `GET` gated by `CRON_SECRET`, two passes — reminders on the `[3,7,14]`-day schedule, then expiration. The CO equivalent `api/cron/co-reminders/route.ts` already exists on the same schedule (§7.3).
 
 ---
 
@@ -86,9 +86,9 @@ Printing the IP address below the signature (per Josh, Session 64) is a **conven
 
 ## 4. Schema changes
 
-One migration. Production migrations via CLI only (`npx supabase db push` from repo root). Never the SQL Editor.
+One migration — `supabase/migrations/20260710120000_signed_artifacts.sql`. Production migrations via CLI only (`npx supabase db push` from repo root). Never the SQL Editor.
 
-**Not purely additive, and it no longer touches `signing_sessions` at all.** §4.1 is now **DEAD** — signer IP already exists and is written, so this migration touches `signing_sessions` **not at all**. What remains: §4.2 adds columns to `change_orders`; §4.3 drops and re-adds a CHECK constraint on `email_logs`, a **baseline-schema table** — that single operation is the only destructive step in this spec and must be reviewed on its own before it goes near production. An earlier draft claimed the migration was additive only and had it touching `signing_sessions`; it is neither.
+**Not purely additive, and it does not touch `signing_sessions` at all.** §4.1 is **DEAD** — signer IP already exists and is written, so the migration touches `signing_sessions` **not at all**. What it does: §4.2 adds the five contractor-signature columns to `change_orders`; §4.5 adds the three CO reminder-tracking columns to `change_orders`; §4.4 adds `contractor_signature_path` to `companies`; §4.3 adds two FK columns to `email_logs` and then **drops and re-adds** its `email_type` CHECK — a **baseline-schema table**. That single drop/re-add is the only destructive step in this spec and must be reviewed on its own before it goes near production. An earlier draft claimed the migration was additive only and had it touching `signing_sessions`; it is neither.
 
 ### 4.1 IP capture — both session tables
 
@@ -116,9 +116,9 @@ change_orders  ADD COLUMN contractor_signed_at timestamptz
 change_orders  ADD COLUMN contractor_signed_by uuid       -- company_members(id), per identity convention
 ```
 
-Column names are design-level. Confirm against live schema at build.
+These column names shipped as written — `20260710120000_signed_artifacts.sql` §1, with `contractor_signed_by` FK'd to `company_members(id)`. `contractor_signature_mode`'s CHECK is `NULL OR IN ('saved_image','typed_name')`.
 
-**Decided (Josh, Session 64):** the saved signature image **bytes** live in the existing `project-files` bucket at `{companyId}/signatures/`; a new **nullable column on the company settings row stores that storage path** — the bytes are **not** base64 in the settings row. _Rationale: this reuses the bucket and RLS that `storeSignedPDF` already writes to, and keeps a binary blob out of a row read on nearly every page load._ The company settings **column** belongs to the batched Company Settings pass (§4.4); the upload and read path can be built without waiting for that pass.
+**Decided (Josh, Session 64):** the saved signature image **bytes** live in the existing `project-files` bucket at `{companyId}/signatures/`; a new **nullable column on the company settings row stores that storage path** — the bytes are **not** base64 in the settings row. _Rationale: this reuses the bucket and RLS that `storeSignedPDF` already writes to, and keeps a binary blob out of a row read on nearly every page load._ That company settings column (`companies.contractor_signature_path`) shipped in **this** migration (§4.4), not a separate batched pass.
 
 ### 4.3 `email_logs` — three additive changes
 
@@ -135,9 +135,12 @@ email_logs  ADD CONSTRAINT email_logs_email_type_check CHECK (
                 'proposal', 'reminder', 'signature_complete',
                 'signature_declined', 'estimate_expired',
                 'change_order', 'co_reminder', 'co_signature_complete',
-                'co_signature_declined'
+                'co_signature_declined',
+                'safety_incident', 'material_delivery'
               ))
 ```
+
+**Eleven values, not nine.** `safety_incident` and `material_delivery` are added now as inert Module-6 placeholders — a CHECK value costs nothing. Their FK columns (`safety_incident_id`, `delivery_id`) are **not** added here: `safety_incidents` and `deliveries` do not exist yet, and a migration cannot reference a table before it exists. Those FK columns land with the 6C/6D migrations that create those tables.
 
 `signing_session_id` **cannot** be reused for CO sessions — its FK points at `signing_sessions`, the wrong table. A separate column is required.
 
@@ -148,11 +151,23 @@ Add `idx_email_logs_change_order_id` to match the existing `idx_email_logs_estim
 A nullable column on the company settings row holds the `project-files` storage path decided in §4.2. It stores the **path only** — never the image bytes.
 
 ```
-<company settings table>  ADD COLUMN contractor_signature_path text
-                            -- nullable; storage path {companyId}/signatures/... in project-files
+companies  ADD COLUMN contractor_signature_path text
+             -- nullable; storage path {companyId}/signatures/... in project-files
 ```
 
-Table and column names are design-level. Confirm against live schema at build. The column lands with the batched Company Settings pass; the bucket upload/read path can be built ahead of it.
+Shipped in **this** migration (`20260710120000_signed_artifacts.sql` §3), on `companies`, placed beside `logo_url` (baseline `20260101000000_baseline_schema.sql` L1037) — the confirmed precedent. It stores the path only, never the image bytes.
+
+### 4.5 `change_orders` — CO reminder tracking
+
+The CO reminder cron (§7.3) needs the same per-row reminder state the estimate cron reads. Three columns, mirroring `estimates` **exactly** in name and type (baseline `20260101000000_baseline_schema.sql` L1349–1351):
+
+```
+change_orders  ADD COLUMN reminder_schedule       jsonb
+change_orders  ADD COLUMN reminder_count          integer  DEFAULT 0 NOT NULL
+change_orders  ADD COLUMN last_reminder_sent_at   timestamptz
+```
+
+Shipped in `20260710120000_signed_artifacts.sql` §2. `api/cron/co-reminders/route.ts` reads them with the same `estimate.reminder_schedule ?? company.default_reminder_schedule ?? [3,7,14]` fallback the estimate cron uses.
 
 ---
 
@@ -217,11 +232,13 @@ Defaults to the primary contact on the project or estimate. Must be overridable,
 | CO signed                 | client **and** contractor | v2 PDF attached               | `co_signature_complete` |
 | CO declined               | contractor                | reason, if captured           | `co_signature_declined` |
 
-Subject and body are company-configurable templates, per the estimate precedent (`replaceTemplateVariables`, `buildSenderAddress`). A `ChangeOrderEmail` React component is required; `ProposalEmail` is the model.
+Subject and body are company-configurable templates, per the estimate precedent (`replaceTemplateVariables`, `buildSenderAddress`). The `ChangeOrderEmail` React component (`apps/web/lib/email/templates/change-order-email.tsx`) is built, modeled on `ProposalEmail`; its `signingUrl` prop is optional so post-signature and decline notices can omit the CTA.
+
+**Observed divergence — decline reason.** The "reason, if captured" in the CO-declined row is free text only. `co_signing_sessions` has `decline_notes` but **no** categorized `decline_reason` enum, whereas `signing_sessions` carries both `decline_reason` (a CHECK-constrained enum) and `decline_notes`. Stated as an observed difference between the two tables; no change proposed here.
 
 ### 7.3 Reminder cron
 
-Estimates have `api/cron/estimate-reminders/route.ts`. Change orders need the equivalent. An unsigned change order that goes quiet is a job stalled at a scope boundary — this is not optional polish.
+Estimates have `api/cron/estimate-reminders/route.ts`; the CO equivalent `api/cron/co-reminders/route.ts` is **built** and registered in `vercel.json` on the same `"0 13 * * *"` daily schedule, `GET` gated by `CRON_SECRET`. It reads the §4.5 columns with the `estimate.reminder_schedule ?? company.default_reminder_schedule ?? [3,7,14]` fallback and logs `email_type:'co_reminder'`. An unsigned change order that goes quiet is a job stalled at a scope boundary — this was not optional polish.
 
 ### 7.4 In-person signing
 
@@ -229,9 +246,9 @@ Costs nothing new. `send` already returns `signingUrl` to the contractor's own b
 
 ---
 
-## 8. Acceptance example — PROPOSED
+## 8. Acceptance example — BUILT, not yet executed end-to-end
 
-Status: **PROPOSED.** Derived from a real Bishop job as narrated Session 64. Not yet verified end-to-end against production. Do not treat as passing until re-run.
+Status: **BUILT, not yet executed end-to-end.** The flow below is implemented on `feat/signed-artifacts` — the send route, `co-pdf-service.ts`, `co-signing-service.ts`, and the `co-reminders` cron all exist and wire together. Derived from a real Bishop job as narrated Session 64. It has **not** been run end-to-end against production; do not treat the trace as passing until re-run.
 
 **Job:** Stevens. **CO #1** — new custom door. **$634.** Signed by Jill Stevens, approximately three weeks before Session 64.
 
@@ -273,13 +290,15 @@ Note: the status transition is `sent -> signed`. There is no `approved` value in
 
 ## 9. Build order
 
-1. Migration (§4). CLI only. Verify with `npm run db:types`, check line count and grep.
-2. Contractor signature capture + Company Settings storage for the saved image.
-3. CO PDF template and `co-pdf-service.ts`, mirroring `proposal-service.ts`.
-4. `ChangeOrderEmail` component.
+Steps 1–7 are **implemented on `feat/signed-artifacts`** (uncommitted). File pointers below; not yet run end-to-end (§8).
+
+1. Migration (§4) — `supabase/migrations/20260710120000_signed_artifacts.sql`. CLI only. Verify with `npm run db:types`, check line count and grep.
+2. Contractor signature capture + Company Settings storage for the saved image — `api/change-orders/[id]/send/route.ts`, `companies.contractor_signature_path`.
+3. CO PDF template and `co-pdf-service.ts` (`generateChangeOrderPDF`, `compositeSignedCoPDF`, `storeSignedCoPDF`), mirroring `proposal-service.ts`; template/data in `lib/change-orders/`.
+4. `ChangeOrderEmail` component — `apps/web/lib/email/templates/change-order-email.tsx`.
 5. Wire `send` route: generate v1, attach, mail, log.
-6. Wire `completeCoSignature`: composite v2, store, mail both parties, log.
-7. CO reminder cron.
+6. Wire `completeCoSignature` (`co-signing-service.ts`): composite v2, store, mail both parties, log.
+7. CO reminder cron — `api/cron/co-reminders/route.ts`.
 8. ~~Backfill: estimate-side `ip_address` capture in `completeSignature`.~~ **DEAD** — `signer_ip` is already written by both services (`signing-service.ts` L204/L278, `co-signing-service.ts` L126/L179). No column to add, nothing to backfill.
 
 ~~Step 8 is not optional. The migration adds the column to `signing_sessions`; nothing writes to it until step 8 lands.~~ **Struck — the premise was false: the column exists and is populated.**
@@ -292,7 +311,7 @@ Note: the status transition is `sent -> signed`. There is no `approved` value in
 - Reminder cadence for COs. Estimates have one; match it or diverge deliberately.
 - Retention policy for v1 artifacts once v2 exists. Counsel.
 - `TECH_DEBT` entry: two signing services are structural clones. Divergence risk. Not consolidated by this spec. **Named here, not yet filed in `TECH_DEBT.md`.**
-- **Legal-text defect (not schema).** `CONSENT_TEXT` reads "I have reviewed **this proposal**…" and is rendered verbatim to change-order signers by `co-signing-client.tsx` L358 — a CO signer attests to reviewing a *proposal*, not a change order. Route to counsel per §3.
+- **Legal-text defect (not schema).** `CONSENT_TEXT` reads "I acknowledge that I have reviewed **this proposal**…" and is rendered verbatim to change-order signers by `app/sign-co/[token]/co-signing-client.tsx` L358 — a CO signer attests to reviewing a *proposal*, not a change order. Both signers see identical text from a **single constant** (`lib/proposal/proposal-defaults.ts` L33, re-exported by both signing services), so any fix touches the estimate flow too. Route to counsel per §3.
 - `apps/web/.claude/` is untracked and not gitignored. Decide.
 
 ---

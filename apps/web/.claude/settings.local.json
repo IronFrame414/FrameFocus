@@ -1,0 +1,16 @@
+{
+  "enabledMcpjsonServers": [
+    "supabase",
+    "context7",
+    "serena"
+  ],
+  "permissions": {
+    "allow": [
+      "Read(//workspaces/FrameFocus/**)",
+      "Bash(ls docs/specs/5*-spec.md)",
+      "Bash(ls docs/future_module_architecture.md docs/specs/future_module_architecture.md)",
+      "Bash(grep -rni \"final authority\\\\|change order\\\\|change_order\\\\|holds final\" docs/specs/5A-spec.md docs/specs/5A-section8-spec.md docs/specs/5E-spec.md CLAUDE.md)",
+      "Bash(find /workspaces/FrameFocus -name \"future_module_architecture.md\")"
+    ]
+  }
+}

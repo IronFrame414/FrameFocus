@@ -112,12 +112,26 @@ const dangerButtonStyle: React.CSSProperties = {
   cursor: 'pointer',
 };
 
+// Signature mode toggle pill (matches the add-row type pills).
+const sigPillStyle = (active: boolean, disabled: boolean): React.CSSProperties => ({
+  padding: '0.25rem 0.75rem',
+  fontSize: '0.75rem',
+  fontWeight: 600,
+  borderRadius: '9999px',
+  border: `1px solid ${active ? '#1a56db' : '#d1d5db'}`,
+  backgroundColor: disabled ? '#f3f4f6' : active ? '#1a56db' : '#fff',
+  color: disabled ? '#9ca3af' : active ? '#fff' : '#374151',
+  cursor: disabled ? 'not-allowed' : 'pointer',
+});
+
 interface CoBuilderProps {
   projectId: string;
   changeOrder: ChangeOrderWithChildren;
   subcontractors: Array<{ id: string; name: string }>;
   canManage: boolean;
   pendingSigningToken: string | null;
+  companyName: string;
+  hasSavedSignature: boolean;
 }
 
 export function CoBuilder({
@@ -126,6 +140,8 @@ export function CoBuilder({
   subcontractors,
   canManage,
   pendingSigningToken,
+  companyName,
+  hasSavedSignature,
 }: CoBuilderProps) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -135,6 +151,19 @@ export function CoBuilder({
   const [recipientEmail, setRecipientEmail] = useState('');
   const [signingUrl, setSigningUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+
+  // Contractor signature (signed-artifact spec §4.2). Required only on the FIRST
+  // send — once contractor_signed_at is set the route reuses it verbatim, so the
+  // signature step is hidden on re-send. Default to the saved image when one is
+  // on file, else typed name; printed name prefilled with the company name.
+  // (contractor_signed_at is a new column — cast until database.ts regenerates.)
+  const contractorSignedAt =
+    (co as { contractor_signed_at?: string | null }).contractor_signed_at ?? null;
+  const needsSignature = contractorSignedAt == null;
+  const [sigMode, setSigMode] = useState<'saved_image' | 'typed_name'>(
+    hasSavedSignature ? 'saved_image' : 'typed_name'
+  );
+  const [sigName, setSigName] = useState(companyName);
 
   // window.origin is client-only — resolve the pending link after mount.
   useEffect(() => {
@@ -166,12 +195,31 @@ export function CoBuilder({
   }
 
   async function handleSend() {
-    setBusy(true);
     setError(null);
-    const result = await sendChangeOrder(co.id, {
+
+    const payload: Parameters<typeof sendChangeOrder>[1] = {
       recipient_name: recipientName.trim() || undefined,
       recipient_email: recipientEmail.trim() || undefined,
-    });
+    };
+
+    // First send: the route requires a contractor signature (mode + printed
+    // name). Guard client-side so the failure is legible before the round-trip.
+    if (needsSignature) {
+      const name = sigName.trim();
+      if (!name) {
+        setError('Enter the printed name for the contractor signature.');
+        return;
+      }
+      if (sigMode === 'saved_image' && !hasSavedSignature) {
+        setError('No saved signature image on file. Add one in Company Settings, or type your name.');
+        return;
+      }
+      payload.contractor_signature_mode = sigMode;
+      payload.contractor_signature_name = name;
+    }
+
+    setBusy(true);
+    const result = await sendChangeOrder(co.id, payload);
     setBusy(false);
     if (!result.success) {
       setError(result.error ?? 'Send failed');
@@ -345,16 +393,78 @@ export function CoBuilder({
               <input
                 value={recipientEmail}
                 onChange={(e) => setRecipientEmail(e.target.value)}
-                placeholder="For your records — no email is sent"
+                placeholder="Leave blank to use the project's primary contact"
                 style={{ ...inputStyle, width: '260px' }}
               />
             </div>
+
+            {needsSignature ? (
+              <div
+                style={{
+                  flexBasis: '100%',
+                  borderTop: '1px dashed #e5e7eb',
+                  paddingTop: '0.625rem',
+                }}
+              >
+                <label style={smallLabelStyle}>Contractor signature</label>
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: '0.375rem',
+                    marginBottom: '0.5rem',
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => hasSavedSignature && setSigMode('saved_image')}
+                    disabled={!hasSavedSignature}
+                    style={sigPillStyle(sigMode === 'saved_image', !hasSavedSignature)}
+                  >
+                    Use saved signature image
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSigMode('typed_name')}
+                    style={sigPillStyle(sigMode === 'typed_name', false)}
+                  >
+                    Type my name
+                  </button>
+                </div>
+                {!hasSavedSignature && (
+                  <p style={{ fontSize: '0.6875rem', color: '#6b7280', margin: '0 0 0.5rem' }}>
+                    No saved signature image on file — add one in Company Settings to use it, or type
+                    your name below.
+                  </p>
+                )}
+                <div>
+                  <label style={smallLabelStyle}>Printed name (required)</label>
+                  <input
+                    value={sigName}
+                    onChange={(e) => setSigName(e.target.value)}
+                    placeholder="Full name as it should appear"
+                    style={{ ...inputStyle, width: '260px' }}
+                  />
+                </div>
+                <p style={{ fontSize: '0.6875rem', color: '#6b7280', margin: '0.375rem 0 0' }}>
+                  {sigMode === 'saved_image'
+                    ? 'Your saved signature image will be applied to this change order.'
+                    : 'Your typed name will be applied as your signature.'}
+                </p>
+              </div>
+            ) : (
+              <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: 0, flexBasis: '100%' }}>
+                Re-sending reuses your existing signature on {co.co_number} and mints a fresh signing
+                link.
+              </p>
+            )}
+
             <button type="button" onClick={handleSend} disabled={busy} style={primaryButtonStyle(busy)}>
               {busy ? 'Sending…' : 'Confirm Send'}
             </button>
             <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: 0, flexBasis: '100%' }}>
-              Sending is your internal acceptance. You&apos;ll get a signing link to share with the
-              client — no email goes out automatically.
+              On send, a signed PDF is emailed to the client with a link to review and sign. The
+              signing link also appears here so you can share it manually.
             </p>
           </div>
         )}

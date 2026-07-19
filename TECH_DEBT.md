@@ -35,6 +35,10 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 - **#6** Source CHECK constraint may be too restrictive (real contractors may want yard sign, trade show, Angi, HomeAdvisor, etc.)
 - **#7** Optional cleanup of Session 7 debugging artifacts — orphaned test users
 
+- **#83** Typed contractor signature stored as rendered PNG only — consider also persisting the typed text string (new column) to allow clean re-rendering later. Currently image-only to match uploaded-signature shape.
+- **#84** Sent change orders cannot be edited. Correct flow is void → edit → resend, not direct edit of a sent CO — a sent CO is a record the client has seen, so mutating it in place is wrong. Needs a void action that supersedes the sent CO and unlocks a new editable revision. Identified Session 76.
+- **#86** Client typed signatures have no typed-name mode — co-data.ts always rasterizes the client's mark to a PNG data-URI whether drawn or typed. The contractor's typed mark renders as native <Text> in Dancing Script (18pt), so the two marks cannot be size-matched: one is point-sized vector text, the other an aspect-fit bitmap. Fix: pass the client's typed text + mode through the signing payload and render as <Text>, mirroring the contractor path. Cross-ref #83. Batch with the typed-name signature UI work. Discovered Session 76.
+
 ### Code Quality
 
 - **#8** `team-page-client.tsx` has local `ROLE_LABELS` — should import from `@framefocus/shared`
@@ -46,10 +50,12 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   - `Company` interface inline, missing `website`, `license_number`, and `ai_tagging_enabled` (added Session 30, Migration 023). Also has `owner_id` and `stripe_subscription_id` fields that may not exist in the actual schema — verify against `database.ts` before trusting them.
   - `Company` forward-references `SubscriptionStatus` before it's declared. Works via TS hoisting but fragile.
   - Fix: delete all inline interfaces. Consumers import from `database.ts` (auto-generated, source of truth) or per-entity service files using the existing Pick/Omit patterns. Same fix shape as old #11.
+- **#90** Crew-role RLS gates not yet verified end-to-end via UI. Session 79 verified project_manager RLS gates fully (team-detail blocked, billing/settings hidden, projects correctly scoped to assigned-only). Crew (crew_member) tier was NOT tested because no working Crew login could be established: the password-reset email link is broken (#70) and Supabase magic-link/reset hit the email rate limit. Crew is more restricted than PM, so PM passing all gates makes a Crew failure unlikely but not impossible — verify when a Crew login path exists. Blocked on #70. Observed Session 79.
 
 ### UX Polish
 
 - **#13** Row click should open read-only detail view (contacts + subcontractors) — currently Edit button is only way in
+- **#89** Vendors are mislabeled "(Sub)" in the project-scheduling New Task assignee dropdown. Both subcontractors and vendors from the Subs & Vendors list render with a "(Sub)" suffix, so a vendor (member_type='vendor') shows as "(Sub)" — the label doesn't match the record's type. Assignment itself works correctly; this is a display bug only. Fix: label each assignee by its actual type — "(Sub)" for subcontractors, "(Vendor)" for vendors. Likely a single dropdown-builder that hardcodes the "(Sub)" suffix instead of reading member_type. Observed Session 79 during manual testing.
 
 ### Track for Module 4 (Estimating)
 
@@ -107,6 +113,8 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 - **#76** Validation schema naming inconsistency. companySettingsSchema uses camelCase keys (addressLine1) and requires a manual remap somewhere in the company write path. New contactAddressSchema uses snake_case so the parsed object flows straight into the service layer with no remap. Resolves when companies writes get migrated to the standard pattern (related to the existing companies pre-trigger holdover item — but a separate code path).
 - **#77** Optional-address vs empty-string-vs-NULL. label and address_line2 use .optional() in Zod, which accepts both undefined and "". An empty form field will insert "" into the DB rather than NULL. Consistent with existing schemas, not blocking, flagged for awareness if data quality matters later.
 - **#78** 4B `set_cost_catalog_updated_by()` trigger function omits SECURITY DEFINER, deviating from the CLAUDE.md per-table updated_by template. Functionally harmless (the trigger passed 4B acceptance tests) but a pattern deviation. Fix: add SECURITY DEFINER to match the template. Found during 4B/4C build wrap.
+- **#87** MCP `SUPABASE_ACCESS_TOKEN` (sbp\_ personal token) lives only in the current shell env — vanishes on Codespace rebuild, breaking the Supabase MCP server every fresh session. Make it persistent (Codespaces secret or committed-safe mechanism). Discovered Session 77.
+- **#88** rebuild-test still uses legacy JWT anon key (`NEXT_PUBLIC_SUPABASE_ANON_KEY` = eyJ... format). Migrate to `sb_publishable_` key + update `.env.local`, then click "Disable JWT-based API keys" to kill the leaked legacy service*role key (rotated to sb_secret* in S77, but legacy pair still enabled because anon half is in use). Rebuild-test only; production unaffected. Discovered Session 77.
   ### Track for Module 7
 - **#80** M7: wire signed-CO deltas into `contract_value` reconciliation. Per the Session 55 5D decision, approved change orders are **display-only** — the project budget view derives `projects.contract_value + sum(approved COs) = revised total`, but CO sign-off does **not** mutate `contract_value`. Module 7 (financials / draw schedules) owns the write-through: reconcile the revised total into the money surfaces (draw schedule, headline contract value) at build time. The signed COs are the source of record, so nothing is lost by deferring — this item exists solely so the write-through isn't forgotten when M7 is built. Decided Session 55 (5D change-orders interview).
 
@@ -170,6 +178,10 @@ non-role portal identity; then build the sub-facing surface that issues these in
 - **#16** Team member password reset UI — closed Session 39 (commit `1ec46b5`). "Send password reset email" button on edit page triggers `auth.resetPasswordForEmail`. Server action ran clean; email delivery blocked by Supabase rate limit during smoke test — infrastructure, not code. Separately discovered pre-existing bug in the sign-in page's Forgot Password link handler (see #70).
 - **#17** Team member notes field — closed Session 39 (commit `1ec46b5`). Textarea in edit form, writes to `profiles.notes` column added in Migration 026.
 - **#66** Ownership transfer — closed Session 40 (commit pending). Migration 027 + transfer-form on Owner-self team detail page. Spawned #71–#75.---
+- **#8** team-page-client.tsx local ROLE_LABELS — closed Session 76 (commit c5ac222). Now imports from @framefocus/shared; shared constant is a superset, all overlapping values identical, behavior unchanged.
+- **#10** invite-form.tsx Invitation import missing import type — closed Session 76 as stale. No Invitation import exists in invite-form.tsx; the only one (in team-page-client.tsx) already uses an inline type qualifier. Condition described never existed in current code.
+- **#50** Delete markup-test/page.tsx — closed Session 76 (commit e8ca00d). Module 3G complete; no references anywhere in codebase.
+- **#85** CO PDF bold line-item row — closed Session 79 (UI verification, no code change — bold row confirmed intentional, it is the line item vs. its detail breakdown, not a bug).
 
 ## Process notes
 

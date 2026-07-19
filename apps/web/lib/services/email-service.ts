@@ -37,13 +37,18 @@ export type TemplateVariables = {
   sent_date: string;
 };
 
-/** Replaces {{var}} tokens. Unknown tokens are left untouched. */
+/**
+ * Replaces {{var}} tokens. Unknown tokens are left untouched. Accepts any
+ * string map so change-order variables (co_number, co_title, …) reuse the same
+ * substitution as the estimate variables — TemplateVariables is a compatible
+ * subtype.
+ */
 export function replaceTemplateVariables(
   template: string,
-  variables: TemplateVariables
+  variables: Record<string, string>
 ): string {
   return template.replace(/\{\{(\w+)\}\}/g, (match, key: string) =>
-    key in variables ? variables[key as keyof TemplateVariables] : match
+    key in variables ? variables[key] : match
   );
 }
 
@@ -54,6 +59,10 @@ export {
   DEFAULT_PROPOSAL_SUBJECT,
   DEFAULT_REMINDER_BODY,
   DEFAULT_REMINDER_SUBJECT,
+  DEFAULT_CO_BODY,
+  DEFAULT_CO_SUBJECT,
+  DEFAULT_CO_REMINDER_BODY,
+  DEFAULT_CO_REMINDER_SUBJECT,
 } from '@/lib/proposal/proposal-defaults';
 
 export type EmailType =
@@ -61,12 +70,20 @@ export type EmailType =
   | 'reminder'
   | 'signature_complete'
   | 'signature_declined'
-  | 'estimate_expired';
+  | 'estimate_expired'
+  // Signed-artifact spec §7 — change-order email types.
+  | 'change_order'
+  | 'co_reminder'
+  | 'co_signature_complete'
+  | 'co_signature_declined';
 
 export interface LogEmailInput {
   company_id: string;
   estimate_id: string | null;
   signing_session_id: string | null;
+  // Signed-artifact spec §4.3 — CO email FKs (nullable; set only for CO emails).
+  change_order_id?: string | null;
+  co_signing_session_id?: string | null;
   resend_message_id: string | null;
   email_type: EmailType;
   recipient_email: string;
@@ -90,6 +107,10 @@ export async function logEmail(
       company_id: input.company_id,
       estimate_id: input.estimate_id,
       signing_session_id: input.signing_session_id,
+      // New columns from the signed-artifact migration — expected type errors
+      // against the un-regenerated database.ts until the migration is applied.
+      change_order_id: input.change_order_id ?? null,
+      co_signing_session_id: input.co_signing_session_id ?? null,
       resend_message_id: input.resend_message_id,
       email_type: input.email_type,
       recipient_email: input.recipient_email,

@@ -192,7 +192,14 @@ export async function softDeleteChangeOrder(id: string): Promise<Result> {
  */
 export async function sendChangeOrder(
   id: string,
-  input?: { recipient_name?: string; recipient_email?: string }
+  input?: {
+    recipient_name?: string;
+    recipient_email?: string;
+    // Contractor signature (signed-artifact spec §4.2) — required by the send
+    // route on first send; reused verbatim on re-send so omitted then.
+    contractor_signature_mode?: 'saved_image' | 'typed_name';
+    contractor_signature_name?: string;
+  }
 ): Promise<{ success: boolean; signingUrl?: string; error?: string }> {
   try {
     const res = await fetch(`/api/change-orders/${id}/send`, {
