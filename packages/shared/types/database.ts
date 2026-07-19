@@ -957,6 +957,391 @@ export type Database = {
           },
         ]
       }
+      daily_log_crew: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          daily_log_id: string
+          deleted_at: string | null
+          id: string
+          is_deleted: boolean | null
+          member_id: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          daily_log_id: string
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          member_id: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          daily_log_id?: string
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          member_id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_log_crew_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_log_crew_daily_log_id_fkey"
+            columns: ["daily_log_id"]
+            isOneToOne: false
+            referencedRelation: "daily_logs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_log_crew_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      daily_log_sub_entries: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          daily_log_id: string
+          deleted_at: string | null
+          hours: number
+          id: string
+          is_deleted: boolean | null
+          member_id: string
+          note: string | null
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          daily_log_id: string
+          deleted_at?: string | null
+          hours: number
+          id?: string
+          is_deleted?: boolean | null
+          member_id: string
+          note?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          daily_log_id?: string
+          deleted_at?: string | null
+          hours?: number
+          id?: string
+          is_deleted?: boolean | null
+          member_id?: string
+          note?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_log_sub_entries_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_log_sub_entries_daily_log_id_fkey"
+            columns: ["daily_log_id"]
+            isOneToOne: false
+            referencedRelation: "daily_logs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_log_sub_entries_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      daily_logs: {
+        Row: {
+          author_member_id: string
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          equipment_used: string | null
+          hazard_notes: string | null
+          hazards_present: boolean
+          id: string
+          is_deleted: boolean | null
+          log_date: string
+          material_needed: string | null
+          material_used: string | null
+          notes: string | null
+          pdf_file_id: string | null
+          project_id: string
+          tasks_tomorrow: string | null
+          updated_at: string | null
+          updated_by: string | null
+          weather: string | null
+          work_performed: string | null
+        }
+        Insert: {
+          author_member_id?: string
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          equipment_used?: string | null
+          hazard_notes?: string | null
+          hazards_present?: boolean
+          id?: string
+          is_deleted?: boolean | null
+          log_date: string
+          material_needed?: string | null
+          material_used?: string | null
+          notes?: string | null
+          pdf_file_id?: string | null
+          project_id: string
+          tasks_tomorrow?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+          weather?: string | null
+          work_performed?: string | null
+        }
+        Update: {
+          author_member_id?: string
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          equipment_used?: string | null
+          hazard_notes?: string | null
+          hazards_present?: boolean
+          id?: string
+          is_deleted?: boolean | null
+          log_date?: string
+          material_needed?: string | null
+          material_used?: string | null
+          notes?: string | null
+          pdf_file_id?: string | null
+          project_id?: string
+          tasks_tomorrow?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+          weather?: string | null
+          work_performed?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "daily_logs_author_member_id_fkey"
+            columns: ["author_member_id"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_logs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_logs_pdf_file_id_fkey"
+            columns: ["pdf_file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "daily_logs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deliveries: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          delivery_date: string
+          has_exceptions: boolean
+          id: string
+          is_deleted: boolean | null
+          notes: string | null
+          project_id: string
+          purchase_order_id: string | null
+          received_by: string
+          updated_at: string | null
+          updated_by: string | null
+          vendor_name: string
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          delivery_date: string
+          has_exceptions?: boolean
+          id?: string
+          is_deleted?: boolean | null
+          notes?: string | null
+          project_id: string
+          purchase_order_id?: string | null
+          received_by?: string
+          updated_at?: string | null
+          updated_by?: string | null
+          vendor_name: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          delivery_date?: string
+          has_exceptions?: boolean
+          id?: string
+          is_deleted?: boolean | null
+          notes?: string | null
+          project_id?: string
+          purchase_order_id?: string | null
+          received_by?: string
+          updated_at?: string | null
+          updated_by?: string | null
+          vendor_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deliveries_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deliveries_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deliveries_purchase_order_id_fkey"
+            columns: ["purchase_order_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deliveries_received_by_fkey"
+            columns: ["received_by"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      delivery_items: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          delivery_id: string
+          description: string
+          id: string
+          is_deleted: boolean | null
+          issue_note: string | null
+          po_item_id: string | null
+          qty_damaged: number
+          qty_received: number
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          delivery_id: string
+          description: string
+          id?: string
+          is_deleted?: boolean | null
+          issue_note?: string | null
+          po_item_id?: string | null
+          qty_damaged?: number
+          qty_received?: number
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          delivery_id?: string
+          description?: string
+          id?: string
+          is_deleted?: boolean | null
+          issue_note?: string | null
+          po_item_id?: string | null
+          qty_damaged?: number
+          qty_received?: number
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delivery_items_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_items_delivery_id_fkey"
+            columns: ["delivery_id"]
+            isOneToOne: false
+            referencedRelation: "deliveries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_items_po_item_id_fkey"
+            columns: ["po_item_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_order_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_logs: {
         Row: {
           bounced_at: string | null
@@ -2656,6 +3041,369 @@ export type Database = {
           },
         ]
       }
+      purchase_order_items: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          description: string
+          id: string
+          is_deleted: boolean | null
+          purchase_order_id: string
+          qty_ordered: number
+          sort_order: number
+          unit: string | null
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          description: string
+          id?: string
+          is_deleted?: boolean | null
+          purchase_order_id: string
+          qty_ordered: number
+          sort_order?: number
+          unit?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string
+          id?: string
+          is_deleted?: boolean | null
+          purchase_order_id?: string
+          qty_ordered?: number
+          sort_order?: number
+          unit?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchase_order_items_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_order_items_purchase_order_id_fkey"
+            columns: ["purchase_order_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      purchase_orders: {
+        Row: {
+          author_member_id: string
+          closed_by: string | null
+          closed_reason: string | null
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          is_deleted: boolean | null
+          ordered_at: string | null
+          po_number: string | null
+          project_id: string
+          status: string
+          updated_at: string | null
+          updated_by: string | null
+          vendor_name: string
+        }
+        Insert: {
+          author_member_id?: string
+          closed_by?: string | null
+          closed_reason?: string | null
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          ordered_at?: string | null
+          po_number?: string | null
+          project_id: string
+          status?: string
+          updated_at?: string | null
+          updated_by?: string | null
+          vendor_name: string
+        }
+        Update: {
+          author_member_id?: string
+          closed_by?: string | null
+          closed_reason?: string | null
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          ordered_at?: string | null
+          po_number?: string | null
+          project_id?: string
+          status?: string
+          updated_at?: string | null
+          updated_by?: string | null
+          vendor_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchase_orders_author_member_id_fkey"
+            columns: ["author_member_id"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_orders_closed_by_fkey"
+            columns: ["closed_by"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_orders_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_orders_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      safety_incident_injuries: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          incident_id: string
+          injured_name: string | null
+          is_deleted: boolean | null
+          member_id: string | null
+          treatment_notes: string | null
+          treatment_sought: boolean
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          incident_id: string
+          injured_name?: string | null
+          is_deleted?: boolean | null
+          member_id?: string | null
+          treatment_notes?: string | null
+          treatment_sought?: boolean
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          incident_id?: string
+          injured_name?: string | null
+          is_deleted?: boolean | null
+          member_id?: string | null
+          treatment_notes?: string | null
+          treatment_sought?: boolean
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_incident_injuries_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incident_injuries_incident_id_fkey"
+            columns: ["incident_id"]
+            isOneToOne: false
+            referencedRelation: "safety_incidents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incident_injuries_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      safety_incident_witnesses: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          incident_id: string
+          is_deleted: boolean | null
+          member_id: string | null
+          updated_at: string | null
+          updated_by: string | null
+          witness_name: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          incident_id: string
+          is_deleted?: boolean | null
+          member_id?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+          witness_name?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          incident_id?: string
+          is_deleted?: boolean | null
+          member_id?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+          witness_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_incident_witnesses_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incident_witnesses_incident_id_fkey"
+            columns: ["incident_id"]
+            isOneToOne: false
+            referencedRelation: "safety_incidents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incident_witnesses_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      safety_incidents: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          description: string
+          id: string
+          incident_date: string
+          incident_type: string
+          is_deleted: boolean | null
+          pdf_file_id: string | null
+          project_id: string | null
+          reported_by_member_id: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          description: string
+          id?: string
+          incident_date: string
+          incident_type: string
+          is_deleted?: boolean | null
+          pdf_file_id?: string | null
+          project_id?: string | null
+          reported_by_member_id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string
+          id?: string
+          incident_date?: string
+          incident_type?: string
+          is_deleted?: boolean | null
+          pdf_file_id?: string | null
+          project_id?: string | null
+          reported_by_member_id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safety_incidents_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_pdf_file_id_fkey"
+            columns: ["pdf_file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safety_incidents_reported_by_member_id_fkey"
+            columns: ["reported_by_member_id"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       schedule_entries: {
         Row: {
           company_id: string
@@ -3516,6 +4264,17 @@ export type Database = {
         Args: { p_estimate_id: string }
         Returns: string
       }
+      create_safety_incident: {
+        Args: {
+          p_description: string
+          p_incident_date: string
+          p_incident_type: string
+          p_injuries?: Json
+          p_project_id: string
+          p_witnesses?: Json
+        }
+        Returns: string
+      }
       get_invitation_by_token: {
         Args: { invite_token: string }
         Returns: {
@@ -3538,6 +4297,17 @@ export type Database = {
       get_my_company_id: { Args: never; Returns: string }
       get_my_member_id: { Args: never; Returns: string }
       get_my_role: { Args: never; Returns: string }
+      get_project_day_segments: {
+        Args: { p_log_date: string; p_project_id: string }
+        Returns: {
+          display_name: string
+          member_id: string
+          member_type: string
+          segment_end: string
+          segment_start: string
+          segment_type: string
+        }[]
+      }
       is_assigned_to_project: {
         Args: { p_project_id: string }
         Returns: boolean
@@ -3549,6 +4319,11 @@ export type Database = {
       next_project_internal_seq: { Args: never; Returns: number }
       next_project_number: { Args: never; Returns: string }
       owns_open_session: { Args: { p_session_id: string }; Returns: boolean }
+      recompute_delivery_exceptions: {
+        Args: { p_delivery_id: string }
+        Returns: undefined
+      }
+      recompute_po_status: { Args: { p_po_id: string }; Returns: undefined }
       seed_default_tags: { Args: { p_company_id: string }; Returns: undefined }
       set_winning_bid: {
         Args: { p_line_item_id: string; p_sub_bid_id: string }
