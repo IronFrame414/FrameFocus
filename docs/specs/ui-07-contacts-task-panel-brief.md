@@ -3,6 +3,7 @@
 **Repo home:** `docs/specs/ui-07-contacts-task-panel-brief.md`
 **Status: PRE-SPEC. Do not build from this.** Planning input from Session 79 manual testing. Each item needs its own interview-first planning session (Josh narrates → trace → approval) before a spec exists.
 **Sequencing:** Item 3's data-model fork must be decided **before** Item 4's panel is designed — they are coupled through the assignee list.
+**Amended 2026-07-20, round 2 (FK evidence):** the assignee source is corrected below — task assignment reads **`company_members`** (not `subcontractors` directly), and `company_members` is populated from `subcontractors` by a DB trigger. This trigger is also the confirmed **root cause of tech-debt #89**. See Item 3 point 2.
 
 ---
 
@@ -10,7 +11,7 @@
 
 Today the sidebar has two destinations: "Contacts" and "Subs & Vendors." Intent: one "Contacts" page holding everyone the company deals with, broken down by type — Clients, Subs, Vendors. One page, internal views; not separate sidebar items.
 
-**Why beyond tidiness:** the split model already leaks downstream. The project-schedule assignee dropdown labels both subs and vendors as "(Sub)" — vendors show mislabeled (**tech debt #89**). Settling the contact model at the source is what makes the label correct everywhere.
+**Why beyond tidiness:** the split model already leaks downstream. The project-schedule assignee dropdown labels both subs and vendors as "(Sub)" — vendors show mislabeled (**tech debt #89**). **Root cause (verified round 2):** the `create_member_for_new_subcontractor` trigger copies every `subcontractors` row (both `sub_type='subcontractor'` and `sub_type='vendor'`) into `company_members` with **`member_type='subcontractor'`** — so vendors lose their vendor identity at sync time, and the dropdown (`task-form.tsx:184`, which appends "(Sub)" for `member_type==='subcontractor'`) can't tell them apart. Fixing the label means either carrying `sub_type` through the trigger into `company_members` or reading vendor-ness back from `subcontractors`. Settling the contact model at the source is what makes the label correct everywhere.
 
 **Current behavior — confirmed Session 79, INTENDED, not a bug:** subs become assignable in project scheduling only when entered through the "Subs & Vendors" list. That is correct — Subs & Vendors is the source of truth for subs. **There is no assignment gap to fix.**
 
@@ -21,7 +22,7 @@ Today the sidebar has two destinations: "Contacts" and "Subs & Vendors." Intent:
 2. **The big fork:** presentation-layer merge (two tables, one UI) vs. true data-model consolidation. Clients live differently from subs/vendors today, and the schema separation is real — but it is **not** the `member_type`-on-subs/vendors shape earlier drafts of this brief assumed. Verified against live schema 2026-07-20:
    - **`subcontractors`** table holds both subs and vendors, discriminated by a **`sub_type`** column (values `'subcontractor'` / `'vendor'`). There is **no `member_type` column on `subcontractors`.**
    - **`company_members`** is a separate table with its own **`member_type`** column (values `'crew'` / `'subcontractor'`) — internal team/crew records, not the Subs & Vendors list.
-   - **Assignment consequence (confirmed):** project-schedule task assignment reads **only from `subcontractors`**. Subs entered through the Contacts surface (which is not the `subcontractors` table) **cannot be assigned to tasks.** This is the mechanism behind the "source of truth is Subs & Vendors" behavior noted above, and any consolidation decision must preserve it (or explicitly migrate the assignee source).
+   - **Assignment mechanism (corrected round 2 — FK evidence):** task/schedule/punch assignment reads **`company_members`**, not `subcontractors` directly. Verified FKs: `tasks.assignee_id`, `schedule_entries.member_id`, and `punch_list_items.assignee_id` all reference **`company_members`**; the assignee picker loads the members list (`task-form.tsx:11,181`). A sub becomes assignable because the **`create_member_for_new_subcontractor` trigger** auto-creates a `company_members` row when a `subcontractors` row is inserted. So the Session-79 behavior ("only Subs & Vendors entries are assignable") is correct, but the mechanism is **trigger-sync into `company_members`**, not a direct read of `subcontractors`. Consolidation must preserve this sync (or explicitly re-point the assignee source), and — see "Why beyond tidiness" — the trigger's collapse of `sub_type` into `member_type='subcontractor'` is the #89 root cause to fix here.
    This drives everything else, including Item 4.
 3. `/subs-and-vendors` route + deep links: redirect or retire.
 4. Per-type fields (sub insurance/trade fields a client doesn't have): per-type form design on the unified page.

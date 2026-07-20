@@ -4,6 +4,7 @@
 **Design source:** approved **1a "Refined Navy."** Depends on **ui-01-foundation.**
 **Task 6 of 6.**
 **Amended 2026-07-20 (locked build decisions):** real CO statuses are `draft / sent / signed / voided`. Badge map: **`sent` → "Awaiting sig."**, **`signed` → "Signed"**, **`voided` → "Voided" (visible, not dropped)**, `draft` → "Draft" (§S3, §4). Negative COs render **red** per spec — the shipped code currently renders them **green**, so this changes shipped behavior (§S4, §7). The amount field is `net_delta`. The list's "Description" column **displays `change_orders.title`** (keep the "Description" column label) (§S4, §4).
+**Amended 2026-07-20, round 2:** **Financial Visibility Floor (ui-01 §11):** for **PM/foreman/crew**, hide all CO **dollar amounts** — the **Amount column** (drop the cell/column) and the **`$` sub-captions** on the summary cards. The CO **counts** (Awaiting/Signed/Draft) and **statuses** remain visible to all; only the money is gated. (Label "Signed" is already standardized from round 1.)
 
 ---
 
@@ -19,7 +20,7 @@ Per Foundation §1 — **including the merge gate: `feat/signed-artifacts` must 
 
 ## 2 · §S — resolve live before writing
 - **§S1 — Existing CO screen.** Locate the current change-orders route/component; restyle in place, keep data wiring + row routing.
-- **§S2 — Summary sources.** Real sources for: Awaiting Signature count + pending dollar sum (`status='sent'`); **Signed** count + added dollar sum (`status='signed'`); Draft count. *(Amended 2026-07-20: "Approved" → "Signed".)*
+- **§S2 — Summary sources.** Real sources for: Awaiting Signature count + pending dollar sum (`status='sent'`); **Signed** count + added dollar sum (`status='signed'`); Draft count. *(Amended 2026-07-20: "Approved" → "Signed".)* **Financial floor (ui-01 §11):** the **counts** show for all roles; the **dollar sums** (pending $, added $) are **hidden for PM/foreman/crew** — render the count with no `$` caption for those roles.
 - **§S3 — Status set.** **Resolved 2026-07-20 (audit).** Real statuses (DB CHECK + `CO_STATUS_LABELS`): `draft / sent / signed / voided`. Badge map — **`sent` → "Awaiting sig."**, **`signed` → "Signed"**, **`voided` → "Voided"** (surfaced, not dropped — it has a live row and a color today), **`draft` → "Draft"**. Do not STOP; render all four.
 - **§S4 — Row fields.** Real source for CO # (`co_number`), **description column = `change_orders.title`** (the list shows `title`; keep the column label "Description"), amount (`net_delta`), status, sent date (`sent_at`). **Negative COs (credits) — decision locked 2026-07-19, reaffirmed 2026-07-20:** render as `−$12,345` in danger `#dc2626`, IBM Plex Mono, right-aligned like positives. **Note:** shipped code currently colors negative `net_delta` **green** (`changes-panel.tsx:325-328`) — this restyle **changes it to red**. The "Signed / $… added" summary card sums signed amounts (credits subtract).
 
@@ -48,7 +49,7 @@ Grid (header + rows): `0.7fr 2.3fr 1.2fr 1fr 1.3fr`, gap 12px.
 - **Rows:** padding `15px 20px`, border-bottom `#f1f3f7`, align center. Last row no border-bottom.
   - CO # (`co_number`): IBM Plex Mono 600 / 13px / `#9aa1ac`.
   - Description: Barlow 600 / `#14213d` — **renders `change_orders.title`** (amended 2026-07-20; column label stays "Description").
-  - Amount (`net_delta`): IBM Plex Mono 600 / 14px / `#14213d`, right-aligned. **Negative → `#dc2626` (red) with `−`** per §S4 (changes the shipped green).
+  - Amount (`net_delta`): IBM Plex Mono 600 / 14px / `#14213d`, right-aligned. **Negative → `#dc2626` (red) with `−`** per §S4 (changes the shipped green). **Financial floor (ui-01 §11):** this column is **hidden for PM/foreman/crew** — drop the Amount cell/column for those roles (the grid collapses to CO # · Description · Status · Sent).
   - **Status badge** (Barlow 600 / 12px, padding `4px 10px`, radius 20px) — **amended 2026-07-20**: Awaiting sig. (`sent`) → bg `#fdece0` text `#b45309`; Signed (`signed`) → bg `#e4f0e6` text `#3d7a4b`; Voided (`voided`) → bg `#eef1f6` text `#c0362c`; Draft (`draft`) → bg `#eef1f6` text `#6b7280`.
   - Sent (`sent_at`): IBM Plex Mono 500 / 12px / `#6b7280`; em-dash `#c3c9d4` when not sent (draft).
 

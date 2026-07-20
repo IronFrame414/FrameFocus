@@ -5,6 +5,7 @@
 **This is task 1 of 6** (Foundation → Dashboard → Projects list → Project detail → Budget → Change Orders). Build only the Foundation here.
 **Amended 2026-07-19 (audit):** wordmark → RafterWorks; nav → 10 items incl. Schedule; branch gate added; branch-exists claim corrected.
 **Amended 2026-07-20 (locked build decisions):** tokens replace existing Tailwind scales in place (§S1); fonts via `next/font` (§S2); icons via `lucide-react` (§S4); existing nav role-gating preserved (§S5, §9); Schedule nav extracts the dashboard's `CompanyCalendar` into a standalone `/schedule` route (§5a); Schedule surfaces ARE restyled to 1a in this refresh — the deferral is removed (§3, §5a); sidebar initials = first+last initial of the wired name (§5, §S6). The `feat/ui-refresh` branch now exists and is checked out (the §1 "does not exist yet" note is stale).
+**Amended 2026-07-20, round 2:** **ui-01 owns the Schedule body restyle** (List/Gantt/Calendar) — ui-04's Schedule tab reuses that same restyled component (§0, §5a, §9). `CompanyCalendar` is **MOVED** (not copied) to `/schedule`; the dashboard has **no** schedule view between this task and ui-02's new schedule card (§5a). **NEW cross-cutting rule — Financial Visibility Floor (§11):** PM / foreman / crew see **actual cost only** — never contract value, budgeted/sell amounts, or CO dollar amounts (this session = UI gates only; the RLS floor migration is a named follow-up in §10). Cleanup: stale §1 branch line corrected; token label "Focus"→"Works" (§4); stale §5a cross-ref in §10 fixed.
 
 ---
 
@@ -14,14 +15,15 @@ Establish the visual foundation the other five screens depend on:
 2. Register the design tokens (color, type, spacing) in the app's existing token system.
 3. Rebuild the left **sidebar / app shell** in the 1a "Refined Navy" style.
 4. Apply the page background + content-area shell.
+5. **(Added round 2)** Extract `CompanyCalendar` into a standalone `/schedule` route and restyle that Schedule view (List/Gantt/Calendar) to 1a — ui-01 owns this restyle; ui-04's Schedule tab reuses the same component (§5a).
 
-Nothing else. No dashboard content, no screen bodies.
+No screen bodies for the *other* five screens (dashboard, projects, budget, etc.) — those are later specs. The Schedule view is the one exception, per task 5 above.
 
 ---
 
 ## 1 · Branch & safety (CC Phase 0)
 - **Merge gate:** do not start this build until `feat/signed-artifacts` has merged to `main`. Verify with `git log origin/main --oneline -5` that the signed-artifacts commits are present; if not, STOP.
-- Work on branch **`feat/ui-refresh`**, created fresh off `main` at session start (verified 2026-07-19: this branch does **not** exist yet). Verify with `git branch --show-current` before any edit; if not on it, STOP and report.
+- Work on branch **`feat/ui-refresh`** (verified 2026-07-20: this branch **exists and is the working branch**; the earlier "does not exist yet" note is superseded). Verify with `git branch --show-current` before any edit; if not on it, STOP and report.
 - **Do not touch** `feat/signed-artifacts`.
 - **CC never commits.** Josh commits manually, path-scoped. Leave the working tree for him to review.
 - Enter **Plan Mode first** (Shift+Tab). Read the §S files, propose a plan, wait for approval before writing code.
@@ -60,7 +62,7 @@ Register these exactly. Match the token to its role; reuse tokens instead of re-
 | Primary (buttons, active nav, active tab, progress fill, links) | `#2f49d1` |
 | Primary hover | `#1f33a8` |
 | Blue tint (ghost-primary bg / info chip) | `#eef1fb` · `#e7ebf9` |
-| Amber accent (logo "Focus", avatar, event accents) | `#f59e0b` |
+| Amber accent (logo "Works", avatar, event accents) | `#f59e0b` |
 | Page background | `#f4f6f9` |
 | Card background | `#ffffff` |
 | Card border | `#e6e9ef` |
@@ -109,7 +111,7 @@ Rebuild as a normal component in the app's framework (reference only: `FFNav.dc.
 **Nav** (`padding 0 14px`, `gap 2px`, flex column). **Ten items**, **this order**:
 `Dashboard · Projects · Schedule · Contacts · Subs & Vendors · Estimates · Cost Catalog · Settings · Team · Billing`
 
-**§5a — Schedule nav item (added 2026-07-19; amended 2026-07-20).** The dashboard currently renders a company-wide `CompanyCalendar` (`apps/web/app/dashboard/company-calendar.tsx`, fed by `getCalendarEvents`) — there is no standalone `/schedule` route. **Create a standalone `/schedule` route and move `CompanyCalendar` (with its `getCalendarEvents` fetch) into it**, so the Schedule nav item and the dashboard's schedule card read the same model. Icon: calendar (lucide). **Body restyle is now IN scope** (decision 8): restyle the extracted schedule view to 1a.
+**§5a — Schedule nav item (added 2026-07-19; amended 2026-07-20; round 2).** The dashboard currently renders a company-wide `CompanyCalendar` (`apps/web/app/dashboard/company-calendar.tsx`, fed by `getCalendarEvents`) — there is no standalone `/schedule` route. **Create a standalone `/schedule` route and MOVE `CompanyCalendar` (with its `getCalendarEvents` fetch) into it** — a **move, not a copy**. **Consequence (round 2):** the dashboard loses its schedule view until ui-02 ships its new schedule card; that gap is expected and acceptable. Icon: calendar (lucide). **ui-01 owns the 1a restyle** of the extracted Schedule view (its List/Gantt/Calendar surfaces); **ui-04's Schedule tab reuses this same restyled component** — it is not re-restyled downstream.
 - Item: flex, align center, `gap 11px`, `padding 10px 12px`, radius 9px.
 - **Active** (matches current route): bg `#2f49d1`, text white, weight 600.
 - **Inactive**: text `#cdd6e8`, weight 500.
@@ -147,7 +149,7 @@ Do them in this order so the sidebar can already reference tokens and fonts.
 - Computed `font-family` on a **nav label** resolves to Barlow; on a **stat/number element** resolves to IBM Plex Mono. Barlow Semi Condensed is **not** loaded.
 - Tokens live in the app's existing token system (§S1); no ad-hoc duplicate hex where a token exists.
 - Sidebar renders: 236px navy, **RafterWorks wordmark with amber "Works"**, **the nav items in the specified order** (all 10 for an owner; fewer for lower roles — existing role-gating is preserved per §S5, amended 2026-07-20), the current route's item highlighted `#2f49d1`/white, footer showing the **real** signed-in user's initials (first+last initial)/name/role and real company name.
-- Schedule nav item routes to the existing schedule view (§5a); the view itself is unmodified.
+- Schedule nav item routes to the **extracted, 1a-restyled** `/schedule` view (§5a); `CompanyCalendar` has been **moved** there (dashboard no longer renders it). ui-04's Schedule tab reuses this same restyled component.
 - Page background is `#f4f6f9`; content region sits beside the fixed sidebar with correct padding.
 - `tsc` / typecheck passes, app builds, no new console errors, existing nav routing still works.
 
@@ -157,4 +159,17 @@ Do them in this order so the sidebar can already reference tokens and fonts.
 - Screens 2–6 each get their own spec.
 - Any §S5 nav discrepancy Josh resolves becomes an amendment to this spec before the next screen is built.
 - **Contacts merge pending (ui-07 Item 3):** "Contacts" and "Subs & Vendors" are slated to unify into one Contacts surface after a planning session resolves the data-model fork. Build both nav items now as specced; expect a later amendment dropping the nav to 9 items. Do not invest in either page body.
-- **Task-creation panel (ui-07 Item 4):** the Schedule page body (deferred per §5a) will include a modal/slide-in task-entry panel; it is downstream of the Item 3 contact-model decision and the 6A UI build.
+- **Task-creation panel (ui-07 Item 4):** the Schedule page body (restyled in this ui-01 pass per §5a) will later gain a modal/slide-in task-entry panel; that panel is downstream of the Item 3 contact-model decision and the 6A UI build — not part of this restyle.
+- **`FINANCIAL-RLS-FLOOR` migration (named follow-up, added round 2):** this session enforces the Financial Visibility Floor (§11) at the **UI layer only**. A DB migration must add a role floor so PM/foreman/crew cannot read contract/budget/CO dollar figures via the API either — e.g. a role condition inside `can_view_project()` or separate financial-table policies (`projects.contract_value`, `project_budget_items` budget/sell columns, `change_orders.net_delta`). **Batch this with the 7 pending production migrations** (see STATE.md). Until it lands, the floor is UI-only and bypassable by a direct query — call this out at review.
+
+---
+
+## 11 · Financial Visibility Floor (cross-cutting — added 2026-07-20 round 2)
+**Applies to ui-02 through ui-06.** A new role rule for financial figures, distinct from the existing nav/action role-gates:
+
+- **Owner + Admin:** see everything (contract value, budgeted/sell amounts, committed, actual cost, variance, CO dollar amounts, margins).
+- **Project Manager, Foreman, Crew:** see **actual cost only**. They must **NOT** see: contract value (`projects.contract_value`), budgeted or sell/price amounts (`project_budget_items.budgeted_amount` and any future sell column), Revised/Original contract, Projected Margin, or **change-order dollar amounts** (`change_orders.net_delta` and any $ summary derived from it). Actual cost (`actual_amount`, once Module 7A populates it) is the one money figure these roles may see.
+- **Rationale:** CLAUDE.md previously granted PM "view job finances" broadly; this narrows it to actual cost and extends the same floor to foreman/crew (both "Limited/Minimal" web roles). See the CLAUDE.md role-table correction (round 2).
+- **This session = UI gates only.** Hide/omit the gated figures for these roles in each screen. The API-level floor is the named `FINANCIAL-RLS-FLOOR` follow-up (§10).
+- **Grid behavior = REFLOW (deterministic rule, locked 2026-07-20 round 2).** When a gated card or column is hidden for PM/foreman/crew, the **remaining cards/columns reflow to fill the row** — do NOT leave a locked em-dash placeholder slot, and do NOT inject a substitute metric. A 4-up KPI row becomes a 3-up (or 2-up) of the visible cards; a 6-column table becomes a 3-column table of the visible columns; grid track counts shrink to the visible count. This applies uniformly across ui-02–ui-06; individual screens do not get to choose a different fill behavior.
+- **Per-screen application:** ui-02 KPI row (Contract Value, Awaiting-Signature $), ui-03 Contract column, ui-04 KPI row (Revised Contract, Projected Margin) + CO amounts in open-items, ui-05 whole budget summary + Budget/Committed/Variance columns (Actual stays), ui-06 CO amounts + $ summary cards. Each spec carries its own note.
