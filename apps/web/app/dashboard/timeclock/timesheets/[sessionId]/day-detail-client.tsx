@@ -276,7 +276,14 @@ export function DayDetailClient({
     <div style={{ maxWidth: '980px' }}>
       {/* Breadcrumb */}
       <p style={{ fontSize: '13px', color: color.muted, margin: '0 0 10px' }}>
-        <Link href="/dashboard/timesheets" style={{ color: color.primary, textDecoration: 'none' }}>
+        <Link href="/dashboard/timeclock" style={{ color: color.primary, textDecoration: 'none' }}>
+          Timeclock
+        </Link>{' '}
+        /{' '}
+        <Link
+          href="/dashboard/timeclock/timesheets"
+          style={{ color: color.primary, textDecoration: 'none' }}
+        >
           Timesheets
         </Link>{' '}
         / {session.memberName}

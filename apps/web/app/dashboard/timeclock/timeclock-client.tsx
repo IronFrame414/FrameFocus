@@ -3,19 +3,21 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  clockIn,
-  clockOut,
-  closeSessionOnly,
   listPickerTasks,
   switchSegment,
   updateMyRecentSegment,
   type Completion,
-  type GpsFix,
   type PickerTask,
   type SegmentType,
   type SessionWithSegments,
   type TimeSegment,
 } from '@/lib/services/time-tracking-client';
+import {
+  ClockModal,
+  fieldLabelStyle,
+  inputStyle,
+  overlayStyle,
+} from '@/components/time/clock-modal';
 import {
   SEGMENT_FIELD_RULES,
   SEGMENT_TYPE_LABELS,
@@ -49,59 +51,9 @@ interface TimeclockClientProps {
   timeZone: string;
 }
 
-type ModalMode = 'clock-in' | 'switch' | 'clock-out' | 'edit' | null;
-
-/**
- * GPS capture-if-available (§4.2 [S84]): one geolocation request; on denial,
- * timeout, or an insecure context, resolve undefined and proceed — never
- * block, never error.
- */
-function captureGps(): Promise<GpsFix | undefined> {
-  return new Promise((resolve) => {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      resolve(undefined);
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (pos) =>
-        resolve({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          accuracy: pos.coords.accuracy,
-          captured_at: new Date().toISOString(),
-        }),
-      () => resolve(undefined),
-      { timeout: 5000, maximumAge: 60000 }
-    );
-  });
-}
-
-const overlayStyle: React.CSSProperties = {
-  position: 'fixed',
-  inset: 0,
-  backgroundColor: 'rgba(20, 33, 61, 0.45)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  zIndex: 50,
-};
-
-const fieldLabelStyle: React.CSSProperties = {
-  ...microLabelStyle,
-  display: 'block',
-  marginBottom: '6px',
-};
-
-const inputStyle: React.CSSProperties = {
-  width: '100%',
-  padding: '9px 12px',
-  borderRadius: '9px',
-  border: `1px solid ${color.inputBorder}`,
-  fontFamily: font.sans,
-  fontSize: '14px',
-  color: color.body,
-  backgroundColor: '#fff',
-};
+// Clock-in / clock-out flows live in the shared ClockModal (also used by the
+// global header button). This page keeps only the switch and edit modals.
+type ModalMode = 'switch' | 'edit' | null;
 
 export function TimeclockClient({
   initialSession,
@@ -114,6 +66,7 @@ export function TimeclockClient({
   const session = initialSession;
 
   const [modal, setModal] = useState<ModalMode>(null);
+  const [clockModal, setClockModal] = useState<'clock-in' | 'clock-out' | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [taskWarning, setTaskWarning] = useState<string | null>(null);
@@ -242,25 +195,6 @@ export function TimeclockClient({
     };
   }
 
-  async function handleClockIn() {
-    const invalid = validateAttribution();
-    if (invalid) {
-      setError(invalid);
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    const gps = await captureGps();
-    const res = await clockIn({ first_segment: normalizedAttribution(), gps_in: gps });
-    setBusy(false);
-    if (!res.success) {
-      setError(res.error ?? 'Failed to clock in.');
-      return;
-    }
-    setModal(null);
-    router.refresh();
-  }
-
   async function handleSwitch() {
     const invalid = validateEnd() ?? validateAttribution();
     if (invalid) {
@@ -273,45 +207,6 @@ export function TimeclockClient({
     setBusy(false);
     if (!res.success) {
       setError(res.error ?? 'Failed to switch.');
-      return;
-    }
-    if (res.taskWarning) setTaskWarning(res.taskWarning);
-    setModal(null);
-    router.refresh();
-  }
-
-  async function handleClockOut() {
-    if (!session) return;
-    // Recovery path: the segment chain is already fully ended (the state a
-    // partial clock-out failure leaves behind) — there is no segment to
-    // validate or end, so close the session only. Without this branch,
-    // validateEnd()'s "No open segment." gate wedges clock-out permanently.
-    if (!currentSegment) {
-      setBusy(true);
-      setError(null);
-      const gps = await captureGps();
-      const res = await closeSessionOnly({ session_id: session.id, gps_out: gps });
-      setBusy(false);
-      if (!res.success) {
-        setError(res.error ?? 'Failed to clock out.');
-        return;
-      }
-      setModal(null);
-      router.refresh();
-      return;
-    }
-    const invalid = validateEnd();
-    if (invalid) {
-      setError(invalid);
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    const gps = await captureGps();
-    const res = await clockOut({ session_id: session.id, end: endFields(), gps_out: gps });
-    setBusy(false);
-    if (!res.success) {
-      setError(res.error ?? 'Failed to clock out.');
       return;
     }
     if (res.taskWarning) setTaskWarning(res.taskWarning);
@@ -429,7 +324,7 @@ export function TimeclockClient({
           </p>
           <button
             style={{ ...primaryButtonStyle, fontSize: '15px', padding: '12px 28px' }}
-            onClick={() => openModal('clock-in')}
+            onClick={() => setClockModal('clock-in')}
           >
             Clock in
           </button>
@@ -478,7 +373,7 @@ export function TimeclockClient({
                 <button style={secondaryButtonStyle} onClick={() => openModal('switch')}>
                   Switch job / task
                 </button>
-                <button style={primaryButtonStyle} onClick={() => openModal('clock-out')}>
+                <button style={primaryButtonStyle} onClick={() => setClockModal('clock-out')}>
                   Clock out
                 </button>
               </div>
@@ -573,22 +468,11 @@ export function TimeclockClient({
             onClick={(e) => e.stopPropagation()}
           >
             <h3 style={{ ...h2Style, fontSize: '19px', marginBottom: '16px' }}>
-              {modal === 'clock-in' && 'Clock in'}
-              {modal === 'switch' && 'Switch job / task'}
-              {modal === 'clock-out' && 'Clock out'}
-              {modal === 'edit' && 'Edit segment'}
+              {modal === 'switch' ? 'Switch job / task' : 'Edit segment'}
             </h3>
 
-            {/* Recovery state: session open but the segment chain is already
-                fully ended — clock-out just closes the day (no end fields). */}
-            {modal === 'clock-out' && !currentSegment && (
-              <p style={{ fontSize: '13px', color: color.muted, margin: '0 0 14px' }}>
-                Your last segment is already ended — clocking out will close the day.
-              </p>
-            )}
-
-            {/* End-of-current fields (switch + clock-out). */}
-            {(modal === 'switch' || modal === 'clock-out') && currentSegment && (
+            {/* End-of-current fields (switch). */}
+            {modal === 'switch' && currentSegment && (
               <div style={{ marginBottom: '18px' }}>
                 <p style={{ fontSize: '13px', color: color.muted, margin: '0 0 10px' }}>
                   Ending: {SEGMENT_TYPE_LABELS[currentSegment.segment_type]}
@@ -632,8 +516,8 @@ export function TimeclockClient({
               </div>
             )}
 
-            {/* Next / edited segment attribution (not for plain clock-out). */}
-            {modal !== 'clock-out' && (
+            {/* Next / edited segment attribution. */}
+            {(modal === 'switch' || modal === 'edit') && (
               <div>
                 {(modal === 'switch') && (
                   <p style={{ ...microLabelStyle, marginBottom: '10px' }}>Next segment</p>
@@ -734,12 +618,6 @@ export function TimeclockClient({
               </div>
             )}
 
-            {modal === 'clock-in' && (
-              <p style={{ fontSize: '12px', color: color.faint, margin: '0 0 14px' }}>
-                Location is captured if your browser allows it — clocking in never requires it.
-              </p>
-            )}
-
             {error && (
               <p style={{ color: color.danger, fontSize: '13px', margin: '0 0 12px' }}>{error}</p>
             )}
@@ -752,25 +630,31 @@ export function TimeclockClient({
                 style={{ ...primaryButtonStyle, opacity: busy ? 0.6 : 1 }}
                 disabled={busy}
                 onClick={() => {
-                  if (modal === 'clock-in') void handleClockIn();
-                  else if (modal === 'switch') void handleSwitch();
-                  else if (modal === 'clock-out') void handleClockOut();
+                  if (modal === 'switch') void handleSwitch();
                   else void handleEditRecent();
                 }}
               >
-                {busy
-                  ? 'Saving…'
-                  : modal === 'clock-in'
-                    ? 'Clock in'
-                    : modal === 'switch'
-                      ? 'Switch'
-                      : modal === 'clock-out'
-                        ? 'Clock out'
-                        : 'Save'}
+                {busy ? 'Saving…' : modal === 'switch' ? 'Switch' : 'Save'}
               </button>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Shared clock-in / clock-out flows (same modal as the global header
+          button). */}
+      {clockModal && (
+        <ClockModal
+          mode={clockModal}
+          session={session}
+          myMemberId={myMemberId}
+          onClose={() => setClockModal(null)}
+          onDone={(result) => {
+            setClockModal(null);
+            if (result.taskWarning) setTaskWarning(result.taskWarning);
+            router.refresh();
+          }}
+        />
       )}
     </div>
   );

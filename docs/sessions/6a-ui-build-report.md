@@ -200,3 +200,24 @@
 5. **Week boundary sanity:** with company timezone America/New_York, a Sunday-evening
    session lands in the prior (Monday-start) week — confirm that matches your payroll
    expectation, else flip `WEEK_STARTS_ON` (top note 1).
+
+---
+
+## Addendum (S85, later same session) — global clock button + Timesheets nesting
+
+**AMENDMENT TO THE OWED FFNAV REINDEX (decision, Josh):** Timesheets is **no longer a
+first-class nav item**. It moved to a subpage of Timeclock —
+`/dashboard/timeclock/timesheets` (day detail `…/timesheets/[sessionId]`), surfaced by a
+tab strip (My clock · Timesheets) visible to supervisor roles only, with redirect stubs
+at the old `/dashboard/timesheets*` URLs. **The M6 handoff's FFNav (11 items, Timesheets
+at index 3) is superseded on this point: the future FFNav reindex must build 10 items**
+(Field Ops keeps its slot; Timesheets does not get one). The sidebar now carries a single
+interim Timeclock link.
+
+Also added: a **global header strip** in `DashboardShell` (every dashboard page shifts
+down by its 54px height — accepted) hosting a clock in/out button with live state
+("Clocked in · since 7:02 AM", company-tz). The clock-in/clock-out modal flows were
+extracted from the timeclock page into shared `components/time/clock-modal.tsx` so the
+header button is fully functional on any page (state via `getOpenSession()` in the
+dashboard layout; freshness = router.refresh() after mutations, no polling in v1;
+`listActiveProjects()` client read added for the global job picker).

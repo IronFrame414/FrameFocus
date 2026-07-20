@@ -190,10 +190,16 @@ export function TimesheetsClient({
           </p>
         </div>
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          <Link href={`/dashboard/timesheets?week=${prevAnchor}`} style={secondaryButtonStyle}>
+          <Link
+            href={`/dashboard/timeclock/timesheets?week=${prevAnchor}`}
+            style={secondaryButtonStyle}
+          >
             ‹ Prev
           </Link>
-          <Link href={`/dashboard/timesheets?week=${nextAnchor}`} style={secondaryButtonStyle}>
+          <Link
+            href={`/dashboard/timeclock/timesheets?week=${nextAnchor}`}
+            style={secondaryButtonStyle}
+          >
             Next ›
           </Link>
           <button
@@ -445,7 +451,7 @@ export function TimesheetsClient({
                         <StatusBadge status={s.status} />
                       </span>
                       <Link
-                        href={`/dashboard/timesheets/${s.id}`}
+                        href={`/dashboard/timeclock/timesheets/${s.id}`}
                         style={{ color: color.primary, fontWeight: 600, textDecoration: 'none' }}
                       >
                         Detail →

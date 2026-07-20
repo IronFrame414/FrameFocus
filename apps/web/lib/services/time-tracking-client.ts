@@ -531,6 +531,24 @@ export async function listOpenSessionsLive(): Promise<LiveSessionRow[]> {
   return rows.map((s) => ({ ...s, currentSegment: bySession.get(s.id) ?? null }));
 }
 
+/**
+ * Job picker read for the GLOBAL clock-in modal (which can open on any
+ * dashboard page, so no server-fetched project list exists). Active projects
+ * only; RLS scopes rows exactly like the server read (owner/admin all,
+ * everyone else assigned — 6A-1 §2.3 [S85]).
+ */
+export async function listActiveProjects(): Promise<{ id: string; name: string }[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('projects')
+    .select('id, name')
+    .eq('status', 'active')
+    .eq('is_deleted', false)
+    .order('name', { ascending: true });
+  if (error) return [];
+  return (data ?? []) as { id: string; name: string }[];
+}
+
 export interface PickerTask {
   id: string;
   title: string;

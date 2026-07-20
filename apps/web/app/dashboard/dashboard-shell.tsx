@@ -4,7 +4,6 @@ import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   Calendar,
-  ClipboardCheck,
   Clock,
   CreditCard,
   FileText,
@@ -18,12 +17,18 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { ROLE_LABELS, type CompanyRole } from '@framefocus/shared';
+import type { SessionWithSegments } from '@/lib/services/time-tracking-client';
+import { GlobalClockButton } from '@/components/time/global-clock-button';
 
 interface DashboardShellProps {
   children: React.ReactNode;
   userName: string;
   userRole: CompanyRole;
   companyName: string;
+  /** Global clock state (S85 header button) — fetched by the layout. */
+  openSession: SessionWithSegments | null;
+  myMemberId: string | null;
+  timeZone: string;
 }
 
 // ui-01 §5 — ten items, this order. Role gates preserved from the previous
@@ -38,18 +43,12 @@ const NAV_ITEMS: {
   { href: '/dashboard', label: 'Dashboard', icon: LayoutGrid },
   { href: '/dashboard/projects', label: 'Projects', icon: Rows3 },
   { href: '/dashboard/schedule', label: 'Schedule', icon: Calendar },
-  // INTERIM PLACEMENT (Module 6A build, S85): two plain links until the M6
-  // handoff's FFNav 11-item reindex (Field Ops hub, new order) is built — that
-  // reindex is explicitly out of scope here. Timeclock is every role's
-  // personal clock; Timesheets is the supervisor approval queue (roles that
-  // can have subordinates).
+  // INTERIM PLACEMENT (Module 6A build, S85): plain link until the M6
+  // handoff's FFNav reindex (Field Ops hub) is built — out of scope here.
+  // Timesheets is NOT a nav item: it moved to a subpage of Timeclock
+  // (/dashboard/timeclock/timesheets, S85 decision) — the owed FFNav reindex
+  // spec must be amended to 10 items accordingly (see 6a build report).
   { href: '/dashboard/timeclock', label: 'Timeclock', icon: Clock },
-  {
-    href: '/dashboard/timesheets',
-    label: 'Timesheets',
-    icon: ClipboardCheck,
-    roles: ['owner', 'admin', 'project_manager', 'foreman'],
-  },
   { href: '/dashboard/contacts', label: 'Contacts', icon: User },
   { href: '/dashboard/subcontractors', label: 'Subs & Vendors', icon: Users },
   {
@@ -77,7 +76,15 @@ function initials(name: string): string {
   return (first + last).toUpperCase();
 }
 
-export function DashboardShell({ children, userName, userRole, companyName }: DashboardShellProps) {
+export function DashboardShell({
+  children,
+  userName,
+  userRole,
+  companyName,
+  openSession,
+  myMemberId,
+  timeZone,
+}: DashboardShellProps) {
   const router = useRouter();
   const pathname = usePathname();
 
@@ -149,7 +156,19 @@ export function DashboardShell({ children, userName, userRole, companyName }: Da
           </button>
         </div>
       </aside>
-      <main className="flex-1 bg-[#f4f6f9] px-[30px] py-[26px]">{children}</main>
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Global header strip (S85): the clock button rides top-right on
+            every dashboard page. Known cost, accepted: shifts page content
+            down by the strip's height. */}
+        <header className="flex h-[54px] shrink-0 items-center justify-end border-b border-[#e6e9ef] bg-white px-[30px]">
+          <GlobalClockButton
+            openSession={openSession}
+            myMemberId={myMemberId}
+            timeZone={timeZone}
+          />
+        </header>
+        <main className="flex-1 bg-[#f4f6f9] px-[30px] py-[26px]">{children}</main>
+      </div>
     </div>
   );
 }
