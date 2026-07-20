@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { getOpenSession } from '@/lib/services/time-tracking';
 import { getProjects } from '@/lib/services/projects';
 import { getMyMember } from '@/lib/services/members';
+import { getCompanyTimezone } from '@/lib/services/company';
 import { TimeclockClient } from './timeclock-client';
 
 /**
@@ -20,10 +21,11 @@ export default async function TimeclockPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect('/sign-in');
 
-  const [session, projects, myMember] = await Promise.all([
+  const [session, projects, myMember, timeZone] = await Promise.all([
     getOpenSession(),
     getProjects({ status: 'active' }),
     getMyMember(),
+    getCompanyTimezone(),
   ]);
 
   // Task titles for the open session's segments (the picker fetches its own
@@ -43,6 +45,7 @@ export default async function TimeclockPage() {
       activeProjects={projects.map((p) => ({ id: p.id, name: p.name }))}
       myMemberId={myMember?.id ?? null}
       taskTitles={taskTitles}
+      timeZone={timeZone}
     />
   );
 }

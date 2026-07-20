@@ -24,7 +24,7 @@ function elapsedLabel(clockInIso: string, nowMs: number): string {
   return `${h}:${m.toString().padStart(2, '0')}`;
 }
 
-export function LiveBoard() {
+export function LiveBoard({ timeZone }: { timeZone: string }) {
   const [rows, setRows] = useState<LiveSessionRow[] | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -125,7 +125,7 @@ export function LiveBoard() {
                   {elapsedLabel(row.clock_in, now)}
                 </p>
                 <p style={{ margin: '1px 0 0', fontSize: '11px', color: color.faint }}>
-                  in {fmtTime(row.clock_in)}
+                  in {fmtTime(row.clock_in, timeZone)}
                   {row.gps_in != null ? ' · on site' : ''}
                 </p>
               </div>

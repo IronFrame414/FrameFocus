@@ -45,6 +45,8 @@ interface TimeclockClientProps {
   myMemberId: string | null;
   /** Titles for tasks referenced by the open session's segments. */
   taskTitles: Record<string, string>;
+  /** Company timezone (companies.timezone) — all wall-clock rendering. */
+  timeZone: string;
 }
 
 type ModalMode = 'clock-in' | 'switch' | 'clock-out' | 'edit' | null;
@@ -106,6 +108,7 @@ export function TimeclockClient({
   activeProjects,
   myMemberId,
   taskTitles,
+  timeZone,
 }: TimeclockClientProps) {
   const router = useRouter();
   const session = initialSession;
@@ -373,6 +376,7 @@ export function TimeclockClient({
             weekday: 'long',
             month: 'long',
             day: 'numeric',
+            timeZone, // company tz — SSR/client render the same header day
           }).format(new Date())}
         </p>
       </div>
@@ -444,7 +448,7 @@ export function TimeclockClient({
               }}
             >
               <div>
-                <p style={microLabelStyle}>Clocked in · {fmtTime(session.clock_in)}</p>
+                <p style={microLabelStyle}>Clocked in · {fmtTime(session.clock_in, timeZone)}</p>
                 <p
                   style={{
                     ...monoValue,
@@ -517,7 +521,8 @@ export function TimeclockClient({
                 >
                   <SegmentBar type={seg.segment_type} />
                   <div style={{ ...monoValue, fontSize: '13px', color: color.bodyAlt, width: '132px', flexShrink: 0, alignSelf: 'center' }}>
-                    {fmtTime(seg.segment_start)} – {seg.segment_end ? fmtTime(seg.segment_end) : 'now'}
+                    {fmtTime(seg.segment_start, timeZone)} –{' '}
+                    {seg.segment_end ? fmtTime(seg.segment_end, timeZone) : 'now'}
                   </div>
                   <div style={{ flex: 1, alignSelf: 'center', minWidth: 0 }}>
                     <p style={{ margin: 0, fontSize: '14px', fontWeight: 600, color: color.navy }}>

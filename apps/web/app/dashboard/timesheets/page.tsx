@@ -5,6 +5,7 @@ import {
   type SessionWithMemberAndSegments,
 } from '@/lib/services/time-tracking';
 import { getMyMember } from '@/lib/services/members';
+import { getCompanyTimezone } from '@/lib/services/company';
 import {
   PROJECT_BEARING_TYPES,
   intervalHours,
@@ -49,12 +50,7 @@ export default async function TimesheetsPage({
     redirect('/dashboard');
   }
 
-  const { data: company } = await supabase
-    .from('companies')
-    .select('timezone')
-    .eq('id', profile.company_id)
-    .single();
-  const timeZone = company?.timezone ?? 'America/New_York';
+  const timeZone = await getCompanyTimezone();
 
   const { weekStart, weekEnd } = weekWindowForYmd(searchParams.week, timeZone);
 
@@ -163,6 +159,7 @@ export default async function TimesheetsPage({
       viewerRole={profile.role}
       viewerMemberId={myMember?.id ?? null}
       canSeeLaborCost={profile.role === 'owner' || profile.role === 'admin'}
+      timeZone={timeZone}
     />
   );
 }

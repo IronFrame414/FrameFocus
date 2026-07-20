@@ -75,6 +75,9 @@ interface DayDetailClientProps {
   /** Owner/Admin use the broad edit path; supervisors the clock-only path. */
   isAdmin: boolean;
   canApprove: boolean;
+  /** Company timezone (companies.timezone) — all wall-clock DISPLAY. The
+   *  datetime-local edit inputs intentionally stay browser-tz (labeled). */
+  timeZone: string;
 }
 
 const fieldLabelStyle: React.CSSProperties = {
@@ -134,6 +137,7 @@ export function DayDetailClient({
   canEditHours,
   isAdmin,
   canApprove,
+  timeZone,
 }: DayDetailClientProps) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -338,7 +342,7 @@ export function DayDetailClient({
       <div style={{ display: 'flex', gap: '14px', marginBottom: '16px', flexWrap: 'wrap' }}>
         <KpiCard
           label="Clock In / Out"
-          value={`${fmtTime(session.clock_in)} – ${session.clock_out ? fmtTime(session.clock_out) : 'open'}`}
+          value={`${fmtTime(session.clock_in, timeZone)} – ${session.clock_out ? fmtTime(session.clock_out, timeZone) : 'open'}`}
         />
         <KpiCard label="Paid Hours" value={fmtHours(hours.paid)} caption="derived" />
         <KpiCard label="Worked (job cost)" value={fmtHours(hours.worked)} caption="derived" />
@@ -368,7 +372,7 @@ export function DayDetailClient({
               }}
             >
               <div style={{ ...monoValue, fontSize: '13px', color: color.bodyAlt, width: '76px', flexShrink: 0, alignSelf: 'center' }}>
-                {fmtTime(seg.segment_start)}
+                {fmtTime(seg.segment_start, timeZone)}
               </div>
               <SegmentBar type={seg.segment_type} />
               <div style={{ flex: 1, alignSelf: 'center', minWidth: 0 }}>

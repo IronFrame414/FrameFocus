@@ -61,6 +61,8 @@ interface TimesheetsClientProps {
   viewerRole: string;
   viewerMemberId: string | null;
   canSeeLaborCost: boolean;
+  /** Company timezone (companies.timezone) — all wall-clock rendering. */
+  timeZone: string;
 }
 
 const GRID = '36px 1.6fr 1fr 1fr 1fr 1fr 1.2fr';
@@ -113,6 +115,7 @@ export function TimesheetsClient({
   viewerRole,
   viewerMemberId,
   canSeeLaborCost,
+  timeZone,
 }: TimesheetsClientProps) {
   const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -222,7 +225,7 @@ export function TimesheetsClient({
         </div>
       )}
 
-      <LiveBoard />
+      <LiveBoard timeZone={timeZone} />
 
       {/* 4-up KPI row. Labor Cost absent (not blanked) for gated roles — the
           row reflows (§2 [S84]). */}
@@ -432,7 +435,8 @@ export function TimesheetsClient({
                         {dayLabel(s.dayKey)}
                       </span>
                       <span style={{ ...monoValue, color: color.bodyAlt, width: '150px' }}>
-                        {fmtTime(s.clock_in)} – {s.clock_out ? fmtTime(s.clock_out) : 'open'}
+                        {fmtTime(s.clock_in, timeZone)} –{' '}
+                        {s.clock_out ? fmtTime(s.clock_out, timeZone) : 'open'}
                       </span>
                       <span style={{ ...monoValue, color: color.bodyAlt, width: '70px' }}>
                         {fmtHours(s.paidHours)}

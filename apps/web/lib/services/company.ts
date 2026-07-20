@@ -55,6 +55,37 @@ export async function getCompany(): Promise<CompanyData | null> {
   return company ?? null;
 }
 
+/**
+ * The caller's company timezone (companies.timezone, migration 20260719000000).
+ * Single source for every screen that formats wall-clock times or computes
+ * week/day boundaries (Module 6A). Falls back to the column's default when the
+ * caller can't be resolved.
+ */
+export async function getCompanyTimezone(): Promise<string> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return 'America/New_York';
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('company_id')
+    .eq('user_id', user.id)
+    .eq('is_deleted', false)
+    .single();
+  if (!profile) return 'America/New_York';
+
+  const { data: company } = await supabase
+    .from('companies')
+    .select('timezone')
+    .eq('id', profile.company_id)
+    .single();
+
+  return company?.timezone ?? 'America/New_York';
+}
+
 // ── 4M — Estimating settings ──
 
 type CompaniesRow = Database['public']['Tables']['companies']['Row'];

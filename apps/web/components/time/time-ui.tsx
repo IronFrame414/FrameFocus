@@ -53,11 +53,24 @@ export function ReadOnlyCaption({ children }: { children: React.ReactNode }) {
   return <span style={{ fontSize: '11px', color: color.faint }}>{children}</span>;
 }
 
-const TIME_FMT = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' });
+// Per-timezone formatter cache — building an Intl.DateTimeFormat is the
+// expensive part; format() is cheap. Keyed by IANA tz name.
+const timeFmtCache = new Map<string, Intl.DateTimeFormat>();
 
-export function fmtTime(iso: string | null): string {
+/**
+ * Wall-clock time in the COMPANY timezone (companies.timezone, threaded in by
+ * each page's server component via getCompanyTimezone()). The explicit
+ * timeZone is required: a naive formatter renders in the runtime's default
+ * tz, so SSR (UTC) and the browser disagree → hydration mismatch (S84 bug 2).
+ */
+export function fmtTime(iso: string | null, timeZone: string): string {
   if (!iso) return '—';
-  return TIME_FMT.format(new Date(iso));
+  let fmt = timeFmtCache.get(timeZone);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', timeZone });
+    timeFmtCache.set(timeZone, fmt);
+  }
+  return fmt.format(new Date(iso));
 }
 
 export function fmtHours(hours: number): string {

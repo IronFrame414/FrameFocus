@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { getSessionDetail } from '@/lib/services/time-tracking';
 import { getMyMember } from '@/lib/services/members';
 import { getProjects } from '@/lib/services/projects';
+import { getCompanyTimezone } from '@/lib/services/company';
 import {
   PROJECT_BEARING_TYPES,
   canApproveByRank,
@@ -47,12 +48,7 @@ export default async function TimesheetDetailPage({
   ]);
   if (!detail) redirect('/dashboard/timesheets');
 
-  const { data: company } = await supabase
-    .from('companies')
-    .select('timezone')
-    .eq('id', profile.company_id)
-    .single();
-  const timeZone = company?.timezone ?? 'America/New_York';
+  const timeZone = await getCompanyTimezone();
 
   // Names for every project/task the segments reference (any status — a job
   // may have closed since). A project RLS hides from this viewer resolves to
@@ -137,6 +133,7 @@ export default async function TimesheetDetailPage({
       canEditHours={isAdmin || canApprove}
       isAdmin={isAdmin}
       canApprove={canApprove}
+      timeZone={timeZone}
     />
   );
 }
