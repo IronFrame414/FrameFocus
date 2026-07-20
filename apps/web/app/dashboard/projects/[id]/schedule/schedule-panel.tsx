@@ -21,6 +21,7 @@ import { Calendar } from '@/components/schedule/calendar';
 import { Gantt } from '@/components/schedule/gantt';
 import { memberColor } from '@/components/schedule/member-color';
 import { TaskForm } from './task-form';
+import { color, font } from '@/lib/theme';
 
 interface SchedulePanelProps {
   projectId: string;
@@ -41,34 +42,40 @@ interface SchedulePanelProps {
 
 type ViewMode = 'list' | 'gantt' | 'calendar';
 
+// 1a tokens (ui-01 §4, restyle folded in per checkpoint decision)
 const cardStyle: React.CSSProperties = {
-  backgroundColor: '#fff',
-  border: '1px solid #e5e7eb',
-  borderRadius: '0.5rem',
-  padding: '1.25rem',
+  backgroundColor: color.cardBg,
+  border: `1px solid ${color.cardBorder}`,
+  borderRadius: '13px',
+  padding: '18px 20px',
   marginBottom: '1rem',
 };
 const titleStyle: React.CSSProperties = {
-  fontSize: '0.8125rem',
+  fontFamily: font.mono,
+  fontSize: '12px',
   fontWeight: 600,
-  color: '#6b7280',
+  color: color.mutedAlt,
   textTransform: 'uppercase',
+  letterSpacing: '0.04em',
   marginBottom: '0.75rem',
 };
 const inputStyle: React.CSSProperties = {
-  padding: '0.5rem',
-  border: '1px solid #d1d5db',
-  borderRadius: '0.375rem',
-  fontSize: '0.875rem',
+  padding: '8px 10px',
+  border: `1px solid ${color.inputBorder}`,
+  borderRadius: '9px',
+  fontFamily: font.sans,
+  fontSize: '13px',
+  color: color.body,
 };
 const primaryButton = (busy: boolean): React.CSSProperties => ({
-  padding: '0.5rem 1rem',
-  fontSize: '0.875rem',
+  padding: '9px 16px',
+  fontFamily: font.sans,
+  fontSize: '13px',
   fontWeight: 600,
   color: '#fff',
-  backgroundColor: busy ? '#93c5fd' : '#2563eb',
+  backgroundColor: busy ? color.faintAlt : color.primary,
   border: 'none',
-  borderRadius: '0.375rem',
+  borderRadius: '9px',
   cursor: busy ? 'default' : 'pointer',
 });
 
@@ -202,17 +209,21 @@ export function SchedulePanel({
     setBusy(false);
   }
 
+  // Segmented control (1a toggle pattern, ui-02 §4)
   const viewButton = (mode: ViewMode, label: string): React.ReactNode => (
     <button
       key={mode}
       onClick={() => setView(mode)}
       style={{
-        padding: '0.375rem 0.875rem',
-        fontSize: '0.875rem',
-        borderRadius: '0.375rem',
-        border: '1px solid #d1d5db',
-        backgroundColor: view === mode ? '#2563eb' : '#fff',
-        color: view === mode ? '#fff' : '#374151',
+        padding: '5px 12px',
+        fontFamily: font.sans,
+        fontSize: '12px',
+        fontWeight: 600,
+        borderRadius: '6px',
+        border: 'none',
+        backgroundColor: view === mode ? '#fff' : 'transparent',
+        boxShadow: view === mode ? '0 1px 2px rgba(0,0,0,.06)' : 'none',
+        color: view === mode ? color.navy : color.mutedAlt,
         cursor: 'pointer',
       }}
     >
@@ -230,7 +241,15 @@ export function SchedulePanel({
           marginBottom: '1rem',
         }}
       >
-        <div style={{ display: 'flex', gap: '0.375rem' }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: '2px',
+            backgroundColor: color.neutralBadgeBg,
+            borderRadius: '8px',
+            padding: '3px',
+          }}
+        >
           {viewButton('list', 'Tasks')}
           {viewButton('gantt', 'Gantt')}
           {viewButton('calendar', 'Calendar')}
@@ -284,7 +303,7 @@ export function SchedulePanel({
       )}
 
       {selectedEvent && selectedEvent.source !== 'task' && (
-        <div style={{ ...cardStyle, borderColor: '#93c5fd' }}>
+        <div style={{ ...cardStyle, borderColor: color.primary }}>
           <div style={titleStyle}>
             {selectedEvent.source === 'inspection' ? 'Inspection' : 'Schedule Entry'} Detail
           </div>

@@ -6,6 +6,12 @@ import { ProjectsList } from './projects-list';
 
 const STATUSES: ProjectStatus[] = ['active', 'on_hold', 'complete', 'archived', 'cancelled'];
 
+/**
+ * ui-03 — 1a projects list. Fetches the full (RLS-scoped) list once so the
+ * subtitle counts and the freshly-built search filter client-side; the status
+ * chips keep the ?status= URL contract. Financial floor (ui-01 §11): the
+ * Contract column is Owner/Admin only — the grid reflows for gated roles.
+ */
 export default async function ProjectsPage({
   searchParams,
 }: {
@@ -32,46 +38,17 @@ export default async function ProjectsPage({
     : undefined;
 
   // RLS scopes visibility: Owner/Admin see all; PM/Foreman/Crew see assigned.
-  const projects = await getProjects(status ? { status } : undefined);
+  const projects = await getProjects();
 
   const canCreate = ['owner', 'admin', 'project_manager'].includes(profile.role);
+  const canSeeFinancials = profile.role === 'owner' || profile.role === 'admin';
 
   return (
-    <div>
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '1.5rem',
-        }}
-      >
-        <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.25rem' }}>
-            Projects
-          </h1>
-          <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>
-            Jobs in progress, on hold, and completed
-          </p>
-        </div>
-        {canCreate && (
-          <a
-            href="/dashboard/projects/new"
-            style={{
-              padding: '0.5rem 1rem',
-              fontSize: '0.875rem',
-              fontWeight: 600,
-              color: '#fff',
-              backgroundColor: '#2563eb',
-              borderRadius: '0.375rem',
-              textDecoration: 'none',
-            }}
-          >
-            + New Project
-          </a>
-        )}
-      </div>
-      <ProjectsList projects={projects} currentStatus={status ?? 'all'} />
-    </div>
+    <ProjectsList
+      projects={projects}
+      currentStatus={status ?? 'all'}
+      canCreate={canCreate}
+      canSeeFinancials={canSeeFinancials}
+    />
   );
 }

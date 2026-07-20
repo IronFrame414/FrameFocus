@@ -2,8 +2,25 @@ import { createClient } from '@/lib/supabase-server';
 import Link from 'next/link';
 import { getCalendarEvents } from '@/lib/services/schedule';
 import { getMyMember } from '@/lib/services/members';
-import { getProjects } from '@/lib/services/projects';
-import { CompanyCalendar } from './company-calendar';
+import { getDashboardData } from '@/lib/services/dashboard';
+import { ScheduleCard } from './schedule-card';
+import { cardStyle, color, font, h2Style, microLabelStyle, primaryButtonStyle } from '@/lib/theme';
+
+/**
+ * ui-02 — 1a summary dashboard: header, 4-up KPI row, schedule card +
+ * Needs-Attention rail. Financial floor (ui-01 §11): Contract Value card and
+ * all $ captions are Owner/Admin only; the KPI row REFLOWS for gated roles.
+ */
+
+/** $221.7k-style compact money for KPI numbers. */
+function compactMoney(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000) return `$${(value / 1_000_000).toFixed(1)}m`;
+  if (abs >= 1_000) return `$${(value / 1_000).toFixed(1)}k`;
+  return `$${value.toFixed(0)}`;
+}
+
+const DOT_COLORS = { amber: '#d97706', red: '#dc2626', blue: '#2f49d1', green: '#16a34a' };
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -17,70 +34,184 @@ export default async function DashboardPage() {
     .eq('user_id', user?.id ?? '')
     .single();
 
-  const isCrew = profile?.role === 'crew_member' || profile?.role === 'subcontractor';
+  const role = profile?.role ?? '';
+  const canSeeFinancials = role === 'owner' || role === 'admin';
+  const canCreate = ['owner', 'admin', 'project_manager'].includes(role);
+  const isCrew = role === 'crew_member' || role === 'subcontractor';
   const myMember = isCrew ? await getMyMember() : null;
 
-  // Company-wide calendar (5B §8): the "who's free / who's slammed" view.
-  // Crew sees own assignments only (§5.5b).
-  const [events, activeProjects] = await Promise.all([
+  const [{ kpis, attention }, events] = await Promise.all([
+    getDashboardData(),
     getCalendarEvents({ ownMemberId: myMember?.id }),
-    getProjects({ status: 'active' }),
   ]);
+
+  const today = new Date();
+  const subtitle = `${today.toLocaleDateString('en-US', { weekday: 'long' })}, ${today.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · ${kpis.activeProjectCount} active project${kpis.activeProjectCount === 1 ? '' : 's'}`;
+
+  // KPI cards — financial floor reflow (ui-01 §11): Contract Value is
+  // Owner/Admin only; gated roles get a 3-up of the remaining cards.
+  const kpiCards: {
+    label: string;
+    value: string;
+    caption: string;
+    captionColor: string;
+    captionWeight: number;
+  }[] = [
+    {
+      label: 'Active Projects',
+      value: String(kpis.activeProjectCount),
+      caption: kpis.pastTargetCount === 0 ? 'On track' : `${kpis.pastTargetCount} past target`,
+      captionColor: kpis.pastTargetCount === 0 ? color.success : color.warning,
+      captionWeight: 600,
+    },
+    ...(canSeeFinancials
+      ? [
+          {
+            label: 'Contract Value',
+            value: compactMoney(kpis.contractValue),
+            caption: 'across active jobs',
+            captionColor: color.muted,
+            captionWeight: 400,
+          },
+        ]
+      : []),
+    {
+      label: 'Awaiting Signature',
+      value: String(kpis.awaitingCount),
+      caption: canSeeFinancials
+        ? `${compactMoney(kpis.awaitingSum)} in change orders`
+        : 'change orders sent',
+      captionColor: canSeeFinancials ? color.warning : color.muted,
+      captionWeight: canSeeFinancials ? 600 : 400,
+    },
+    {
+      label: 'Open Punch Items',
+      value: String(kpis.openPunchCount),
+      caption: 'across active jobs',
+      captionColor: color.muted,
+      captionWeight: 400,
+    },
+  ];
 
   return (
     <div>
+      {/* Header */}
       <div
         style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          marginBottom: '1.5rem',
+          marginBottom: '22px',
         }}
       >
         <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.25rem' }}>
-            Welcome back, {profile?.first_name ?? 'there'}
-          </h1>
-          <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>
-            {activeProjects.length} active project{activeProjects.length === 1 ? '' : 's'}
-          </p>
+          <h2 style={h2Style}>Welcome back, {profile?.first_name ?? 'there'}</h2>
+          <p style={{ color: color.muted, fontSize: '14px', margin: '4px 0 0' }}>{subtitle}</p>
         </div>
-        <Link
-          href="/dashboard/projects"
-          style={{
-            padding: '0.5rem 1rem',
-            fontSize: '0.875rem',
-            fontWeight: 600,
-            color: '#fff',
-            backgroundColor: '#2563eb',
-            borderRadius: '0.375rem',
-            textDecoration: 'none',
-          }}
-        >
-          View Projects
-        </Link>
+        {canCreate && (
+          <Link href="/dashboard/projects/new" style={primaryButtonStyle}>
+            + New Project
+          </Link>
+        )}
       </div>
 
+      {/* KPI row — reflow to visible-card count (ui-01 §11) */}
       <div
         style={{
-          backgroundColor: '#fff',
-          border: '1px solid #e5e7eb',
-          borderRadius: '0.5rem',
-          padding: '1.25rem',
+          display: 'grid',
+          gridTemplateColumns: `repeat(${kpiCards.length}, 1fr)`,
+          gap: '14px',
+          marginBottom: '18px',
         }}
       >
-        <div
-          style={{
-            fontSize: '0.8125rem',
-            fontWeight: 600,
-            color: '#6b7280',
-            textTransform: 'uppercase',
-            marginBottom: '0.75rem',
-          }}
-        >
-          {isCrew ? 'My Schedule' : 'Employee Calendar — All Jobs'}
+        {kpiCards.map((kpi) => (
+          <div key={kpi.label} style={{ ...cardStyle, padding: '16px 17px' }}>
+            <div style={microLabelStyle}>{kpi.label}</div>
+            <div
+              style={{
+                fontFamily: font.mono,
+                fontSize: '30px',
+                fontWeight: 600,
+                color: color.navy,
+                margin: '4px 0 2px',
+              }}
+            >
+              {kpi.value}
+            </div>
+            <div
+              style={{ fontSize: '12px', color: kpi.captionColor, fontWeight: kpi.captionWeight }}
+            >
+              {kpi.caption}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Two-column region */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: '18px' }}>
+        <div style={{ ...cardStyle, padding: '18px 20px' }}>
+          <ScheduleCard events={events} />
         </div>
-        <CompanyCalendar events={events} />
+
+        <div style={{ ...cardStyle, padding: '18px' }}>
+          <div style={{ ...microLabelStyle, fontSize: '13px', fontWeight: 700, color: color.navy }}>
+            Needs Attention
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '14px' }}>
+            {attention.length === 0 && (
+              <p style={{ fontSize: '13px', color: color.faint, margin: 0 }}>
+                Nothing needs attention right now.
+              </p>
+            )}
+            {attention.map((item, i) => {
+              const body = (
+                <span style={{ fontSize: '13px', color: color.body, lineHeight: 1.4 }}>
+                  <span style={{ color: color.navy, fontWeight: 700 }}>{item.emphasis}</span>{' '}
+                  {item.text}
+                </span>
+              );
+              return (
+                <div key={i} style={{ display: 'flex', gap: '9px', alignItems: 'flex-start' }}>
+                  <span
+                    style={{
+                      width: '8px',
+                      height: '8px',
+                      borderRadius: '50%',
+                      backgroundColor: DOT_COLORS[item.severity],
+                      marginTop: '5px',
+                      flexShrink: 0,
+                    }}
+                  />
+                  {item.href ? (
+                    <Link href={item.href} style={{ textDecoration: 'none' }}>
+                      {body}
+                    </Link>
+                  ) : (
+                    body
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <button
+            title="Activity log arrives with a later module"
+            style={{
+              width: '100%',
+              marginTop: '16px',
+              padding: '9px',
+              borderRadius: '8px',
+              border: 'none',
+              backgroundColor: color.blueTint,
+              color: color.primary,
+              fontFamily: font.sans,
+              fontSize: '13px',
+              fontWeight: 600,
+              cursor: 'default',
+            }}
+          >
+            View all activity
+          </button>
+        </div>
       </div>
     </div>
   );

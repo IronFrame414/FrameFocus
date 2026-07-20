@@ -4,11 +4,15 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { ProjectWithContact } from '@/lib/services/projects';
 import { PROJECT_STATUS_LABELS } from '@/lib/services/projects-client';
+import { badgeStyle, color, font, h2Style, primaryButtonStyle } from '@/lib/theme';
 
 interface ProjectHeaderProps {
   project: ProjectWithContact;
+  /** Owner/Admin/PM — shows the "+ Change Order" action (ui-04 §4). */
+  canManage: boolean;
 }
 
+// ui-04 §S2 (locked round 2): current tabs + Photos (adjacent to Files).
 const TABS: { slug: string; label: string }[] = [
   { slug: '', label: 'Overview' },
   { slug: 'schedule', label: 'Schedule' },
@@ -16,23 +20,25 @@ const TABS: { slug: string; label: string }[] = [
   { slug: 'changes', label: 'Change Orders' },
   { slug: 'punch', label: 'Punch List' },
   { slug: 'files', label: 'Files' },
+  { slug: 'photos', label: 'Photos' },
   { slug: 'contacts', label: 'Contacts' },
   { slug: 'contracts', label: 'Contracts' },
   { slug: 'team', label: 'Team' },
 ];
 
-const STATUS_COLORS: Record<string, { bg: string; fg: string }> = {
-  active: { bg: '#dcfce7', fg: '#166534' },
-  on_hold: { bg: '#fef3c7', fg: '#92400e' },
-  complete: { bg: '#dbeafe', fg: '#1e40af' },
-  archived: { bg: '#f3f4f6', fg: '#374151' },
-  cancelled: { bg: '#fee2e2', fg: '#991b1b' },
+// ui-03 §4 badge system (shared with the list screen).
+const STATUS_BADGES: Record<string, { bg: string; fg: string }> = {
+  active: { bg: '#e4f0e6', fg: '#3d7a4b' },
+  on_hold: { bg: '#fdece0', fg: '#b45309' },
+  complete: { bg: '#eef1f6', fg: '#6b7280' },
+  archived: { bg: '#eef1f6', fg: '#6b7280' },
+  cancelled: { bg: '#eef1f6', fg: '#c0362c' },
 };
 
-export function ProjectHeader({ project }: ProjectHeaderProps) {
+export function ProjectHeader({ project, canManage }: ProjectHeaderProps) {
   const pathname = usePathname();
   const base = `/dashboard/projects/${project.id}`;
-  const colors = STATUS_COLORS[project.status] ?? STATUS_COLORS.archived;
+  const badge = STATUS_BADGES[project.status] ?? STATUS_BADGES.archived;
 
   function isActive(slug: string): boolean {
     if (slug === '') return pathname === base;
@@ -40,77 +46,79 @@ export function ProjectHeader({ project }: ProjectHeaderProps) {
   }
 
   return (
-    <div style={{ marginBottom: '1.5rem' }}>
-      <div style={{ marginBottom: '0.25rem' }}>
+    <div style={{ marginBottom: '20px' }}>
+      {/* Breadcrumb (ui-04 §4) */}
+      <div style={{ marginBottom: '8px' }}>
         <Link
           href="/dashboard/projects"
-          style={{ fontSize: '0.8125rem', color: '#6b7280', textDecoration: 'none' }}
+          style={{
+            fontFamily: font.mono,
+            fontSize: '12px',
+            fontWeight: 500,
+            color: color.faint,
+            textDecoration: 'none',
+          }}
         >
-          ← Projects
+          Projects
         </Link>
+        <span style={{ fontFamily: font.mono, fontSize: '12px', color: color.faint }}> / </span>
+        <span style={{ fontFamily: font.mono, fontSize: '12px', fontWeight: 500, color: color.muted }}>
+          {project.project_number}
+        </span>
       </div>
+
+      {/* Title row */}
       <div
         style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'flex-start',
-          marginBottom: '1rem',
+          marginBottom: '16px',
         }}
       >
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <h1 style={{ fontSize: '1.5rem', fontWeight: 700 }}>{project.name}</h1>
-            <span
-              style={{
-                padding: '0.125rem 0.625rem',
-                borderRadius: '9999px',
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                backgroundColor: colors.bg,
-                color: colors.fg,
-              }}
-            >
-              {PROJECT_STATUS_LABELS[project.status]}
-            </span>
-          </div>
-          <p style={{ color: '#6b7280', fontSize: '0.875rem', marginTop: '0.25rem' }}>
-            {project.project_number}
-            {project.contact
-              ? ` · ${project.contact.first_name} ${project.contact.last_name}`
-              : ''}
-            {project.contract_value !== null
-              ? ` · ${project.contract_value.toLocaleString('en-US', {
-                  style: 'currency',
-                  currency: 'USD',
-                })}`
-              : ''}
-          </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <h2 style={{ ...h2Style, fontSize: '25px' }}>{project.name}</h2>
+          <span
+            style={{ ...badgeStyle, backgroundColor: badge.bg, color: badge.fg }}
+          >
+            {PROJECT_STATUS_LABELS[project.status]}
+          </span>
         </div>
+        {canManage && (
+          <Link href={`${base}/changes`} style={primaryButtonStyle}>
+            + Change Order
+          </Link>
+        )}
       </div>
+
+      {/* Tab bar — active tab carries the inset blue underline (ui-04 §4) */}
       <div
         style={{
           display: 'flex',
-          gap: '0.25rem',
-          borderBottom: '1px solid #e5e7eb',
+          gap: '2px',
+          borderBottom: `1px solid ${color.cardBorder}`,
         }}
       >
-        {TABS.map((tab) => (
-          <Link
-            key={tab.slug}
-            href={tab.slug === '' ? base : `${base}/${tab.slug}`}
-            style={{
-              padding: '0.5rem 0.875rem',
-              fontSize: '0.875rem',
-              fontWeight: isActive(tab.slug) ? 600 : 400,
-              color: isActive(tab.slug) ? '#2563eb' : '#6b7280',
-              borderBottom: isActive(tab.slug) ? '2px solid #2563eb' : '2px solid transparent',
-              textDecoration: 'none',
-              marginBottom: '-1px',
-            }}
-          >
-            {tab.label}
-          </Link>
-        ))}
+        {TABS.map((tab) => {
+          const active = isActive(tab.slug);
+          return (
+            <Link
+              key={tab.slug}
+              href={tab.slug === '' ? base : `${base}/${tab.slug}`}
+              style={{
+                padding: '10px 14px',
+                fontFamily: font.sans,
+                fontSize: '13px',
+                fontWeight: 600,
+                color: active ? color.navy : color.mutedAlt,
+                boxShadow: active ? `inset 0 -2px 0 ${color.primary}` : 'none',
+                textDecoration: 'none',
+              }}
+            >
+              {tab.label}
+            </Link>
+          );
+        })}
       </div>
     </div>
   );

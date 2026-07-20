@@ -31,6 +31,8 @@ export default async function ProjectChangesPage({ params }: { params: { id: str
 
   const canManage = ['owner', 'admin', 'project_manager'].includes(profile.role);
   const canDelete = ['owner', 'admin'].includes(profile.role);
+  // Financial floor (ui-01 §11): CO dollar amounts are Owner/Admin only.
+  const canSeeFinancials = ['owner', 'admin'].includes(profile.role);
 
   return (
     <ChangesPanel
@@ -39,6 +41,7 @@ export default async function ProjectChangesPage({ params }: { params: { id: str
       changeOrders={changeOrders}
       canManage={canManage}
       canDelete={canDelete}
+      canSeeFinancials={canSeeFinancials}
     />
   );
 }

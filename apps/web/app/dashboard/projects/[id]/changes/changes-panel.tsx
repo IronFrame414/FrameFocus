@@ -1,26 +1,35 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
-  CO_STATUS_LABELS,
   createChangeOrder,
   softDeleteChangeOrder,
   type ChangeOrderStatus,
   type ChangeOrderType,
   type ChangeOrderWithAuthor,
 } from '@/lib/services/change-orders-client';
+import {
+  badgeStyle,
+  cardStyle,
+  color,
+  font,
+  microLabelStyle,
+  primaryButtonStyle,
+  secondaryButtonStyle,
+} from '@/lib/theme';
 
-// 5D — CO list + create. A new CO starts as a Draft shell and opens in
-// the builder; net deltas are signed (credits negative, D-2) and
-// display-only (D-6 — contract_value is never mutated).
+// ui-06 — 1a CO list. Badge map locked round 2: sent → "Awaiting sig.",
+// signed → "Signed", voided → "Voided" (visible), draft → "Draft". Negative
+// COs (credits) render RED per §S4 — this deliberately changes the previously
+// shipped green. Financial floor (ui-01 §11): the Amount column and all $
+// captions are Owner/Admin only; the grid REFLOWS for gated roles.
 
-const STATUS_COLORS: Record<ChangeOrderStatus, { bg: string; fg: string }> = {
-  draft: { bg: '#f3f4f6', fg: '#374151' },
-  sent: { bg: '#fef3c7', fg: '#92400e' },
-  signed: { bg: '#dcfce7', fg: '#166534' },
-  voided: { bg: '#fee2e2', fg: '#991b1b' },
+const STATUS_BADGES: Record<ChangeOrderStatus, { label: string; bg: string; fg: string }> = {
+  sent: { label: 'Awaiting sig.', bg: '#fdece0', fg: '#b45309' },
+  signed: { label: 'Signed', bg: '#e4f0e6', fg: '#3d7a4b' },
+  voided: { label: 'Voided', bg: '#eef1f6', fg: '#c0362c' },
+  draft: { label: 'Draft', bg: '#eef1f6', fg: '#6b7280' },
 };
 
 const CO_TYPE_OPTIONS: Array<{ value: ChangeOrderType; label: string }> = [
@@ -30,7 +39,7 @@ const CO_TYPE_OPTIONS: Array<{ value: ChangeOrderType; label: string }> = [
 ];
 
 function money(value: number): string {
-  return value.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+  return Math.abs(value).toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 }
 
 interface ChangesPanelProps {
@@ -39,6 +48,8 @@ interface ChangesPanelProps {
   changeOrders: ChangeOrderWithAuthor[];
   canManage: boolean;
   canDelete: boolean;
+  /** Financial floor (ui-01 §11): CO dollar amounts are Owner/Admin only. */
+  canSeeFinancials: boolean;
 }
 
 export function ChangesPanel({
@@ -47,6 +58,7 @@ export function ChangesPanel({
   changeOrders,
   canManage,
   canDelete,
+  canSeeFinancials,
 }: ChangesPanelProps) {
   const router = useRouter();
   const [formOpen, setFormOpen] = useState(false);
@@ -60,10 +72,12 @@ export function ChangesPanel({
   const [error, setError] = useState<string | null>(null);
 
   const inputStyle: React.CSSProperties = {
-    padding: '0.5rem 0.75rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '0.375rem',
-    fontSize: '0.875rem',
+    padding: '9px 12px',
+    border: `1px solid ${color.inputBorder}`,
+    borderRadius: '9px',
+    fontFamily: font.sans,
+    fontSize: '13px',
+    color: color.body,
     boxSizing: 'border-box',
   };
 
@@ -97,41 +111,46 @@ export function ChangesPanel({
     router.refresh();
   }
 
-  const signedTotal = changeOrders
-    .filter((co) => co.status === 'signed')
-    .reduce((sum, co) => sum + co.net_delta, 0);
+  // Summary sources (§S2): counts for all roles; $ sums Owner/Admin only.
+  const sent = changeOrders.filter((co) => co.status === 'sent');
+  const signed = changeOrders.filter((co) => co.status === 'signed');
+  const drafts = changeOrders.filter((co) => co.status === 'draft');
+  const sentSum = sent.reduce((sum, co) => sum + co.net_delta, 0);
+  const signedSum = signed.reduce((sum, co) => sum + co.net_delta, 0);
+
+  const summaryCards: { label: string; value: number; valueColor: string; caption: string }[] = [
+    {
+      label: 'Awaiting Signature',
+      value: sent.length,
+      valueColor: color.warning,
+      caption: canSeeFinancials
+        ? `${sentSum < 0 ? '−' : ''}${money(sentSum)} pending`
+        : 'sent to clients',
+    },
+    {
+      label: 'Signed',
+      value: signed.length,
+      valueColor: color.success,
+      caption: canSeeFinancials
+        ? `${signedSum < 0 ? '−' : ''}${money(signedSum)} added`
+        : 'signed by clients',
+    },
+    { label: 'Draft', value: drafts.length, valueColor: color.navy, caption: 'Not yet sent' },
+  ];
+
+  // Grid — reflow per financial floor; a trailing auto column carries the
+  // delete action for Owner/Admin.
+  const gridTemplate = canSeeFinancials
+    ? `0.7fr 2.3fr 1.2fr 1fr 1.3fr${canDelete ? ' auto' : ''}`
+    : '0.7fr 2.9fr 1.1fr 1.3fr';
 
   return (
-    <div style={{ maxWidth: '900px' }}>
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '1rem',
-        }}
-      >
-        <p style={{ fontSize: '0.8125rem', color: '#6b7280', margin: 0 }}>
-          Signed change orders total {money(signedTotal)} (display-only — the headline contract
-          value is unchanged until Module 7).
-        </p>
+    <div>
+      {/* Header actions */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
         {canManage && !formOpen && (
-          <button
-            type="button"
-            onClick={() => setFormOpen(true)}
-            style={{
-              padding: '0.5rem 1rem',
-              fontSize: '0.875rem',
-              fontWeight: 600,
-              color: '#fff',
-              backgroundColor: '#1a56db',
-              border: 'none',
-              borderRadius: '0.375rem',
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            New Change Order
+          <button type="button" onClick={() => setFormOpen(true)} style={primaryButtonStyle}>
+            + New Change Order
           </button>
         )}
       </div>
@@ -139,12 +158,12 @@ export function ChangesPanel({
       {error && (
         <div
           style={{
-            padding: '0.75rem 1rem',
-            borderRadius: '0.375rem',
-            marginBottom: '1rem',
+            padding: '12px 16px',
+            borderRadius: '9px',
+            marginBottom: '14px',
             backgroundColor: '#fef2f2',
-            color: '#991b1b',
-            fontSize: '0.875rem',
+            color: color.dangerAlt,
+            fontSize: '13px',
           }}
         >
           {error}
@@ -155,27 +174,17 @@ export function ChangesPanel({
         <form
           onSubmit={handleCreate}
           style={{
-            backgroundColor: '#fff',
-            borderRadius: '0.5rem',
-            border: '1px solid #e5e7eb',
-            padding: '1rem',
-            marginBottom: '1rem',
+            ...cardStyle,
+            padding: '16px',
+            marginBottom: '14px',
             display: 'flex',
-            gap: '0.75rem',
+            gap: '12px',
             flexWrap: 'wrap',
             alignItems: 'flex-end',
           }}
         >
           <div style={{ flex: '1 1 240px' }}>
-            <label
-              style={{
-                display: 'block',
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                color: '#6b7280',
-                marginBottom: '0.25rem',
-              }}
-            >
+            <label style={{ ...microLabelStyle, display: 'block', marginBottom: '4px' }}>
               Title
             </label>
             <input
@@ -187,15 +196,7 @@ export function ChangesPanel({
             />
           </div>
           <div>
-            <label
-              style={{
-                display: 'block',
-                fontSize: '0.75rem',
-                fontWeight: 600,
-                color: '#6b7280',
-                marginBottom: '0.25rem',
-              }}
-            >
+            <label style={{ ...microLabelStyle, display: 'block', marginBottom: '4px' }}>
               CO type
             </label>
             <select
@@ -214,149 +215,155 @@ export function ChangesPanel({
             type="submit"
             disabled={busy || !title.trim()}
             style={{
-              padding: '0.5rem 1rem',
-              fontSize: '0.875rem',
-              fontWeight: 600,
-              color: '#fff',
-              backgroundColor: busy || !title.trim() ? '#9ca3af' : '#1a56db',
-              border: 'none',
-              borderRadius: '0.375rem',
+              ...primaryButtonStyle,
+              backgroundColor: busy || !title.trim() ? color.faintAlt : color.primary,
               cursor: busy || !title.trim() ? 'not-allowed' : 'pointer',
             }}
           >
             {busy ? 'Creating…' : 'Create Draft'}
           </button>
-          <button
-            type="button"
-            onClick={() => setFormOpen(false)}
-            style={{
-              padding: '0.5rem 1rem',
-              fontSize: '0.875rem',
-              backgroundColor: '#f3f4f6',
-              border: '1px solid #d1d5db',
-              borderRadius: '0.375rem',
-              cursor: 'pointer',
-            }}
-          >
+          <button type="button" onClick={() => setFormOpen(false)} style={secondaryButtonStyle}>
             Cancel
           </button>
         </form>
       )}
 
+      {/* Summary — 3 cards (ui-06 §4) */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: '14px',
+          marginBottom: '18px',
+        }}
+      >
+        {summaryCards.map((card) => (
+          <div key={card.label} style={{ ...cardStyle, padding: '16px 17px' }}>
+            <div style={microLabelStyle}>{card.label}</div>
+            <div
+              style={{
+                fontFamily: font.mono,
+                fontSize: '28px',
+                fontWeight: 600,
+                color: card.valueColor,
+                margin: '4px 0 2px',
+              }}
+            >
+              {card.value}
+            </div>
+            <div style={{ fontSize: '12px', color: color.muted }}>{card.caption}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* CO table */}
       {changeOrders.length === 0 ? (
-        <div
-          style={{
-            padding: '3rem',
-            textAlign: 'center',
-            color: '#6b7280',
-            backgroundColor: '#fff',
-            borderRadius: '0.5rem',
-            border: '1px solid #e5e7eb',
-          }}
-        >
+        <div style={{ ...cardStyle, padding: '48px', textAlign: 'center', color: color.muted }}>
           No change orders yet.
           {canManage && ' Create one to record added or removed scope.'}
         </div>
       ) : (
-        <div
-          style={{
-            backgroundColor: '#fff',
-            borderRadius: '0.5rem',
-            border: '1px solid #e5e7eb',
-            overflowX: 'auto',
-          }}
-        >
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
-                {['CO #', 'Title', 'Status', 'Net Delta', 'Author', 'Signed', ''].map(
-                  (label, i) => (
-                    <th
-                      key={label || 'actions'}
-                      style={{
-                        padding: '0.5rem',
-                        textAlign: i === 3 ? 'right' : 'left',
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
-                        color: '#6b7280',
-                        textTransform: 'uppercase',
-                      }}
-                    >
-                      {label}
-                    </th>
-                  )
+        <div style={{ ...cardStyle, overflow: 'hidden' }}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: gridTemplate,
+              gap: '12px',
+              padding: '12px 20px',
+              backgroundColor: color.tableHeadBg,
+              borderBottom: `1px solid ${color.neutralBadgeBg}`,
+            }}
+          >
+            <span style={microLabelStyle}>CO #</span>
+            <span style={microLabelStyle}>Description</span>
+            {canSeeFinancials && (
+              <span style={{ ...microLabelStyle, textAlign: 'right' }}>Amount</span>
+            )}
+            <span style={microLabelStyle}>Status</span>
+            <span style={microLabelStyle}>Sent</span>
+            {canSeeFinancials && canDelete && <span />}
+          </div>
+
+          {changeOrders.map((co, i) => {
+            const badge = STATUS_BADGES[co.status];
+            return (
+              <div
+                key={co.id}
+                onClick={() => router.push(`/dashboard/projects/${projectId}/changes/${co.id}`)}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = color.tableHeadBg)}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: gridTemplate,
+                  gap: '12px',
+                  alignItems: 'center',
+                  padding: '15px 20px',
+                  borderBottom:
+                    i === changeOrders.length - 1 ? 'none' : `1px solid ${color.rowDivider}`,
+                  cursor: 'pointer',
+                }}
+              >
+                <span style={{ fontFamily: font.mono, fontSize: '13px', fontWeight: 600, color: color.faint }}>
+                  {co.co_number}
+                </span>
+                <span style={{ fontFamily: font.sans, fontSize: '14px', fontWeight: 600, color: color.navy }}>
+                  {co.title}
+                </span>
+                {canSeeFinancials && (
+                  <span
+                    style={{
+                      fontFamily: font.mono,
+                      fontSize: '14px',
+                      fontWeight: 600,
+                      textAlign: 'right',
+                      // Negative COs (credits) render RED per §S4 (round 2).
+                      color: co.net_delta < 0 ? color.danger : color.navy,
+                    }}
+                  >
+                    {co.net_delta < 0 ? '−' : ''}
+                    {money(co.net_delta)}
+                  </span>
                 )}
-              </tr>
-            </thead>
-            <tbody>
-              {changeOrders.map((co) => {
-                const colors = STATUS_COLORS[co.status];
-                return (
-                  <tr key={co.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                    <td style={{ padding: '0.5rem', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>
-                      <Link
-                        href={`/dashboard/projects/${projectId}/changes/${co.id}`}
-                        style={{ color: '#1a56db', textDecoration: 'none', fontWeight: 600 }}
-                      >
-                        {co.co_number}
-                      </Link>
-                    </td>
-                    <td style={{ padding: '0.5rem', fontSize: '0.875rem' }}>{co.title}</td>
-                    <td style={{ padding: '0.5rem' }}>
-                      <span
+                <span>
+                  <span style={{ ...badgeStyle, backgroundColor: badge.bg, color: badge.fg }}>
+                    {badge.label}
+                  </span>
+                </span>
+                <span
+                  style={{
+                    fontFamily: font.mono,
+                    fontSize: '12px',
+                    fontWeight: 500,
+                    color: co.sent_at ? color.muted : color.faintAlt,
+                  }}
+                >
+                  {co.sent_at ? new Date(co.sent_at).toLocaleDateString() : '—'}
+                </span>
+                {canSeeFinancials && canDelete && (
+                  <span onClick={(e) => e.stopPropagation()}>
+                    {co.status !== 'signed' && (
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(co)}
                         style={{
-                          display: 'inline-block',
-                          padding: '0.125rem 0.5rem',
-                          borderRadius: '9999px',
-                          fontSize: '0.75rem',
+                          padding: '4px 10px',
+                          fontSize: '12px',
                           fontWeight: 600,
-                          backgroundColor: colors.bg,
-                          color: colors.fg,
+                          color: color.dangerAlt,
+                          backgroundColor: '#fff',
+                          border: '1px solid #fecaca',
+                          borderRadius: '8px',
+                          cursor: 'pointer',
                         }}
                       >
-                        {CO_STATUS_LABELS[co.status]}
-                      </span>
-                    </td>
-                    <td
-                      style={{
-                        padding: '0.5rem',
-                        fontSize: '0.875rem',
-                        textAlign: 'right',
-                        color: co.net_delta < 0 ? '#166534' : undefined,
-                      }}
-                    >
-                      {money(co.net_delta)}
-                    </td>
-                    <td style={{ padding: '0.5rem', fontSize: '0.875rem', color: '#6b7280' }}>
-                      {co.author?.display_name ?? '—'}
-                    </td>
-                    <td style={{ padding: '0.5rem', fontSize: '0.875rem', color: '#6b7280' }}>
-                      {co.signed_at ? new Date(co.signed_at).toLocaleDateString() : '—'}
-                    </td>
-                    <td style={{ padding: '0.5rem', textAlign: 'right' }}>
-                      {canDelete && co.status !== 'signed' && (
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(co)}
-                          style={{
-                            padding: '0.25rem 0.625rem',
-                            fontSize: '0.75rem',
-                            color: '#991b1b',
-                            backgroundColor: '#fff',
-                            border: '1px solid #fecaca',
-                            borderRadius: '0.375rem',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          Delete
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                        Delete
+                      </button>
+                    )}
+                  </span>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

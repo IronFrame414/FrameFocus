@@ -1,30 +1,44 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import type { ProjectStatus, ProjectWithContact } from '@/lib/services/projects';
 import { PROJECT_STATUS_LABELS, PROJECT_TYPE_LABELS } from '@/lib/services/projects-client';
+import {
+  badgeStyle,
+  cardStyle,
+  color,
+  font,
+  h2Style,
+  microLabelStyle,
+  primaryButtonStyle,
+} from '@/lib/theme';
 
 interface ProjectsListProps {
   projects: ProjectWithContact[];
   currentStatus: string;
+  canCreate: boolean;
+  /** Financial floor (ui-01 §11): Contract column is Owner/Admin only. */
+  canSeeFinancials: boolean;
 }
 
 const STATUS_FILTERS: { value: string; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'active', label: 'Active' },
-  { value: 'on_hold', label: 'On Hold' },
+  { value: 'on_hold', label: 'On hold' },
   { value: 'complete', label: 'Complete' },
   { value: 'archived', label: 'Archived' },
   { value: 'cancelled', label: 'Cancelled' },
 ];
 
-const STATUS_COLORS: Record<ProjectStatus, { bg: string; fg: string }> = {
-  active: { bg: '#dcfce7', fg: '#166534' },
-  on_hold: { bg: '#fef3c7', fg: '#92400e' },
-  complete: { bg: '#dbeafe', fg: '#1e40af' },
-  archived: { bg: '#f3f4f6', fg: '#374151' },
-  cancelled: { bg: '#fee2e2', fg: '#991b1b' },
+// ui-03 §4 badge colors — these hex values are authoritative (round 2).
+const STATUS_BADGES: Record<ProjectStatus, { bg: string; fg: string }> = {
+  active: { bg: '#e4f0e6', fg: '#3d7a4b' },
+  on_hold: { bg: '#fdece0', fg: '#b45309' },
+  complete: { bg: '#eef1f6', fg: '#6b7280' },
+  archived: { bg: '#eef1f6', fg: '#6b7280' },
+  cancelled: { bg: '#eef1f6', fg: '#c0362c' },
 };
 
 function money(value: number | null): string {
@@ -32,122 +46,210 @@ function money(value: number | null): string {
   return value.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 }
 
-export function ProjectsList({ projects, currentStatus }: ProjectsListProps) {
+export function ProjectsList({
+  projects,
+  currentStatus,
+  canCreate,
+  canSeeFinancials,
+}: ProjectsListProps) {
   const router = useRouter();
+  const [search, setSearch] = useState('');
 
-  const cellStyle: React.CSSProperties = { padding: '0.75rem 0.5rem' };
-  const headStyle: React.CSSProperties = {
-    padding: '0.5rem',
-    textAlign: 'left',
-    fontSize: '0.75rem',
-    fontWeight: 600,
-    color: '#6b7280',
-    textTransform: 'uppercase',
+  const counts = useMemo(
+    () => ({
+      total: projects.length,
+      active: projects.filter((p) => p.status === 'active').length,
+      complete: projects.filter((p) => p.status === 'complete').length,
+    }),
+    [projects]
+  );
+
+  const visible = useMemo(() => {
+    let rows = projects;
+    if (currentStatus !== 'all') rows = rows.filter((p) => p.status === currentStatus);
+    const q = search.trim().toLowerCase();
+    if (q) {
+      rows = rows.filter((p) => {
+        const client = p.contact ? `${p.contact.first_name} ${p.contact.last_name}` : '';
+        return (
+          p.name.toLowerCase().includes(q) ||
+          p.project_number.toLowerCase().includes(q) ||
+          client.toLowerCase().includes(q)
+        );
+      });
+    }
+    return rows;
+  }, [projects, currentStatus, search]);
+
+  // Financial floor reflow (ui-01 §11): 6 columns for Owner/Admin, 5 without
+  // the Contract column for gated roles.
+  const gridTemplate = canSeeFinancials
+    ? '1fr 2.2fr 1.5fr 1.2fr 1.2fr 1.3fr'
+    : '1fr 2.4fr 1.7fr 1.3fr 1.3fr';
+
+  const rowBase: React.CSSProperties = {
+    display: 'grid',
+    gridTemplateColumns: gridTemplate,
+    gap: '12px',
+    alignItems: 'center',
+    padding: '15px 20px',
+    borderBottom: `1px solid ${color.rowDivider}`,
+    cursor: 'pointer',
   };
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-        {STATUS_FILTERS.map((f) => (
-          <button
-            key={f.value}
-            onClick={() =>
-              router.push(
-                f.value === 'all'
-                  ? '/dashboard/projects'
-                  : `/dashboard/projects?status=${f.value}`
-              )
-            }
+      {/* Header */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: '18px',
+        }}
+      >
+        <div>
+          <h2 style={h2Style}>Projects</h2>
+          <p style={{ color: color.muted, fontSize: '14px', margin: '4px 0 0' }}>
+            {counts.total} total · {counts.active} active · {counts.complete} complete
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search projects…"
             style={{
-              padding: '0.375rem 0.75rem',
-              fontSize: '0.875rem',
-              borderRadius: '9999px',
-              border: '1px solid #d1d5db',
-              backgroundColor: currentStatus === f.value ? '#2563eb' : '#fff',
-              color: currentStatus === f.value ? '#fff' : '#374151',
-              cursor: 'pointer',
+              width: '220px',
+              padding: '9px 12px',
+              backgroundColor: '#fff',
+              border: `1px solid ${color.inputBorder}`,
+              borderRadius: '9px',
+              fontFamily: font.sans,
+              fontSize: '13px',
+              color: color.body,
             }}
-          >
-            {f.label}
-          </button>
-        ))}
+          />
+          {canCreate && (
+            <Link href="/dashboard/projects/new" style={primaryButtonStyle}>
+              + New Project
+            </Link>
+          )}
+        </div>
       </div>
 
-      {projects.length === 0 ? (
-        <div
-          style={{
-            padding: '3rem',
-            textAlign: 'center',
-            color: '#6b7280',
-            backgroundColor: '#fff',
-            borderRadius: '0.5rem',
-            border: '1px solid #e5e7eb',
-          }}
-        >
-          No projects{currentStatus !== 'all' ? ` with status "${currentStatus}"` : ''} yet.
-          Convert an accepted estimate or create one manually.
+      {/* Filter chips */}
+      <div style={{ display: 'flex', gap: '6px', marginBottom: '14px' }}>
+        {STATUS_FILTERS.map((f) => {
+          const selected = currentStatus === f.value;
+          return (
+            <button
+              key={f.value}
+              onClick={() =>
+                router.push(
+                  f.value === 'all'
+                    ? '/dashboard/projects'
+                    : `/dashboard/projects?status=${f.value}`
+                )
+              }
+              style={{
+                padding: '7px 14px',
+                fontFamily: font.sans,
+                fontSize: '13px',
+                fontWeight: 600,
+                borderRadius: '8px',
+                border: selected ? '1px solid transparent' : `1px solid ${color.cardBorder}`,
+                backgroundColor: selected ? color.navy : '#fff',
+                color: selected ? '#fff' : color.bodyAlt,
+                cursor: 'pointer',
+              }}
+            >
+              {f.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Table card */}
+      {visible.length === 0 ? (
+        <div style={{ ...cardStyle, padding: '48px', textAlign: 'center', color: color.muted }}>
+          No projects
+          {currentStatus !== 'all' ? ` with status "${currentStatus}"` : ''}
+          {search.trim() ? ` matching "${search.trim()}"` : ''}. Convert an accepted estimate or
+          create one manually.
         </div>
       ) : (
-        <div
-          style={{
-            backgroundColor: '#fff',
-            borderRadius: '0.5rem',
-            border: '1px solid #e5e7eb',
-            overflowX: 'auto',
-          }}
-        >
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
-                <th style={headStyle}>Number</th>
-                <th style={headStyle}>Name</th>
-                <th style={headStyle}>Client</th>
-                <th style={headStyle}>Type</th>
-                <th style={headStyle}>Status</th>
-                <th style={{ ...headStyle, textAlign: 'right' }}>Contract Value</th>
-              </tr>
-            </thead>
-            <tbody>
-              {projects.map((p) => (
-                <tr key={p.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                  <td style={{ ...cellStyle, fontWeight: 600 }}>
-                    <Link
-                      href={`/dashboard/projects/${p.id}`}
-                      style={{ color: '#2563eb', textDecoration: 'none' }}
-                    >
-                      {p.project_number}
-                    </Link>
-                  </td>
-                  <td style={cellStyle}>{p.name}</td>
-                  <td style={{ ...cellStyle, color: '#6b7280' }}>
-                    {p.contact
-                      ? `${p.contact.first_name} ${p.contact.last_name}`
-                      : '—'}
-                  </td>
-                  <td style={{ ...cellStyle, color: '#6b7280' }}>
-                    {PROJECT_TYPE_LABELS[p.project_type]}
-                  </td>
-                  <td style={cellStyle}>
-                    <span
-                      style={{
-                        padding: '0.125rem 0.5rem',
-                        borderRadius: '9999px',
-                        fontSize: '0.75rem',
-                        fontWeight: 500,
-                        backgroundColor: STATUS_COLORS[p.status].bg,
-                        color: STATUS_COLORS[p.status].fg,
-                      }}
-                    >
-                      {PROJECT_STATUS_LABELS[p.status]}
-                    </span>
-                  </td>
-                  <td style={{ ...cellStyle, textAlign: 'right', fontWeight: 500 }}>
-                    {money(p.contract_value)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div style={{ ...cardStyle, overflow: 'hidden' }}>
+          {/* Header row */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: gridTemplate,
+              gap: '12px',
+              padding: '12px 20px',
+              backgroundColor: color.tableHeadBg,
+              borderBottom: `1px solid ${color.neutralBadgeBg}`,
+            }}
+          >
+            <span style={microLabelStyle}>Number</span>
+            <span style={microLabelStyle}>Name</span>
+            <span style={microLabelStyle}>Client</span>
+            <span style={microLabelStyle}>Type</span>
+            <span style={microLabelStyle}>Status</span>
+            {canSeeFinancials && (
+              <span style={{ ...microLabelStyle, textAlign: 'right' }}>Contract</span>
+            )}
+          </div>
+
+          {visible.map((p, i) => (
+            <div
+              key={p.id}
+              onClick={() => router.push(`/dashboard/projects/${p.id}`)}
+              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = color.tableHeadBg)}
+              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+              style={{
+                ...rowBase,
+                borderBottom: i === visible.length - 1 ? 'none' : rowBase.borderBottom,
+              }}
+            >
+              <span style={{ fontFamily: font.mono, fontSize: '13px', fontWeight: 500, color: color.muted }}>
+                {p.project_number}
+              </span>
+              <span style={{ fontFamily: font.sans, fontWeight: 700, color: color.navy, fontSize: '14px' }}>
+                {p.name}
+              </span>
+              <span style={{ fontSize: '13px', color: color.bodyAlt }}>
+                {p.contact ? `${p.contact.first_name} ${p.contact.last_name}` : '—'}
+              </span>
+              <span style={{ fontSize: '13px', fontWeight: 500, color: color.bodyAlt }}>
+                {PROJECT_TYPE_LABELS[p.project_type]}
+              </span>
+              <span>
+                <span
+                  style={{
+                    ...badgeStyle,
+                    backgroundColor: STATUS_BADGES[p.status].bg,
+                    color: STATUS_BADGES[p.status].fg,
+                  }}
+                >
+                  {PROJECT_STATUS_LABELS[p.status]}
+                </span>
+              </span>
+              {canSeeFinancials && (
+                <span
+                  style={{
+                    fontFamily: font.mono,
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    color: p.contract_value === null ? color.faint : color.navy,
+                    textAlign: 'right',
+                  }}
+                >
+                  {money(p.contract_value)}
+                </span>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>

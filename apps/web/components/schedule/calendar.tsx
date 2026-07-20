@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { CalendarEvent } from '@/lib/services/schedule-client';
 import { memberColor } from './member-color';
+import { color, font } from '@/lib/theme';
 
 interface CalendarProps {
   events: CalendarEvent[];
@@ -27,9 +28,10 @@ function startOfWeek(d: Date): Date {
 }
 
 /**
- * Month/week employee calendar (5B §8). Renders the pre-assembled UNION of
- * dated tasks + general entries + job-level inspections; each member in
- * their color.
+ * Month/week employee calendar (5B §8), restyled to 1a (ui-01 §5a). Renders
+ * the pre-assembled UNION of dated tasks + general entries + job-level
+ * inspections; each member in their color. Inspections use the 1a inspection
+ * chip family (ui-02 §4).
  */
 export function Calendar({ events, onSelect }: CalendarProps) {
   const [view, setView] = useState<ViewMode>('month');
@@ -75,12 +77,15 @@ export function Calendar({ events, onSelect }: CalendarProps) {
   const todayKey = toKey(new Date());
 
   const navButton: React.CSSProperties = {
-    padding: '0.25rem 0.625rem',
-    fontSize: '0.875rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '0.375rem',
+    padding: '5px 11px',
+    fontSize: '13px',
+    fontWeight: 600,
+    color: color.body,
+    border: `1px solid ${color.inputBorder}`,
+    borderRadius: '9px',
     backgroundColor: '#fff',
     cursor: 'pointer',
+    transition: 'background-color 140ms ease',
   };
 
   return (
@@ -90,29 +95,53 @@ export function Calendar({ events, onSelect }: CalendarProps) {
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          marginBottom: '0.75rem',
+          marginBottom: '14px',
         }}
       >
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          <button onClick={() => shift(-1)} style={navButton}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <button onClick={() => shift(-1)} style={navButton} aria-label="Previous">
             ←
           </button>
-          <span style={{ fontSize: '0.9375rem', fontWeight: 600, minWidth: '180px', textAlign: 'center' }}>
+          <span
+            style={{
+              fontSize: '15px',
+              fontWeight: 700,
+              color: color.navy,
+              minWidth: '180px',
+              textAlign: 'center',
+            }}
+          >
             {title}
           </span>
-          <button onClick={() => shift(1)} style={navButton}>
+          <button onClick={() => shift(1)} style={navButton} aria-label="Next">
             →
           </button>
         </div>
-        <div style={{ display: 'flex', gap: '0.25rem' }}>
-          {(['month', 'week'] as ViewMode[]).map((m) => (
+        {/* Week/Month segmented toggle (ui-02 §4 pattern) */}
+        <div
+          style={{
+            display: 'flex',
+            gap: '2px',
+            backgroundColor: color.neutralBadgeBg,
+            borderRadius: '8px',
+            padding: '3px',
+          }}
+        >
+          {(['week', 'month'] as ViewMode[]).map((m) => (
             <button
               key={m}
               onClick={() => setView(m)}
               style={{
-                ...navButton,
-                backgroundColor: view === m ? '#2563eb' : '#fff',
-                color: view === m ? '#fff' : '#374151',
+                padding: '5px 12px',
+                fontSize: '12px',
+                fontWeight: 600,
+                border: 'none',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                backgroundColor: view === m ? '#fff' : 'transparent',
+                boxShadow: view === m ? '0 1px 2px rgba(0,0,0,.06)' : 'none',
+                color: view === m ? color.navy : color.mutedAlt,
+                transition: 'background-color 140ms ease',
               }}
             >
               {m === 'month' ? 'Month' : 'Week'}
@@ -125,10 +154,10 @@ export function Calendar({ events, onSelect }: CalendarProps) {
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(7, 1fr)',
-          border: '1px solid #e5e7eb',
-          borderRadius: '0.5rem',
+          border: `1px solid ${color.cardBorder}`,
+          borderRadius: '9px',
           overflow: 'hidden',
-          backgroundColor: '#e5e7eb',
+          backgroundColor: color.cardBorder,
           gap: '1px',
         }}
       >
@@ -136,11 +165,14 @@ export function Calendar({ events, onSelect }: CalendarProps) {
           <div
             key={d}
             style={{
-              padding: '0.375rem',
-              fontSize: '0.75rem',
+              padding: '6px',
+              fontFamily: font.mono,
+              fontSize: '11px',
               fontWeight: 600,
-              color: '#6b7280',
-              backgroundColor: '#f9fafb',
+              textTransform: 'uppercase',
+              letterSpacing: '0.04em',
+              color: '#a2a8b2',
+              backgroundColor: color.tableHeadBg,
               textAlign: 'center',
             }}
           >
@@ -151,21 +183,28 @@ export function Calendar({ events, onSelect }: CalendarProps) {
           const key = toKey(day);
           const dayEvents = eventsFor(key);
           const inMonth = view === 'week' || day.getMonth() === anchor.getMonth();
+          const isToday = key === todayKey;
           return (
             <div
               key={key}
               style={{
                 minHeight: view === 'month' ? '96px' : '160px',
-                padding: '0.25rem',
-                backgroundColor: inMonth ? '#fff' : '#f9fafb',
-                fontSize: '0.75rem',
+                padding: '4px',
+                backgroundColor: inMonth ? '#fff' : color.tableHeadBg,
+                fontSize: '12px',
               }}
             >
               <div
                 style={{
-                  fontWeight: key === todayKey ? 700 : 400,
-                  color: key === todayKey ? '#2563eb' : inMonth ? '#374151' : '#9ca3af',
-                  marginBottom: '0.125rem',
+                  display: 'inline-block',
+                  fontFamily: font.mono,
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  padding: isToday ? '1px 6px' : '1px 0',
+                  borderRadius: '7px',
+                  backgroundColor: isToday ? color.primary : 'transparent',
+                  color: isToday ? '#fff' : inMonth ? color.muted : color.faintAlt,
+                  marginBottom: '3px',
                 }}
               >
                 {day.getDate()}
@@ -179,26 +218,25 @@ export function Calendar({ events, onSelect }: CalendarProps) {
                     display: 'block',
                     width: '100%',
                     textAlign: 'left',
-                    marginBottom: '2px',
-                    padding: '1px 4px',
-                    borderRadius: '3px',
-                    fontSize: '0.6875rem',
+                    marginBottom: '3px',
+                    padding: '3px 5px',
+                    borderRadius: '4px',
+                    fontSize: '10.5px',
+                    fontWeight: 600,
                     whiteSpace: 'nowrap',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     cursor: onSelect ? 'pointer' : 'default',
-                    border: e.source === 'inspection' ? '1px dashed #92400e' : 'none',
+                    border: 'none',
                     backgroundColor:
                       e.source === 'inspection'
-                        ? '#fef3c7'
+                        ? color.blueTintAlt
                         : memberColor(e.member_id, e.color) + '22',
                     color:
-                      e.source === 'inspection'
-                        ? '#92400e'
-                        : memberColor(e.member_id, e.color),
+                      e.source === 'inspection' ? '#3a4db0' : memberColor(e.member_id, e.color),
                     borderLeft:
                       e.source === 'inspection'
-                        ? '3px solid #d97706'
+                        ? '3px solid #7385d8'
                         : `3px solid ${memberColor(e.member_id, e.color)}`,
                   }}
                 >

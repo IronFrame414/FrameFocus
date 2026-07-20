@@ -3,20 +3,29 @@ import { redirect } from 'next/navigation';
 import { getBudgetRollup } from '@/lib/services/budget';
 import { getSignedChangeOrders } from '@/lib/services/change-orders';
 import { getProject } from '@/lib/services/projects';
+import { cardStyle, color, font, microLabelStyle } from '@/lib/theme';
+
+/**
+ * ui-05 — 1a Budget tab. Grouped by cost_code with a section-subtotal row per
+ * group + a grand-total row (locked round 2; row_type is a cost-category tag,
+ * NOT the grouping key). Committed/Actual/Variance render em-dash until the
+ * Module 7A ledger populates them — a raw 0 must not render as $0.
+ *
+ * Financial floor (ui-01 §11): Owner/Admin see the 5-card summary and the
+ * 6-column table; PM/Foreman/Crew see actual cost only — the Cost to Date
+ * card and a 3-column Code · Description · Actual table (REFLOW rule).
+ */
 
 function money(value: number): string {
   return value.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 }
 
-/**
- * 5E — Project Budget View. Read-only display of project_budget_items grouped
- * by cost_code. Committed/Actual render zero until Module 7 populates them;
- * Variance = Budgeted − Actual (so Variance = Budgeted at launch).
- *
- * 5D §7 — contract summary on top: original contract_value + Σ(signed CO net
- * deltas) = revised contract total, display-only. projects.contract_value is
- * never mutated by CO sign-off (D-6; write-through is Module 7 / #80).
- */
+/** Em-dash for the unpopulated-until-7A columns (0 reads as unpopulated). */
+function moneyOrDash(value: number | null | undefined): string {
+  if (!value) return '—';
+  return money(value);
+}
+
 export default async function ProjectBudgetPage({ params }: { params: { id: string } }) {
   const supabase = await createClient();
 
@@ -24,6 +33,16 @@ export default async function ProjectBudgetPage({ params }: { params: { id: stri
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect('/sign-in');
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('user_id', user.id)
+    .eq('is_deleted', false)
+    .single();
+  if (!profile) redirect('/dashboard');
+
+  const canSeeFinancials = profile.role === 'owner' || profile.role === 'admin';
 
   const [rollup, project, signedCos] = await Promise.all([
     getBudgetRollup(params.id),
@@ -33,183 +52,285 @@ export default async function ProjectBudgetPage({ params }: { params: { id: stri
 
   const contractValue = project?.contract_value ?? null;
   const signedCoTotal = signedCos.reduce((sum, co) => sum + co.net_delta, 0);
+  const revised = contractValue !== null ? contractValue + signedCoTotal : signedCoTotal;
 
-  const headStyle: React.CSSProperties = {
-    padding: '0.5rem',
+  // Summary cards — financial floor reflow: gated roles get Cost to Date only.
+  const summaryCards: {
+    label: string;
+    value: string;
+    valueColor: string;
+    inverted?: boolean;
+  }[] = canSeeFinancials
+    ? [
+        {
+          label: 'Original',
+          value: contractValue !== null ? money(contractValue) : '—',
+          valueColor: contractValue !== null ? color.navy : color.faint,
+        },
+        {
+          label: 'Signed COs',
+          value:
+            signedCoTotal !== 0 ? `${signedCoTotal > 0 ? '+' : ''}${money(signedCoTotal)}` : '—',
+          valueColor: signedCoTotal !== 0 ? color.warning : color.faint,
+        },
+        { label: 'Revised', value: money(revised), valueColor: '#fff', inverted: true },
+        { label: 'Cost to Date', value: '—', valueColor: color.faint },
+        { label: 'Projected Margin', value: '—', valueColor: color.faint },
+      ]
+    : [{ label: 'Cost to Date', value: '—', valueColor: color.faint }];
+
+  // Table grid — 6 columns for Owner/Admin, 3 for gated roles (reflow).
+  const gridTemplate = canSeeFinancials
+    ? '0.7fr 2fr 1.1fr 1.1fr 1.1fr 1.1fr'
+    : '0.7fr 3fr 1.1fr';
+
+  const moneyCell: React.CSSProperties = {
+    fontFamily: font.mono,
+    fontSize: '13px',
+    fontWeight: 500,
+    color: color.navy,
     textAlign: 'right',
-    fontSize: '0.75rem',
-    fontWeight: 600,
-    color: '#6b7280',
-    textTransform: 'uppercase',
   };
-  const cellStyle: React.CSSProperties = {
-    padding: '0.5rem',
-    textAlign: 'right',
-    fontSize: '0.875rem',
-  };
+  const dashCell: React.CSSProperties = { ...moneyCell, color: color.faint };
 
   return (
-    <div style={{ maxWidth: '900px' }}>
-      {/* 5D §7 — display-only contract summary */}
+    <div>
+      {/* Summary row */}
       <div
         style={{
-          backgroundColor: '#fff',
-          borderRadius: '0.5rem',
-          border: '1px solid #e5e7eb',
-          padding: '1rem',
-          marginBottom: '1rem',
+          display: 'grid',
+          gridTemplateColumns: `repeat(${summaryCards.length}, 1fr)`,
+          gap: '12px',
+          marginBottom: '18px',
+          maxWidth: canSeeFinancials ? undefined : '260px',
         }}
       >
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <tbody>
-            <tr>
-              <td style={{ padding: '0.25rem 0.5rem', fontSize: '0.875rem' }}>
-                Original contract value
-              </td>
-              <td style={{ padding: '0.25rem 0.5rem', fontSize: '0.875rem', textAlign: 'right' }}>
-                {contractValue != null ? money(contractValue) : '—'}
-              </td>
-            </tr>
-            {signedCos.map((co) => (
-              <tr key={co.id}>
-                <td
-                  style={{ padding: '0.25rem 0.5rem', fontSize: '0.875rem', color: '#6b7280' }}
-                >
-                  {co.co_number} — {co.title} (signed{' '}
-                  {co.signed_at ? new Date(co.signed_at).toLocaleDateString() : ''})
-                </td>
-                <td
-                  style={{
-                    padding: '0.25rem 0.5rem',
-                    fontSize: '0.875rem',
-                    textAlign: 'right',
-                    color: co.net_delta < 0 ? '#166534' : undefined,
-                  }}
-                >
-                  {money(co.net_delta)}
-                </td>
-              </tr>
-            ))}
-            <tr style={{ borderTop: '1px solid #e5e7eb', fontWeight: 700 }}>
-              <td style={{ padding: '0.375rem 0.5rem', fontSize: '0.875rem' }}>
-                Revised contract total
-              </td>
-              <td style={{ padding: '0.375rem 0.5rem', fontSize: '0.875rem', textAlign: 'right' }}>
-                {contractValue != null ? money(contractValue + signedCoTotal) : money(signedCoTotal)}
-              </td>
-            </tr>
-          </tbody>
-        </table>
-        <p style={{ fontSize: '0.75rem', color: '#9ca3af', margin: '0.5rem 0 0' }}>
-          Display-only: signed change orders do not modify the headline contract value until
-          Module 7.
-        </p>
+        {summaryCards.map((card) => (
+          <div
+            key={card.label}
+            style={{
+              ...cardStyle,
+              padding: '14px 15px',
+              backgroundColor: card.inverted ? color.navy : color.cardBg,
+              border: card.inverted ? `1px solid ${color.navy}` : cardStyle.border,
+            }}
+          >
+            <div
+              style={{
+                ...microLabelStyle,
+                fontSize: '10.5px',
+                color: card.inverted ? color.navySecondary : color.mutedAlt,
+              }}
+            >
+              {card.label}
+            </div>
+            <div
+              style={{
+                fontFamily: font.mono,
+                fontSize: '20px',
+                fontWeight: 600,
+                color: card.valueColor,
+                marginTop: '4px',
+              }}
+            >
+              {card.value}
+            </div>
+          </div>
+        ))}
       </div>
 
-      <p style={{ fontSize: '0.8125rem', color: '#6b7280', marginBottom: '1rem' }}>
-        Cost baseline from the estimate (pre-markup, pre-tax). The budget total sits below the
-        contract value by the markup — they are not expected to match. Committed and Actual fill
-        in with Module 7.
-      </p>
+      {canSeeFinancials && (
+        <p style={{ fontSize: '13px', color: color.muted, margin: '0 0 14px' }}>
+          Cost baseline from the estimate (pre-markup, pre-tax) — the budget total sits below the
+          revised contract by the markup. Committed and Actual fill in with Module 7.
+        </p>
+      )}
 
+      {/* Budget table */}
       {rollup.groups.length === 0 ? (
-        <div
-          style={{
-            padding: '3rem',
-            textAlign: 'center',
-            color: '#6b7280',
-            backgroundColor: '#fff',
-            borderRadius: '0.5rem',
-            border: '1px solid #e5e7eb',
-          }}
-        >
+        <div style={{ ...cardStyle, padding: '48px', textAlign: 'center', color: color.muted }}>
           No budget items. The baseline is created when an estimate is converted to this project.
         </div>
       ) : (
-        <div
-          style={{
-            backgroundColor: '#fff',
-            borderRadius: '0.5rem',
-            border: '1px solid #e5e7eb',
-            overflowX: 'auto',
-          }}
-        >
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
-                <th style={{ ...headStyle, textAlign: 'left' }}>Description</th>
-                <th style={headStyle}>Budgeted</th>
-                <th style={headStyle}>Committed</th>
-                <th style={headStyle}>Actual</th>
-                <th style={headStyle}>Variance</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rollup.groups.map((group) => (
-                <GroupRows key={group.cost_code} group={group} cellStyle={cellStyle} />
-              ))}
-              <tr style={{ borderTop: '2px solid #e5e7eb', fontWeight: 700 }}>
-                <td style={{ ...cellStyle, textAlign: 'left' }}>Project Budget Total</td>
-                <td style={cellStyle}>{money(rollup.totalBudgeted)}</td>
-                <td style={cellStyle}>{money(rollup.totalCommitted)}</td>
-                <td style={cellStyle}>{money(rollup.totalActual)}</td>
-                <td style={cellStyle}>{money(rollup.totalBudgeted - rollup.totalActual)}</td>
-              </tr>
-            </tbody>
-          </table>
+        <div style={{ ...cardStyle, overflow: 'hidden' }}>
+          {/* Header */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: gridTemplate,
+              gap: '12px',
+              padding: '12px 20px',
+              backgroundColor: color.tableHeadBg,
+              borderBottom: `1px solid ${color.neutralBadgeBg}`,
+            }}
+          >
+            <span style={microLabelStyle}>Code</span>
+            <span style={microLabelStyle}>Description</span>
+            {canSeeFinancials && (
+              <span style={{ ...microLabelStyle, textAlign: 'right' }}>Budget</span>
+            )}
+            {canSeeFinancials && (
+              <span style={{ ...microLabelStyle, textAlign: 'right' }}>Committed</span>
+            )}
+            <span style={{ ...microLabelStyle, textAlign: 'right' }}>Actual</span>
+            {canSeeFinancials && (
+              <span style={{ ...microLabelStyle, textAlign: 'right' }}>Variance</span>
+            )}
+          </div>
+
+          {rollup.groups.map((group) => (
+            <div key={group.cost_code}>
+              {group.items.map((item) => {
+                const variance =
+                  item.actual_amount && item.actual_amount !== 0
+                    ? (item.budgeted_amount ?? 0) - item.actual_amount
+                    : null;
+                return (
+                  <div
+                    key={item.id}
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: gridTemplate,
+                      gap: '12px',
+                      alignItems: 'center',
+                      padding: '13px 20px',
+                      borderBottom: `1px solid ${color.rowDivider}`,
+                    }}
+                  >
+                    <span style={{ fontFamily: font.mono, fontSize: '13px', color: color.faint }}>
+                      {item.cost_code ?? '—'}
+                    </span>
+                    <span style={{ fontFamily: font.sans, fontSize: '13px', fontWeight: 600, color: color.navy }}>
+                      {item.description}
+                      {item.row_type && (
+                        <span style={{ color: color.faint, fontWeight: 400, fontSize: '12px' }}>
+                          {' '}
+                          · {item.row_type}
+                        </span>
+                      )}
+                    </span>
+                    {canSeeFinancials && (
+                      <span style={moneyCell}>{money(item.budgeted_amount ?? 0)}</span>
+                    )}
+                    {canSeeFinancials && (
+                      <span style={dashCell}>{moneyOrDash(item.committed_amount)}</span>
+                    )}
+                    <span style={item.actual_amount ? moneyCell : dashCell}>
+                      {moneyOrDash(item.actual_amount)}
+                    </span>
+                    {canSeeFinancials && (
+                      <span
+                        style={{
+                          ...moneyCell,
+                          color:
+                            variance === null
+                              ? color.faint
+                              : variance >= 0
+                                ? color.success
+                                : color.danger,
+                        }}
+                      >
+                        {variance === null
+                          ? '—'
+                          : `${variance >= 0 ? '+' : '−'}${money(Math.abs(variance))}`}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+
+              {/* Section subtotal (one per cost_code group, ui-05 §S4) */}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: gridTemplate,
+                  gap: '12px',
+                  alignItems: 'center',
+                  padding: '12px 20px',
+                  backgroundColor: color.tableHeadBg,
+                  borderBottom: `1px solid ${color.rowDivider}`,
+                }}
+              >
+                <span
+                  style={{
+                    gridColumn: '1 / span 2',
+                    fontFamily: font.sans,
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    color: color.body,
+                  }}
+                >
+                  {group.cost_code}
+                </span>
+                {canSeeFinancials && (
+                  <span style={{ ...moneyCell, fontWeight: 600, color: color.body }}>
+                    {money(group.budgeted)}
+                  </span>
+                )}
+                {canSeeFinancials && (
+                  <span style={dashCell}>{moneyOrDash(group.committed)}</span>
+                )}
+                <span style={group.actual ? { ...moneyCell, fontWeight: 600 } : dashCell}>
+                  {moneyOrDash(group.actual)}
+                </span>
+                {canSeeFinancials && (
+                  <span style={dashCell}>
+                    {group.actual ? money(group.budgeted - group.actual) : '—'}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+
+          {/* Grand total */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: gridTemplate,
+              gap: '12px',
+              alignItems: 'center',
+              padding: '14px 20px',
+              backgroundColor: color.tableHeadBg,
+            }}
+          >
+            <span
+              style={{
+                gridColumn: '1 / span 2',
+                fontFamily: font.sans,
+                fontSize: '14px',
+                fontWeight: 700,
+                color: color.navy,
+              }}
+            >
+              Total
+            </span>
+            {canSeeFinancials && (
+              <span style={{ ...moneyCell, fontSize: '14px', fontWeight: 700 }}>
+                {money(rollup.totalBudgeted)}
+              </span>
+            )}
+            {canSeeFinancials && (
+              <span style={{ ...dashCell, fontSize: '14px', fontWeight: 700 }}>
+                {moneyOrDash(rollup.totalCommitted)}
+              </span>
+            )}
+            <span
+              style={
+                rollup.totalActual
+                  ? { ...moneyCell, fontSize: '14px', fontWeight: 700 }
+                  : { ...dashCell, fontSize: '14px', fontWeight: 700 }
+              }
+            >
+              {moneyOrDash(rollup.totalActual)}
+            </span>
+            {canSeeFinancials && (
+              <span style={{ ...dashCell, fontSize: '14px', fontWeight: 700 }}>
+                {rollup.totalActual ? money(rollup.totalBudgeted - rollup.totalActual) : '—'}
+              </span>
+            )}
+          </div>
         </div>
       )}
     </div>
-  );
-}
-
-function GroupRows({
-  group,
-  cellStyle,
-}: {
-  group: Awaited<ReturnType<typeof getBudgetRollup>>['groups'][number];
-  cellStyle: React.CSSProperties;
-}) {
-  return (
-    <>
-      <tr style={{ backgroundColor: '#f9fafb' }}>
-        <td
-          colSpan={5}
-          style={{
-            padding: '0.5rem',
-            fontSize: '0.8125rem',
-            fontWeight: 600,
-            color: '#374151',
-          }}
-        >
-          {group.cost_code}
-        </td>
-      </tr>
-      {group.items.map((item) => (
-        <tr key={item.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-          <td style={{ ...cellStyle, textAlign: 'left' }}>
-            {item.description}
-            {item.row_type && (
-              <span style={{ color: '#9ca3af', fontSize: '0.75rem' }}> · {item.row_type}</span>
-            )}
-          </td>
-          <td style={cellStyle}>{money(item.budgeted_amount ?? 0)}</td>
-          <td style={cellStyle}>{money(item.committed_amount ?? 0)}</td>
-          <td style={cellStyle}>{money(item.actual_amount ?? 0)}</td>
-          <td style={cellStyle}>
-            {money((item.budgeted_amount ?? 0) - (item.actual_amount ?? 0))}
-          </td>
-        </tr>
-      ))}
-      <tr style={{ borderBottom: '1px solid #e5e7eb', fontWeight: 600 }}>
-        <td style={{ ...cellStyle, textAlign: 'left', color: '#6b7280' }}>
-          {group.cost_code} subtotal
-        </td>
-        <td style={cellStyle}>{money(group.budgeted)}</td>
-        <td style={cellStyle}>{money(group.committed)}</td>
-        <td style={cellStyle}>{money(group.actual)}</td>
-        <td style={cellStyle}>{money(group.budgeted - group.actual)}</td>
-      </tr>
-    </>
   );
 }

@@ -111,11 +111,11 @@ export function Gantt({ rollups, unphased, dependencies, onSelect }: GanttProps)
   const chartHeight = rows.length * ROW_HEIGHT;
 
   return (
-    <div style={{ overflowX: 'auto', border: '1px solid #e5e7eb', borderRadius: '0.5rem', backgroundColor: '#fff' }}>
+    <div style={{ overflowX: 'auto', border: '1px solid #e6e9ef', borderRadius: '13px', backgroundColor: '#fff' }}>
       <div style={{ display: 'flex', minWidth: LABEL_WIDTH + chartWidth }}>
         {/* Labels column */}
-        <div style={{ width: LABEL_WIDTH, flexShrink: 0, borderRight: '1px solid #e5e7eb' }}>
-          <div style={{ height: 28, borderBottom: '1px solid #e5e7eb' }} />
+        <div style={{ width: LABEL_WIDTH, flexShrink: 0, borderRight: '1px solid #e6e9ef' }}>
+          <div style={{ height: 28, borderBottom: '1px solid #e6e9ef' }} />
           {rows.map((row, i) => (
             <div
               key={i}
@@ -126,8 +126,8 @@ export function Gantt({ rollups, unphased, dependencies, onSelect }: GanttProps)
                 padding: '0 0.5rem',
                 fontSize: '0.8125rem',
                 fontWeight: row.kind === 'phase' ? 700 : 400,
-                backgroundColor: row.kind === 'phase' ? '#f9fafb' : '#fff',
-                borderBottom: '1px solid #f3f4f6',
+                backgroundColor: row.kind === 'phase' ? '#f7f9fc' : '#fff',
+                borderBottom: '1px solid #f1f3f7',
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
@@ -148,7 +148,7 @@ export function Gantt({ rollups, unphased, dependencies, onSelect }: GanttProps)
         {/* Timeline */}
         <div style={{ position: 'relative', width: chartWidth }}>
           {/* Header */}
-          <div style={{ position: 'relative', height: 28, borderBottom: '1px solid #e5e7eb' }}>
+          <div style={{ position: 'relative', height: 28, borderBottom: '1px solid #e6e9ef' }}>
             {dayMarks.map((mark) => (
               <span
                 key={mark.x}
@@ -176,7 +176,7 @@ export function Gantt({ rollups, unphased, dependencies, onSelect }: GanttProps)
                   top: 0,
                   bottom: 0,
                   width: 1,
-                  backgroundColor: '#f3f4f6',
+                  backgroundColor: '#f1f3f7',
                 }}
               />
             ))}
@@ -195,8 +195,8 @@ export function Gantt({ rollups, unphased, dependencies, onSelect }: GanttProps)
                       left: 0,
                       right: 0,
                       height: ROW_HEIGHT,
-                      backgroundColor: '#f9fafb',
-                      borderBottom: '1px solid #f3f4f6',
+                      backgroundColor: '#f7f9fc',
+                      borderBottom: '1px solid #f1f3f7',
                     }}
                   />
                 );
@@ -214,8 +214,8 @@ export function Gantt({ rollups, unphased, dependencies, onSelect }: GanttProps)
                       left: 0,
                       right: 0,
                       height: ROW_HEIGHT,
-                      backgroundColor: '#f9fafb',
-                      borderBottom: '1px solid #f3f4f6',
+                      backgroundColor: '#f7f9fc',
+                      borderBottom: '1px solid #f1f3f7',
                     }}
                   />
                   {/* Phase bracket: a thin band spanning min start → max end */}
@@ -226,7 +226,7 @@ export function Gantt({ rollups, unphased, dependencies, onSelect }: GanttProps)
                       left: x,
                       width,
                       height: 6,
-                      backgroundColor: '#9ca3af',
+                      backgroundColor: '#9aa1ac',
                       borderRadius: 3,
                     }}
                   />
@@ -293,11 +293,11 @@ export function Gantt({ rollups, unphased, dependencies, onSelect }: GanttProps)
                 const y2 = toBar.y + ROW_HEIGHT / 2;
                 const midX = x1 + Math.max(8, (x2 - x1) / 2);
                 return (
-                  <g key={dep.id} stroke="#9ca3af" strokeWidth={1.5} fill="none">
+                  <g key={dep.id} stroke="#9aa1ac" strokeWidth={1.5} fill="none">
                     <path d={`M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2 - 4} ${y2}`} />
                     <path
                       d={`M ${x2 - 4} ${y2 - 3} L ${x2} ${y2} L ${x2 - 4} ${y2 + 3}`}
-                      fill="#9ca3af"
+                      fill="#9aa1ac"
                       stroke="none"
                     />
                   </g>
