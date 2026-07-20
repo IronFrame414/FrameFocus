@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   clockIn,
   clockOut,
+  closeSessionOnly,
   listPickerTasks,
   switchSegment,
   updateMyRecentSegment,
@@ -277,12 +278,30 @@ export function TimeclockClient({
   }
 
   async function handleClockOut() {
+    if (!session) return;
+    // Recovery path: the segment chain is already fully ended (the state a
+    // partial clock-out failure leaves behind) — there is no segment to
+    // validate or end, so close the session only. Without this branch,
+    // validateEnd()'s "No open segment." gate wedges clock-out permanently.
+    if (!currentSegment) {
+      setBusy(true);
+      setError(null);
+      const gps = await captureGps();
+      const res = await closeSessionOnly({ session_id: session.id, gps_out: gps });
+      setBusy(false);
+      if (!res.success) {
+        setError(res.error ?? 'Failed to clock out.');
+        return;
+      }
+      setModal(null);
+      router.refresh();
+      return;
+    }
     const invalid = validateEnd();
     if (invalid) {
       setError(invalid);
       return;
     }
-    if (!session) return;
     setBusy(true);
     setError(null);
     const gps = await captureGps();
@@ -554,6 +573,14 @@ export function TimeclockClient({
               {modal === 'clock-out' && 'Clock out'}
               {modal === 'edit' && 'Edit segment'}
             </h3>
+
+            {/* Recovery state: session open but the segment chain is already
+                fully ended — clock-out just closes the day (no end fields). */}
+            {modal === 'clock-out' && !currentSegment && (
+              <p style={{ fontSize: '13px', color: color.muted, margin: '0 0 14px' }}>
+                Your last segment is already ended — clocking out will close the day.
+              </p>
+            )}
 
             {/* End-of-current fields (switch + clock-out). */}
             {(modal === 'switch' || modal === 'clock-out') && currentSegment && (

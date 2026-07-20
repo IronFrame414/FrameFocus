@@ -246,6 +246,38 @@ export async function clockOut(input: {
 }
 
 /**
+ * Close-only clock-out: stamps clock_out (+ optional GPS) WITHOUT touching
+ * segments. Recovery path for the "session open, segment chain already fully
+ * ended" state a partial clock-out failure leaves behind (see endSegmentAt's
+ * idempotency note) — the normal clockOut() cannot run there because it has
+ * no open segment to end. Idempotent like endSegmentAt: the UPDATE only
+ * matches a still-open session, and 0 rows = already closed = success. Row
+ * scope is the existing RLS self-arm (own AND clock_out IS NULL); columns are
+ * within the self allowlist of the column-scope trigger (clock_out
+ * NULL->value, gps_out).
+ */
+export async function closeSessionOnly(input: {
+  session_id: string;
+  clock_out?: string;
+  gps_out?: GpsFix;
+}): Promise<Result> {
+  const supabase = createClient();
+  const at = input.clock_out ?? new Date().toISOString();
+
+  const updates: Record<string, unknown> = { clock_out: at };
+  if (input.gps_out) updates.gps_out = input.gps_out;
+
+  // updated_by / updated_at handled by triggers.
+  const { error } = await supabase
+    .from('time_clock_sessions')
+    .update(updates)
+    .eq('id', input.session_id)
+    .is('clock_out', null);
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
+/**
  * Approve a session (§8). RLS (can_approve_member) enforces the strictly-below
  * hierarchy — this only fires the write. Guards status = 'pending' so it never
  * touches an Owner session (status null) or re-approves. approved_by is the
