@@ -10,9 +10,16 @@ import {
   PROJECT_BEARING_TYPES,
   intervalHours,
   paidHours,
+  weekLaborCost,
   weekWindowForYmd,
   weeklyHoursSummary,
+  type PricedSessionInput,
 } from '@framefocus/shared/utils/time-tracking';
+import {
+  getCompanyRates,
+  getSessionRateSnapshots,
+  rateEffectiveOn,
+} from '@/lib/services/pay-rates';
 import { TimeclockTabs } from '@/components/time/timeclock-tabs';
 import {
   TimesheetsClient,
@@ -138,6 +145,41 @@ export default async function TimesheetsPage({
     })
     .sort((a, b) => a.displayName.localeCompare(b.displayName));
 
+  // ── Labor Cost (wk) — Owner/Admin only (Financial Visibility Floor).
+  //    Approved sessions price from their frozen approval-time snapshot;
+  //    pending/owner sessions price live from member_pay_rates on each
+  //    session's company-tz date. OT: first 40 paid hours straight, later
+  //    hours 1.5x, chronological (weekLaborCost). A member with ANY
+  //    unpriceable session is wholly unpriced — the KPI sums priceable
+  //    members and reports coverage. ──
+  const canSeeLaborCost = profile.role === 'owner' || profile.role === 'admin';
+  let laborCost: { total: number; priced: number; totalMembers: number } | null = null;
+  if (canSeeLaborCost && rows.length > 0) {
+    const approvedIds = sessions.filter((s) => s.status === 'approved').map((s) => s.id);
+    const [companyRates, snapshots] = await Promise.all([
+      getCompanyRates(),
+      getSessionRateSnapshots(approvedIds),
+    ]);
+    let total = 0;
+    let priced = 0;
+    for (const row of rows) {
+      const inputs: PricedSessionInput[] = row.sessions.map((s) => ({
+        clockIn: s.clock_in,
+        paidHours: s.paidHours,
+        hourlyRate:
+          s.status === 'approved'
+            ? (snapshots[s.id] ?? null) // absent snapshot == frozen null (decision 5)
+            : rateEffectiveOn(companyRates, row.memberId, s.dayKey),
+      }));
+      const result = weekLaborCost(inputs);
+      if (result.priceable) {
+        total += result.cost;
+        priced += 1;
+      }
+    }
+    laborCost = { total, priced, totalMembers: rows.length };
+  }
+
   // Week label + prev/next anchors (local dates just outside the window).
   const labelFmt = new Intl.DateTimeFormat('en-US', {
     timeZone,
@@ -161,7 +203,8 @@ export default async function TimesheetsPage({
       nextAnchor={nextAnchor}
         viewerRole={profile.role}
         viewerMemberId={myMember?.id ?? null}
-        canSeeLaborCost={profile.role === 'owner' || profile.role === 'admin'}
+        canSeeLaborCost={canSeeLaborCost}
+        laborCost={laborCost}
         timeZone={timeZone}
       />
     </div>

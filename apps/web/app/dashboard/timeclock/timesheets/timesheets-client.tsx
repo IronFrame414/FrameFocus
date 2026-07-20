@@ -61,6 +61,9 @@ interface TimesheetsClientProps {
   viewerRole: string;
   viewerMemberId: string | null;
   canSeeLaborCost: boolean;
+  /** Owner/Admin only; null for other roles. priced = members whose whole
+   *  week is rate-covered (snapshot or live). */
+  laborCost: { total: number; priced: number; totalMembers: number } | null;
   /** Company timezone (companies.timezone) — all wall-clock rendering. */
   timeZone: string;
 }
@@ -115,6 +118,7 @@ export function TimesheetsClient({
   viewerRole,
   viewerMemberId,
   canSeeLaborCost,
+  laborCost,
   timeZone,
 }: TimesheetsClientProps) {
   const router = useRouter();
@@ -245,7 +249,26 @@ export function TimesheetsClient({
           caption="derived"
         />
         {canSeeLaborCost && (
-          <KpiCard label="Labor Cost (wk)" value="—" caption="no pay-rate source yet" />
+          <KpiCard
+            label="Labor Cost (wk)"
+            value={
+              laborCost && laborCost.priced > 0
+                ? laborCost.total.toLocaleString('en-US', {
+                    style: 'currency',
+                    currency: 'USD',
+                  })
+                : '—'
+            }
+            caption={
+              !laborCost || laborCost.totalMembers === 0
+                ? 'no time this week'
+                : laborCost.priced === 0
+                  ? 'no pay rates yet'
+                  : laborCost.priced < laborCost.totalMembers
+                    ? `priced for ${laborCost.priced} of ${laborCost.totalMembers} members`
+                    : 'incl. 1.5× OT past 40h'
+            }
+          />
         )}
       </div>
 

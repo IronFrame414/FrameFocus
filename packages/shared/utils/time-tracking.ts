@@ -400,3 +400,64 @@ export function weeklyHoursSummary(
   const ot = overtimeHours(paid, settings);
   return { paidHours: paid, regularHours: paid - ot, overtimeHours: ot };
 }
+
+// ── Labor cost (6A pay rates, S85) ──
+//
+// Pricing rules (locked): each session prices at the rate effective on its
+// clock-in date (approved sessions use their frozen snapshot; the caller
+// resolves the rate either way). The first otThresholdHours paid hours of the
+// week price at straight rate; hours past the threshold price at
+// OT_RATE_MULTIPLIER, attributed CHRONOLOGICALLY — the latest hours of the
+// week are the OT hours, priced at 1.5x the rate of the day they fall on. A
+// mid-week raise therefore prices OT at the raised rate iff the OT hours fall
+// after the raise. Never stored; derived at read time.
+
+export const OT_RATE_MULTIPLIER = 1.5;
+
+export interface PricedSessionInput {
+  /** Chronological ordering + day attribution. */
+  clockIn: string | Date;
+  paidHours: number;
+  /** Resolved rate for this session's day: frozen snapshot when approved,
+   *  live member_pay_rates lookup otherwise. null = unpriceable. */
+  hourlyRate: number | null;
+}
+
+export interface WeekLaborCost {
+  cost: number;
+  /** False when ANY session in the week lacks a resolvable rate — the member
+   *  is then wholly unpriced (partial pricing would misattribute OT). */
+  priceable: boolean;
+}
+
+/**
+ * One member's week priced with chronological OT attribution. Sessions may be
+ * passed in any order; they are walked by clock-in time, accumulating paid
+ * hours. A session that straddles the OT threshold splits: hours up to the
+ * threshold at straight rate, the remainder at OT_RATE_MULTIPLIER — both at
+ * that session's own rate.
+ */
+export function weekLaborCost(
+  sessions: PricedSessionInput[],
+  settings: TimeSettings = DEFAULT_TIME_SETTINGS
+): WeekLaborCost {
+  if (sessions.length === 0) return { cost: 0, priceable: true };
+  if (sessions.some((s) => s.hourlyRate == null)) return { cost: 0, priceable: false };
+
+  const sorted = [...sessions].sort((a, b) => toMs(a.clockIn) - toMs(b.clockIn));
+  let cumulative = 0;
+  let cost = 0;
+  for (const s of sorted) {
+    const rate = s.hourlyRate as number;
+    const before = cumulative;
+    const after = cumulative + s.paidHours;
+    const straightHours = Math.max(
+      0,
+      Math.min(after, settings.otThresholdHours) - Math.min(before, settings.otThresholdHours)
+    );
+    const otHours = Math.max(0, after - Math.max(before, settings.otThresholdHours));
+    cost += straightHours * rate + otHours * rate * OT_RATE_MULTIPLIER;
+    cumulative = after;
+  }
+  return { cost, priceable: true };
+}
