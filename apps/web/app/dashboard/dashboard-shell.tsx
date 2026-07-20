@@ -4,6 +4,8 @@ import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   Calendar,
+  ClipboardCheck,
+  Clock,
   CreditCard,
   FileText,
   LayoutGrid,
@@ -36,6 +38,18 @@ const NAV_ITEMS: {
   { href: '/dashboard', label: 'Dashboard', icon: LayoutGrid },
   { href: '/dashboard/projects', label: 'Projects', icon: Rows3 },
   { href: '/dashboard/schedule', label: 'Schedule', icon: Calendar },
+  // INTERIM PLACEMENT (Module 6A build, S85): two plain links until the M6
+  // handoff's FFNav 11-item reindex (Field Ops hub, new order) is built — that
+  // reindex is explicitly out of scope here. Timeclock is every role's
+  // personal clock; Timesheets is the supervisor approval queue (roles that
+  // can have subordinates).
+  { href: '/dashboard/timeclock', label: 'Timeclock', icon: Clock },
+  {
+    href: '/dashboard/timesheets',
+    label: 'Timesheets',
+    icon: ClipboardCheck,
+    roles: ['owner', 'admin', 'project_manager', 'foreman'],
+  },
   { href: '/dashboard/contacts', label: 'Contacts', icon: User },
   { href: '/dashboard/subcontractors', label: 'Subs & Vendors', icon: Users },
   {
