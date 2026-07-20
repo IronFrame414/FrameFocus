@@ -145,11 +145,21 @@ async function endSegmentAt(
 
   // BEFORE UPDATE trigger `time_segments_set_updated_by` handles updated_by;
   // updated_at is handled by the existing updated_at trigger.
-  const { error } = await supabase
+  // Idempotent by design: only an OPEN segment is written (a retry after a
+  // partial clock-out failure would otherwise re-end an ended segment and be
+  // rejected by the column-scope trigger, wedging clock-out). Zero rows
+  // matched = already ended = success, so the caller proceeds.
+  const { data: ended, error } = await supabase
     .from('time_segments')
     .update(updates)
-    .eq('id', end.segment_id);
+    .eq('id', end.segment_id)
+    .is('segment_end', null)
+    .select('id');
   if (error) return { ok: false, error: error.message };
+  if (!ended || ended.length === 0) {
+    // Already ended by a prior attempt; its note/completion/task write stand.
+    return { ok: true };
+  }
 
   let taskWarning: string | undefined;
   if (end.completion === 'complete' && end.task_id) {
