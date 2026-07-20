@@ -5,9 +5,45 @@ import type {
   PricingMode,
   ProposalSettings,
   TermsSection,
+  TimeTrackingSettings,
 } from '@/lib/services/company';
+import type { GpsClockMode } from '@framefocus/shared/utils/time-tracking';
 
-export type { CompanyData, EstimatingSettings, PricingMode, ProposalSettings, TermsSection };
+export type {
+  CompanyData,
+  EstimatingSettings,
+  GpsClockMode,
+  PricingMode,
+  ProposalSettings,
+  TermsSection,
+  TimeTrackingSettings,
+};
+
+// ── Company Settings pass [S86] — time-tracking settings ──
+// timezone is excluded: it predates this pass and has no UI control yet;
+// this form updates only the five S86 columns.
+export type UpdateTimeTrackingSettingsInput = Partial<
+  Omit<TimeTrackingSettings, 'id' | 'timezone'>
+>;
+
+export async function updateTimeTrackingSettings(
+  companyId: string,
+  updates: UpdateTimeTrackingSettingsInput
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = createClient();
+
+  // companies pre-trigger holdover (CLAUDE.md): set updated_at
+  // explicitly — companies_set_updated_by trigger does not exist.
+  const { error } = await supabase
+    .from('companies')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', companyId);
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+  return { success: true };
+}
 
 export async function updateCompany(
   companyId: string,

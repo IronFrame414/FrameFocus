@@ -1,14 +1,16 @@
 import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
-import { getSessionDetail } from '@/lib/services/time-tracking';
+import { getSessionDetail, getSessionsForReview } from '@/lib/services/time-tracking';
 import { getMyMember } from '@/lib/services/members';
 import { getProjects } from '@/lib/services/projects';
-import { getCompanyTimezone } from '@/lib/services/company';
+import { getCompanyTimeSettings } from '@/lib/services/company';
 import {
   PROJECT_BEARING_TYPES,
   canApproveByRank,
+  dayWindow,
   intervalHours,
   paidHours,
+  paidHoursPerSession,
   sessionDurationHours,
 } from '@framefocus/shared/utils/time-tracking';
 import { DayDetailClient } from './day-detail-client';
@@ -48,7 +50,7 @@ export default async function TimesheetDetailPage({
   ]);
   if (!detail) redirect('/dashboard/timeclock/timesheets');
 
-  const timeZone = await getCompanyTimezone();
+  const { timezone: timeZone, time: timeSettings } = await getCompanyTimeSettings();
 
   // Names for every project/task the segments reference (any status — a job
   // may have closed since). A project RLS hides from this viewer resolves to
@@ -73,7 +75,29 @@ export default async function TimesheetDetailPage({
   // ── Derived hours (pure helpers; open intervals measured to now) ──
   const asOf = new Date();
   const sessionH = sessionDurationHours(detail, asOf);
-  const paidH = paidHours(detail, detail.segments, undefined, asOf);
+
+  // Paid hours honor the PER-DAY paid-break cap (§13): the day's allowance is
+  // shared across this member's sessions, so fetch the day's siblings and
+  // allocate. Skipped when breaks are unpaid — no allowance to share.
+  let paidH: number;
+  if (timeSettings.breaksPaid) {
+    const { dayStart, dayEnd } = dayWindow(new Date(detail.clock_in), timeZone);
+    const daySessions = (
+      await getSessionsForReview({ from: dayStart.toISOString(), to: dayEnd.toISOString() })
+    ).filter((s) => s.member_id === detail.member_id);
+    const idx = daySessions.findIndex((s) => s.id === detail.id);
+    paidH =
+      idx >= 0
+        ? paidHoursPerSession(
+            daySessions.map((s) => ({ session: s, segments: s.segments })),
+            timeZone,
+            timeSettings,
+            asOf
+          )[idx]
+        : paidHours(detail, detail.segments, timeSettings, asOf);
+  } else {
+    paidH = paidHours(detail, detail.segments, timeSettings, asOf);
+  }
   const workedH = detail.segments
     .filter((s) => PROJECT_BEARING_TYPES.includes(s.segment_type))
     .reduce((h, s) => h + intervalHours(s.segment_start, s.segment_end, asOf), 0);

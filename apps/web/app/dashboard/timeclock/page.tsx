@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation';
 import { getOpenSession } from '@/lib/services/time-tracking';
 import { getProjects } from '@/lib/services/projects';
 import { getMyMember } from '@/lib/services/members';
-import { getCompanyTimezone } from '@/lib/services/company';
+import { getCompanyTimeSettings } from '@/lib/services/company';
 import { TimeclockTabs } from '@/components/time/timeclock-tabs';
 import { TimeclockClient } from './timeclock-client';
 
@@ -33,11 +33,11 @@ export default async function TimeclockPage() {
     profile?.role ?? ''
   );
 
-  const [session, projects, myMember, timeZone] = await Promise.all([
+  const [session, projects, myMember, timeSettings] = await Promise.all([
     getOpenSession(),
     getProjects({ status: 'active' }),
     getMyMember(),
-    getCompanyTimezone(),
+    getCompanyTimeSettings(),
   ]);
 
   // Task titles for the open session's segments (the picker fetches its own
@@ -59,7 +59,8 @@ export default async function TimeclockPage() {
         activeProjects={projects.map((p) => ({ id: p.id, name: p.name }))}
         myMemberId={myMember?.id ?? null}
         taskTitles={taskTitles}
-        timeZone={timeZone}
+        timeZone={timeSettings.timezone}
+        gpsMode={timeSettings.gpsClockMode}
       />
     </div>
   );

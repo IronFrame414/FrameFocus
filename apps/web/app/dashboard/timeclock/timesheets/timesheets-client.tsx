@@ -66,6 +66,8 @@ interface TimesheetsClientProps {
   laborCost: { total: number; priced: number; totalMembers: number } | null;
   /** Company timezone (companies.timezone) — all wall-clock rendering. */
   timeZone: string;
+  /** companies.ot_threshold_hours [S86] — footer label only; OT math is server-side. */
+  otThresholdHours: number;
 }
 
 const GRID = '36px 1.6fr 1fr 1fr 1fr 1fr 1.2fr';
@@ -120,6 +122,7 @@ export function TimesheetsClient({
   canSeeLaborCost,
   laborCost,
   timeZone,
+  otThresholdHours,
 }: TimesheetsClientProps) {
   const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -489,7 +492,8 @@ export function TimesheetsClient({
       </div>
 
       <p style={{ fontSize: '12px', color: color.faint, margin: '12px 0 0' }}>
-        OT is derived from weekly paid hours over the threshold (default 40), never selected.
+        OT is derived from weekly paid hours over the {otThresholdHours}h threshold, never
+        selected.
       </p>
     </div>
   );

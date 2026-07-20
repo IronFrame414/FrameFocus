@@ -17,6 +17,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { ROLE_LABELS, type CompanyRole } from '@framefocus/shared';
+import type { GpsClockMode } from '@framefocus/shared/utils/time-tracking';
 import type { SessionWithSegments } from '@/lib/services/time-tracking-client';
 import { GlobalClockButton } from '@/components/time/global-clock-button';
 
@@ -29,6 +30,8 @@ interface DashboardShellProps {
   openSession: SessionWithSegments | null;
   myMemberId: string | null;
   timeZone: string;
+  /** companies.gps_clock_mode [S86] — 'off' disables capture in ClockModal. */
+  gpsMode: GpsClockMode;
 }
 
 // ui-01 §5 — ten items, this order. Role gates preserved from the previous
@@ -84,6 +87,7 @@ export function DashboardShell({
   openSession,
   myMemberId,
   timeZone,
+  gpsMode,
 }: DashboardShellProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -165,6 +169,7 @@ export function DashboardShell({
             openSession={openSession}
             myMemberId={myMemberId}
             timeZone={timeZone}
+            gpsMode={gpsMode}
           />
         </header>
         <main className="flex-1 bg-[#f4f6f9] px-[30px] py-[26px]">{children}</main>

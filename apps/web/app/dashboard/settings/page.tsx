@@ -1,9 +1,15 @@
 import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
-import { getCompany, getEstimatingSettings, getProposalSettings } from '@/lib/services/company';
+import {
+  getCompany,
+  getEstimatingSettings,
+  getProposalSettings,
+  getTimeTrackingSettings,
+} from '@/lib/services/company';
 import { SettingsForm } from './settings-form';
 import { EstimatingSettingsForm } from './estimating-settings-form';
 import { ProposalSettingsForm } from './proposal-settings-form';
+import { TimeTrackingSettingsForm } from './time-tracking-settings-form';
 
 export default async function SettingsPage() {
   const supabase = await createClient();
@@ -30,6 +36,7 @@ export default async function SettingsPage() {
 
   const estimatingSettings = await getEstimatingSettings();
   const proposalSettings = await getProposalSettings();
+  const timeTrackingSettings = await getTimeTrackingSettings();
 
   return (
     <div>
@@ -43,6 +50,7 @@ export default async function SettingsPage() {
       <SettingsForm company={company} />
       {estimatingSettings && <EstimatingSettingsForm settings={estimatingSettings} />}
       {proposalSettings && <ProposalSettingsForm settings={proposalSettings} />}
+      {timeTrackingSettings && <TimeTrackingSettingsForm settings={timeTrackingSettings} />}
     </div>
   );
 }

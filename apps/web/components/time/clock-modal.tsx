@@ -4,9 +4,11 @@
 // the GLOBAL header button can run the full flows from any dashboard page —
 // S85 decision: "always accessible means functional"). Self-contained: fetches
 // its own active-projects and task-picker lists client-side, captures GPS
-// (capture-if-available, §4.2 [S84]), calls the existing service mutations,
-// and hands the result back via onDone. The timeclock page reuses this for
-// its own Clock in / Clock out buttons; its switch/edit modals stay local.
+// per the company's gps_clock_mode [S86] ('off' = never; 'capture' =
+// capture-if-available, §4.2 [S84]; 'enforce' = mobile-future, treated as
+// 'capture' on desktop), calls the existing service mutations, and hands the
+// result back via onDone. The timeclock page reuses this for its own Clock
+// in / Clock out buttons; its switch/edit modals stay local.
 
 import { useEffect, useState } from 'react';
 import {
@@ -25,6 +27,7 @@ import {
   SEGMENT_FIELD_RULES,
   SEGMENT_TYPE_LABELS,
   SEGMENT_TYPES,
+  type GpsClockMode,
 } from '@framefocus/shared/utils/time-tracking';
 import {
   cardStyle,
@@ -95,12 +98,21 @@ interface ClockModalProps {
   /** The caller's open session (null when clocked out). */
   session: SessionWithSegments | null;
   myMemberId: string | null;
+  /** companies.gps_clock_mode [S86] — 'off' skips capture entirely. */
+  gpsMode: GpsClockMode;
   onClose: () => void;
   /** Fired after a successful write. Caller closes the modal and refreshes. */
   onDone: (result: { taskWarning?: string }) => void;
 }
 
-export function ClockModal({ mode, session, myMemberId, onClose, onDone }: ClockModalProps) {
+export function ClockModal({
+  mode,
+  session,
+  myMemberId,
+  gpsMode,
+  onClose,
+  onDone,
+}: ClockModalProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -156,7 +168,7 @@ export function ClockModal({ mode, session, myMemberId, onClose, onDone }: Clock
     }
     setBusy(true);
     setError(null);
-    const gps = await captureGps();
+    const gps = gpsMode === 'off' ? undefined : await captureGps();
     const res = await clockIn({
       first_segment: {
         segment_type: segType,
@@ -180,7 +192,7 @@ export function ClockModal({ mode, session, myMemberId, onClose, onDone }: Clock
     if (!currentSegment) {
       setBusy(true);
       setError(null);
-      const gps = await captureGps();
+      const gps = gpsMode === 'off' ? undefined : await captureGps();
       const res = await closeSessionOnly({ session_id: session.id, gps_out: gps });
       setBusy(false);
       if (!res.success) {
@@ -200,7 +212,7 @@ export function ClockModal({ mode, session, myMemberId, onClose, onDone }: Clock
     }
     setBusy(true);
     setError(null);
-    const gps = await captureGps();
+    const gps = gpsMode === 'off' ? undefined : await captureGps();
     const res = await clockOut({
       session_id: session.id,
       end: {
@@ -333,9 +345,11 @@ export function ClockModal({ mode, session, myMemberId, onClose, onDone }: Clock
                 </select>
               </div>
             )}
-            <p style={{ fontSize: '12px', color: color.faint, margin: '0 0 14px' }}>
-              Location is captured if your browser allows it — clocking in never requires it.
-            </p>
+            {gpsMode !== 'off' && (
+              <p style={{ fontSize: '12px', color: color.faint, margin: '0 0 14px' }}>
+                Location is captured if your browser allows it — clocking in never requires it.
+              </p>
+            )}
           </div>
         )}
 

@@ -23,6 +23,7 @@ import {
   SEGMENT_TYPE_LABELS,
   SEGMENT_TYPES,
   intervalHours,
+  type GpsClockMode,
 } from '@framefocus/shared/utils/time-tracking';
 import {
   ReadOnlyCaption,
@@ -49,6 +50,8 @@ interface TimeclockClientProps {
   taskTitles: Record<string, string>;
   /** Company timezone (companies.timezone) — all wall-clock rendering. */
   timeZone: string;
+  /** companies.gps_clock_mode [S86] — threaded through to ClockModal. */
+  gpsMode: GpsClockMode;
 }
 
 // Clock-in / clock-out flows live in the shared ClockModal (also used by the
@@ -61,6 +64,7 @@ export function TimeclockClient({
   myMemberId,
   taskTitles,
   timeZone,
+  gpsMode,
 }: TimeclockClientProps) {
   const router = useRouter();
   const session = initialSession;
@@ -648,6 +652,7 @@ export function TimeclockClient({
           mode={clockModal}
           session={session}
           myMemberId={myMemberId}
+          gpsMode={gpsMode}
           onClose={() => setClockModal(null)}
           onDone={(result) => {
             setClockModal(null);

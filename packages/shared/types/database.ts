@@ -544,6 +544,7 @@ export type Database = {
           address_line2: string | null
           ai_tagging_enabled: boolean
           brand_color: string | null
+          breaks_paid: boolean
           city: string | null
           contractor_signature_path: string | null
           created_at: string | null
@@ -567,10 +568,13 @@ export type Database = {
           email: string | null
           estimate_number_prefix: string
           estimate_number_sequence: number
+          gps_clock_mode: string
           id: string
           license_number: string | null
           logo_url: string | null
           name: string
+          ot_threshold_hours: number
+          paid_break_cap_minutes: number
           phone: string | null
           project_internal_sequence: number
           slug: string
@@ -583,6 +587,7 @@ export type Database = {
           trade_type: string | null
           updated_at: string | null
           website: string | null
+          week_starts_on: number
           zip: string | null
         }
         Insert: {
@@ -590,6 +595,7 @@ export type Database = {
           address_line2?: string | null
           ai_tagging_enabled?: boolean
           brand_color?: string | null
+          breaks_paid?: boolean
           city?: string | null
           contractor_signature_path?: string | null
           created_at?: string | null
@@ -613,10 +619,13 @@ export type Database = {
           email?: string | null
           estimate_number_prefix?: string
           estimate_number_sequence?: number
+          gps_clock_mode?: string
           id?: string
           license_number?: string | null
           logo_url?: string | null
           name: string
+          ot_threshold_hours?: number
+          paid_break_cap_minutes?: number
           phone?: string | null
           project_internal_sequence?: number
           slug: string
@@ -629,6 +638,7 @@ export type Database = {
           trade_type?: string | null
           updated_at?: string | null
           website?: string | null
+          week_starts_on?: number
           zip?: string | null
         }
         Update: {
@@ -636,6 +646,7 @@ export type Database = {
           address_line2?: string | null
           ai_tagging_enabled?: boolean
           brand_color?: string | null
+          breaks_paid?: boolean
           city?: string | null
           contractor_signature_path?: string | null
           created_at?: string | null
@@ -659,10 +670,13 @@ export type Database = {
           email?: string | null
           estimate_number_prefix?: string
           estimate_number_sequence?: number
+          gps_clock_mode?: string
           id?: string
           license_number?: string | null
           logo_url?: string | null
           name?: string
+          ot_threshold_hours?: number
+          paid_break_cap_minutes?: number
           phone?: string | null
           project_internal_sequence?: number
           slug?: string
@@ -675,6 +689,7 @@ export type Database = {
           trade_type?: string | null
           updated_at?: string | null
           website?: string | null
+          week_starts_on?: number
           zip?: string | null
         }
         Relationships: []

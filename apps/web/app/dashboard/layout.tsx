@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getOpenSession } from '@/lib/services/time-tracking';
 import { getMyMember } from '@/lib/services/members';
-import { getCompanyTimezone } from '@/lib/services/company';
+import { getCompanyTimeSettings } from '@/lib/services/company';
 import { DashboardShell } from './dashboard-shell';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -30,11 +30,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // every dashboard page. App Router layouts don't refetch on client-side
   // navigation — freshness comes from router.refresh(), which every clock
   // mutation already triggers.
-  const [company, openSession, myMember, timeZone] = await Promise.all([
+  const [company, openSession, myMember, timeSettings] = await Promise.all([
     supabase.from('companies').select('name').eq('id', profile.company_id).single(),
     getOpenSession(),
     getMyMember(),
-    getCompanyTimezone(),
+    getCompanyTimeSettings(),
   ]);
 
   return (
@@ -44,7 +44,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
       companyName={company.data?.name ?? 'My Company'}
       openSession={openSession}
       myMemberId={myMember?.id ?? null}
-      timeZone={timeZone}
+      timeZone={timeSettings.timezone}
+      gpsMode={timeSettings.gpsClockMode}
     >
       {children}
     </DashboardShell>

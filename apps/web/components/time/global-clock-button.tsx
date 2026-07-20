@@ -8,6 +8,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { SessionWithSegments } from '@/lib/services/time-tracking-client';
+import type { GpsClockMode } from '@framefocus/shared/utils/time-tracking';
 import { ClockModal } from '@/components/time/clock-modal';
 import { fmtTime, monoValue } from '@/components/time/time-ui';
 import { color, primaryButtonStyle, secondaryButtonStyle } from '@/lib/theme';
@@ -16,9 +17,16 @@ interface GlobalClockButtonProps {
   openSession: SessionWithSegments | null;
   myMemberId: string | null;
   timeZone: string;
+  /** companies.gps_clock_mode [S86] — threaded through to ClockModal. */
+  gpsMode: GpsClockMode;
 }
 
-export function GlobalClockButton({ openSession, myMemberId, timeZone }: GlobalClockButtonProps) {
+export function GlobalClockButton({
+  openSession,
+  myMemberId,
+  timeZone,
+  gpsMode,
+}: GlobalClockButtonProps) {
   const router = useRouter();
   const [mode, setMode] = useState<'clock-in' | 'clock-out' | null>(null);
   const [taskWarning, setTaskWarning] = useState<string | null>(null);
@@ -84,6 +92,7 @@ export function GlobalClockButton({ openSession, myMemberId, timeZone }: GlobalC
           mode={mode}
           session={openSession}
           myMemberId={myMemberId}
+          gpsMode={gpsMode}
           onClose={() => setMode(null)}
           onDone={(result) => {
             setMode(null);

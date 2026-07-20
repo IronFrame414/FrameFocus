@@ -5,11 +5,11 @@ import {
   type SessionWithMemberAndSegments,
 } from '@/lib/services/time-tracking';
 import { getMyMember } from '@/lib/services/members';
-import { getCompanyTimezone } from '@/lib/services/company';
+import { getCompanyTimeSettings } from '@/lib/services/company';
 import {
   PROJECT_BEARING_TYPES,
   intervalHours,
-  paidHours,
+  paidHoursPerSession,
   weekLaborCost,
   weekWindowForYmd,
   weeklyHoursSummary,
@@ -32,8 +32,8 @@ import {
  * Supervisor-only surface: crew/sub/client roles are redirected (they also
  * have no sidebar link). Visibility inside is RLS-tiered once migration
  * 20260721010000 applies — each viewer sees only members strictly below their
- * rank, plus themselves. Week = Monday-start in the company timezone (S85
- * decision 9; WEEK_STARTS_ON in packages/shared/utils/time-tracking.ts).
+ * rank, plus themselves. Week = companies.week_starts_on midnight in the
+ * company timezone (S86 settings pass; Monday default per S85 decision 9).
  */
 export default async function TimesheetsPage({
   searchParams,
@@ -58,9 +58,13 @@ export default async function TimesheetsPage({
     redirect('/dashboard');
   }
 
-  const timeZone = await getCompanyTimezone();
+  const {
+    timezone: timeZone,
+    weekStartsOn,
+    time: timeSettings,
+  } = await getCompanyTimeSettings();
 
-  const { weekStart, weekEnd } = weekWindowForYmd(searchParams.week, timeZone);
+  const { weekStart, weekEnd } = weekWindowForYmd(searchParams.week, timeZone, weekStartsOn);
 
   const [sessions, myMember] = await Promise.all([
     getSessionsForReview({ from: weekStart.toISOString(), to: weekEnd.toISOString() }),
@@ -86,7 +90,10 @@ export default async function TimesheetsPage({
   const rows: MemberWeekRow[] = [...byMember.entries()]
     .map(([memberId, memberSessions]) => {
       const summary = weeklyHoursSummary(
-        memberSessions.map((s) => ({ session: s, segments: s.segments }))
+        memberSessions.map((s) => ({ session: s, segments: s.segments })),
+        timeSettings,
+        undefined,
+        timeZone
       );
       const workedHours = memberSessions.reduce(
         (sum, s) =>
@@ -116,17 +123,24 @@ export default async function TimesheetsPage({
         ),
       ];
 
-      const queueSessions: QueueSessionRow[] = memberSessions
+      // Per-session paid hours with the paid-break cap shared per company-tz
+      // day (§13) — two sessions in one day split a single allowance.
+      const sortedSessions = memberSessions
         .slice()
-        .sort((a, b) => new Date(a.clock_in).getTime() - new Date(b.clock_in).getTime())
-        .map((s) => ({
-          id: s.id,
-          clock_in: s.clock_in,
-          clock_out: s.clock_out,
-          status: s.status,
-          dayKey: dayFmt.format(new Date(s.clock_in)),
-          paidHours: paidHours(s, s.segments),
-        }));
+        .sort((a, b) => new Date(a.clock_in).getTime() - new Date(b.clock_in).getTime());
+      const perSessionPaid = paidHoursPerSession(
+        sortedSessions.map((s) => ({ session: s, segments: s.segments })),
+        timeZone,
+        timeSettings
+      );
+      const queueSessions: QueueSessionRow[] = sortedSessions.map((s, i) => ({
+        id: s.id,
+        clock_in: s.clock_in,
+        clock_out: s.clock_out,
+        status: s.status,
+        dayKey: dayFmt.format(new Date(s.clock_in)),
+        paidHours: perSessionPaid[i],
+      }));
 
       return {
         memberId,
@@ -148,8 +162,8 @@ export default async function TimesheetsPage({
   // ── Labor Cost (wk) — Owner/Admin only (Financial Visibility Floor).
   //    Approved sessions price from their frozen approval-time snapshot;
   //    pending/owner sessions price live from member_pay_rates on each
-  //    session's company-tz date. OT: first 40 paid hours straight, later
-  //    hours 1.5x, chronological (weekLaborCost). A member with ANY
+  //    session's company-tz date. OT: paid hours up to the company threshold
+  //    straight, later hours 1.5x, chronological (weekLaborCost). A member with ANY
   //    unpriceable session is wholly unpriced — the KPI sums priceable
   //    members and reports coverage. ──
   const canSeeLaborCost = profile.role === 'owner' || profile.role === 'admin';
@@ -171,7 +185,7 @@ export default async function TimesheetsPage({
             ? (snapshots[s.id] ?? null) // absent snapshot == frozen null (decision 5)
             : rateEffectiveOn(companyRates, row.memberId, s.dayKey),
       }));
-      const result = weekLaborCost(inputs);
+      const result = weekLaborCost(inputs, timeSettings);
       if (result.priceable) {
         total += result.cost;
         priced += 1;
@@ -206,6 +220,7 @@ export default async function TimesheetsPage({
         canSeeLaborCost={canSeeLaborCost}
         laborCost={laborCost}
         timeZone={timeZone}
+        otThresholdHours={timeSettings.otThresholdHours}
       />
     </div>
   );

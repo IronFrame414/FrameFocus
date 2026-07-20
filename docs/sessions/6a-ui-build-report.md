@@ -221,3 +221,42 @@ extracted from the timeclock page into shared `components/time/clock-modal.tsx` 
 header button is fully functional on any page (state via `getOpenSession()` in the
 dashboard layout; freshness = router.refresh() after mutations, no polling in v1;
 `listActiveProjects()` client read added for the global job picker).
+
+---
+
+## Addendum (S86) — Company Settings pass built; admin-timeclock setting DROPPED
+
+The batched Company Settings pass owed above is now BUILT (migration
+`20260721050000_company_time_settings.sql` — written, NOT applied, NOT committed,
+per the standing rule). Five columns on `companies`: `week_starts_on` (0-6, default
+Monday), `ot_threshold_hours` (numeric(5,2), default 40), `breaks_paid` (default
+false), `paid_break_cap_minutes` (default 30, inert while breaks_paid is off),
+`gps_clock_mode` (off | capture | enforce, default capture). Consumed via
+`getCompanyTimeSettings()`; settings UI is a new "Time Tracking" card on the
+Owner/Admin settings page. Top note 1 is thereby closed: `WEEK_STARTS_ON = 1`
+remains only as the fallback default behind `companies.week_starts_on`.
+
+**SPEC AMENDMENT (decision, Josh, S86): `admin_timeclock_enabled` is DROPPED.**
+6A-spec §4/§8/§13 and the original 6A migration header promised an "Admin
+timeclock — enable/disable, default OFF" company setting. It is not built and will
+not be: **timeclocks are always available to every role, with no company gate** —
+users who shouldn't clock in simply don't. This also matches the code as shipped
+(the global header clock button and `/dashboard/timeclock` have never been
+role-gated). The §8 consequence stands unchanged: Admin sessions are approvable by
+Owner only, via the strictly-below rule. 6A-spec §13 carries the supersede marker.
+
+Other S86 decisions folded into the pass:
+
+1. **Daily OT threshold (6A open item #4) — deferred entirely, no column.**
+2. **Per-day paid-break cap fixed.** `paidHours()` applied the cap PER SESSION;
+   §13 defines it PER COMPANY-TZ DAY. New `paidHoursPerSession()` shares one
+   daily allowance chronologically across a member's sessions; the queue,
+   weekly summary, and day detail all use it. Single-session `paidHours()`
+   remains, documented as correct only for a day's sole break-carrying session.
+3. **GPS three-state.** Desktop honors `off` by not capturing (ClockModal skips
+   `captureGps()` and hides the caption); `enforce` is reserved for the mobile
+   build and behaves as `capture` on desktop (§4.2 [S84] rationale unchanged).
+4. **Week-start re-bucketing accepted** — changing `week_starts_on` re-groups
+   historical weeks and re-derives OT/Labor Cost at read time. No
+   effective-dating (deliberately unlike pay rates). Documented in TECH_DEBT
+   #92 and captioned in the settings UI.
