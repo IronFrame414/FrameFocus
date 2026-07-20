@@ -46,11 +46,11 @@ const NAV_ITEMS: {
   { href: '/dashboard', label: 'Dashboard', icon: LayoutGrid },
   { href: '/dashboard/projects', label: 'Projects', icon: Rows3 },
   { href: '/dashboard/schedule', label: 'Schedule', icon: Calendar },
-  // INTERIM PLACEMENT (Module 6A build, S85): plain link until the M6
-  // handoff's FFNav reindex (Field Ops hub) is built — out of scope here.
-  // Timesheets is NOT a nav item: it moved to a subpage of Timeclock
-  // (/dashboard/timeclock/timesheets, S85 decision) — the owed FFNav reindex
-  // spec must be amended to 10 items accordingly (see 6a build report).
+  // PERMANENT first-class item (S86 decision — no longer interim). Timesheets
+  // is NOT a nav item: it lives at /dashboard/timeclock/timesheets (S85).
+  // The owed FFNav reindex is DEFERRED to the 6B UI build and inserts a
+  // Field Ops item after Schedule (target 12-item order in the 6a build
+  // report's S86 round-2 addendum); Timeclock keeps this slot.
   { href: '/dashboard/timeclock', label: 'Timeclock', icon: Clock },
   { href: '/dashboard/contacts', label: 'Contacts', icon: User },
   { href: '/dashboard/subcontractors', label: 'Subs & Vendors', icon: Users },

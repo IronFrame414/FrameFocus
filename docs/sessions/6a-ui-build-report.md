@@ -260,3 +260,30 @@ Other S86 decisions folded into the pass:
    historical weeks and re-derives OT/Labor Cost at read time. No
    effective-dating (deliberately unlike pay rates). Documented in TECH_DEBT
    #92 and captioned in the settings UI.
+
+---
+
+## Addendum (S86, round 2) — FFNav reindex: decisions LOCKED, build DEFERRED to 6B UI
+
+Supersedes the S85 addendum's "the future FFNav reindex must build 10 items" note.
+The handoff FFNav is stale in two ways (no Schedule — it predates the ui-01 refresh
+that made `/schedule` first-class; no Timeclock — it predates the S85 nesting that
+made `/dashboard/timeclock` the time-tracking home), so the mechanical 10-item
+target cannot be built as written. Decisions (Josh, S86):
+
+1. **DEFERRED — the reindex lands with the 6B UI build**, not before. A Field Ops
+   nav item has no destination today (6B/6C/6D are schema-only); 6B-1 §S-1 already
+   plans around the nav change being separate. The sidebar stays as-is until then.
+2. **Target order (12 items):** `Dashboard · Projects · Schedule · Field Ops ·
+   Timeclock · Contacts · Subs & Vendors · Estimates · Cost Catalog · Settings ·
+   Team · Billing`.
+3. **Timeclock is PERMANENT first-class** (no longer interim) — the S85 nesting
+   stands; Field Ops does NOT absorb time tracking.
+4. **Settings before Team** — ui-01 §5 order is authoritative over the handoff's
+   Team-before-Settings (the FFNav prototype is "ignore/rebuild" per its own README).
+5. **Field Ops inserts after Schedule**, honoring the handoff's near-the-top intent.
+6. **Field Ops role gate:** ungated (all dashboard roles) by default, per the
+   Admin-role principle — refine at 6B build if its spec says otherwise.
+7. Handoff `active`-index references (e.g. "Module 7 Settings = FFNav 9") are
+   prototype-only; nothing in the codebase consumes them. The old
+   `/dashboard/timesheets*` redirect stubs are unaffected.
