@@ -127,10 +127,13 @@ export function TimeclockClient({
 
   const [pickerTasks, setPickerTasks] = useState<PickerTask[]>([]);
 
-  // Live elapsed tick while clocked in.
-  const [now, setNow] = useState(() => Date.now());
+  // Live elapsed tick while clocked in. Seeded null so NO Date.now() runs
+  // during SSR — the server HTML and the first client render both show the
+  // stable placeholder, and the real clock starts post-mount (hydration-safe).
+  const [now, setNow] = useState<number | null>(null);
   useEffect(() => {
     if (!session) return;
+    setNow(Date.now());
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
   }, [session]);
@@ -332,8 +335,9 @@ export function TimeclockClient({
   }
 
   const rules = SEGMENT_FIELD_RULES[segType];
-  const elapsedHours = session ? intervalHours(session.clock_in, null, new Date(now)) : 0;
   const elapsedClock = (() => {
+    if (!session || now === null) return '–:––:––'; // pre-mount placeholder (SSR-stable)
+    const elapsedHours = intervalHours(session.clock_in, null, new Date(now));
     const totalSeconds = Math.max(0, Math.floor(elapsedHours * 3600));
     const h = Math.floor(totalSeconds / 3600);
     const m = Math.floor((totalSeconds % 3600) / 60);
@@ -472,7 +476,14 @@ export function TimeclockClient({
             </div>
             {segments.map((seg, i) => {
               const isRecent = recentSegment !== null && seg.id === recentSegment.id;
-              const hours = intervalHours(seg.segment_start, seg.segment_end, new Date(now));
+              // Ended segments ignore asOf; the OPEN segment's running duration
+              // waits for the post-mount tick (placeholder below) — no Date.now()
+              // during SSR.
+              const hours = intervalHours(
+                seg.segment_start,
+                seg.segment_end,
+                now !== null ? new Date(now) : undefined
+              );
               return (
                 <div
                   key={seg.id}
@@ -504,7 +515,7 @@ export function TimeclockClient({
                     </p>
                   </div>
                   <div style={{ ...monoValue, fontSize: '13px', color: color.bodyAlt, alignSelf: 'center' }}>
-                    {fmtDuration(hours)}
+                    {seg.segment_end === null && now === null ? '—' : fmtDuration(hours)}
                   </div>
                   {isRecent && (
                     <button
