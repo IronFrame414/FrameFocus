@@ -18,7 +18,11 @@ Today the sidebar has two destinations: "Contacts" and "Subs & Vendors." Intent:
 
 **Open decisions for the planning session:**
 1. Breakdown shape: tabs (Clients / Subs / Vendors switchable views, Contractor Foreman-style) vs. a single list with a type filter/column.
-2. **The big fork:** presentation-layer merge (two tables, one UI) vs. true data-model consolidation. Clients live differently from subs/vendors today (`member_type` on subs/vendors; the schema separation is real). This drives everything else, including Item 4.
+2. **The big fork:** presentation-layer merge (two tables, one UI) vs. true data-model consolidation. Clients live differently from subs/vendors today, and the schema separation is real — but it is **not** the `member_type`-on-subs/vendors shape earlier drafts of this brief assumed. Verified against live schema 2026-07-20:
+   - **`subcontractors`** table holds both subs and vendors, discriminated by a **`sub_type`** column (values `'subcontractor'` / `'vendor'`). There is **no `member_type` column on `subcontractors`.**
+   - **`company_members`** is a separate table with its own **`member_type`** column (values `'crew'` / `'subcontractor'`) — internal team/crew records, not the Subs & Vendors list.
+   - **Assignment consequence (confirmed):** project-schedule task assignment reads **only from `subcontractors`**. Subs entered through the Contacts surface (which is not the `subcontractors` table) **cannot be assigned to tasks.** This is the mechanism behind the "source of truth is Subs & Vendors" behavior noted above, and any consolidation decision must preserve it (or explicitly migrate the assignee source).
+   This drives everything else, including Item 4.
 3. `/subs-and-vendors` route + deep links: redirect or retire.
 4. Per-type fields (sub insurance/trade fields a client doesn't have): per-type form design on the unified page.
 
