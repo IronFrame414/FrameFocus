@@ -66,6 +66,7 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
 - **#20** Add `insurance_carrier` and `insurance_policy_number` to subcontractors — for Insurance Expiration Alert workflow
 - **#21** `tm_rate` column on `profiles` (Module 6 prep) — decided Session 12, needs migration
+- **#91** 6A timeclock notifications — 6A emits "still-clocked-in" events at 4:00 PM and 5:00 PM (overtime) for any open clock session; clocking out cancels them. Actual push-notification delivery is deferred to the separate cross-cutting Notifications build. 6A only emits named events, never delivers. Decided Session 84 during 6A UI interview.
 
 ### Module 3 Follow-Ups
 
