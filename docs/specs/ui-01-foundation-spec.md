@@ -4,6 +4,7 @@
 **Design source:** approved direction **1a "Refined Navy."** Do NOT build 1b or 1c.
 **This is task 1 of 6** (Foundation → Dashboard → Projects list → Project detail → Budget → Change Orders). Build only the Foundation here.
 **Amended 2026-07-19 (audit):** wordmark → RafterWorks; nav → 10 items incl. Schedule; branch gate added; branch-exists claim corrected.
+**Amended 2026-07-20 (locked build decisions):** tokens replace existing Tailwind scales in place (§S1); fonts via `next/font` (§S2); icons via `lucide-react` (§S4); existing nav role-gating preserved (§S5, §9); Schedule nav extracts the dashboard's `CompanyCalendar` into a standalone `/schedule` route (§5a); Schedule surfaces ARE restyled to 1a in this refresh — the deferral is removed (§3, §5a); sidebar initials = first+last initial of the wired name (§5, §S6). The `feat/ui-refresh` branch now exists and is checked out (the §1 "does not exist yet" note is stale).
 
 ---
 
@@ -30,19 +31,19 @@ Nothing else. No dashboard content, no screen bodies.
 ## 2 · §S — Structure to resolve LIVE before writing (do not assume; read the repo)
 > These are unknowns from the planning side. Resolve each by reading actual source in Plan Mode. If a §S item can't be resolved or conflicts with this spec, STOP and surface it — do not guess, do not silently reorder or invent.
 
-- **§S1 — Token home.** How does the app currently define design tokens? (Tailwind theme? CSS custom properties? a theme file?) Put the tokens in §4 wherever the app *already* keeps them. Do not introduce a second parallel system.
-- **§S2 — Font loading.** How are fonts loaded today (`next/font`, a global CSS `@import`, a `<link>`)? Add Barlow + IBM Plex Mono via that same mechanism. **Do NOT load Barlow Semi Condensed** (1c only).
-- **§S3 — Existing shell.** Locate the current sidebar / layout component. This task **replaces its visual treatment in place** — it must keep the existing nav routing/targets and the existing auth/user/company data wiring.
-- **§S4 — Icon library.** Which icon set does the app use (Lucide/Feather/other)? Map the nav icons (§5) to that set. Do not hand-inline raw SVG if the app has an icon component.
-- **§S5 — Nav inventory conflict check.** Compare the app's *current* top-level nav items to the **10** in §5. **Schedule is expected to be missing from the app — it is an intended addition** (see §5a). Any *other* diff (app has items not listed here, or is missing others listed here): **STOP and surface to Josh** — do not drop or add on your own.
-- **§S6 — User/company data.** The sidebar header (company name) and footer (avatar initials, name, role) must bind to the real current user/company, not hardcoded. Find the existing source for these.
+- **§S1 — Token home.** Tokens live in the Tailwind theme — `apps/web/tailwind.config.ts` (`theme.extend.colors`, currently a `brand` "Steel Blue" scale + `accent` "Amber" scale). **Amended 2026-07-20:** register the §4 tokens here by **replacing the existing `brand`/`accent` scales in place** — do NOT introduce a second parallel token system. Note the orphan shadcn HSL custom properties in `globals.css` (`--background`, `--foreground`) are unused/not wired into Tailwind; leave or clean, but don't build on them. Where a screen elsewhere referenced the old `brand.900` (`#1e3a5f`) etc., expect it to shift to the new navy `#14213d` — that is intended.
+- **§S2 — Font loading.** **Amended 2026-07-20:** the app loads **no** web fonts today (no `next/font`, no `@import`, no `<link>`; Tailwind names `Inter` but never loads it). There is no existing mechanism to reuse — load Barlow + IBM Plex Mono via **`next/font`** (in `apps/web/app/layout.tsx`), wiring both into the Tailwind `fontFamily`. **Do NOT load Barlow Semi Condensed** (1c only).
+- **§S3 — Existing shell.** The shell is `apps/web/app/dashboard/dashboard-shell.tsx` (`<aside>`), rendered by `apps/web/app/dashboard/layout.tsx`. This task **replaces its visual treatment in place** — it must keep the existing nav routing/targets and the existing auth/user/company data wiring.
+- **§S4 — Icon library.** **Amended 2026-07-20:** `lucide-react` is already a dependency but is **imported nowhere**; existing icons are hand-inlined SVG and the sidebar is **text-only today** (no icons). Map the nav icons (§5) to **`lucide-react`** components. Do not hand-inline raw SVG for the nav.
+- **§S5 — Nav inventory conflict check.** **Resolved 2026-07-20 (audit):** the app's current nav is exactly the 10 minus Schedule, in the same order (Dashboard, Projects, Contacts, Subs & Vendors, Estimates, Cost Catalog, Settings, Team, Billing) — Schedule is the only diff and is the intended addition (§5a). No other discrepancy. **Preserve the existing role-gating** on the nav items (Estimates + Cost Catalog gated owner/admin/PM; Settings gated owner/admin; Billing owner-only) — a given user still sees only the items their role allows.
+- **§S6 — User/company data.** The sidebar header (company name) and footer (name, role) bind to the real current user/company via `apps/web/app/dashboard/layout.tsx` (queries `profiles` for `first_name/last_name/role/company_id` and `companies` for `name`, passed as props; role rendered via `ROLE_LABELS`). **Amended 2026-07-20:** no initials logic exists today — **derive the avatar initials as the first initial of `first_name` + first initial of `last_name`** from the already-wired name; do not add a new data source.
 
 ---
 
 ## 3 · Non-goals
 - No screen bodies (dashboard, projects, budget, etc.) — later specs.
 - No new routes or nav destinations **except** the Schedule nav item (§5a) — decision reversed 2026-07-19: schedule is BOTH a Dashboard card (ui-02) AND its own left-nav item.
-- No restyle of the Schedule page body — the nav item routes to the existing schedule view as-is; its 1a restyle is later work.
+- ~~No restyle of the Schedule page body.~~ **Amended 2026-07-20:** this deferral is **removed** — the Schedule surfaces (the extracted `/schedule` route body and the per-project Schedule tab) ARE restyled to 1a as part of this refresh. (The full Module 6A Schedule UI already exists — see the ui-04 §S2 correction.)
 - No mobile layout (desktop-first; mobile is a separate later effort).
 
 ---
@@ -108,7 +109,7 @@ Rebuild as a normal component in the app's framework (reference only: `FFNav.dc.
 **Nav** (`padding 0 14px`, `gap 2px`, flex column). **Ten items**, **this order**:
 `Dashboard · Projects · Schedule · Contacts · Subs & Vendors · Estimates · Cost Catalog · Settings · Team · Billing`
 
-**§5a — Schedule nav item (added 2026-07-19).** Routes to the existing schedule view — the one the current dashboard renders (resolve its component/route live in §S3; if no standalone `/schedule` route exists, create the route and mount the existing component unmodified). Icon: calendar. Body restyle is out of scope.
+**§5a — Schedule nav item (added 2026-07-19; amended 2026-07-20).** The dashboard currently renders a company-wide `CompanyCalendar` (`apps/web/app/dashboard/company-calendar.tsx`, fed by `getCalendarEvents`) — there is no standalone `/schedule` route. **Create a standalone `/schedule` route and move `CompanyCalendar` (with its `getCalendarEvents` fetch) into it**, so the Schedule nav item and the dashboard's schedule card read the same model. Icon: calendar (lucide). **Body restyle is now IN scope** (decision 8): restyle the extracted schedule view to 1a.
 - Item: flex, align center, `gap 11px`, `padding 10px 12px`, radius 9px.
 - **Active** (matches current route): bg `#2f49d1`, text white, weight 600.
 - **Inactive**: text `#cdd6e8`, weight 500.
@@ -116,7 +117,7 @@ Rebuild as a normal component in the app's framework (reference only: `FFNav.dc.
 - Active state is driven by the **current route**, not a hardcoded index.
 
 **Footer** (`margin auto 14px 0`, `padding-top 16px`, `border-top 1px solid rgba(255,255,255,.08)`, flex align center `gap 11px`):
-- Avatar: 36px, radius 9px, bg `#f59e0b`, text `#14213d`, Barlow 700 / 14px — **current user's initials (§S6)**.
+- Avatar: 36px, radius 9px, bg `#f59e0b`, text `#14213d`, Barlow 700 / 14px — **current user's initials (§S6): first initial of first name + first initial of last name** (amended 2026-07-20).
 - Name: white, weight 600, 13px — **current user (§S6)**.
 - Role: `#8fa0c4`, 12px — **current user's role (§S6)**.
 
@@ -145,7 +146,7 @@ Do them in this order so the sidebar can already reference tokens and fonts.
 ## 9 · Acceptance checks
 - Computed `font-family` on a **nav label** resolves to Barlow; on a **stat/number element** resolves to IBM Plex Mono. Barlow Semi Condensed is **not** loaded.
 - Tokens live in the app's existing token system (§S1); no ad-hoc duplicate hex where a token exists.
-- Sidebar renders: 236px navy, **RafterWorks wordmark with amber "Works"**, **10 items in the specified order**, the current route's item highlighted `#2f49d1`/white, footer showing the **real** signed-in user's initials/name/role and real company name.
+- Sidebar renders: 236px navy, **RafterWorks wordmark with amber "Works"**, **the nav items in the specified order** (all 10 for an owner; fewer for lower roles — existing role-gating is preserved per §S5, amended 2026-07-20), the current route's item highlighted `#2f49d1`/white, footer showing the **real** signed-in user's initials (first+last initial)/name/role and real company name.
 - Schedule nav item routes to the existing schedule view (§5a); the view itself is unmodified.
 - Page background is `#f4f6f9`; content region sits beside the fixed sidebar with correct padding.
 - `tsc` / typecheck passes, app builds, no new console errors, existing nav routing still works.

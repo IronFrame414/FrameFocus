@@ -3,11 +3,12 @@
 **Repo home:** `docs/specs/ui-05-budget-spec.md`
 **Design source:** approved **1a "Refined Navy."** Depends on **ui-01-foundation.**
 **Task 5 of 6.**
+**Amended 2026-07-20 (locked build decisions):** the budget table **is grouped by `cost_code` and DOES have section subtotal rows** (one per cost-code group) plus a grand-total row — reversing the earlier "no subtotals" rule (§S4, §3, §4). The live page already groups by `cost_code` and the model carries a `row_type` column, so grouping is real, not invented.
 
 ---
 
 ## 0 · Task (single)
-Restyle the project **Budget** tab to 1a: breadcrumb, title + actions, a 5-up summary row (one navy inverted card), and a cost-tracking table with a bold totals row.
+Restyle the project **Budget** tab to 1a: breadcrumb, title + actions, a 5-up summary row (one navy inverted card), and a cost-tracking table **grouped by `cost_code` with a section-subtotal row per group** and a bold grand-total row. *(Amended 2026-07-20.)*
 
 ---
 
@@ -20,13 +21,12 @@ Per Foundation §1.
 - **§S1 — Existing budget.** Locate the current budget route/component; restyle in place, keep data wiring.
 - **§S2 — Summary sources.** Real sources for Original, Approved COs, Revised (= Original + Approved COs, derived). **Known gaps:** Cost to Date and Projected Margin depend on models that don't exist yet (actuals ledger = Module 7A; sell/profit basis = open `project_budget_items` schema gap). **Render both as em-dash cards** until those land — do not compute fakes, do not build the ledger here. **Schema note (verified 2026-07-20):** `project_budget_items` already has `committed_amount` and `actual_amount` columns (numeric, default 0), but the Module 7A ledger that populates them is not yet built — treat them as unpopulated and keep the em-dash cards.
 - **§S3 — Line-item fields.** Real source per row: code (CSI-style, the `cost_code` column), description, budget (`budgeted_amount`). **Committed and Actual columns render em-dash until Module 7A's ledger exists** (committed cost reads from the 7A ledger by design). **Schema note (verified 2026-07-20):** the `committed_amount` and `actual_amount` columns already exist on `project_budget_items` (numeric, default 0) but are unpopulated until 7A — a raw read would return 0, not a real figure, so keep the em-dash rather than rendering `$0`. Variance = budget − actual, positive = under budget / favorable; renders em-dash while actual is em-dash. If the app already has any populated committed/actual source, use it and surface what you found.
-- **§S4 — Totals.** Confirm totals are summed from the live rows, not a stored figure.
-> Note from tech debt: a bold line-item row was previously seen in a PDF — possibly a section subtotal or a bug. This screen has **no section-subtotal rows**; only per-line rows + one grand-total row. If the data model implies subtotals, STOP and surface rather than inventing a row type.
+- **§S4 — Grouping + totals.** **Amended 2026-07-20:** the live budget page already groups rows by `cost_code` (`getBudgetRollup`, `budget.ts`), and `project_budget_items` carries a `row_type` column — so grouping and row typing are real, not invented. Render **one section-subtotal row per `cost_code` group** (summed from that group's live line rows) plus one **grand-total** row. All subtotals and the grand total are computed from the live rows, never stored. *(This reverses the earlier "no subtotals" instruction; the tech-debt "bold row seen in a PDF" was the legitimate section subtotal, not a bug.)*
 
 ---
 
 ## 3 · Non-goals
-No section subtotals, no inline editing UI (that's a later batch), no export format work (button routes to existing export). No mobile layout. Sample figures are representative.
+No inline editing UI (that's a later batch), no export format work (button routes to existing export). No mobile layout. Sample figures are representative. *(Amended 2026-07-20: "no section subtotals" removed — subtotals ARE rendered per §S4/§4.)*
 
 ---
 
@@ -47,10 +47,11 @@ Cards padding `14px 15px`. Micro-label IBM Plex Mono 10.5px uppercase `#8a919c`;
 ### Budget table — white, border `#e6e9ef`, radius 13px, overflow hidden
 Grid (header + rows + total): `0.7fr 2fr 1.1fr 1.1fr 1.1fr 1.1fr`, gap 12px.
 - **Header:** padding `12px 20px`, bg `#f7f9fc`, border-bottom `#eef1f6`, IBM Plex Mono 600 / 11px / uppercase / `#8a919c`: Code · Description · Budget · Committed · Actual · Variance. **The four money columns are right-aligned.**
-- **Rows:** padding `13px 20px`, border-bottom `#f1f3f7`, align center, IBM Plex Mono 500 / 13px / `#14213d`.
+- **Rows** (line items, grouped by `cost_code`): padding `13px 20px`, border-bottom `#f1f3f7`, align center, IBM Plex Mono 500 / 13px / `#14213d`.
   - Code: `#9aa1ac`. Description: override to **Barlow 600**. Money cells right-aligned.
   - Variance: positive `#16a34a` with `+`; negative `#dc2626` with `−`; em-dash `#9aa1ac` when none.
-- **Totals row:** padding `14px 20px`, bg `#f7f9fc`, IBM Plex Mono **700** / 14px / `#14213d`. "Total" label in Barlow; money right-aligned; variance colored per sign.
+- **Section subtotal row** (one per `cost_code` group, after its line rows) — **amended 2026-07-20**: padding `12px 20px`, bg `#f7f9fc`, IBM Plex Mono **600** / 13px / `#374151`. Label = the cost-code group name in Barlow 600 (spanning the Code+Description cells); money columns right-aligned, summed from that group's live line rows; variance colored per sign. Slightly lighter than the grand-total row so the hierarchy reads (subtotal 600/`#374151` vs total 700/`#14213d`).
+- **Grand-total row:** padding `14px 20px`, bg `#f7f9fc`, IBM Plex Mono **700** / 14px / `#14213d`. "Total" label in Barlow; money right-aligned; variance colored per sign. Summed across all line rows (equals the sum of the section subtotals).
 
 ---
 
@@ -67,6 +68,6 @@ Per Foundation §8.
 
 ## 7 · Acceptance checks
 - Summary shows 5 cards with the **Revised card inverted navy**; all money/percentages in IBM Plex Mono.
-- Table rows + totals bind to **real data (§S3–§S4)**; variance sign matches the app's real convention (§S3); no invented subtotal rows.
-- Money columns right-aligned; totals row bold on `#f7f9fc`.
+- Table line rows + **per-`cost_code` section subtotals** + grand total bind to **real data (§S3–§S4)**; variance sign matches the app's real convention (§S3). *(Amended 2026-07-20: subtotals are rendered, computed from live rows — the grand total equals the sum of subtotals.)*
+- Money columns right-aligned; subtotal rows (600) and grand-total row (700 bold) both on `#f7f9fc`, with the grand total visually heavier.
 - `tsc` passes, builds clean, no new console errors.
