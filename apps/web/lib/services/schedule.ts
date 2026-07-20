@@ -12,6 +12,7 @@ export type ScheduleEntry = Omit<ScheduleEntryRow, 'general_kind'> & {
   member: {
     id: string;
     display_name: string;
+    member_type: string;
     schedule_color: string | null;
   } | null;
   project: { id: string; name: string; project_number: string } | null;
@@ -41,6 +42,8 @@ export interface CalendarEvent {
   end_date: string; // same as start for single-day
   member_id: string | null; // null for inspections
   member_name: string | null;
+  /** company_members.member_type ('crew' | 'subcontractor'); null for inspections. */
+  member_type: string | null;
   color: string | null;
   project_id: string | null;
   project_label: string | null;
@@ -53,7 +56,7 @@ export interface CalendarEvent {
 }
 
 const ENTRY_JOIN =
-  '*, member:company_members(id, display_name, schedule_color), project:projects(id, name, project_number)';
+  '*, member:company_members(id, display_name, member_type, schedule_color), project:projects(id, name, project_number)';
 
 export async function getScheduleEntries(filters?: {
   projectId?: string;
@@ -111,7 +114,7 @@ export async function getCalendarEvents(options: {
   let taskQuery = supabase
     .from('tasks')
     .select(
-      'id, title, status, start_date, due_date, notes:description, project_id, assignee:company_members(id, display_name, schedule_color), project:projects(id, name, project_number)'
+      'id, title, status, start_date, due_date, notes:description, project_id, assignee:company_members(id, display_name, member_type, schedule_color), project:projects(id, name, project_number)'
     )
     .eq('is_deleted', false)
     .eq('is_scheduled', true);
@@ -122,6 +125,7 @@ export async function getCalendarEvents(options: {
     const assignee = t.assignee as unknown as {
       id: string;
       display_name: string;
+      member_type: string;
       schedule_color: string | null;
     } | null;
     if (options.ownMemberId && assignee?.id !== options.ownMemberId) continue;
@@ -140,6 +144,7 @@ export async function getCalendarEvents(options: {
       end_date: end,
       member_id: assignee?.id ?? null,
       member_name: assignee?.display_name ?? null,
+      member_type: assignee?.member_type ?? null,
       color: assignee?.schedule_color ?? null,
       project_id: t.project_id,
       project_label: project ? project.project_number : null,
@@ -164,6 +169,7 @@ export async function getCalendarEvents(options: {
       end_date: e.end_date ?? e.entry_date,
       member_id: e.member_id,
       member_name: e.member?.display_name ?? null,
+      member_type: e.member?.member_type ?? null,
       color: e.member?.schedule_color ?? null,
       project_id: e.project_id,
       project_label: e.project?.project_number ?? null,
@@ -183,6 +189,7 @@ export async function getCalendarEvents(options: {
       end_date: i.scheduled_date,
       member_id: null,
       member_name: null,
+      member_type: null,
       color: null,
       project_id: i.project_id,
       project_label: null,
