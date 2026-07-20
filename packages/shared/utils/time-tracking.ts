@@ -226,6 +226,163 @@ export interface WeeklyHoursSummary {
   overtimeHours: number;
 }
 
+// ── Approval-hierarchy rank (6A-2) — TypeScript mirror of the SQL
+//    time_role_rank / time_member_rank pair (migrations 20260710130000 +
+//    20260721010000). UI-gating only; the DB functions are the enforcement.
+//    NOTE: intentionally diverges from ROLE_HIERARCHY in constants/roles.ts —
+//    here subcontractor == crew (peers, Session-64 decision); there sub < crew. ──
+
+export const TIME_ROLE_RANK: Record<string, number> = {
+  owner: 5,
+  admin: 4,
+  project_manager: 3,
+  foreman: 2,
+  crew_member: 1,
+  subcontractor: 1,
+};
+
+/**
+ * Rank of a member for the strictly-below tier rules. `role` is the member's
+ * profile role, or null for a profile-less subcontractor member — pinned to
+ * the crew tier (1), matching SQL time_member_rank().
+ */
+export function timeMemberRank(role: string | null): number {
+  if (role == null) return 1;
+  return TIME_ROLE_RANK[role] ?? 0;
+}
+
+/**
+ * UI mirror of SQL can_approve_member(): strictly below the viewer, never
+ * self. Callers pass isSelf explicitly (member ids, not roles, decide it).
+ */
+export function canApproveByRank(
+  viewerRole: string,
+  targetRole: string | null,
+  isSelf: boolean
+): boolean {
+  if (isSelf) return false;
+  const target = timeMemberRank(targetRole);
+  return target >= 1 && (TIME_ROLE_RANK[viewerRole] ?? 0) > target;
+}
+
+// ── Week window (6A-2 approval queue + approve_member_week RPC) ──
+//
+// DECISION (Session 85, Phase 2 item 9): the payroll week starts MONDAY
+// 00:00 in the company timezone (companies.timezone). Single constant so a
+// future company setting can drive it — do NOT scatter week math elsewhere.
+// The setting column itself is deferred to the batched Company Settings pass
+// (tracked in the 6A build report).
+
+/** 0 = Sunday … 6 = Saturday. Monday per S85 decision. */
+export const WEEK_STARTS_ON = 1;
+
+const WEEKDAY_INDEX: Record<string, number> = {
+  Sun: 0,
+  Mon: 1,
+  Tue: 2,
+  Wed: 3,
+  Thu: 4,
+  Fri: 5,
+  Sat: 6,
+};
+
+interface ZonedParts {
+  year: number;
+  month: number; // 1-12
+  day: number;
+  hour: number;
+  minute: number;
+  second: number;
+  weekday: number; // 0 = Sunday
+}
+
+function zonedParts(instant: Date, timeZone: string): ZonedParts {
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    weekday: 'short',
+    hour12: false,
+  });
+  const parts: Record<string, string> = {};
+  for (const p of dtf.formatToParts(instant)) parts[p.type] = p.value;
+  return {
+    year: Number(parts.year),
+    month: Number(parts.month),
+    day: Number(parts.day),
+    hour: Number(parts.hour) % 24, // Intl emits "24" for midnight in some engines
+    minute: Number(parts.minute),
+    second: Number(parts.second),
+    weekday: WEEKDAY_INDEX[parts.weekday ?? ''] ?? 0,
+  };
+}
+
+/**
+ * The UTC instant of local midnight on (y, m, d) in `timeZone`. Two-pass
+ * offset correction handles DST transitions (a second pass converges because
+ * offsets are stable away from the transition instant itself).
+ */
+function zonedMidnightUtc(y: number, m: number, d: number, timeZone: string): Date {
+  let guess = Date.UTC(y, m - 1, d);
+  for (let i = 0; i < 2; i++) {
+    const p = zonedParts(new Date(guess), timeZone);
+    const asUtc = Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second);
+    guess += Date.UTC(y, m - 1, d) - asUtc;
+  }
+  return new Date(guess);
+}
+
+export interface WeekWindow {
+  /** Inclusive start — local WEEK_STARTS_ON midnight, as a UTC instant. */
+  weekStart: Date;
+  /** Exclusive end — the next week's start. */
+  weekEnd: Date;
+}
+
+/**
+ * The [weekStart, weekEnd) window containing `reference`, with boundaries at
+ * WEEK_STARTS_ON midnight in `timeZone`. Feed the ISO strings to
+ * getWeeklyHours / getSessions / approve_member_week — all three use
+ * clock_in >= start AND clock_in < end.
+ */
+export function weekWindow(reference: Date, timeZone: string): WeekWindow {
+  const p = zonedParts(reference, timeZone);
+  const daysBack = (p.weekday - WEEK_STARTS_ON + 7) % 7;
+  // Date.UTC arithmetic normalizes month/year rollover on its own.
+  const startYmd = new Date(Date.UTC(p.year, p.month - 1, p.day - daysBack));
+  const endYmd = new Date(Date.UTC(p.year, p.month - 1, p.day - daysBack + 7));
+  return {
+    weekStart: zonedMidnightUtc(
+      startYmd.getUTCFullYear(),
+      startYmd.getUTCMonth() + 1,
+      startYmd.getUTCDate(),
+      timeZone
+    ),
+    weekEnd: zonedMidnightUtc(
+      endYmd.getUTCFullYear(),
+      endYmd.getUTCMonth() + 1,
+      endYmd.getUTCDate(),
+      timeZone
+    ),
+  };
+}
+
+/**
+ * weekWindow() for a local calendar date given as "YYYY-MM-DD" (URL anchors).
+ * Anchoring at local NOON of that date keeps the resolved instant inside the
+ * intended local day in every timezone; malformed input falls back to today.
+ */
+export function weekWindowForYmd(ymd: string | undefined, timeZone: string): WeekWindow {
+  const m = ymd ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd) : null;
+  if (!m) return weekWindow(new Date(), timeZone);
+  const midnight = zonedMidnightUtc(Number(m[1]), Number(m[2]), Number(m[3]), timeZone);
+  return weekWindow(new Date(midnight.getTime() + 12 * 3_600_000), timeZone);
+}
+
 /**
  * Roll a week's sessions (each with its segments) into paid / regular / OT
  * hours. Caller is responsible for selecting the week's sessions and the
