@@ -2,7 +2,7 @@
 
 > **Design authority:** `docs/specs/future_module_architecture.md` §7.4. **This spec amends §7.4** (§3).
 >
-> **Status:** DRAFT — not built. Acceptance trace (§8) is **PROPOSED/UNVERIFIED**, derived from a real Bishop delivery (Jones Lumber → Willow Ridge). Quantities are reconstructed. Verify before build.
+> **Status:** DRAFT — not built. Acceptance trace (§8) is **VERIFIED** — a real Sherwin-Williams paint delivery narrated by Josh (reconciliation item 5). The reconstructed Jones Lumber draft is retained as §8.1, illustrative only.
 >
 > **Written against stale project knowledge.** All column references are **design-level** — confirm against live schema at build.
 >
@@ -187,6 +187,25 @@ Sent via Resend, from `companyname@rafterworks.com`. **Failure to send must not 
 
 ---
 
+## §U — Desktop UI [S87]
+
+Added per the CLAUDE.md spec completeness rule (2026-07-20): no UI build proceeds from a
+schema/service-only spec.
+
+- **Layout authority:** M6 UI handoff screen **4e** — PO detail with ordered-vs-usable bars,
+  split deliveries, exception badges.
+- **Forms (path A — no handoff design; mobile foundation):** desktop PO create/edit and
+  delivery check-in forms, styled from ui-01 tokens. Mobile, when built, supersedes check-in
+  as the primary capture surface.
+- **Entry points:** BOTH **Field Ops** nav item → **Deliveries** tab AND within project detail
+  (deliveries are job-specific), per the locked 12-item FFNav order
+  (`docs/sessions/6a-ui-build-report.md` S86 round-2 addendum).
+- **Roles:** mirror §6a — read via `can_view_project()` (Owner/Admin all; PM/Foreman/Crew
+  assigned-only); PO create Owner/Admin/PM; delivery check-in any member on a visible project;
+  manual PO close Owner/Admin (required `closed_reason`); delete Owner/Admin soft-delete.
+
+---
+
 ## 8. Acceptance example — from a real Bishop delivery
 
 > Bishop paint order, narrated by Josh and mirrored to an approved input→store→output trace (this session). This replaces the earlier reconstructed Jones Lumber draft, which is retained below (§8.1) as an illustrative exception-path example only. Column references remain design-level — confirm against live schema at build.
@@ -228,7 +247,7 @@ Sent via Resend, from `companyname@rafterworks.com`. **Failure to send must not 
 
 - **Q1 — Read visibility — RESOLVED (this session).** Verified against migrations: `can_view_project()` and the `projects_select_visible` policy both gate Owner/Admin → all company projects, everyone else → assigned-only. 6D adopts the identical rule (§6a Read). 6B/6C are being updated to the same rule this session; the answer is consistent across all three.
 - **Q2 — Damaged-goods return — RESOLVED (this session): won't build for v1.** Josh's workflow: a damaged/short item is a phone call or email to the vendor (photos if needed); the physical goods either go back on the truck or into the dumpster. There is no internal return lifecycle to track — resolution lives with the vendor, not in the app. So `qty_damaged` + the §4.1 `issue_note` + optional job-file photos fully cover it; truck-vs-dumpster, if noted, lives in `issue_note` free text. A first-class `returns` concept is a post-v1 enhancement ONLY if Bishop's process changes (e.g. they begin losing track of promised credits). The credit case remains covered by §5.1 manual close with `closed_reason`.
-- **Q3 — Author/audit split — RESOLVED (this session).** Josh confirmed `author_member_id` (office author, `company_members` FK defaulting to `get_my_member_id()`, named to match `change_orders` 5D) and the defaulted `received_by`, both distinct from audit `created_by = auth.uid()`. Verified against migrations. Q1 (read-visibility) remains the only open question.
+- **Q3 — Author/audit split — RESOLVED (this session).** Josh confirmed `author_member_id` (office author, `company_members` FK defaulting to `get_my_member_id()`, named to match `change_orders` 5D) and the defaulted `received_by`, both distinct from audit `created_by = auth.uid()`. Verified against migrations. Q1 is likewise RESOLVED — no open questions remain in §8a.
 
 ---
 
@@ -238,4 +257,4 @@ Sent via Resend, from `companyname@rafterworks.com`. **Failure to send must not 
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
 | 1   | **PO-close semantics — resolved (§5.1).** Closes on _usable_ quantity (`qty_received − qty_damaged` summed across deliveries); auto-close can't always fire, so Owner or Admin may close by hand with a required `closed_reason`.                                     | Closed |
 | 2   | **Damaged-goods return — RESOLVED: won't build for v1.** `qty_damaged` + §4.1 `issue_note` + optional job-file photos cover Bishop's actual workflow (vendor call; goods to truck or dumpster; no internal return lifecycle). `returns` concept is post-v1 only if the process changes. See §8a Q2.                                                                                                  | Closed |
-| 3   | Acceptance trace (§8) is PROPOSED — verify against a real Bishop delivery before build.                                                                                                                                                                             |
+| 3   | **Acceptance trace — VERIFIED [S87].** §8 carries the real Sherwin-Williams delivery (reconciliation item 5); the reconstructed Jones Lumber draft is §8.1, illustrative only.                                                                                       | Closed |
