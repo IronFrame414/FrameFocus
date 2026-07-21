@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   Calendar,
+  Clock,
   CreditCard,
   FileText,
   LayoutGrid,
@@ -16,12 +17,21 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { ROLE_LABELS, type CompanyRole } from '@framefocus/shared';
+import type { GpsClockMode } from '@framefocus/shared/utils/time-tracking';
+import type { SessionWithSegments } from '@/lib/services/time-tracking-client';
+import { GlobalClockButton } from '@/components/time/global-clock-button';
 
 interface DashboardShellProps {
   children: React.ReactNode;
   userName: string;
   userRole: CompanyRole;
   companyName: string;
+  /** Global clock state (S85 header button) — fetched by the layout. */
+  openSession: SessionWithSegments | null;
+  myMemberId: string | null;
+  timeZone: string;
+  /** companies.gps_clock_mode [S86] — 'off' disables capture in ClockModal. */
+  gpsMode: GpsClockMode;
 }
 
 // ui-01 §5 — ten items, this order. Role gates preserved from the previous
@@ -36,6 +46,12 @@ const NAV_ITEMS: {
   { href: '/dashboard', label: 'Dashboard', icon: LayoutGrid },
   { href: '/dashboard/projects', label: 'Projects', icon: Rows3 },
   { href: '/dashboard/schedule', label: 'Schedule', icon: Calendar },
+  // PERMANENT first-class item (S86 decision — no longer interim). Timesheets
+  // is NOT a nav item: it lives at /dashboard/timeclock/timesheets (S85).
+  // The owed FFNav reindex is DEFERRED to the 6B UI build and inserts a
+  // Field Ops item after Schedule (target 12-item order in the 6a build
+  // report's S86 round-2 addendum); Timeclock keeps this slot.
+  { href: '/dashboard/timeclock', label: 'Timeclock', icon: Clock },
   { href: '/dashboard/contacts', label: 'Contacts', icon: User },
   { href: '/dashboard/subcontractors', label: 'Subs & Vendors', icon: Users },
   {
@@ -63,7 +79,16 @@ function initials(name: string): string {
   return (first + last).toUpperCase();
 }
 
-export function DashboardShell({ children, userName, userRole, companyName }: DashboardShellProps) {
+export function DashboardShell({
+  children,
+  userName,
+  userRole,
+  companyName,
+  openSession,
+  myMemberId,
+  timeZone,
+  gpsMode,
+}: DashboardShellProps) {
   const router = useRouter();
   const pathname = usePathname();
 
@@ -135,7 +160,20 @@ export function DashboardShell({ children, userName, userRole, companyName }: Da
           </button>
         </div>
       </aside>
-      <main className="flex-1 bg-[#f4f6f9] px-[30px] py-[26px]">{children}</main>
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/* Global header strip (S85): the clock button rides top-right on
+            every dashboard page. Known cost, accepted: shifts page content
+            down by the strip's height. */}
+        <header className="flex h-[54px] shrink-0 items-center justify-end border-b border-[#e6e9ef] bg-white px-[30px]">
+          <GlobalClockButton
+            openSession={openSession}
+            myMemberId={myMemberId}
+            timeZone={timeZone}
+            gpsMode={gpsMode}
+          />
+        </header>
+        <main className="flex-1 bg-[#f4f6f9] px-[30px] py-[26px]">{children}</main>
+      </div>
     </div>
   );
 }

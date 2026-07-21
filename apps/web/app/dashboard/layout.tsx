@@ -1,5 +1,8 @@
 import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
+import { getOpenSession } from '@/lib/services/time-tracking';
+import { getMyMember } from '@/lib/services/members';
+import { getCompanyTimeSettings } from '@/lib/services/company';
 import { DashboardShell } from './dashboard-shell';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -23,17 +26,26 @@ export default async function DashboardLayout({ children }: { children: React.Re
     redirect('/sign-in');
   }
 
-  const { data: company } = await supabase
-    .from('companies')
-    .select('name')
-    .eq('id', profile.company_id)
-    .single();
+  // Global clock state (S85): fetched here so the header button works on
+  // every dashboard page. App Router layouts don't refetch on client-side
+  // navigation — freshness comes from router.refresh(), which every clock
+  // mutation already triggers.
+  const [company, openSession, myMember, timeSettings] = await Promise.all([
+    supabase.from('companies').select('name').eq('id', profile.company_id).single(),
+    getOpenSession(),
+    getMyMember(),
+    getCompanyTimeSettings(),
+  ]);
 
   return (
     <DashboardShell
       userName={`${profile.first_name} ${profile.last_name}`}
       userRole={profile.role}
-      companyName={company?.name ?? 'My Company'}
+      companyName={company.data?.name ?? 'My Company'}
+      openSession={openSession}
+      myMemberId={myMember?.id ?? null}
+      timeZone={timeSettings.timezone}
+      gpsMode={timeSettings.gpsClockMode}
     >
       {children}
     </DashboardShell>

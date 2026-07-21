@@ -89,14 +89,18 @@ export async function getSession(id: string): Promise<SessionWithSegments | null
 }
 
 /**
- * Sessions visible to the caller (RLS: Owner/Admin/PM/Foreman company-wide, a
- * member their own). Filters soft-deleted out by default.
+ * Sessions visible to the caller. Visibility is whatever RLS grants — tiered
+ * once migration 20260721010000 applies (own row, or members strictly below
+ * the caller's time_role_rank). Filters soft-deleted out by default.
+ * `open: true` = currently clocked in (clock_out IS NULL — the §S-4
+ * open-status expression).
  */
 export async function getSessions(filters?: {
   memberId?: string;
   status?: SessionApprovalStatus;
   from?: string; // clock_in >= (ISO)
   to?: string; // clock_in < (ISO)
+  open?: boolean; // clock_out IS NULL
 }): Promise<TimeClockSession[]> {
   const supabase = await createClient();
 
@@ -111,10 +115,114 @@ export async function getSessions(filters?: {
   else if (filters?.status) query = query.eq('status', filters.status);
   if (filters?.from) query = query.gte('clock_in', filters.from);
   if (filters?.to) query = query.lt('clock_in', filters.to);
+  if (filters?.open) query = query.is('clock_out', null);
 
   const { data, error } = await query;
   if (error) return [];
   return (data ?? []) as unknown as TimeClockSession[];
+}
+
+// ── Member-joined reads (6A-2 supervisor surfaces) ──
+// Two FKs point at company_members (member_id, approved_by), so both joins
+// carry explicit FK hints.
+
+export interface SessionMemberInfo {
+  id: string;
+  display_name: string;
+  member_type: string;
+  profile: { role: string; avatar_url: string | null } | null;
+}
+
+export type SessionWithMember = TimeClockSession & {
+  member: SessionMemberInfo | null;
+  approver: { display_name: string } | null;
+};
+
+export type SessionDetail = SessionWithMember & { segments: TimeSegment[] };
+
+const MEMBER_JOIN =
+  'member:company_members!time_clock_sessions_member_id_fkey(id, display_name, member_type, profile:profiles(role, avatar_url)), ' +
+  'approver:company_members!time_clock_sessions_approved_by_fkey(display_name)';
+
+/** getSessions plus member identity (name, role, avatar) and approver name. */
+export async function getSessionsWithMember(filters?: {
+  memberId?: string;
+  status?: SessionApprovalStatus;
+  from?: string;
+  to?: string;
+  open?: boolean;
+}): Promise<SessionWithMember[]> {
+  const supabase = await createClient();
+
+  let query = supabase
+    .from('time_clock_sessions')
+    .select(`*, ${MEMBER_JOIN}`)
+    .eq('is_deleted', false)
+    .order('clock_in', { ascending: false });
+
+  if (filters?.memberId) query = query.eq('member_id', filters.memberId);
+  if (filters?.status === null) query = query.is('status', null);
+  else if (filters?.status) query = query.eq('status', filters.status);
+  if (filters?.from) query = query.gte('clock_in', filters.from);
+  if (filters?.to) query = query.lt('clock_in', filters.to);
+  if (filters?.open) query = query.is('clock_out', null);
+
+  const { data, error } = await query;
+  if (error) return [];
+  return (data ?? []) as unknown as SessionWithMember[];
+}
+
+export type SessionWithMemberAndSegments = SessionWithMember & { segments: TimeSegment[] };
+
+/**
+ * The 4a review/queue read: sessions in a window WITH member identity AND
+ * segments, so paid / worked / OT roll up from pure helpers without N further
+ * queries. Visibility is RLS-tiered like every other session read.
+ */
+export async function getSessionsForReview(filters?: {
+  from?: string;
+  to?: string;
+}): Promise<SessionWithMemberAndSegments[]> {
+  const supabase = await createClient();
+
+  let query = supabase
+    .from('time_clock_sessions')
+    .select(`*, ${MEMBER_JOIN}, segments:time_segments(*)`)
+    .eq('is_deleted', false)
+    .order('clock_in', { ascending: false })
+    .order('segment_start', { ascending: true, foreignTable: 'time_segments' });
+
+  if (filters?.from) query = query.gte('clock_in', filters.from);
+  if (filters?.to) query = query.lt('clock_in', filters.to);
+
+  const { data, error } = await query;
+  if (error) return [];
+  const rows = (data ?? []) as unknown as SessionWithMemberAndSegments[];
+  for (const row of rows) {
+    row.segments = (row.segments ?? []).filter((s) => !s.is_deleted);
+  }
+  return rows;
+}
+
+/**
+ * One session with member identity AND its segments (the 4b day-detail read).
+ * Does NOT filter is_deleted on the session (trash-bin pattern); soft-deleted
+ * segments are filtered.
+ */
+export async function getSessionDetail(id: string): Promise<SessionDetail | null> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from('time_clock_sessions')
+    .select(`*, ${MEMBER_JOIN}, segments:time_segments(*)`)
+    .eq('id', id)
+    .order('segment_start', { ascending: true, foreignTable: 'time_segments' })
+    .maybeSingle();
+
+  if (error || !data) return null;
+  const detail = data as unknown as SessionDetail;
+  detail.segments = (detail.segments ?? []).filter((s) => !s.is_deleted);
+  return detail;
 }
 
 /** Segments of a session, ordered chronologically. */

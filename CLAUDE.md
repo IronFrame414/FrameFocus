@@ -1,6 +1,6 @@
 # CLAUDE.md — FrameFocus Development Guide
 
-> **Last updated:** April 25, 2026 (Session 42 — Standard triggers section added)
+> **Last updated:** July 20, 2026 (Session 86 — Spec completeness rule added to Platform Modules)
 > **Purpose:** This file is the single source of truth for all development conversations. Read this before every session.
 
 ---
@@ -191,6 +191,8 @@ This chains `supabase db push`, `npm run db:types`, and `npm run type-check`. Co
 Status → [STATE.md](STATE.md). Module list and details → [CLAUDE_MODULES.md](CLAUDE_MODULES.md), [docs/module4-architecture.md](docs/module4-architecture.md), [docs/roadmap/FrameFocus_Quick_Reference.docx](docs/roadmap/FrameFocus_Quick_Reference.docx).
 
 **Cross-cutting:** AI Layer (see AI Integration Rules below), Workflow Engine (Supabase Webhooks + Edge Functions, Phase 2+), QuickBooks Integration (Modules 6 & 7 — see CLAUDE_MODULES.md).
+
+**Spec completeness rule (added 2026-07-20, Session 86).** Every module spec must include a UI section — screens, roles, entry points, nav placement — before the spec is considered complete. No UI build proceeds from a schema/service-only spec. UI gaps discovered at build time (the S85/S86 6A experience: interim nav links, a nav reindex owed against a stale handoff, screens specced after the schema shipped) are the failure this prevents.
 
 ## Database Conventions
 

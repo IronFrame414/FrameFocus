@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.4"
+    PostgrestVersion: "14.5"
   }
   graphql_public: {
     Tables: {
@@ -544,6 +544,7 @@ export type Database = {
           address_line2: string | null
           ai_tagging_enabled: boolean
           brand_color: string | null
+          breaks_paid: boolean
           city: string | null
           contractor_signature_path: string | null
           created_at: string | null
@@ -567,10 +568,13 @@ export type Database = {
           email: string | null
           estimate_number_prefix: string
           estimate_number_sequence: number
+          gps_clock_mode: string
           id: string
           license_number: string | null
           logo_url: string | null
           name: string
+          ot_threshold_hours: number
+          paid_break_cap_minutes: number
           phone: string | null
           project_internal_sequence: number
           slug: string
@@ -583,6 +587,7 @@ export type Database = {
           trade_type: string | null
           updated_at: string | null
           website: string | null
+          week_starts_on: number
           zip: string | null
         }
         Insert: {
@@ -590,6 +595,7 @@ export type Database = {
           address_line2?: string | null
           ai_tagging_enabled?: boolean
           brand_color?: string | null
+          breaks_paid?: boolean
           city?: string | null
           contractor_signature_path?: string | null
           created_at?: string | null
@@ -613,10 +619,13 @@ export type Database = {
           email?: string | null
           estimate_number_prefix?: string
           estimate_number_sequence?: number
+          gps_clock_mode?: string
           id?: string
           license_number?: string | null
           logo_url?: string | null
           name: string
+          ot_threshold_hours?: number
+          paid_break_cap_minutes?: number
           phone?: string | null
           project_internal_sequence?: number
           slug: string
@@ -629,6 +638,7 @@ export type Database = {
           trade_type?: string | null
           updated_at?: string | null
           website?: string | null
+          week_starts_on?: number
           zip?: string | null
         }
         Update: {
@@ -636,6 +646,7 @@ export type Database = {
           address_line2?: string | null
           ai_tagging_enabled?: boolean
           brand_color?: string | null
+          breaks_paid?: boolean
           city?: string | null
           contractor_signature_path?: string | null
           created_at?: string | null
@@ -659,10 +670,13 @@ export type Database = {
           email?: string | null
           estimate_number_prefix?: string
           estimate_number_sequence?: number
+          gps_clock_mode?: string
           id?: string
           license_number?: string | null
           logo_url?: string | null
           name?: string
+          ot_threshold_hours?: number
+          paid_break_cap_minutes?: number
           phone?: string | null
           project_internal_sequence?: number
           slug?: string
@@ -675,6 +689,7 @@ export type Database = {
           trade_type?: string | null
           updated_at?: string | null
           website?: string | null
+          week_starts_on?: number
           zip?: string | null
         }
         Relationships: []
@@ -2367,6 +2382,63 @@ export type Database = {
           },
           {
             foreignKeyName: "invitations_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      member_pay_rates: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          effective_date: string
+          hourly_rate: number
+          id: string
+          is_deleted: boolean | null
+          member_id: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          effective_date: string
+          hourly_rate: number
+          id?: string
+          is_deleted?: boolean | null
+          member_id: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          effective_date?: string
+          hourly_rate?: number
+          id?: string
+          is_deleted?: boolean | null
+          member_id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_pay_rates_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_pay_rates_member_id_fkey"
             columns: ["member_id"]
             isOneToOne: false
             referencedRelation: "company_members"
@@ -4139,6 +4211,75 @@ export type Database = {
           },
         ]
       }
+      time_edit_logs: {
+        Row: {
+          changes: Json
+          company_id: string
+          created_at: string | null
+          editor_member_id: string | null
+          id: string
+          segment_id: string | null
+          session_id: string | null
+          target_member_id: string | null
+        }
+        Insert: {
+          changes: Json
+          company_id: string
+          created_at?: string | null
+          editor_member_id?: string | null
+          id?: string
+          segment_id?: string | null
+          session_id?: string | null
+          target_member_id?: string | null
+        }
+        Update: {
+          changes?: Json
+          company_id?: string
+          created_at?: string | null
+          editor_member_id?: string | null
+          id?: string
+          segment_id?: string | null
+          session_id?: string | null
+          target_member_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "time_edit_logs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "time_edit_logs_editor_member_id_fkey"
+            columns: ["editor_member_id"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "time_edit_logs_segment_id_fkey"
+            columns: ["segment_id"]
+            isOneToOne: false
+            referencedRelation: "time_segments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "time_edit_logs_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "time_clock_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "time_edit_logs_target_member_id_fkey"
+            columns: ["target_member_id"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       time_segments: {
         Row: {
           company_id: string
@@ -4225,6 +4366,58 @@ export type Database = {
           },
         ]
       }
+      time_session_rate_snapshots: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          hourly_rate: number | null
+          id: string
+          member_id: string | null
+          rate_effective_date: string | null
+          session_id: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string | null
+          hourly_rate?: number | null
+          id?: string
+          member_id?: string | null
+          rate_effective_date?: string | null
+          session_id: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          hourly_rate?: number | null
+          id?: string
+          member_id?: string | null
+          rate_effective_date?: string | null
+          session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "time_session_rate_snapshots_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "time_session_rate_snapshots_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "time_session_rate_snapshots_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: true
+            referencedRelation: "time_clock_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       trial_emails: {
         Row: {
           created_at: string | null
@@ -4248,6 +4441,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      approve_member_week: {
+        Args: { p_member_id: string; p_week_end: string; p_week_start: string }
+        Returns: number
+      }
       can_approve_member: {
         Args: { p_target_member_id: string }
         Returns: boolean
@@ -4331,6 +4528,7 @@ export type Database = {
         Args: { p_project_id: string }
         Returns: boolean
       }
+      is_my_recent_segment: { Args: { p_segment_id: string }; Returns: boolean }
       is_platform_admin: { Args: never; Returns: boolean }
       is_project_creator: { Args: { p_project_id: string }; Returns: boolean }
       next_co_number: { Args: { p_project_id: string }; Returns: string }
@@ -4361,7 +4559,9 @@ export type Database = {
           found_status: string
         }[]
       }
+      time_member_rank: { Args: { p_member_id: string }; Returns: number }
       time_role_rank: { Args: { p_role: string }; Returns: number }
+      time_session_member: { Args: { p_session_id: string }; Returns: string }
       transfer_ownership: {
         Args: { p_new_owner_id: string }
         Returns: undefined

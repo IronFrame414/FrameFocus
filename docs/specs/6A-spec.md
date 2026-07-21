@@ -89,7 +89,7 @@ time_clock_sessions
 
 - **No `project_id`.** **No `category`.** **No break columns.** (§3)
 - One open session per member at a time — enforce in the service layer; consider a partial unique index on `(member_id) WHERE clock_out IS NULL AND is_deleted = false`.
-- **Owner has a timeclock (Session 64 reversal).** The Owner clocks in/out and attributes segments to projects like anyone else — **Owner labor is a real job cost.** _Supersedes the original rule "Owner has no timeclock; no session rows exist for an Owner."_ **Admin** has a timeclock only when the company setting is ON (default OFF).
+- **Owner has a timeclock (Session 64 reversal).** The Owner clocks in/out and attributes segments to projects like anyone else — **Owner labor is a real job cost.** _Supersedes the original rule "Owner has no timeclock; no session rows exist for an Owner."_ ~~**Admin** has a timeclock only when the company setting is ON (default OFF).~~ **[S86 SUPERSEDED:** setting DROPPED — Admin (like every role) always has a timeclock; see §13.**]**
 - `gps_in`/`gps_out` column type (PostGIS `geography` vs. `jsonb` lat/lng) is a **build decision** — 6A has no spatial queries, so `jsonb` is likely sufficient and avoids a PostGIS dependency. Flagged, not decided.
 
 ---
@@ -182,7 +182,7 @@ Per §7.1: a task must be assigned to the member **or** unassigned. Confirm agai
 | Crew     | nobody                   |
 
 - **Owner hours have no approval state (Session 64).** Approval is strictly-below and nobody outranks the Owner, so an Owner's session is **never pending and never approved — it simply exists. Do not auto-approve it.** _Supersedes "Owner has no timeclock → no one approves an Owner (no rows exist)"; the Owner now clocks in (§4)._ **Schema flag:** the session `status` column is currently `NOT NULL DEFAULT 'pending'`; an Owner session must be able to carry no approval state (nullable, or an `n/a` value) — resolve at build.
-- Admin's hours (setting ON) → approvable by **Owner only**, which falls out of the strictly-below rule.
+- Admin's hours ~~(setting ON)~~ **[S86: setting dropped — always on]** → approvable by **Owner only**, which falls out of the strictly-below rule.
 - Only `approved` sessions are eligible for QuickBooks export (Module 7).
 - Approval is on the **session** (payroll), not the segment.
 
@@ -282,9 +282,9 @@ People forget to clock in and out, so hours need an edit path — the spec previ
 Land in the **batched** Company Settings pass, not in 6A.
 
 - **Overtime rules** — weekly threshold (default 40 h/wk); optional daily threshold (open, #4)
-- **GPS clock-in** — capture/enforce toggle, default **OFF**
+- **GPS clock-in** — ~~capture/enforce toggle, default **OFF**~~ **[S86 AMENDED — BUILT:** three-state `gps_clock_mode` (`off | capture | enforce`), default **capture**, migration 20260721050000. Desktop honors `off` by not capturing; `enforce` is mobile-future and behaves as `capture` on desktop (§4.2 [S84]).**]**
 - **Breaks paid/unpaid** — default **unpaid** (open, #2/#3). **(Session 64 — Bishop pays for lunch.)** Two settings: **(a) breaks paid** on/off; **(b) paid break minutes per day** (a daily cap, e.g. 30 min). When ON, break-segment duration up to the cap counts toward paid hours — and thus toward the weekly OT threshold (§9). Break segments still carry no `project_id`, so paid-break time never lands on a job's cost. Batched settings pass, **not a 6A migration.**
-- **Admin timeclock** — enable/disable, default **OFF**
+- **Admin timeclock** — ~~enable/disable, default **OFF**~~ **[S86 SUPERSEDED — DROPPED (Josh):** no company gate; the timeclock is always available to every role. No column built; see the S86 addendum in `docs/sessions/6a-ui-build-report.md`. §8's consequence stands via strictly-below: Admin hours are approvable by Owner only.**]**
 
 ---
 

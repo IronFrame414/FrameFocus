@@ -52,8 +52,13 @@ UI-over-existing-services build plus the additions in §4.
    would block office clock-ins or record junk fixes. **GPS becomes mandatory (with owner/admin
    override) in the mobile build**, where the app controls the platform. See §4.2.
 3. **Prompted to pick a job (mandatory), then a task (optional).**
-   - Job list is role-scoped: crew/foreman see only assigned active jobs; PM/admin/owner see all
-     active jobs. **Active jobs only** (no completed/archived).
+   - Job list is role-scoped: crew/foreman/**PM** see only assigned active jobs; admin/owner see
+     all active jobs. **Active jobs only** (no completed/archived). **[S85 — AMENDED at build:]**
+     the S83 text granted PM all active jobs, but live `projects_select_visible` RLS (and the
+     CLAUDE.md role table — PM is "Full (scoped to assigned projects)") scope PM to assigned
+     projects platform-wide. Widening projects RLS for this picker would leak all projects to PMs
+     across the app. Josh's call (S85 Phase 2 item 11): keep live RLS; the picker lists what RLS
+     grants. Logged under CONFLICTS in the 6A build report.
    - Task list = unassigned tasks on the chosen job **plus** tasks assigned to this user.
    - "Job, no task" is allowed — the user may skip the task step.
 4. **Switch job/task any time, unlimited** → current segment ends, new segment opens, same session
@@ -154,7 +159,10 @@ conflicts.
 
 **§S-3 — Read scope for the job picker.** Confirm how "active jobs assigned to me" vs. "all active
 jobs" is expressed against the live `projects` / `project_assignments` schema and existing RLS, so
-the picker's role-scoping is enforced server-side and not UI-only.
+the picker's role-scoping is enforced server-side and not UI-only. **[S85 — RESOLVED at build:]**
+live `projects_select_visible` already enforces the (amended, §2.3) scoping server-side —
+owner/admin company-wide, everyone else via `is_assigned_to_project(id)`. The picker queries
+`projects` with `status = 'active'` and takes whatever RLS grants; no migration needed or written.
 
 ---
 

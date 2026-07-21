@@ -90,3 +90,20 @@ export const proposalSettingsSchema = z.object({
 });
 
 export type ProposalSettingsInput = z.infer<typeof proposalSettingsSchema>;
+
+// ── Company Settings pass [S86] — time-tracking settings ──
+// Bounds mirror the CHECK constraints in migration 20260721050000; the
+// tighter UI bounds here are sanity caps, not schema truth.
+
+// numeric(5,2) CHECK (> 0); 168 = hours in a week.
+export const otThresholdHoursSchema = z
+  .number()
+  .gt(0, 'Must be more than 0')
+  .max(168, 'Cannot exceed 168 hours');
+
+// integer CHECK (>= 0); 480 minutes (8h) is a sanity cap.
+export const paidBreakCapMinutesSchema = z
+  .number()
+  .int('Whole minutes only')
+  .min(0, 'Cannot be negative')
+  .max(480, 'At most 480 minutes');

@@ -1,5 +1,11 @@
 import { createClient } from '@/lib/supabase-server';
 import type { Database } from '@framefocus/shared/types/database';
+import {
+  DEFAULT_TIME_SETTINGS,
+  WEEK_STARTS_ON,
+  type GpsClockMode,
+  type TimeSettings,
+} from '@framefocus/shared/utils/time-tracking';
 
 // CHECK-constrained columns come back as loose `string` from the
 // type generator; re-narrow per CLAUDE.md.
@@ -53,6 +59,95 @@ export async function getCompany(): Promise<CompanyData | null> {
     .single();
 
   return company ?? null;
+}
+
+// ── Company Settings pass [S86] — time-tracking settings ──
+// Five columns (migration 20260721050000) + timezone, read together so the
+// time screens make one fetch. gps_clock_mode is CHECK-constrained; re-narrow
+// the generator's loose `string` per CLAUDE.md.
+
+export type TimeTrackingSettings = Omit<
+  Pick<
+    Database['public']['Tables']['companies']['Row'],
+    | 'id'
+    | 'timezone'
+    | 'week_starts_on'
+    | 'ot_threshold_hours'
+    | 'breaks_paid'
+    | 'paid_break_cap_minutes'
+    | 'gps_clock_mode'
+  >,
+  'gps_clock_mode'
+> & { gps_clock_mode: GpsClockMode };
+
+/**
+ * Raw settings row for the settings page (needs `id` for updates). RLS scopes
+ * companies to the caller's own row. Returns null when the caller can't be
+ * resolved — the semantic accessor below carries the fallbacks.
+ */
+export async function getTimeTrackingSettings(): Promise<TimeTrackingSettings | null> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data } = await supabase
+    .from('companies')
+    .select(
+      'id, timezone, week_starts_on, ot_threshold_hours, breaks_paid, paid_break_cap_minutes, gps_clock_mode'
+    )
+    .maybeSingle();
+
+  return (data as TimeTrackingSettings | null) ?? null;
+}
+
+/** Semantic shape the time screens consume (shared-helper parameter types). */
+export interface CompanyTimeSettings {
+  timezone: string;
+  /** 0 = Sunday … 6 = Saturday (companies.week_starts_on). */
+  weekStartsOn: number;
+  /** OT threshold + paid-break rules, in the pure helpers' shape. */
+  time: TimeSettings;
+  gpsClockMode: GpsClockMode;
+}
+
+/**
+ * The caller's time settings with column-default fallbacks when the caller
+ * can't be resolved (mirrors getCompanyTimezone's old behavior). Single
+ * source for every screen that formats wall-clock times, computes week/day
+ * boundaries, or derives paid hours / OT (Module 6A).
+ */
+export async function getCompanyTimeSettings(): Promise<CompanyTimeSettings> {
+  const row = await getTimeTrackingSettings();
+  if (!row) {
+    return {
+      timezone: 'America/New_York',
+      weekStartsOn: WEEK_STARTS_ON,
+      time: DEFAULT_TIME_SETTINGS,
+      gpsClockMode: 'capture',
+    };
+  }
+  return {
+    timezone: row.timezone,
+    weekStartsOn: row.week_starts_on,
+    time: {
+      otThresholdHours: row.ot_threshold_hours,
+      breaksPaid: row.breaks_paid,
+      breakCapMinutes: row.paid_break_cap_minutes,
+    },
+    gpsClockMode: row.gps_clock_mode,
+  };
+}
+
+/**
+ * The caller's company timezone (companies.timezone, migration 20260719000000).
+ * Kept for screens that need only the timezone; delegates to
+ * getCompanyTimeSettings so there is one read path.
+ */
+export async function getCompanyTimezone(): Promise<string> {
+  return (await getCompanyTimeSettings()).timezone;
 }
 
 // ── 4M — Estimating settings ──

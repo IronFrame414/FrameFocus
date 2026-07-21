@@ -1,8 +1,10 @@
 import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getTeamMember, getCompanyAdmins } from '@/lib/services/team';
+import { getMemberRates } from '@/lib/services/pay-rates';
 import EditForm from './edit-form';
 import TransferForm from './transfer-form';
+import PayRateSection from './pay-rate-section';
 
 export default async function TeamMemberEditPage({ params }: { params: { id: string } }) {
   const supabase = await createClient();
@@ -38,6 +40,16 @@ export default async function TeamMemberEditPage({ params }: { params: { id: str
       ? await getCompanyAdmins(supabase, caller.company_id, caller.id)
       : [];
 
+  // Pay rates (S85): keyed by the member row, not the profile. Client-role
+  // profiles have no member row — no rate section for them.
+  const { data: memberRow } = await supabase
+    .from('company_members')
+    .select('id')
+    .eq('profile_id', target.id)
+    .eq('is_deleted', false)
+    .maybeSingle();
+  const rates = memberRow ? await getMemberRates(memberRow.id) : [];
+
   return (
     <div className="p-6 max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">Edit Team Member</h1>
@@ -65,6 +77,7 @@ export default async function TeamMemberEditPage({ params }: { params: { id: str
           callerRole={caller.role as 'owner' | 'admin'}
         />
       )}
+      {memberRow && <PayRateSection memberId={memberRow.id} rates={rates} />}
     </div>
   );
 }
