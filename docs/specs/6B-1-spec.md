@@ -52,6 +52,18 @@ stays open for the mobile build; the desktop answer is: type); offline sync; any
 
 ---
 
+## §R — Roles
+
+Mirrors `6B-spec.md` §8:
+
+- **Read:** via `can_view_project()` — Owner/Admin see all projects; PM/Foreman/Crew see
+  assigned projects only.
+- **Edit:** creator only.
+- **Delete:** Owner/Admin.
+- **No approval workflow** on logs.
+
+---
+
 ## §3 — Read/detail view (handoff 4c — authoritative layout)
 
 - Breadcrumb (project-nested); title + author + date; **Field sub-tab bar** (Daily Logs active ·
@@ -98,10 +110,12 @@ filters beyond the project scope, v1. Multiple logs per project-day are legal; t
 
 ## §S — Confirm live before building (CC — no names asserted)
 
-- **§S-1 — Routes + nav.** The 4c screen lives under the **Field Ops** nav item, which does not
-  exist yet (the FFNav shell change is a separate task). Decide the interim route (likely
-  project-nested, e.g. under the existing project detail) and surface it; do not build the full
-  nav change inside this slice unless Josh says so.
+- **§S-1 — Routes + nav.** RESOLVED [S86/S87]: FFNav reindex lands with this build. Locked
+  12-item order per docs/sessions/6a-ui-build-report.md S86 round-2 addendum: Dashboard ·
+  Projects · Schedule · Field Ops · Timeclock · Contacts · Subs & Vendors · Estimates ·
+  Cost Catalog · Settings · Team · Billing. Field Ops inserts after Schedule; ungated (all
+  dashboard roles) unless refined here. 6B routes live under Field Ops — CC proposes the
+  route tree in Phase 2.
 - **§S-2 — 6B service layer.** Inventory what exists (S83 verified the 6A services; 6B services
   are UNVERIFIED — there may be none). Build server/client per convention if absent.
 - **§S-3 — Company timezone.** `6B-spec.md` §13.2 requires it for the day-boundary predicate.
