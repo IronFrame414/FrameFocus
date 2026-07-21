@@ -19,7 +19,7 @@
 > 1. **Domain reporter ≠ audit column.** `created_by` / `updated_by` are audit columns defaulting to `auth.uid()` (FK `auth.users`), in 6A and in `change_orders` (5D). The "who filed this" identity is a separate `*_member_id` column defaulting to `get_my_member_id()` (FK `company_members`) — `change_orders.author_member_id` is the reference. **This spec's "`created_by` = reporter" / "`created_by = get_my_member_id()`" is a [DRIFT].** See §2 and §5.
 > 2. **Read-visibility helper exists; 6C now aligns with it.** M5 ships `can_view_project()` = "owner/admin see all **OR** the caller is assigned," i.e. **PM/Foreman are assigned-only**. This spec originally granted PM/Foreman company-wide incident read — that **[CONFLICT] is RESOLVED (Josh, this session): assigned-only, matching `can_view_project()`**. PM/Foreman (and Crew) read incidents only on projects they are assigned to; Owner/Admin read all. See §5 / Q2.
 > 3. **`num_nonnulls()` is Postgres-native and unused elsewhere in this repo's migrations** (verified). The §2.1 conditional CHECKs are valid SQL; kept as-is. Still tracked as open item #8.
-> 4. **Acceptance trace stays PROPOSED.** See the NEEDS INTERVIEW blocker in §8.
+> 4. **Acceptance trace is VERIFIED** — walked against a real Bishop incident this session (§8, status line). The earlier "stays PROPOSED / NEEDS INTERVIEW" note was stale.
 
 ---
 
@@ -47,6 +47,9 @@ project_id UUID NOT NULL REFERENCES projects(id)
 incident_date DATE NOT NULL
 incident_type TEXT NOT NULL -- 'injury' | 'property_damage' | 'near_miss'
 description TEXT NOT NULL
+prevention_notes TEXT -- nullable [S87]: corrective/preventive action taken
+status TEXT NOT NULL DEFAULT 'open' -- [S87] enum, e.g. 'open' | 'closed' — Owner/Admin-editable; enum home per §9 #1
+outcome TEXT -- nullable [S87]: resolution narrative — Owner/Admin-editable
 pdf_file_id UUID REFERENCES files(id) -- M3
 reported_by_member_id UUID NOT NULL DEFAULT get_my_member_id() REFERENCES company_members(id) -- domain reporter (§5)
 -- standard columns (created_by / updated_by are AUDIT = auth.uid(), NOT the reporter)
@@ -55,6 +58,11 @@ reported_by_member_id UUID NOT NULL DEFAULT get_my_member_id() REFERENCES compan
 - **[DRIFT — corrected]** the reporter is **`reported_by_member_id`** (a `company_members` FK defaulting to `get_my_member_id()`), **not** `created_by`. `created_by`/`updated_by` are audit columns defaulting to `auth.uid()` (FK `auth.users`), per 6A and `change_orders.author_member_id` (5D).
 - `incident_type` is a CHECK-constrained enum. See §9 open item #1.
 - Never locks. Editable by creator (§5), because treatment is usually learned a day later.
+- **[S87]** `prevention_notes` is free text — what was done so it doesn't happen again.
+- **[S87]** `status` + `outcome` track resolution. These two fields are **Owner/Admin-editable**
+  (an exception to the creator-only edit rule in §5 — closing out an incident is a leadership
+  act, not a reporter act). The automated 2-day follow-up prompt discussed alongside them is
+  **DEFERRED** — scheduler infrastructure doesn't exist; see §9 open item #10.
 
 ### 2.1 `safety_incident_injuries` — injured party (member or outsider)
 
@@ -116,13 +124,15 @@ Sent via Resend, from `companyname@rafterworks.com`, per the existing convention
 
 **On send failure (Josh, this session): log the failure _and_ surface a retry affordance to the Owner.** Silent-log is rejected — a swallowed email on an injury means the Owner never learns it happened. The retry is Owner-visible, not a background-only reattempt, so the failure cannot pass unnoticed. (Resolves §9 item #5.)
 
+**[S87]** Email + the hierarchy rule above stand as-is for v1. **Future:** prep for mobile push notifications — when the mobile app ships, push supplements (does not replace) email.
+
 ---
 
 ## 5. Permissions & RLS
 
 - Company-scoped: `company_id = get_my_company_id()`.
 - **Create:** any member, on any project they can see.
-- **Edit:** **creator only** — **[DRIFT — corrected]** keyed on **`reported_by_member_id = get_my_member_id()`**, not `created_by` (the audit `auth.uid()` column, §2). Treatment details arrive late; the record never locks.
+- **Edit:** **creator only** for the incident record — **[DRIFT — corrected]** keyed on **`reported_by_member_id = get_my_member_id()`**, not `created_by` (the audit `auth.uid()` column, §2). Treatment details arrive late; the record never locks. **EXCEPT [S87]:** `status` and `outcome` are **Owner/Admin-editable** (closing out an incident is a leadership act — see §2).
 - **Read:** **[RESOLVED — assigned-only via `can_view_project()`]** Owner/Admin read **all** company incidents; **PM/Foreman and Crew read only incidents on projects they are assigned to**, via `can_view_project(project_id)`. This aligns 6C with M5 content-visibility — no divergent rule. (Josh, this session: safety incidents get **no** broader read grant than ordinary project content. What reaches leadership about an injury on a project they cannot browse is the **notification**, not the log listing — see §4. Q2.)
 - **Delete:** soft-delete, Owner/Admin only. An incident a crew member can erase is not a record.
 
@@ -141,6 +151,22 @@ Sent via Resend, from `companyname@rafterworks.com`, per the existing convention
 - One PDF per incident, filed to the project's **Safety** folder in M3.
 - Generated on create. Because incidents never lock, an edited incident's PDF goes stale — **regenerate (overwrite) on edit.** Josh, this session. Edits only ever add data (treatment learned later, a witness remembered); nothing is deleted, so one always-current PDF is correct and there is no versioning. The stored PDF is replaced in place on every edit.
 - Generation reuses React-PDF (per repo tooling).
+
+---
+
+## §U — Desktop UI [S87]
+
+Added per the CLAUDE.md spec completeness rule (2026-07-20): no UI build proceeds from a
+schema/service-only spec.
+
+- **Screens:** M6 UI handoff **4d** — company incident log + incident detail. Entry point:
+  **Field Ops** nav item → **Safety** tab, per the locked 12-item FFNav order
+  (`docs/sessions/6a-ui-build-report.md` S86 round-2 addendum).
+- **Create/edit form:** desktop (path A — no handoff design; the handoff defers entry forms to
+  mobile). Built now as the foundation for the future mobile capture surface.
+- **Roles:** mirror §5 — Owner/Admin see all company incidents; PM/Foreman/Crew assigned-only
+  via `can_view_project()`. Create: any member on a visible project. Edit: creator only, except
+  `status`/`outcome` (Owner/Admin — §2). Delete: Owner/Admin soft-delete.
 
 ---
 
@@ -182,14 +208,15 @@ Had this been opened from a daily log's hazard flag, `project_id` and `incident_
 | 7   | No FK from a 6B hazard flag to the incident it escalated into. Add later if the link proves useful.                                                                            | Deferred |
 | 8   | `num_nonnulls()` is Postgres-native — confirm it's available for the §2.1 / §2.2 member-or-outsider identity CHECKs.                                                            | Build    |
 | 9   | Enforcement mechanism for the injury cross-table invariant (`incident_type = 'injury'` ⇒ ≥1 `safety_incident_injuries` row) — application logic vs. DB trigger. Decide at build. | 6C build |
+| 10  | **[S87] DEFERRED** — automated 2-day follow-up prompt on open incidents (nudge toward `status`/`outcome` closure, §2). Scheduler infrastructure doesn't exist; revisit when it does.  | Deferred |
 
 ---
 
 ## 9a. Questions for Josh (raised by the 6A as-built reconciliation — resolve nothing silently)
 
-- **Q1 — Reporter identity.** Confirm the reporter is a `company_members` FK (`reported_by_member_id`, default `get_my_member_id()`), distinct from the audit `created_by = auth.uid()` — matching 6A and `change_orders.author_member_id`. (Correction applied in §2/§5; flagging for sign-off.)
+- **Q1 — Reporter identity. CONFIRMED [S87].** The reporter is a `company_members` FK (`reported_by_member_id`, default `get_my_member_id()`), distinct from the audit `created_by = auth.uid()` — matching 6A and `change_orders.author_member_id`. (Correction applied in §2/§5; signed off.)
 - **Q2 — Incident read visibility for PM/Foreman. RESOLVED — assigned-only, matching `can_view_project()`.** PM/Foreman (and Crew) read incidents only on projects they are assigned to; Owner/Admin read all. No broader safety grant — notification (§4), not the log listing, is what reaches leadership about an off-project injury. Applied in §5 and the §0 reconciliation block.
-- **Q3 — `incident_type` enum home (existing open item #1).** Declare once and add to `TECH_DEBT.md` (the `row_type` enum is already hand-duplicated across five files — don't repeat that). Where should the single declaration live?
+- **Q3 — `incident_type` enum home (existing open item #1). DEFERRED to build Phase 2 [S87].** Declare once and add to `TECH_DEBT.md` (the `row_type` enum is already hand-duplicated across five files — don't repeat that). CC proposes the single declaration's home in build Phase 2.
 
 ---
 
