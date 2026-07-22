@@ -491,6 +491,20 @@ export function dayWindow(reference: Date, timeZone: string): DayWindow {
 }
 
 /**
+ * dayWindow() for a local calendar date given as "YYYY-MM-DD" (daily_logs.
+ * log_date). Mirrors weekWindowForYmd: anchoring at local NOON keeps the
+ * resolved instant inside the intended local day in every timezone; malformed
+ * input falls back to today. Added by the 6B UI build for the photo-pull and
+ * delivery day windows (6B-spec §13.2 day-boundary rule).
+ */
+export function dayWindowForYmd(ymd: string | undefined, timeZone: string): DayWindow {
+  const m = ymd ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd) : null;
+  if (!m) return dayWindow(new Date(), timeZone);
+  const midnight = zonedMidnightUtc(Number(m[1]), Number(m[2]), Number(m[3]), timeZone);
+  return dayWindow(new Date(midnight.getTime() + 12 * 3_600_000), timeZone);
+}
+
+/**
  * Roll a week's sessions (each with its segments) into paid / regular / OT
  * hours. Caller is responsible for selecting the week's sessions and the
  * timezone-correct week boundary — this stays pure. Pass `timeZone` so the
