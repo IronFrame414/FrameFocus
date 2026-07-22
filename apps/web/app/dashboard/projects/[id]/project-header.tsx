@@ -13,12 +13,16 @@ interface ProjectHeaderProps {
 }
 
 // ui-04 §S2 (locked round 2): current tabs + Photos (adjacent to Files).
+// + Deliveries (S90, 6D-spec §U amendment) — first-class project tab after
+// Punch List (the field/materials cluster); Daily Logs and Safety stay on
+// the Field Ops surface only.
 const TABS: { slug: string; label: string }[] = [
   { slug: '', label: 'Overview' },
   { slug: 'schedule', label: 'Schedule' },
   { slug: 'budget', label: 'Budget' },
   { slug: 'changes', label: 'Change Orders' },
   { slug: 'punch', label: 'Punch List' },
+  { slug: 'deliveries', label: 'Deliveries' },
   { slug: 'files', label: 'Files' },
   { slug: 'photos', label: 'Photos' },
   { slug: 'contacts', label: 'Contacts' },

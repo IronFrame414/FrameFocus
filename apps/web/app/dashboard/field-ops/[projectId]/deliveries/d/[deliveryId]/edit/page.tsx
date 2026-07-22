@@ -2,7 +2,11 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
 import { getProject } from '@/lib/services/projects';
-import { getDelivery } from '@/lib/services/deliveries';
+import {
+  getDelivery,
+  getDeliveryLevelPhotos,
+  getDeliveryPhotos,
+} from '@/lib/services/deliveries';
 import { getMyMember } from '@/lib/services/members';
 import { FieldTabs } from '@/components/field/field-tabs';
 import { DeliveryEditForm } from './delivery-edit-form';
@@ -42,6 +46,21 @@ export default async function EditDeliveryPage({
   const canEdit = isAdminRole || (myMember != null && myMember.id === delivery.received_by);
   if (!canEdit) {
     redirect(`/dashboard/field-ops/${params.projectId}/deliveries/d/${params.deliveryId}`);
+  }
+
+  // Existing photo counts feed the form's damage-photo guard (a line that
+  // already has photos satisfies the rule); the route re-derives from DB.
+  const [linePhotos, deliveryLevelPhotos] = await Promise.all([
+    getDeliveryPhotos(delivery.items.map((it) => it.id)),
+    getDeliveryLevelPhotos(delivery.id),
+  ]);
+  const photoCountByItem = new Map<string, number>();
+  for (const photo of linePhotos) {
+    if (!photo.delivery_item_id) continue;
+    photoCountByItem.set(
+      photo.delivery_item_id,
+      (photoCountByItem.get(photo.delivery_item_id) ?? 0) + 1
+    );
   }
 
   return (
@@ -87,7 +106,9 @@ export default async function EditDeliveryPage({
           qty_received: Number(it.qty_received),
           qty_damaged: Number(it.qty_damaged),
           issue_note: it.issue_note,
+          existingPhotoCount: photoCountByItem.get(it.id) ?? 0,
         }))}
+        existingDeliveryPhotoCount={deliveryLevelPhotos.length}
       />
     </div>
   );

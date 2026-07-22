@@ -447,7 +447,9 @@ export default async function ProjectOverviewPage({ params }: { params: { id: st
           </div>
 
           {/* Field Ops entry point (6B UI, Phase 3 Q3) — second door into the
-              project's field surface besides the Field Ops nav item. */}
+              project's field surface besides the Field Ops nav item.
+              Deliveries dropped from the label (S90): it is now a first-class
+              tab in the strip above. */}
           <div style={{ ...cardStyle, padding: '18px' }}>
             <div style={railTitleStyle}>Field operations</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -460,7 +462,7 @@ export default async function ProjectOverviewPage({ params }: { params: { id: st
                   fontWeight: 600,
                 }}
               >
-                Daily logs, deliveries &amp; safety →
+                Daily logs &amp; safety →
               </Link>
               <Link
                 href={`/dashboard/field-ops/${project.id}/daily-logs/new`}

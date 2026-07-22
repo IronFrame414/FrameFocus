@@ -3,20 +3,15 @@ import { notFound, redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
 import { getProject } from '@/lib/services/projects';
 import { getOrderlessDeliveries, getPurchaseOrders } from '@/lib/services/deliveries';
-import { FieldTabs } from '@/components/field/field-tabs';
 import { DeliveriesSections } from '@/components/field/deliveries-sections';
 
-// 6D — Deliveries tab list (Phase 2 Q3, approved: minimal). The list body is
-// shared with the project-detail Deliveries tab (S90 dual-entry) via
-// DeliveriesSections: open POs, closed POs (kept visible for the record),
-// and orderless check-ins. + New PO is Owner/Admin/PM (RLS-mirrored gate);
-// + Check in delivery is any member.
+// S90 — Deliveries as a first-class project tab (6D-spec §U amendment).
+// Renders under the ProjectHeader tab strip (layout.tsx); the list body is
+// shared with the Field Ops → Deliveries tab (dual-entry). PO detail,
+// check-in, and edit flows stay on their field-ops routes — this tab is the
+// project-side door, not a parallel implementation.
 
-export default async function DeliveriesListPage({
-  params,
-}: {
-  params: { projectId: string };
-}) {
+export default async function ProjectDeliveriesPage({ params }: { params: { id: string } }) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -31,7 +26,7 @@ export default async function DeliveriesListPage({
     .single();
   if (!profile) redirect('/dashboard');
 
-  const project = await getProject(params.projectId);
+  const project = await getProject(params.id);
   if (!project || project.is_deleted) notFound();
 
   const [pos, orderless] = await Promise.all([
@@ -43,23 +38,9 @@ export default async function DeliveriesListPage({
 
   return (
     <div>
-      <div className="mb-2 font-mono text-[12px] font-medium text-[#9aa1ac]">
-        <Link href="/dashboard/projects" className="hover:text-[#14213d]">
-          Projects
-        </Link>{' '}
-        /{' '}
-        <Link href={`/dashboard/projects/${project.id}`} className="hover:text-[#14213d]">
-          {project.name}
-        </Link>{' '}
-        / Field / <span className="text-[#6b7280]">Deliveries</span>
-      </div>
-
-      <div className="mb-4 flex items-start justify-between">
-        <div>
-          <h2 className="text-[24px] font-extrabold tracking-[-0.01em] text-[#14213d]">
-            Deliveries
-          </h2>
-          <div className="mt-[2px] text-[13px] text-[#6b7280]">{project.name}</div>
+      <div className="mb-4 flex items-center justify-between">
+        <div className="text-[13px] text-[#6b7280]">
+          Purchase orders and truck check-ins for this job.
         </div>
         <div className="flex gap-[10px]">
           {canCreatePo ? (
@@ -78,8 +59,6 @@ export default async function DeliveriesListPage({
           </Link>
         </div>
       </div>
-
-      <FieldTabs projectId={project.id} active="deliveries" />
 
       <DeliveriesSections
         projectId={project.id}

@@ -10,9 +10,10 @@ import { uploadFile } from '@/lib/services/files-client';
 // the truck and enters what actually arrived, against a read-only "Ordered"
 // figure per line; orderless is free lines (§4). The
 // "Issue with delivery" per-line toggle IS the issue_note (live semantics,
-// §4.1 as amended). Photos are project-pooled to the main job file
-// (category 'photos', Phase 3 Q7) and upload immediately — they exist to
-// send to the vendor, not as delivery-record attachments.
+// §4.1 as amended). Photos attach PER LINE (S90): they upload immediately,
+// project-pooled to the main job file (category 'photos', client_visible
+// false), and the check-in route binds them to their delivery line
+// (files.delivery_item_id) — REQUIRED on any line with damaged quantity.
 
 const card = 'rounded-[13px] border border-[#e6e9ef] bg-white p-[18px]';
 const label = 'mb-[6px] block text-[11px] font-semibold uppercase tracking-wide text-[#8a919c]';
@@ -32,6 +33,11 @@ export interface CheckInPoOption {
   }[];
 }
 
+interface LinePhoto {
+  id: string;
+  name: string;
+}
+
 interface ItemRow {
   po_item_id: string | null;
   description: string;
@@ -42,6 +48,9 @@ interface ItemRow {
   qty_damaged: number;
   issue_note: string;
   issueOpen: boolean;
+  /** Uploaded photos bound to this line at submit (S90). */
+  photos: LinePhoto[];
+  uploading: boolean;
 }
 
 interface CheckInFormProps {
@@ -61,6 +70,8 @@ function rowsForPo(po: CheckInPoOption): ItemRow[] {
     qty_damaged: 0,
     issue_note: '',
     issueOpen: false,
+    photos: [],
+    uploading: false,
   }));
 }
 
@@ -71,6 +82,8 @@ const EMPTY_ROW: ItemRow = {
   qty_damaged: 0,
   issue_note: '',
   issueOpen: false,
+  photos: [],
+  uploading: false,
 };
 
 export function CheckInForm({ projectId, todayYmd, preselectedPoId, openPos }: CheckInFormProps) {
@@ -82,12 +95,15 @@ export function CheckInForm({ projectId, todayYmd, preselectedPoId, openPos }: C
   const [date, setDate] = useState(todayYmd);
   const [notes, setNotes] = useState('');
   const [items, setItems] = useState<ItemRow[]>(initialPo ? rowsForPo(initialPo) : [{ ...EMPTY_ROW }]);
-  const [uploadedPhotos, setUploadedPhotos] = useState<string[]>([]);
-  const [uploading, setUploading] = useState(false);
+  // General whole-delivery photos (S90) — always optional, bound to the
+  // check-in as a whole via files.delivery_id, never tagged 'damage'.
+  const [deliveryPhotos, setDeliveryPhotos] = useState<LinePhoto[]>([]);
+  const [deliveryPhotosUploading, setDeliveryPhotosUploading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const selectedPo = openPos.find((p) => p.id === poId) ?? null;
+  const anyUploading = items.some((i) => i.uploading) || deliveryPhotosUploading;
 
   function handlePoChange(nextId: string) {
     setPoId(nextId);
@@ -105,20 +121,41 @@ export function CheckInForm({ projectId, todayYmd, preselectedPoId, openPos }: C
     setItems((rows) => rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
   }
 
-  async function handlePhotoUpload(files: FileList | null) {
+  async function handleLinePhotoUpload(i: number, files: FileList | null) {
     if (!files || files.length === 0) return;
-    setUploading(true);
+    setItem(i, { uploading: true });
     for (const file of Array.from(files)) {
       // Project-pooled (Q7): main job file, category 'photos'. client_visible
-      // defaults false, so these stay portal-hidden.
+      // defaults false, so these stay portal-hidden. The check-in route binds
+      // each photo to its delivery line and tags damage lines' photos.
       const result = await uploadFile(file, { project_id: projectId, category: 'photos' });
-      if (result.success) setUploadedPhotos((p) => [...p, file.name]);
-      else {
-        setError(`Photo "${file.name}": ${result.error}`);
+      if (result.success && result.id) {
+        const photo = { id: result.id, name: file.name };
+        setItems((rows) =>
+          rows.map((r, j) => (j === i ? { ...r, photos: [...r.photos, photo] } : r))
+        );
+      } else {
+        setError(`Photo "${file.name}": ${result.error ?? 'upload failed'}`);
         break;
       }
     }
-    setUploading(false);
+    setItem(i, { uploading: false });
+  }
+
+  async function handleDeliveryPhotoUpload(files: FileList | null) {
+    if (!files || files.length === 0) return;
+    setDeliveryPhotosUploading(true);
+    for (const file of Array.from(files)) {
+      const result = await uploadFile(file, { project_id: projectId, category: 'photos' });
+      if (result.success && result.id) {
+        const photo = { id: result.id, name: file.name };
+        setDeliveryPhotos((p) => [...p, photo]);
+      } else {
+        setError(`Photo "${file.name}": ${result.error ?? 'upload failed'}`);
+        break;
+      }
+    }
+    setDeliveryPhotosUploading(false);
   }
 
   async function handleSubmit() {
@@ -139,6 +176,12 @@ export function CheckInForm({ projectId, todayYmd, preselectedPoId, openPos }: C
         );
         return;
       }
+      if (i.qty_damaged > 0 && i.photos.length === 0) {
+        setError(
+          `"${i.description}": ${i.qty_damaged} marked damaged — attach at least one photo of the damage before recording. The office sends these to the vendor.`
+        );
+        return;
+      }
     }
     setSaving(true);
 
@@ -154,7 +197,9 @@ export function CheckInForm({ projectId, todayYmd, preselectedPoId, openPos }: C
         qty_received: i.qty_received,
         qty_damaged: i.qty_damaged,
         issue_note: i.issue_note.trim() || null,
+        photo_file_ids: i.photos.map((p) => p.id),
       })),
+      photo_file_ids: deliveryPhotos.map((p) => p.id),
     });
 
     if (!result.success) {
@@ -294,6 +339,37 @@ export function CheckInForm({ projectId, todayYmd, preselectedPoId, openPos }: C
                 </button>
               )}
             </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <label
+                className={
+                  item.qty_damaged > 0 && item.photos.length === 0
+                    ? 'cursor-pointer text-[12px] font-semibold text-[#c0362c] hover:underline'
+                    : 'cursor-pointer text-[12px] font-semibold text-[#2f49d1] hover:underline'
+                }
+              >
+                {item.uploading
+                  ? 'Uploading…'
+                  : item.qty_damaged > 0 && item.photos.length === 0
+                    ? '📷 Damage photo required'
+                    : '📷 Add photo'}
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  disabled={item.uploading || saving}
+                  onChange={(e) => {
+                    void handleLinePhotoUpload(i, e.target.files);
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+              {item.photos.length > 0 ? (
+                <span className="text-[12px] text-[#3d7a4b]">
+                  {item.photos.map((p) => p.name).join(', ')}
+                </span>
+              ) : null}
+            </div>
           </div>
         ))}
         {!selectedPo ? (
@@ -305,6 +381,10 @@ export function CheckInForm({ projectId, todayYmd, preselectedPoId, openPos }: C
             + Add line
           </button>
         ) : null}
+        <p className="mt-2 text-[11px] text-[#9aa1ac]">
+          Photos file to the job&rsquo;s photo pool and stay attached to their line — required when
+          a line has damage, so the office has evidence for the vendor call.
+        </p>
       </div>
 
       <div className={card}>
@@ -320,17 +400,25 @@ export function CheckInForm({ projectId, todayYmd, preselectedPoId, openPos }: C
             />
           </div>
           <div>
-            <label className={label}>Photos (to the job file — for the vendor call)</label>
+            <label className={label}>Photos (whole delivery — optional)</label>
             <input
               type="file"
               accept="image/*"
               multiple
-              disabled={uploading}
-              onChange={(e) => void handlePhotoUpload(e.target.files)}
+              disabled={deliveryPhotosUploading || saving}
+              onChange={(e) => {
+                void handleDeliveryPhotoUpload(e.target.files);
+                e.target.value = '';
+              }}
               className="text-[13px] text-[#374151]"
             />
-            {uploadedPhotos.length > 0 ? (
-              <p className="mt-1 text-[12px] text-[#3d7a4b]">Uploaded: {uploadedPhotos.join(', ')}</p>
+            {deliveryPhotosUploading ? (
+              <p className="mt-1 text-[12px] text-[#8a919c]">Uploading…</p>
+            ) : null}
+            {deliveryPhotos.length > 0 ? (
+              <p className="mt-1 text-[12px] text-[#3d7a4b]">
+                Uploaded: {deliveryPhotos.map((p) => p.name).join(', ')}
+              </p>
             ) : null}
           </div>
         </div>
@@ -344,14 +432,15 @@ export function CheckInForm({ projectId, todayYmd, preselectedPoId, openPos }: C
 
       <button
         type="button"
-        disabled={saving || uploading}
+        disabled={saving || anyUploading}
         onClick={() => void handleSubmit()}
         className="self-start rounded-[9px] bg-[#2f49d1] px-[15px] py-[10px] text-[13px] font-semibold text-white transition-colors hover:bg-[#2438a8] disabled:opacity-50"
       >
         {saving ? 'Recording…' : 'Record delivery'}
       </button>
       <p className="-mt-2 text-[11px] text-[#9aa1ac]">
-        Recording emails Owner, Admin, and assigned PMs — clean or flagged.
+        Recording emails Owner, Admin, and assigned PMs — clean or flagged — and files a delivery
+        record PDF to the job&rsquo;s Files.
       </p>
     </div>
   );

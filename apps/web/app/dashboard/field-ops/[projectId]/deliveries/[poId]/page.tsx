@@ -231,14 +231,23 @@ export default async function PurchaseOrderDetailPage({
                     by {d.receiver?.display_name ?? 'Unknown'}
                     {d.notes ? ` · "${d.notes}"` : ''}
                   </span>
-                  {canEditDelivery ? (
+                  <span className="flex gap-2">
+                    {/* Photos + record PDF live on the detail view (S90). */}
                     <Link
-                      href={`/dashboard/field-ops/${project.id}/deliveries/d/${d.id}/edit`}
+                      href={`/dashboard/field-ops/${project.id}/deliveries/d/${d.id}`}
                       className="text-[12px] font-semibold text-[#2f49d1] hover:underline"
                     >
-                      Edit
+                      Details
                     </Link>
-                  ) : null}
+                    {canEditDelivery ? (
+                      <Link
+                        href={`/dashboard/field-ops/${project.id}/deliveries/d/${d.id}/edit`}
+                        className="text-[12px] font-semibold text-[#2f49d1] hover:underline"
+                      >
+                        Edit
+                      </Link>
+                    ) : null}
+                  </span>
                 </div>
               </div>
             );
