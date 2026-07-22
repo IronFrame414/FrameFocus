@@ -197,12 +197,57 @@ schema/service-only spec.
 - **Forms (path A — no handoff design; mobile foundation):** desktop PO create/edit and
   delivery check-in forms, styled from ui-01 tokens. Mobile, when built, supersedes check-in
   as the primary capture surface.
-- **Entry points:** BOTH **Field Ops** nav item → **Deliveries** tab AND within project detail
-  (deliveries are job-specific), per the locked 12-item FFNav order
-  (`docs/sessions/6a-ui-build-report.md` S86 round-2 addendum).
+- **Entry points [AMENDED S90]:** dual-entry — BOTH **Field Ops** nav item → **Deliveries**
+  tab AND a **first-class Deliveries tab in the project-detail tab strip**
+  (`/dashboard/projects/[id]/deliveries`, placed after Punch List). The project tab renders
+  the same list body (shared `DeliveriesSections` component); PO detail, check-in, and edit
+  flows stay on their field-ops routes. Daily Logs stays a rail-card entry on the project
+  overview; Safety is unchanged. Supersedes the S87 wording ("within project detail" was the
+  overview rail card only).
 - **Roles:** mirror §6a — read via `can_view_project()` (Owner/Admin all; PM/Foreman/Crew
   assigned-only); PO create Owner/Admin/PM; delivery check-in any member on a visible project;
   manual PO close Owner/Admin (required `closed_reason`); delete Owner/Admin soft-delete.
+
+### §U.1 — S90 amendments (approved scope + new scope, this session)
+
+- **Per-line damage photos (approved scope).** Every check-in line — PO-prefilled or
+  orderless — carries a photo attach. Photos upload immediately, **project-pooled**
+  (category `photos`, `client_visible false`), then the check-in route binds each to its
+  line via `files.delivery_item_id` (migration `20260723000000`; third instance of the
+  nullable-domain-pointer pattern after `daily_log_id` / `safety_incident_id`,
+  `ON DELETE SET NULL`). Photos on lines with `qty_damaged > 0` are tagged `damage`
+  (existing `files.tags` mechanism — no new tag infrastructure needed). **A line with
+  `qty_damaged > 0` REQUIRES at least one photo**: enforced in the form (blocking message),
+  in the zod schema, and in the route (ids verified against the project's live files rows
+  before any insert). **[AMENDED S90, same session]** The requirement now also holds on
+  EDIT: the edit form carries the same per-line attach and red "📷 Damage photo required"
+  block, and saves route through `PUT /api/deliveries/[id]` (`deliveryEditSchema`), which
+  re-derives the truth — existing line-bound photos from `files.delivery_item_id` plus
+  verified new ids — before any write. A line that already has a photo satisfies the rule.
+  The former client-direct `updateDelivery`/`setDeliveryItems` pair is retired; the route
+  owns the reconcile and regenerates the PDF. §9 #4 is closed.
+- **Whole-delivery photo slot [S90, same session].** A general photo attach at the bottom of
+  BOTH the check-in and edit forms — always optional, applies to the delivery as a whole,
+  never tagged `damage`. Bound via `files.delivery_id` (migration `20260723020000`, fourth
+  nullable-pointer instance). Renders as a "Delivery photos" strip on the detail view and a
+  "Whole delivery" block in the PDF (line photos keep priority within the 12-photo embed
+  cap).
+- **Delivery record PDF on EVERY check-in (new scope).** One PDF per check-in, clean or
+  exception — vendor, date, receiver, PO reference, each line's received/damaged/issue-note,
+  and the line-bound photos (JPEG/PNG embedded, 12-photo cap, 6B guards). Filed to project
+  Files under new category `deliveries` (migration `20260723010000`, which also adds
+  `deliveries.pdf_file_id`). Pipeline is the 6B regenerate→repoint→purge exactly
+  (`delivery-pdf-service.ts`); generated inline by the check-in route (best-effort — never
+  rolls back the insert), regenerated after every delivery edit, and on demand via
+  Download/Generate PDF on the delivery detail view (`/api/deliveries/[id]/pdf`, authority =
+  receiver or Owner/Admin, mirroring the deliveries UPDATE policy).
+- **Closed-PO visibility (verified).** Reported as "closed PO disappears from the deliveries
+  view." Verified NOT reproducible at any layer: the list query has no status filter, RLS
+  has no status term, and an RLS-impersonated query returns closed POs. The only surface
+  that drops closed POs is the check-in PO dropdown — intended (no check-ins against a
+  closed order; the DB auto-reopen path exists for auto-closed POs). The list now groups
+  **Open purchase orders** / **Closed purchase orders** as explicit sections (badges kept)
+  so a just-closed PO is findable rather than interleaved.
 
 ---
 
@@ -258,3 +303,4 @@ schema/service-only spec.
 | 1   | **PO-close semantics — resolved (§5.1).** Closes on _usable_ quantity (`qty_received − qty_damaged` summed across deliveries); auto-close can't always fire, so Owner or Admin may close by hand with a required `closed_reason`.                                     | Closed |
 | 2   | **Damaged-goods return — RESOLVED: won't build for v1.** `qty_damaged` + §4.1 `issue_note` + optional job-file photos cover Bishop's actual workflow (vendor call; goods to truck or dumpster; no internal return lifecycle). `returns` concept is post-v1 only if the process changes. See §8a Q2.                                                                                                  | Closed |
 | 3   | **Acceptance trace — VERIFIED [S87].** §8 carries the real Sherwin-Williams delivery (reconciliation item 5); the reconstructed Jones Lumber draft is §8.1, illustrative only.                                                                                       | Closed |
+| 4   | **[S90] Damage-photo requirement not enforced on edit — CLOSED (same session).** The edit path now enforces the rule end-to-end: per-line photo attach on the edit form, same red required-block as check-in, saves via `PUT /api/deliveries/[id]` with zod + DB-derived verification (existing line-bound photos count). See §U.1.                                                                    | Closed |
