@@ -446,6 +446,36 @@ export default async function ProjectOverviewPage({ params }: { params: { id: st
             </div>
           </div>
 
+          {/* Field Ops entry point (6B UI, Phase 3 Q3) — second door into the
+              project's field surface besides the Field Ops nav item. */}
+          <div style={{ ...cardStyle, padding: '18px' }}>
+            <div style={railTitleStyle}>Field operations</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <Link
+                href={`/dashboard/field-ops/${project.id}/daily-logs`}
+                style={{
+                  fontSize: '13px',
+                  color: color.primary,
+                  textDecoration: 'none',
+                  fontWeight: 600,
+                }}
+              >
+                Daily logs, deliveries &amp; safety →
+              </Link>
+              <Link
+                href={`/dashboard/field-ops/${project.id}/daily-logs/new`}
+                style={{
+                  fontSize: '13px',
+                  color: color.primary,
+                  textDecoration: 'none',
+                  fontWeight: 600,
+                }}
+              >
+                + New daily log
+              </Link>
+            </div>
+          </div>
+
           {canTransition && (
             <div style={{ ...cardStyle, padding: '18px' }}>
               <div style={railTitleStyle}>Status</div>

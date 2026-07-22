@@ -1,0 +1,110 @@
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { closePurchaseOrder, softDeletePurchaseOrder } from '@/lib/services/deliveries-client';
+
+// 6D §5.1 — manual close (Owner/Admin; closed_reason required) and
+// Owner/Admin soft-delete. Reopen is deliberately NOT offered (TECH_DEBT #93
+// documents the PM direct-API edge; auto-reopen exists for auto-closed POs).
+
+export function ClosePoButton({ poId }: { poId: string }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleClose() {
+    if (!reason.trim()) {
+      setError('A reason is required — an unexplained closed PO looks identical to an open one.');
+      return;
+    }
+    setBusy(true);
+    const result = await closePurchaseOrder(poId, reason.trim());
+    setBusy(false);
+    if (result.success) {
+      setOpen(false);
+      router.refresh();
+    } else {
+      setError(result.error ?? 'Close failed');
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="rounded-[9px] border border-[#e0e4ea] bg-white px-[15px] py-[9px] text-[13px] font-semibold text-[#374151] transition-colors hover:border-[#c9d2e4]"
+      >
+        Close PO
+      </button>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+      <div className="w-[420px] rounded-[13px] border border-[#e6e9ef] bg-white p-5">
+        <div className="mb-2 text-[15px] font-bold text-[#14213d]">Close this PO by hand</div>
+        <p className="mb-3 text-[13px] leading-snug text-[#6b7280]">
+          Use this when no further truck is coming — e.g. the vendor credited instead of
+          replacing. A reason is required.
+        </p>
+        <textarea
+          className="min-h-[72px] w-full rounded-[9px] border border-[#e0e4ea] px-3 py-[9px] text-[13px] text-[#14213d] outline-none focus:border-[#2f49d1]"
+          placeholder={'e.g. "Jones credited us, not replacing."'}
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+        />
+        {error ? <p className="mt-2 text-[12px] text-[#c0362c]">{error}</p> : null}
+        <div className="mt-3 flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="rounded-[9px] px-[13px] py-[8px] text-[13px] font-semibold text-[#6b7280] hover:text-[#14213d]"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void handleClose()}
+            className="rounded-[9px] bg-[#c0362c] px-[15px] py-[8px] text-[13px] font-semibold text-white hover:bg-[#a52d24] disabled:opacity-50"
+          >
+            {busy ? 'Closing…' : 'Close PO'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function DeletePoButton({ poId, projectId }: { poId: string; projectId: string }) {
+  const router = useRouter();
+  const [busy, setBusy] = useState(false);
+
+  async function handleDelete() {
+    if (!window.confirm('Move this purchase order to the trash?')) return;
+    setBusy(true);
+    const result = await softDeletePurchaseOrder(poId);
+    setBusy(false);
+    if (result.success) {
+      router.push(`/dashboard/field-ops/${projectId}/deliveries`);
+      router.refresh();
+    } else {
+      window.alert(result.error ?? 'Delete failed');
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      disabled={busy}
+      onClick={() => void handleDelete()}
+      className="rounded-[9px] border border-[#f5c6c0] bg-white px-[15px] py-[9px] text-[13px] font-semibold text-[#c0362c] transition-colors hover:bg-[#fbe4e2] disabled:opacity-50"
+    >
+      Delete
+    </button>
+  );
+}

@@ -7,6 +7,7 @@ import {
   Clock,
   CreditCard,
   FileText,
+  HardHat,
   LayoutGrid,
   List,
   Rows3,
@@ -34,9 +35,10 @@ interface DashboardShellProps {
   gpsMode: GpsClockMode;
 }
 
-// ui-01 §5 — ten items, this order. Role gates preserved from the previous
-// shell (§S5): Estimates + Cost Catalog owner/admin/pm; Settings owner/admin;
-// Billing owner-only. Icon mapping per §5/§S4 (lucide).
+// FFNav 12-item order locked S86 round-2 (6a-ui-build-report addendum), built
+// with the 6B UI: Field Ops inserted after Schedule. Role gates preserved from
+// ui-01 §5/§S5: Estimates + Cost Catalog owner/admin/pm; Settings owner/admin;
+// Billing owner-only. Icon mapping per §5/§S4 (lucide; hard-hat = Field Ops).
 const NAV_ITEMS: {
   href: string;
   label: string;
@@ -46,11 +48,11 @@ const NAV_ITEMS: {
   { href: '/dashboard', label: 'Dashboard', icon: LayoutGrid },
   { href: '/dashboard/projects', label: 'Projects', icon: Rows3 },
   { href: '/dashboard/schedule', label: 'Schedule', icon: Calendar },
+  // Field Ops: ungated (all dashboard roles) per the S86 round-2 decision;
+  // per-project RLS (can_view_project) scopes what the hub actually lists.
+  { href: '/dashboard/field-ops', label: 'Field Ops', icon: HardHat },
   // PERMANENT first-class item (S86 decision — no longer interim). Timesheets
   // is NOT a nav item: it lives at /dashboard/timeclock/timesheets (S85).
-  // The owed FFNav reindex is DEFERRED to the 6B UI build and inserts a
-  // Field Ops item after Schedule (target 12-item order in the 6a build
-  // report's S86 round-2 addendum); Timeclock keeps this slot.
   { href: '/dashboard/timeclock', label: 'Timeclock', icon: Clock },
   { href: '/dashboard/contacts', label: 'Contacts', icon: User },
   { href: '/dashboard/subcontractors', label: 'Subs & Vendors', icon: Users },
