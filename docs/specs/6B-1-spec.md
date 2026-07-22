@@ -19,7 +19,8 @@
 > `6B-spec.md` §13), M3 files/photos, M5 projects, 6D deliveries tables (live; read-only render).
 >
 > **Conventions:** `CLAUDE.md` throughout — server/client service split, RLS already governs
-> visibility (`can_view_project()`, creator-only edit via `author_member_id`).
+> visibility (`can_view_project()`; edit = creator OR Owner/Admin via `author_member_id`,
+> **[AMENDED S87, Phase 3 Q1: live RLS is ground truth]** — see `6B-spec.md` §8).
 
 ---
 
@@ -28,7 +29,8 @@
 Two surfaces:
 
 1. **Read/detail view** — handoff 4c: the office reads the day's field record.
-2. **Create/edit form** — desktop entry (path A [S84]); creator-only edit per `6B-spec.md` §8.
+2. **Create/edit form** — desktop entry (path A [S84]); edit by creator or Owner/Admin per
+   `6B-spec.md` §8 as amended [S87].
 
 **Out of scope for this build:** voice-to-text (**dropped from desktop v1 [S84]** — open item #3
 stays open for the mobile build; the desktop answer is: type); offline sync; any 6C/6D/6E UI
@@ -38,8 +40,11 @@ stays open for the mobile build; the desktop answer is: type); offline sync; any
 
 ## §2 — Locked decisions [S84]
 
-1. **Photos: display + upload.** The photo grid auto-pulls the day's project photos (M3) AND
-   offers a file-upload attach on desktop (photo capture is a phone act; upload replaces it).
+1. **Photos: display + upload — log-bound [AMENDED S87].** The grid shows the log's OWN
+   attachments (`files.daily_log_id`, migration `20260721080000`) and offers a file-upload
+   attach on desktop (photo capture is a phone act; upload replaces it). The original
+   day-pool auto-pull is superseded — two same-day logs never share photos. Uploads store
+   `category: 'daily_logs'` with a per-file `client_visible` flag (portal enforcement is M9).
 2. **Voice-to-text: dropped from desktop v1.** No vendor, no UI affordance. Mobile decision later.
 3. **PDF: regenerate-on-edit.** One current PDF per log; an edit regenerates and replaces it in
    the project's Daily Logs folder (M3). This closes `6B-spec.md` open item #2 for v1 —
@@ -58,7 +63,8 @@ Mirrors `6B-spec.md` §8:
 
 - **Read:** via `can_view_project()` — Owner/Admin see all projects; PM/Foreman/Crew see
   assigned projects only.
-- **Edit:** creator only.
+- **Edit:** creator or Owner/Admin **[AMENDED S87 — live RLS is ground truth; see
+  `6B-spec.md` §8]**.
 - **Delete:** Owner/Admin.
 - **No approval workflow** on logs.
 
@@ -74,7 +80,7 @@ Mirrors `6B-spec.md` §8:
   - **Left:** Work performed paragraph; **2×2 free-text cards** (Material used / Material needed /
     Equipment used / Tasks for tomorrow); **Notes** (the §6.7a field — present in the data spec
     though absent from the 4c mock; render it, e.g. full-width under the 2×2); **Photos** grid
-    (auto-pulled + uploaded, "+N more" tile).
+    (log-bound attachments [S87], "+N more" tile).
   - **Right rail:** **Hazard flagged** amber callout (only when `hazards_present`) with hazard
     notes + the red escalation button (§2.4); **Crew present** (auto-filled members, each with
     **read-only employee hours** from the shared 6A derivation, "read-only, from time tracking
@@ -101,8 +107,8 @@ filters beyond the project scope, v1. Multiple logs per project-day are legal; t
   helper (Build Note 1 — this build ADDS that helper to `packages/shared/utils/time-tracking.ts`,
   touching 6A additively; call it out in the commit). Crew list editable after; hours never
   editable here.
-- **Edit:** creator only (`author_member_id = get_my_member_id()`), never locks. Saving an edit
-  regenerates the PDF (§2.3).
+- **Edit:** creator or Owner/Admin (`author_member_id = get_my_member_id()` OR owner/admin —
+  live RLS [S87]), never locks. Saving an edit regenerates the PDF (§2.3).
 - **PDF generation:** React-PDF per repo tooling, filed to the project's Daily Logs folder (M3),
   regenerate-on-edit.
 
@@ -146,8 +152,10 @@ filters beyond the project scope, v1. Multiple logs per project-day are legal; t
 - [ ] Crew present auto-fills from the shared helper at creation and is editable after; employee
       hours render read-only and recompute on read; warranty-only visitors labeled.
 - [ ] Sub hours are manual rows; they never enter 6A.
-- [ ] Photos: day's project photos auto-pull; desktop upload attaches; grid shows "+N" overflow.
-- [ ] Edit is creator-only (direct client call as a non-creator is rejected); saving regenerates
-      the PDF; two same-day logs produce two PDFs with disambiguated filenames.
+- [ ] Photos: log-bound [S87] — the grid and PDF show only this log's attachments (a same-day
+      sibling log shares nothing); desktop upload attaches; grid shows "+N" overflow.
+- [ ] Edit is creator-or-Owner/Admin [S87] (a direct client call as a non-creator, non-admin
+      member is rejected); saving regenerates the PDF; two same-day logs produce two PDFs with
+      disambiguated filenames.
 - [ ] No voice-to-text affordance anywhere.
 - [ ] `tsc` passes, builds clean, no new console errors.

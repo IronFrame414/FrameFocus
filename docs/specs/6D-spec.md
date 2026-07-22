@@ -69,7 +69,7 @@ Consequence: an orderless delivery has **no ordered quantities to compare agains
 
 The item list carries an **"Issue with delivery"** action. The crew taps it, selects the specific problem line(s), and adds a per-item `issue_note` on each (e.g. `"2 split, returned with driver"`).
 
-This is additive to the numeric derivation in §6, not a replacement. `has_exceptions` still trips automatically whenever `qty_damaged > 0` or `qty_received <> qty_ordered` on a PO line — the arithmetic cannot be suppressed by a crew that forgets the button. The button's job is to (1) let the crew flag a problem the numbers don't capture, and (2) attach the `issue_note` that explains what went wrong. A short or damaged line is flagged either way; the note is what the button adds.
+This is additive to the numeric derivation in §6, not a replacement. **[AMENDED S87 — live semantics:]** `has_exceptions` trips automatically on `qty_damaged > 0` or over-delivery beyond the line's remaining quantity — the arithmetic cannot be suppressed by a crew that forgets the button. A merely short line does NOT flag the truck (split-delivery correctness; shortness lives on the PO's usable bars, §5). The button's mechanism IS the `issue_note`: setting it on a line is what flags a problem the numbers don't capture, and the note explains what went wrong.
 
 ---
 
@@ -87,7 +87,7 @@ This is additive to the numeric derivation in §6, not a replacement. `has_excep
 
 **Consequence: auto-close cannot always fire.** If the vendor issues a credit instead of a replacement, no further delivery arrives, and the PO would sit open forever.
 
-**Manual close.** Owner and Admin may close an open PO. `closed_reason` is required — e.g. `"Jones credited us, not replacing."`
+**Manual close.** Owner and Admin may close an open PO. `closed_reason` is required — e.g. `"Jones credited us, not replacing."` **[As-built note, S87:]** auto-close is a DB trigger (`recompute_po_status`) writing the sentinel reason `"Auto-closed: all lines filled by usable quantity"` with `closed_by` NULL; a later item edit auto-reopens ONLY auto-closed POs (exact sentinel match) — manual closes are never touched.
 
 ```sql
 CHECK (status <> 'closed' OR closed_reason IS NOT NULL)
@@ -106,7 +106,7 @@ company_id UUID NOT NULL REFERENCES companies(id)
 project_id UUID NOT NULL REFERENCES projects(id)
 vendor_name TEXT NOT NULL -- free text in v1 (§1)
 po_number TEXT -- vendor's or ours; nullable
-status TEXT NOT NULL -- 'open' | 'closed' | 'cancelled'
+status TEXT NOT NULL -- 'open' | 'closed' [AMENDED S87 — 'cancelled' dropped; live CHECK is open|closed. A called-off PO is closed by hand with a reason (§5.1); an entered-in-error PO is soft-deleted.]
 ordered_at DATE
 closed_reason TEXT
 closed_by UUID REFERENCES company_members(id)
@@ -156,7 +156,7 @@ issue_note TEXT                       -- per-item note when crew flags an issue 
 CHECK (qty_damaged <= qty_received)
 ```
 
-- `has_exceptions` is set true by either path (§4.1): **auto-derived at write time** when any child item has `qty_damaged > 0` or `qty_received <> qty_ordered` on its PO line, **or** set by the crew's explicit "Issue with delivery" flag. The numeric path cannot be suppressed. Store it so the notification and the list view don't recompute.
+- `has_exceptions` — **[AMENDED S87 — live semantics, DB-owned.]** Derived by the as-built trigger chain (`delivery_items_recompute` → `recompute_delivery_exceptions`) on every item write: a delivery flags when any line has `qty_damaged > 0`, OR a crew `issue_note` (the §4.1 button's storage), OR an **over-delivery** beyond the line's remaining quantity. A merely **short** line does NOT flag the truck — on split deliveries truck 1 of 2 is normally "short," and shortness already surfaces on the PO's usable bars as unfilled quantity. This supersedes the earlier `qty_received <> qty_ordered` wording. The derivation cannot be suppressed from the client; it is stored so the notification and list view don't recompute.
 - `qty_damaged <= qty_received` — you cannot damage what didn't arrive. Damaged goods that leave on the truck were still _received_ first; that's what makes them a return.
 - Photos are optional and go to the **main job file** (M3), not bound to the `deliveries` row. Per Josh's workflow, photos exist to send to the vendor on a damage call, not as a delivery-record attachment. If a delivery-scoped photo link is ever wanted, it is an additive M3 change.
 - **Offline caveat on `received_by`.** The `DEFAULT get_my_member_id()` is correct for online check-in (the person receiving the truck is the one submitting). But on the offline-ready path (§1), a synced-later insert would fire the default as whoever *syncs*, not who received. The offline client must therefore set `received_by` explicitly at capture time; the server default is a convenience for the online case only.

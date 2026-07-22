@@ -43,7 +43,7 @@ The formal record of something that actually happened: injury, property damage, 
 safety_incidents
 id UUID PK
 company_id UUID NOT NULL REFERENCES companies(id)
-project_id UUID NOT NULL REFERENCES projects(id)
+project_id UUID REFERENCES projects(id) -- NULLABLE [AMENDED S88 — live schema is ground truth]: a shop/yard incident has no project. RLS: null-project incidents read by supervisors + the reporter.
 incident_date DATE NOT NULL
 incident_type TEXT NOT NULL -- 'injury' | 'property_damage' | 'near_miss'
 description TEXT NOT NULL
@@ -59,6 +59,8 @@ reported_by_member_id UUID NOT NULL DEFAULT get_my_member_id() REFERENCES compan
 - `incident_type` is a CHECK-constrained enum. See §9 open item #1.
 - Never locks. Editable by creator (§5), because treatment is usually learned a day later.
 - **[S87]** `prevention_notes` is free text — what was done so it doesn't happen again.
+- **[S88]** Photos are **incident-bound** via `files.safety_incident_id` (nullable FK, `ON DELETE SET NULL`, migration `20260722010000`), `category 'safety'`, `client_visible` false — mirroring 6B's log-bound rule. v1: photo attach requires a project (file paths are project-keyed); shop/yard incidents record without photos.
+- **[S88]** Creation is atomic via `create_safety_incident()` (SECURITY INVOKER, migration `20260722020000`) — the injury invariant is a DEFERRED constraint trigger, so the incident and its injury rows must commit together.
 - **[S87]** `status` + `outcome` track resolution. These two fields are **Owner/Admin-editable**
   (an exception to the creator-only edit rule in §5 — closing out an incident is a leadership
   act, not a reporter act). The automated 2-day follow-up prompt discussed alongside them is
@@ -116,9 +118,9 @@ When a daily log's `hazards_present` is ticked, 6B surfaces a **"File an inciden
 
 ## 4. Notification
 
-**Every incident, regardless of type or severity, emails Owner, Admin, PM, and Foreman.** (Josh, this session — option A over a narrower Owner/Admin-only alternative.) Matches the promise already written into 6B §7, so no divergence entry is owed.
+**[AMENDED S87/S88 — HIERARCHY, not a flat role list.]** Every incident, regardless of type or severity, emails **everyone whose role is strictly above the submitter's**, within the supervisory set (Owner/Admin/PM/Foreman): crew- or sub-filed → Foreman + PM + Admin + Owner; foreman-filed → PM + Admin + Owner; PM-filed → Admin + Owner; Admin-filed → Owner. **Floor: an Owner-filed incident notifies Admin(s)** — no incident is ever silent. This supersedes the earlier flat "Owner, Admin, PM, Foreman" wording (and the 6B §7 cross-reference inherits this rule). Rank source: the shared `ROLE_HIERARCHY` constant.
 
-**Notification is independent of read-visibility (§5):** a PM or Foreman is notified of every incident — including one on a project they are **not** assigned to and therefore cannot browse in the incident log. The email reaches them; the log listing stays assigned-scoped.
+**Notification is independent of read-visibility (§5):** a recipient in the hierarchy is notified of every qualifying incident — including one on a project they are **not** assigned to and therefore cannot browse in the incident log. The email reaches them; the log listing stays assigned-scoped.
 
 Sent via Resend, from `companyname@rafterworks.com`, per the existing convention. Failure to send must not roll back the incident insert.
 
@@ -132,7 +134,7 @@ Sent via Resend, from `companyname@rafterworks.com`, per the existing convention
 
 - Company-scoped: `company_id = get_my_company_id()`.
 - **Create:** any member, on any project they can see.
-- **Edit:** **creator only** for the incident record — **[DRIFT — corrected]** keyed on **`reported_by_member_id = get_my_member_id()`**, not `created_by` (the audit `auth.uid()` column, §2). Treatment details arrive late; the record never locks. **EXCEPT [S87]:** `status` and `outcome` are **Owner/Admin-editable** (closing out an incident is a leadership act — see §2).
+- **Edit:** **reporter OR Owner/Admin** — **[AMENDED S88, live RLS is ground truth]**: the shipped `safety_incidents_update_authorized` policy grants Owner/Admin full row edit, not a status/outcome-only carve-out (consistent with the 6B S87 decision and the Admin-role principle). Keyed on **`reported_by_member_id = get_my_member_id()`**, not `created_by` (the audit `auth.uid()` column, §2). Treatment details arrive late; the record never locks. The `status`/`outcome` **controls** are UI-gated to Owner/Admin (§2 [S87]).
 - **Read:** **[RESOLVED — assigned-only via `can_view_project()`]** Owner/Admin read **all** company incidents; **PM/Foreman and Crew read only incidents on projects they are assigned to**, via `can_view_project(project_id)`. This aligns 6C with M5 content-visibility — no divergent rule. (Josh, this session: safety incidents get **no** broader read grant than ordinary project content. What reaches leadership about an injury on a project they cannot browse is the **notification**, not the log listing — see §4. Q2.)
 - **Delete:** soft-delete, Owner/Admin only. An incident a crew member can erase is not a record.
 
@@ -206,8 +208,8 @@ Had this been opened from a daily log's hazard flag, `project_id` and `incident_
 | 5   | **RESOLVED** — on send failure: log it **and** surface a retry affordance to the Owner (§4). Silent-log rejected — a swallowed injury email means the Owner never learns. Insert never rolls back on send failure. | Closed   |
 | 6   | OSHA (§6) — confirm with insurer before any OSHA claim is made in marketing.                                                                                                   | Josh     |
 | 7   | No FK from a 6B hazard flag to the incident it escalated into. Add later if the link proves useful.                                                                            | Deferred |
-| 8   | `num_nonnulls()` is Postgres-native — confirm it's available for the §2.1 / §2.2 member-or-outsider identity CHECKs.                                                            | Build    |
-| 9   | Enforcement mechanism for the injury cross-table invariant (`incident_type = 'injury'` ⇒ ≥1 `safety_incident_injuries` row) — application logic vs. DB trigger. Decide at build. | 6C build |
+| 8   | **RESOLVED [S88]** — `num_nonnulls()` identity CHECKs confirmed live on both party tables (`*_identity_check`).                                                                 | Closed   |
+| 9   | **RESOLVED [S88] — DB trigger, as-built.** The invariant ships as DEFERRABLE INITIALLY DEFERRED constraint triggers on both tables (`enforce_injury_has_injured_party`); creation therefore goes through the atomic `create_safety_incident()` RPC (§2). App-level validation duplicates the check for friendly errors only. | Closed   |
 | 10  | **[S87] DEFERRED** — automated 2-day follow-up prompt on open incidents (nudge toward `status`/`outcome` closure, §2). Scheduler infrastructure doesn't exist; revisit when it does.  | Deferred |
 
 ---
@@ -216,7 +218,7 @@ Had this been opened from a daily log's hazard flag, `project_id` and `incident_
 
 - **Q1 — Reporter identity. CONFIRMED [S87].** The reporter is a `company_members` FK (`reported_by_member_id`, default `get_my_member_id()`), distinct from the audit `created_by = auth.uid()` — matching 6A and `change_orders.author_member_id`. (Correction applied in §2/§5; signed off.)
 - **Q2 — Incident read visibility for PM/Foreman. RESOLVED — assigned-only, matching `can_view_project()`.** PM/Foreman (and Crew) read incidents only on projects they are assigned to; Owner/Admin read all. No broader safety grant — notification (§4), not the log listing, is what reaches leadership about an off-project injury. Applied in §5 and the §0 reconciliation block.
-- **Q3 — `incident_type` enum home (existing open item #1). DEFERRED to build Phase 2 [S87].** Declare once and add to `TECH_DEBT.md` (the `row_type` enum is already hand-duplicated across five files — don't repeat that). CC proposes the single declaration's home in build Phase 2.
+- **Q3 — `incident_type` enum home (existing open item #1). RESOLVED [S88].** Declared ONCE in `packages/shared/constants/safety.ts` (`INCIDENT_TYPES`, `INCIDENT_STATUSES` + label maps), exported through the shared barrel and consumed by UI, validation, and service types. The SQL CHECKs remain the DB-side source. No hand-copies — the `row_type` mistake is not repeated.
 
 ---
 

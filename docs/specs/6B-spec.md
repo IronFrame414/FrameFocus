@@ -177,7 +177,7 @@ Conversations, decisions, and "he said / she said" records not covered by the st
 
 ### 6.8 Photos
 
-Auto-pulled from that day's captures for that project (M3). Markup reuses the M3 component unchanged (§7.6) — no new build.
+**[AMENDED S87 — log-bound.]** Photos attach to their specific log via `files.daily_log_id` (open item #8, resolved); a log's grid and PDF show only its own attachments, never a same-day sibling's. The original "auto-pulled from that day's captures" day-pool is superseded. Markup reuses the M3 component unchanged (§7.6) — no new build.
 
 ### 6.9 Voice-to-text
 
@@ -204,11 +204,12 @@ Foreman speaks, app transcribes (§7.2). **New external dependency** — no tran
 
 - Company-scoped: `company_id = get_my_company_id()`.
 - **Create:** any member, on any project they can see. No rank gate (§3.1).
-- **Edit / delete:** **creator only** — **[DRIFT — corrected]** keyed on **`author_member_id = get_my_member_id()`**, not `created_by` (which is the audit `auth.uid()` column, §4). Never locks (§7.2).
+- **Edit:** **creator OR Owner/Admin** — **[AMENDED S87, Phase 3 Q1: live RLS is ground truth.]** The shipped `daily_logs_update_authorized` policy allows `author_member_id = get_my_member_id()` OR owner/admin (the Admin-role principle). The earlier "creator only" text described a policy that was never shipped. Keyed on `author_member_id`, not `created_by` (the audit `auth.uid()` column, §4). Never locks (§7.2).
+- **Delete:** **Owner/Admin only** — the UPDATE policy's `with_check` restricts flipping `is_deleted` to owner/admin. Matches the prior spec text; unchanged by the S87 amendment.
 - **Read:** **[RESOLVED — assigned-only via `can_view_project()`]** read visibility follows M5 content-visibility: `can_view_project()` = "owner/admin see all **OR** the caller is assigned" — restricting **PM/Foreman to assigned projects**, not company-wide. 6A's *session* reads granted PM/Foreman company-wide (for approval/costing), but daily logs are project-scoped content, not payroll, so they do not diverge. Crew read is assigned-only likewise (use `can_view_project(project_id)`). This is the module-wide decision (Q5).
 - Soft-delete per convention (Owner/Admin only for delete, mirroring 6A/M5 — Q5).
 
-> A PM who arrives after a Crew member wrote the log **cannot edit it**. Accepted consequence of §3.1 — the PM writes their own log instead.
+> A PM who arrives after a Crew member wrote the log **cannot edit it** (a PM is not Owner/Admin). Accepted consequence of §3.1 — the PM writes their own log instead. Owner/Admin can edit any log per the S87 amendment above.
 
 ---
 
@@ -255,7 +256,7 @@ Employee hours: **not stored** — derived on read.
 | 5   | "Tasks for tomorrow" ↔ 6E briefing: **resolved** — 6E displays this field read-only and stores nothing (no FK, no link), per 6E-spec §5. (M5 tasks overlap still open.) | Closed            |
 | 6   | Crew-present snapshot staleness for late arrivals (§5)                                                     | Accepted; revisit |
 | 7   | Which `segment_type`s count as "on site" (§5)                                                              | Build             |
-| 8   | Photo auto-pull predicate — project + date, or explicit attach?                                            | Build             |
+| 8   | **RESOLVED [S87] — explicit attach, log-bound.** Photos link to their log via `files.daily_log_id` (nullable FK, `ON DELETE SET NULL`, M3 nullable-pointer convention — migration `20260721080000`); two same-day logs never pool attachments. Supersedes both the original project+date idea and the interim Q4/S87 upload-day-window predicate for log photos. Mobile capture binds the same way at capture time. | Closed            |
 | 9   | Crew read-visibility depends on the M5 §5.2a decision actually shipping as recommended                     | Build             |
 
 ---
