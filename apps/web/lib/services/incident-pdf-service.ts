@@ -18,6 +18,10 @@ import { downloadImageBase64 } from '@/lib/change-orders/co-data';
 const BUCKET = 'project-files';
 const MAX_EMBEDDED_PHOTOS = 12;
 
+// react-pdf decodes only JPEG and PNG — see daily-log-pdf-service.ts. Other
+// image types (HEIC, webp, gif) stay counted but not embedded.
+const EMBEDDABLE_MIME_TYPES = new Set(['image/jpeg', 'image/png']);
+
 function slug(value: string): string {
   return (
     value
@@ -41,8 +45,9 @@ export async function regenerateIncidentPdf(
     getIncidentPhotos(incidentId),
   ]);
 
+  const embeddable = photos.filter((p) => EMBEDDABLE_MIME_TYPES.has(p.mime_type));
   const embedded: { dataUri: string }[] = [];
-  for (const photo of photos.slice(0, MAX_EMBEDDED_PHOTOS)) {
+  for (const photo of embeddable.slice(0, MAX_EMBEDDED_PHOTOS)) {
     const base64 = await downloadImageBase64(rls, BUCKET, photo.file_path);
     if (base64) embedded.push({ dataUri: `data:${photo.mime_type};base64,${base64}` });
   }

@@ -80,6 +80,100 @@ function toRowState(r: {
   };
 }
 
+// Module scope, NOT nested in IncidentForm: a component defined inside the
+// parent gets a new function identity every parent render, so React unmounts
+// and remounts the whole subtree — text inputs lose focus after each
+// keystroke.
+function PersonRows({
+  rows,
+  setRows,
+  withTreatment,
+  what,
+  roster,
+}: {
+  rows: PersonRowState[];
+  setRows: (updater: (rows: PersonRowState[]) => PersonRowState[]) => void;
+  withTreatment: boolean;
+  what: string;
+  roster: RosterOption[];
+}) {
+  return (
+    <>
+      {rows.map((row, i) => (
+        <div key={row.id ?? `new-${i}`} className="mb-2 rounded-[9px] border border-[#eef1f6] p-3">
+          <div className="flex gap-2">
+            <select
+              className={input}
+              value={row.member_id}
+              onChange={(e) =>
+                setRows((rs) =>
+                  rs.map((r, j) => (j === i ? { ...r, member_id: e.target.value } : r))
+                )
+              }
+            >
+              <option value="">— Outside person (type a name) —</option>
+              {roster.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.display_name}
+                </option>
+              ))}
+            </select>
+            {!row.member_id ? (
+              <input
+                type="text"
+                className={input}
+                placeholder={`${what} name`}
+                value={row.name}
+                onChange={(e) =>
+                  setRows((rs) => rs.map((r, j) => (j === i ? { ...r, name: e.target.value } : r)))
+                }
+              />
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))}
+              className="shrink-0 text-[12px] text-[#c0362c] hover:underline"
+            >
+              Remove
+            </button>
+          </div>
+          {withTreatment ? (
+            <div className="mt-2 flex items-center gap-2">
+              <label className="flex shrink-0 items-center gap-2 text-[13px] text-[#374151]">
+                <input
+                  type="checkbox"
+                  checked={row.treatment_sought}
+                  onChange={(e) =>
+                    setRows((rs) =>
+                      rs.map((r, j) =>
+                        j === i ? { ...r, treatment_sought: e.target.checked } : r
+                      )
+                    )
+                  }
+                />
+                Treatment sought
+              </label>
+              {row.treatment_sought ? (
+                <input
+                  type="text"
+                  className={input}
+                  placeholder='e.g. "Urgent care, stitches."'
+                  value={row.treatment_notes}
+                  onChange={(e) =>
+                    setRows((rs) =>
+                      rs.map((r, j) => (j === i ? { ...r, treatment_notes: e.target.value } : r))
+                    )
+                  }
+                />
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+      ))}
+    </>
+  );
+}
+
 export function IncidentForm({
   mode,
   incidentId,
@@ -228,94 +322,6 @@ export function IncidentForm({
     setSaving(false);
   }
 
-  function PersonRows({
-    rows,
-    setRows,
-    withTreatment,
-    what,
-  }: {
-    rows: PersonRowState[];
-    setRows: (updater: (rows: PersonRowState[]) => PersonRowState[]) => void;
-    withTreatment: boolean;
-    what: string;
-  }) {
-    return (
-      <>
-        {rows.map((row, i) => (
-          <div key={row.id ?? `new-${i}`} className="mb-2 rounded-[9px] border border-[#eef1f6] p-3">
-            <div className="flex gap-2">
-              <select
-                className={input}
-                value={row.member_id}
-                onChange={(e) =>
-                  setRows((rs) =>
-                    rs.map((r, j) => (j === i ? { ...r, member_id: e.target.value } : r))
-                  )
-                }
-              >
-                <option value="">— Outside person (type a name) —</option>
-                {roster.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.display_name}
-                  </option>
-                ))}
-              </select>
-              {!row.member_id ? (
-                <input
-                  type="text"
-                  className={input}
-                  placeholder={`${what} name`}
-                  value={row.name}
-                  onChange={(e) =>
-                    setRows((rs) => rs.map((r, j) => (j === i ? { ...r, name: e.target.value } : r)))
-                  }
-                />
-              ) : null}
-              <button
-                type="button"
-                onClick={() => setRows((rs) => rs.filter((_, j) => j !== i))}
-                className="shrink-0 text-[12px] text-[#c0362c] hover:underline"
-              >
-                Remove
-              </button>
-            </div>
-            {withTreatment ? (
-              <div className="mt-2 flex items-center gap-2">
-                <label className="flex shrink-0 items-center gap-2 text-[13px] text-[#374151]">
-                  <input
-                    type="checkbox"
-                    checked={row.treatment_sought}
-                    onChange={(e) =>
-                      setRows((rs) =>
-                        rs.map((r, j) =>
-                          j === i ? { ...r, treatment_sought: e.target.checked } : r
-                        )
-                      )
-                    }
-                  />
-                  Treatment sought
-                </label>
-                {row.treatment_sought ? (
-                  <input
-                    type="text"
-                    className={input}
-                    placeholder='e.g. "Urgent care, stitches."'
-                    value={row.treatment_notes}
-                    onChange={(e) =>
-                      setRows((rs) =>
-                        rs.map((r, j) => (j === i ? { ...r, treatment_notes: e.target.value } : r))
-                      )
-                    }
-                  />
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        ))}
-      </>
-    );
-  }
-
   return (
     <div className="flex max-w-[760px] flex-col gap-4">
       <div className={card}>
@@ -388,7 +394,7 @@ export function IncidentForm({
             <span className="text-[11px] font-medium normal-case text-[#9aa1ac]">· if any</span>
           )}
         </div>
-        <PersonRows rows={injuries} setRows={setInjuries} withTreatment what="Injured" />
+        <PersonRows rows={injuries} setRows={setInjuries} withTreatment what="Injured" roster={roster} />
         <button
           type="button"
           onClick={() => setInjuries((rs) => [...rs, personRow()])}
@@ -417,7 +423,13 @@ export function IncidentForm({
           </div>
         ) : (
           <>
-            <PersonRows rows={witnesses} setRows={setWitnesses} withTreatment={false} what="Witness" />
+            <PersonRows
+              rows={witnesses}
+              setRows={setWitnesses}
+              withTreatment={false}
+              what="Witness"
+              roster={roster}
+            />
             <button
               type="button"
               onClick={() => setWitnesses((rs) => [...rs, personRow()])}

@@ -78,6 +78,7 @@ export default async function CheckInPage({
             po_item_id: l.item.id,
             description: l.item.description,
             unit: l.item.unit,
+            ordered: Number(l.item.qty_ordered),
             remaining: Math.max(0, Number(l.item.qty_ordered) - l.usableTotal),
           })),
         }))}

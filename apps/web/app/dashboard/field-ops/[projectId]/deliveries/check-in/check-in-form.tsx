@@ -6,8 +6,9 @@ import { checkInDelivery } from '@/lib/services/deliveries-client';
 import { uploadFile } from '@/lib/services/files-client';
 
 // 6D — check-in form: the crew's two-slips comparison, on desktop. Against a
-// PO the lines prefill from the order (received defaults to the remaining
-// quantity — the crew corrects it down); orderless is free lines (§4). The
+// PO the lines prefill from the order with received at 0 — the crew counts
+// the truck and enters what actually arrived, against a read-only "Ordered"
+// figure per line; orderless is free lines (§4). The
 // "Issue with delivery" per-line toggle IS the issue_note (live semantics,
 // §4.1 as amended). Photos are project-pooled to the main job file
 // (category 'photos', Phase 3 Q7) and upload immediately — they exist to
@@ -22,13 +23,21 @@ export interface CheckInPoOption {
   id: string;
   title: string;
   vendor_name: string;
-  lines: { po_item_id: string; description: string; unit: string | null; remaining: number }[];
+  lines: {
+    po_item_id: string;
+    description: string;
+    unit: string | null;
+    ordered: number;
+    remaining: number;
+  }[];
 }
 
 interface ItemRow {
   po_item_id: string | null;
   description: string;
   unit?: string | null;
+  /** PO lines only — free lines have no order to compare against. */
+  ordered?: number | null;
   qty_received: number;
   qty_damaged: number;
   issue_note: string;
@@ -47,7 +56,8 @@ function rowsForPo(po: CheckInPoOption): ItemRow[] {
     po_item_id: l.po_item_id,
     description: l.description,
     unit: l.unit,
-    qty_received: l.remaining,
+    ordered: l.ordered,
+    qty_received: 0,
     qty_damaged: 0,
     issue_note: '',
     issueOpen: false,
@@ -231,6 +241,11 @@ export function CheckInForm({ projectId, todayYmd, preselectedPoId, openPos }: C
                 />
               )}
               <div className="flex shrink-0 items-center gap-2">
+                {item.ordered != null ? (
+                  <span className="text-[11px] text-[#8a919c]">
+                    Ordered: <span className="font-semibold text-[#374151]">{item.ordered}</span>
+                  </span>
+                ) : null}
                 <label className="text-[11px] text-[#8a919c]">Received</label>
                 <input
                   type="number"

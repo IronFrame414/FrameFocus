@@ -7,6 +7,26 @@ const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
 type UploadResult = { success: boolean; id?: string; error?: string };
 type MutationResult = { success: boolean; error?: string };
 
+// Browsers leave file.type EMPTY for formats they don't recognize — notably
+// iPhone HEIC. Falling back straight to application/octet-stream makes such
+// photos invisible to every mime_type LIKE 'image/%' query (log/incident
+// photo grids and PDF embeds), so infer from the extension first.
+const EXTENSION_MIME: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  heic: 'image/heic',
+  heif: 'image/heif',
+};
+
+function inferMimeType(file: File): string {
+  if (file.type) return file.type;
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+  return EXTENSION_MIME[ext] ?? 'application/octet-stream';
+}
+
 export async function uploadFile(
   file: File,
   options: {
@@ -47,8 +67,7 @@ export async function uploadFile(
   const safeFilename = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
   const storagePath = `${profile.company_id}/${options.project_id}/${uniqueId}-${safeFilename}`;
 
-  // Fallback for browsers that don't populate file.type
-  const mimeType = file.type || 'application/octet-stream';
+  const mimeType = inferMimeType(file);
 
   // Upload bytes first
   const { error: uploadError } = await supabase.storage.from(BUCKET).upload(storagePath, file, {

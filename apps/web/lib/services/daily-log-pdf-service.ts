@@ -29,6 +29,11 @@ const BUCKET = 'project-files';
 // the remainder left in Module 3.
 const MAX_EMBEDDED_PHOTOS = 12;
 
+// react-pdf decodes only JPEG and PNG. Anything else (HEIC from iPhones,
+// webp, gif) would fail the whole render if fed in as a data URI — those
+// photos stay counted but not embedded; the caption reports the remainder.
+const EMBEDDABLE_MIME_TYPES = new Set(['image/jpeg', 'image/png']);
+
 function slug(value: string): string {
   return (
     value
@@ -63,8 +68,9 @@ export async function regenerateDailyLogPdf(
 
   // Photo bytes come through the caller's RLS client — a caller who cannot
   // read the files embeds nothing. Failed downloads are skipped, not fatal.
+  const embeddable = photos.filter((p) => EMBEDDABLE_MIME_TYPES.has(p.mime_type));
   const embedded: { dataUri: string }[] = [];
-  for (const photo of photos.slice(0, MAX_EMBEDDED_PHOTOS)) {
+  for (const photo of embeddable.slice(0, MAX_EMBEDDED_PHOTOS)) {
     const base64 = await downloadImageBase64(rls, BUCKET, photo.file_path);
     if (base64) embedded.push({ dataUri: `data:${photo.mime_type};base64,${base64}` });
   }
