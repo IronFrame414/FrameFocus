@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { deliveryCheckInSchema } from '@framefocus/shared/validation/deliveries';
+import { regenerateDeliveryPdf } from '@/lib/services/delivery-pdf-service';
+import type { Database } from '@framefocus/shared/types/database';
 import {
   buildSenderAddress,
   getManagerRecipients,
@@ -59,6 +61,41 @@ export async function POST(request: NextRequest) {
     vendorName = po.vendor_name;
   }
 
+  // Verify photo ids BEFORE inserting anything: they must be this project's
+  // live files rows. The zod refine already requires ids on damaged lines;
+  // this closes the fabricated-uuid hole so "damage requires a photo" holds
+  // against the API, not just the form. Delivery-level (whole-truck) ids are
+  // verified in the same pass — always optional, bound below.
+  const allPhotoIds = [
+    ...input.items.flatMap((i) => i.photo_file_ids ?? []),
+    ...(input.photo_file_ids ?? []),
+  ];
+  let verifiedTagsById = new Map<string, string[]>();
+  if (allPhotoIds.length > 0) {
+    const { data: photoRows, error: photoError } = await supabase
+      .from('files')
+      .select('id, tags')
+      .in('id', allPhotoIds)
+      .eq('project_id', input.project_id)
+      .eq('is_deleted', false);
+    if (photoError) {
+      console.error(`[deliveries/check-in] photo verification failed: ${photoError.message}`);
+      return NextResponse.json({ error: 'Check-in failed' }, { status: 500 });
+    }
+    verifiedTagsById = new Map((photoRows ?? []).map((r) => [r.id, r.tags ?? []]));
+    for (const item of input.items) {
+      if (item.qty_damaged > 0) {
+        const verified = (item.photo_file_ids ?? []).filter((id) => verifiedTagsById.has(id));
+        if (verified.length === 0) {
+          return NextResponse.json(
+            { error: `"${item.description}": a damage photo is required on this line` },
+            { status: 400 }
+          );
+        }
+      }
+    }
+  }
+
   const { data: delivery, error: insertError } = await supabase
     .from('deliveries')
     .insert({
@@ -75,19 +112,81 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Check-in failed' }, { status: 500 });
   }
 
-  const { error: itemsError } = await supabase.from('delivery_items').insert(
-    input.items.map((i) => ({
-      delivery_id: delivery.id,
-      po_item_id: i.po_item_id ?? null,
-      description: i.description,
-      qty_received: i.qty_received,
-      qty_damaged: i.qty_damaged,
-      issue_note: i.issue_note?.trim() ? i.issue_note.trim() : null,
-    }))
-  );
-  if (itemsError) {
-    console.error(`[deliveries/check-in] items insert failed: ${itemsError.message}`);
+  // .select('id') — INSERT ... RETURNING preserves VALUES order, so row i of
+  // the result is input.items[i]; the photo linking below relies on that.
+  const { data: insertedItems, error: itemsError } = await supabase
+    .from('delivery_items')
+    .insert(
+      input.items.map((i) => ({
+        delivery_id: delivery.id,
+        po_item_id: i.po_item_id ?? null,
+        description: i.description,
+        qty_received: i.qty_received,
+        qty_damaged: i.qty_damaged,
+        issue_note: i.issue_note?.trim() ? i.issue_note.trim() : null,
+      }))
+    )
+    .select('id');
+  if (itemsError || !insertedItems || insertedItems.length !== input.items.length) {
+    console.error(
+      `[deliveries/check-in] items insert failed: ${itemsError?.message ?? 'row count mismatch'}`
+    );
     return NextResponse.json({ error: 'Check-in failed on line items' }, { status: 500 });
+  }
+
+  // ── Per-line photo binding (S90). Photos were uploaded ahead of submit,
+  // project-pooled (category 'photos'); bind each verified id to its line
+  // via files.delivery_item_id and tag damage-line photos "damage". Caller
+  // RLS (files_update_non_client) scopes the company. Binding failure never
+  // rolls back the check-in — the photos remain ordinary project photos.
+  for (let i = 0; i < input.items.length; i++) {
+    const item = input.items[i];
+    for (const photoId of item.photo_file_ids ?? []) {
+      const tags = verifiedTagsById.get(photoId);
+      if (!tags) continue; // not this project's file — skip
+      const nextTags =
+        item.qty_damaged > 0 && !tags.includes('damage') ? [...tags, 'damage'] : tags;
+      // delivery_item_id (migration 20260723000000) is not in database.ts
+      // until the next type regen — swap to a plain typed update then.
+      const link = {
+        delivery_item_id: insertedItems[i].id,
+        tags: nextTags,
+      } as unknown as Database['public']['Tables']['files']['Update'];
+      const { error: linkError } = await supabase.from('files').update(link).eq('id', photoId);
+      if (linkError) {
+        console.error(`[deliveries/check-in] photo ${photoId} link failed: ${linkError.message}`);
+      }
+    }
+  }
+
+  // General whole-delivery photos bind via files.delivery_id (migration
+  // 20260723020000) — never tagged 'damage'.
+  for (const photoId of input.photo_file_ids ?? []) {
+    if (!verifiedTagsById.has(photoId)) continue; // not this project's file — skip
+    // delivery_id is not in database.ts until the next type regen.
+    const link = {
+      delivery_id: delivery.id,
+    } as unknown as Database['public']['Tables']['files']['Update'];
+    const { error: linkError } = await supabase.from('files').update(link).eq('id', photoId);
+    if (linkError) {
+      console.error(
+        `[deliveries/check-in] delivery photo ${photoId} link failed: ${linkError.message}`
+      );
+    }
+  }
+
+  // ── Delivery record PDF — EVERY check-in, clean or exception (S90).
+  // Best-effort: generation failure never rolls back the check-in; the PDF
+  // is regenerable from the delivery detail view.
+  let pdfError: string | null = null;
+  try {
+    const pdf = await regenerateDeliveryPdf(supabase, getSupabaseAdmin(), delivery.id);
+    pdfError = pdf.error;
+  } catch (err) {
+    pdfError = err instanceof Error ? err.message : 'PDF generation failed';
+  }
+  if (pdfError) {
+    console.error(`[deliveries/check-in] PDF failed for ${delivery.id}: ${pdfError}`);
   }
 
   // Read back trigger-derived state + receiver for the email.
