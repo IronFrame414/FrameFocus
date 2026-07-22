@@ -12,6 +12,9 @@ export type FileCategory =
   | 'change_orders'
   | 'daily_logs'
   | 'receipts'
+  // 'safety' has been in the live files_category_check since the M3 CHECK
+  // shipped; first consumed by 6C incident photos + PDFs (S88).
+  | 'safety'
   | 'other';
 
 export type FileRecord = Omit<FileRow, 'category'> & {

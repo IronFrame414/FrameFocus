@@ -75,7 +75,11 @@ export type EmailType =
   | 'change_order'
   | 'co_reminder'
   | 'co_signature_complete'
-  | 'co_signature_declined';
+  | 'co_signature_declined'
+  // 6D §7 — delivery check-in notification (email_types row seeded in S78).
+  | 'material_delivery'
+  // 6C §4 — incident hierarchy notification (email_types row seeded in S78).
+  | 'safety_incident';
 
 export interface LogEmailInput {
   company_id: string;

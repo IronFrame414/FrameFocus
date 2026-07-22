@@ -19,6 +19,8 @@ export interface NotificationEmailProps {
   heading: string;
   message: string;
   estimateUrl: string;
+  /** Button label — defaults to the original estimate wording. */
+  ctaLabel?: string;
 }
 
 export function NotificationEmail({
@@ -26,6 +28,7 @@ export function NotificationEmail({
   heading,
   message,
   estimateUrl,
+  ctaLabel = 'Open Estimate',
 }: NotificationEmailProps) {
   return (
     <Html>
@@ -61,7 +64,7 @@ export function NotificationEmail({
                 textDecoration: 'none',
               }}
             >
-              Open Estimate
+              {ctaLabel}
             </Button>
           </Section>
           <Text style={{ fontSize: '11px', color: '#9ca3af' }}>FrameFocus notification</Text>
