@@ -15,6 +15,9 @@ export type FileCategory =
   // 'safety' has been in the live files_category_check since the M3 CHECK
   // shipped; first consumed by 6C incident photos + PDFs (S88).
   | 'safety'
+  // 'deliveries' added to files_category_check by migration 20260723010000
+  // (S90) — delivery record PDFs only; check-in photos stay in 'photos'.
+  | 'deliveries'
   | 'other';
 
 export type FileRecord = Omit<FileRow, 'category'> & {

@@ -1,5 +1,8 @@
 import { createClient } from '@/lib/supabase-browser';
-import type { DeliveryCheckInInput } from '@framefocus/shared/validation/deliveries';
+import type {
+  DeliveryCheckInInput,
+  DeliveryEditInput,
+} from '@framefocus/shared/validation/deliveries';
 export type {
   PurchaseOrder,
   PurchaseOrderDetail,
@@ -44,15 +47,6 @@ export interface PoLineInput {
   description: string;
   qty_ordered: number;
   unit?: string | null;
-}
-
-export interface DeliveryItemInput {
-  id?: string;
-  po_item_id?: string | null;
-  description: string;
-  qty_received: number;
-  qty_damaged: number;
-  issue_note?: string | null;
 }
 
 export async function createPurchaseOrder(
@@ -175,54 +169,25 @@ export async function softDeletePurchaseOrder(id: string): Promise<MutationResul
   return { success: true };
 }
 
-export async function updateDelivery(
-  id: string,
-  fields: { vendor_name?: string; delivery_date?: string; notes?: string | null }
-): Promise<MutationResult> {
-  const supabase = createClient();
-  // Triggers own updated_at / updated_by; has_exceptions is recomputed by
-  // the DB when items change — never written here.
-  const { error } = await supabase.from('deliveries').update(fields).eq('id', id);
-  if (error) return { success: false, error: error.message };
-  return { success: true };
-}
-
-/** Reconcile delivery lines; the DB trigger recomputes exception/PO state. */
-export async function setDeliveryItems(
+/**
+ * Save a delivery edit via the server route (S90 — replaces the former
+ * client-direct updateDelivery/setDeliveryItems pair, so the damage-photo
+ * rule and photo binding are enforced server-side; the route also
+ * regenerates the record PDF). The DB trigger chain recomputes
+ * exception/PO state on every item write.
+ */
+export async function saveDeliveryEdit(
   deliveryId: string,
-  items: DeliveryItemInput[]
+  input: DeliveryEditInput
 ): Promise<MutationResult> {
-  const supabase = createClient();
-  const { data: current, error: readError } = await supabase
-    .from('delivery_items')
-    .select('id')
-    .eq('delivery_id', deliveryId)
-    .eq('is_deleted', false);
-  if (readError) return { success: false, error: readError.message };
-
-  const keptIds = new Set(items.filter((i) => i.id).map((i) => i.id as string));
-  const removeIds = (current ?? []).map((r) => r.id).filter((id) => !keptIds.has(id));
-  if (removeIds.length > 0) {
-    const { error } = await supabase.from('delivery_items').delete().in('id', removeIds);
-    if (error) return { success: false, error: error.message };
-  }
-  for (const item of items) {
-    const row = {
-      po_item_id: item.po_item_id ?? null,
-      description: item.description,
-      qty_received: item.qty_received,
-      qty_damaged: item.qty_damaged,
-      issue_note: item.issue_note?.trim() ? item.issue_note.trim() : null,
-    };
-    if (item.id) {
-      const { error } = await supabase.from('delivery_items').update(row).eq('id', item.id);
-      if (error) return { success: false, error: error.message };
-    } else {
-      const { error } = await supabase
-        .from('delivery_items')
-        .insert({ ...row, delivery_id: deliveryId });
-      if (error) return { success: false, error: error.message };
-    }
+  const res = await fetch(`/api/deliveries/${deliveryId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    return { success: false, error: body?.error ?? `Save failed (${res.status})` };
   }
   return { success: true };
 }
@@ -234,6 +199,22 @@ export async function softDeleteDelivery(id: string): Promise<MutationResult> {
     .update({ is_deleted: true, deleted_at: new Date().toISOString() })
     .eq('id', id);
   if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
+/**
+ * Generate (or regenerate) the delivery's record PDF via the server route
+ * (S90; mirrors generateDailyLogPdf). Best-effort at call sites — the record
+ * itself is already saved when this runs.
+ */
+export async function generateDeliveryPdf(
+  deliveryId: string
+): Promise<{ success: boolean; error?: string }> {
+  const res = await fetch(`/api/deliveries/${deliveryId}/pdf`, { method: 'POST' });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    return { success: false, error: body?.error ?? `PDF generation failed (${res.status})` };
+  }
   return { success: true };
 }
 
