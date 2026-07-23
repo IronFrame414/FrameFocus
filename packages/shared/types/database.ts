@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.4"
   }
   graphql_public: {
     Tables: {
@@ -1212,6 +1212,7 @@ export type Database = {
           id: string
           is_deleted: boolean | null
           notes: string | null
+          pdf_file_id: string | null
           project_id: string
           purchase_order_id: string | null
           received_by: string
@@ -1229,6 +1230,7 @@ export type Database = {
           id?: string
           is_deleted?: boolean | null
           notes?: string | null
+          pdf_file_id?: string | null
           project_id: string
           purchase_order_id?: string | null
           received_by?: string
@@ -1246,6 +1248,7 @@ export type Database = {
           id?: string
           is_deleted?: boolean | null
           notes?: string | null
+          pdf_file_id?: string | null
           project_id?: string
           purchase_order_id?: string | null
           received_by?: string
@@ -1259,6 +1262,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "deliveries_pdf_file_id_fkey"
+            columns: ["pdf_file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
             referencedColumns: ["id"]
           },
           {
@@ -2157,10 +2167,14 @@ export type Database = {
         Row: {
           ai_tags: string[] | null
           category: string
+          client_visible: boolean
           company_id: string
           created_at: string | null
           created_by: string | null
+          daily_log_id: string | null
           deleted_at: string | null
+          delivery_id: string | null
+          delivery_item_id: string | null
           file_name: string
           file_path: string
           file_size: number
@@ -2170,6 +2184,7 @@ export type Database = {
           markup_data: Json | null
           mime_type: string
           project_id: string | null
+          safety_incident_id: string | null
           supersedes_id: string | null
           tags: string[] | null
           updated_at: string | null
@@ -2179,10 +2194,14 @@ export type Database = {
         Insert: {
           ai_tags?: string[] | null
           category: string
+          client_visible?: boolean
           company_id?: string
           created_at?: string | null
           created_by?: string | null
+          daily_log_id?: string | null
           deleted_at?: string | null
+          delivery_id?: string | null
+          delivery_item_id?: string | null
           file_name: string
           file_path: string
           file_size: number
@@ -2192,6 +2211,7 @@ export type Database = {
           markup_data?: Json | null
           mime_type: string
           project_id?: string | null
+          safety_incident_id?: string | null
           supersedes_id?: string | null
           tags?: string[] | null
           updated_at?: string | null
@@ -2201,10 +2221,14 @@ export type Database = {
         Update: {
           ai_tags?: string[] | null
           category?: string
+          client_visible?: boolean
           company_id?: string
           created_at?: string | null
           created_by?: string | null
+          daily_log_id?: string | null
           deleted_at?: string | null
+          delivery_id?: string | null
+          delivery_item_id?: string | null
           file_name?: string
           file_path?: string
           file_size?: number
@@ -2214,6 +2238,7 @@ export type Database = {
           markup_data?: Json | null
           mime_type?: string
           project_id?: string | null
+          safety_incident_id?: string | null
           supersedes_id?: string | null
           tags?: string[] | null
           updated_at?: string | null
@@ -2229,10 +2254,38 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "files_daily_log_id_fkey"
+            columns: ["daily_log_id"]
+            isOneToOne: false
+            referencedRelation: "daily_logs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "files_delivery_id_fkey"
+            columns: ["delivery_id"]
+            isOneToOne: false
+            referencedRelation: "deliveries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "files_delivery_item_id_fkey"
+            columns: ["delivery_item_id"]
+            isOneToOne: false
+            referencedRelation: "delivery_items"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "files_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "files_safety_incident_id_fkey"
+            columns: ["safety_incident_id"]
+            isOneToOne: false
+            referencedRelation: "safety_incidents"
             referencedColumns: ["id"]
           },
           {
@@ -3426,9 +3479,12 @@ export type Database = {
           incident_date: string
           incident_type: string
           is_deleted: boolean | null
+          outcome: string | null
           pdf_file_id: string | null
+          prevention_notes: string | null
           project_id: string | null
           reported_by_member_id: string
+          status: string
           updated_at: string | null
           updated_by: string | null
         }
@@ -3442,9 +3498,12 @@ export type Database = {
           incident_date: string
           incident_type: string
           is_deleted?: boolean | null
+          outcome?: string | null
           pdf_file_id?: string | null
+          prevention_notes?: string | null
           project_id?: string | null
           reported_by_member_id?: string
+          status?: string
           updated_at?: string | null
           updated_by?: string | null
         }
@@ -3458,9 +3517,12 @@ export type Database = {
           incident_date?: string
           incident_type?: string
           is_deleted?: boolean | null
+          outcome?: string | null
           pdf_file_id?: string | null
+          prevention_notes?: string | null
           project_id?: string | null
           reported_by_member_id?: string
+          status?: string
           updated_at?: string | null
           updated_by?: string | null
         }
@@ -4480,17 +4542,30 @@ export type Database = {
         Args: { p_estimate_id: string }
         Returns: string
       }
-      create_safety_incident: {
-        Args: {
-          p_description: string
-          p_incident_date: string
-          p_incident_type: string
-          p_injuries?: Json
-          p_project_id: string
-          p_witnesses?: Json
-        }
-        Returns: string
-      }
+      create_safety_incident:
+        | {
+            Args: {
+              p_description: string
+              p_incident_date: string
+              p_incident_type: string
+              p_injuries?: Json
+              p_project_id: string
+              p_witnesses?: Json
+            }
+            Returns: string
+          }
+        | {
+            Args: {
+              p_description: string
+              p_incident_date: string
+              p_incident_type: string
+              p_injuries: Json
+              p_prevention_notes: string
+              p_project_id: string
+              p_witnesses: Json
+            }
+            Returns: string
+          }
       get_invitation_by_token: {
         Args: { invite_token: string }
         Returns: {
@@ -4513,6 +4588,14 @@ export type Database = {
       get_my_company_id: { Args: never; Returns: string }
       get_my_member_id: { Args: never; Returns: string }
       get_my_role: { Args: never; Returns: string }
+      get_project_day_presence: {
+        Args: { p_date: string; p_project_id: string }
+        Returns: {
+          hours: number
+          member_id: string
+          warranty_only: boolean
+        }[]
+      }
       get_project_day_segments: {
         Args: { p_log_date: string; p_project_id: string }
         Returns: {
