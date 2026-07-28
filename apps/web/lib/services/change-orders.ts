@@ -4,8 +4,9 @@ import type { Database } from '@framefocus/shared/types/database';
 // 5D — Change Orders (docs/specs/5D-spec.md). A CO is written identically
 // to an estimate: line items → typed rows, same §4.4a tax-then-markup
 // (D-1). Credits are negative values on normal rows (D-2/D-3). Money is
-// display-only: projects.contract_value is never mutated here (D-6,
-// TECH_DEBT #80 — Module 7 owns the write-through).
+// display-only: projects.contract_value is never mutated here (D-6;
+// TECH_DEBT #80 closed by derivation — lib/services/contract-value.ts is
+// the revised-contract authority, 7B).
 
 type ChangeOrderRow = Database['public']['Tables']['change_orders']['Row'];
 type CoLineItemRow = Database['public']['Tables']['change_order_line_items']['Row'];

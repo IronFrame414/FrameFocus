@@ -105,8 +105,8 @@ export interface CompleteCoSignatureParams {
 /**
  * D-4 — the client signature is what makes the CO binding: records the
  * signature with full ESIGN audit data and moves the CO to `signed`.
- * projects.contract_value is NOT touched (D-6 — Module 7 / #80 owns
- * the write-through).
+ * projects.contract_value is NOT touched (D-6; #80 closed by derivation —
+ * the revised total is derived by lib/services/contract-value.ts, 7B).
  */
 export async function completeCoSignature(
   admin: SupabaseClient<Database>,
