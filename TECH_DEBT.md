@@ -1,6 +1,6 @@
 # TECH_DEBT.md — FrameFocus
 
-> **Last updated:** July 28, 2026 — Session 89 (#96–#99 filed from the M6B RLS probe, fixes scheduled S90)
+> **Last updated:** July 28, 2026 — Session 90 (#96–#99 closed; #80 closure pending this session)
 > **Purpose:** Tracks all known tech debt — open and closed. Lives in the repo, not in project knowledge. Read on demand when working on items, planning a polish session, or auditing.
 
 ---
@@ -72,20 +72,6 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 - **#94** HEIC photos are stored but never render — no conversion pipeline (found S88, daily-log PDF "regression"). Browsers report an empty `file.type` for iPhone HEIC files; `uploadFile` now infers `image/heic` from the extension so these photos appear in log/incident photo queries and counts, but react-pdf embeds only JPEG/PNG (the PDF caption reports them as "not embedded") and Chrome cannot display HEIC in the photo grids either. Real fix is HEIC→JPEG conversion at upload (e.g. `heic2any` client-side) or server-side (`sharp` + libheif) — a new dependency, so a deliberate decision. Matters because iPhone field crews shoot HEIC by default.
 - **#95** — M6B cast escape-hatch cleanup
   Post-S88 type regen, ~60 `as unknown as` casts remain in apps/web (services + delivery/safety/daily-log routes). Some may be redundant now that M6B schema is typed, but type-check is green so none are load-bearing failures. No spec names which to remove. Approach when picked up: remove one at a time, re-run `npx turbo run type-check`, keep only removals that stay green. Do NOT bulk-remove — most are structural join-shape casts that will break.
-
-### Security — S89 M6B RLS probe (all four scheduled S90)
-
-- **#96** `files` company-wide RLS leak — `files_select_non_client` and `files_update_non_client` (baseline `20260101000000_baseline_schema.sql:3622,3629`) are **company-scoped, not project-scoped**: any company member reads ANY file in the company (including photos attached to daily logs on projects they cannot see via `can_view_project`), and any non-client role can UPDATE any company file — including setting `client_visible = true` (column added `20260721070000`) on a file from someone else's project. M3-era policy, written before project-scoped visibility existed; **exposed by 6B** (daily-log photo links + client_visible). SEVERITY: must be fixed before ANY client-facing surface ships (Pre-M9 gate) — `client_visible=true` is the future client-read predicate, and today anyone can set it on anything. Failing probes from the S89 report (run as a crew member NOT assigned to the target project):
-  ```sql
-  -- Probe 1: returns rows — should return 0
-  SELECT id, file_name FROM files WHERE project_id = '<unassigned-project-uuid>';
-  -- Probe 2: succeeds — should be denied
-  UPDATE files SET client_visible = true WHERE id = '<file-on-unassigned-project>';
-  ```
-  Fix shape: add a `can_view_project(project_id)` arm (files with NULL project_id need a decided rule), and gate `client_visible` writes to Owner/Admin via column scope. Discovered Session 89 (M6B RLS probe). Scheduled S90.
-- **#97** `daily_logs` INSERT author spoofing — `daily_logs_insert_authorized` WITH CHECK (`20260711150000_module6_6b_daily_logs.sql:289-294`) verifies company + `can_view_project` but does **not bind `author_member_id` to the caller**: any member can INSERT a log attributed to any other member by supplying `author_member_id` explicitly (the `get_my_member_id()` DEFAULT is only a default). Since 6B edit rights key on `author_member_id` (creator-only edit), spoofing also grants the spoofed identity's edit surface to the author's chosen victim. Fix: add `author_member_id = get_my_member_id()` (or Owner/Admin override arm) to WITH CHECK. Discovered Session 89 (M6B RLS probe). Scheduled S90.
-- **#98** `daily_logs` soft-delete reversal — `daily_logs_update_authorized` WITH CHECK (`20260711150000:298-313`) enforces `is_deleted = false OR owner/admin`, which pins **setting** `is_deleted=true` to Owner/Admin but is satisfied by any author write that sets `is_deleted` back to **false**: the log's author can un-delete a log an Owner/Admin soft-deleted, silently reversing the delete. Enforcement is one-directional. Fix: block `is_deleted` transitions (both directions) for non-Owner/Admin — column-scope trigger or `OLD.is_deleted` guard. Discovered Session 89 (M6B RLS probe). Scheduled S90.
-- **#99** `daily_log_crew` / `daily_log_sub_entries` accept cross-company `member_id` — the INSERT/UPDATE policies (`20260711150000:326-352,376-402`) verify the parent log's company/project but assert nothing about `member_id` itself; the FK to `company_members` accepts any existing member row, including one belonging to a DIFFERENT company. A crew row can therefore name another tenant's member (writes a cross-tenant reference; reads of the joined name would then leak whatever the join exposes). Fix: policy (or trigger) assertion that `member_id`'s `company_members.company_id = get_my_company_id()`. Discovered Session 89 (M6B RLS probe). Scheduled S90.
 
 ### Module 3 Follow-Ups
 
@@ -202,6 +188,10 @@ non-role portal identity; then build the sub-facing surface that issues these in
 - **#10** invite-form.tsx Invitation import missing import type — closed Session 76 as stale. No Invitation import exists in invite-form.tsx; the only one (in team-page-client.tsx) already uses an inline type qualifier. Condition described never existed in current code.
 - **#50** Delete markup-test/page.tsx — closed Session 76 (commit e8ca00d). Module 3G complete; no references anywhere in codebase.
 - **#85** CO PDF bold line-item row — closed Session 79 (UI verification, no code change — bold row confirmed intentional, it is the line item vs. its detail breakdown, not a bug).
+- **#96** `files` company-wide RLS leak (select/insert/update policies project-scoped + category-gated; `client_visible` and gated-category recategorization Owner/Admin-only via trigger) — closed Session 90, commit `9fbcc1c` (migration `20260728000000_security_rls_96_99.sql`). **Applied to rebuild-test only — prod push owed.** The `storage.objects` arm is defense-in-depth (storage cannot see `files.category`); the table policy is the primary gate. Verified by impersonated RLS probe (`SET LOCAL role authenticated` + `request.jwt.claims`), negative and positive controls both pass. Record correction: the S89 probes cited in this item's original entry ran via Supabase MCP as `current_user=postgres` with RLS bypassed and were NOT valid behavioral evidence — the S90 impersonated probes are the evidentiary run.
+- **#97** `daily_logs` INSERT author spoofing — WITH CHECK now binds `author_member_id = get_my_member_id()` with Owner/Admin override — closed Session 90, commit `9fbcc1c` (same migration; rebuild-test only, prod push owed with #96).
+- **#98** `daily_logs` soft-delete reversal — `is_deleted`/`deleted_at` transitions blocked in both directions for non-Owner/Admin via BEFORE UPDATE column-scope trigger — closed Session 90, commit `9fbcc1c` (same migration; rebuild-test only, prod push owed with #96).
+- **#99** `daily_log_crew`/`daily_log_sub_entries` cross-company `member_id` — same-company EXISTS added to INSERT WITH CHECK and new explicit UPDATE WITH CHECK on both tables — closed Session 90, commit `9fbcc1c` (same migration; rebuild-test only, prod push owed with #96).
 
 ## Process notes
 
