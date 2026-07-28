@@ -122,7 +122,6 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 - **#87** MCP `SUPABASE_ACCESS_TOKEN` (sbp\_ personal token) lives only in the current shell env — vanishes on Codespace rebuild, breaking the Supabase MCP server every fresh session. Make it persistent (Codespaces secret or committed-safe mechanism). Discovered Session 77.
 - **#88** rebuild-test still uses legacy JWT anon key (`NEXT_PUBLIC_SUPABASE_ANON_KEY` = eyJ... format). Migrate to `sb_publishable_` key + update `.env.local`, then click "Disable JWT-based API keys" to kill the leaked legacy service*role key (rotated to sb_secret* in S77, but legacy pair still enabled because anon half is in use). Rebuild-test only; production unaffected. Discovered Session 77.
   ### Track for Module 7
-- **#80** M7: wire signed-CO deltas into `contract_value` reconciliation. Per the Session 55 5D decision, approved change orders are **display-only** — the project budget view derives `projects.contract_value + sum(approved COs) = revised total`, but CO sign-off does **not** mutate `contract_value`. Module 7 (financials / draw schedules) owns the write-through: reconcile the revised total into the money surfaces (draw schedule, headline contract value) at build time. The signed COs are the source of record, so nothing is lost by deferring — this item exists solely so the write-through isn't forgotten when M7 is built. Decided Session 55 (5D change-orders interview).
 
 #### #81 — Dormant subcontractor invite path (parked, not dead)
 
@@ -192,6 +191,7 @@ non-role portal identity; then build the sub-facing surface that issues these in
 - **#97** `daily_logs` INSERT author spoofing — WITH CHECK now binds `author_member_id = get_my_member_id()` with Owner/Admin override — closed Session 90, commit `9fbcc1c` (same migration; rebuild-test only, prod push owed with #96).
 - **#98** `daily_logs` soft-delete reversal — `is_deleted`/`deleted_at` transitions blocked in both directions for non-Owner/Admin via BEFORE UPDATE column-scope trigger — closed Session 90, commit `9fbcc1c` (same migration; rebuild-test only, prod push owed with #96).
 - **#99** `daily_log_crew`/`daily_log_sub_entries` cross-company `member_id` — same-company EXISTS added to INSERT WITH CHECK and new explicit UPDATE WITH CHECK on both tables — closed Session 90, commit `9fbcc1c` (same migration; rebuild-test only, prod push owed with #96).
+- **#80** signed-CO deltas → `contract_value` reconciliation — closed by DERIVATION, not write-through: `projects.contract_value` is never mutated; revised = original + Σ(client-signed CO `net_delta`), derived by `apps/web/lib/services/contract-value.ts` (7B-spec §0 rules 1-2). Closed Session 90, commits `e57043c` (service) + `93d41d7` (call sites). Spec: `docs/specs/7B-spec.md`.
 
 ## Process notes
 
