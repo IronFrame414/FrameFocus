@@ -41,9 +41,13 @@ file:line citations throughout. Git/migrations are ground truth over any prior s
   `expenses.state` column (`committed | actual`, §2.1) ships with 7A, but **v1 writes `'actual'`
   only** — no committed flow is built here; 7C owns every committed writer.
 - Sub labor rates — manual T&M calc; out.
-- **Labor is NEVER an expense capture category** (Q5). The expense `cost_category` CHECK is
-  three-valued: `material | subcontractor | other`. This deliberately narrows interview decision 2's
-  four-value list; labor dollars flow only through the derived labor rollup.
+- **Labor is NEVER an expense capture category** (Q5). Labor dollars flow only through the
+  derived labor rollup.
+- **`subcontractor` is NEVER a capture category either** (S89 7C boundary decision — 7A =
+  point-of-purchase receipts only; anything invoiced/billed enters through 7C). **Capture
+  surfaces offer `material | other` only** and `createExpense` rejects `subcontractor`. The
+  value **stays in the DB CHECK** because 7C's bill/commitment writers set it
+  (`7C-spec.md` §0/§2.1) — removed from capture, not from the schema.
 - Receipt-photo-to-QB-attachment — a **connector (7G) requirement**; noted in §6, not designed here.
 - Sell/profit per row, invoicing basis, payments — 7B/7D/7E.
 - Company-overhead (non-job) expenses — `project_id` is NOT NULL (Q2); overhead waits for 7G need.
@@ -142,7 +146,11 @@ CREATE TABLE public.expenses (
     description       text,
     cost_category     text NOT NULL DEFAULT 'material'
                         CHECK (cost_category IN ('material','subcontractor','other')),
-                        -- labor deliberately excluded (Q5)
+                        -- labor deliberately excluded (Q5).
+                        -- 'subcontractor' is NOT capturable (S89 7C boundary): capture
+                        -- surfaces + createExpense offer material|other only; the value
+                        -- exists solely for 7C bill/commitment writers (7C-spec §2.1
+                        -- extends the column-scope trigger to enforce this).
 
     -- S89 amendment: committed/actual state per architecture P1 (§7.8.1).
     -- v1 writes 'actual' ONLY — no capture surface, service function, or RPC
@@ -249,8 +257,11 @@ ALTER TABLE public.companies
 
 Free-text QB account paths (e.g. `Cost of goods sold:Supplies & materials`). Nullable — unset
 means the connector will prompt at 7G time. `gl_account_labor` exists for the **future labor
-export**, not for expense capture (labor is not a capture category). Crew never sees these
-(Settings is Owner/Admin-gated already, `dashboard-shell.tsx:71`).
+export**, not for expense capture (labor is not a capture category).
+**`gl_account_subcontractor` is KEPT** (S89 7C boundary): subcontractor is not capturable in 7A,
+but 7C's sub bills carry `cost_category='subcontractor'` and consume this mapping at 7G export
+(`7C-spec.md` §2.1, §5 hooks). Crew never sees these (Settings is Owner/Admin-gated already,
+`dashboard-shell.tsx:71`).
 
 ### 2.6 Labor burden (S89 amendment; architecture §7.8.3)
 
@@ -526,9 +537,10 @@ re-sequences.
 Parking-lot simple, one column, camera-first: **Receipt photo(s)** (multi, `uploadFile` →
 `category 'receipts'`, `expense_id` linked; HEIC caveat #94 applies — stored but may not render),
 **Supplier** (text), **Date** (auto-today, editable), **Amount**, **Description**, **Job**
-(picker, assigned projects — required, Q2), **Category** (`material | subcontractor | other`;
-default material; pre-set on material runs). Submit → pending. Crew sees a confirmation with a
-status chip, no financial context beyond their own entry.
+(picker, assigned projects — required, Q2), **Category** (`material | other` — S89 7C boundary:
+`subcontractor` is never offered at capture; default material; pre-set on material runs).
+Submit → pending. Crew sees a confirmation with a status chip, no financial context beyond
+their own entry.
 
 ### 5.4 My Expenses / list (`/dashboard/expenses`) — role-scoped content
 
@@ -542,7 +554,9 @@ status chip, no financial context beyond their own entry.
 Opened per pending expense from the queue:
 
 - Receipt photo strip (tap = fullscreen), all capture fields (editable — Owner/Admin may correct
-  before approval), **Project reassign** dropdown (Q7: wrong-job = reassign, not reject).
+  before approval; the category selector offers `material | other` — S89 7C boundary: a receipt
+  is never recategorized `subcontractor`, that's a 7C bill), **Project reassign** dropdown
+  (Q7: wrong-job = reassign, not reject).
 - **Allocation section — always shown (Q4):** the project's budget lines
   (description, `cost_code`; `budgeted_amount` shown — Owner/Admin audience only, floor-safe)
   with per-line amount inputs; live "Unallocated: $X" remainder; over-allocation blocked.
@@ -630,11 +644,12 @@ approved time keeps its frozen burden." Crew/PM/foreman never see this surface
 
 ### Open items
 
-- **Committed-state writers are 7C's** (S89 amendment): `expenses.state` ships with the
-  `committed | actual` CHECK but v1 has **no** committed flow — no capture surface, service
-  function, or RPC writes `'committed'`, and the §2.3 recompute filters `state='actual'`. 7C
-  decides whether commitments are expense rows in `'committed'` state or their own table feeding
-  `committed_amount`; 7A deliberately does not preempt that.
+- **Committed-state writers are 7C's — now specced** (S89 amendment; resolved same session):
+  `expenses.state` ships with the `committed | actual` CHECK but the 7A build has **no**
+  committed flow — no capture surface, service function, or RPC writes `'committed'`, and the
+  §2.3 recompute filters `state='actual'`. **`7C-spec.md` resolves the shape: commitments ARE
+  expense rows** (sub stages, PO totals, manual committed entries — 7C §0/§2.1), written only
+  by 7C's owner/admin/PM writers via the extended column-scope trigger.
 - **~~Burden read-time repricing~~ RESOLVED (S89 follow-up):** burden is frozen into
   `time_session_rate_snapshots` at approval, forward-only (§2.6). Remaining flag: pre-burden
   approved sessions carry NULL burden fields = pass-through pricing, permanently — stated in
