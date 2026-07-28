@@ -10,16 +10,25 @@ interface ProjectHeaderProps {
   project: ProjectWithContact;
   /** Owner/Admin/PM — shows the "+ Change Order" action (ui-04 §4). */
   canManage: boolean;
+  /** Caller's role — gates the Job Cost tab (7A §5.6: hidden for crew). */
+  role: string;
 }
 
 // ui-04 §S2 (locked round 2): current tabs + Photos (adjacent to Files).
 // + Deliveries (S90, 6D-spec §U amendment) — first-class project tab after
 // Punch List (the field/materials cluster); Daily Logs and Safety stay on
 // the Field Ops surface only.
-const TABS: { slug: string; label: string }[] = [
+// + Job Cost (7A §5.6, S90 Q4a): immediately after Budget (the money
+// cluster); role-gated — Owner/Admin/PM/Foreman only, crew never sees it.
+const TABS: { slug: string; label: string; roles?: string[] }[] = [
   { slug: '', label: 'Overview' },
   { slug: 'schedule', label: 'Schedule' },
   { slug: 'budget', label: 'Budget' },
+  {
+    slug: 'costs',
+    label: 'Job Cost',
+    roles: ['owner', 'admin', 'project_manager', 'foreman'],
+  },
   { slug: 'changes', label: 'Change Orders' },
   { slug: 'punch', label: 'Punch List' },
   { slug: 'deliveries', label: 'Deliveries' },
@@ -39,10 +48,11 @@ const STATUS_BADGES: Record<string, { bg: string; fg: string }> = {
   cancelled: { bg: '#eef1f6', fg: '#c0362c' },
 };
 
-export function ProjectHeader({ project, canManage }: ProjectHeaderProps) {
+export function ProjectHeader({ project, canManage, role }: ProjectHeaderProps) {
   const pathname = usePathname();
   const base = `/dashboard/projects/${project.id}`;
   const badge = STATUS_BADGES[project.status] ?? STATUS_BADGES.archived;
+  const visibleTabs = TABS.filter((t) => !t.roles || t.roles.includes(role));
 
   function isActive(slug: string): boolean {
     if (slug === '') return pathname === base;
@@ -103,7 +113,7 @@ export function ProjectHeader({ project, canManage }: ProjectHeaderProps) {
           borderBottom: `1px solid ${color.cardBorder}`,
         }}
       >
-        {TABS.map((tab) => {
+        {visibleTabs.map((tab) => {
           const active = isActive(tab.slug);
           return (
             <Link

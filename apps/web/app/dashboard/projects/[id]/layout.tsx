@@ -37,6 +37,7 @@ export default async function ProjectLayout({
       <ProjectHeader
         project={project}
         canManage={['owner', 'admin', 'project_manager'].includes(role)}
+        role={role}
       />
       {children}
     </div>

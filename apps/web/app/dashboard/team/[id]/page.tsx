@@ -1,7 +1,8 @@
 import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getTeamMember, getCompanyAdmins } from '@/lib/services/team';
-import { getMemberRates } from '@/lib/services/pay-rates';
+import { getMemberBurden, getMemberRates } from '@/lib/services/pay-rates';
+import { getGLMappingSettings } from '@/lib/services/company';
 import EditForm from './edit-form';
 import TransferForm from './transfer-form';
 import PayRateSection from './pay-rate-section';
@@ -48,7 +49,15 @@ export default async function TeamMemberEditPage({ params }: { params: { id: str
     .eq('profile_id', target.id)
     .eq('is_deleted', false)
     .maybeSingle();
-  const rates = memberRow ? await getMemberRates(memberRow.id) : [];
+  // Burden rides the same Owner/Admin surface as pay rates (7A §5.9); the
+  // company fixed $/hr feeds the '+' arm of the preview line.
+  const [rates, burden, glSettings] = memberRow
+    ? await Promise.all([
+        getMemberRates(memberRow.id),
+        getMemberBurden(memberRow.id),
+        getGLMappingSettings(),
+      ])
+    : [[], null, null];
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
@@ -77,7 +86,14 @@ export default async function TeamMemberEditPage({ params }: { params: { id: str
           callerRole={caller.role as 'owner' | 'admin'}
         />
       )}
-      {memberRow && <PayRateSection memberId={memberRow.id} rates={rates} />}
+      {memberRow && (
+        <PayRateSection
+          memberId={memberRow.id}
+          rates={rates}
+          burden={burden}
+          companyFixedBurden={glSettings?.fixed_burden_per_hour ?? null}
+        />
+      )}
     </div>
   );
 }

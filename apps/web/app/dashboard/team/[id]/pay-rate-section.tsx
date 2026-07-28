@@ -13,6 +13,9 @@ import { useRouter } from 'next/navigation';
 import {
   addMemberRate,
   deleteMemberRate,
+  setMemberBurden,
+  type BurdenSource,
+  type MemberBurdenSettings,
   type MemberPayRate,
 } from '@/lib/services/pay-rates-client';
 import { cardStyle, color, h2Style, microLabelStyle, primaryButtonStyle } from '@/lib/theme';
@@ -22,6 +25,10 @@ interface PayRateSectionProps {
   memberId: string;
   /** Newest effective_date first (getMemberRates order). */
   rates: MemberPayRate[];
+  /** 7A §5.9 — live burden row (null = no row yet = pass-through ×1.0). */
+  burden: MemberBurdenSettings | null;
+  /** companies.fixed_burden_per_hour — the '+' arm of the preview (null→0). */
+  companyFixedBurden: number | null;
 }
 
 function money(rate: number): string {
@@ -42,15 +49,62 @@ const inputStyle: React.CSSProperties = {
   color: color.body,
 };
 
-export default function PayRateSection({ memberId, rates }: PayRateSectionProps) {
+export default function PayRateSection({
+  memberId,
+  rates,
+  burden,
+  companyFixedBurden,
+}: PayRateSectionProps) {
   const router = useRouter();
   const [rateInput, setRateInput] = useState('');
   const [dateInput, setDateInput] = useState(() => todayYmd());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // 7A §5.9 — burden controls (multiplier + source toggle).
+  const [multiplierInput, setMultiplierInput] = useState(
+    String(burden?.burden_multiplier ?? 1.0)
+  );
+  const [burdenSource, setBurdenSource] = useState<BurdenSource>(
+    burden?.burden_source ?? 'member_multiplier'
+  );
+  const [burdenBusy, setBurdenBusy] = useState(false);
+  const [burdenError, setBurdenError] = useState<string | null>(null);
+  const [burdenSaved, setBurdenSaved] = useState(false);
+
   const today = todayYmd();
   const current = rates.find((r) => r.effective_date <= today) ?? null;
+
+  async function handleSaveBurden() {
+    const parsed = Number(multiplierInput);
+    if (!multiplierInput.trim() || Number.isNaN(parsed) || parsed <= 0) {
+      setBurdenError('Enter a burden multiplier greater than zero.');
+      return;
+    }
+    setBurdenBusy(true);
+    setBurdenError(null);
+    setBurdenSaved(false);
+    const res = await setMemberBurden(memberId, {
+      burden_multiplier: parsed,
+      burden_source: burdenSource,
+    });
+    setBurdenBusy(false);
+    if (!res.success) {
+      setBurdenError(res.error ?? 'Failed to save burden settings.');
+      return;
+    }
+    setBurdenSaved(true);
+    router.refresh();
+  }
+
+  // Founder safeguard (§7.8.3): the preview line IS the formula the next
+  // approval will freeze — the operator flips with the toggle.
+  const previewMultiplier = Number(multiplierInput) > 0 ? Number(multiplierInput) : 1.0;
+  const preview = current
+    ? burdenSource === 'member_multiplier'
+      ? `${money(current.hourly_rate)} × ${previewMultiplier} / hr`
+      : `${money(current.hourly_rate)} + ${money(companyFixedBurden ?? 0)} / hr`
+    : null;
 
   async function handleAdd() {
     const parsed = Number(rateInput);
@@ -175,6 +229,75 @@ export default function PayRateSection({ memberId, rates }: PayRateSectionProps)
       {error && (
         <p style={{ color: color.danger, fontSize: '13px', margin: '10px 0 0' }}>{error}</p>
       )}
+
+      {/* ── 7A §5.9 — labor burden ── */}
+      <div style={{ borderTop: `1px solid ${color.rowDivider}`, marginTop: '20px', paddingTop: '16px' }}>
+        <h3 style={{ ...h2Style, fontSize: '15px', marginBottom: '4px' }}>Labor burden</h3>
+        <p style={{ fontSize: '12px', color: color.faint, margin: '0 0 12px' }}>
+          Applies to future approvals only — already-approved time keeps its frozen burden.
+        </p>
+
+        <div style={{ display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '10px' }}>
+          <div style={{ display: 'flex', gap: '12px', fontSize: '13px', color: color.body }}>
+            <label style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <input
+                type="radio"
+                checked={burdenSource === 'member_multiplier'}
+                onChange={() => setBurdenSource('member_multiplier')}
+              />
+              Member multiplier
+            </label>
+            <label style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <input
+                type="radio"
+                checked={burdenSource === 'company_fixed'}
+                onChange={() => setBurdenSource('company_fixed')}
+              />
+              Company fixed $/hr
+            </label>
+          </div>
+          {burdenSource === 'member_multiplier' && (
+            <input
+              type="number"
+              min="0.001"
+              step="0.01"
+              value={multiplierInput}
+              onChange={(e) => setMultiplierInput(e.target.value)}
+              aria-label="Burden multiplier"
+              style={{ ...inputStyle, width: '100px' }}
+            />
+          )}
+        </div>
+
+        {preview && (
+          <p style={{ margin: '0 0 12px', fontSize: '14px', color: color.body }}>
+            Burdened cost:{' '}
+            <span style={{ ...monoValue, fontWeight: 600, color: color.navy }}>{preview}</span>
+            {burdenSource === 'company_fixed' && companyFixedBurden === null && (
+              <span style={{ fontSize: '12px', color: color.warningDeep }}>
+                {' '}
+                — no company fixed burden set (Settings); treated as $0.00
+              </span>
+            )}
+          </p>
+        )}
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button
+            style={{ ...primaryButtonStyle, opacity: burdenBusy ? 0.6 : 1 }}
+            disabled={burdenBusy}
+            onClick={() => void handleSaveBurden()}
+          >
+            {burdenBusy ? 'Saving…' : 'Save burden'}
+          </button>
+          {burdenSaved && (
+            <span style={{ fontSize: '12px', color: color.success }}>Saved.</span>
+          )}
+        </div>
+        {burdenError && (
+          <p style={{ color: color.danger, fontSize: '13px', margin: '10px 0 0' }}>{burdenError}</p>
+        )}
+      </div>
     </div>
   );
 }

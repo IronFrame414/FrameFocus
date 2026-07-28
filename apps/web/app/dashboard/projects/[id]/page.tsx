@@ -485,6 +485,7 @@ export default async function ProjectOverviewPage({ params }: { params: { id: st
                 projectId={project.id}
                 currentStatus={project.status}
                 userRole={profile.role}
+                actualEndDate={project.actual_end_date}
               />
             </div>
           )}
