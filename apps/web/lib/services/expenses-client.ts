@@ -236,6 +236,50 @@ export async function uploadExpenseReceipt(
 }
 
 // ----------------------------------------------------------------------------
+// 7A UI client reads (S90 Phase 2 Q3 — additive). Client-side because their
+// consumers are modals that fetch at interaction time: the review popup's
+// allocation section re-fetches after a project reassign, and the material-run
+// prompt checks for an existing expense before the segment ends.
+// ----------------------------------------------------------------------------
+
+/** Budget lines for the review popup's allocation section (Q4 — always shown).
+ *  budgeted_amount rides along for the Owner/Admin-only display (floor-safe:
+ *  the popup itself is Owner/Admin). */
+export interface BudgetLineOption {
+  id: string;
+  description: string | null;
+  cost_code: string | null;
+  budgeted_amount: number | null;
+  actual_amount: number | null;
+}
+
+export async function listProjectBudgetLines(projectId: string): Promise<BudgetLineOption[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('project_budget_items')
+    .select('id, description, cost_code, budgeted_amount, actual_amount')
+    .eq('project_id', projectId)
+    .eq('is_deleted', false)
+    .order('cost_code', { ascending: true, nullsFirst: false })
+    .order('created_at', { ascending: true });
+  if (error) return [];
+  return (data ?? []) as BudgetLineOption[];
+}
+
+/** Prompt-skip check (§5.1): an expense already born from this segment means
+ *  the material-run prompt does not re-fire. */
+export async function segmentHasExpense(segmentId: string): Promise<boolean> {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from('expenses')
+    .select('id')
+    .eq('source_segment_id', segmentId)
+    .eq('is_deleted', false)
+    .limit(1);
+  return (data ?? []).length > 0;
+}
+
+// ----------------------------------------------------------------------------
 // Material-run decline (Q10 / Phase 2 Q5). There is NO declineMaterialRunExpense
 // service: 6A RLS lets a member end only their own OPEN segment — an author
 // cannot patch an ENDED segment's note, and we do not widen RLS for this.

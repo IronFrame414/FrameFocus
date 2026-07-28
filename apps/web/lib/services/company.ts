@@ -243,3 +243,36 @@ export async function getProposalSettings(): Promise<ProposalSettings | null> {
 
   return (data as ProposalSettings | null) ?? null;
 }
+
+// ── 7A §5.8 — GL account mapping + company fixed burden ──
+// The four gl_account_* columns are free-text QB account paths consumed by
+// the future 7G connector (7A only stores them). fixed_burden_per_hour is the
+// '+' arm of the per-member burden toggle (7A-spec §2.6) — NULL treated as 0.
+
+export type GLMappingSettings = Pick<
+  CompaniesRow,
+  | 'id'
+  | 'gl_account_labor'
+  | 'gl_account_material'
+  | 'gl_account_subcontractor'
+  | 'gl_account_other'
+  | 'fixed_burden_per_hour'
+>;
+
+export async function getGLMappingSettings(): Promise<GLMappingSettings | null> {
+  const supabase = await createClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data } = await supabase
+    .from('companies')
+    .select(
+      'id, gl_account_labor, gl_account_material, gl_account_subcontractor, gl_account_other, fixed_burden_per_hour'
+    )
+    .maybeSingle();
+
+  return (data as GLMappingSettings | null) ?? null;
+}

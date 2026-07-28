@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase-browser';
 import type {
   CompanyData,
   EstimatingSettings,
+  GLMappingSettings,
   PricingMode,
   ProposalSettings,
   TermsSection,
@@ -12,6 +13,7 @@ import type { GpsClockMode } from '@framefocus/shared/utils/time-tracking';
 export type {
   CompanyData,
   EstimatingSettings,
+  GLMappingSettings,
   GpsClockMode,
   PricingMode,
   ProposalSettings,
@@ -29,6 +31,31 @@ export type UpdateTimeTrackingSettingsInput = Partial<
 export async function updateTimeTrackingSettings(
   companyId: string,
   updates: UpdateTimeTrackingSettingsInput
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = createClient();
+
+  // companies pre-trigger holdover (CLAUDE.md): set updated_at
+  // explicitly — companies_set_updated_by trigger does not exist.
+  const { error } = await supabase
+    .from('companies')
+    .update({ ...updates, updated_at: new Date().toISOString() })
+    .eq('id', companyId);
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+  return { success: true };
+}
+
+// ── 7A §5.8 — GL account mapping + company fixed burden ──
+// Owner/Admin (page-level gate; companies RLS scopes the row). A
+// fixed_burden_per_hour change is FORWARD-ONLY: it affects future session
+// approvals, never already-frozen snapshots (7A-spec §2.6).
+export type UpdateGLMappingSettingsInput = Partial<Omit<GLMappingSettings, 'id'>>;
+
+export async function updateGLMappingSettings(
+  companyId: string,
+  updates: UpdateGLMappingSettingsInput
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = createClient();
 
