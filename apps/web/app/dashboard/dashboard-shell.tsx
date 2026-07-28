@@ -10,6 +10,7 @@ import {
   HardHat,
   LayoutGrid,
   List,
+  Receipt,
   Rows3,
   Settings,
   User,
@@ -39,6 +40,9 @@ interface DashboardShellProps {
 // with the 6B UI: Field Ops inserted after Schedule. Role gates preserved from
 // ui-01 §5/§S5: Estimates + Cost Catalog owner/admin/pm; Settings owner/admin;
 // Billing owner-only. Icon mapping per §5/§S4 (lucide; hard-hat = Field Ops).
+// 7A [S90]: Expenses APPENDED after Timeclock as item 13 of the locked 12
+// (7A-spec §5.2 — ungated, the Field Ops precedent; page content is
+// role-scoped). Final position is owed to the deferred FFNav reindex session.
 const NAV_ITEMS: {
   href: string;
   label: string;
@@ -54,6 +58,8 @@ const NAV_ITEMS: {
   // PERMANENT first-class item (S86 decision — no longer interim). Timesheets
   // is NOT a nav item: it lives at /dashboard/timeclock/timesheets (S85).
   { href: '/dashboard/timeclock', label: 'Timeclock', icon: Clock },
+  // 7A: ungated — crew capture + own list; content is role-scoped (§5.4).
+  { href: '/dashboard/expenses', label: 'Expenses', icon: Receipt },
   { href: '/dashboard/contacts', label: 'Contacts', icon: User },
   { href: '/dashboard/subcontractors', label: 'Subs & Vendors', icon: Users },
   {
@@ -172,6 +178,7 @@ export function DashboardShell({
             myMemberId={myMemberId}
             timeZone={timeZone}
             gpsMode={gpsMode}
+            userRole={userRole}
           />
         </header>
         <main className="flex-1 bg-[#f4f6f9] px-[30px] py-[26px]">{children}</main>

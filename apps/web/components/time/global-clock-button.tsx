@@ -19,6 +19,8 @@ interface GlobalClockButtonProps {
   timeZone: string;
   /** companies.gps_clock_mode [S86] — threaded through to ClockModal. */
   gpsMode: GpsClockMode;
+  /** Caller's role — the 7A expense sheet's photo exemption (ClockModal). */
+  userRole: string;
 }
 
 export function GlobalClockButton({
@@ -26,6 +28,7 @@ export function GlobalClockButton({
   myMemberId,
   timeZone,
   gpsMode,
+  userRole,
 }: GlobalClockButtonProps) {
   const router = useRouter();
   const [mode, setMode] = useState<'clock-in' | 'clock-out' | null>(null);
@@ -93,6 +96,8 @@ export function GlobalClockButton({
           session={openSession}
           myMemberId={myMemberId}
           gpsMode={gpsMode}
+          timeZone={timeZone}
+          userRole={userRole}
           onClose={() => setMode(null)}
           onDone={(result) => {
             setMode(null);

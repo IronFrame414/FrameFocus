@@ -29,6 +29,9 @@ import {
   SEGMENT_TYPES,
   type GpsClockMode,
 } from '@framefocus/shared/utils/time-tracking';
+import { segmentHasExpense, withDeclineNote } from '@/lib/services/expenses-client';
+import { ExpenseCaptureModal } from '@/components/expenses/expense-capture-form';
+import { MaterialRunPrompt } from '@/components/expenses/material-run-prompt';
 import {
   cardStyle,
   color,
@@ -100,6 +103,12 @@ interface ClockModalProps {
   myMemberId: string | null;
   /** companies.gps_clock_mode [S86] — 'off' skips capture entirely. */
   gpsMode: GpsClockMode;
+  /** Company timezone — the expense sheet's date pre-fill (6B log_date
+   *  convention). Both mounts (header button, timeclock page) have it. */
+  timeZone: string;
+  /** Caller's role — the expense sheet's Owner/Admin photo exemption
+   *  (presentation-only; no service or RLS change). */
+  userRole: string;
   onClose: () => void;
   /** Fired after a successful write. Caller closes the modal and refreshes. */
   onDone: (result: { taskWarning?: string }) => void;
@@ -110,11 +119,20 @@ export function ClockModal({
   session,
   myMemberId,
   gpsMode,
+  timeZone,
+  userRole,
   onClose,
   onDone,
 }: ClockModalProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // 7A §5.1 material-run flow (clock-out path). 'ask' replaces the footer
+  // with the prompt (segment still open — the decline must ride the end
+  // note); 'capture' means the segment ended and the expense sheet is up.
+  const [materialRunStep, setMaterialRunStep] = useState<'ask' | 'capture' | null>(null);
+  const [endedRun, setEndedRun] = useState<{ segmentId: string; projectId: string } | null>(null);
+  const [pendingWarning, setPendingWarning] = useState<string | undefined>(undefined);
 
   // Clock-in attribution fields.
   const [segType, setSegType] = useState<SegmentType>('work');
@@ -210,6 +228,27 @@ export function ClockModal({
       setError('Mark the task complete or incomplete before ending.');
       return;
     }
+
+    // 7A §5.1 — ending a material_run intercepts with the mandatory expense
+    // prompt, unless one already exists for this segment (prompt-skip).
+    if (currentSegment.segment_type === 'material_run' && materialRunStep === null) {
+      setBusy(true);
+      setError(null);
+      const hasExpense = await segmentHasExpense(currentSegment.id);
+      setBusy(false);
+      if (!hasExpense) {
+        setMaterialRunStep('ask');
+        return;
+      }
+    }
+
+    await performClockOut(endNote.trim(), false);
+  }
+
+  /** The actual clock-out write. `openCapture` holds onDone until the expense
+   *  sheet finishes (§5.1 — capture happens AFTER the segment ends). */
+  async function performClockOut(note: string, openCapture: boolean) {
+    if (!session || !currentSegment) return;
     setBusy(true);
     setError(null);
     const gps = gpsMode === 'off' ? undefined : await captureGps();
@@ -219,17 +258,49 @@ export function ClockModal({
         segment_id: currentSegment.id,
         segment_type: currentSegment.segment_type,
         task_id: currentSegment.task_id,
-        note: currentSegment.segment_type === 'break' ? null : endNote.trim(),
+        note: currentSegment.segment_type === 'break' ? null : note,
         completion: currentSegment.task_id ? (endCompletion as Completion) : null,
       },
       gps_out: gps,
     });
     setBusy(false);
     if (!res.success) {
+      setMaterialRunStep(null);
       setError(res.error ?? 'Failed to clock out.');
       return;
     }
+    if (openCapture && currentSegment.project_id) {
+      setPendingWarning(res.taskWarning);
+      setEndedRun({ segmentId: currentSegment.id, projectId: currentSegment.project_id });
+      setMaterialRunStep('capture');
+      return;
+    }
     onDone({ taskWarning: res.taskWarning });
+  }
+
+  /** Company-tz calendar day (6B log_date convention) for the expense sheet. */
+  const todayYmd = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+
+  // Post-end expense sheet: the run segment is ended; the session is closed.
+  // Done/close both hand control back to the caller (refresh happens there).
+  if (materialRunStep === 'capture' && endedRun) {
+    return (
+      <ExpenseCaptureModal
+        title="Log material run expense"
+        initialProjectId={endedRun.projectId}
+        lockProject
+        sourceSegmentId={endedRun.segmentId}
+        todayYmd={todayYmd}
+        callerRole={userRole}
+        onDone={() => onDone({ taskWarning: pendingWarning })}
+        onClose={() => onDone({ taskWarning: pendingWarning })}
+      />
+    );
   }
 
   return (
@@ -357,21 +428,30 @@ export function ClockModal({
           <p style={{ color: color.danger, fontSize: '13px', margin: '0 0 12px' }}>{error}</p>
         )}
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
-          <button style={secondaryButtonStyle} disabled={busy} onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            style={{ ...primaryButtonStyle, opacity: busy ? 0.6 : 1 }}
-            disabled={busy}
-            onClick={() => {
-              if (mode === 'clock-in') void handleClockIn();
-              else void handleClockOut();
-            }}
-          >
-            {busy ? 'Saving…' : mode === 'clock-in' ? 'Clock in' : 'Clock out'}
-          </button>
-        </div>
+        {materialRunStep === 'ask' ? (
+          /* 7A §5.1 — segment still open; the decline rides the end note. */
+          <MaterialRunPrompt
+            busy={busy}
+            onNoPurchase={() => void performClockOut(withDeclineNote(endNote), false)}
+            onLogExpense={() => void performClockOut(endNote.trim(), true)}
+          />
+        ) : (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
+            <button style={secondaryButtonStyle} disabled={busy} onClick={onClose}>
+              Cancel
+            </button>
+            <button
+              style={{ ...primaryButtonStyle, opacity: busy ? 0.6 : 1 }}
+              disabled={busy}
+              onClick={() => {
+                if (mode === 'clock-in') void handleClockIn();
+                else void handleClockOut();
+              }}
+            >
+              {busy ? 'Saving…' : mode === 'clock-in' ? 'Clock in' : 'Clock out'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

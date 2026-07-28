@@ -32,6 +32,9 @@ import {
   fmtTime,
   monoValue,
 } from '@/components/time/time-ui';
+import { segmentHasExpense, withDeclineNote } from '@/lib/services/expenses-client';
+import { ExpenseCaptureModal } from '@/components/expenses/expense-capture-form';
+import { MaterialRunPrompt } from '@/components/expenses/material-run-prompt';
 import {
   cardStyle,
   color,
@@ -52,6 +55,8 @@ interface TimeclockClientProps {
   timeZone: string;
   /** companies.gps_clock_mode [S86] — threaded through to ClockModal. */
   gpsMode: GpsClockMode;
+  /** Caller's role — the 7A expense sheet's photo exemption. */
+  userRole: string;
 }
 
 // Clock-in / clock-out flows live in the shared ClockModal (also used by the
@@ -65,6 +70,7 @@ export function TimeclockClient({
   taskTitles,
   timeZone,
   gpsMode,
+  userRole,
 }: TimeclockClientProps) {
   const router = useRouter();
   const session = initialSession;
@@ -85,6 +91,12 @@ export function TimeclockClient({
   // Fields for ending the CURRENT segment (switch / clock-out).
   const [endNote, setEndNote] = useState('');
   const [endCompletion, setEndCompletion] = useState<'' | Completion>('');
+
+  // 7A §5.1 material-run flow (switch path — S90 Q1: BOTH end paths prompt).
+  // 'ask' replaces the switch-modal footer while the segment is still open;
+  // 'capture' means the switch landed and the expense sheet is up.
+  const [runStep, setRunStep] = useState<'ask' | 'capture' | null>(null);
+  const [endedRun, setEndedRun] = useState<{ segmentId: string; projectId: string } | null>(null);
 
   const [pickerTasks, setPickerTasks] = useState<PickerTask[]>([]);
 
@@ -136,6 +148,7 @@ export function TimeclockClient({
 
   function openModal(mode: Exclude<ModalMode, null>) {
     setError(null);
+    setRunStep(null);
     setEndNote('');
     setEndCompletion('');
     if (mode === 'edit' && recentSegment) {
@@ -188,33 +201,59 @@ export function TimeclockClient({
     return null;
   }
 
-  function endFields() {
-    if (!currentSegment) throw new Error('No open segment.');
-    return {
-      segment_id: currentSegment.id,
-      segment_type: currentSegment.segment_type,
-      task_id: currentSegment.task_id,
-      note: currentSegment.segment_type === 'break' ? null : endNote.trim(),
-      completion: currentSegment.task_id ? (endCompletion as Completion) : null,
-    };
-  }
-
   async function handleSwitch() {
     const invalid = validateEnd() ?? validateAttribution();
     if (invalid) {
       setError(invalid);
       return;
     }
+
+    // 7A §5.1 — ending a material_run intercepts with the mandatory expense
+    // prompt, unless one already exists for this segment (prompt-skip).
+    if (currentSegment?.segment_type === 'material_run' && runStep === null) {
+      setBusy(true);
+      setError(null);
+      const hasExpense = await segmentHasExpense(currentSegment.id);
+      setBusy(false);
+      if (!hasExpense) {
+        setRunStep('ask');
+        return;
+      }
+    }
+
+    await performSwitch(endNote.trim(), false);
+  }
+
+  /** The actual switch write. `openCapture` opens the expense sheet after the
+   *  segment ends (§5.1 — capture AFTER the end, decline rides the note). */
+  async function performSwitch(note: string, openCapture: boolean) {
+    if (!currentSegment) return;
     setBusy(true);
     setError(null);
-    const res = await switchSegment({ end: endFields(), next: normalizedAttribution() });
+    const res = await switchSegment({
+      end: {
+        segment_id: currentSegment.id,
+        segment_type: currentSegment.segment_type,
+        task_id: currentSegment.task_id,
+        note: currentSegment.segment_type === 'break' ? null : note,
+        completion: currentSegment.task_id ? (endCompletion as Completion) : null,
+      },
+      next: normalizedAttribution(),
+    });
     setBusy(false);
     if (!res.success) {
+      setRunStep(null);
       setError(res.error ?? 'Failed to switch.');
       return;
     }
     if (res.taskWarning) setTaskWarning(res.taskWarning);
     setModal(null);
+    if (openCapture && currentSegment.project_id) {
+      setEndedRun({ segmentId: currentSegment.id, projectId: currentSegment.project_id });
+      setRunStep('capture');
+      return;
+    }
+    setRunStep(null);
     router.refresh();
   }
 
@@ -626,23 +665,68 @@ export function TimeclockClient({
               <p style={{ color: color.danger, fontSize: '13px', margin: '0 0 12px' }}>{error}</p>
             )}
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
-              <button style={secondaryButtonStyle} disabled={busy} onClick={() => setModal(null)}>
-                Cancel
-              </button>
-              <button
-                style={{ ...primaryButtonStyle, opacity: busy ? 0.6 : 1 }}
-                disabled={busy}
-                onClick={() => {
-                  if (modal === 'switch') void handleSwitch();
-                  else void handleEditRecent();
-                }}
-              >
-                {busy ? 'Saving…' : modal === 'switch' ? 'Switch' : 'Save'}
-              </button>
-            </div>
+            {modal === 'switch' && runStep === 'ask' ? (
+              /* 7A §5.1 — segment still open; the decline rides the end note. */
+              <MaterialRunPrompt
+                busy={busy}
+                onNoPurchase={() => void performSwitch(withDeclineNote(endNote), false)}
+                onLogExpense={() => void performSwitch(endNote.trim(), true)}
+              />
+            ) : (
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
+                <button
+                  style={secondaryButtonStyle}
+                  disabled={busy}
+                  onClick={() => {
+                    setRunStep(null);
+                    setModal(null);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  style={{ ...primaryButtonStyle, opacity: busy ? 0.6 : 1 }}
+                  disabled={busy}
+                  onClick={() => {
+                    if (modal === 'switch') void handleSwitch();
+                    else void handleEditRecent();
+                  }}
+                >
+                  {busy ? 'Saving…' : modal === 'switch' ? 'Switch' : 'Save'}
+                </button>
+              </div>
+            )}
           </div>
         </div>
+      )}
+
+      {/* 7A §5.1 — post-switch material-run expense sheet (segment already
+          ended; job locked from it). */}
+      {runStep === 'capture' && endedRun && (
+        <ExpenseCaptureModal
+          title="Log material run expense"
+          projects={activeProjects}
+          initialProjectId={endedRun.projectId}
+          lockProject
+          sourceSegmentId={endedRun.segmentId}
+          callerRole={userRole}
+          todayYmd={new Intl.DateTimeFormat('en-CA', {
+            timeZone,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+          }).format(new Date())}
+          onDone={() => {
+            setRunStep(null);
+            setEndedRun(null);
+            router.refresh();
+          }}
+          onClose={() => {
+            setRunStep(null);
+            setEndedRun(null);
+            router.refresh();
+          }}
+        />
       )}
 
       {/* Shared clock-in / clock-out flows (same modal as the global header
@@ -653,6 +737,8 @@ export function TimeclockClient({
           session={session}
           myMemberId={myMemberId}
           gpsMode={gpsMode}
+          timeZone={timeZone}
+          userRole={userRole}
           onClose={() => setClockModal(null)}
           onDone={(result) => {
             setClockModal(null);

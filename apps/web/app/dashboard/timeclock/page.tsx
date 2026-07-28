@@ -61,6 +61,7 @@ export default async function TimeclockPage() {
         taskTitles={taskTitles}
         timeZone={timeSettings.timezone}
         gpsMode={timeSettings.gpsClockMode}
+        userRole={profile?.role ?? ''}
       />
     </div>
   );
