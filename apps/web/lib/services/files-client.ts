@@ -27,6 +27,35 @@ function inferMimeType(file: File): string {
   return EXTENSION_MIME[ext] ?? 'application/octet-stream';
 }
 
+const HEIC_MIME_TYPES = new Set(['image/heic', 'image/heif']);
+const HEIC_JPEG_QUALITY = 0.82;
+
+// #94: browsers and react-pdf render JPEG/PNG only — HEIC bytes stored as-is
+// are invisible in photo grids and captioned "not embedded" in PDFs. Convert
+// at upload so every consumer keys off the row's image/jpeg mime_type
+// unchanged. heic2any is browser-only and heavy, so it is dynamically
+// imported here — non-HEIC uploads never load it. Returns null on ANY
+// failure: the caller falls back to uploading the original bytes, so an
+// upload never fails harder than the pre-conversion behavior.
+async function convertHeicToJpeg(file: File): Promise<File | null> {
+  try {
+    const { default: heic2any } = await import('heic2any');
+    const result = await heic2any({
+      blob: file,
+      toType: 'image/jpeg',
+      quality: HEIC_JPEG_QUALITY,
+    });
+    // Multi-frame HEIC (bursts) yields an array — keep the first frame.
+    const blob = Array.isArray(result) ? result[0] : result;
+    if (!blob) return null;
+    const jpegName = `${file.name.replace(/\.(heic|heif)$/i, '')}.jpg`;
+    return new File([blob], jpegName, { type: 'image/jpeg' });
+  } catch (err) {
+    console.error('HEIC conversion failed — uploading original bytes:', err);
+    return null;
+  }
+}
+
 export async function uploadFile(
   file: File,
   options: {
@@ -35,12 +64,29 @@ export async function uploadFile(
     tags?: string[];
   }
 ): Promise<UploadResult> {
-  // Client-side size check — fail fast before touching storage
+  // Client-side size check — fail fast before touching storage.
+  // #94: the limit applies to the ORIGINAL bytes — an oversized HEIC is
+  // rejected before we spend the conversion (the converted JPEG is smaller,
+  // so nothing that passes here can exceed the limit after conversion).
   if (file.size > MAX_FILE_SIZE_BYTES) {
     return {
       success: false,
       error: `File too large. Max size is ${MAX_FILE_SIZE_BYTES / 1024 / 1024} MB.`,
     };
+  }
+
+  // #94: HEIC → JPEG at upload. On conversion failure `upload` keeps the
+  // original file and its inferred HEIC mime (today's stored-but-unrendered
+  // behavior). All downstream fields (path, name, size, mime_type) follow
+  // `upload`, never `file`.
+  let upload = file;
+  let mimeType = inferMimeType(file);
+  if (HEIC_MIME_TYPES.has(mimeType)) {
+    const converted = await convertHeicToJpeg(file);
+    if (converted) {
+      upload = converted;
+      mimeType = 'image/jpeg';
+    }
   }
 
   const supabase = createClient();
@@ -64,13 +110,11 @@ export async function uploadFile(
   // Category lives in the column, NOT in the path — keeps category editable
   // without orphaning the storage location.
   const uniqueId = crypto.randomUUID();
-  const safeFilename = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const safeFilename = upload.name.replace(/[^a-zA-Z0-9._-]/g, '_');
   const storagePath = `${profile.company_id}/${options.project_id}/${uniqueId}-${safeFilename}`;
 
-  const mimeType = inferMimeType(file);
-
   // Upload bytes first
-  const { error: uploadError } = await supabase.storage.from(BUCKET).upload(storagePath, file, {
+  const { error: uploadError } = await supabase.storage.from(BUCKET).upload(storagePath, upload, {
     contentType: mimeType,
     upsert: false,
   });
@@ -85,9 +129,9 @@ export async function uploadFile(
     .insert({
       project_id: options.project_id,
       category: options.category,
-      file_name: file.name,
+      file_name: upload.name,
       file_path: storagePath,
-      file_size: file.size,
+      file_size: upload.size,
       mime_type: mimeType,
       tags: options.tags ?? [],
     })
