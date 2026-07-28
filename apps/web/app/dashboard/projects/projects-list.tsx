@@ -17,6 +17,10 @@ import {
 
 interface ProjectsListProps {
   projects: ProjectWithContact[];
+  /** 7B: revised contract per project id (server-derived via
+   *  getRevisedContractMap — the single legal derivation). null = no
+   *  original contract value; empty for roles without the Contract column. */
+  revisedContracts: Record<string, number | null>;
   currentStatus: string;
   canCreate: boolean;
   /** Financial floor (ui-01 §11): Contract column is Owner/Admin only. */
@@ -48,6 +52,7 @@ function money(value: number | null): string {
 
 export function ProjectsList({
   projects,
+  revisedContracts,
   currentStatus,
   canCreate,
   canSeeFinancials,
@@ -241,11 +246,12 @@ export function ProjectsList({
                     fontFamily: font.mono,
                     fontSize: '14px',
                     fontWeight: 600,
-                    color: p.contract_value === null ? color.faint : color.navy,
+                    // 7B (Q3a): the Contract column shows the REVISED value.
+                    color: (revisedContracts[p.id] ?? null) === null ? color.faint : color.navy,
                     textAlign: 'right',
                   }}
                 >
-                  {money(p.contract_value)}
+                  {money(revisedContracts[p.id] ?? null)}
                 </span>
               )}
             </div>

@@ -1,8 +1,7 @@
 import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getBudgetRollup } from '@/lib/services/budget';
-import { getSignedChangeOrders } from '@/lib/services/change-orders';
-import { getProject } from '@/lib/services/projects';
+import { getRevisedContract } from '@/lib/services/contract-value';
 import { cardStyle, color, font, microLabelStyle } from '@/lib/theme';
 
 /**
@@ -44,15 +43,16 @@ export default async function ProjectBudgetPage({ params }: { params: { id: stri
 
   const canSeeFinancials = profile.role === 'owner' || profile.role === 'admin';
 
-  const [rollup, project, signedCos] = await Promise.all([
+  const [rollup, contract] = await Promise.all([
     getBudgetRollup(params.id),
-    getProject(params.id),
-    getSignedChangeOrders(params.id),
+    getRevisedContract(params.id),
   ]);
 
-  const contractValue = project?.contract_value ?? null;
-  const signedCoTotal = signedCos.reduce((sum, co) => sum + co.net_delta, 0);
-  const revised = contractValue !== null ? contractValue + signedCoTotal : signedCoTotal;
+  // 7B: the single legal derivation (contract-value.ts). Null original =>
+  // null revised => em-dash (Q2 — the old signedCoTotal fallback is gone).
+  const contractValue = contract.original;
+  const signedCoTotal = contract.signedDelta;
+  const revised = contract.revised;
 
   // Summary cards — financial floor reflow: gated roles get Cost to Date only.
   const summaryCards: {
@@ -73,7 +73,12 @@ export default async function ProjectBudgetPage({ params }: { params: { id: stri
             signedCoTotal !== 0 ? `${signedCoTotal > 0 ? '+' : ''}${money(signedCoTotal)}` : '—',
           valueColor: signedCoTotal !== 0 ? color.warning : color.faint,
         },
-        { label: 'Revised', value: money(revised), valueColor: '#fff', inverted: true },
+        {
+          label: 'Revised',
+          value: revised !== null ? money(revised) : '—',
+          valueColor: '#fff',
+          inverted: true,
+        },
         { label: 'Cost to Date', value: '—', valueColor: color.faint },
         { label: 'Projected Margin', value: '—', valueColor: color.faint },
       ]

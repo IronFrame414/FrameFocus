@@ -46,6 +46,9 @@ interface ChangesPanelProps {
   projectId: string;
   projectType: string;
   changeOrders: ChangeOrderWithAuthor[];
+  /** 7B: Σ signed net_delta from getRevisedContract() — server-computed, the
+   *  single legal derivation. The panel never re-sums its listed rows. */
+  signedDelta: number;
   canManage: boolean;
   canDelete: boolean;
   /** Financial floor (ui-01 §11): CO dollar amounts are Owner/Admin only. */
@@ -56,6 +59,7 @@ export function ChangesPanel({
   projectId,
   projectType,
   changeOrders,
+  signedDelta,
   canManage,
   canDelete,
   canSeeFinancials,
@@ -116,7 +120,9 @@ export function ChangesPanel({
   const signed = changeOrders.filter((co) => co.status === 'signed');
   const drafts = changeOrders.filter((co) => co.status === 'draft');
   const sentSum = sent.reduce((sum, co) => sum + co.net_delta, 0);
-  const signedSum = signed.reduce((sum, co) => sum + co.net_delta, 0);
+  // 7B: signed $ comes from the server-passed derivation, not a re-sum here
+  // ("awaiting" sentSum is not contract value and stays local).
+  const signedSum = signedDelta;
 
   const summaryCards: { label: string; value: number; valueColor: string; caption: string }[] = [
     {

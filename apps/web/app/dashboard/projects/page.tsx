@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getProjects } from '@/lib/services/projects';
 import type { ProjectStatus } from '@/lib/services/projects';
+import { getRevisedContractMap } from '@/lib/services/contract-value';
 import { ProjectsList } from './projects-list';
 
 const STATUSES: ProjectStatus[] = ['active', 'on_hold', 'complete', 'archived', 'cancelled'];
@@ -43,9 +44,21 @@ export default async function ProjectsPage({
   const canCreate = ['owner', 'admin', 'project_manager'].includes(profile.role);
   const canSeeFinancials = profile.role === 'owner' || profile.role === 'admin';
 
+  // 7B: the Contract column shows the REVISED value (Q3a) — batch-derived
+  // server-side, one grouped query (contract-value.ts). Only fetched for the
+  // roles that can see the column; the client gets plain revised numbers.
+  const revisedContracts: Record<string, number | null> = {};
+  if (canSeeFinancials) {
+    const map = await getRevisedContractMap(projects.map((p) => p.id));
+    for (const [id, rc] of Object.entries(map)) {
+      revisedContracts[id] = rc.revised;
+    }
+  }
+
   return (
     <ProjectsList
       projects={projects}
+      revisedContracts={revisedContracts}
       currentStatus={status ?? 'all'}
       canCreate={canCreate}
       canSeeFinancials={canSeeFinancials}

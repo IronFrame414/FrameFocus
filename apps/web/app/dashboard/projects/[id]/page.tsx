@@ -2,7 +2,8 @@ import { createClient } from '@/lib/supabase-server';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { getProject, PROJECT_TYPE_LABELS } from '@/lib/services/projects';
-import { getSignedChangeOrders, getChangeOrders } from '@/lib/services/change-orders';
+import { getChangeOrders } from '@/lib/services/change-orders';
+import { getRevisedContract } from '@/lib/services/contract-value';
 import { getPhases, getTasks, rollupPhases } from '@/lib/services/tasks';
 import { getProjectAssignments } from '@/lib/services/project-assignments';
 import { memberColor } from '@/components/schedule/member-color';
@@ -57,8 +58,8 @@ export default async function ProjectOverviewPage({ params }: { params: { id: st
   const project = await getProject(params.id);
   if (!project) notFound();
 
-  const [signedCos, allCos, phases, tasks, assignments] = await Promise.all([
-    getSignedChangeOrders(params.id),
+  const [contract, allCos, phases, tasks, assignments] = await Promise.all([
+    getRevisedContract(params.id),
     getChangeOrders(params.id),
     getPhases(params.id),
     getTasks(params.id),
@@ -88,9 +89,8 @@ export default async function ProjectOverviewPage({ params }: { params: { id: st
   const canSeeFinancials = profile.role === 'owner' || profile.role === 'admin';
 
   // --- KPIs (ui-04 §S3) --------------------------------------------------
-  const signedDelta = signedCos.reduce((sum, co) => sum + co.net_delta, 0);
-  const revisedContract =
-    project.contract_value !== null ? project.contract_value + signedDelta : null;
+  // 7B: revised contract from the single legal derivation (contract-value.ts).
+  const revisedContract = contract.revised;
 
   const today = new Date().toISOString().slice(0, 10);
   const daysToTarget = project.target_end_date
@@ -509,8 +509,23 @@ export default async function ProjectOverviewPage({ params }: { params: { id: st
             {canSeeFinancials && (
               <div style={detailRow}>
                 <span style={detailKey}>Contract Value</span>
-                <span style={{ fontFamily: font.mono, fontWeight: 600 }}>
-                  {money(project.contract_value)}
+                {/* 7B: Revised is the headline figure; Original captions it
+                    only when signed COs have moved the total (§4). */}
+                <span style={{ fontFamily: font.mono, fontWeight: 600, textAlign: 'right' }}>
+                  {money(contract.revised)}
+                  {contract.signedDelta !== 0 && (
+                    <span
+                      style={{
+                        display: 'block',
+                        fontFamily: font.sans,
+                        fontSize: '11px',
+                        fontWeight: 400,
+                        color: color.faint,
+                      }}
+                    >
+                      Original: {money(contract.original)}
+                    </span>
+                  )}
                 </span>
               </div>
             )}

@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getChangeOrders } from '@/lib/services/change-orders';
+import { getRevisedContract } from '@/lib/services/contract-value';
 import { getProject } from '@/lib/services/projects';
 import { ChangesPanel } from './changes-panel';
 
@@ -24,9 +25,10 @@ export default async function ProjectChangesPage({ params }: { params: { id: str
     .single();
   if (!profile) redirect('/dashboard');
 
-  const [changeOrders, project] = await Promise.all([
+  const [changeOrders, project, contract] = await Promise.all([
     getChangeOrders(params.id),
     getProject(params.id),
+    getRevisedContract(params.id),
   ]);
 
   const canManage = ['owner', 'admin', 'project_manager'].includes(profile.role);
@@ -39,6 +41,7 @@ export default async function ProjectChangesPage({ params }: { params: { id: str
       projectId={params.id}
       projectType={project?.project_type ?? 'fixed_price'}
       changeOrders={changeOrders}
+      signedDelta={contract.signedDelta}
       canManage={canManage}
       canDelete={canDelete}
       canSeeFinancials={canSeeFinancials}
