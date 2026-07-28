@@ -282,12 +282,19 @@ One definition, referenced everywhere.
 The ledger must hold all three without conflating them. A "bill expected, not received" state is a
 _committed_ figure with a known amount, not a forecast and not yet an actual.
 
-### P5 — Verification is the gate into job cost.
+### P5 — Approval is the gate into job cost. **[S89 AMENDMENT — terminology]**
 
-Any member can enter an expense. An expense entered by a PM, foreman, or crew member is
-**unverified** until an owner or admin verifies it, and an unverified expense is excluded from the
-committed→actual rollup until then. Owner/admin entries are verified on save. This mirrors the
-established shape of Module 6's "only approved sessions export" and the punch-complete gate.
+Any member can enter an expense. An expense is **pending** until an owner or admin **approves**
+it, and a pending expense is excluded from the rollup until then. A **rejected** state also exists
+(rejection note required). This mirrors the established shape of Module 6's "only approved
+sessions export" and the punch-complete gate.
+
+> **[S89 AMENDMENT.]** The interview term "verified / unverified" is renamed to the 6A shape —
+> **approved / pending / rejected** — as adopted by the built `7A-spec.md` (§2.1). Two deltas from
+> the original wording: (1) terminology; (2) the original P5 auto-verified owner/admin entries on
+> save — 7A-spec keeps **every** entry `pending` until reviewed, one uniform gate (locked S89
+> decision 3). **7H must follow** — its "verified" wording (`7H-spec.md:46-47,61,137`) is a
+> flagged conflict, not authority.
 
 ---
 
@@ -321,13 +328,20 @@ the relevant sub-module is specced.
    portal-less client — whether that precedent opens the gate for invoicing is a gate decision, not
    a spec detail, and is not resolved here.
 
-2. **Reopening a completed job.** A late bill (a vendor bill arriving weeks after close) has nowhere
-   to land unless a completed job can be reopened. The 5A lifecycle permits `complete → archived`
-   only. The founder has flagged this twice as a design question. It is now a hard M7 dependency —
-   both 7A (late cost) and 7C (late bill, "can't close with open bills, but sometimes there's no
-   bill yet") require it. The founder believes a reopen path was addressed in a recently built spec;
-   this is **UNVERIFIED** and must be confirmed against the actual spec/migration before 7A or 7C is
-   specced.
+2. **Reopening a completed job.** ~~A late bill (a vendor bill arriving weeks after close) has
+   nowhere to land unless a completed job can be reopened. The 5A lifecycle permits
+   `complete → archived` only. The founder has flagged this twice as a design question. It is now a
+   hard M7 dependency — both 7A (late cost) and 7C (late bill, "can't close with open bills, but
+   sometimes there's no bill yet") require it. The founder believes a reopen path was addressed in
+   a recently built spec; this is **UNVERIFIED** and must be confirmed against the actual
+   spec/migration before 7A or 7C is specced.~~
+   **[S89 AMENDMENT — RESOLVED, constraint CLOSED.]** Verified against the repo (S89 Phase 1): no
+   reopen path existed — `STATUS_TRANSITIONS` in `apps/web/lib/services/projects-client.ts` had
+   `complete: ['archived','cancelled']`, service-layer only, no DB trigger; the founder's
+   recollection of a prior build was wrong. `7A-spec.md` now specs the full reopen:
+   `complete → active`, **Owner/Admin only**, punch gate re-runs on every re-complete,
+   `actual_end_date` prompted (keep vs. today) on re-complete. §7.12 verification task #2 is
+   closed by the same read. 7C inherits the path; nothing further to design here.
 
 3. **View-only financial role — deferred, not designed.** Earlier turns raised a bookkeeper /
    outside-accountant read-only view. Cut from launch scope and recorded as a build-later item
@@ -386,47 +400,51 @@ STORE    project          — which job it hits
          category         — labor | material | subcontractor | other
                             (SINGLE enum, one definition — P3)
          cost_amount      — what it cost Bishop
-         sell_amount      — what the client is charged
-                            (the M5 budget-row gap, debt #7: budget carries cost only)
          state            — committed | actual   (cash basis — P1)
          burden applied   — labor rows only (see 7.8.3)
          tax              — folded into cost_amount for material; none for subs
          source_ref       — the timesheet / receipt / sub invoice / PO it came from
          entered_by       — the member who added it (get_my_member_id)
-         verification     — verified | unverified (see 7.8.2)
+         approval         — approved | pending | rejected (see 7.8.2, S89 terms)
          attachment       — receipt image or PDF, optional (Module 3 storage)
 
 OUTPUT   Rolls up by category → job cost.
-         Cost vs. sell vs. budget vs. contract → the "what did we make" number,
-         read by 7H.
+         Cost vs. budget vs. contract → the "what did we make" number, read
+         by 7H. (Sell/profit read from estimating (M4) and billing (7D)
+         surfaces — NOT from the cost row; see the S89 reversal below.)
 ```
 
 **Design decisions fixed in interview:**
 
-- **Sell lives on the cost row**, not only on the budget. Every row carries cost _and_ sell;
-  profit derives. (Founder, confirmed.)
+- ~~**Sell lives on the cost row**, not only on the budget. Every row carries cost _and_ sell;
+  profit derives. (Founder, confirmed.)~~ **[S89 REVERSAL — deleted.]** Founder reversal, S89:
+  expense/cost rows record **actual cost only** — no `sell_amount`. Markup happens at estimating
+  (M4) or at T&M billing (7D). **Debt #7 (§7.1 — budget rows carry no sell/profit) is unaffected
+  by this reversal and is still owed elsewhere**; deleting sell from the cost row does not close
+  it, it only relocates where sell will eventually live.
 - **Committed vs. actual per source:** material (open PO) and subs (signed, unbilled) can be
   _committed_. Labor is _always actual on entry_ — you don't PO labor ahead. (Founder, agreed.)
 - **Tax:** folded into `cost_amount` for material; **no tax on subs.** (Founder, #10.)
 
-### 7.8.2 — The verification lifecycle
+### 7.8.2 — The approval lifecycle **[S89 AMENDMENT — was "verification"]**
 
 ```
 STORE (adds to the row)
-  entered_by         — the member who added it
-  verification_state — verified | unverified
-                       owner / admin entry  → verified on save
-                       PM / foreman / crew  → unverified, awaits review
-  attachment         — receipt image or PDF (Module 3), optional
+  entered_by  — the member who added it
+  status      — pending | approved | rejected   (6A shape, S89;
+                rejected requires a rejection note)
+  attachment  — receipt image or PDF (Module 3), optional
 
 OUTPUT
-  Unverified rows are visible but EXCLUDED from the committed→actual rollup
-  until an owner or admin verifies. Verification is the gate into job cost (P5).
+  Pending rows are visible but EXCLUDED from the rollup until an owner or
+  admin approves. Rejected rows never count. Approval is the gate into
+  job cost (P5).
 ```
 
 Same shape as Module 6's "only approved sessions export" and the punch-complete gate. Any member
-can add an expense; PM/foreman/crew entries need owner/admin verification before they count.
-(Founder, confirmed.)
+can add an expense; **every** entry (owner/admin included) is `pending` until owner/admin
+approval. (Founder, confirmed; terminology + uniform-pending per the built `7A-spec.md`, S89.
+7H's "verified" wording must be updated to match — flagged conflict.)
 
 ### 7.8.3 — Labor burden
 
@@ -466,14 +484,16 @@ arithmetic the row runs. (Founder, explicit — a safeguard, not polish.)
 
 - Cost rows carry an optional **receipt attachment** — image or PDF — stored via Module 3's
   existing file pipeline (inherited, not rebuilt).
-- **Any member of the company can add an expense.** Entries by PM/foreman/crew are unverified until
-  owner/admin verification (7.8.2).
+- **Any member of the company can add an expense.** Every entry is `pending` until owner/admin
+  approval (7.8.2 — S89 terminology).
 
 ### 7.8.5 — Late costs and reopen (dependency)
 
 A cost posted to the wrong job, or a bill arriving weeks after a job closed, is handled today by
 **manually transferring the data** — which is _why a job must be reopenable_ (founder, #11). This
-is a hard dependency on the reopen path (§7.7 constraint #2), UNVERIFIED.
+is a hard dependency on the reopen path (§7.7 constraint #2). **[S89: RESOLVED — the reopen is
+specced in `7A-spec.md` (complete → active, Owner/Admin only); §7.7 #2 is closed. Wrong-job
+expenses additionally get a review-time project reassign in 7A, no reopen needed.]**
 
 ### 7.8.6 — Approved trace: allowance overage → signed material selection → auto-invoice
 

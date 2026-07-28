@@ -22,7 +22,11 @@ file:line citations throughout. Git/migrations are ground truth over any prior s
 - **Allocation** — at review, Owner/Admin may optionally split an approved expense across
   `project_budget_items` lines (Option B). Ad-hoc budget lines may be created inline (Q4b).
 - **Live job cost rollup** — actual labor (derived read-time from approved 6A sessions × rate
-  snapshots, Owner/Admin only) + approved expenses (visible per role floor).
+  snapshots, burden frozen in the snapshot (S89 follow-up, §2.6), Owner/Admin only) + approved
+  expenses (visible per role floor).
+- **Labor burden model** (S89 amendment; architecture §7.8.3) — per-member multiplier + source
+  toggle, company fixed $/hr; burden frozen at session approval, **forward only** — approved
+  labor cost never re-prices; all burden fields at the pay-rates floor (§2.6).
 - **GL mapping ride-along** — company-settings GL account string per cost category. Crew never
   sees it. Consumed by the future 7G connector; 7A only stores it.
 - **Full project reopen** — `complete → active` added to the lifecycle (Owner/Admin only, Q1).
@@ -33,7 +37,9 @@ file:line citations throughout. Git/migrations are ground truth over any prior s
 
 - Vendor bills / committed cost — **7C**. `project_budget_items.committed_amount` stays untouched
   by 7A (it exists, `DEFAULT 0`, nothing populates it — verified
-  `supabase/migrations/20260704212000_module5_5a_conversion.sql:43`).
+  `supabase/migrations/20260704212000_module5_5a_conversion.sql:43`). S89 amendment: the
+  `expenses.state` column (`committed | actual`, §2.1) ships with 7A, but **v1 writes `'actual'`
+  only** — no committed flow is built here; 7C owns every committed writer.
 - Sub labor rates — manual T&M calc; out.
 - **Labor is NEVER an expense capture category** (Q5). The expense `cost_category` CHECK is
   three-valued: `material | subcontractor | other`. This deliberately narrows interview decision 2's
@@ -87,9 +93,12 @@ tolerates this gap: the job-cost screen shows labor + expenses and labels the fi
 expenses to date," not "total job cost."
 
 **Rollup mid-job.** Josh opens the project's Job Cost tab: labor-to-date (approved sessions ×
-frozen snapshots, derived live) + approved expenses by category + per-line `actual_amount` vs
-`budgeted_amount`. PM Sarah opens the same tab: **expenses only** — no labor dollars, no
-budget/sell figures (decision 6 / FINANCIAL floor).
+frozen snapshot rates, **burdened from each session's frozen snapshot** — Dave's approved
+sessions price at `$28.00 × 1.0 ×` his hours until Bishop calculates a real multiplier; switching
+Dave to the company fixed $/hr flips the on-screen `×` to `+` and affects **future approvals
+only**, never these rows — §2.6) + approved expenses by
+category + per-line `actual_amount` vs `budgeted_amount`. PM Sarah opens the same tab:
+**expenses only** — no labor dollars, no budget/sell figures (decision 6 / FINANCIAL floor).
 
 **Post-completion straggler.** Three weeks after the job is marked complete (punch gate passed,
 `actual_end_date` stamped), a $91 disposal-fee receipt surfaces. Josh:
@@ -134,6 +143,13 @@ CREATE TABLE public.expenses (
     cost_category     text NOT NULL DEFAULT 'material'
                         CHECK (cost_category IN ('material','subcontractor','other')),
                         -- labor deliberately excluded (Q5)
+
+    -- S89 amendment: committed/actual state per architecture P1 (§7.8.1).
+    -- v1 writes 'actual' ONLY — no capture surface, service function, or RPC
+    -- sets 'committed'. Committed writers (PO/sub-quote commitments) land
+    -- with 7C. The column ships now so 7C extends, not migrates.
+    state             text NOT NULL DEFAULT 'actual'
+                        CHECK (state IN ('committed','actual')),
 
     -- Review gate (6A shape + rejected, Q7)
     status            text NOT NULL DEFAULT 'pending'
@@ -188,7 +204,10 @@ CREATE TABLE public.expense_allocations (
 -- actual_amount = COALESCE(SUM(a.amount), 0) over expense_allocations a
 -- JOIN expenses e ON e.id = a.expense_id
 -- WHERE a.budget_item_id = p AND a.is_deleted = false
---   AND e.status = 'approved' AND e.is_deleted = false;
+--   AND e.status = 'approved' AND e.state = 'actual' AND e.is_deleted = false;
+-- (state filter is a v1 no-op — nothing writes 'committed' — but keeps
+--  actual_amount semantically actual-only when 7C's committed writers land;
+--  committed dollars belong in committed_amount, a 7C concern.)
 ```
 
 Fired by AFTER triggers on `expense_allocations` (INSERT/UPDATE/DELETE) and on `expenses` when
@@ -233,13 +252,91 @@ means the connector will prompt at 7G time. `gl_account_labor` exists for the **
 export**, not for expense capture (labor is not a capture category). Crew never sees these
 (Settings is Owner/Admin-gated already, `dashboard-shell.tsx:71`).
 
-### 2.6 Reopen (decision 7) — no schema change
+### 2.6 Labor burden (S89 amendment; architecture §7.8.3)
+
+Hours × wage is not labor cost (§7.1 debt #9, resolved in the 7A interview). Two capture points,
+one toggle:
+
+```sql
+-- Per-member burden settings. NOT columns on company_members/profiles — those
+-- are company-readable, and burden is Financial-Visibility-Floor data. Same
+-- placement rationale as member_pay_rates ("deliberately NOT a column on the
+-- company-readable company_members", 20260721040000_6a_member_pay_rates.sql:15-16).
+CREATE TABLE public.member_burden_settings (
+    -- standard columns
+
+    member_id          uuid NOT NULL REFERENCES company_members(id),
+    burden_multiplier  numeric(6,3) NOT NULL DEFAULT 1.0
+                         CHECK (burden_multiplier > 0),   -- 1.0 = pass-through until Bishop
+                                                          -- calculates its true burden (§7.8.3)
+    burden_source      text NOT NULL DEFAULT 'member_multiplier'
+                         CHECK (burden_source IN ('member_multiplier','company_fixed')),
+
+    CONSTRAINT member_burden_settings_member_key UNIQUE (member_id)
+);
+-- RLS: Owner/Admin-only SELECT + INSERT + UPDATE, both directions — the exact
+-- member_pay_rates template (20260721040000:89-112). No DELETE policy.
+
+-- Company-wide fixed burden, dollars per hour (the '+' arm of the toggle).
+ALTER TABLE public.companies
+  ADD COLUMN fixed_burden_per_hour numeric(10,2);   -- nullable; NULL treated as 0
+```
+
+**Burden is frozen at session approval (S89 follow-up — founder decision: forward only).**
+Approved labor cost never re-prices. Burden joins the existing rate snapshot:
+`time_session_rate_snapshots` (`20260721040000:123-135`) gains three columns —
+
+```sql
+ALTER TABLE public.time_session_rate_snapshots
+  ADD COLUMN burden_multiplier     numeric(6,3),   -- nullable; frozen at approval
+  ADD COLUMN fixed_burden_per_hour numeric(10,2),  -- nullable; frozen at approval
+  ADD COLUMN burden_source         text
+    CHECK (burden_source IS NULL
+           OR burden_source IN ('member_multiplier','company_fixed'));
+```
+
+— written by the **same** `snapshot_session_rate()` trigger (`20260721040000:171-219`) at the
+pending→approved transition, copying the member's `member_burden_settings` row and the company
+`fixed_burden_per_hour` as of that moment. `ON CONFLICT DO NOTHING` stands — frozen means frozen,
+burden included. A later burden change (multiplier, fixed $/hr, or toggle) affects **future
+approvals only**.
+
+- **NULL = pass-through, stated explicitly:** approved sessions that predate the burden columns
+  (every session approved before this migration) carry NULL burden fields — the rollup prices
+  them at the bare snapshot rate (multiplier 1.0 equivalent). This is correct, not a data bug:
+  their labor cost was approved before burden existed and never re-prices.
+- **Unapproved sessions have no snapshot → no burden cost yet.** Consistent by construction:
+  pending labor isn't in job cost at all (§4 reads approved sessions only), so there is nothing
+  to price and no live-read fallback.
+
+**Derivation, per the member's toggle AS FROZEN in the snapshot (architecture §7.8.3, locked):**
+
+```
+snapshot.burden_source = 'member_multiplier' → snapshot_rate × snapshot.burden_multiplier × hours
+snapshot.burden_source = 'company_fixed'     → (snapshot_rate + snapshot.fixed_burden_per_hour) × hours
+snapshot.burden_source IS NULL               → snapshot_rate × hours   (pre-burden pass-through)
+```
+
+The rollup reads burden **from the snapshot, never live**. The toggle is a **stored per-member
+choice** — never a global rule two files could read differently. The UI **flips the visible
+operator** (`×` vs `+`) with the toggle: what the user sees on screen IS the arithmetic the next
+approval will freeze (founder safeguard, §7.8.3 — not polish).
+
+**Floor caveat (flagged, not resolved):** `companies` SELECT is company-wide
+(`companies_select_own`, `20260101000000_baseline_schema.sql:3201`), so `fixed_burden_per_hour`
+is API-readable by every role — unlike every other burden/pay field. A company-wide $/hr is less
+sensitive than a person's rate, but it is still labor-cost data visible below the floor. Carried
+to the FINANCIAL-RLS-FLOOR migration (§6 open items); the alternative (a one-row Owner/Admin
+side table) deviates from the instruction's "companies gains fixed burden $/hr" and is not built.
+
+
+### 2.7 Reopen (decision 7) — no schema change
 
 `complete → active` is a service-layer state-machine edit (§3.4). No migration. The DB-level
 transition backstop remains deferred with TECH_DEBT #82 (`TECH_DEBT.md:166`) — building that
 trigger later must encode the NEW machine including reopen (flagged in §6).
 
-### 2.7 RLS
+### 2.8 RLS
 
 `expenses` (self-contained — does not depend on the pending FINANCIAL-RLS-FLOOR migration):
 
@@ -327,6 +424,9 @@ Per the CLAUDE.md service pattern: server reads in `expenses.ts`, client writes 
   inserts a `project_budget_items` row with `budgeted_amount = 0`, using the new INSERT policy)
 - `declineMaterialRunExpense(segmentId)` — appends the "No purchase made" decline to the
   segment's end note (Q10) via the existing segment-note write path.
+- `setMemberBurden(memberId, {burden_multiplier, burden_source})` (Owner/Admin — upsert on
+  `member_burden_settings`, S89 §2.6; lives beside the existing pay-rate write functions).
+  Company `fixed_burden_per_hour` writes ride the existing company-settings save path.
 
 ### 3.3 RPC — `approve_expense(p_expense_id uuid, p_allocations jsonb) RETURNS void`
 
@@ -377,11 +477,16 @@ complete.)
 - **Labor to date** — derived live, never persisted: approved `time_clock_sessions` ×
   `time_session_rate_snapshots` (Owner/Admin RLS stands as built, `20260721040000:89-161`),
   attributed to the project by its `work`/`material_run`/`warranty` segments' durations
-  (project-bearing types per `time_segments_project_gate_check`, `20260710130000:224-227`).
-  v1 prices project hours at **straight snapshot rate**; OT-premium attribution to a specific
-  job is an open item (§6) — the weekly OT derivation in
+  (project-bearing types per `time_segments_project_gate_check`, `20260710130000:224-227`),
+  **burdened from the snapshot's frozen burden fields (S89 follow-up, §2.6):**
+  `snapshot_rate × snapshot.burden_multiplier × hours` or
+  `(snapshot_rate + snapshot.fixed_burden_per_hour) × hours` per the frozen `burden_source`
+  (NULL → bare snapshot rate, the pre-burden pass-through). Burden is **never read live** —
+  approved labor cost never re-prices. v1 prices project hours at **straight burdened rate**;
+  OT-premium attribution to a specific job is an open item (§6) — the weekly OT derivation in
   `packages/shared/utils/time-tracking.ts` is week-scoped, not job-scoped.
-- **Expenses to date** — approved expenses by `cost_category`; allocated vs unallocated split.
+- **Expenses to date** — approved (`state='actual'`) expenses by `cost_category`; allocated vs
+  unallocated split.
 - **Per-line** — `budgeted_amount` vs `actual_amount` (trigger-maintained, §2.3).
 - Labeled **"labor + expenses to date"** — explicitly NOT "total job cost" (sub bills/committed
   are 7C; the trace in §1 depends on this honesty).
@@ -461,12 +566,27 @@ row (ui-04 pattern).
   — "Keep original end date (YYYY-MM-DD)" / "Update to today" (locked decision 8; only on
   re-complete, Q11; per-case user decision, no rule).
 
-### 5.8 Settings — GL account mapping (Owner/Admin)
+### 5.8 Settings — GL account mapping + company burden (Owner/Admin)
 
 New section on `/dashboard/settings` following the exact existing pattern
 (`settings/page.tsx:50-53`; sectioned form + `Pick<>` getter in `lib/services/company.ts`):
 `GLMappingSettingsForm` with four text inputs (Labor, Material, Subcontractor, Other — QB account
 path strings), helper text "Used when exporting to QuickBooks. Leave blank to choose at export."
+
+**Company fixed burden (S89, §2.6):** a `$/hr` input ("Fixed labor burden per hour") in the same
+Owner/Admin settings pass — the `+` arm of the per-member toggle. Caption states it applies only
+to members whose burden source is set to "company fixed."
+
+### 5.9 Member burden controls (Owner/Admin — pay-rate surface)
+
+On the same Owner/Admin surface that manages a member's pay rate (the S85 pay-rates UI):
+**burden multiplier** input + **source toggle** ("Member multiplier" | "Company fixed $/hr").
+Per the founder safeguard (architecture §7.8.3): the preview line renders the member's live
+arithmetic with the operator flipping with the toggle —
+`$28.00 × 1.15 / hr` vs `$28.00 + $6.50 / hr` — **what is on screen IS the formula the next
+approval will freeze.** Caption (S89 follow-up): "Applies to future approvals only — already-
+approved time keeps its frozen burden." Crew/PM/foreman never see this surface
+(member_burden_settings is Owner/Admin RLS, §2.6).
 
 ---
 
@@ -481,7 +601,8 @@ path strings), helper text "Used when exporting to QuickBooks. Leave blank to ch
 | `actual_end_date` stamp | `projects-client.ts:130-132` | parameterize on re-complete only (Q11) |
 | Gate hardening / #82 | `projects-client.ts:145-177`; `TECH_DEBT.md:166` | keep service-layer; DB trigger stays deferred, must later encode reopen |
 | Review-gate template | `20260710130000:96-103` (status/approved_by/at); `20260721020000:20-58` (atomic RPC); `20260721010000:184-234` (column scope) | mirrored + `rejected` added |
-| Labor cost basis | `20260721040000` (`member_pay_rates` :34-50, snapshots :123-135, trigger :171-219; Owner/Admin RLS :89-161) | read-only; RLS stands as built |
+| Labor cost basis | `20260721040000` (`member_pay_rates` :34-50, snapshots :123-135, trigger :171-219; Owner/Admin RLS :89-161) | snapshots table gains three burden columns; `snapshot_session_rate()` extended to freeze them (§2.6); RLS stands as built |
+| Labor burden (S89) | placement rationale `20260721040000:15-16`; `companies_select_own` leak `20260101000000:3201` | new `member_burden_settings` (pay-rates RLS template) + `companies.fixed_burden_per_hour`; frozen at approval, forward-only (§2.6) |
 | Segment attribution | `20260710130000:195-246` (project gate CHECK :224-227) | rollup labor-by-project source |
 | Material-run UI hook | `components/time/clock-modal.tsx:205-222` | expense prompt on segment end |
 | Budget lines | `20260704212000:27-47` (`actual_amount` :44; SELECT policy :86-91; conversion :100-239) | allocations write `actual_amount` via trigger; Owner/Admin INSERT policy added for ad-hoc lines |
@@ -495,8 +616,10 @@ path strings), helper text "Used when exporting to QuickBooks. Leave blank to ch
 
 1. **7H committed-on-7A-ledger** (`7H-spec.md:17-18,69,117-118`): 7A v1 ships no committed rows
    (7C's). 7H must read committed from wherever 7C actually lands it.
-2. **7H "actual rows carry sell"** (`7H-spec.md:37`): FALSE against this spec — no sell anywhere
-   in 7A. 7H's per-category margin idea needs a different source.
+2. **7H "actual rows carry sell"** (`7H-spec.md:37`): FALSE against this spec **and against the
+   S89-amended architecture** — §7.8.1's "sell lives on the cost row" was reversed (expense rows
+   record actual cost only; markup at estimating or T&M billing). 7H's per-category margin idea
+   needs a different source. Debt #7 (budget sell/profit) remains open elsewhere.
 3. **7H "verified" terminology** (`7H-spec.md:46-47,61,137`): 7A's live terms are **approved** /
    **rejected**. 7H adopts 7A's terms per its own rule (`7H-spec.md:149-150`).
 4. **7G GL-mapping ownership** (`7G-spec.md:55-56` assigns category→account mapping to the 7C
@@ -507,8 +630,21 @@ path strings), helper text "Used when exporting to QuickBooks. Leave blank to ch
 
 ### Open items
 
-- **OT-premium job attribution** (PROPOSED v1: straight snapshot rate on project hours; weekly OT
-  premium not allocated to jobs — `weekLaborCost` is week-scoped). Decide at build or defer to 7H.
+- **Committed-state writers are 7C's** (S89 amendment): `expenses.state` ships with the
+  `committed | actual` CHECK but v1 has **no** committed flow — no capture surface, service
+  function, or RPC writes `'committed'`, and the §2.3 recompute filters `state='actual'`. 7C
+  decides whether commitments are expense rows in `'committed'` state or their own table feeding
+  `committed_amount`; 7A deliberately does not preempt that.
+- **~~Burden read-time repricing~~ RESOLVED (S89 follow-up):** burden is frozen into
+  `time_session_rate_snapshots` at approval, forward-only (§2.6). Remaining flag: pre-burden
+  approved sessions carry NULL burden fields = pass-through pricing, permanently — stated in
+  §2.6, restated here so nobody "backfills" them.
+- **`companies.fixed_burden_per_hour` sits below the floor** (§2.6): `companies_select_own`
+  (`20260101000000:3201`) exposes it API-wide to all roles. Carried to the FINANCIAL-RLS-FLOOR
+  migration batch; per-member burden fields are NOT affected (own Owner/Admin table).
+- **OT-premium job attribution** (PROPOSED v1: straight burdened snapshot rate on project hours;
+  weekly OT premium not allocated to jobs — `weekLaborCost` is week-scoped). Decide at build or
+  defer to 7H.
 - **HEIC receipts** — TECH_DEBT #94: iPhone receipts store but don't render in review. The review
   popup inherits this until the conversion pipeline lands. Real risk: an approver can't read the
   receipt. Consider prioritizing #94 before 7A UI ships.
@@ -525,6 +661,10 @@ path strings), helper text "Used when exporting to QuickBooks. Leave blank to ch
 
 ---
 
-*Written Session 89 on `feature/7a-spec`. Not committed — Josh commits manually. No SQL run, no
-other file modified. Anything labeled PROPOSED was not locked in the interview or Phase 2 answers
-and is a build-time decision surface, not a settled fact.*
+*Written Session 89 on `feature/7a-spec`; amended same session (S89 amendment pass: `state`
+column, labor burden per architecture §7.8.3, terminology alignment; S89 follow-up: burden
+frozen at approval, forward-only) alongside the matching
+`module7-architecture.md` amendments (sell reversal, approval terminology, §7.7 #2 closure). Not
+committed — Josh commits manually. No SQL run. Anything labeled PROPOSED was not locked in the
+interview, Phase 2 answers, or the amendment pass, and is a build-time decision surface, not a
+settled fact.*
