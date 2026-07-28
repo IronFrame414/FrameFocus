@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.4"
+    PostgrestVersion: "14.5"
   }
   graphql_public: {
     Tables: {
@@ -568,6 +568,11 @@ export type Database = {
           email: string | null
           estimate_number_prefix: string
           estimate_number_sequence: number
+          fixed_burden_per_hour: number | null
+          gl_account_labor: string | null
+          gl_account_material: string | null
+          gl_account_other: string | null
+          gl_account_subcontractor: string | null
           gps_clock_mode: string
           id: string
           license_number: string | null
@@ -619,6 +624,11 @@ export type Database = {
           email?: string | null
           estimate_number_prefix?: string
           estimate_number_sequence?: number
+          fixed_burden_per_hour?: number | null
+          gl_account_labor?: string | null
+          gl_account_material?: string | null
+          gl_account_other?: string | null
+          gl_account_subcontractor?: string | null
           gps_clock_mode?: string
           id?: string
           license_number?: string | null
@@ -670,6 +680,11 @@ export type Database = {
           email?: string | null
           estimate_number_prefix?: string
           estimate_number_sequence?: number
+          fixed_burden_per_hour?: number | null
+          gl_account_labor?: string | null
+          gl_account_material?: string | null
+          gl_account_other?: string | null
+          gl_account_subcontractor?: string | null
           gps_clock_mode?: string
           id?: string
           license_number?: string | null
@@ -2163,6 +2178,194 @@ export type Database = {
           },
         ]
       }
+      expense_allocations: {
+        Row: {
+          amount: number
+          budget_item_id: string
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          expense_id: string
+          id: string
+          is_deleted: boolean | null
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          amount: number
+          budget_item_id: string
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          expense_id: string
+          id?: string
+          is_deleted?: boolean | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          amount?: number
+          budget_item_id?: string
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          expense_id?: string
+          id?: string
+          is_deleted?: boolean | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_allocations_budget_item_id_fkey"
+            columns: ["budget_item_id"]
+            isOneToOne: false
+            referencedRelation: "project_budget_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_allocations_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_allocations_expense_id_fkey"
+            columns: ["expense_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      expenses: {
+        Row: {
+          amount: number
+          approved_at: string | null
+          approved_by: string | null
+          author_member_id: string
+          company_id: string
+          cost_category: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          description: string | null
+          expense_date: string
+          id: string
+          is_deleted: boolean | null
+          project_id: string
+          qb_export_status: string | null
+          rejected_at: string | null
+          rejected_by: string | null
+          rejection_note: string | null
+          source_segment_id: string | null
+          state: string
+          status: string
+          supplier: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          amount: number
+          approved_at?: string | null
+          approved_by?: string | null
+          author_member_id?: string
+          company_id?: string
+          cost_category?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          expense_date: string
+          id?: string
+          is_deleted?: boolean | null
+          project_id: string
+          qb_export_status?: string | null
+          rejected_at?: string | null
+          rejected_by?: string | null
+          rejection_note?: string | null
+          source_segment_id?: string | null
+          state?: string
+          status?: string
+          supplier: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          amount?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          author_member_id?: string
+          company_id?: string
+          cost_category?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          expense_date?: string
+          id?: string
+          is_deleted?: boolean | null
+          project_id?: string
+          qb_export_status?: string | null
+          rejected_at?: string | null
+          rejected_by?: string | null
+          rejection_note?: string | null
+          source_segment_id?: string | null
+          state?: string
+          status?: string
+          supplier?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expenses_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_author_member_id_fkey"
+            columns: ["author_member_id"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_rejected_by_fkey"
+            columns: ["rejected_by"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_source_segment_id_fkey"
+            columns: ["source_segment_id"]
+            isOneToOne: false
+            referencedRelation: "time_segments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       files: {
         Row: {
           ai_tags: string[] | null
@@ -2175,6 +2378,7 @@ export type Database = {
           deleted_at: string | null
           delivery_id: string | null
           delivery_item_id: string | null
+          expense_id: string | null
           file_name: string
           file_path: string
           file_size: number
@@ -2202,6 +2406,7 @@ export type Database = {
           deleted_at?: string | null
           delivery_id?: string | null
           delivery_item_id?: string | null
+          expense_id?: string | null
           file_name: string
           file_path: string
           file_size: number
@@ -2229,6 +2434,7 @@ export type Database = {
           deleted_at?: string | null
           delivery_id?: string | null
           delivery_item_id?: string | null
+          expense_id?: string | null
           file_name?: string
           file_path?: string
           file_size?: number
@@ -2272,6 +2478,13 @@ export type Database = {
             columns: ["delivery_item_id"]
             isOneToOne: false
             referencedRelation: "delivery_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "files_expense_id_fkey"
+            columns: ["expense_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
             referencedColumns: ["id"]
           },
           {
@@ -2437,6 +2650,63 @@ export type Database = {
             foreignKeyName: "invitations_member_id_fkey"
             columns: ["member_id"]
             isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      member_burden_settings: {
+        Row: {
+          burden_multiplier: number
+          burden_source: string
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          is_deleted: boolean | null
+          member_id: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          burden_multiplier?: number
+          burden_source?: string
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          member_id: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          burden_multiplier?: number
+          burden_source?: string
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          member_id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "member_burden_settings_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "member_burden_settings_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: true
             referencedRelation: "company_members"
             referencedColumns: ["id"]
           },
@@ -4430,8 +4700,11 @@ export type Database = {
       }
       time_session_rate_snapshots: {
         Row: {
+          burden_multiplier: number | null
+          burden_source: string | null
           company_id: string
           created_at: string | null
+          fixed_burden_per_hour: number | null
           hourly_rate: number | null
           id: string
           member_id: string | null
@@ -4439,8 +4712,11 @@ export type Database = {
           session_id: string
         }
         Insert: {
+          burden_multiplier?: number | null
+          burden_source?: string | null
           company_id: string
           created_at?: string | null
+          fixed_burden_per_hour?: number | null
           hourly_rate?: number | null
           id?: string
           member_id?: string | null
@@ -4448,8 +4724,11 @@ export type Database = {
           session_id: string
         }
         Update: {
+          burden_multiplier?: number | null
+          burden_source?: string | null
           company_id?: string
           created_at?: string | null
+          fixed_burden_per_hour?: number | null
           hourly_rate?: number | null
           id?: string
           member_id?: string | null
@@ -4503,6 +4782,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      approve_expense: {
+        Args: { p_allocations?: Json; p_expense_id: string }
+        Returns: undefined
+      }
       approve_member_week: {
         Args: { p_member_id: string; p_week_end: string; p_week_start: string }
         Returns: number
@@ -4619,6 +4902,10 @@ export type Database = {
       next_project_internal_seq: { Args: never; Returns: number }
       next_project_number: { Args: never; Returns: string }
       owns_open_session: { Args: { p_session_id: string }; Returns: boolean }
+      recompute_budget_item_actual: {
+        Args: { p_budget_item_id: string }
+        Returns: undefined
+      }
       recompute_delivery_exceptions: {
         Args: { p_delivery_id: string }
         Returns: undefined
