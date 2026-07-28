@@ -1,4 +1,8 @@
 import { createClient } from '@/lib/supabase-server';
+import {
+  CONTRACT_CONTRIBUTING_CO_FILTER,
+  getPortfolioRevisedContract,
+} from '@/lib/services/contract-value';
 
 // ui-02 §S2/§S4 — company-wide dashboard reads. All queries run on the
 // session client, so RLS scopes rows per role (Owner/Admin see all projects;
@@ -9,7 +13,7 @@ import { createClient } from '@/lib/supabase-server';
 export interface DashboardKpis {
   activeProjectCount: number;
   pastTargetCount: number; // active projects past target_end_date
-  contractValue: number; // Σ(contract_value + signed CO net deltas), active projects
+  contractValue: number; // portfolio revised contract (7B: contract-value.ts), active projects
   awaitingCount: number; // COs status='sent'
   awaitingSum: number; // Σ net_delta of those (Owner/Admin display only)
   openPunchCount: number; // open + in_progress punch items on active projects
@@ -36,21 +40,22 @@ export async function getDashboardData(): Promise<DashboardData> {
   // the missing-dates feed items.
   const { data: activeProjects } = await supabase
     .from('projects')
-    .select('id, name, project_number, contract_value, start_date, target_end_date')
+    .select('id, name, project_number, start_date, target_end_date')
     .eq('status', 'active')
     .eq('is_deleted', false);
 
   const active = activeProjects ?? [];
   const activeIds = active.map((p) => p.id);
 
-  // Signed CO deltas on active projects (revised-contract component) +
-  // recently-signed feed items, one query.
+  // Signed CO ROWS on active projects — the recently-signed attention feed
+  // needs per-CO rows, so this query stays even though the KPI sum now comes
+  // from getPortfolioRevisedContract() (7B Q3: duplicate query accepted; the
+  // shared filter constant keeps the two reads in lockstep).
   const { data: signedCos } = activeIds.length
     ? await supabase
         .from('change_orders')
         .select('id, co_number, title, net_delta, signed_at, project_id')
-        .eq('status', 'signed')
-        .eq('is_deleted', false)
+        .match(CONTRACT_CONTRIBUTING_CO_FILTER)
         .in('project_id', activeIds)
     : { data: [] };
 
@@ -71,14 +76,13 @@ export async function getDashboardData(): Promise<DashboardData> {
         .in('project_id', activeIds)
     : { count: 0 };
 
-  const signedDeltaSum = (signedCos ?? []).reduce((sum, co) => sum + (co.net_delta ?? 0), 0);
-  const contractValue =
-    active.reduce((sum, p) => sum + (p.contract_value ?? 0), 0) + signedDeltaSum;
+  // 7B: the one legal derivation of the portfolio revised contract.
+  const portfolio = await getPortfolioRevisedContract();
 
   const kpis: DashboardKpis = {
     activeProjectCount: active.length,
     pastTargetCount: active.filter((p) => p.target_end_date && p.target_end_date < today).length,
-    contractValue,
+    contractValue: portfolio.revisedSum,
     awaitingCount: (sentCos ?? []).length,
     awaitingSum: (sentCos ?? []).reduce((sum, co) => sum + (co.net_delta ?? 0), 0),
     openPunchCount: punchCount ?? 0,

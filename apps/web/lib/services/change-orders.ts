@@ -113,8 +113,9 @@ export async function getChangeOrder(id: string): Promise<ChangeOrderWithChildre
 }
 
 /**
- * Signed COs for the budget view's display-only contract summary (§7):
- * original contract_value + Σ(signed net deltas) = revised total.
+ * Signed COs as ROWS (lists, panels). For the revised-contract FIGURE, the
+ * derivation authority is lib/services/contract-value.ts (7B §2.2) — do not
+ * re-derive original + Σ(net_delta) from this function's results.
  */
 export async function getSignedChangeOrders(projectId: string): Promise<ChangeOrderWithAuthor[]> {
   const supabase = await createClient();
