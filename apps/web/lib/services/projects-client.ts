@@ -3,14 +3,16 @@ import type { Project, ProjectStatus, ProjectType } from '@/lib/services/project
 export type { Project, ProjectStatus, ProjectType };
 
 /**
- * Allowed status transitions (5A §2 lifecycle):
- *   active <-> on_hold (reversible), active -> complete, any -> cancelled,
- *   complete -> archived.
+ * Allowed status transitions (5A §2 lifecycle, amended by 7A-spec §2.7/§3.4
+ * decision 7): active <-> on_hold (reversible), active -> complete,
+ * any -> cancelled, complete -> archived, and complete -> active (REOPEN —
+ * Owner/Admin only, enforced in transitionProjectStatus; late cost = reopen,
+ * log, re-complete; punch gate re-runs on every re-complete).
  */
 const STATUS_TRANSITIONS: Record<ProjectStatus, ProjectStatus[]> = {
   active: ['on_hold', 'complete', 'cancelled'],
   on_hold: ['active', 'cancelled'],
-  complete: ['archived', 'cancelled'],
+  complete: ['active', 'archived', 'cancelled'],
   archived: ['cancelled'],
   cancelled: [],
 };
@@ -109,17 +111,33 @@ export async function updateProject(
  * gate (5A §2, enforced per 5C §6) blocks completion while any punch item is
  * unresolved: an item is closed when verified (if verification required) or
  * complete (if not).
+ *
+ * 7A additions (§3.4): complete -> active is the REOPEN — Owner/Admin only
+ * (opts.userRole, the deleteProject precedent; service-layer per #82's
+ * status quo). Re-completing a reopened project (an actual_end_date already
+ * exists) requires opts.endDateChoice — the UI prompts keep-original vs
+ * update-to-today (locked decision 8; per-case, no rule). First-time
+ * completion keeps the auto-stamp. opts is optional so existing 3-arg
+ * callers compile; the new paths fail with clear errors until the UI
+ * supplies opts.
  */
 export async function transitionProjectStatus(
   id: string,
   from: ProjectStatus,
-  to: ProjectStatus
+  to: ProjectStatus,
+  opts?: { userRole?: string; endDateChoice?: 'keep' | 'today' }
 ): Promise<{ success: boolean; error?: string }> {
   if (!allowedStatusTransitions(from).includes(to)) {
     return { success: false, error: `Cannot move a ${from} project to ${to}.` };
   }
 
   const supabase = createClient();
+
+  if (from === 'complete' && to === 'active') {
+    if (opts?.userRole !== 'owner' && opts?.userRole !== 'admin') {
+      return { success: false, error: 'Only Owner or Admin can reopen a completed project.' };
+    }
+  }
 
   if (from === 'active' && to === 'complete') {
     const gate = await checkPunchGate(id);
@@ -128,7 +146,32 @@ export async function transitionProjectStatus(
 
   const updates: Record<string, unknown> = { status: to };
   if (to === 'complete') {
-    updates.actual_end_date = new Date().toISOString().slice(0, 10);
+    // Re-complete detection: a prior actual_end_date means this project was
+    // completed before (and reopened). Fail closed on a read error — the
+    // date decision must not be silently defaulted.
+    const { data: current, error: readError } = await supabase
+      .from('projects')
+      .select('actual_end_date')
+      .eq('id', id)
+      .single();
+    if (readError || !current) {
+      return { success: false, error: 'Could not verify the project end date. Try again.' };
+    }
+
+    if (current.actual_end_date === null) {
+      // First completion — auto-stamp today (unchanged 5A behavior).
+      updates.actual_end_date = new Date().toISOString().slice(0, 10);
+    } else if (opts?.endDateChoice === 'today') {
+      updates.actual_end_date = new Date().toISOString().slice(0, 10);
+    } else if (opts?.endDateChoice === 'keep') {
+      // Keep the original date — no write.
+    } else {
+      return {
+        success: false,
+        error:
+          'This project was completed before. Choose whether to keep the original end date or update it to today.',
+      };
+    }
   }
 
   const { error } = await supabase.from('projects').update(updates).eq('id', id);

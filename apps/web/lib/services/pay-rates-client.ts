@@ -58,3 +58,36 @@ export async function deleteMemberRate(id: string): Promise<Result> {
   if (error) return { success: false, error: error.message };
   return { success: true };
 }
+
+// ----------------------------------------------------------------------------
+// 7A labor burden (7A-spec §2.6/§3.2) — Owner/Admin upsert, beside the
+// pay-rate writes per the spec. FORWARD-ONLY: a change here affects future
+// approvals only; already-approved sessions keep their frozen burden. Typed
+// calls (member_burden_settings is in the regenerated database.ts).
+// ----------------------------------------------------------------------------
+
+import type { BurdenSource, MemberBurdenSettings } from '@/lib/services/pay-rates';
+export type { BurdenSource, MemberBurdenSettings };
+
+export async function setMemberBurden(
+  memberId: string,
+  input: { burden_multiplier: number; burden_source: BurdenSource }
+): Promise<Result> {
+  if (!(input.burden_multiplier > 0)) {
+    return { success: false, error: 'Burden multiplier must be greater than zero.' };
+  }
+
+  const supabase = createClient();
+  const { error } = await supabase
+    .from('member_burden_settings')
+    .upsert(
+      {
+        member_id: memberId,
+        burden_multiplier: input.burden_multiplier,
+        burden_source: input.burden_source,
+      },
+      { onConflict: 'member_id' }
+    );
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}

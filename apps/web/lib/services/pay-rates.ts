@@ -95,3 +95,43 @@ export function rateEffectiveOn(
   }
   return best ? Number(best.hourly_rate) : null;
 }
+
+// ----------------------------------------------------------------------------
+// 7A labor burden (7A-spec §2.6) — same floor as rates: member_burden_settings
+// is Owner/Admin-only RLS; other roles read []. Burden is FROZEN into the
+// approval snapshot (forward-only) — these live settings price only FUTURE
+// approvals. Typed calls: the table is in the regenerated database.ts.
+// ----------------------------------------------------------------------------
+
+export type BurdenSource = 'member_multiplier' | 'company_fixed';
+
+export interface MemberBurdenSettings {
+  id: string;
+  member_id: string;
+  burden_multiplier: number;
+  burden_source: BurdenSource;
+}
+
+/** One member's burden row (null = no row yet = pass-through pricing). */
+export async function getMemberBurden(memberId: string): Promise<MemberBurdenSettings | null> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('member_burden_settings')
+    .select('id, member_id, burden_multiplier, burden_source')
+    .eq('member_id', memberId)
+    .eq('is_deleted', false)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data as MemberBurdenSettings;
+}
+
+/** Every live burden row in the company (the burden manager's list input). */
+export async function getCompanyBurdenSettings(): Promise<MemberBurdenSettings[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('member_burden_settings')
+    .select('id, member_id, burden_multiplier, burden_source')
+    .eq('is_deleted', false);
+  if (error || !data) return [];
+  return data as MemberBurdenSettings[];
+}
