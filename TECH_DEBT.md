@@ -38,6 +38,7 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 - **#83** Typed contractor signature stored as rendered PNG only — consider also persisting the typed text string (new column) to allow clean re-rendering later. Currently image-only to match uploaded-signature shape.
 - **#84** Sent change orders cannot be edited. Correct flow is void → edit → resend, not direct edit of a sent CO — a sent CO is a record the client has seen, so mutating it in place is wrong. Needs a void action that supersedes the sent CO and unlocks a new editable revision. Identified Session 76.
 - **#86** Client typed signatures have no typed-name mode — co-data.ts always rasterizes the client's mark to a PNG data-URI whether drawn or typed. The contractor's typed mark renders as native <Text> in Dancing Script (18pt), so the two marks cannot be size-matched: one is point-sized vector text, the other an aspect-fit bitmap. Fix: pass the client's typed text + mode through the signing payload and render as <Text>, mirroring the contractor path. Cross-ref #83. Batch with the typed-name signature UI work. Discovered Session 76.
+- **#102** purchase_orders.total_amount can be written directly, bypassing the set_po_total_amount RPC, desyncing the PO's committed expense row. The live PO UPDATE policy lets PM edit open POs. Accepted in 7C v1: the RPC is the only UI path, so drift requires a hand-rolled API call. No column-scope trigger shipped. Fix shape: PO column-scope trigger pinning total_amount to the RPC. Cross-ref #93 (same tighten-if-observed posture). Observed Session 91.
 
 ### Code Quality
 
@@ -51,6 +52,8 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   - `Company` forward-references `SubscriptionStatus` before it's declared. Works via TS hoisting but fragile.
   - Fix: delete all inline interfaces. Consumers import from `database.ts` (auto-generated, source of truth) or per-entity service files using the existing Pick/Omit patterns. Same fix shape as old #11.
 - **#90** Crew-role RLS gates not yet verified end-to-end via UI. Session 79 verified project_manager RLS gates fully (team-detail blocked, billing/settings hidden, projects correctly scoped to assigned-only). Crew (crew_member) tier was NOT tested because no working Crew login could be established: the password-reset email link is broken (#70) and Supabase magic-link/reset hit the email rate limit. Crew is more restricted than PM, so PM passing all gates makes a Crew failure unlikely but not impossible — verify when a Crew login path exists. Blocked on #70. Observed Session 79.
+- **#103** No foreman test identity in rebuild-test, so foreman-arm RLS probes cannot run. S91's 7C probe grid left the foreman SELECT arm on expense_payments NOT RUN for this reason. Same gap class as #90. Fix: create a foreman profile + company_member in rebuild-test. Observed Session 91.
+- **#104** rebuild-test has only one company, so no true cross-company isolation probe is possible. S91 substituted a three-identity control. Fix: create a second test company with its own owner. Observed Session 91.
 
 ### UX Polish
 
