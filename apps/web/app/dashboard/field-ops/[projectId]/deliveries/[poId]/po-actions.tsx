@@ -3,10 +3,117 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { closePurchaseOrder, softDeletePurchaseOrder } from '@/lib/services/deliveries-client';
+import { setPoTotal } from '@/lib/services/payables-client';
 
 // 6D §5.1 — manual close (Owner/Admin; closed_reason required) and
 // Owner/Admin soft-delete. Reopen is deliberately NOT offered (TECH_DEBT #93
 // documents the PM direct-API edge; auto-reopen exists for auto-closed POs).
+//
+// 7C §2.4 (Q8/2b) — PoTotalControl: entering the total IS the commitment.
+// The set_po_total_amount RPC upserts the PO's committed expense row; editing
+// the total adjusts it. No line-item pricing (locked). The RPC rejects ≤ 0,
+// so a total can be adjusted but never cleared.
+
+function fmtUsd(n: number): string {
+  return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+}
+
+export function PoTotalControl({
+  poId,
+  totalAmount,
+  canEdit,
+}: {
+  poId: string;
+  totalAmount: number | null;
+  canEdit: boolean;
+}) {
+  const router = useRouter();
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(totalAmount !== null ? String(totalAmount) : '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSave() {
+    const parsed = Number(value);
+    if (Number.isNaN(parsed) || parsed <= 0) {
+      setError('Enter a total greater than zero.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    const result = await setPoTotal(poId, parsed);
+    setBusy(false);
+    if (!result.success) {
+      setError(result.error ?? 'Failed to set the total.');
+      return;
+    }
+    setEditing(false);
+    router.refresh();
+  }
+
+  return (
+    <div className="mb-4 rounded-[13px] border border-[#e6e9ef] bg-white p-[16px]">
+      <div className="mb-1 text-[13px] font-bold uppercase text-[#14213d]">
+        PO total{' '}
+        <span className="text-[11px] font-medium normal-case tracking-normal text-[#9aa1ac]">
+          — entering the total commits it to job cost
+        </span>
+      </div>
+      {editing ? (
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min="0.01"
+            step="0.01"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            className="w-[140px] rounded-[9px] border border-[#e0e4ea] px-3 py-[7px] text-[13px] text-[#14213d] outline-none focus:border-[#2f49d1]"
+          />
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void handleSave()}
+            className="rounded-[9px] bg-[#2f49d1] px-[13px] py-[7px] text-[13px] font-semibold text-white hover:bg-[#2438a8] disabled:opacity-50"
+          >
+            {busy ? 'Saving…' : 'Save'}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              setEditing(false);
+              setError(null);
+            }}
+            className="rounded-[9px] px-[10px] py-[7px] text-[13px] font-semibold text-[#6b7280] hover:text-[#14213d]"
+          >
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center gap-3">
+          <span className="font-mono text-[17px] font-semibold text-[#14213d]">
+            {totalAmount !== null ? fmtUsd(totalAmount) : 'Not set'}
+          </span>
+          {totalAmount !== null ? (
+            <span className="text-[12px] text-[#3d7a4b]">committed</span>
+          ) : (
+            <span className="text-[12px] text-[#9aa1ac]">no committed cost on the job yet</span>
+          )}
+          {canEdit ? (
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="text-[12px] font-semibold text-[#2f49d1] hover:underline"
+            >
+              {totalAmount !== null ? 'Adjust' : 'Set total'}
+            </button>
+          ) : null}
+        </div>
+      )}
+      {error ? <p className="mt-2 text-[12px] text-[#c0362c]">{error}</p> : null}
+    </div>
+  );
+}
 
 export function ClosePoButton({ poId }: { poId: string }) {
   const router = useRouter();

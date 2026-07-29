@@ -1,9 +1,10 @@
 'use client';
 
-// 7A §5.4 — role-scoped expense list. Crew: own rows, edit/soft-delete own
-// PENDING rows (Q8), rejection note visible. PM/Foreman: read-only project
-// expenses. Owner/Admin: all rows + Review queue tab (pending count badge)
-// + trash link. RLS already scopes the data; this component only shapes it.
+// 7A §5.4 + 7C §3.3 — role-scoped tabs: Receipts (7A point-of-purchase rows) |
+// Bills & Commitments (7C payables — Owner/Admin/PM/Foreman) | Review queue
+// (Owner/Admin; PM-entered bills appear beside receipts, §4.2). Crew: own
+// receipts, edit/soft-delete own PENDING rows (Q8), rejection note visible.
+// RLS already scopes the data; this component only shapes it.
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
@@ -13,6 +14,9 @@ import {
   type ExpenseListItem,
   type ExpenseStatus,
 } from '@/lib/services/expenses-client';
+import type { PayableListItem } from '@/lib/services/payables-client';
+import { BillsTab } from './bills-tab';
+import { BillFormModal } from './bill-form';
 import { ExpenseCaptureModal } from '@/components/expenses/expense-capture-form';
 import {
   EXPENSE_CATEGORY_LABELS,
@@ -34,6 +38,9 @@ interface ExpensesPageClientProps {
   role: string;
   myMemberId: string | null;
   expenses: ExpenseListItem[];
+  /** 7C payable rows with payments joined (may overlap `expenses` by id —
+   *  the Receipts tab excludes them). */
+  billRows: PayableListItem[];
   /** Active projects — capture + review-time reassign options. */
   activeProjects: { id: string; name: string }[];
   /** All projects — name resolution for rows on non-active jobs. */
@@ -43,7 +50,7 @@ interface ExpensesPageClientProps {
   todayYmd: string;
 }
 
-type Tab = 'all' | 'queue';
+type Tab = 'receipts' | 'bills' | 'queue';
 
 const cellStyle: React.CSSProperties = {
   padding: '11px 14px',
@@ -57,6 +64,7 @@ export function ExpensesPageClient({
   role,
   myMemberId,
   expenses,
+  billRows,
   activeProjects,
   projectNames,
   pendingReceipts,
@@ -64,14 +72,21 @@ export function ExpensesPageClient({
 }: ExpensesPageClientProps) {
   const router = useRouter();
   const isReviewer = role === 'owner' || role === 'admin';
+  // §4 roles: Bills tab for Owner/Admin/PM/Foreman (Foreman read-only); Crew
+  // has nothing in 7C — receipts only.
+  const seesBills = ['owner', 'admin', 'project_manager', 'foreman'].includes(role);
+  const canEnterBills = ['owner', 'admin', 'project_manager'].includes(role);
 
-  const [tab, setTab] = useState<Tab>('all');
+  const [tab, setTab] = useState<Tab>('receipts');
   const [projectFilter, setProjectFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState<'' | ExpenseStatus>('');
   const [reviewing, setReviewing] = useState<ExpenseListItem | null>(null);
   const [editing, setEditing] = useState<ExpenseListItem | null>(null);
+  const [addingBill, setAddingBill] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const payableIds = useMemo(() => new Set(billRows.map((b) => b.id)), [billRows]);
 
   const pendingCount = useMemo(
     () => expenses.filter((e) => e.status === 'pending').length,
@@ -80,11 +95,14 @@ export function ExpensesPageClient({
 
   const rows = useMemo(() => {
     let list = expenses;
+    // Receipts tab: 7A rows only — payables live on their own tab.
+    if (tab === 'receipts') list = list.filter((e) => !payableIds.has(e.id));
+    // Review queue: receipts AND bills side by side (§4.2).
     if (tab === 'queue') list = list.filter((e) => e.status === 'pending');
     if (projectFilter) list = list.filter((e) => e.project_id === projectFilter);
-    if (tab === 'all' && statusFilter) list = list.filter((e) => e.status === statusFilter);
+    if (tab === 'receipts' && statusFilter) list = list.filter((e) => e.status === statusFilter);
     return list;
-  }, [expenses, tab, projectFilter, statusFilter]);
+  }, [expenses, tab, projectFilter, statusFilter, payableIds]);
 
   async function handleDelete(id: string) {
     if (!confirm('Move this expense to trash?')) return;
@@ -128,19 +146,28 @@ export function ExpensesPageClient({
               Trash
             </Link>
           )}
-          <Link href="/dashboard/expenses/new" style={primaryButtonStyle}>
-            + Log expense
-          </Link>
+          {tab === 'bills' && canEnterBills ? (
+            <button style={primaryButtonStyle} onClick={() => setAddingBill(true)}>
+              + New bill / commitment
+            </button>
+          ) : (
+            <Link href="/dashboard/expenses/new" style={primaryButtonStyle}>
+              + Log expense
+            </Link>
+          )}
         </div>
       </div>
 
-      {/* Owner/Admin tabs — All | Review queue (badge). */}
-      {isReviewer && (
+      {/* §3.3 tabs — Receipts | Bills & Commitments | Review queue (badge). */}
+      {(seesBills || isReviewer) && (
         <div style={{ display: 'flex', gap: '2px', borderBottom: `1px solid ${color.cardBorder}`, marginBottom: '14px' }}>
           {(
             [
-              { key: 'all', label: 'All expenses' },
-              { key: 'queue', label: `Review queue${pendingCount > 0 ? ` (${pendingCount})` : ''}` },
+              { key: 'receipts', label: 'Receipts' },
+              ...(seesBills ? [{ key: 'bills', label: 'Bills & Commitments' }] : []),
+              ...(isReviewer
+                ? [{ key: 'queue', label: `Review queue${pendingCount > 0 ? ` (${pendingCount})` : ''}` }]
+                : []),
             ] as { key: Tab; label: string }[]
           ).map((t) => (
             <button
@@ -164,6 +191,18 @@ export function ExpensesPageClient({
         </div>
       )}
 
+      {/* 7C — Bills & Commitments tab (own filters, table, and modals). */}
+      {tab === 'bills' ? (
+        <BillsTab
+          rows={billRows}
+          role={role}
+          projectNames={projectNames}
+          activeProjects={activeProjects}
+          todayYmd={todayYmd}
+          onReview={(e) => setReviewing(e)}
+        />
+      ) : (
+        <>
       {/* Filters. */}
       <div style={{ display: 'flex', gap: '10px', marginBottom: '14px', flexWrap: 'wrap' }}>
         <select
@@ -184,7 +223,7 @@ export function ExpensesPageClient({
             </option>
           ))}
         </select>
-        {tab === 'all' && (
+        {tab === 'receipts' && (
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as '' | ExpenseStatus)}
@@ -313,6 +352,8 @@ export function ExpensesPageClient({
           </div>
         )}
       </div>
+        </>
+      )}
 
       {/* §5.5 — the review popup (Owner/Admin). */}
       {reviewing && (
@@ -323,6 +364,19 @@ export function ExpensesPageClient({
           onClose={() => setReviewing(null)}
           onDone={() => {
             setReviewing(null);
+            router.refresh();
+          }}
+        />
+      )}
+
+      {/* 7C §4.1 — new bill / commitment (Owner/Admin/PM; PM lands pending). */}
+      {addingBill && (
+        <BillFormModal
+          projects={activeProjects}
+          todayYmd={todayYmd}
+          onClose={() => setAddingBill(false)}
+          onDone={() => {
+            setAddingBill(false);
             router.refresh();
           }}
         />

@@ -9,6 +9,8 @@ import {
   deleteProject,
 } from '@/lib/services/projects-client';
 import { PROJECT_STATUS_LABELS } from '@/lib/services/projects-client';
+import { getCommittedRemaining } from '@/lib/services/payables-client';
+import { fmtMoney } from '@/components/expenses/expense-ui';
 
 interface StatusControlProps {
   projectId: string;
@@ -65,6 +67,22 @@ export function StatusControl({
             'The punch gate will re-run when it is completed again, and you will be ' +
             'asked whether to keep the original completion date. The completion date ' +
             'and any warranty record persist — nothing is cleared.'
+        )
+      ) {
+        return;
+      }
+    }
+    // 7C §4.7 (Q7iii) — complete-with-open-bills advisory: warn on committed
+    // dollars still open, never block (P2). Pairs with 7A's reopen for the
+    // late bill.
+    if (to === 'complete') {
+      const stillCommitted = await getCommittedRemaining(projectId);
+      if (
+        stillCommitted > 0 &&
+        !confirm(
+          `${fmtMoney(stillCommitted)} is still committed on this job (open bills or ` +
+            'sub stages). You can complete anyway — a late bill can be recorded by ' +
+            'reopening the project.\n\nComplete this project?'
         )
       ) {
         return;
