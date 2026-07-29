@@ -230,8 +230,19 @@ CHECK `('coi','license','w9','other')`, `file_id → files`, `issued_date`,
 Compliance status **derived, never stored** (`current / expiring_soon / expired` from
 `expiration_date` vs today — 5I `:64`); COI = single soonest expiration (`:65`).
 **Alert thresholds: −30 and −7 days** (Q5 — matches 5I `:123`; S89's earlier "30/14" is
-superseded; no 5I amendment owed). RLS: owner/admin/PM read+write (5I Path A — office uploads);
-sub self-service upload is 5I's portal (Path B), not built here.
+superseded; no 5I amendment owed). RLS: read Owner/Admin/PM; ~~owner/admin/PM read+write (5I
+Path A — office uploads)~~ **write Owner/Admin only [S92 RESOLVED — §6.10 option (b):
+Owner/Admin-only compliance upload v1. §1's trace says the office uploads COIs/W-9s; PM as a
+writer was aspirational. No RLS change required — the #96 files policies already admit
+`project_id IS NULL` rows for Owner/Admin. Adding PM later is purely additive — the follow-up
+compliance arm on the files policies (option a), batched with FINANCIAL-RLS-FLOOR, remains
+available but is NOT being done now. KNOWN DIVERGENCE, accepted: the live table policies
+(`20260729010000:426-452`) admit PM on INSERT/UPDATE — wider than this writer set. No narrowing
+migration owed (same tighten-if-observed posture as #102); harm is bounded — a PM can create a
+compliance row but cannot attach a file (#96 blocks the upload). 7C↔5I DIVERGENCE FLAG: 5I's
+own trace (`5I-spec.md:174`) has the PM uploading under Path A — reconcile at 5I build
+(5I-spec NOT amended now), same pattern as §6.1.]**
+Sub self-service upload is 5I's portal (Path B), not built here.
 **Flag to 5I:** the portal build must NOT re-create this table — 7C ships it; 5I keeps design
 ownership (§6 open items).
 
@@ -321,7 +332,7 @@ No new API routes; no new page routes. Existing surfaces grow (Q9):
 | `/dashboard/expenses` | tabs: **Receipts \| Bills & Commitments \| Review queue** — BUILT [S91] |
 | `/dashboard/projects/[id]/costs` | **Payables** section (7A Job Cost tab) — BUILT [S91] |
 | `/dashboard/projects/[id]/contracts` | payment-schedule setup + stage/payment panel on the sub contract (`contracts-panel.tsx`) — BUILT [S91] |
-| `/dashboard/subcontractors/[id]` (sub record) | compliance docs list + upload + expiry chips — **[S91 NOT BUILT (§6.10); and the route does not exist — only `/dashboard/subcontractors/[id]/edit` (cross-ref TECH_DEBT #13); the section lands on the edit page when unblocked]** |
+| `/dashboard/subcontractors/[id]` (sub record) | compliance docs list + upload + expiry chips — **[S91 NOT BUILT (§6.10); and the route does not exist — only `/dashboard/subcontractors/[id]/edit` (cross-ref TECH_DEBT #13, and now #108(c), which asks for that read-only profile); the section lands on the edit page when unblocked]** |
 | `/dashboard/schedule` | compliance expiry trigger points as calendar entries — **[S91 NOT BUILT — stopped with the compliance surface (§6.10); `getExpiringCompliance` is ready to feed `getCalendarEvents` as derived-at-read entries]** |
 | `/dashboard/field-ops/[projectId]/deliveries/[poId]` (6D PO detail) | **[S91 ADDED at build — this table originally named no PO surface]** PO total field (`PoTotalControl`, `po-actions.tsx`) → `set_po_total_amount`; Owner/Admin/PM |
 
@@ -419,17 +430,23 @@ receipts only).
 9. **FINANCIAL-RLS-FLOOR:** payables dollars ride expenses/payments RLS (self-contained), but
    the standing budget-items and companies-row gaps are unchanged; batch with the named
    migration.
-10. **[S91 — OPEN] Compliance upload RLS conflict — blocks §2.5's PM writers, §4 screen 6, the
-    §3.3 calendar row, and §4.4's release-time compliance chips (no doc rows can exist, so the
-    chips shipped nowhere — they land with the same unblock).** The #96 files policies (`20260728000000:89-91`) admit
-    `project_id IS NULL` rows for **Owner/Admin only**; §2.5 names Owner/Admin/PM as compliance
+10. **[S91 — OPEN → RESOLVED S92: option (b) — Owner/Admin-only compliance upload v1.]**
+    The conflict blocked §2.5's PM writers, §4 screen 6, the §3.3 calendar row, and §4.4's
+    release-time compliance chips (no doc rows can exist, so the chips shipped nowhere — they
+    land with the same unblock). The #96 files policies (`20260728000000:89-91`) admit
+    `project_id IS NULL` rows for **Owner/Admin only**; §2.5 named Owner/Admin/PM as compliance
     writers, and compliance docs are member-scoped (no project to attach). The S91 build
     STOPPED here per instruction: no upload function, no sub-record section, no calendar
-    wiring; no file_id-NULL rows, no arbitrary-project pinning, no RLS change. §2.5 stands as
-    design intent. **Options:** (a) a follow-up migration adding a compliance arm to the files
-    policies — e.g. Owner/Admin/PM for a dedicated NULL-project compliance path — batched with
-    FINANCIAL-RLS-FLOOR; (b) Owner/Admin-only compliance upload v1 (amend §2.5's writer set).
-    Undecided — Josh's call.
+    wiring; no file_id-NULL rows, no arbitrary-project pinning, no RLS change.
+    **Decision (Josh, S92): option (b).** §2.5's writer set amended to Owner/Admin only.
+    Rationale: §1's trace says the office uploads COIs/W-9s; PM as a writer was aspirational.
+    No RLS change required — #96 already admits `project_id IS NULL` rows for Owner/Admin.
+    Adding PM later is purely additive — option (a)'s follow-up compliance arm on the files
+    policies, batched with FINANCIAL-RLS-FLOOR, remains available but is NOT being done now.
+    This unblocks §4 screen 6, the §3.3 calendar row, and §4.4's release-time chips (build
+    still pending). Screen 6 still lands on the edit page — `/dashboard/subcontractors/[id]`
+    does not exist (#13, and now #108(c), which asks for that read-only profile). See §2.5 for
+    the accepted live-policy divergence and the 7C↔5I flag.
 
 ---
 
@@ -439,4 +456,5 @@ correction: payments convert to actual immediately — live split accounting rep
 flip-at-full rule). BUILT and committed Session 91 on `feature/7c-payables` (`6b9e7bb` schema,
 `732dffe` services, `0153d75` UI); divergences from the build amended inline as [S91] — the
 migration and those commits win over any remaining spec text. Every former PROPOSED is now
-resolved inline except §6.10 (compliance upload), which is an open decision.*
+resolved inline, including §6.10 (compliance upload) — RESOLVED S92, option (b):
+Owner/Admin-only upload v1.*

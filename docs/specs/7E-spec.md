@@ -58,9 +58,10 @@ applies to one or more invoices — no orphan income.
 
 - Fires on **job completion + client sign-off.** (The trigger is the _client's_ sign-off, not an
   app Owner/Admin action — those are different actors.)
-  **[S91 CONTRADICTION FLAG — acceptance §9 #6 says "owner sign-off." Which actor triggers
-  release is UNDECIDED between these two lines; Josh to resolve before 7E builds. Neither line
-  was corrected — see §O.]**
+  **[S92 RESOLVED — this line is correct; acceptance §9 #6's "owner sign-off" was the drafting
+  error and is fixed. Rationale: the client holds the retainage, so only the client can accept
+  the work that triggers release; Owner/Admin retain their gate one step later — the
+  auto-generated release invoice still waits on Owner/Admin approval before sending.]**
 - **Optional lien-release gate:** collecting the released money may require the contractor to send
   an **outbound lien release** to the client first. This requirement is **toggleable off** by the
   contractor. The toggle is a **global company setting**, and each company **uploads the lien-release
@@ -71,7 +72,10 @@ applies to one or more invoices — no orphan income.
   amount, held for **app Owner/Admin approval before sending.**
 - Applies to retainage the **client holds** from the company (the outbound / contractor→client
   direction). The parallel case — retainage the **company holds from subcontractors** (inbound) —
-  is released by the same trigger but is a **7C/AP** concern (named, not built here).
+  releases around the **same milestone (job completion), not the same trigger** [S92]: the 7C
+  side is **Owner-initiated at sub completion** and does not wait on the client's sign-off of
+  the whole job. No client gate is added to 7C; nothing about the shipped 7C flow changes. It
+  is a **7C/AP** concern (named, not built here).
 
 ---
 
@@ -128,10 +132,10 @@ Recipients: Owner/Admin (per event). Channel/wording/on-off: owned by the notifi
 4. Underpayment leaves the invoice open/partial; overpayment creates a client credit that applies
    only on user action.
 5. Every invoice — paid electronically or not — pushes to QB and is tagged to a job-named Project.
-6. Retainage release fires on completion + owner sign-off, generates a release invoice, and holds
-   for Owner/Admin approval before sending.
-   **[S91 CONTRADICTION FLAG — §4 says the trigger is the _client's_ sign-off, explicitly "not
-   an app Owner/Admin action." Undecided; see the §4 flag and §O.]**
+6. Retainage release fires on completion + **client** sign-off, generates a release invoice, and
+   holds for Owner/Admin approval before sending.
+   **[S92 — "owner sign-off" was a drafting error, corrected; §4 is the governing line and
+   carries the rationale.]**
 7. A refund is Owner/Admin-only (Admin needs Owner approval) and records as a credit memo.
 8. AR aging tracks 30/60/90; per-client reminders send on user-set timing/wording and notify
    Owner/Admin.
@@ -181,6 +185,6 @@ service files, and routes. Do **not** assert from context — read.
 - **Pre-Module 9 external-surface gate** governs the client-facing pay surface (where the client
   actually pays). The pay-_link_ concept is fixed; the surface follows the gate.
 - **Notification system** (§A.2) must be designed before §7 events can actually deliver.
-- **[S91] Retainage-release trigger actor UNDECIDED** — §4 says the _client's_ sign-off;
-  acceptance §9 #6 says _owner_ sign-off. Flagged inline at both lines; Josh resolves before
-  the 7E build.
+- **[S92] Retainage-release trigger actor RESOLVED — the _client's_ sign-off.** §4 was
+  correct; acceptance §9 #6's "owner sign-off" was a drafting error, now fixed. Rationale
+  recorded at §4.
