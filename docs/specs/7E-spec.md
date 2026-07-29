@@ -37,10 +37,11 @@ applies to one or more invoices — no orphan income.
   QuickBooks-style. **One payment can split across several invoices; one invoice can be satisfied by
   several payments over time.**
 - **Every invoice pushes to QuickBooks** (not only electronically paid ones). On sync, QB tags each
-  invoice/payment to a **Project named after the job** — **decided.** It is **not** a new chart-of-
-  accounts account. The exact QB mechanism that implements a job-named Project (QB Project vs.
-  sub-customer vs. Class) is a **7G** implementation detail to verify against live QB API docs; the
-  _decision_ (tag to a job-named Project) is fixed here.
+  invoice/payment to the job's QB **sub-customer** (named after the job, nested under the client
+  Customer via `ParentRef`). It is **not** a new chart-of-accounts account. [S91 — the mechanism
+  this spec deferred to 7G is now RESOLVED: sub-customer; the QBO "Projects" feature is
+  explicitly not used (`7G-spec.md` §7G.2 #2, §7G.6 — its `IsProject` flag is read-only on
+  create). The decision fixed here — tag income to a job-named QB entity — is unchanged.]
 
 ---
 
@@ -57,6 +58,10 @@ applies to one or more invoices — no orphan income.
 
 - Fires on **job completion + client sign-off.** (The trigger is the _client's_ sign-off, not an
   app Owner/Admin action — those are different actors.)
+  **[S92 RESOLVED — this line is correct; acceptance §9 #6's "owner sign-off" was the drafting
+  error and is fixed. Rationale: the client holds the retainage, so only the client can accept
+  the work that triggers release; Owner/Admin retain their gate one step later — the
+  auto-generated release invoice still waits on Owner/Admin approval before sending.]**
 - **Optional lien-release gate:** collecting the released money may require the contractor to send
   an **outbound lien release** to the client first. This requirement is **toggleable off** by the
   contractor. The toggle is a **global company setting**, and each company **uploads the lien-release
@@ -67,7 +72,10 @@ applies to one or more invoices — no orphan income.
   amount, held for **app Owner/Admin approval before sending.**
 - Applies to retainage the **client holds** from the company (the outbound / contractor→client
   direction). The parallel case — retainage the **company holds from subcontractors** (inbound) —
-  is released by the same trigger but is a **7C/AP** concern (named, not built here).
+  releases around the **same milestone (job completion), not the same trigger** [S92]: the 7C
+  side is **Owner-initiated at sub completion** and does not wait on the client's sign-off of
+  the whole job. No client gate is added to 7C; nothing about the shipped 7C flow changes. It
+  is a **7C/AP** concern (named, not built here).
 
 ---
 
@@ -124,8 +132,10 @@ Recipients: Owner/Admin (per event). Channel/wording/on-off: owned by the notifi
 4. Underpayment leaves the invoice open/partial; overpayment creates a client credit that applies
    only on user action.
 5. Every invoice — paid electronically or not — pushes to QB and is tagged to a job-named Project.
-6. Retainage release fires on completion + owner sign-off, generates a release invoice, and holds
-   for Owner/Admin approval before sending.
+6. Retainage release fires on completion + **client** sign-off, generates a release invoice, and
+   holds for Owner/Admin approval before sending.
+   **[S92 — "owner sign-off" was a drafting error, corrected; §4 is the governing line and
+   carries the rationale.]**
 7. A refund is Owner/Admin-only (Admin needs Owner approval) and records as a credit memo.
 8. AR aging tracks 30/60/90; per-client reminders send on user-set timing/wording and notify
    Owner/Admin.
@@ -158,9 +168,10 @@ Not build-ready until CC reads these live and fills table names, columns, FKs, R
 service files, and routes. Do **not** assert from context — read.
 
 1. **7D invoice tables** — the payment record links to invoices; needs their shape and status model.
-2. **QuickBooks connector (7G)** — undefined. The electronic-payment path, the every-invoice push,
-   and the job-named-Project tagging all depend on it. Verify the QB mechanism (Project vs. sub-
-   customer vs. Class) against live QB API docs at 7G spec time. **This is the gating dependency.**
+2. **QuickBooks connector (7G)** — [S91] spec now EXISTS (`7G-spec.md`); the mechanism is
+   resolved (sub-customer, §7G.2 #2). The electronic-payment path and the every-invoice push
+   still depend on the 7G **build** — the electronic half stays a stub until then. **This is
+   the gating dependency.**
 3. **Module 5 project / budget / `contract_value` tables** — deposit crediting, retainage held
    balance, and where applied payments post into project finances.
 4. **Company settings** — AR reminder configuration (per-client timing + wording).
@@ -174,3 +185,6 @@ service files, and routes. Do **not** assert from context — read.
 - **Pre-Module 9 external-surface gate** governs the client-facing pay surface (where the client
   actually pays). The pay-_link_ concept is fixed; the surface follows the gate.
 - **Notification system** (§A.2) must be designed before §7 events can actually deliver.
+- **[S92] Retainage-release trigger actor RESOLVED — the _client's_ sign-off.** §4 was
+  correct; acceptance §9 #6's "owner sign-off" was a drafting error, now fixed. Rationale
+  recorded at §4.

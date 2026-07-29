@@ -2242,29 +2242,107 @@ export type Database = {
           },
         ]
       }
+      expense_payments: {
+        Row: {
+          amount: number
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          expense_id: string
+          id: string
+          is_deleted: boolean | null
+          method: string | null
+          note: string | null
+          over_stage: boolean
+          paid_date: string
+          retainage_withheld: number
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          amount: number
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          expense_id: string
+          id?: string
+          is_deleted?: boolean | null
+          method?: string | null
+          note?: string | null
+          over_stage?: boolean
+          paid_date: string
+          retainage_withheld?: number
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          amount?: number
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          expense_id?: string
+          id?: string
+          is_deleted?: boolean | null
+          method?: string | null
+          note?: string | null
+          over_stage?: boolean
+          paid_date?: string
+          retainage_withheld?: number
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expense_payments_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_payments_expense_id_fkey"
+            columns: ["expense_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       expenses: {
         Row: {
           amount: number
           approved_at: string | null
           approved_by: string | null
           author_member_id: string
+          awaiting_paper: boolean
+          closed_out_at: string | null
+          closed_out_by: string | null
+          closeout_reason: string | null
           company_id: string
           cost_category: string
           created_at: string | null
           created_by: string | null
           deleted_at: string | null
           description: string | null
+          due_date: string | null
           expense_date: string
           id: string
           is_deleted: boolean | null
+          is_retainage: boolean
           project_id: string
+          purchase_order_id: string | null
           qb_export_status: string | null
           rejected_at: string | null
           rejected_by: string | null
           rejection_note: string | null
           source_segment_id: string | null
+          stage_label: string | null
           state: string
           status: string
+          sub_contract_id: string | null
           supplier: string
           updated_at: string | null
           updated_by: string | null
@@ -2274,23 +2352,32 @@ export type Database = {
           approved_at?: string | null
           approved_by?: string | null
           author_member_id?: string
+          awaiting_paper?: boolean
+          closed_out_at?: string | null
+          closed_out_by?: string | null
+          closeout_reason?: string | null
           company_id?: string
           cost_category?: string
           created_at?: string | null
           created_by?: string | null
           deleted_at?: string | null
           description?: string | null
+          due_date?: string | null
           expense_date: string
           id?: string
           is_deleted?: boolean | null
+          is_retainage?: boolean
           project_id: string
+          purchase_order_id?: string | null
           qb_export_status?: string | null
           rejected_at?: string | null
           rejected_by?: string | null
           rejection_note?: string | null
           source_segment_id?: string | null
+          stage_label?: string | null
           state?: string
           status?: string
+          sub_contract_id?: string | null
           supplier: string
           updated_at?: string | null
           updated_by?: string | null
@@ -2300,23 +2387,32 @@ export type Database = {
           approved_at?: string | null
           approved_by?: string | null
           author_member_id?: string
+          awaiting_paper?: boolean
+          closed_out_at?: string | null
+          closed_out_by?: string | null
+          closeout_reason?: string | null
           company_id?: string
           cost_category?: string
           created_at?: string | null
           created_by?: string | null
           deleted_at?: string | null
           description?: string | null
+          due_date?: string | null
           expense_date?: string
           id?: string
           is_deleted?: boolean | null
+          is_retainage?: boolean
           project_id?: string
+          purchase_order_id?: string | null
           qb_export_status?: string | null
           rejected_at?: string | null
           rejected_by?: string | null
           rejection_note?: string | null
           source_segment_id?: string | null
+          stage_label?: string | null
           state?: string
           status?: string
+          sub_contract_id?: string | null
           supplier?: string
           updated_at?: string | null
           updated_by?: string | null
@@ -2337,6 +2433,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "expenses_closed_out_by_fkey"
+            columns: ["closed_out_by"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "expenses_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
@@ -2351,6 +2454,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "expenses_purchase_order_id_fkey"
+            columns: ["purchase_order_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_orders"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "expenses_rejected_by_fkey"
             columns: ["rejected_by"]
             isOneToOne: false
@@ -2362,6 +2472,13 @@ export type Database = {
             columns: ["source_segment_id"]
             isOneToOne: false
             referencedRelation: "time_segments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_sub_contract_id_fkey"
+            columns: ["sub_contract_id"]
+            isOneToOne: false
+            referencedRelation: "subcontractor_contracts"
             referencedColumns: ["id"]
           },
         ]
@@ -3533,6 +3650,7 @@ export type Database = {
           po_number: string | null
           project_id: string
           status: string
+          total_amount: number | null
           updated_at: string | null
           updated_by: string | null
           vendor_name: string
@@ -3551,6 +3669,7 @@ export type Database = {
           po_number?: string | null
           project_id: string
           status?: string
+          total_amount?: number | null
           updated_at?: string | null
           updated_by?: string | null
           vendor_name: string
@@ -3569,6 +3688,7 @@ export type Database = {
           po_number?: string | null
           project_id?: string
           status?: string
+          total_amount?: number | null
           updated_at?: string | null
           updated_by?: string | null
           vendor_name?: string
@@ -3987,6 +4107,79 @@ export type Database = {
           },
         ]
       }
+      subcontractor_compliance_documents: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          doc_type: string
+          expiration_date: string | null
+          file_id: string | null
+          id: string
+          is_deleted: boolean | null
+          issued_date: string | null
+          member_id: string
+          notes: string | null
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          doc_type: string
+          expiration_date?: string | null
+          file_id?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          issued_date?: string | null
+          member_id: string
+          notes?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          doc_type?: string
+          expiration_date?: string | null
+          file_id?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          issued_date?: string | null
+          member_id?: string
+          notes?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subcontractor_compliance_documents_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subcontractor_compliance_documents_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subcontractor_compliance_documents_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subcontractor_contracts: {
         Row: {
           company_id: string
@@ -4000,6 +4193,8 @@ export type Database = {
           member_id: string
           notes: string | null
           project_id: string
+          retainage_percent: number | null
+          retainage_shape: string | null
           scope_of_work: string | null
           signed_doc_file_id: string | null
           status: string
@@ -4018,6 +4213,8 @@ export type Database = {
           member_id: string
           notes?: string | null
           project_id: string
+          retainage_percent?: number | null
+          retainage_shape?: string | null
           scope_of_work?: string | null
           signed_doc_file_id?: string | null
           status?: string
@@ -4036,6 +4233,8 @@ export type Database = {
           member_id?: string
           notes?: string | null
           project_id?: string
+          retainage_percent?: number | null
+          retainage_shape?: string | null
           scope_of_work?: string | null
           signed_doc_file_id?: string | null
           status?: string
@@ -4087,6 +4286,7 @@ export type Database = {
           default_hourly_rate: number | null
           default_markup_percent: number | null
           deleted_at: string | null
+          did_not_finish: boolean
           ein: string | null
           email: string | null
           id: string
@@ -4121,6 +4321,7 @@ export type Database = {
           default_hourly_rate?: number | null
           default_markup_percent?: number | null
           deleted_at?: string | null
+          did_not_finish?: boolean
           ein?: string | null
           email?: string | null
           id?: string
@@ -4155,6 +4356,7 @@ export type Database = {
           default_hourly_rate?: number | null
           default_markup_percent?: number | null
           deleted_at?: string | null
+          did_not_finish?: boolean
           ein?: string | null
           email?: string | null
           id?: string
@@ -4911,10 +5113,34 @@ export type Database = {
         Returns: undefined
       }
       recompute_po_status: { Args: { p_po_id: string }; Returns: undefined }
+      record_expense_payment: {
+        Args: {
+          p_amount: number
+          p_expense_id: string
+          p_method?: string
+          p_note?: string
+          p_override_over_stage?: boolean
+          p_paid_date: string
+        }
+        Returns: Json
+      }
       seed_default_tags: { Args: { p_company_id: string }; Returns: undefined }
+      set_po_total_amount: {
+        Args: { p_amount: number; p_po_id: string }
+        Returns: string
+      }
       set_winning_bid: {
         Args: { p_line_item_id: string; p_sub_bid_id: string }
         Returns: undefined
+      }
+      setup_payment_schedule: {
+        Args: {
+          p_retainage_percent?: number
+          p_retainage_shape?: string
+          p_stages: Json
+          p_sub_contract_id: string
+        }
+        Returns: Json
       }
       switch_pricing_mode: {
         Args: { p_estimate_id: string; p_new_mode: string }

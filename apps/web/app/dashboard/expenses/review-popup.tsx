@@ -7,6 +7,14 @@
 // (Q7: wrong-job = reassign, not reject), allocation section ALWAYS shown
 // (Q4) with live unallocated remainder and inline "+ Add budget line" (Q4b),
 // Approve (zero allocations legal — Option B) | Reject (note required).
+//
+// 7C §4.2 — committed rows (bills/commitments/stages) share this popup.
+// Allocations write budget actual_amount, so the section is HIDDEN for
+// committed rows (they settle through payments, not allocations) and approval
+// goes through approve_expense with zero allocations — the RPC is
+// state-agnostic (verified: it checks only pending + role). The category
+// select is also hidden (a bill may legitimately be 'subcontractor', which
+// capture never offers).
 
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -20,7 +28,11 @@ import {
   type CaptureCategory,
   type ExpenseListItem,
 } from '@/lib/services/expenses-client';
-import { CAPTURE_CATEGORY_LABELS, fmtMoney } from '@/components/expenses/expense-ui';
+import {
+  CAPTURE_CATEGORY_LABELS,
+  EXPENSE_CATEGORY_LABELS,
+  fmtMoney,
+} from '@/components/expenses/expense-ui';
 import { overlayStyle, fieldLabelStyle, inputStyle } from '@/components/time/clock-modal';
 import {
   cardStyle,
@@ -43,6 +55,10 @@ interface ReviewPopupProps {
 }
 
 export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: ReviewPopupProps) {
+  // 7C: a committed row settles via payments — no allocations, no category
+  // select (see header comment).
+  const isCommitted = expense.state === 'committed';
+
   // Editable capture fields (Owner/Admin may correct before approval).
   const [supplier, setSupplier] = useState(expense.supplier);
   const [date, setDate] = useState(expense.expense_date);
@@ -161,19 +177,20 @@ export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: Re
     setError(null);
 
     // Correct-before-approve: persist any edited capture fields first.
+    // Committed rows never touch cost_category here (select hidden).
     const dirty =
       supplier.trim() !== expense.supplier ||
       date !== expense.expense_date ||
       parsedAmount !== expense.amount ||
       (description.trim() || null) !== (expense.description ?? null) ||
-      category !== expense.cost_category;
+      (!isCommitted && category !== expense.cost_category);
     if (dirty) {
       const upd = await updateExpense(expense.id, {
         supplier: supplier.trim(),
         expense_date: date,
         amount: parsedAmount,
         description: description.trim() || null,
-        cost_category: category,
+        ...(isCommitted ? {} : { cost_category: category }),
       });
       if (!upd.success) {
         setBusy(false);
@@ -268,17 +285,24 @@ export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: Re
           </div>
           <div>
             <label style={fieldLabelStyle}>Category</label>
-            <select
-              value={category}
-              onChange={(e) => setCategory(e.target.value as CaptureCategory)}
-              style={inputStyle}
-            >
-              {(Object.keys(CAPTURE_CATEGORY_LABELS) as CaptureCategory[]).map((c) => (
-                <option key={c} value={c}>
-                  {CAPTURE_CATEGORY_LABELS[c]}
-                </option>
-              ))}
-            </select>
+            {isCommitted ? (
+              <p style={{ fontSize: '13px', color: color.body, margin: '8px 0 0' }}>
+                {EXPENSE_CATEGORY_LABELS[expense.cost_category] ?? expense.cost_category}
+                <span style={{ color: color.muted }}> · committed</span>
+              </p>
+            ) : (
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value as CaptureCategory)}
+                style={inputStyle}
+              >
+                {(Object.keys(CAPTURE_CATEGORY_LABELS) as CaptureCategory[]).map((c) => (
+                  <option key={c} value={c}>
+                    {CAPTURE_CATEGORY_LABELS[c]}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
         </div>
         <div style={{ marginBottom: '12px' }}>
@@ -311,9 +335,17 @@ export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: Re
           </select>
         </div>
 
-        {/* Allocation — ALWAYS shown (Q4). budgeted_amount is Owner/Admin-only
-            audience here (floor-safe). */}
-        <div style={{ marginBottom: '16px' }}>
+        {/* Allocation — ALWAYS shown for receipts (Q4); HIDDEN for committed
+            rows (7C §4.2 — they settle via payments, allocations write budget
+            actuals). budgeted_amount is Owner/Admin-only audience here
+            (floor-safe). */}
+        {isCommitted && (
+          <p style={{ fontSize: '12px', color: color.muted, margin: '0 0 16px' }}>
+            Committed — this row settles through recorded payments; approving puts it in the
+            job&rsquo;s committed total. No budget allocation.
+          </p>
+        )}
+        <div style={{ marginBottom: '16px', display: isCommitted ? 'none' : undefined }}>
           <p style={{ ...microLabelStyle, marginBottom: '8px' }}>
             Allocate to budget lines (optional)
           </p>

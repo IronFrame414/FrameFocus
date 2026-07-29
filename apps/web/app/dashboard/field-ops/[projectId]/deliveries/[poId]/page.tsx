@@ -5,7 +5,7 @@ import { getProject } from '@/lib/services/projects';
 import { getPurchaseOrderDetail, poTitle } from '@/lib/services/deliveries';
 import { getMyMember } from '@/lib/services/members';
 import { FieldTabs } from '@/components/field/field-tabs';
-import { ClosePoButton, DeletePoButton } from './po-actions';
+import { ClosePoButton, DeletePoButton, PoTotalControl } from './po-actions';
 
 // 6D — handoff 4e: PO detail. Ordered-vs-usable bars (usable = received −
 // damaged, DB-derived quantities aggregated per line), split-delivery truck
@@ -115,6 +115,9 @@ export default async function PurchaseOrderDetailPage({
       </div>
 
       <FieldTabs projectId={project.id} active="deliveries" />
+
+      {/* 7C §2.4 — the PO total IS the commitment (Owner/Admin/PM). */}
+      <PoTotalControl poId={po.id} totalAmount={po.total_amount} canEdit={canEditPo} />
 
       <div className="grid grid-cols-[1fr_320px] items-start gap-[18px]">
         {/* Left — ordered vs usable */}

@@ -58,7 +58,11 @@ existing doc/decision; `[inferred]` = Claude's inference, confirm before treatin
    never performs or brokers notarization — it only emails the PDF for the company to print / notarize
    / upload.
 10. **Amount source.** `[this session]` Client releases pull the **`$` to match the invoice**
-    (auto); sub releases take the **`$` typed by hand** (sub payment side isn't wired in v1).
+    (auto); sub releases take the **`$` typed by hand** — the recorded v1 decision.
+    [S91 rationale update: the original reason ("sub payment side isn't wired") is gone — 7C
+    shipped `expense_payments` (S91). REVISIT at sub-side build: auto-matching the sub release
+    `$` to the payment being released is now possible, but it is a design change to this
+    decision and was not made here.]
 11. **Collection gate.** `[inherited]` (from the prior-session 7E decisions — Session 72 handoff) A company may require a
     conditional release be sent **to collect**. Global company toggle; the company uploads its own
     format; the requirement is removable.
@@ -147,8 +151,12 @@ company-standard or entered per release. A **custom** box covers anything not li
 
 Not built in v1. Recorded so it isn't re-lost:
 
-- **Triggers** fire when a sub is scheduled and when a sub completes — depends on **Module 6's
-  sub-scheduling model**, which isn't readable yet.
+- **Triggers** fire when a sub is scheduled and when a sub completes. [S91 rationale update:
+  ~~"depends on Module 6's sub-scheduling model, which isn't readable yet"~~ — M6 is built and
+  readable, and 7C shipped the sub payment machinery (schedule stages, `expense_payments`,
+  Owner-only release via `record_expense_payment` / `releaseRetainage`, compliance state read
+  at release), so the trigger points now exist in code. The remaining blocker is the
+  external-surface gate below, not readability. The v1 client-outbound-only decision stands.]
 - **The sub is the signer**, and signs **via an emailed link** — an external surface, so it follows
   the **Pre-Module 9 external-surface gate** (email + magic-link vs. hosted portal), not a one-off.
 - Sub-release **`$` is entered manually** (#10).

@@ -174,8 +174,10 @@ ahead of schema.)
 CC must read and reconcile:
 
 1. **Signed-artifact / change-order tables** — 7D converts signed COs into invoices; needs the CO
-   record shape and its money delta. *(Unmerged branch at architecture-doc time — verify merge
-   state first.)*
+   record shape and its money delta. *([S91] Merged and live: `change_orders` — migration
+   `20260704215000`, status `draft|sent|signed|voided`, `net_delta` — plus the signed-artifact
+   columns (`20260710120000`); 7B reads them via `contract-value.ts`. The old "unmerged branch"
+   caveat is dead.)*
 2. **Estimate line model** (Module 4) — invoice detail format mirrors the source; standalone uses
    the same format.
 3. **Module 5 project / budget / `contract_value` tables** — deposit-to-budget crediting,

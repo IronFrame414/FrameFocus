@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase-server';
 import { notFound, redirect } from 'next/navigation';
 import { getProject } from '@/lib/services/projects';
 import { getExpenses, getJobCostRollup } from '@/lib/services/expenses';
+import { getPayablesSummary } from '@/lib/services/payables';
 import { getBudgetRollup } from '@/lib/services/budget';
 import { getMembers } from '@/lib/services/members';
 import {
@@ -67,9 +68,14 @@ export default async function JobCostPage({ params }: { params: { id: string } }
   const project = await getProject(params.id);
   if (!project) notFound();
 
-  const [rollup, expenses] = await Promise.all([
+  // Payables section (7C §4.5): Owner/Admin + PM — foreman sees the expenses
+  // side only (no Payables money summary beyond expenses, §4 roles).
+  const seesPayables = isOwnerAdmin || role === 'project_manager';
+
+  const [rollup, expenses, payables] = await Promise.all([
     getJobCostRollup(params.id),
     getExpenses({ project_id: params.id }),
+    seesPayables ? getPayablesSummary(params.id) : Promise.resolve(null),
   ]);
 
   // Owner/Admin extras: per-line budget vs actual + member names for labor.
@@ -99,7 +105,7 @@ export default async function JobCostPage({ params }: { params: { id: string } }
           <h2 style={{ ...h2Style, fontSize: '19px' }}>Job cost</h2>
           <p style={{ color: color.muted, fontSize: '13px', margin: '4px 0 0' }}>
             {isOwnerAdmin
-              ? 'Labor + expenses to date — sub bills and committed costs are not included (they arrive with vendor bills, 7C).'
+              ? 'Labor + actual expenses to date — receipts plus bill payments. Committed (unpaid) costs show under Payables below.'
               : 'Approved expenses to date on this job.'}
           </p>
         </div>
@@ -127,7 +133,8 @@ export default async function JobCostPage({ params }: { params: { id: string } }
             {fmtMoney(rollup.expenses.totalApproved)}
           </p>
           <p style={{ fontSize: '11px', color: color.faint, margin: '4px 0 0' }}>
-            approved only{rollup.expenses.pendingCount > 0 && ` · ${rollup.expenses.pendingCount} pending review`}
+            approved receipts + bill payments
+            {rollup.expenses.pendingCount > 0 && ` · ${rollup.expenses.pendingCount} pending review`}
           </p>
         </div>
         {showLabor && (
@@ -137,11 +144,53 @@ export default async function JobCostPage({ params }: { params: { id: string } }
               {fmtMoney(combined)}
             </p>
             <p style={{ fontSize: '11px', color: color.faint, margin: '4px 0 0' }}>
-              not total job cost — sub bills arrive with 7C
+              actual to date — committed costs are separate (Payables)
             </p>
           </div>
         )}
       </div>
+
+      {/* 7C §4.5 — Payables (Owner/Admin + PM): committed remaining, retainage
+          held, awaiting-paper list, still-owed headline ("THE NUMBER"). */}
+      {payables && (
+        <div style={{ ...cardStyle, padding: '16px 20px', marginBottom: '18px', maxWidth: '560px' }}>
+          <p style={{ ...microLabelStyle, marginBottom: '10px' }}>Payables</p>
+          <div style={{ display: 'flex', gap: '26px', flexWrap: 'wrap', marginBottom: '10px' }}>
+            <div>
+              <p style={{ fontSize: '11px', color: color.faint, margin: 0 }}>Still owed</p>
+              <p style={{ fontFamily: font.mono, fontSize: '20px', fontWeight: 600, color: color.navy, margin: '2px 0 0' }}>
+                {fmtMoney(payables.stillOwed)}
+              </p>
+            </div>
+            <div>
+              <p style={{ fontSize: '11px', color: color.faint, margin: 0 }}>Retainage held</p>
+              <p style={{ fontFamily: font.mono, fontSize: '20px', fontWeight: 600, color: color.navy, margin: '2px 0 0' }}>
+                {fmtMoney(payables.retainageHeld)}
+              </p>
+            </div>
+          </div>
+          {payables.awaitingPaper.length > 0 && (
+            <div style={{ borderTop: `1px solid ${color.rowDivider}`, paddingTop: '8px' }}>
+              <p style={{ fontSize: '11px', color: color.faint, margin: '0 0 4px' }}>
+                Bill expected — committed with no document yet
+              </p>
+              {payables.awaitingPaper.map((a) => (
+                <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', padding: '2px 0' }}>
+                  <span style={{ color: color.body }}>{a.supplier}</span>
+                  <span style={{ fontFamily: font.mono, color: color.navy }}>{fmtMoney(a.amount)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <p style={{ fontSize: '11px', color: color.faint, margin: '8px 0 0' }}>
+            Still owed = committed − paid. Manage rows on the{' '}
+            <Link href="/dashboard/expenses" style={{ color: color.primary }}>
+              Bills &amp; Commitments
+            </Link>{' '}
+            tab.
+          </p>
+        </div>
+      )}
 
       {/* Expenses by category (all §5.6 audiences). */}
       <div style={{ ...cardStyle, padding: '16px 20px', marginBottom: '18px', maxWidth: '420px' }}>
