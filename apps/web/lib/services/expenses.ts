@@ -1,5 +1,11 @@
 import { createClient } from '@/lib/supabase-server';
 import type { Database } from '@framefocus/shared/types/database';
+import {
+  committedRemaining,
+  countsTowardCommitted,
+  isPayableRow,
+  netCashOut,
+} from '@/lib/services/payables-shared';
 
 // 7A Job Expenses — server reads (docs/specs/7A-spec.md §3.1).
 // Visibility is RLS-governed (expenses_select_scoped): Owner/Admin/PM/Foreman
@@ -120,12 +126,28 @@ export interface JobCostRollup {
     byMember: { member_id: string; hours: number; cost: number }[];
   };
   expenses: {
-    /** Approved, state='actual' only (§2.6 rollup math). */
+    /**
+     * ACTUAL dollars (7C §2.6 as amended): approved 7A receipts (full amount)
+     * + NET payments on payable rows (Σ amount − retainage_withheld — cash
+     * that actually left the company). Derived from expense_payments, never
+     * from `state` (a settlement marker only).
+     */
     totalApproved: number;
     byCategory: Record<ExpenseCategory, number>;
     allocated: number;
     unallocated: number;
     pendingCount: number;
+  };
+  /** 7C committed side (§2.6) — derived at read, same predicate everywhere
+   *  (payables-shared.ts). */
+  payables: {
+    /** "THE NUMBER" — still-owed = Σ GREATEST(amount − Σ payments, 0) over
+     *  approved, open, non-deleted payable rows. */
+    committedRemaining: number;
+    /** Remaining on is_retainage accrual rows (subset). */
+    retainageHeld: number;
+    awaitingPaperCount: number;
+    stillOwed: number;
   };
 }
 
@@ -155,33 +177,83 @@ function burdenedRate(s: SnapshotRow): number {
 export async function getJobCostRollup(projectId: string): Promise<JobCostRollup> {
   const supabase = await createClient();
 
-  // --- Expenses side (approved + actual; state filter is a v1 no-op) -------
+  // --- Expenses side (7C §2.6 as amended — derived at read) ----------------
+  // Receipts (7A, non-payable rows) contribute their full approved amount.
+  // Payable rows (7C bills/stages/retainage) contribute their NET payments —
+  // never `amount`, never `state`. A row counts as payable via the shared
+  // predicate OR by having payments (a settled manual bill's state flips to
+  // 'actual' with no linkage columns).
   const { data: expenseRows } = await supabase
     .from('expenses')
-    .select('id, amount, cost_category, status, state')
+    .select(
+      'id, amount, cost_category, status, state, sub_contract_id, purchase_order_id, is_retainage, closed_out_at, awaiting_paper, is_deleted'
+    )
     .eq('project_id', projectId)
     .eq('is_deleted', false);
 
   const rows = (expenseRows ?? []) as Pick<
     Expense,
-    'id' | 'amount' | 'cost_category' | 'status' | 'state'
+    | 'id'
+    | 'amount'
+    | 'cost_category'
+    | 'status'
+    | 'state'
+    | 'sub_contract_id'
+    | 'purchase_order_id'
+    | 'is_retainage'
+    | 'closed_out_at'
+    | 'awaiting_paper'
+    | 'is_deleted'
   >[];
-  const approved = rows.filter((e) => e.status === 'approved' && e.state === 'actual');
-  const approvedIds = approved.map((e) => e.id);
+
+  const allIds = rows.map((e) => e.id);
+  const { data: paymentRows } = allIds.length
+    ? await supabase
+        .from('expense_payments')
+        .select('expense_id, amount, retainage_withheld, is_deleted')
+        .in('expense_id', allIds)
+    : { data: [] as { expense_id: string; amount: number; retainage_withheld: number; is_deleted: boolean | null }[] };
+
+  const paymentsByExpense = new Map<
+    string,
+    { amount: number; retainage_withheld: number; is_deleted: boolean | null }[]
+  >();
+  for (const p of paymentRows ?? []) {
+    const list = paymentsByExpense.get(p.expense_id) ?? [];
+    list.push(p);
+    paymentsByExpense.set(p.expense_id, list);
+  }
+
+  const payable = (e: (typeof rows)[number]) =>
+    isPayableRow(e, (paymentsByExpense.get(e.id) ?? []).length > 0);
+
+  const receipts = rows.filter((e) => e.status === 'approved' && !payable(e));
+  const approvedPayables = rows.filter((e) => e.status === 'approved' && payable(e));
 
   const byCategory: Record<ExpenseCategory, number> = { material: 0, subcontractor: 0, other: 0 };
-  for (const e of approved) byCategory[e.cost_category] += e.amount ?? 0;
+  for (const e of receipts) byCategory[e.cost_category] += e.amount ?? 0;
+  for (const e of approvedPayables) {
+    byCategory[e.cost_category] += netCashOut(paymentsByExpense.get(e.id) ?? []);
+  }
 
-  const { data: allocationRows } = approvedIds.length
+  // Allocations only ever exist on receipts (the review popup writes them for
+  // actual-state rows); bills settle through payments, not allocations.
+  const receiptIds = receipts.map((e) => e.id);
+  const { data: allocationRows } = receiptIds.length
     ? await supabase
         .from('expense_allocations')
         .select('expense_id, amount')
-        .in('expense_id', approvedIds)
+        .in('expense_id', receiptIds)
         .eq('is_deleted', false)
     : { data: [] as { expense_id: string; amount: number }[] };
 
   const allocated = (allocationRows ?? []).reduce((sum, a) => sum + (a.amount ?? 0), 0);
-  const totalApproved = approved.reduce((sum, e) => sum + (e.amount ?? 0), 0);
+  const receiptsTotal = receipts.reduce((sum, e) => sum + (e.amount ?? 0), 0);
+  const cashOut7C = approvedPayables.reduce(
+    (sum, e) => sum + netCashOut(paymentsByExpense.get(e.id) ?? []),
+    0
+  );
+  const totalApproved = receiptsTotal + cashOut7C;
 
   const expensesSide: JobCostRollup['expenses'] = {
     totalApproved,
@@ -189,6 +261,27 @@ export async function getJobCostRollup(projectId: string): Promise<JobCostRollup
     allocated,
     unallocated: totalApproved - allocated,
     pendingCount: rows.filter((e) => e.status === 'pending').length,
+  };
+
+  // Committed side (§2.6) — same rows, shared definitions.
+  let committed = 0;
+  let retainageHeld = 0;
+  let awaitingPaperCount = 0;
+  for (const e of approvedPayables) {
+    if (!countsTowardCommitted(e)) continue;
+    const remaining = committedRemaining(e, paymentsByExpense.get(e.id) ?? []);
+    committed += remaining;
+    if (e.is_retainage) retainageHeld += remaining;
+  }
+  for (const e of rows) {
+    if (e.awaiting_paper && e.closed_out_at === null) awaitingPaperCount += 1;
+  }
+
+  const payablesSide: JobCostRollup['payables'] = {
+    committedRemaining: committed,
+    retainageHeld,
+    awaitingPaperCount,
+    stillOwed: committed,
   };
 
   // --- Labor side (derived; Owner/Admin-only by snapshot RLS) --------------
@@ -264,5 +357,6 @@ export async function getJobCostRollup(projectId: string): Promise<JobCostRollup
       byMember: [...perMember.entries()].map(([member_id, v]) => ({ member_id, ...v })),
     },
     expenses: expensesSide,
+    payables: payablesSide,
   };
 }
