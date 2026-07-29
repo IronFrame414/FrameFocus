@@ -433,8 +433,12 @@ Per the CLAUDE.md service pattern: server reads in `expenses.ts`, client writes 
 - `reassignExpenseProject(id, newProjectId)` (Owner/Admin, review-time, Q7)
 - `createAdHocBudgetLine(projectId, {description, row_type, cost_code})` (Owner/Admin, Q4b —
   inserts a `project_budget_items` row with `budgeted_amount = 0`, using the new INSERT policy)
-- `declineMaterialRunExpense(segmentId)` — appends the "No purchase made" decline to the
-  segment's end note (Q10) via the existing segment-note write path.
+- ~~`declineMaterialRunExpense(segmentId)`~~ **[S91 AMENDMENT — this function cannot exist.**
+  6A RLS lets a member end only their own OPEN segment; an author cannot patch an ENDED
+  segment's note, and RLS is not widened for a decline marker. As shipped (S90), the decline
+  composes into the end note AT END TIME — `MATERIAL_RUN_DECLINE_NOTE` + `withDeclineNote()`
+  (`expenses-client.ts`) — which forces the prompt to fire BEFORE the segment ends. Verified
+  live: segment `0cab1358` carries `"test — No purchase made"` on `time_segments.note`.]
 - `setMemberBurden(memberId, {burden_multiplier, burden_source})` (Owner/Admin — upsert on
   `member_burden_settings`, S89 §2.6; lives beside the existing pay-rate write functions).
   Company `fixed_burden_per_hour` writes ride the existing company-settings save path.
@@ -513,11 +517,15 @@ budget/sell/contract figures — UI-gated per ui-01 §11 until FINANCIAL-RLS-FLO
 
 ### 5.1 Entry points
 
-1. **Material-run segment end (primary crew path):** ending a `material_run` segment in the clock
-   modal (`apps/web/components/time/clock-modal.tsx` end flow, `:205-222`) opens the expense sheet
-   pre-filled — project from the segment, category `material`, date today. Declining requires the
-   explicit **"No purchase made"** tap, recorded on the segment note (Q10). If an expense already
-   exists for the segment (`source_segment_id`), the prompt is skipped.
+1. **Material-run segment end (primary crew path):** ending a `material_run` segment opens the
+   expense sheet pre-filled — project from the segment, category `material`, date today.
+   **[S91 AMENDMENT — TWO end paths, not one:** the clock modal
+   (`apps/web/components/time/clock-modal.tsx` end flow) AND the job-switch path
+   (`timeclock-client.tsx` `handleSwitch` — the MORE common crew route: return from the store →
+   switch back to work, no clock-out). Both run the same prompt/capture components as shipped
+   S90.] Declining requires the explicit **"No purchase made"** tap, recorded on the segment
+   note (Q10). If an expense already exists for the segment (`source_segment_id`), the prompt
+   is skipped.
 2. **Expenses nav item →** `/dashboard/expenses` (+ "Log expense" button → `/dashboard/expenses/new`).
 3. **Project detail → Job Cost tab** (`/dashboard/projects/[id]/costs`), "Log expense" pre-filled
    with the project.
@@ -618,7 +626,7 @@ approved time keeps its frozen burden." Crew/PM/foreman never see this surface
 | Labor cost basis | `20260721040000` (`member_pay_rates` :34-50, snapshots :123-135, trigger :171-219; Owner/Admin RLS :89-161) | snapshots table gains three burden columns; `snapshot_session_rate()` extended to freeze them (§2.6); RLS stands as built |
 | Labor burden (S89) | placement rationale `20260721040000:15-16`; `companies_select_own` leak `20260101000000:3201` | new `member_burden_settings` (pay-rates RLS template) + `companies.fixed_burden_per_hour`; frozen at approval, forward-only (§2.6) |
 | Segment attribution | `20260710130000:195-246` (project gate CHECK :224-227) | rollup labor-by-project source |
-| Material-run UI hook | `components/time/clock-modal.tsx:205-222` | expense prompt on segment end |
+| Material-run UI hook | `components/time/clock-modal.tsx` end flow + `timeclock-client.tsx` `handleSwitch` [S91 — both paths, see §5.1] | expense prompt on segment end |
 | Budget lines | `20260704212000:27-47` (`actual_amount` :44; SELECT policy :86-91; conversion :100-239) | allocations write `actual_amount` via trigger; Owner/Admin INSERT policy added for ad-hoc lines |
 | Receipt storage | baseline `:1367-1390` (`'receipts'` in CHECK :1388); `files-client.ts:30-100`; link-column precedent `20260721080000` | `files.expense_id` + `uploadFile` extension |
 | Settings pattern | `settings/page.tsx:50-53`; `company.ts` getters (`:88`, `:180`) | GL mapping form + getter |

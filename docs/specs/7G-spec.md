@@ -53,12 +53,16 @@ confirm before treating as fixed.
 4. **Income mapping.** `[this session]` Client invoices post to income via a **single "Construction Income" service
    Item**, **remappable** to whatever income account/Item the company actually uses. Income is income
    — the labor / material / sub / other split is a **cost** distinction and does **not** appear on
-   invoices. That cost-category → cost-account mapping belongs to the **7C** cost/AP export path, not
-   here.
+   invoices. [S91 wording fix — the recorded 7C-spec §6.3 conflict:] the cost-category →
+   cost-account mapping **lives in Company Settings** —
+   `companies.gl_account_labor/material/subcontractor/other`, shipped with 7A (migration
+   `20260728010000:299-302`) — and 7C's bills **consume** it at export. Either way it is not this
+   income path's concern.
 
 5. **Sync timing — per-record.** `[this session]` Each financial record exports to QB the moment it clears **its own
-   approval gate** — invoice on send, manual payment on entry, CO on approval, timesheet on approval.
-   Electronic payments arrive inbound via the webhook. **There is no separate batch "session"
+   approval gate** — invoice on send, manual payment on entry, timesheet on approval. *("CO on
+   approval" deleted [S91] — whether a signed CO exports anything at all is UNDECIDED; see the
+   open item in §7G.4.)* Electronic payments arrive inbound via the webhook. **There is no separate batch "session"
    approval before export.** ("Only approved sessions export" is read as: only records that have
    passed their own approval sync — not a batch object.)
 
@@ -140,13 +144,23 @@ Direction is FF → QB unless noted. Refinements this session are marked **(new)
 
 - Client → QB **Customer**
 - Job → QB **sub-customer** under the client **(new)**
-- Sub / vendor (with EIN) → QB **Vendor** *(7C)*
+- Sub / vendor (with EIN) → QB **Vendor** *(7C — live source: the `subcontractors` table, which carries `ein` [S91])*
 - Client invoice → QB **Invoice** (CustomerRef = job sub-customer; single income Item) *(7D)*
 - Client payment, **electronic** → **INBOUND** from QB via webhook (Model A) *(7E)* **(new direction)**
 - Client payment, **manual** (check/cash) → QB **Payment** *(7E)*
 - Credit / refund → QB **CreditMemo / RefundReceipt** *(7E)*
-- Sub pay application → QB **Bill**; sub payment → QB **BillPayment** *(7C)*
-- Approved change order → QB **contract adjustment** (raises or lowers contract value; bidirectional) *(7B)*
+- Sub bill / commitment → QB **Bill**; sub payment → QB **BillPayment** *(7C — [S91] "pay
+  application" is not a shipped concept; live sources are the payable `expenses` rows
+  (bills / schedule stages) and `expense_payments`. Payment `amount` is GROSS; cash out is
+  NET of `retainage_withheld` — map accordingly at 7G build.)*
+- ~~Approved change order → QB **contract adjustment** (raises or lowers contract value; bidirectional) *(7B)*~~
+  **[S91 — deleted, FALSE on two counts: the contributing CO status is `'signed'`
+  (`change_orders_status_check`, migration `20260704215000:70`; `contract-value.ts:17-20`), and
+  contract value is DERIVED at read (`contract-value.ts`) — there is no FF-side write to mirror.
+  §7G.3 lists no contract-adjustment entity. OPEN ITEM: What, if anything, does a signed CO
+  export to QB? Under derivation there is no FF-side write to mirror and §7G.3 lists no
+  contract-adjustment entity. Options: (a) nothing — money reaches QB when invoiced via 7D;
+  (b) something else at 7G build. Undecided [S91].]**
 - Approved timesheet → QB **Time / Payroll** entry *(M6 / payroll)*
 
 **Lifecycle, not just create.** The map above is the create / first-push. Records also change: edits
@@ -197,6 +211,8 @@ CC also confirms, against the live schema:
 
 ## §7G.6 — Verify-in-sandbox & open dependencies
 
+- **OPEN [S91] — signed-CO export undecided.** See the deleted map row in §7G.4: options are
+  (a) nothing — CO money reaches QB when invoiced via 7D; (b) something else at 7G build.
 - **RESOLVED (docs) — pay-link on accounting scope.** Enabling the invoice pay-link is an
   accounting-scope Invoice operation (the `AllowOnline*Payment` flags); no Charges API / payment scope
   needed for Model A. **Live-only residual:** confirm the link renders for a real QB-Payments-enabled
