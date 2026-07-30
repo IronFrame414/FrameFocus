@@ -5127,6 +5127,10 @@ export type Database = {
         Args: { p_estimate_id: string }
         Returns: string
       }
+      create_budget_line_at_capture: {
+        Args: { p_cost_code?: string; p_description: string; p_project_id: string }
+        Returns: string
+      }
       create_safety_incident:
         | {
             Args: {

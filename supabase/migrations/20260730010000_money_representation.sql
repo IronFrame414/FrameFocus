@@ -28,6 +28,7 @@
 --   3. instrument_rates — table, backdating-guard trigger, supersede RPC (§4.2)
 --   4. project_budget_items — source_change_order_id, is_miscellaneous (§4.3)
 --   5. get_or_create_misc_budget_item (§5.5)
+--  5b. create_budget_line_at_capture (§5.5, A-7)
 --   6. convert_estimate_to_project — amended cost mapping (§5.1)
 --   7. apply_change_order_budget (§5.2)
 --   8. recompute_budget_item_actual / _committed + trigger chain (§4.5/§5.3)
@@ -399,6 +400,58 @@ BEGIN
     FROM project_budget_items
     WHERE project_id = p_project_id AND is_miscellaneous AND is_deleted = false;
   END IF;
+
+  RETURN v_id;
+END;
+$$;
+
+-- ----------------------------------------------------------------------------
+-- 5b. create_budget_line_at_capture (§5.5, A-7) — "New budget line" in the
+--     split-at-capture editor. SECURITY DEFINER on the
+--     get_or_create_misc_budget_item model: project_budget_items INSERT is
+--     otherwise Owner/Admin-only (7A Q4b policy), and the capture editor is
+--     also used by PM. Role-gated INSIDE to Owner/Admin/PM — foreman/crew
+--     pick existing lines or Miscellaneous, never create. budgeted_amount
+--     is always 0: capture names a bucket, it never sets a budget.
+-- ----------------------------------------------------------------------------
+
+CREATE FUNCTION public.create_budget_line_at_capture(
+  p_project_id uuid,
+  p_description text,
+  p_cost_code text DEFAULT NULL
+) RETURNS uuid
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  v_company_id uuid;
+  v_id uuid;
+BEGIN
+  IF public.get_my_role() IS NULL
+     OR public.get_my_role() NOT IN ('owner', 'admin', 'project_manager') THEN
+    RAISE EXCEPTION 'Only Owner/Admin/PM may create a budget line at capture.';
+  END IF;
+  IF p_description IS NULL OR btrim(p_description) = '' THEN
+    RAISE EXCEPTION 'create_budget_line_at_capture: a description is required';
+  END IF;
+  IF NOT public.can_view_project(p_project_id) THEN
+    RAISE EXCEPTION 'create_budget_line_at_capture: project not visible';
+  END IF;
+
+  SELECT company_id INTO v_company_id
+  FROM projects
+  WHERE id = p_project_id AND company_id = public.get_my_company_id();
+  IF v_company_id IS NULL THEN
+    RAISE EXCEPTION 'create_budget_line_at_capture: project not found';
+  END IF;
+
+  INSERT INTO project_budget_items (
+    company_id, project_id, description, cost_code, budgeted_amount, created_by
+  ) VALUES (
+    v_company_id, p_project_id, btrim(p_description),
+    NULLIF(btrim(COALESCE(p_cost_code, '')), ''), 0, auth.uid()
+  )
+  RETURNING id INTO v_id;
 
   RETURN v_id;
 END;
@@ -971,9 +1024,13 @@ CREATE POLICY expense_allocations_delete_authorized ON public.expense_allocation
 --     shipped 7A RPC blindly INSERTed the passed rows on top (double-write)
 --     and its Σ guard summed ONLY the passed rows, so capture + approval
 --     could stack past the expense amount. Now the passed set REPLACES the
---     existing split, and the guard checks the FINAL state: zero allocations
---     (Option B stands — committed rows, jobs with no budget lines) or
---     Σ = expense amount exactly (cent-tolerant).
+--     existing split, and the guard checks the FINAL state: at least ONE
+--     allocation, Σ = expense amount exactly (cent-tolerant). Zero-allocation
+--     approval is ILLEGAL (A-7 ruling — supersedes 7A Option B on the
+--     approval path). This is an approval-PATH rule, not a DB invariant:
+--     the retainage accrual row is born approved inside
+--     record_expense_payment (Q3) and never passes through here — the one
+--     documented exception (spec A-7).
 --     Existing rows are HARD-deleted, not soft-deleted: the UNIQUE
 --     (expense_id, budget_item_id) constraint has no is_deleted predicate,
 --     so a soft-deleted captured row would still occupy the key and collide
@@ -1052,8 +1109,11 @@ BEGIN
     VALUES (v_expense.company_id, p_expense_id, v_alloc.budget_item_id, v_alloc.amount);
   END LOOP;
 
-  -- FINAL-state guard: a split, if present, covers the expense exactly.
-  IF v_count > 0 AND abs(v_total - v_expense.amount) >= 0.005 THEN
+  -- FINAL-state guard (A-7): every approval carries a full split.
+  IF v_count = 0 THEN
+    RAISE EXCEPTION 'approve_expense: at least one budget-line allocation is required';
+  END IF;
+  IF abs(v_total - v_expense.amount) >= 0.005 THEN
     RAISE EXCEPTION 'approve_expense: allocations (%) must equal the expense amount (%) exactly', v_total, v_expense.amount;
   END IF;
 

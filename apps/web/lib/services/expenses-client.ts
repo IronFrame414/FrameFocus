@@ -144,6 +144,27 @@ export async function getOrCreateMiscBudgetLine(projectId: string): Promise<Crea
   return { success: true, id: data as string };
 }
 
+/** "New budget line" at capture (A-7): SECURITY DEFINER RPC because the
+ *  7A Q4b INSERT policy is Owner/Admin-only and the split editor is also
+ *  used by PM. Role-gated inside (Owner/Admin/PM); budgeted_amount is
+ *  always 0 — capture names a bucket, it never sets a budget. */
+export async function createBudgetLineAtCapture(
+  projectId: string,
+  description: string,
+  costCode?: string | null
+): Promise<CreateResult> {
+  if (!description.trim()) return { success: false, error: 'A line name is required.' };
+
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc('create_budget_line_at_capture', {
+    p_project_id: projectId,
+    p_description: description.trim(),
+    p_cost_code: costCode?.trim() || undefined,
+  });
+  if (error) return { success: false, error: error.message };
+  return { success: true, id: data as string };
+}
+
 /** Captured split for the review popup's adjust-mode (S93 A-6): loaded as
  *  the popup's initial state; approveExpense then RECONCILES — the passed
  *  set replaces these rows. */
@@ -239,11 +260,13 @@ export interface AllocationInput {
 
 /**
  * Approve + RECONCILE the split atomically via the approve_expense RPC
- * (7A original 20260728010000, amended by 20260730010000 §9b / A-6 —
+ * (7A original 20260728010000, amended by 20260730010000 §9b / A-6+A-7 —
  * SECURITY INVOKER). The passed allocations REPLACE whatever exists for the
- * expense; the final state must be zero allocations (Option B — still
- * legal) or Σ = expense amount exactly (cent-tolerant). Validates
- * Owner/Admin, pending, lines on the expense's project.
+ * expense; the final state must be ≥1 allocation with Σ = expense amount
+ * exactly (cent-tolerant). Zero-allocation approval is illegal (A-7 —
+ * the retainage accrual row, born approved inside record_expense_payment,
+ * is the one documented exception). Validates Owner/Admin, pending, lines
+ * on the expense's project.
  */
 export async function approveExpense(
   id: string,

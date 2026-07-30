@@ -146,9 +146,10 @@
   expense amount. Amended semantics: the passed set REPLACES the existing
   rows (hard delete — the UNIQUE (expense_id, budget_item_id) constraint
   has no is_deleted predicate, so a soft-deleted row would collide with its
-  replacement), and the guard checks the FINAL state — zero allocations
-  (Option B stands: committed rows, jobs with no budget lines) or Σ =
-  expense amount exactly (cent-tolerant). The review popup shifts to
+  replacement), and the guard checks the FINAL state — Σ = expense amount
+  exactly (cent-tolerant). [The zero-allocation arm originally kept here
+  ("Option B stands") is superseded by A-7 — zero-allocation approval is
+  now illegal.] The review popup shifts to
   adjust-mode: captured allocations load as its initial state — for
   committed rows too, whose split section stays hidden: their captured
   single-line target (§4.4) passes through scaled to the possibly-corrected
@@ -157,6 +158,25 @@
   wiped at approval. This widens
   the §5.3 extent — `approve_expense` is the one 7A function this migration
   amends.
+- **A-7: zero-allocation approval is ILLEGAL (added 2026-07-30, S93
+  follow-up — supersedes 7A Option B on the approval path and A-6's
+  zero-allocation arm).** `approve_expense` requires ≥1 allocation with Σ =
+  expense amount exactly. **This is an approval-PATH rule, not a DB
+  invariant:** the retainage accrual row is born approved inside
+  `record_expense_payment` (7C Q3) and never passes through
+  `approve_expense` — the one documented exception. (A second bypass exists
+  by design: the 7A column-scope trigger exempts Owner/Admin entirely, so a
+  direct API `status='approved'` UPDATE by Owner/Admin skips the rule — the
+  same opening `rejectExpense` legitimately uses for rejections. No service
+  or UI path approves that way.) Consequences wired in: the review popup
+  requires a full split (allocation section now shows for committed rows
+  too — their allocations feed the committed rollup under §4.5); the
+  post-setup batch-approve (7C Q13) passes each stage's captured target
+  through, falling back to a full-amount Miscellaneous allocation for
+  untargeted stages; and the split editor gains **"New budget line"**
+  (name + optional cost code, `budgeted_amount` 0) for **Owner/Admin/PM
+  only** via the `create_budget_line_at_capture` SECURITY DEFINER RPC
+  (§5.5) — foreman/crew pick existing lines or Miscellaneous.
 - **A-6: no backfill (P10).** Pre-spec budget lines (pre-tax, or
   sell-as-budget fallback rows), pre-spec expenses without allocations, and
   pre-spec flat lines without cost are left as-is and disregarded. No
@@ -617,6 +637,14 @@ columns to any `can_view_project()` role — known, accepted, reviewed-against.
   of UTC entering "today" late in their day can trip the future-date
   rejection; and concurrent renegotiations are not serialized — two
   simultaneous inserts can read the same floor.
+- **`create_budget_line_at_capture(p_project_id uuid, p_description text,
+  p_cost_code text DEFAULT NULL) RETURNS uuid`** — SECURITY DEFINER on the
+  `get_or_create_misc_budget_item` model (`can_view_project` checked
+  inside): the split editor's "New budget line" (A-7). Role-gated inside to
+  **Owner/Admin/PM** — the 7A Q4b INSERT policy is Owner/Admin-only and the
+  capture editor is also used by PM; foreman/crew never create lines.
+  `budgeted_amount` is always 0 — capture names a bucket, it never sets a
+  budget.
 - **`set_line_override_cost(p_line_id uuid, p_cost numeric) RETURNS void`** —
   SECURITY DEFINER, Owner/Admin/PM (the S-6 conversion audience, §7.3). The
   conversion pre-flight's write path: `estimate_line_items_update_manager`
@@ -701,7 +729,10 @@ sub-contract/PO entry surfaces (`payables-client.ts` consumers).
 - The capture form gains an **allocation split editor**: add budget lines
   (picker grouped by instrument + "Miscellaneous") with an amount per line;
   running Σ must equal the expense amount before save; one line prefilled as
-  the default single-allocation case.
+  the default single-allocation case. **"New budget line"** (A-7) lets
+  Owner/Admin/PM name a line at capture (name + optional cost code,
+  `budgeted_amount` 0, via `create_budget_line_at_capture` §5.5);
+  foreman/crew pick existing lines or Miscellaneous.
 - **Scope flag (explicit, per Josh):** this **widens the capture-form
   scope** beyond 7A's shipped capture UX — the split editor appears in the
   field/mobile capture flow used by foreman/crew, not just the office form.

@@ -11,6 +11,7 @@
 
 import { useEffect, useState } from 'react';
 import {
+  createBudgetLineAtCapture,
   getOrCreateMiscBudgetLine,
   listProjectBudgetLines,
   type AllocationInput,
@@ -113,6 +114,15 @@ export function BudgetSplitEditor({
 }) {
   const [lines, setLines] = useState<BudgetLineOption[] | null>(null);
 
+  // "New budget line" (A-7): Owner/Admin/PM name a bucket in the field —
+  // budgeted_amount 0, via the create_budget_line_at_capture RPC (§5.5).
+  // Foreman/crew pick existing lines or Miscellaneous.
+  const [creatingLine, setCreatingLine] = useState(false);
+  const [newLineName, setNewLineName] = useState('');
+  const [newLineCostCode, setNewLineCostCode] = useState('');
+  const [createBusy, setCreateBusy] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
   useEffect(() => {
     if (!projectId) {
       setLines(null);
@@ -128,6 +138,38 @@ export function BudgetSplitEditor({
   }, [projectId]);
 
   const showBudgeted = callerRole === 'owner' || callerRole === 'admin';
+  const canCreateLine =
+    callerRole === 'owner' || callerRole === 'admin' || callerRole === 'project_manager';
+
+  async function handleCreateLine() {
+    if (!newLineName.trim()) {
+      setCreateError('The new line needs a name.');
+      return;
+    }
+    setCreateBusy(true);
+    setCreateError(null);
+    const res = await createBudgetLineAtCapture(projectId, newLineName, newLineCostCode || null);
+    if (!res.success || !res.id) {
+      setCreateBusy(false);
+      setCreateError(res.error ?? 'Could not create the budget line.');
+      return;
+    }
+    setLines(await listProjectBudgetLines(projectId));
+    // Point the first unpicked row at the new line; else add a row for it.
+    const target = rows.find((r) => r.budget_item_id === '');
+    if (target) {
+      onChange(rows.map((r) => (r.key === target.key ? { ...r, budget_item_id: res.id! } : r)));
+    } else {
+      onChange([
+        ...rows,
+        { key: Math.max(...rows.map((r) => r.key)) + 1, budget_item_id: res.id, amount: '' },
+      ]);
+    }
+    setCreateBusy(false);
+    setCreatingLine(false);
+    setNewLineName('');
+    setNewLineCostCode('');
+  }
   const hasMiscLine = (lines ?? []).some((l) => l.is_miscellaneous);
 
   // Group options by instrument (Original Contract / per-CO / ad-hoc+misc).
@@ -208,26 +250,45 @@ export function BudgetSplitEditor({
         </div>
       ))}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <button
-          type="button"
-          onClick={() =>
-            onChange([
-              ...rows,
-              { key: Math.max(...rows.map((r) => r.key)) + 1, budget_item_id: '', amount: '' },
-            ])
-          }
-          disabled={disabled}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: color.primary,
-            cursor: 'pointer',
-            fontSize: '13px',
-            padding: 0,
-          }}
-        >
-          + Split across another line
-        </button>
+        <span style={{ display: 'flex', gap: '14px' }}>
+          <button
+            type="button"
+            onClick={() =>
+              onChange([
+                ...rows,
+                { key: Math.max(...rows.map((r) => r.key)) + 1, budget_item_id: '', amount: '' },
+              ])
+            }
+            disabled={disabled}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: color.primary,
+              cursor: 'pointer',
+              fontSize: '13px',
+              padding: 0,
+            }}
+          >
+            + Split across another line
+          </button>
+          {canCreateLine && !creatingLine && (
+            <button
+              type="button"
+              onClick={() => setCreatingLine(true)}
+              disabled={disabled || !projectId}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: color.primary,
+                cursor: 'pointer',
+                fontSize: '13px',
+                padding: 0,
+              }}
+            >
+              + New budget line
+            </button>
+          )}
+        </span>
         {rows.length > 1 && (
           <span
             style={{
@@ -243,6 +304,53 @@ export function BudgetSplitEditor({
           </span>
         )}
       </div>
+
+      {creatingLine && (
+        <div style={{ display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' }}>
+          <input
+            placeholder="Line name"
+            value={newLineName}
+            onChange={(e) => setNewLineName(e.target.value)}
+            disabled={createBusy}
+            style={{ ...inputStyle, flex: 1, minWidth: '140px' }}
+          />
+          <input
+            placeholder="Cost code (optional)"
+            value={newLineCostCode}
+            onChange={(e) => setNewLineCostCode(e.target.value)}
+            disabled={createBusy}
+            style={{ ...inputStyle, width: '130px' }}
+          />
+          <button
+            type="button"
+            onClick={() => void handleCreateLine()}
+            disabled={createBusy}
+            style={{
+              ...inputStyle,
+              width: 'auto',
+              cursor: 'pointer',
+              fontWeight: 600,
+              color: color.primary,
+            }}
+          >
+            {createBusy ? 'Adding…' : 'Add'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setCreatingLine(false);
+              setCreateError(null);
+            }}
+            disabled={createBusy}
+            style={{ ...inputStyle, width: 'auto', cursor: 'pointer' }}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+      {createError && (
+        <p style={{ color: color.danger, fontSize: '12px', margin: '6px 0 0' }}>{createError}</p>
+      )}
     </div>
   );
 }
