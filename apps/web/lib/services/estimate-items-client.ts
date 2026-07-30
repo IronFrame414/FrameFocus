@@ -1,11 +1,18 @@
 import { createClient } from '@/lib/supabase-browser';
 import type { Database } from '@framefocus/shared/types/database';
 import {
+  applyInstrumentRateOverrides,
+  assertInstrumentRatesInForce,
   computeEstimateTotals,
   computeLineTotalsFromRows,
+  NoRateInForceError,
+  type ContractType,
   type EstimateMarkupDefaults,
+  type InstrumentPricingContext,
   type RowPricingInput,
 } from '@framefocus/shared/utils/estimate-totals';
+import { rateInForce } from '@/lib/services/instrument-rates-shared';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
   DiscountType,
   EstimateAttachmentType,
@@ -14,6 +21,45 @@ import type {
   PricingMode,
   RowType,
 } from '@/lib/services/estimates-client';
+
+/**
+ * Rates in force TODAY for a non-fixed instrument (money representation
+ * P4/P5). Superseded rows never win; the newest effective_from ≤ today does.
+ * Fixed-price instruments skip the query entirely.
+ */
+export async function loadInstrumentPricingContext(
+  supabase: SupabaseClient<Database>,
+  ref: { estimate_id: string } | { change_order_id: string },
+  contractType: ContractType
+): Promise<InstrumentPricingContext> {
+  if (contractType === 'fixed_price') return { contract_type: 'fixed_price' };
+
+  let query = supabase
+    .from('instrument_rates')
+    .select('rate_type, rate, effective_from, superseded_at');
+  query =
+    'estimate_id' in ref
+      ? query.eq('estimate_id', ref.estimate_id)
+      : query.eq('change_order_id', ref.change_order_id);
+  const { data } = await query;
+
+  // Selection is the shared rateInForce (instrument-rates-shared.ts) — the
+  // one definition, not a re-statement of it.
+  const today = new Date().toISOString().slice(0, 10);
+  const rates = data ?? [];
+
+  if (contractType === 'cost_plus') {
+    return {
+      contract_type: 'cost_plus',
+      cost_plus_percent: rateInForce(rates, 'cost_plus_percent', today),
+    };
+  }
+  return {
+    contract_type: 'time_and_materials',
+    tm_labor_hourly: rateInForce(rates, 'tm_labor_hourly', today),
+    tm_nonlabor_percent: rateInForce(rates, 'tm_nonlabor_percent', today),
+  };
+}
 
 // Child-table writes are RLS-guarded (D4): company scope + parent
 // estimate must be Draft + PMs must own the parent. A blocked UPDATE
@@ -174,7 +220,9 @@ export type CreateLineItemInput = Pick<
 
 export type UpdateLineItemInput = Partial<
   Omit<CreateLineItemInput, 'estimate_id'> &
-    Pick<LineItemInsert, 'total_price_override'>
+    // override_cost (money representation §4.1): the estimator's COST basis
+    // for a flat-priced line — conversion carries it, never the sell price.
+    Pick<LineItemInsert, 'total_price_override' | 'override_cost'>
 >;
 
 export async function createEstimateLineItem(input: CreateLineItemInput): Promise<CreateResult> {
@@ -206,6 +254,38 @@ export async function updateEstimateLineItem(
   if (!data || data.length === 0) {
     return { success: false, error: 'Line item not found or estimate not editable' };
   }
+  return { success: true };
+}
+
+/** Flat-priced lines still missing a cost basis — the S-6 pre-flight list. */
+export async function listFlatLinesMissingCost(
+  estimateId: string
+): Promise<{ id: string; name: string; total_price_override: number | null }[]> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from('estimate_line_items')
+    .select('id, name, total_price_override')
+    .eq('estimate_id', estimateId)
+    .not('total_price_override', 'is', null)
+    .is('override_cost', null)
+    .order('sort_order', { ascending: true });
+  if (error || !data) return [];
+  return data;
+}
+
+/** S-6 pre-flight write path (money representation §5.5): line-item RLS is
+ *  draft-only, but conversion typically runs on an accepted estimate — the
+ *  SECURITY DEFINER RPC sets the one cost column on flat-priced lines. */
+export async function setLineOverrideCost(lineId: string, cost: number): Promise<Result> {
+  if (!(cost >= 0)) return { success: false, error: 'Enter a cost of zero or more.' };
+
+  const supabase = createClient();
+  const { error } = await supabase.rpc('set_line_override_cost', {
+    p_line_id: lineId,
+    p_cost: cost,
+  });
+  if (error) return { success: false, error: error.message };
   return { success: true };
 }
 
@@ -509,7 +589,7 @@ export async function recalculateEstimateTotals(estimateId: string): Promise<Res
   const { data: estimate, error: estimateError } = await supabase
     .from('estimates')
     .select(
-      'id, pricing_mode, tax_rate, subcontractor_markup_percent, material_markup_percent, labor_markup_percent, discount_type, discount_amount'
+      'id, pricing_mode, contract_type, tax_rate, subcontractor_markup_percent, material_markup_percent, labor_markup_percent, discount_type, discount_amount'
     )
     .eq('id', estimateId)
     .single();
@@ -522,6 +602,25 @@ export async function recalculateEstimateTotals(estimateId: string): Promise<Res
     material_markup_percent: estimate.material_markup_percent,
     labor_markup_percent: estimate.labor_markup_percent,
   };
+
+  // Money representation P4/P5: on cost-plus/T&M instruments the negotiated
+  // rate(s) in force TODAY (nothing is incurred at estimate time) override
+  // per-row markup; T&M labor prices at hours × the flat rate.
+  const contractType = (estimate.contract_type ?? 'fixed_price') as ContractType;
+  const rateCtx = await loadInstrumentPricingContext(
+    supabase,
+    { estimate_id: estimateId },
+    contractType
+  );
+
+  // A rateless non-fixed instrument must never price (0% would silently sell
+  // at cost) — bail BEFORE any row/line/total is persisted.
+  try {
+    assertInstrumentRatesInForce(rateCtx);
+  } catch (e) {
+    if (e instanceof NoRateInForceError) return { success: false, error: e.message };
+    throw e;
+  }
 
   const { data: lines, error: linesError } = await supabase
     .from('estimate_line_items')
@@ -567,13 +666,14 @@ export async function recalculateEstimateTotals(estimateId: string): Promise<Res
     }));
 
     const lineTotals = computeLineTotalsFromRows({
-      rows: rowInputs,
+      rows: applyInstrumentRateOverrides(rowInputs, rateCtx),
       pricing_mode: pricingMode,
       tax_rate: estimate.tax_rate,
       defaults,
       discount_type: line.discount_type as DiscountType | null,
       discount_amount: line.discount_amount,
       total_price_override: line.total_price_override,
+      tm_labor_hourly: rateCtx.tm_labor_hourly,
     });
 
     // Persist each row's marked-up total.

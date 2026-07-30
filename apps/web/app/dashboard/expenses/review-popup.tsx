@@ -5,21 +5,29 @@
 // approve; category offers material|other only — a receipt is never
 // recategorized 'subcontractor', that's a 7C bill), project reassign
 // (Q7: wrong-job = reassign, not reject), allocation section ALWAYS shown
-// (Q4) with live unallocated remainder and inline "+ Add budget line" (Q4b),
-// Approve (zero allocations legal — Option B) | Reject (note required).
+// (Q4) with live unallocated remainder and inline "+ Add budget line" (Q4b).
 //
-// 7C §4.2 — committed rows (bills/commitments/stages) share this popup.
-// Allocations write budget actual_amount, so the section is HIDDEN for
-// committed rows (they settle through payments, not allocations) and approval
-// goes through approve_expense with zero allocations — the RPC is
-// state-agnostic (verified: it checks only pending + role). The category
-// select is also hidden (a bill may legitimately be 'subcontractor', which
-// capture never offers).
+// S93 A-6/A-7 — ADJUST-MODE, SPLIT REQUIRED: the captured split loads as
+// this popup's initial state and approve_expense RECONCILES (the passed set
+// replaces the rows). Approval requires ≥1 allocation with Σ = the expense
+// amount exactly — zero-allocation approval is illegal (A-7 supersedes 7A
+// Option B on the approval path; the retainage accrual row, born approved
+// in record_expense_payment, never passes through here). Reassigning the
+// job clears the split — the old project's lines no longer apply, and
+// reconcile drops their rows.
+//
+// 7C §4.2 as amended (A-7) — committed rows (bills/commitments/stages)
+// share this popup. Under the S93 origin-predicated recomputes their
+// allocations feed the COMMITTED rollup — settlement still runs through
+// payments — so the allocation section shows for them too. Only the
+// category select stays hidden (a bill may legitimately be
+// 'subcontractor', which capture never offers).
 
 import { useCallback, useEffect, useState } from 'react';
 import {
   approveExpense,
   createAdHocBudgetLine,
+  listExpenseAllocations,
   listProjectBudgetLines,
   reassignExpenseProject,
   rejectExpense,
@@ -93,7 +101,19 @@ export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: Re
   }, []);
 
   useEffect(() => {
-    void loadLines(projectId);
+    void (async () => {
+      await loadLines(projectId);
+      // Adjust-mode (S93 A-6): the captured split is the starting point —
+      // committed rows included (their §4.4 target seeds the section).
+      const captured = await listExpenseAllocations(expense.id);
+      if (captured.length === 0) return;
+      const seeded: Record<string, string> = {};
+      for (const row of captured) {
+        const prior = Number(seeded[row.budget_item_id] ?? 0);
+        seeded[row.budget_item_id] = (prior + row.amount).toFixed(2);
+      }
+      setAllocations(seeded);
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -104,6 +124,9 @@ export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: Re
   const allocatedTotal = allocationEntries.reduce((sum, a) => sum + a.amount, 0);
   const unallocated = (Number.isNaN(parsedAmount) ? 0 : parsedAmount) - allocatedTotal;
   const overAllocated = unallocated < -0.004; // cent-tolerant
+  // A-7: every approval carries a full split — ≥1 allocation, Σ = amount
+  // exactly. Mirrors the RPC's final-state guard.
+  const splitMismatch = allocationEntries.length === 0 || Math.abs(unallocated) > 0.004;
 
   /** Selecting an empty line pre-fills it with the unallocated remainder —
    *  the first line selected gets the full expense amount. Editable after;
@@ -169,8 +192,10 @@ export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: Re
       setError('Amount must be greater than zero.');
       return;
     }
-    if (overAllocated) {
-      setError('Allocations exceed the expense amount.');
+    if (splitMismatch) {
+      setError(
+        'Approval requires a full split — allocate the entire expense amount across budget lines.'
+      );
       return;
     }
     setBusy(true);
@@ -335,25 +360,25 @@ export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: Re
           </select>
         </div>
 
-        {/* Allocation — ALWAYS shown for receipts (Q4); HIDDEN for committed
-            rows (7C §4.2 — they settle via payments, allocations write budget
-            actuals). budgeted_amount is Owner/Admin-only audience here
-            (floor-safe). */}
+        {/* Allocation — ALWAYS shown (Q4; A-7 extends to committed rows,
+            whose allocations feed the committed rollup). budgeted_amount is
+            Owner/Admin-only audience here (floor-safe). */}
         {isCommitted && (
           <p style={{ fontSize: '12px', color: color.muted, margin: '0 0 16px' }}>
-            Committed — this row settles through recorded payments; approving puts it in the
-            job&rsquo;s committed total. No budget allocation.
+            Committed — this row settles through recorded payments; the allocation below
+            targets the job&rsquo;s committed rollup.
           </p>
         )}
-        <div style={{ marginBottom: '16px', display: isCommitted ? 'none' : undefined }}>
+        <div style={{ marginBottom: '16px' }}>
           <p style={{ ...microLabelStyle, marginBottom: '8px' }}>
-            Allocate to budget lines (optional)
+            Allocate to budget lines (required — the full amount)
           </p>
           {lines === null ? (
             <p style={{ fontSize: '13px', color: color.faint, margin: 0 }}>Loading budget lines…</p>
           ) : lines.length === 0 && !addingLine ? (
             <p style={{ fontSize: '13px', color: color.muted, margin: '0 0 8px' }}>
-              This job has no budget lines yet — add one below, or approve without allocating.
+              This job has no budget lines yet — add one below to approve (approval requires a
+              full allocation).
             </p>
           ) : (
             lines.map((l) => (
@@ -445,12 +470,16 @@ export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: Re
             style={{
               fontSize: '13px',
               fontWeight: 600,
-              color: overAllocated ? color.danger : color.navy,
+              color: splitMismatch ? color.danger : color.navy,
               margin: '10px 0 0',
             }}
           >
             Unallocated: {fmtMoney(unallocated)}
-            {overAllocated && ' — allocations exceed the expense amount'}
+            {overAllocated
+              ? ' — allocations exceed the expense amount'
+              : splitMismatch
+                ? ' — approval requires the full amount allocated'
+                : ''}
           </p>
         </div>
 
@@ -496,8 +525,8 @@ export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: Re
               Reject…
             </button>
             <button
-              style={{ ...primaryButtonStyle, opacity: busy || overAllocated ? 0.6 : 1 }}
-              disabled={busy || overAllocated}
+              style={{ ...primaryButtonStyle, opacity: busy || splitMismatch ? 0.6 : 1 }}
+              disabled={busy || splitMismatch}
               onClick={() => void handleApprove()}
             >
               {busy ? 'Saving…' : 'Approve'}

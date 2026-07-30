@@ -7,6 +7,12 @@
 import { useState } from 'react';
 import { createBill } from '@/lib/services/payables-client';
 import type { ExpenseCategory } from '@/lib/services/expenses-client';
+import {
+  BudgetSplitEditor,
+  emptySplit,
+  resolveSplit,
+  type SplitRowDraft,
+} from '@/components/expenses/budget-split-editor';
 import { overlayStyle, fieldLabelStyle, inputStyle } from '@/components/time/clock-modal';
 import { cardStyle, color, h2Style, primaryButtonStyle, secondaryButtonStyle } from '@/lib/theme';
 
@@ -19,11 +25,13 @@ const BILL_CATEGORY_LABELS: Record<ExpenseCategory, string> = {
 interface BillFormModalProps {
   projects: { id: string; name: string }[];
   todayYmd: string;
+  /** Split editor floor gate (§7.1): budgeted figures Owner/Admin only. */
+  callerRole?: string;
   onClose: () => void;
   onDone: () => void;
 }
 
-export function BillFormModal({ projects, todayYmd, onClose, onDone }: BillFormModalProps) {
+export function BillFormModal({ projects, todayYmd, callerRole, onClose, onDone }: BillFormModalProps) {
   const [projectId, setProjectId] = useState(projects[0]?.id ?? '');
   const [supplier, setSupplier] = useState('');
   const [date, setDate] = useState(todayYmd);
@@ -32,6 +40,8 @@ export function BillFormModal({ projects, todayYmd, onClose, onDone }: BillFormM
   const [description, setDescription] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [awaitingPaper, setAwaitingPaper] = useState(false);
+  // Split at capture (money representation §4.4/P7) — bills are expenses too.
+  const [split, setSplit] = useState<SplitRowDraft[]>(emptySplit());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,17 +50,29 @@ export function BillFormModal({ projects, todayYmd, onClose, onDone }: BillFormM
       setError('Pick a job.');
       return;
     }
+    const parsedAmount = Number(amount);
+    if (!amount.trim() || Number.isNaN(parsedAmount) || parsedAmount <= 0) {
+      setError('Enter an amount greater than zero.');
+      return;
+    }
     setBusy(true);
     setError(null);
+    const resolved = await resolveSplit(projectId, split, parsedAmount);
+    if (!resolved.allocations) {
+      setBusy(false);
+      setError(resolved.error ?? 'Fix the budget split before saving.');
+      return;
+    }
     const res = await createBill({
       project_id: projectId,
       supplier,
       expense_date: date,
-      amount: Number(amount),
+      amount: parsedAmount,
       cost_category: category,
       description: description.trim() || null,
       due_date: dueDate || null,
       awaiting_paper: awaitingPaper,
+      allocations: resolved.allocations,
     });
     setBusy(false);
     if (!res.success) {
@@ -130,6 +152,15 @@ export function BillFormModal({ projects, todayYmd, onClose, onDone }: BillFormM
             style={{ ...inputStyle, resize: 'vertical' }}
           />
         </div>
+        <BudgetSplitEditor
+          projectId={projectId}
+          totalAmount={Number(amount) || 0}
+          rows={split}
+          onChange={setSplit}
+          callerRole={callerRole}
+          disabled={busy}
+        />
+
         <label
           style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', color: color.body, marginBottom: '16px', cursor: 'pointer' }}
         >

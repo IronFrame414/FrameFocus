@@ -1,11 +1,16 @@
 import { createClient } from '@/lib/supabase-browser';
 import type { Database } from '@framefocus/shared/types/database';
 import {
+  applyInstrumentRateOverrides,
+  assertInstrumentRatesInForce,
   computeLineTotalsFromRows,
+  NoRateInForceError,
   roundMoney,
+  type ContractType,
   type EstimateMarkupDefaults,
   type RowPricingInput,
 } from '@framefocus/shared/utils/estimate-totals';
+import { loadInstrumentPricingContext } from '@/lib/services/estimate-items-client';
 import type {
   ChangeOrder,
   ChangeOrderLineItem,
@@ -429,7 +434,7 @@ export async function recalculateChangeOrderTotals(changeOrderId: string): Promi
   const { data: co, error: coError } = await supabase
     .from('change_orders')
     .select(
-      'id, pricing_mode, tax_rate, subcontractor_markup_percent, material_markup_percent, labor_markup_percent'
+      'id, pricing_mode, co_type, tax_rate, subcontractor_markup_percent, material_markup_percent, labor_markup_percent'
     )
     .eq('id', changeOrderId)
     .single();
@@ -442,6 +447,23 @@ export async function recalculateChangeOrderTotals(changeOrderId: string): Promi
     material_markup_percent: co.material_markup_percent,
     labor_markup_percent: co.labor_markup_percent,
   };
+
+  // Money representation P4/P5: a cost-plus/T&M CO prices by its own
+  // negotiated rate(s) in force today, overriding per-row markup.
+  const rateCtx = await loadInstrumentPricingContext(
+    supabase,
+    { change_order_id: changeOrderId },
+    (co.co_type ?? 'fixed_price') as ContractType
+  );
+
+  // A rateless non-fixed instrument must never price (0% would silently sell
+  // at cost) — bail BEFORE any row/line/net_delta is persisted.
+  try {
+    assertInstrumentRatesInForce(rateCtx);
+  } catch (e) {
+    if (e instanceof NoRateInForceError) return { success: false, error: e.message };
+    throw e;
+  }
 
   const { data: lines, error: linesError } = await supabase
     .from('change_order_line_items')
@@ -486,10 +508,11 @@ export async function recalculateChangeOrderTotals(changeOrderId: string): Promi
     }));
 
     const lineTotals = computeLineTotalsFromRows({
-      rows: rowInputs,
+      rows: applyInstrumentRateOverrides(rowInputs, rateCtx),
       pricing_mode: pricingMode,
       tax_rate: co.tax_rate,
       defaults,
+      tm_labor_hourly: rateCtx.tm_labor_hourly,
     });
 
     for (let i = 0; i < lineRows.length; i++) {

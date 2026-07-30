@@ -20,6 +20,12 @@ import {
 } from '@/lib/services/expenses-client';
 import { listActiveProjects } from '@/lib/services/time-tracking-client';
 import {
+  BudgetSplitEditor,
+  emptySplit,
+  resolveSplit,
+  type SplitRowDraft,
+} from '@/components/expenses/budget-split-editor';
+import {
   cardStyle,
   color,
   h2Style,
@@ -77,6 +83,11 @@ export function ExpenseCaptureForm({
     existing && existing.cost_category !== 'subcontractor' ? existing.cost_category : 'material'
   );
   const [photos, setPhotos] = useState<File[]>([]);
+  // SPLIT AT CAPTURE (money representation §4.4/P7) — one prefilled row is
+  // the single-allocation case; "Miscellaneous" is the default target and
+  // resolves lazily at submit. Edit mode leaves the captured split alone
+  // (adjusting a split is the review popup's job).
+  const [split, setSplit] = useState<SplitRowDraft[]>(emptySplit());
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -144,6 +155,12 @@ export function ExpenseCaptureForm({
       }
       setPhotoWarning(await uploadPhotos(existing.id, projectId));
     } else {
+      const resolved = await resolveSplit(projectId, split, parsedAmount);
+      if (!resolved.allocations) {
+        setBusy(false);
+        setError(resolved.error ?? 'Fix the budget split before submitting.');
+        return;
+      }
       const res = await createExpense({
         project_id: projectId,
         supplier,
@@ -152,6 +169,7 @@ export function ExpenseCaptureForm({
         description: description.trim() || null,
         cost_category: category,
         source_segment_id: sourceSegmentId ?? null,
+        allocations: resolved.allocations,
       });
       if (!res.success || !res.id) {
         setBusy(false);
@@ -273,6 +291,19 @@ export function ExpenseCaptureForm({
           </select>
         )}
       </div>
+
+      {/* Split editor — new captures only; the review popup adjusts existing
+          splits. Budgeted figures render for Owner/Admin only (§7.1). */}
+      {!existing && (
+        <BudgetSplitEditor
+          projectId={projectId}
+          totalAmount={Number(amount) || 0}
+          rows={split}
+          onChange={setSplit}
+          callerRole={callerRole}
+          disabled={busy}
+        />
+      )}
 
       <div style={{ marginBottom: '14px' }}>
         <label style={fieldLabelStyle}>Category</label>

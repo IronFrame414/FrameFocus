@@ -22,7 +22,11 @@ import {
   voidContractWithCloseout,
 } from '@/lib/services/payables-client';
 import { committedRemaining, grossPaid } from '@/lib/services/payables-shared';
-import { approveExpense } from '@/lib/services/expenses-client';
+import {
+  approveExpense,
+  getOrCreateMiscBudgetLine,
+  listExpenseAllocations,
+} from '@/lib/services/expenses-client';
 import { fmtMoney } from '@/components/expenses/expense-ui';
 import { PaymentModal } from '@/components/expenses/payment-modal';
 import { CloseoutDialog } from '@/components/expenses/closeout-dialog';
@@ -413,7 +417,23 @@ function SubSchedulePanel({
     setBusy(true);
     setNotice(null);
     for (const s of stages.filter((x) => x.status === 'pending')) {
-      const res = await approveExpense(s.id, []);
+      // A-7: approval requires a full split. A stage keeps its captured
+      // budget-line target (§4.4) when it has one; an untargeted stage
+      // lands on Miscellaneous — adjustable later by Owner/Admin.
+      const captured = await listExpenseAllocations(s.id);
+      let allocations = captured.map((a) => ({
+        budget_item_id: a.budget_item_id,
+        amount: a.amount,
+      }));
+      if (allocations.length === 0) {
+        const misc = await getOrCreateMiscBudgetLine(contract.project_id);
+        if (!misc.success || !misc.id) {
+          setNotice(misc.error ?? 'Could not prepare the Miscellaneous line.');
+          break;
+        }
+        allocations = [{ budget_item_id: misc.id, amount: s.amount }];
+      }
+      const res = await approveExpense(s.id, allocations);
       if (!res.success) {
         setNotice(res.error ?? 'Approval failed.');
         break;

@@ -17,7 +17,15 @@ export type ExpensePayment = Database['public']['Tables']['expense_payments']['R
  *  committed state, sub/PO linkage, or the retainage accrual row — as a
  *  PostgREST .or() string. A SETTLED manual bill (state flipped to 'actual',
  *  no linkage) matches none of these — catch it via its payments
- *  (`hasPayments` / the payments-inner query in getBillsAndCommitments). */
+ *  (`hasPayments` / the payments-inner query in getBillsAndCommitments).
+ *
+ *  ⚠ ACCEPTED RISK (docs/specs/money-representation.md §4.5, locked S93):
+ *  this predicate is ALSO the budget recompute's ORIGIN test — mirrored in
+ *  SQL inside recompute_budget_item_actual / _committed (migration
+ *  20260730010000). The budget trigger chain is a CONSUMER of this
+ *  definition alongside the payables screens: ANY change here silently moves
+ *  budget numbers and must be reviewed against the money-representation
+ *  spec (and kept in lockstep with the SQL mirror). */
 export const PAYABLE_OR_FILTER =
   'state.eq.committed,sub_contract_id.not.is.null,purchase_order_id.not.is.null,is_retainage.eq.true' as const;
 

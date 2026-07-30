@@ -9,6 +9,7 @@ import {
   PAYABLE_OR_FILTER,
   type ExpensePayment,
 } from '@/lib/services/payables-shared';
+import { validateCaptureSplit } from '@/lib/services/expenses-client';
 export type { PayableListItem } from '@/lib/services/payables';
 export type { ExpensePayment } from '@/lib/services/payables-shared';
 
@@ -58,6 +59,11 @@ async function getMyMemberId(): Promise<string | null> {
 export interface ScheduleStageInput {
   label: string;
   amount: number;
+  /** Money representation §4.4 [S93]: optional budget-line target — the
+   *  stage's committed row is allocated to this line in the same RPC
+   *  transaction (additive-optional; absent = line-less, reconciled at
+   *  review). */
+  budget_item_id?: string | null;
 }
 
 export interface RetainageInput {
@@ -95,7 +101,11 @@ export async function setupPaymentSchedule(
   const supabase = createClient();
   const { data, error } = await supabase.rpc('setup_payment_schedule', {
     p_sub_contract_id: subContractId,
-    p_stages: stages.map((s) => ({ label: s.label.trim(), amount: s.amount })),
+    p_stages: stages.map((s) => ({
+      label: s.label.trim(),
+      amount: s.amount,
+      budget_item_id: s.budget_item_id ?? null,
+    })),
     p_retainage_shape: retainage?.shape,
     p_retainage_percent: retainage?.shape === 'percent_across' ? retainage.percent : undefined,
   });
@@ -143,6 +153,9 @@ export interface BillInput {
   due_date?: string | null; // per-bill (§7.9 — vendor terms vary)
   /** decision 6: a known number with no document yet ("bill expected"). */
   awaiting_paper?: boolean;
+  /** SPLIT AT CAPTURE (money representation §4.4/P7): ≥1 line, Σ exactly =
+   *  amount. Same rule as receipts — bills are expenses too. */
+  allocations: { budget_item_id: string; amount: number }[];
 }
 
 async function insertPayableRow(input: BillInput): Promise<CreateResult> {
@@ -151,6 +164,8 @@ async function insertPayableRow(input: BillInput): Promise<CreateResult> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.expense_date)) {
     return { success: false, error: 'Date must be a calendar date.' };
   }
+  const splitError = validateCaptureSplit(input.amount, input.allocations);
+  if (splitError) return { success: false, error: splitError };
 
   const supabase = createClient();
   // company_id, author_member_id, created_by, status='pending' fill from
@@ -170,6 +185,23 @@ async function insertPayableRow(input: BillInput): Promise<CreateResult> {
 
   const { data, error } = await supabase.from('expenses').insert(row).select('id').single();
   if (error) return { success: false, error: error.message };
+
+  // Capture split (§4.4) — author-while-pending or Owner/Admin RLS. A failed
+  // split leaves the bill pending-unallocated for the review popup to fix.
+  const { error: allocError } = await supabase.from('expense_allocations').insert(
+    input.allocations.map((a) => ({
+      expense_id: data.id,
+      budget_item_id: a.budget_item_id,
+      amount: a.amount,
+    }))
+  );
+  if (allocError) {
+    return {
+      success: false,
+      id: data.id,
+      error: `Bill saved, but the budget split failed: ${allocError.message}. It can be fixed at review.`,
+    };
+  }
   return { success: true, id: data.id };
 }
 
@@ -231,13 +263,18 @@ export async function uploadBillDocument(
 
 export async function setPoTotal(
   purchaseOrderId: string,
-  amount: number
+  amount: number,
+  /** Money representation §4.4 [S93]: optional budget-line target for the
+   *  PO's committed row (single allocation, Σ = amount; the RPC keeps it in
+   *  step on adjust). */
+  budgetItemId?: string | null
 ): Promise<MutationResult> {
   if (!(amount > 0)) return { success: false, error: 'The PO total must be greater than zero.' };
   const supabase = createClient();
   const { error } = await supabase.rpc('set_po_total_amount', {
     p_po_id: purchaseOrderId,
     p_amount: amount,
+    p_budget_item_id: budgetItemId ?? undefined,
   });
   if (error) return { success: false, error: error.message };
   return { success: true };

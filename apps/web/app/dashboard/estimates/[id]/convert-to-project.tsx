@@ -4,6 +4,13 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { convertEstimateToProject } from '@/lib/services/projects-client';
+import {
+  listFlatLinesMissingCost,
+  setLineOverrideCost,
+} from '@/lib/services/estimate-items-client';
+import { fmtMoney } from '../labels';
+
+type PreflightLine = { id: string; name: string; total_price_override: number | null };
 
 interface ConvertToProjectProps {
   estimateId: string;
@@ -29,6 +36,11 @@ export function ConvertToProject({
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // S-6 pre-flight (money representation §7.1): flat-priced lines missing a
+  // cost basis, listed with inline inputs. Non-null = the modal is open.
+  const [preflight, setPreflight] = useState<PreflightLine[] | null>(null);
+  const [costs, setCosts] = useState<Record<string, string>>({});
+  const [preflightError, setPreflightError] = useState<string | null>(null);
 
   if (projectId || status === 'converted') {
     if (variant === 'banner') {
@@ -55,16 +67,7 @@ export function ConvertToProject({
     return null;
   }
 
-  async function handleConvert() {
-    if (
-      !window.confirm(
-        `Convert ${estimateNumber} to a project? All estimate data carries over and the estimate is marked converted.`
-      )
-    ) {
-      return;
-    }
-    setBusy(true);
-    setError(null);
+  async function runConversion() {
     const result = await convertEstimateToProject(estimateId);
     if (result.success && result.projectId) {
       router.push(`/dashboard/projects/${result.projectId}`);
@@ -74,6 +77,180 @@ export function ConvertToProject({
       setBusy(false);
     }
   }
+
+  async function handleConvert() {
+    setBusy(true);
+    setError(null);
+
+    // S-6 pre-flight: any flat-priced line without a cost basis must get one
+    // before conversion — required fill-in, not a silent zero and not a
+    // dead end (OQ-10).
+    const missing = await listFlatLinesMissingCost(estimateId);
+    if (missing.length > 0) {
+      setCosts({});
+      setPreflightError(null);
+      setPreflight(missing);
+      setBusy(false);
+      return;
+    }
+
+    if (
+      !window.confirm(
+        `Convert ${estimateNumber} to a project? All estimate data carries over and the estimate is marked converted.`
+      )
+    ) {
+      setBusy(false);
+      return;
+    }
+    await runConversion();
+  }
+
+  const parsedCosts = (preflight ?? []).map((line) => {
+    const raw = (costs[line.id] ?? '').trim();
+    const num = raw === '' ? NaN : Number(raw);
+    return { line, value: Number.isFinite(num) && num >= 0 ? num : null };
+  });
+  const allCostsFilled = parsedCosts.length > 0 && parsedCosts.every((c) => c.value != null);
+
+  async function handlePreflightConvert() {
+    if (!allCostsFilled) return;
+    setBusy(true);
+    setPreflightError(null);
+    // Writes go through set_line_override_cost (§5.5) — a plain line UPDATE
+    // is RLS-blocked outside draft, and conversion usually runs on an
+    // accepted estimate.
+    for (const { line, value } of parsedCosts) {
+      const result = await setLineOverrideCost(line.id, value as number);
+      if (!result.success) {
+        setPreflightError(`${line.name}: ${result.error || 'save failed'}`);
+        setBusy(false);
+        return;
+      }
+    }
+    setPreflight(null);
+    await runConversion();
+  }
+
+  // S-6 pre-flight modal: required cost fill-in for flat-priced lines.
+  const preflightModal = preflight && (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: 'rgba(17, 24, 39, 0.5)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 50,
+      }}
+    >
+      <div
+        style={{
+          backgroundColor: '#fff',
+          borderRadius: '0.5rem',
+          padding: '1.25rem',
+          width: '480px',
+          maxWidth: '92vw',
+          maxHeight: '80vh',
+          overflowY: 'auto',
+        }}
+      >
+        <h2 style={{ fontSize: '1rem', fontWeight: 700, margin: '0 0 0.25rem' }}>
+          Enter costs to convert
+        </h2>
+        <p style={{ fontSize: '0.8125rem', color: '#6b7280', margin: '0 0 1rem' }}>
+          These flat-priced lines have a price but no cost. The project budget is built from
+          cost — enter what each line costs you (not what the client pays) to continue.
+        </p>
+
+        {preflight.map((line) => (
+          <div
+            key={line.id}
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: '0.75rem',
+              padding: '0.375rem 0',
+              fontSize: '0.875rem',
+            }}
+          >
+            <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {line.name}
+              <span style={{ color: '#6b7280', marginLeft: '0.5rem' }}>
+                priced {fmtMoney(line.total_price_override)}
+              </span>
+            </span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="Cost $"
+              value={costs[line.id] ?? ''}
+              onChange={(e) => setCosts((c) => ({ ...c, [line.id]: e.target.value }))}
+              style={{
+                width: '110px',
+                padding: '0.25rem 0.5rem',
+                border: '1px solid #d1d5db',
+                borderRadius: '0.25rem',
+                fontSize: '0.875rem',
+                textAlign: 'right',
+                flexShrink: 0,
+              }}
+            />
+          </div>
+        ))}
+
+        {preflightError && (
+          <div style={{ color: '#991b1b', fontSize: '0.8125rem', margin: '0.5rem 0' }}>
+            {preflightError}
+          </div>
+        )}
+
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            gap: '0.5rem',
+            marginTop: '1rem',
+          }}
+        >
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => setPreflight(null)}
+            style={{
+              padding: '0.5rem 1rem',
+              fontSize: '0.875rem',
+              backgroundColor: '#f3f4f6',
+              border: '1px solid #d1d5db',
+              borderRadius: '0.375rem',
+              cursor: 'pointer',
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={busy || !allCostsFilled}
+            onClick={handlePreflightConvert}
+            style={{
+              padding: '0.5rem 1rem',
+              fontSize: '0.875rem',
+              fontWeight: 600,
+              color: '#fff',
+              backgroundColor: busy || !allCostsFilled ? '#9ca3af' : '#16a34a',
+              border: 'none',
+              borderRadius: '0.375rem',
+              cursor: busy || !allCostsFilled ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {busy ? 'Converting…' : `Save costs & convert ${estimateNumber}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   const button = (
     <button
@@ -99,6 +276,7 @@ export function ConvertToProject({
     return (
       <span>
         {button}
+        {preflightModal}
         {error && (
           <span style={{ display: 'block', color: '#991b1b', fontSize: '0.75rem', marginTop: '0.25rem' }}>
             {error}
@@ -132,6 +310,7 @@ export function ConvertToProject({
         over — or revise and resend if the client requested changes.
       </span>
       <span style={{ flexShrink: 0 }}>{button}</span>
+      {preflightModal}
       {error && <span style={{ color: '#991b1b' }}>{error}</span>}
     </div>
   );

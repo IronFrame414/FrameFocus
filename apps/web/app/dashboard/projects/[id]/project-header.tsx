@@ -18,15 +18,15 @@ interface ProjectHeaderProps {
 // + Deliveries (S90, 6D-spec §U amendment) — first-class project tab after
 // Punch List (the field/materials cluster); Daily Logs and Safety stay on
 // the Field Ops surface only.
-// + Job Cost (7A §5.6, S90 Q4a): immediately after Budget (the money
-// cluster); role-gated — Owner/Admin/PM/Foreman only, crew never sees it.
+// S93 (money representation A-5/§7.2): Budget + Job Cost merged into ONE
+// "Budget & Cost" tab at the old Budget position; /costs redirects here.
+// The 7A crew gate carries over — Owner/Admin/PM/Foreman only.
 const TABS: { slug: string; label: string; roles?: string[] }[] = [
   { slug: '', label: 'Overview' },
   { slug: 'schedule', label: 'Schedule' },
-  { slug: 'budget', label: 'Budget' },
   {
-    slug: 'costs',
-    label: 'Job Cost',
+    slug: 'budget',
+    label: 'Budget & Cost',
     roles: ['owner', 'admin', 'project_manager', 'foreman'],
   },
   { slug: 'changes', label: 'Change Orders' },

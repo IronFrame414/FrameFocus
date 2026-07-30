@@ -181,6 +181,20 @@ export async function completeCoSignature(
     .eq('status', 'sent');
   if (coError) return { success: false, error: coError.message };
 
+  // Money representation §5.2 (P6): a signed CO writes its OWN budget lines
+  // from its cost rows. Best-effort — a failure must not roll back the
+  // binding signature (the notifyCoSigned pattern below); the merged budget
+  // screen shows the gap with an Owner/Admin "Create budget lines" retry.
+  const { error: budgetError } = await admin.rpc('apply_change_order_budget', {
+    p_change_order_id: co.id,
+  });
+  if (budgetError) {
+    console.error(
+      `apply_change_order_budget failed for CO ${co.co_number} (${co.id}) after signing — retry from the Budget & Cost screen:`,
+      budgetError.message
+    );
+  }
+
   // Email v2 to both parties (spec §7.2). Best-effort — a failed notification
   // must not roll back the binding signature (mirrors notifyManagers).
   await notifyCoSigned(admin, {
