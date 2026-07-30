@@ -5237,6 +5237,10 @@ export type Database = {
         Returns: Json
       }
       seed_default_tags: { Args: { p_company_id: string }; Returns: undefined }
+      set_line_override_cost: {
+        Args: { p_cost: number; p_line_id: string }
+        Returns: undefined
+      }
       set_po_total_amount: {
         Args: { p_amount: number; p_budget_item_id?: string; p_po_id: string }
         Returns: string

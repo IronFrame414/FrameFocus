@@ -596,6 +596,14 @@ columns to any `can_view_project()` role — known, accepted, reviewed-against.
   of UTC entering "today" late in their day can trip the future-date
   rejection; and concurrent renegotiations are not serialized — two
   simultaneous inserts can read the same floor.
+- **`set_line_override_cost(p_line_id uuid, p_cost numeric) RETURNS void`** —
+  SECURITY DEFINER, Owner/Admin/PM (the S-6 conversion audience, §7.3). The
+  conversion pre-flight's write path: `estimate_line_items_update_manager`
+  pins line UPDATEs to draft estimates, but the pre-flight fills missing
+  `override_cost` at convert time, when the estimate is typically
+  accepted/frozen. Deliberately narrow — the one column, flat-priced lines
+  only (`total_price_override IS NOT NULL`), rejected once the estimate is
+  converted. Records a cost basis; can never move sell.
 - **`supersede_instrument_rate(p_rate_id uuid, p_reason text) RETURNS void`**
   — SECURITY DEFINER RPC, **Owner-only** (checked inside — deliberately
   stricter than the Owner/Admin INSERT: correcting history is a bigger lever
@@ -723,7 +731,9 @@ type/rate read-only). No mixing within one CO (P4).
 flat-priced line has `override_cost IS NULL`, list those lines with inline
 cost inputs; **require fill-in, then proceed**. Not a silent zero, not a
 dead-end block (OQ-10 resolution). The RPC's NULL guard (§5.1) backstops
-direct API calls.
+direct API calls. Fill-ins persist through `set_line_override_cost` (§5.5) —
+line-item RLS is draft-only and conversion typically runs on an accepted
+estimate, so a plain UPDATE would silently match zero rows.
 
 ### 7.2 Nav placement & entry points
 

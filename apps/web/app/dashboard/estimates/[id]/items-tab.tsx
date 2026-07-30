@@ -530,6 +530,23 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
             </span>
           </div>
           <div style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+            {/* Cost basis for a flat-priced line (S-3/§4.1) — carried to the
+                project budget at conversion; never shown to the client. */}
+            {hasOverride && (
+              <span style={{ marginRight: '0.75rem' }}>
+                <span style={rowLabel}>Cost </span>
+                <InlineNumber
+                  value={line.override_cost}
+                  disabled={!canEdit}
+                  allowNull
+                  format={(v) => (v == null ? 'not set' : fmtMoney(v))}
+                  validate={(v) => (v != null && v < 0 ? '≥ 0' : null)}
+                  onSave={(v) =>
+                    mutate(() => updateEstimateLineItem(line.id, { override_cost: v }), false)
+                  }
+                />
+              </span>
+            )}
             <span style={rowLabel}>Total </span>
             <InlineNumber
               value={line.total_price_override}

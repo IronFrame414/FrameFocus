@@ -16,6 +16,7 @@ import { InlineNumber } from '../inline-edit';
 import { fmtPercent } from '../labels';
 import { STATUS_LABELS } from '../labels';
 import type { TabProps } from './estimate-builder';
+import { ContractSection } from './contract-section';
 import { SigningActivity } from './signing-activity';
 
 interface DetailsTabProps extends TabProps {
@@ -156,6 +157,14 @@ export function DetailsTab({
             />
           </div>
         </div>
+
+        {/* Contract type + negotiated rates + P11 projection (S-3).
+            Owner/Admin edit; PM sees read-only (§7.3). */}
+        <ContractSection
+          estimate={estimate}
+          canEditSettings={canEdit && (role === 'owner' || role === 'admin')}
+          reload={reload}
+        />
 
         {/* Pricing */}
         <div style={sectionStyle}>

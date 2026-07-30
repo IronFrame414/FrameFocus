@@ -257,6 +257,38 @@ export async function updateEstimateLineItem(
   return { success: true };
 }
 
+/** Flat-priced lines still missing a cost basis — the S-6 pre-flight list. */
+export async function listFlatLinesMissingCost(
+  estimateId: string
+): Promise<{ id: string; name: string; total_price_override: number | null }[]> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from('estimate_line_items')
+    .select('id, name, total_price_override')
+    .eq('estimate_id', estimateId)
+    .not('total_price_override', 'is', null)
+    .is('override_cost', null)
+    .order('sort_order', { ascending: true });
+  if (error || !data) return [];
+  return data;
+}
+
+/** S-6 pre-flight write path (money representation §5.5): line-item RLS is
+ *  draft-only, but conversion typically runs on an accepted estimate — the
+ *  SECURITY DEFINER RPC sets the one cost column on flat-priced lines. */
+export async function setLineOverrideCost(lineId: string, cost: number): Promise<Result> {
+  if (!(cost >= 0)) return { success: false, error: 'Enter a cost of zero or more.' };
+
+  const supabase = createClient();
+  const { error } = await supabase.rpc('set_line_override_cost', {
+    p_line_id: lineId,
+    p_cost: cost,
+  });
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
 /** Hard delete — cascades to rows and sub bids. */
 export async function deleteEstimateLineItem(id: string): Promise<Result> {
   const supabase = createClient();

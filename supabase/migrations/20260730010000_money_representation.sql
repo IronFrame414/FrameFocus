@@ -24,6 +24,7 @@
 -- Contents:
 --   1. estimates — contract_type + projected_value (§4.2)
 --   2. estimate_line_items.override_cost + clone_estimate_line (§4.1)
+--      + set_line_override_cost (S-6 pre-flight write path, §5.5)
 --   3. instrument_rates — table, backdating-guard trigger, supersede RPC (§4.2)
 --   4. project_budget_items — source_change_order_id, is_miscellaneous (§4.3)
 --   5. get_or_create_misc_budget_item (§5.5)
@@ -97,6 +98,59 @@ BEGIN
   WHERE r.line_item_id = p_line.id;
 
   RETURN v_new_line_id;
+END;
+$$;
+
+-- set_line_override_cost — the S-6 conversion pre-flight's write path (§5.5).
+-- estimate_line_items_update_manager pins line UPDATEs to DRAFT estimates,
+-- but the pre-flight fills missing costs at CONVERT time, when the estimate
+-- is typically accepted/frozen. SECURITY DEFINER, deliberately narrow: the
+-- one column, flat-priced lines only, Owner/Admin/PM (the conversion
+-- audience, §7.3), never after conversion. It records a cost basis — it can
+-- never move sell.
+CREATE FUNCTION public.set_line_override_cost(
+  p_line_id uuid,
+  p_cost numeric
+) RETURNS void
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path TO 'public'
+AS $$
+DECLARE
+  v_line RECORD;
+  v_estimate RECORD;
+BEGIN
+  IF public.get_my_role() IS NULL
+     OR public.get_my_role() NOT IN ('owner', 'admin', 'project_manager') THEN
+    RAISE EXCEPTION 'Only Owner/Admin/PM may set a line cost.';
+  END IF;
+  IF p_cost IS NULL OR p_cost < 0 THEN
+    RAISE EXCEPTION 'set_line_override_cost: cost must be zero or more';
+  END IF;
+
+  SELECT * INTO v_line
+  FROM estimate_line_items
+  WHERE id = p_line_id AND company_id = public.get_my_company_id()
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'set_line_override_cost: line not found';
+  END IF;
+  IF v_line.total_price_override IS NULL THEN
+    RAISE EXCEPTION 'set_line_override_cost: not a flat-priced line';
+  END IF;
+
+  SELECT * INTO v_estimate
+  FROM estimates
+  WHERE id = v_line.estimate_id AND is_deleted = false;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'set_line_override_cost: estimate not found';
+  END IF;
+  IF v_estimate.status = 'converted' OR v_estimate.project_id IS NOT NULL THEN
+    RAISE EXCEPTION 'set_line_override_cost: this estimate is already converted';
+  END IF;
+
+  UPDATE estimate_line_items SET override_cost = p_cost WHERE id = p_line_id;
 END;
 $$;
 
