@@ -4382,6 +4382,7 @@ export type Database = {
           insurance_expiry: string | null
           is_deleted: boolean | null
           license_number: string | null
+          member_id: string | null
           mobile: string | null
           notes: string | null
           phone: string | null
@@ -4417,6 +4418,7 @@ export type Database = {
           insurance_expiry?: string | null
           is_deleted?: boolean | null
           license_number?: string | null
+          member_id?: string | null
           mobile?: string | null
           notes?: string | null
           phone?: string | null
@@ -4452,6 +4454,7 @@ export type Database = {
           insurance_expiry?: string | null
           is_deleted?: boolean | null
           license_number?: string | null
+          member_id?: string | null
           mobile?: string | null
           notes?: string | null
           phone?: string | null
@@ -4473,6 +4476,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subcontractors_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "company_members"
             referencedColumns: ["id"]
           },
         ]
