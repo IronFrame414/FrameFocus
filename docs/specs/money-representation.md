@@ -332,13 +332,24 @@ stage rows, PO committed rows, manual bills, the retainage accrual row).
   allocation amount to this line — **regardless of `state`**. Never mutated
   by payments, close-outs, or 7C's settlement flip.
 - **`actual_amount`** = Σ over approved **receipt-origin** expense
-  allocations **PLUS payments against commitment-origin expenses**: each
+  allocations **PLUS NET payments against commitment-origin expenses**: each
   `expense_payments` row contributes
-  `payment.amount × (allocation.amount / expense.amount)` to each allocated
-  line (2-dp rounding per `roundMoney`,
+  `(payment.amount − payment.retainage_withheld) × (allocation.amount /
+  expense.amount)` to each allocated line (2-dp rounding per `roundMoney`,
   `packages/shared/utils/estimate-totals.ts:35-37`). A commitment-origin
   expense's own allocation amounts never enter actual directly — only its
-  payments do.
+  payments do. **[S93 BUILD AMENDMENT (Josh, Phase 2 Q2): NET, not gross.**
+  Rev 4 said `payment.amount` (gross); that double-counts withheld retainage
+  — the withheld dollars would sit in line actual AND in the retainage
+  accrual row — and disagrees with the shipped job-level actual, which is
+  NET (`apps/web/lib/services/expenses.ts:130-137`, the S91 gross/net
+  amendment, `20260729010000_7c_accounts_payable.sql:14-22`).]
+- **Retainage accrual rows are line-less in v1 (Phase 2 Q3).** The
+  `is_retainage` row is created inside `record_expense_payment` (untouched)
+  with no allocations, so its gross and its release payment reach no budget
+  line. Per-line totals exclude retainage held/released; job-level payables
+  numbers carry it. Stated on the merged screen; filed as tech debt in the
+  S93 build notes.
 - **Remaining committed is DERIVED at read, never stored:** per line, Σ over
   the line's commitment-origin expenses of per-expense
   `committed_remaining = GREATEST(amount − Σ payments, 0)` (zero once closed
@@ -353,8 +364,12 @@ stage rows, PO committed rows, manual bills, the retainage accrual row).
   (`20260729010000_7c_accounts_payable.sql:728-731`, "Settlement marker
   only (§2.2): money math never reads state"). Because origin is not a
   function of `state`, the flip changes neither recompute — the rev-3
-  conflict is resolved by realigning with 7C's invariant. **7C is NOT
-  changed.**
+  conflict is resolved by realigning with 7C's invariant.
+  **[S93 BUILD AMENDMENT (Josh, Phase 2 Q1) — "7C is not changed" is
+  narrowed to: `record_expense_payment` and the settlement flip are
+  untouched.** §4.4's budget-line-target amendment to
+  `setup_payment_schedule` and `set_po_total_amount` (additive-optional
+  parameters) does proceed; nothing else in 7C moves.]
 
 **How origin is determined from live columns.** A commitment-origin expense
 is one matching 7C's own payable predicate — `isPayableRow` /
@@ -514,8 +529,10 @@ Per §4.5: new `recompute_budget_item_committed()`, amended
 (the N-2 ruling); trigger-chain extensions to `expenses` and
 `expense_payments`. The 7A comment invariant
 (`20260728010000_7a_expenses_job_cost.sql:177-183`) is superseded per A-4.
-**No 7C object is modified** — the settlement flip (`:728-731`) stays
-exactly as shipped.
+**7C extent [S93 BUILD AMENDMENT, Phase 2 Q1]:** `record_expense_payment`
+and the settlement flip (`:728-731`) stay exactly as shipped;
+`setup_payment_schedule` and `set_po_total_amount` gain additive-optional
+budget-line-target parameters (§4.4); nothing else in 7C moves.
 
 ### 5.4 `FINANCIAL-RLS-FLOOR` — relationship to this spec
 
