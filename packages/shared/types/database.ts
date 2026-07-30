@@ -1,10 +1,3 @@
-// ⚠ S93 HAND-PATCH (Phase 2 Q6, approved): the money-representation migration
-// (20260730010000) was WRITTEN but NOT APPLIED this session, so this file
-// could not be regenerated. The estimates / estimate_line_items /
-// project_budget_items additions, the instrument_rates table, and the new
-// RPC signatures below were hand-written in generator style. Running
-// `npm run db:push` (after applying the migration) regenerates this file and
-// erases this note — any divergence self-heals.
 export type Json =
   | string
   | number
@@ -5128,7 +5121,11 @@ export type Database = {
         Returns: string
       }
       create_budget_line_at_capture: {
-        Args: { p_cost_code?: string; p_description: string; p_project_id: string }
+        Args: {
+          p_cost_code?: string
+          p_description: string
+          p_project_id: string
+        }
         Returns: string
       }
       create_safety_incident:
