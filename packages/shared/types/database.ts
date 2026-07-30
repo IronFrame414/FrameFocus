@@ -1,3 +1,10 @@
+// ⚠ S93 HAND-PATCH (Phase 2 Q6, approved): the money-representation migration
+// (20260730010000) was WRITTEN but NOT APPLIED this session, so this file
+// could not be regenerated. The estimates / estimate_line_items /
+// project_budget_items additions, the instrument_rates table, and the new
+// RPC signatures below were hand-written in generator style. Running
+// `npm run db:push` (after applying the migration) regenerates this file and
+// erases this note — any divergence self-heals.
 export type Json =
   | string
   | number
@@ -1631,6 +1638,7 @@ export type Database = {
           id: string
           name: string
           notes: string | null
+          override_cost: number | null
           sort_order: number
           subcategory_id: string | null
           total_price: number
@@ -1650,6 +1658,7 @@ export type Database = {
           id?: string
           name: string
           notes?: string | null
+          override_cost?: number | null
           sort_order: number
           subcategory_id?: string | null
           total_price?: number
@@ -1669,6 +1678,7 @@ export type Database = {
           id?: string
           name?: string
           notes?: string | null
+          override_cost?: number | null
           sort_order?: number
           subcategory_id?: string | null
           total_price?: number
@@ -1970,6 +1980,7 @@ export type Database = {
           company_id: string
           contact_address_id: string | null
           contact_id: string
+          contract_type: string
           cover_letter: string | null
           created_at: string | null
           created_by: string | null
@@ -1995,6 +2006,7 @@ export type Database = {
           parent_estimate_id: string | null
           pricing_mode: string
           project_id: string | null
+          projected_value: number | null
           proposal_pricing_level: string
           reminder_count: number
           reminder_schedule: Json | null
@@ -2022,6 +2034,7 @@ export type Database = {
           company_id?: string
           contact_address_id?: string | null
           contact_id: string
+          contract_type?: string
           cover_letter?: string | null
           created_at?: string | null
           created_by?: string | null
@@ -2047,6 +2060,7 @@ export type Database = {
           parent_estimate_id?: string | null
           pricing_mode?: string
           project_id?: string | null
+          projected_value?: number | null
           proposal_pricing_level?: string
           reminder_count?: number
           reminder_schedule?: Json | null
@@ -2074,6 +2088,7 @@ export type Database = {
           company_id?: string
           contact_address_id?: string | null
           contact_id?: string
+          contract_type?: string
           cover_letter?: string | null
           created_at?: string | null
           created_by?: string | null
@@ -2099,6 +2114,7 @@ export type Database = {
           parent_estimate_id?: string | null
           pricing_mode?: string
           project_id?: string | null
+          projected_value?: number | null
           proposal_pricing_level?: string
           reminder_count?: number
           reminder_schedule?: Json | null
@@ -2703,6 +2719,73 @@ export type Database = {
           },
         ]
       }
+      instrument_rates: {
+        Row: {
+          change_order_id: string | null
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          effective_from: string
+          estimate_id: string | null
+          id: string
+          rate: number
+          rate_type: string
+          superseded_at: string | null
+          superseded_by: string | null
+          superseded_reason: string | null
+        }
+        Insert: {
+          change_order_id?: string | null
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          effective_from: string
+          estimate_id?: string | null
+          id?: string
+          rate: number
+          rate_type: string
+          superseded_at?: string | null
+          superseded_by?: string | null
+          superseded_reason?: string | null
+        }
+        Update: {
+          change_order_id?: string | null
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          effective_from?: string
+          estimate_id?: string | null
+          id?: string
+          rate?: number
+          rate_type?: string
+          superseded_at?: string | null
+          superseded_by?: string | null
+          superseded_reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "instrument_rates_change_order_id_fkey"
+            columns: ["change_order_id"]
+            isOneToOne: false
+            referencedRelation: "change_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "instrument_rates_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "instrument_rates_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invitations: {
         Row: {
           company_id: string
@@ -3109,8 +3192,10 @@ export type Database = {
           description: string
           id: string
           is_deleted: boolean | null
+          is_miscellaneous: boolean
           project_id: string
           row_type: string | null
+          source_change_order_id: string | null
           source_line_item_id: string | null
           source_line_row_id: string | null
           updated_at: string | null
@@ -3128,8 +3213,10 @@ export type Database = {
           description: string
           id?: string
           is_deleted?: boolean | null
+          is_miscellaneous?: boolean
           project_id: string
           row_type?: string | null
+          source_change_order_id?: string | null
           source_line_item_id?: string | null
           source_line_row_id?: string | null
           updated_at?: string | null
@@ -3147,8 +3234,10 @@ export type Database = {
           description?: string
           id?: string
           is_deleted?: boolean | null
+          is_miscellaneous?: boolean
           project_id?: string
           row_type?: string | null
+          source_change_order_id?: string | null
           source_line_item_id?: string | null
           source_line_row_id?: string | null
           updated_at?: string | null
@@ -3167,6 +3256,13 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_budget_items_source_change_order_id_fkey"
+            columns: ["source_change_order_id"]
+            isOneToOne: false
+            referencedRelation: "change_orders"
             referencedColumns: ["id"]
           },
           {
@@ -4984,6 +5080,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      apply_change_order_budget: {
+        Args: { p_change_order_id: string }
+        Returns: number
+      }
       approve_expense: {
         Args: { p_allocations?: Json; p_expense_id: string }
         Returns: undefined
@@ -5073,6 +5173,10 @@ export type Database = {
       get_my_company_id: { Args: never; Returns: string }
       get_my_member_id: { Args: never; Returns: string }
       get_my_role: { Args: never; Returns: string }
+      get_or_create_misc_budget_item: {
+        Args: { p_project_id: string }
+        Returns: string
+      }
       get_project_day_presence: {
         Args: { p_date: string; p_project_id: string }
         Returns: {
@@ -5104,7 +5208,15 @@ export type Database = {
       next_project_internal_seq: { Args: never; Returns: number }
       next_project_number: { Args: never; Returns: string }
       owns_open_session: { Args: { p_session_id: string }; Returns: boolean }
+      recompute_budget_item: {
+        Args: { p_budget_item_id: string }
+        Returns: undefined
+      }
       recompute_budget_item_actual: {
+        Args: { p_budget_item_id: string }
+        Returns: undefined
+      }
+      recompute_budget_item_committed: {
         Args: { p_budget_item_id: string }
         Returns: undefined
       }
@@ -5126,7 +5238,7 @@ export type Database = {
       }
       seed_default_tags: { Args: { p_company_id: string }; Returns: undefined }
       set_po_total_amount: {
-        Args: { p_amount: number; p_po_id: string }
+        Args: { p_amount: number; p_budget_item_id?: string; p_po_id: string }
         Returns: string
       }
       set_winning_bid: {
@@ -5141,6 +5253,10 @@ export type Database = {
           p_sub_contract_id: string
         }
         Returns: Json
+      }
+      supersede_instrument_rate: {
+        Args: { p_rate_id: string; p_reason: string }
+        Returns: undefined
       }
       switch_pricing_mode: {
         Args: { p_estimate_id: string; p_new_mode: string }
