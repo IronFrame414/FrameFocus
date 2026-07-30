@@ -21,6 +21,16 @@ export type DiscountType = 'percent' | 'fixed';
 
 export type PricingMode = 'markup' | 'margin';
 
+// Money representation P4: contract type lives on the INSTRUMENT. Value set
+// matches change_orders.co_type — one spelling everywhere.
+export type ContractType = 'fixed_price' | 'cost_plus' | 'time_and_materials';
+
+export const CONTRACT_TYPE_LABELS: Record<ContractType, string> = {
+  fixed_price: 'Fixed price',
+  cost_plus: 'Cost plus',
+  time_and_materials: 'Time & materials',
+};
+
 // 4D-rev3: single estimate-level five-value proposal presentation.
 export type ProposalPricingLevel =
   | 'lump_sum'
@@ -62,13 +72,19 @@ type EstimateInsert = Database['public']['Tables']['estimates']['Insert'];
 
 export type Estimate = Omit<
   EstimateRow,
-  'status' | 'discount_type' | 'proposal_pricing_level' | 'decline_reason_code' | 'pricing_mode'
+  | 'status'
+  | 'discount_type'
+  | 'proposal_pricing_level'
+  | 'decline_reason_code'
+  | 'pricing_mode'
+  | 'contract_type'
 > & {
   status: EstimateStatus;
   discount_type: DiscountType | null;
   proposal_pricing_level: ProposalPricingLevel;
   decline_reason_code: DeclineReasonCode | null;
   pricing_mode: PricingMode;
+  contract_type: ContractType;
 };
 
 export type CreateEstimateInput = Pick<EstimateInsert, 'name' | 'contact_id'> & {
@@ -94,9 +110,13 @@ export type UpdateEstimateInput = Partial<
     | 'terms_sections'
     | 'expiration_days'
     | 'internal_notes'
+    // Money representation §4.2/§7.1 S-3 — Owner/Admin-gated in the UI
+    // (projected_value is user-entered, never derived; NULL is normal).
+    | 'projected_value'
   > & {
     discount_type: DiscountType | null;
     proposal_pricing_level: ProposalPricingLevel;
+    contract_type: ContractType;
   }
 >;
 

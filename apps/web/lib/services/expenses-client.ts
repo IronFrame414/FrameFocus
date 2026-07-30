@@ -29,6 +29,13 @@ export interface ExpenseCaptureInput {
   description?: string | null;
   cost_category?: CaptureCategory; // default 'material'
   source_segment_id?: string | null; // set when born from a material-run prompt
+  /**
+   * SPLIT AT CAPTURE (money representation §4.4/P7): every new expense lands
+   * on budget lines via ≥1 allocation with Σ exactly = amount (service/UI
+   * enforce exact; the DB keeps Σ ≤). One line is the single-allocation
+   * case; "Miscellaneous" resolves via getOrCreateMiscBudgetLine.
+   */
+  allocations: AllocationInput[];
 }
 
 /** The caller's company_members.id (Q2 — local helper; the createProject
@@ -57,13 +64,35 @@ async function getMyMemberId(): Promise<string | null> {
   return member?.id ?? null;
 }
 
-/** Log an expense. Lands pending/actual — nothing counts until approved. */
+/** Σ(allocations) must equal the expense amount exactly at capture (2-dp
+ *  money — compare rounded). */
+export function validateCaptureSplit(
+  amount: number,
+  allocations: AllocationInput[]
+): string | null {
+  if (allocations.length === 0) return 'Pick at least one budget line for this expense.';
+  for (const a of allocations) {
+    if (!a.budget_item_id) return 'Every split line needs a budget line.';
+    if (!(a.amount > 0)) return 'Every split line needs a positive amount.';
+  }
+  const sum = Math.round(allocations.reduce((s, a) => s + a.amount, 0) * 100) / 100;
+  if (sum !== Math.round(amount * 100) / 100) {
+    return `The split must add up to the expense amount (split ${sum.toFixed(2)} vs ${amount.toFixed(2)}).`;
+  }
+  return null;
+}
+
+/** Log an expense with its capture split. Lands pending/actual — nothing
+ *  counts until approved (allocation rows on pending expenses are inert to
+ *  the recomputes). */
 export async function createExpense(input: ExpenseCaptureInput): Promise<CreateResult> {
   if (!input.supplier.trim()) return { success: false, error: 'Supplier is required.' };
   if (!(input.amount > 0)) return { success: false, error: 'Amount must be greater than zero.' };
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.expense_date)) {
     return { success: false, error: 'Date must be a calendar date.' };
   }
+  const splitError = validateCaptureSplit(input.amount, input.allocations);
+  if (splitError) return { success: false, error: splitError };
 
   const supabase = createClient();
 
@@ -81,14 +110,97 @@ export async function createExpense(input: ExpenseCaptureInput): Promise<CreateR
 
   const { data, error } = await supabase.from('expenses').insert(row).select('id').single();
   if (error) return { success: false, error: error.message };
+
+  // The split (expense_allocations_insert_authorized: author-while-pending
+  // or Owner/Admin). A failed split leaves the expense pending-unallocated —
+  // surfaced so the reviewer fixes it in the popup rather than losing the
+  // capture.
+  const { error: allocError } = await supabase.from('expense_allocations').insert(
+    input.allocations.map((a) => ({
+      expense_id: data.id,
+      budget_item_id: a.budget_item_id,
+      amount: a.amount,
+    }))
+  );
+  if (allocError) {
+    return {
+      success: false,
+      id: data.id,
+      error: `Expense saved, but the budget split failed: ${allocError.message}. It can be fixed at review.`,
+    };
+  }
   return { success: true, id: data.id };
+}
+
+/** The project's Miscellaneous catch-all line — created LAZILY on first use
+ *  (money representation §4.3/§5.5; SECURITY DEFINER RPC because field roles
+ *  fail the Owner/Admin budget-line INSERT policy). */
+export async function getOrCreateMiscBudgetLine(projectId: string): Promise<CreateResult> {
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc('get_or_create_misc_budget_item', {
+    p_project_id: projectId,
+  });
+  if (error) return { success: false, error: error.message };
+  return { success: true, id: data as string };
+}
+
+/** Captured split for the review popup (approval ADJUSTS the split — edits
+ *  rows in place, then approves with no new allocations). */
+export interface ExpenseAllocationRow {
+  id: string;
+  budget_item_id: string;
+  amount: number;
+}
+
+export async function listExpenseAllocations(expenseId: string): Promise<ExpenseAllocationRow[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('expense_allocations')
+    .select('id, budget_item_id, amount')
+    .eq('expense_id', expenseId)
+    .eq('is_deleted', false)
+    .order('created_at', { ascending: true });
+  if (error) return [];
+  return (data ?? []) as ExpenseAllocationRow[];
+}
+
+/** Review-time split adjustments (Owner/Admin; author-while-pending). */
+export async function updateExpenseAllocation(
+  id: string,
+  updates: { budget_item_id?: string; amount?: number }
+): Promise<MutationResult> {
+  const supabase = createClient();
+  const { error } = await supabase.from('expense_allocations').update(updates).eq('id', id);
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
+export async function addExpenseAllocation(
+  expenseId: string,
+  allocation: AllocationInput
+): Promise<MutationResult> {
+  const supabase = createClient();
+  const { error } = await supabase.from('expense_allocations').insert({
+    expense_id: expenseId,
+    budget_item_id: allocation.budget_item_id,
+    amount: allocation.amount,
+  });
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
+export async function removeExpenseAllocation(id: string): Promise<MutationResult> {
+  const supabase = createClient();
+  const { error } = await supabase.from('expense_allocations').delete().eq('id', id);
+  if (error) return { success: false, error: error.message };
+  return { success: true };
 }
 
 /** Capture-field edits — pending author or Owner/Admin (column scope gates
  *  the rest). BEFORE UPDATE triggers handle updated_at / updated_by. */
 export async function updateExpense(
   id: string,
-  updates: Partial<ExpenseCaptureInput>
+  updates: Partial<Omit<ExpenseCaptureInput, 'allocations'>>
 ): Promise<MutationResult> {
   const supabase = createClient();
   const { error } = await supabase
@@ -251,13 +363,21 @@ export interface BudgetLineOption {
   cost_code: string | null;
   budgeted_amount: number | null;
   actual_amount: number | null;
+  /** Instrument provenance for picker grouping (money representation §4.3):
+   *  a CO id → that CO's group; else estimate provenance → Original
+   *  Contract; else ad-hoc/miscellaneous. */
+  source_change_order_id: string | null;
+  source_line_item_id: string | null;
+  is_miscellaneous: boolean;
 }
 
 export async function listProjectBudgetLines(projectId: string): Promise<BudgetLineOption[]> {
   const supabase = createClient();
   const { data, error } = await supabase
     .from('project_budget_items')
-    .select('id, description, cost_code, budgeted_amount, actual_amount')
+    .select(
+      'id, description, cost_code, budgeted_amount, actual_amount, source_change_order_id, source_line_item_id, is_miscellaneous'
+    )
     .eq('project_id', projectId)
     .eq('is_deleted', false)
     .order('cost_code', { ascending: true, nullsFirst: false })
