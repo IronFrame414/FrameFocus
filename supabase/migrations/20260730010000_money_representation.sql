@@ -32,6 +32,7 @@
 --   7. apply_change_order_budget (§5.2)
 --   8. recompute_budget_item_actual / _committed + trigger chain (§4.5/§5.3)
 --   9. expense_allocations RLS — widened to capture authors (§4.4)
+--  9b. approve_expense — reconcile semantics (§4.4 / A-6, amends 7A)
 --  10. setup_payment_schedule / set_po_total_amount — allocation targets (§4.4)
 -- ============================================================================
 
@@ -962,6 +963,107 @@ CREATE POLICY expense_allocations_delete_authorized ON public.expense_allocation
       )
     )
   );
+
+-- ----------------------------------------------------------------------------
+-- 9b. approve_expense — RECONCILE semantics (A-6, S93 follow-up; amends the
+--     7A §3.3 RPC — the one 7A function this migration touches). Split-at-
+--     capture (§4.4) means allocation rows already exist at approval; the
+--     shipped 7A RPC blindly INSERTed the passed rows on top (double-write)
+--     and its Σ guard summed ONLY the passed rows, so capture + approval
+--     could stack past the expense amount. Now the passed set REPLACES the
+--     existing split, and the guard checks the FINAL state: zero allocations
+--     (Option B stands — committed rows, jobs with no budget lines) or
+--     Σ = expense amount exactly (cent-tolerant).
+--     Existing rows are HARD-deleted, not soft-deleted: the UNIQUE
+--     (expense_id, budget_item_id) constraint has no is_deleted predicate,
+--     so a soft-deleted captured row would still occupy the key and collide
+--     with its reconciled replacement. Allocations are a working split, not
+--     a record — the service layer's removeExpenseAllocation already hard
+--     deletes. Reconcile runs while the expense is still pending, so the
+--     rows are inert for the recompute until the status flip at the end.
+--     Same signature as the shipped function — CREATE OR REPLACE is safe.
+-- ----------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION public.approve_expense(
+  p_expense_id uuid,
+  p_allocations jsonb DEFAULT '[]'::jsonb
+) RETURNS void
+LANGUAGE plpgsql
+SET search_path TO 'public'
+AS $$
+DECLARE
+  v_me uuid := public.get_my_member_id();
+  v_expense RECORD;
+  v_alloc RECORD;
+  v_total numeric := 0;
+  v_count integer := 0;
+BEGIN
+  IF public.get_my_role() IS NULL
+     OR public.get_my_role() NOT IN ('owner', 'admin') THEN
+    RAISE EXCEPTION 'Only Owner/Admin may approve expenses.';
+  END IF;
+  IF v_me IS NULL THEN
+    RAISE EXCEPTION 'No member identity for approver.';
+  END IF;
+
+  -- Row lock prevents two concurrent approvals of the same expense.
+  SELECT * INTO v_expense
+  FROM expenses
+  WHERE id = p_expense_id
+    AND company_id = public.get_my_company_id()
+    AND is_deleted = false
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'approve_expense: expense not found';
+  END IF;
+  IF v_expense.status <> 'pending' THEN
+    RAISE EXCEPTION 'approve_expense: expense is %, not pending', v_expense.status;
+  END IF;
+
+  -- Reconcile: the passed set replaces whatever capture (or an earlier
+  -- review pass) wrote. See the header note on hard vs soft delete.
+  DELETE FROM expense_allocations WHERE expense_id = p_expense_id;
+
+  FOR v_alloc IN
+    SELECT (a ->> 'budget_item_id')::uuid AS budget_item_id,
+           (a ->> 'amount')::numeric      AS amount
+    FROM jsonb_array_elements(p_allocations) a
+  LOOP
+    IF v_alloc.budget_item_id IS NULL OR v_alloc.amount IS NULL OR v_alloc.amount <= 0 THEN
+      RAISE EXCEPTION 'approve_expense: each allocation needs a budget line and a positive amount';
+    END IF;
+
+    -- Every line must belong to the expense's own project + company.
+    PERFORM 1
+    FROM project_budget_items b
+    WHERE b.id = v_alloc.budget_item_id
+      AND b.project_id = v_expense.project_id
+      AND b.company_id = v_expense.company_id
+      AND b.is_deleted = false;
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'approve_expense: budget line % is not on this expense''s project', v_alloc.budget_item_id;
+    END IF;
+
+    v_total := v_total + v_alloc.amount;
+    v_count := v_count + 1;
+
+    INSERT INTO expense_allocations (company_id, expense_id, budget_item_id, amount)
+    VALUES (v_expense.company_id, p_expense_id, v_alloc.budget_item_id, v_alloc.amount);
+  END LOOP;
+
+  -- FINAL-state guard: a split, if present, covers the expense exactly.
+  IF v_count > 0 AND abs(v_total - v_expense.amount) >= 0.005 THEN
+    RAISE EXCEPTION 'approve_expense: allocations (%) must equal the expense amount (%) exactly', v_total, v_expense.amount;
+  END IF;
+
+  UPDATE expenses
+  SET status = 'approved',
+      approved_by = v_me,
+      approved_at = now()
+  WHERE id = p_expense_id;
+END;
+$$;
 
 -- ----------------------------------------------------------------------------
 -- 10. 7C writer RPCs — additive-optional budget-line targets (§4.4, Phase 2

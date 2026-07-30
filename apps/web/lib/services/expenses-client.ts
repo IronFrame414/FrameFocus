@@ -144,8 +144,9 @@ export async function getOrCreateMiscBudgetLine(projectId: string): Promise<Crea
   return { success: true, id: data as string };
 }
 
-/** Captured split for the review popup (approval ADJUSTS the split — edits
- *  rows in place, then approves with no new allocations). */
+/** Captured split for the review popup's adjust-mode (S93 A-6): loaded as
+ *  the popup's initial state; approveExpense then RECONCILES — the passed
+ *  set replaces these rows. */
 export interface ExpenseAllocationRow {
   id: string;
   budget_item_id: string;
@@ -237,9 +238,12 @@ export interface AllocationInput {
 }
 
 /**
- * Approve + allocate atomically via the approve_expense RPC (migration
- * 20260728010000 — SECURITY INVOKER; validates Owner/Admin, pending, lines on
- * the expense's project, Σ ≤ amount). Zero allocations is legal (Option B).
+ * Approve + RECONCILE the split atomically via the approve_expense RPC
+ * (7A original 20260728010000, amended by 20260730010000 §9b / A-6 —
+ * SECURITY INVOKER). The passed allocations REPLACE whatever exists for the
+ * expense; the final state must be zero allocations (Option B — still
+ * legal) or Σ = expense amount exactly (cent-tolerant). Validates
+ * Owner/Admin, pending, lines on the expense's project.
  */
 export async function approveExpense(
   id: string,

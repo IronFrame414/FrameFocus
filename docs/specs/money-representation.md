@@ -138,6 +138,25 @@
   allocations is legal" (`:126-128`) is superseded for new expenses: capture
   requires ≥1 allocation with Σ = amount (§4.4).
 - **A-5: Budget (5E / ui-05) and Job Cost (7A §5.6) screens merge** — see §7.
+- **A-6: `approve_expense` reconciles the split (7A §3.3 amended — added
+  2026-07-30, S93 follow-up).** Split-at-capture (§4.4) turned approval into
+  an ADJUSTMENT of an existing split, but the shipped 7A RPC blindly
+  appended the passed allocations and its Σ guard summed only the passed
+  rows — capture + approval double-wrote the split and could stack past the
+  expense amount. Amended semantics: the passed set REPLACES the existing
+  rows (hard delete — the UNIQUE (expense_id, budget_item_id) constraint
+  has no is_deleted predicate, so a soft-deleted row would collide with its
+  replacement), and the guard checks the FINAL state — zero allocations
+  (Option B stands: committed rows, jobs with no budget lines) or Σ =
+  expense amount exactly (cent-tolerant). The review popup shifts to
+  adjust-mode: captured allocations load as its initial state — for
+  committed rows too, whose split section stays hidden: their captured
+  single-line target (§4.4) passes through scaled to the possibly-corrected
+  amount (the `set_po_total_amount` single-allocation rule), because under
+  replace semantics an unseeded committed row would have its budget target
+  wiped at approval. This widens
+  the §5.3 extent — `approve_expense` is the one 7A function this migration
+  amends.
 - **A-6: no backfill (P10).** Pre-spec budget lines (pre-tax, or
   sell-as-budget fallback rows), pre-spec expenses without allocations, and
   pre-spec flat lines without cost are left as-is and disregarded. No
@@ -554,6 +573,8 @@ Per §4.5: new `recompute_budget_item_committed()`, amended
 and the settlement flip (`:728-731`) stay exactly as shipped;
 `setup_payment_schedule` and `set_po_total_amount` gain additive-optional
 budget-line-target parameters (§4.4); nothing else in 7C moves.
+**7A extent [A-6, S93 follow-up]:** `approve_expense` is amended to
+reconcile-not-append (see A-6) — the one 7A object this migration touches.
 
 ### 5.4 `FINANCIAL-RLS-FLOOR` — relationship to this spec
 

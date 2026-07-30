@@ -8,6 +8,13 @@
 // (Q4) with live unallocated remainder and inline "+ Add budget line" (Q4b),
 // Approve (zero allocations legal — Option B) | Reject (note required).
 //
+// S93 A-6 — ADJUST-MODE: split-at-capture means allocations usually already
+// exist, so the captured split loads as this popup's initial state and
+// approve_expense RECONCILES (the passed set replaces the rows). A nonzero
+// split must equal the expense amount exactly; clearing every input approves
+// with no split (Option B). Reassigning the job clears the split — the old
+// project's lines no longer apply, and reconcile drops their rows.
+//
 // 7C §4.2 — committed rows (bills/commitments/stages) share this popup.
 // Allocations write budget actual_amount, so the section is HIDDEN for
 // committed rows (they settle through payments, not allocations) and approval
@@ -20,6 +27,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   approveExpense,
   createAdHocBudgetLine,
+  listExpenseAllocations,
   listProjectBudgetLines,
   reassignExpenseProject,
   rejectExpense,
@@ -93,17 +101,42 @@ export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: Re
   }, []);
 
   useEffect(() => {
-    void loadLines(projectId);
+    void (async () => {
+      await loadLines(projectId);
+      // Adjust-mode (S93 A-6): the captured split is the starting point.
+      // Committed rows seed too — their section is hidden, but reconcile
+      // replaces what is passed, so an unseeded committed row would have
+      // its §4.4 budget-line target wiped on approval.
+      const captured = await listExpenseAllocations(expense.id);
+      if (captured.length === 0) return;
+      const seeded: Record<string, string> = {};
+      for (const row of captured) {
+        const prior = Number(seeded[row.budget_item_id] ?? 0);
+        seeded[row.budget_item_id] = (prior + row.amount).toFixed(2);
+      }
+      setAllocations(seeded);
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const parsedAmount = Number(amount);
-  const allocationEntries = Object.entries(allocations)
+  const rawEntries = Object.entries(allocations)
     .map(([budget_item_id, v]) => ({ budget_item_id, amount: Number(v) }))
     .filter((a) => !Number.isNaN(a.amount) && a.amount > 0);
+  // Committed rows hide the split editor, so their captured single-line
+  // target silently tracks the (possibly corrected) amount — the same
+  // single-allocation rule set_po_total_amount applies on adjust.
+  const allocationEntries =
+    isCommitted && rawEntries.length === 1 && !Number.isNaN(parsedAmount) && parsedAmount > 0
+      ? [{ budget_item_id: rawEntries[0].budget_item_id, amount: parsedAmount }]
+      : rawEntries;
   const allocatedTotal = allocationEntries.reduce((sum, a) => sum + a.amount, 0);
   const unallocated = (Number.isNaN(parsedAmount) ? 0 : parsedAmount) - allocatedTotal;
   const overAllocated = unallocated < -0.004; // cent-tolerant
+  // A-6: a split, if present, must cover the expense exactly — the RPC's
+  // final-state guard enforces it; this mirrors it so approve stays enabled
+  // only when legal (zero allocations remains legal, Option B).
+  const splitMismatch = allocationEntries.length > 0 && Math.abs(unallocated) > 0.004;
 
   /** Selecting an empty line pre-fills it with the unallocated remainder —
    *  the first line selected gets the full expense amount. Editable after;
@@ -169,8 +202,10 @@ export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: Re
       setError('Amount must be greater than zero.');
       return;
     }
-    if (overAllocated) {
-      setError('Allocations exceed the expense amount.');
+    if (splitMismatch) {
+      setError(
+        'A split must equal the expense amount exactly — finish allocating or clear every line to approve without a split.'
+      );
       return;
     }
     setBusy(true);
@@ -347,7 +382,7 @@ export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: Re
         )}
         <div style={{ marginBottom: '16px', display: isCommitted ? 'none' : undefined }}>
           <p style={{ ...microLabelStyle, marginBottom: '8px' }}>
-            Allocate to budget lines (optional)
+            Allocate to budget lines (full amount or none)
           </p>
           {lines === null ? (
             <p style={{ fontSize: '13px', color: color.faint, margin: 0 }}>Loading budget lines…</p>
@@ -445,12 +480,16 @@ export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: Re
             style={{
               fontSize: '13px',
               fontWeight: 600,
-              color: overAllocated ? color.danger : color.navy,
+              color: splitMismatch ? color.danger : color.navy,
               margin: '10px 0 0',
             }}
           >
             Unallocated: {fmtMoney(unallocated)}
-            {overAllocated && ' — allocations exceed the expense amount'}
+            {overAllocated
+              ? ' — allocations exceed the expense amount'
+              : splitMismatch
+                ? ' — a split must equal the expense amount exactly (or clear it to approve without one)'
+                : ''}
           </p>
         </div>
 
@@ -496,8 +535,8 @@ export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: Re
               Reject…
             </button>
             <button
-              style={{ ...primaryButtonStyle, opacity: busy || overAllocated ? 0.6 : 1 }}
-              disabled={busy || overAllocated}
+              style={{ ...primaryButtonStyle, opacity: busy || splitMismatch ? 0.6 : 1 }}
+              disabled={busy || splitMismatch}
               onClick={() => void handleApprove()}
             >
               {busy ? 'Saving…' : 'Approve'}
