@@ -2,8 +2,10 @@ import { createClient } from '@/lib/supabase-browser';
 import type { Database } from '@framefocus/shared/types/database';
 import {
   applyInstrumentRateOverrides,
+  assertInstrumentRatesInForce,
   computeEstimateTotals,
   computeLineTotalsFromRows,
+  NoRateInForceError,
   type ContractType,
   type EstimateMarkupDefaults,
   type InstrumentPricingContext,
@@ -612,6 +614,15 @@ export async function recalculateEstimateTotals(estimateId: string): Promise<Res
     { estimate_id: estimateId },
     contractType
   );
+
+  // A rateless non-fixed instrument must never price (0% would silently sell
+  // at cost) — bail BEFORE any row/line/total is persisted.
+  try {
+    assertInstrumentRatesInForce(rateCtx);
+  } catch (e) {
+    if (e instanceof NoRateInForceError) return { success: false, error: e.message };
+    throw e;
+  }
 
   const { data: lines, error: linesError } = await supabase
     .from('estimate_line_items')

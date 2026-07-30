@@ -2,7 +2,9 @@ import { createClient } from '@/lib/supabase-browser';
 import type { Database } from '@framefocus/shared/types/database';
 import {
   applyInstrumentRateOverrides,
+  assertInstrumentRatesInForce,
   computeLineTotalsFromRows,
+  NoRateInForceError,
   roundMoney,
   type ContractType,
   type EstimateMarkupDefaults,
@@ -453,6 +455,15 @@ export async function recalculateChangeOrderTotals(changeOrderId: string): Promi
     { change_order_id: changeOrderId },
     (co.co_type ?? 'fixed_price') as ContractType
   );
+
+  // A rateless non-fixed instrument must never price (0% would silently sell
+  // at cost) — bail BEFORE any row/line/net_delta is persisted.
+  try {
+    assertInstrumentRatesInForce(rateCtx);
+  } catch (e) {
+    if (e instanceof NoRateInForceError) return { success: false, error: e.message };
+    throw e;
+  }
 
   const { data: lines, error: linesError } = await supabase
     .from('change_order_line_items')

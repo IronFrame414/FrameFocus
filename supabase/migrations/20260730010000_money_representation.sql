@@ -110,6 +110,14 @@ $$;
 -- one column, flat-priced lines only, Owner/Admin/PM (the conversion
 -- audience, §7.3), never after conversion. It records a cost basis — it can
 -- never move sell.
+-- Visibility: SECURITY DEFINER bypasses RLS, so the function re-checks the
+-- estimates SELECT policy (estimates_select_authenticated) itself:
+--   (company_id = get_my_company_id())
+--   AND (get_my_role() IN ('owner','admin')
+--        OR (get_my_role() = 'project_manager' AND created_by = auth.uid()))
+-- Company is enforced on the line lookup; the PM arm is enforced on the
+-- parent estimate below. Without it a PM could write override_cost on
+-- estimates they cannot SELECT.
 CREATE FUNCTION public.set_line_override_cost(
   p_line_id uuid,
   p_cost numeric
@@ -148,6 +156,15 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'set_line_override_cost: estimate not found';
   END IF;
+
+  -- PM arm of the estimates SELECT policy (see header): a PM may only touch
+  -- estimates they created. Same message as the not-found branch — to a PM,
+  -- an invisible estimate and a nonexistent one must be indistinguishable.
+  IF public.get_my_role() = 'project_manager'
+     AND v_estimate.created_by IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION 'set_line_override_cost: estimate not found';
+  END IF;
+
   IF v_estimate.status = 'converted' OR v_estimate.project_id IS NOT NULL THEN
     RAISE EXCEPTION 'set_line_override_cost: this estimate is already converted';
   END IF;
@@ -292,9 +309,20 @@ CREATE POLICY instrument_rates_insert_authorized ON public.instrument_rates
 -- is retained and there is no un-supersede. Rate-in-force lookups exclude
 -- superseded rows, so a correction retroactively fixes derived sell
 -- computed under the typo — intended.
+-- Rateless guard: superseding must never leave the instrument+rate_type
+-- with NO live rate — a rateless cost-plus/T&M instrument has no defined
+-- sell (the TS side refuses to price it). The replacement is written in the
+-- SAME transaction (both replacement params or neither); when other live
+-- rates of the type remain, the replacement may be omitted. The replacement
+-- INSERT runs after the stamp, so the unique indexes and the backdating
+-- guard see the superseded row excluded — it may reuse the typo's exact
+-- date (§5.5), and the guard still rejects future dates and dates before
+-- any remaining live rate.
 CREATE FUNCTION public.supersede_instrument_rate(
   p_rate_id uuid,
-  p_reason text
+  p_reason text,
+  p_replacement_rate numeric DEFAULT NULL,
+  p_replacement_effective_from date DEFAULT NULL
 ) RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER
 SET search_path TO 'public'
@@ -307,6 +335,12 @@ BEGIN
   END IF;
   IF p_reason IS NULL OR btrim(p_reason) = '' THEN
     RAISE EXCEPTION 'supersede_instrument_rate: a reason is required';
+  END IF;
+  IF (p_replacement_rate IS NULL) <> (p_replacement_effective_from IS NULL) THEN
+    RAISE EXCEPTION 'supersede_instrument_rate: a replacement needs both a rate and an effective date';
+  END IF;
+  IF p_replacement_rate IS NOT NULL AND p_replacement_rate < 0 THEN
+    RAISE EXCEPTION 'supersede_instrument_rate: the replacement rate must be zero or more';
   END IF;
 
   SELECT * INTO v_rate
@@ -326,6 +360,28 @@ BEGIN
       superseded_by = auth.uid(),
       superseded_reason = btrim(p_reason)
   WHERE id = p_rate_id;
+
+  -- Replacement in the same transaction. The BEFORE INSERT backdating guard
+  -- and the partial unique indexes apply as on any insert.
+  IF p_replacement_rate IS NOT NULL THEN
+    INSERT INTO instrument_rates (
+      company_id, estimate_id, change_order_id, rate_type, rate, effective_from
+    ) VALUES (
+      v_rate.company_id, v_rate.estimate_id, v_rate.change_order_id,
+      v_rate.rate_type, p_replacement_rate, p_replacement_effective_from
+    );
+  END IF;
+
+  -- Final-state guard: the instrument+rate_type must still have a live rate.
+  PERFORM 1
+  FROM instrument_rates
+  WHERE rate_type = v_rate.rate_type
+    AND superseded_at IS NULL
+    AND ((v_rate.estimate_id IS NOT NULL AND estimate_id = v_rate.estimate_id)
+      OR (v_rate.change_order_id IS NOT NULL AND change_order_id = v_rate.change_order_id));
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'supersede_instrument_rate: this would leave the instrument with no % in force — provide a replacement rate', v_rate.rate_type;
+  END IF;
 END;
 $$;
 

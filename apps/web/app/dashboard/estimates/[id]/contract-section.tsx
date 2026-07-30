@@ -66,6 +66,15 @@ export function ContractSection({ estimate, canEditSettings, reload }: ContractS
 
   const today = new Date().toISOString().slice(0, 10);
 
+  // Rateless guard surface: rate types the contract type requires but which
+  // have nothing in force (never set, or the only rate was superseded).
+  // Recompute refuses to price a rateless instrument — it would otherwise
+  // persist zero-margin totals — so say why totals are frozen.
+  const missingRates =
+    contractType === 'fixed_price'
+      ? []
+      : RATE_FIELDS[contractType].filter((f) => rateInForce(rates, f.rateType, today) == null);
+
   async function handleTypeChange(next: ContractType) {
     if (next === contractType) return;
     const ok = window.confirm(
@@ -160,6 +169,22 @@ export function ContractSection({ estimate, canEditSettings, reload }: ContractS
 
       {contractType !== 'fixed_price' && (
         <>
+          {missingRates.length > 0 && (
+            <div
+              style={{
+                padding: '0.5rem 0.75rem',
+                borderRadius: '0.375rem',
+                marginBottom: '0.5rem',
+                backgroundColor: '#fffbeb',
+                border: '1px solid #fde68a',
+                color: '#92400e',
+                fontSize: '0.8125rem',
+              }}
+            >
+              No rate in force ({missingRates.map((f) => f.label).join(', ')}) — totals cannot
+              recalculate until {missingRates.length === 1 ? 'a rate is' : 'rates are'} set.
+            </div>
+          )}
           {RATE_FIELDS[contractType].map((field) => (
             <div key={field.rateType} style={rowStyle}>
               <span style={fieldLabel}>{field.label}</span>

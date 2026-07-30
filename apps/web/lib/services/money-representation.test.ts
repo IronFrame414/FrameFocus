@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import {
   applyInstrumentRateOverrides,
+  assertInstrumentRatesInForce,
   computeLineTotalsFromRows,
   computeRowBudgetCost,
   computeRowPricing,
   deriveCostPlusSell,
   deriveTmLaborSell,
+  NoRateInForceError,
   type RowPricingInput,
 } from '@framefocus/shared/utils/estimate-totals';
 
@@ -107,6 +109,43 @@ describe('applyInstrumentRateOverrides (P4 — negotiated rate overrides per-row
     });
     expect(out.map((r) => r.markup_percent)).toEqual([15, 20, 20]);
   });
+
+  it('a rateless cost_plus instrument throws — never 0% (zero-margin) fallback', () => {
+    expect(() =>
+      applyInstrumentRateOverrides(rows, { contract_type: 'cost_plus', cost_plus_percent: null })
+    ).toThrow(NoRateInForceError);
+    expect(() =>
+      applyInstrumentRateOverrides(rows, { contract_type: 'cost_plus' })
+    ).toThrow(NoRateInForceError);
+  });
+
+  it('a T&M instrument missing either rate throws', () => {
+    expect(() =>
+      applyInstrumentRateOverrides(rows, {
+        contract_type: 'time_and_materials',
+        tm_labor_hourly: 85,
+        tm_nonlabor_percent: null,
+      })
+    ).toThrow(NoRateInForceError);
+    expect(() =>
+      applyInstrumentRateOverrides(rows, {
+        contract_type: 'time_and_materials',
+        tm_labor_hourly: null,
+        tm_nonlabor_percent: 20,
+      })
+    ).toThrow(NoRateInForceError);
+  });
+
+  it('assertInstrumentRatesInForce names the missing rate type', () => {
+    try {
+      assertInstrumentRatesInForce({ contract_type: 'cost_plus', cost_plus_percent: null });
+      expect.unreachable('should have thrown');
+    } catch (e) {
+      expect(e).toBeInstanceOf(NoRateInForceError);
+      expect((e as NoRateInForceError).rateType).toBe('cost_plus_percent');
+    }
+    expect(() => assertInstrumentRatesInForce({ contract_type: 'fixed_price' })).not.toThrow();
+  });
 });
 
 describe('T&M labor pricing (tm_labor_hourly passthrough)', () => {
@@ -147,7 +186,7 @@ describe('T&M labor pricing (tm_labor_hourly passthrough)', () => {
     expect(totals.total_price).toBe(970);
   });
 
-  it('without the rate, labor prices by the ordinary markup path (regression)', () => {
+  it('on a NON-T&M instrument (tm_labor_hourly undefined), labor prices by the ordinary markup path (regression)', () => {
     const p = computeRowPricing({
       row: { ...labor(28, 10), markup_percent: 15 },
       pricing_mode: 'markup',
@@ -155,5 +194,17 @@ describe('T&M labor pricing (tm_labor_hourly passthrough)', () => {
       defaults: {},
     });
     expect(p.total).toBe(322); // 280 × 1.15
+  });
+
+  it('on a T&M instrument with NO labor rate in force (null), labor throws — never the markup fallback (contract-type downgrade)', () => {
+    expect(() =>
+      computeRowPricing({
+        row: { ...labor(28, 10), markup_percent: 15 },
+        pricing_mode: 'markup',
+        tax_rate: 8.25,
+        defaults: {},
+        tm_labor_hourly: null,
+      })
+    ).toThrow(NoRateInForceError);
   });
 });

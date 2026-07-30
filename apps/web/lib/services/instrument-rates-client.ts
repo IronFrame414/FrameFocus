@@ -74,18 +74,36 @@ export async function addInstrumentRate(
 
 /** Owner-only typo correction (§5.5): stamps the row superseded with a
  *  required reason; the original stays for audit and drops out of
- *  rate-in-force. The replacement rate, if needed, is an ordinary add. */
+ *  rate-in-force. The replacement is written by the RPC in the SAME
+ *  transaction; the RPC rejects any supersede that would leave the
+ *  instrument+rate_type with no live rate (a rateless instrument cannot
+ *  price), so omit the replacement only when another live rate of the type
+ *  remains. The replacement may reuse the superseded row's exact date. */
 export async function supersedeInstrumentRate(
   rateId: string,
-  reason: string
+  reason: string,
+  replacement?: { rate: number; effectiveFrom: string }
 ): Promise<MutationResult> {
   if (!reason.trim()) return { success: false, error: 'A reason is required to supersede a rate.' };
+  if (replacement && !(replacement.rate >= 0)) {
+    return { success: false, error: 'The replacement rate must be zero or more.' };
+  }
 
   const supabase = createClient();
   const { error } = await supabase.rpc('supersede_instrument_rate', {
     p_rate_id: rateId,
     p_reason: reason.trim(),
+    p_replacement_rate: replacement?.rate,
+    p_replacement_effective_from: replacement?.effectiveFrom,
   });
-  if (error) return { success: false, error: error.message };
+  if (error) {
+    if (error.message.includes('provide a replacement rate')) {
+      return {
+        success: false,
+        error: 'This is the only rate in force — superseding it requires a replacement rate in the same step.',
+      };
+    }
+    return { success: false, error: error.message };
+  }
   return { success: true };
 }

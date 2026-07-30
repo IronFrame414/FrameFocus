@@ -5263,7 +5263,12 @@ export type Database = {
         Returns: Json
       }
       supersede_instrument_rate: {
-        Args: { p_rate_id: string; p_reason: string }
+        Args: {
+          p_rate_id: string
+          p_reason: string
+          p_replacement_effective_from?: string
+          p_replacement_rate?: number
+        }
         Returns: undefined
       }
       switch_pricing_mode: {
