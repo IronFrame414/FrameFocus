@@ -135,6 +135,71 @@ export function resolveRowMarkupPercent(
   }
 }
 
+// ── Money-representation additions (docs/specs/money-representation.md) ──
+
+/**
+ * Budget cost of a row (spec §5.1 / A-1): pre-markup cost, TAX-INCLUSIVE on
+ * any taxed row except labor (labor is never taxed by construction — the
+ * type-column CHECK pins apply_tax = false). TS mirror of the SQL cost
+ * mapping in convert_estimate_to_project / apply_change_order_budget
+ * (migration 20260730010000). Tax here is never client-facing — it is cost
+ * measurement only (P3).
+ */
+export function computeRowBudgetCost(
+  row: RowPricingInput,
+  taxRate: number | null | undefined
+): number {
+  const cost = computeRowCost(row);
+  if (row.row_type === 'labor' || !row.apply_tax) return cost;
+  return roundMoney(cost * (1 + (taxRate ?? 0) / 100));
+}
+
+/** Sell for a cost under a negotiated cost-plus (or T&M non-labor) markup
+ *  rate — the rate OVERRIDES per-row markup and estimate defaults (P4). */
+export function deriveCostPlusSell(cost: number, ratePercent: number): number {
+  return roundMoney(cost * (1 + ratePercent / 100));
+}
+
+/** T&M labor sell: man-hours × the negotiated flat rate. Sell-side only —
+ *  overhead + profit are baked into the rate; it never touches cost, markup,
+ *  or the burden multiplier (spec §4.2). */
+export function deriveTmLaborSell(hours: number, hourlyRate: number): number {
+  return roundMoney(hours * hourlyRate);
+}
+
+export type ContractType = 'fixed_price' | 'cost_plus' | 'time_and_materials';
+
+export interface InstrumentPricingContext {
+  contract_type: ContractType;
+  /** Rate in force for a cost-plus instrument (cost_plus_percent). */
+  cost_plus_percent?: number | null;
+  /** Rates in force for a T&M instrument. */
+  tm_labor_hourly?: number | null;
+  tm_nonlabor_percent?: number | null;
+}
+
+/**
+ * Applies the instrument's negotiated-rate overrides to row inputs (P4):
+ * cost-plus — every row's markup_percent becomes the negotiated rate;
+ * T&M — non-labor rows take tm_nonlabor_percent (labor rows are priced by
+ * deriveTmLaborSell via the tm_labor_hourly passthrough below, so their
+ * markup is irrelevant). Fixed-price returns the rows untouched.
+ */
+export function applyInstrumentRateOverrides(
+  rows: RowPricingInput[],
+  ctx: InstrumentPricingContext
+): RowPricingInput[] {
+  if (ctx.contract_type === 'cost_plus') {
+    return rows.map((r) => ({ ...r, markup_percent: ctx.cost_plus_percent ?? 0 }));
+  }
+  if (ctx.contract_type === 'time_and_materials') {
+    return rows.map((r) =>
+      r.row_type === 'labor' ? r : { ...r, markup_percent: ctx.tm_nonlabor_percent ?? 0 }
+    );
+  }
+  return rows;
+}
+
 export interface RowPricing {
   cost: number;
   tax_amount: number;
@@ -151,8 +216,18 @@ export function computeRowPricing(input: {
   pricing_mode: PricingMode;
   tax_rate: number | null | undefined;
   defaults: EstimateMarkupDefaults;
+  /** T&M instruments only: labor rows price at hours × this rate (sell-side
+   *  flat rate, spec §4.2) instead of rate × qty × markup. */
+  tm_labor_hourly?: number | null;
 }): RowPricing {
   const cost = computeRowCost(input.row);
+  if (input.tm_labor_hourly != null && input.row.row_type === 'labor') {
+    return {
+      cost,
+      tax_amount: 0,
+      total: deriveTmLaborSell(input.row.quantity ?? 0, input.tm_labor_hourly),
+    };
+  }
   const taxable = input.row.row_type !== 'labor' && !!input.row.apply_tax;
   const tax = taxable ? roundMoney(cost * ((input.tax_rate ?? 0) / 100)) : 0;
   const markup = resolveRowMarkupPercent(input.row.row_type, input.row.markup_percent, input.defaults);
@@ -180,6 +255,8 @@ export function computeLineTotalsFromRows(input: {
   discount_type?: DiscountType | null;
   discount_amount?: number | null;
   total_price_override?: number | null;
+  /** T&M instruments only — see computeRowPricing. */
+  tm_labor_hourly?: number | null;
 }): LineTotals {
   let sum = 0;
   let tax = 0;
@@ -190,6 +267,7 @@ export function computeLineTotalsFromRows(input: {
       pricing_mode: input.pricing_mode,
       tax_rate: input.tax_rate,
       defaults: input.defaults,
+      tm_labor_hourly: input.tm_labor_hourly,
     });
     rowTotals.push(p.total);
     sum += p.total;
