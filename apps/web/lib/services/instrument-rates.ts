@@ -2,9 +2,12 @@ import { createClient } from '@/lib/supabase-server';
 import type { Database } from '@framefocus/shared/types/database';
 
 // Money representation §4.2/§6 — instrument-scoped negotiated rates.
-// Effective-dated, FORWARD-ONLY (DB trigger instrument_rates_forward_only,
-// migration 20260730010000), append-only except the Owner-only supersede
-// stamp (supersede_instrument_rate RPC). Rate-in-force = the non-superseded
+// Effective-dated; backdating bounded by the previous rate (P5 as amended:
+// the first rate per instrument+rate_type may be backdated to the signing
+// date, later rates land between the latest existing rate and today — DB
+// trigger instrument_rates_backdating_guard, migration 20260730010000).
+// Append-only except the Owner-only supersede stamp
+// (supersede_instrument_rate RPC). Rate-in-force = the non-superseded
 // row of the matching rate_type with the greatest effective_from ≤ the
 // as-of date.
 

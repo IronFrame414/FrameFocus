@@ -6,7 +6,9 @@ export { rateInForce } from '@/lib/services/instrument-rates';
 
 // Money representation §4.2/§6 — client writes for instrument rates.
 // INSERT is Owner/Admin (RLS instrument_rates_insert_authorized); the DB
-// trigger is the forward-only authority — this file just surfaces its error.
+// backdating guard is the authority (first rate per type: any date; later
+// rates: on/after the latest existing rate, never in the future) — this
+// file just surfaces its errors.
 // Supersede is Owner-ONLY, through the SECURITY DEFINER RPC (never a
 // direct UPDATE — the table has no UPDATE policy).
 
@@ -37,9 +39,10 @@ export async function getRateInForceToday(
   return rateInForce(rates, rateType, new Date().toISOString().slice(0, 10));
 }
 
-/** New rate row (initial negotiation or forward-only renegotiation).
- *  Owner/Admin. effective_from defaults to today; the DB trigger rejects
- *  past dates. */
+/** New rate row (initial negotiation or renegotiation). Owner/Admin.
+ *  effective_from defaults to today. The DB backdating guard is the
+ *  authority: the first rate of a type may be backdated (signing date);
+ *  later rates must land between the latest existing rate and today. */
 export async function addInstrumentRate(
   ref: InstrumentRef,
   rateType: InstrumentRateType,
@@ -57,8 +60,11 @@ export async function addInstrumentRate(
     effective_from: effectiveFrom ?? new Date().toISOString().slice(0, 10),
   });
   if (error) {
-    if (error.message.includes('forward-only') || error.message.includes('in the past')) {
-      return { success: false, error: 'Rates are forward-only — the effective date cannot be in the past.' };
+    if (error.message.includes('before the latest existing rate')) {
+      return { success: false, error: 'The effective date cannot be before the latest existing rate of this type — history before the previous rate is immutable.' };
+    }
+    if (error.message.includes('in the future')) {
+      return { success: false, error: 'A renegotiated rate cannot be dated in the future.' };
     }
     return { success: false, error: error.message };
   }

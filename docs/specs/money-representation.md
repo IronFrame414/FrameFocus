@@ -37,11 +37,20 @@
   or time & materials**, with its own negotiated rate(s) where applicable. No
   mixing within one instrument. A project may hold instruments of different
   types simultaneously.
-- **P5 — Negotiated rates are effective-dated and FORWARD-ONLY.** Both the
-  cost-plus markup rate and the T&M labor sell rate. A renegotiated rate
-  applies from its effective date forward; cost/hours mark up or bill at the
-  rate in force when incurred/worked. History is never rewritten —
-  forward-only is enforced by a database trigger (§5.5), not app-only.
+- **P5 — Negotiated rates are effective-dated; backdating is bounded by the
+  previous rate.** (Amended 2026-07-30, Josh's ruling — replaces the earlier
+  strict forward-only rule.) Both the cost-plus markup rate and the T&M
+  labor sell rate. A rate applies from its effective date forward;
+  cost/hours mark up or bill at the rate in force when incurred/worked. The
+  FIRST rate on an instrument+rate_type may take any `effective_from`,
+  including months back — it records the contract signing date. An
+  agreement is often struck days before it can be entered; the delay is
+  data entry, not a change in the deal. Costs entered between the handshake
+  and the entry DO reprice — correct, the deal was in force. LATER rates
+  must be dated on or after the latest existing rate for that
+  instrument+rate_type, and never in the future. This does not reopen OQ-8:
+  history before the previous rate is still immutable — the bound is
+  enforced by a database trigger (§5.5), not app-only.
 - **P6 — Signed COs write their OWN budget lines.** CO scope is tracked
   independently of the original contract's baseline, labeled by instrument.
 - **P7 — Every expense lands on budget lines via SPLIT-AT-CAPTURE
@@ -242,23 +251,27 @@ CREATE UNIQUE INDEX instrument_rates_co_type_date_key
   `20260728010000_7a_expenses_job_cost.sql:44`; time segment date for T&M
   labor).
 - **Rate correction (supersede).** Without it, a mistyped rate would be
-  permanent (append-only + no backdating). `supersede_instrument_rate()`
+  permanent (append-only + backdating bounded at the previous rate).
+  `supersede_instrument_rate()`
   (§5.5) marks a row superseded with a **required reason**, **Owner-only**;
   the original row is retained for audit and drops out of rate-in-force
   lookups — so derived sell computed under the typo is retroactively
-  corrected, which is the point. Forward-only still governs NEW rates: the
-  trigger (§5.5) is not weakened, and the replacement rate is an ordinary new
-  row subject to it.
+  corrected, which is the point. The backdating bound still governs NEW
+  rates: the trigger (§5.5) is not weakened, and the replacement rate is an
+  ordinary new row subject to it — superseded rows drop out of the trigger's
+  floor, so a correction can be re-dated back to the previous good rate.
 - A cost-plus instrument carries `cost_plus_percent` rows; a T&M instrument
   carries BOTH `tm_labor_hourly` and `tm_nonlabor_percent` rows. Fixed-price
   instruments carry none. All three rate types get identical treatment:
-  effective-dated, forward-only (trigger, §5.5), supersede-able (§5.5).
+  effective-dated, backdating-bounded (trigger, §5.5), supersede-able (§5.5).
 - On a cost-plus instrument `cost_plus_percent` — and on a T&M instrument
   `tm_nonlabor_percent` — **overrides** per-line/per-row `markup_percent` and
   the estimate-level markup defaults (`baseline_schema.sql:1323-1326`) for
   all sell derivation.
-- **Forward-only is DB-enforced:** the `instrument_rates_forward_only`
-  trigger (§5.5) rejects `effective_from` in the past. RLS: SELECT
+- **The backdating bound is DB-enforced:** the
+  `instrument_rates_backdating_guard` trigger (§5.5) leaves the first rate
+  per instrument+rate_type free-dated and pins later rates to
+  [latest existing non-superseded rate, today]. RLS: SELECT
   company-scoped; INSERT **Owner and Admin** (per the Admin Role Principle —
   rate renegotiation is not on the owner-only list); no UPDATE/DELETE
   policies (append-only) — the supersede stamp is applied only through the
@@ -274,7 +287,8 @@ ALTER TABLE public.project_budget_items
   ADD COLUMN is_miscellaneous boolean DEFAULT false NOT NULL;
 
 CREATE UNIQUE INDEX idx_project_budget_items_misc_one_per_project
-  ON public.project_budget_items (project_id) WHERE is_miscellaneous;
+  ON public.project_budget_items (project_id)
+  WHERE is_miscellaneous AND NOT is_deleted;
 ```
 
 - **Instrument of a line (derived, not stored):** `source_change_order_id`
@@ -558,11 +572,17 @@ columns to any `can_view_project()` role — known, accepted, reviewed-against.
   re-select). Caller must pass `can_view_project(p_project_id)` — checked
   inside the function. Lazy creation means it works for estimate-born,
   no-estimate, and T&M projects alike (OQ-9 resolution).
-- **`instrument_rates_forward_only`** — BEFORE INSERT trigger on
-  `instrument_rates`: `RAISE EXCEPTION` when `NEW.effective_from <
-  CURRENT_DATE`. Combined with the absence of UPDATE/DELETE policies, history
-  is immutable and rates can never be backdated (OQ-8 resolution — DB
-  trigger, not app-only). Unchanged by the supersede path below.
+- **`instrument_rates_backdating_guard`** — BEFORE INSERT trigger on
+  `instrument_rates` (P5 as amended 2026-07-30 — replaces the earlier
+  `instrument_rates_forward_only`). If no non-superseded row exists for the
+  same instrument+`rate_type`, the insert passes with any `effective_from`
+  (the first rate records the contract signing date). Otherwise it `RAISE
+  EXCEPTION`s when `NEW.effective_from` is before the latest existing
+  non-superseded rate's `effective_from`, or after `CURRENT_DATE`. Combined
+  with the absence of UPDATE/DELETE policies, history before the previous
+  rate is immutable (OQ-8 as amended — DB trigger, not app-only). Superseded
+  rows are excluded from the floor, so a correction after a supersede can be
+  re-dated back to the previous good rate.
 - **`supersede_instrument_rate(p_rate_id uuid, p_reason text) RETURNS void`**
   — SECURITY DEFINER RPC, **Owner-only** (checked inside — deliberately
   stricter than the Owner/Admin INSERT: correcting history is a bigger lever
@@ -571,7 +591,7 @@ columns to any `can_view_project()` role — known, accepted, reviewed-against.
   if already superseded). The original row is retained; there is no un-supersede.
   This RPC is the table's only mutation path — no UPDATE policy exists
   (§4.2). A replacement rate, if needed, is a normal INSERT still subject to
-  the forward-only trigger.
+  the backdating guard (which excludes superseded rows from its floor).
 
 ---
 
@@ -581,7 +601,7 @@ columns to any `can_view_project()` role — known, accepted, reviewed-against.
 | --- | --- |
 | `packages/shared/utils/estimate-totals.ts` | Sell math unchanged. Add `computeRowBudgetCost()` — cost × (1 + tax) for any taxed non-labor row (mirrors §5.1 SQL). Add `deriveCostPlusSell(cost, ratePercent)` and `deriveTmLaborSell(hours, hourlyRate)` honoring P4/P5: `cost_plus_percent` (cost-plus) and `tm_nonlabor_percent` (T&M non-labor) each override per-row markup / `resolveRowMarkupPercent` (`:119-136`); T&M labor rate is sell-only, no burden, no markup. Unit tests alongside (the `apps/web/lib/services/payables-shared.test.ts` precedent). |
 | `apps/web/lib/services/estimate-items-client.ts` | Flat-price lines persist `override_cost`. Settings save persists `contract_type` and the user-entered `projected_value` (nullable — never derived or defaulted from totals). Cost-plus estimates: sell derivation swaps per-row markup for the rate in force. T&M estimates: labor rows display sell at `tm_labor_hourly` (hours × rate); non-labor rows price at the `tm_nonlabor_percent` rate in force. Recompute (`:554-609`) structure untouched. |
-| New `apps/web/lib/services/instrument-rates(-client).ts` | Server/client pair for `instrument_rates`: list (rate-in-force + history, superseded rows included but marked), append (Owner/Admin; the DB trigger is the forward-only authority, the service surfaces its error), and supersede via the `supersede_instrument_rate` RPC (Owner-only, required reason). Standard service-pair pattern (CLAUDE.md → Service Layer Pattern). |
+| New `apps/web/lib/services/instrument-rates(-client).ts` | Server/client pair for `instrument_rates`: list (rate-in-force + history, superseded rows included but marked), append (Owner/Admin; the DB backdating guard is the authority — first rate per type free-dated, later rates floored at the latest existing rate and capped at today — the service surfaces its errors), and supersede via the `supersede_instrument_rate` RPC (Owner-only, required reason). Standard service-pair pattern (CLAUDE.md → Service Layer Pattern). |
 | `apps/web/lib/services/co-signing-service.ts` | `completeCoSignature()` calls `apply_change_order_budget` after the status flip (§5.2). |
 | `apps/web/lib/services/budget.ts` | `getBudgetRollup()` (`:35+`) gains: instrument grouping (original contract / per-CO / ad-hoc+misc); **remaining-committed derivation** (per §4.5 — joins `expense_payments` through allocations; displays remaining, not the stored gross); cost-to-date = actual + remaining. Fix the stale "pre-tax" comment (`:31-34`). |
 | `apps/web/lib/services/expenses-client.ts` | `createExpense` writes the expense **and its allocation split** (≥1 line, Σ = amount) in one flow; picker sourced from `listProjectBudgetLines` (`:257-267`) grouped by instrument, plus "Miscellaneous" resolving through `get_or_create_misc_budget_item`. `createAdHocBudgetLine` (`:186-210`) unchanged. |
@@ -669,7 +689,10 @@ sub-contract/PO entry surfaces (`payables-client.ts` consumers).
 **S-4: Rate history panel** — on the instrument (estimate detail / CO
 detail) for cost-plus and T&M instruments: rate list with effective dates;
 **"Renegotiate rate"** (Owner and Admin; append-only; date picker floors at
-today — the DB trigger §5.5 is the authority); **"Supersede rate"**
+the latest existing non-superseded rate for that type and caps at today —
+no floor when it is the instrument's first rate of that type, which may be
+backdated to the signing date; the DB trigger §5.5 is the authority);
+**"Supersede rate"**
 (**Owner-only**, required reason — the §5.5 RPC) for correcting a mistyped
 row. Superseded rows stay listed, struck through with their reason; they are
 excluded from rate-in-force.

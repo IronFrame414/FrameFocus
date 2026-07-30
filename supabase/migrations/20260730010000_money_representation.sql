@@ -8,7 +8,8 @@
 --   P1/P2  budgeted_amount is COST; sell is derived; no sell/tax columns.
 --   P3     budget cost is TAX-INCLUSIVE on any taxed row except labor (A-1).
 --   P4/P5  contract type + negotiated rates live on the instrument,
---          effective-dated, forward-only (DB trigger), supersede-able.
+--          effective-dated, backdating bounded by the previous rate (DB
+--          trigger; first rate free — the signing date), supersede-able.
 --   P6     signed COs write their own budget lines (apply_change_order_budget).
 --   P7     split-at-capture allocations; lazy Miscellaneous line.
 --   P8     committed_amount stores GROSS; actual gains NET commitment
@@ -23,7 +24,7 @@
 -- Contents:
 --   1. estimates — contract_type + projected_value (§4.2)
 --   2. estimate_line_items.override_cost + clone_estimate_line (§4.1)
---   3. instrument_rates — table, forward-only trigger, supersede RPC (§4.2)
+--   3. instrument_rates — table, backdating-guard trigger, supersede RPC (§4.2)
 --   4. project_budget_items — source_change_order_id, is_miscellaneous (§4.3)
 --   5. get_or_create_misc_budget_item (§5.5)
 --   6. convert_estimate_to_project — amended cost mapping (§5.1)
@@ -160,22 +161,49 @@ CREATE UNIQUE INDEX instrument_rates_co_type_date_key
   ON public.instrument_rates (change_order_id, rate_type, effective_from)
   WHERE change_order_id IS NOT NULL;
 
--- Forward-only is DB-enforced (OQ-8 resolution): reject effective_from in
--- the past. Combined with the absence of UPDATE/DELETE policies, history is
--- immutable and rates can never be backdated. Unchanged by supersede.
-CREATE OR REPLACE FUNCTION public.instrument_rates_forward_only()
+-- Backdating guard (OQ-8 as amended — Josh's ruling, S93 follow-up):
+--   * The FIRST rate on an instrument+rate_type may take ANY effective_from,
+--     including months back — it records the contract signing date. An
+--     agreement is often struck days before it can be entered; the delay is
+--     data entry, not a change in the deal. Costs dated between the
+--     handshake and the entry DO reprice — correct, the deal was in force.
+--   * LATER rates must be dated on or after the latest existing
+--     (non-superseded) rate for that instrument+rate_type, and never in the
+--     future.
+-- This does NOT reopen OQ-8: history before the previous rate stays
+-- immutable, and there are still no UPDATE/DELETE policies. Superseded rows
+-- drop out of the floor, so a correction (§5.5) can be re-dated back to the
+-- previous good rate.
+CREATE FUNCTION public.instrument_rates_backdating_guard()
 RETURNS TRIGGER AS $$
+DECLARE
+  v_latest date;
 BEGIN
-  IF NEW.effective_from < CURRENT_DATE THEN
-    RAISE EXCEPTION 'A rate cannot take effect in the past (effective_from %). Rates are forward-only.', NEW.effective_from;
+  SELECT MAX(effective_from) INTO v_latest
+  FROM public.instrument_rates
+  WHERE rate_type = NEW.rate_type
+    AND superseded_at IS NULL
+    AND ((NEW.estimate_id IS NOT NULL AND estimate_id = NEW.estimate_id)
+      OR (NEW.change_order_id IS NOT NULL AND change_order_id = NEW.change_order_id));
+
+  -- First rate: free dating — it records the signing date.
+  IF v_latest IS NULL THEN
+    RETURN NEW;
+  END IF;
+
+  IF NEW.effective_from < v_latest THEN
+    RAISE EXCEPTION 'A renegotiated rate cannot be dated before the latest existing rate (%). History before the previous rate is immutable.', v_latest;
+  END IF;
+  IF NEW.effective_from > CURRENT_DATE THEN
+    RAISE EXCEPTION 'A renegotiated rate cannot be dated in the future (effective_from %).', NEW.effective_from;
   END IF;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER instrument_rates_forward_only
+CREATE TRIGGER instrument_rates_backdating_guard
   BEFORE INSERT ON public.instrument_rates
-  FOR EACH ROW EXECUTE FUNCTION public.instrument_rates_forward_only();
+  FOR EACH ROW EXECUTE FUNCTION public.instrument_rates_backdating_guard();
 
 ALTER TABLE public.instrument_rates ENABLE ROW LEVEL SECURITY;
 
@@ -249,10 +277,14 @@ CREATE INDEX idx_project_budget_items_source_change_order_id
   ON public.project_budget_items (source_change_order_id)
   WHERE source_change_order_id IS NOT NULL;
 
--- At most one Miscellaneous line per project; makes lazy get-or-create
--- race-safe (insert → unique violation → re-select).
+-- At most one LIVE Miscellaneous line per project; makes lazy get-or-create
+-- race-safe (insert → unique violation → re-select). NOT is_deleted keeps
+-- the predicate aligned with the function's liveness view (§5.5): a
+-- soft-deleted Misc line must neither block the INSERT nor satisfy the
+-- re-select, or the function returns NULL without error.
 CREATE UNIQUE INDEX idx_project_budget_items_misc_one_per_project
-  ON public.project_budget_items (project_id) WHERE is_miscellaneous;
+  ON public.project_budget_items (project_id)
+  WHERE is_miscellaneous AND NOT is_deleted;
 
 -- ----------------------------------------------------------------------------
 -- 5. get_or_create_misc_budget_item (§5.5) — lazy, on first use (OQ-9).
@@ -294,7 +326,7 @@ BEGIN
   ) VALUES (
     v_company_id, p_project_id, 'Miscellaneous', 0, true, auth.uid()
   )
-  ON CONFLICT (project_id) WHERE is_miscellaneous DO NOTHING
+  ON CONFLICT (project_id) WHERE is_miscellaneous AND NOT is_deleted DO NOTHING
   RETURNING id INTO v_id;
 
   IF v_id IS NULL THEN
@@ -756,7 +788,7 @@ BEGIN
 END;
 $$;
 
-DROP TRIGGER expenses_recompute_on_change ON public.expenses;
+DROP TRIGGER IF EXISTS expenses_recompute_on_change ON public.expenses;
 CREATE TRIGGER expenses_recompute_on_change
   AFTER UPDATE ON public.expenses
   FOR EACH ROW
@@ -807,9 +839,9 @@ CREATE TRIGGER expense_payments_recompute_budget
 --    are inert — neither recompute counts them until status='approved'.
 -- ----------------------------------------------------------------------------
 
-DROP POLICY expense_allocations_insert_admin ON public.expense_allocations;
-DROP POLICY expense_allocations_update_admin ON public.expense_allocations;
-DROP POLICY expense_allocations_delete_admin ON public.expense_allocations;
+DROP POLICY IF EXISTS expense_allocations_insert_admin ON public.expense_allocations;
+DROP POLICY IF EXISTS expense_allocations_update_admin ON public.expense_allocations;
+DROP POLICY IF EXISTS expense_allocations_delete_admin ON public.expense_allocations;
 
 CREATE POLICY expense_allocations_insert_authorized ON public.expense_allocations
   FOR INSERT TO authenticated
@@ -1003,7 +1035,12 @@ $$;
 --      committed row is allocated in full to that line. On adjust, a single
 --      existing allocation tracks the new total (Σ = amount); multi-line
 --      splits are left for the review popup to reconcile.
-CREATE OR REPLACE FUNCTION public.set_po_total_amount(
+--      The shipped 7C signature (uuid, numeric) is dropped first: the added
+--      p_budget_item_id changes the argument list, so CREATE OR REPLACE
+--      would create an OVERLOAD beside it and every existing two-argument
+--      call would fail with "function is not unique".
+DROP FUNCTION IF EXISTS public.set_po_total_amount(uuid, numeric);
+CREATE FUNCTION public.set_po_total_amount(
   p_po_id uuid,
   p_amount numeric,
   p_budget_item_id uuid DEFAULT NULL
