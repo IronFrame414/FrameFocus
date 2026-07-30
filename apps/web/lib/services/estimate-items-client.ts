@@ -11,6 +11,7 @@ import {
   type InstrumentPricingContext,
   type RowPricingInput,
 } from '@framefocus/shared/utils/estimate-totals';
+import { rateInForce } from '@/lib/services/instrument-rates-shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
   DiscountType,
@@ -42,24 +43,21 @@ export async function loadInstrumentPricingContext(
       : query.eq('change_order_id', ref.change_order_id);
   const { data } = await query;
 
+  // Selection is the shared rateInForce (instrument-rates-shared.ts) — the
+  // one definition, not a re-statement of it.
   const today = new Date().toISOString().slice(0, 10);
-  const inForce = (rateType: string): number | null => {
-    let best: { effective_from: string; rate: number } | null = null;
-    for (const r of data ?? []) {
-      if (r.rate_type !== rateType || r.superseded_at !== null) continue;
-      if (r.effective_from > today) continue;
-      if (!best || r.effective_from > best.effective_from) best = r;
-    }
-    return best?.rate ?? null;
-  };
+  const rates = data ?? [];
 
   if (contractType === 'cost_plus') {
-    return { contract_type: 'cost_plus', cost_plus_percent: inForce('cost_plus_percent') };
+    return {
+      contract_type: 'cost_plus',
+      cost_plus_percent: rateInForce(rates, 'cost_plus_percent', today),
+    };
   }
   return {
     contract_type: 'time_and_materials',
-    tm_labor_hourly: inForce('tm_labor_hourly'),
-    tm_nonlabor_percent: inForce('tm_nonlabor_percent'),
+    tm_labor_hourly: rateInForce(rates, 'tm_labor_hourly', today),
+    tm_nonlabor_percent: rateInForce(rates, 'tm_nonlabor_percent', today),
   };
 }
 

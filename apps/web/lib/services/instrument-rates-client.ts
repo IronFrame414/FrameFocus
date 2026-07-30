@@ -1,10 +1,23 @@
 import { createClient } from '@/lib/supabase-browser';
-import type { InstrumentRate, InstrumentRateType, InstrumentRef } from '@/lib/services/instrument-rates';
-import { rateInForce } from '@/lib/services/instrument-rates';
-export type { InstrumentRate, InstrumentRateType, InstrumentRef } from '@/lib/services/instrument-rates';
-export { rateInForce } from '@/lib/services/instrument-rates';
+import type {
+  InstrumentRate,
+  InstrumentRateType,
+  InstrumentRef,
+} from '@/lib/services/instrument-rates-shared';
+import { rateInForce } from '@/lib/services/instrument-rates-shared';
+export type {
+  InstrumentRate,
+  InstrumentRateType,
+  InstrumentRef,
+  RateInForceInput,
+} from '@/lib/services/instrument-rates-shared';
+export { rateInForce } from '@/lib/services/instrument-rates-shared';
 
 // Money representation §4.2/§6 — client writes for instrument rates.
+// Types and the pure rateInForce live in instrument-rates-shared.ts (no
+// supabase import — safe in the client bundle). NEVER import a value from
+// instrument-rates.ts here: it pulls supabase-server → next/headers into
+// the client bundle and breaks the build (type-only imports are fine).
 // INSERT is Owner/Admin (RLS instrument_rates_insert_authorized); the DB
 // backdating guard is the authority (no future dates, ever; first rate per
 // type may backdate to the signing date; later rates on/after the latest
