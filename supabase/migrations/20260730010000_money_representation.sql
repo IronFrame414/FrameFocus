@@ -153,32 +153,44 @@ CREATE INDEX idx_instrument_rates_change_order_id ON public.instrument_rates USI
 
 -- Uniqueness (spec §4.2): a single UNIQUE across both instrument columns is
 -- a NO-OP — exactly one is always NULL and NULLs are distinct. Two partial
--- unique indexes instead, one per instrument column.
+-- unique indexes instead, one per instrument column. Superseded rows are
+-- excluded so a corrective rate (§5.5) can reuse the superseded typo's
+-- EXACT date — leaving even one day priced under the prior rate is not
+-- acceptable.
 CREATE UNIQUE INDEX instrument_rates_estimate_type_date_key
   ON public.instrument_rates (estimate_id, rate_type, effective_from)
-  WHERE estimate_id IS NOT NULL;
+  WHERE estimate_id IS NOT NULL AND superseded_at IS NULL;
 CREATE UNIQUE INDEX instrument_rates_co_type_date_key
   ON public.instrument_rates (change_order_id, rate_type, effective_from)
-  WHERE change_order_id IS NOT NULL;
+  WHERE change_order_id IS NOT NULL AND superseded_at IS NULL;
 
 -- Backdating guard (OQ-8 as amended — Josh's ruling, S93 follow-up):
---   * The FIRST rate on an instrument+rate_type may take ANY effective_from,
---     including months back — it records the contract signing date. An
---     agreement is often struck days before it can be entered; the delay is
---     data entry, not a change in the deal. Costs dated between the
---     handshake and the entry DO reprice — correct, the deal was in force.
+--   * NO rate may be dated in the future. Nothing legitimate needs one.
+--   * The FIRST rate on an instrument+rate_type may otherwise take ANY
+--     effective_from, including months back — it records the contract
+--     signing date. An agreement is often struck days before it can be
+--     entered; the delay is data entry, not a change in the deal. Costs
+--     dated between the handshake and the entry DO reprice — correct, the
+--     deal was in force.
 --   * LATER rates must be dated on or after the latest existing
---     (non-superseded) rate for that instrument+rate_type, and never in the
---     future.
+--     (non-superseded) rate for that instrument+rate_type.
 -- This does NOT reopen OQ-8: history before the previous rate stays
 -- immutable, and there are still no UPDATE/DELETE policies. Superseded rows
--- drop out of the floor, so a correction (§5.5) can be re-dated back to the
--- previous good rate.
+-- drop out of the floor (and out of the unique indexes above), so a
+-- correction (§5.5) can reuse the superseded typo's exact date.
+-- Documented known issues (accepted): CURRENT_DATE is UTC, so users in
+-- timezones ahead of UTC entering "today" late in their day can trip the
+-- future-date rejection; and concurrent renegotiations are not serialized —
+-- two simultaneous inserts can read the same floor.
 CREATE FUNCTION public.instrument_rates_backdating_guard()
 RETURNS TRIGGER AS $$
 DECLARE
   v_latest date;
 BEGIN
+  IF NEW.effective_from > CURRENT_DATE THEN
+    RAISE EXCEPTION 'A rate cannot be dated in the future (effective_from %).', NEW.effective_from;
+  END IF;
+
   SELECT MAX(effective_from) INTO v_latest
   FROM public.instrument_rates
   WHERE rate_type = NEW.rate_type
@@ -186,16 +198,13 @@ BEGIN
     AND ((NEW.estimate_id IS NOT NULL AND estimate_id = NEW.estimate_id)
       OR (NEW.change_order_id IS NOT NULL AND change_order_id = NEW.change_order_id));
 
-  -- First rate: free dating — it records the signing date.
+  -- First rate: backdate freely — it records the signing date.
   IF v_latest IS NULL THEN
     RETURN NEW;
   END IF;
 
   IF NEW.effective_from < v_latest THEN
     RAISE EXCEPTION 'A renegotiated rate cannot be dated before the latest existing rate (%). History before the previous rate is immutable.', v_latest;
-  END IF;
-  IF NEW.effective_from > CURRENT_DATE THEN
-    RAISE EXCEPTION 'A renegotiated rate cannot be dated in the future (effective_from %).', NEW.effective_from;
   END IF;
   RETURN NEW;
 END;

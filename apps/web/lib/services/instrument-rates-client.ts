@@ -6,9 +6,9 @@ export { rateInForce } from '@/lib/services/instrument-rates';
 
 // Money representation §4.2/§6 — client writes for instrument rates.
 // INSERT is Owner/Admin (RLS instrument_rates_insert_authorized); the DB
-// backdating guard is the authority (first rate per type: any date; later
-// rates: on/after the latest existing rate, never in the future) — this
-// file just surfaces its errors.
+// backdating guard is the authority (no future dates, ever; first rate per
+// type may backdate to the signing date; later rates on/after the latest
+// existing rate) — this file just surfaces its errors.
 // Supersede is Owner-ONLY, through the SECURITY DEFINER RPC (never a
 // direct UPDATE — the table has no UPDATE policy).
 
@@ -41,8 +41,9 @@ export async function getRateInForceToday(
 
 /** New rate row (initial negotiation or renegotiation). Owner/Admin.
  *  effective_from defaults to today. The DB backdating guard is the
- *  authority: the first rate of a type may be backdated (signing date);
- *  later rates must land between the latest existing rate and today. */
+ *  authority: no rate may be future-dated; the first rate of a type may be
+ *  backdated (signing date); later rates must land between the latest
+ *  existing rate and today. */
 export async function addInstrumentRate(
   ref: InstrumentRef,
   rateType: InstrumentRateType,
@@ -64,7 +65,7 @@ export async function addInstrumentRate(
       return { success: false, error: 'The effective date cannot be before the latest existing rate of this type — history before the previous rate is immutable.' };
     }
     if (error.message.includes('in the future')) {
-      return { success: false, error: 'A renegotiated rate cannot be dated in the future.' };
+      return { success: false, error: 'A rate cannot be dated in the future.' };
     }
     return { success: false, error: error.message };
   }
