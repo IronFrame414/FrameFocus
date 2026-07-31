@@ -22,6 +22,7 @@ import type {
 } from '@/lib/services/payables-client';
 import {
   deriveAwardBudgetLines,
+  reviseSubContractSchedule,
   setupPaymentSchedule,
   softDeletePayment,
   voidContractWithCloseout,
@@ -417,6 +418,12 @@ function SubSchedulePanel({
   // 113c stage 4: the §3.3 award tie, re-derived when the review opens —
   // exactly one candidate prefills the schedule; several defer to the picker.
   const [awardLines, setAwardLines] = useState<AwardBudgetLine[] | null>(null);
+  // 113c stage 5: revise-while-unsigned — the editor reopens seeded with the
+  // CURRENT stages (labels/amounts/targets fetched at open).
+  const [revising, setRevising] = useState(false);
+  const [reviseInitial, setReviseInitial] = useState<
+    { label: string; amount: string; budget_item_id: string }[] | null
+  >(null);
 
   async function openReview() {
     setBusy(true);
@@ -565,9 +572,56 @@ function SubSchedulePanel({
 
   const pendingStages = stages.filter((s) => s.status === 'pending');
 
+  // 113c §5 — revise is open only while formal-and-unsigned with NO payments
+  // (the RPC re-checks; signing or paying closes the path for good).
+  const hasPayments = rows.some((r) => r.payments.some((p) => !p.is_deleted));
+  const canRevise =
+    isOwnerAdmin &&
+    contract.requires_formal_contract &&
+    contract.status !== 'signed' &&
+    contract.status !== 'void' &&
+    !hasPayments;
+
+  async function openRevise() {
+    setBusy(true);
+    const seeded = await Promise.all(
+      stages.map(async (s) => {
+        const allocs = await listExpenseAllocations(s.id);
+        return {
+          label: s.stage_label ?? '',
+          amount: String(s.amount),
+          budget_item_id: allocs[0]?.budget_item_id ?? '',
+        };
+      })
+    );
+    setReviseInitial(seeded);
+    setBusy(false);
+    setRevising(true);
+  }
+
   return (
     <div style={{ marginTop: '0.5rem', paddingLeft: '0.75rem', borderLeft: '2px solid #eef1f6' }}>
       {formalToggle}
+      {canRevise && !revising && (
+        <button style={smallButton} disabled={busy} onClick={() => void openRevise()}>
+          Revise schedule
+        </button>
+      )}
+      {revising && reviseInitial && (
+        <ScheduleSetupEditor
+          contract={contract}
+          hideAmounts={!isOwnerAdmin}
+          initialStages={reviseInitial}
+          reviseMode
+          onCancel={() => setRevising(false)}
+          onDone={(warning) => {
+            setRevising(false);
+            setReviseInitial(null);
+            if (warning) setNotice(warning);
+            router.refresh();
+          }}
+        />
+      )}
       {pendingStages.length > 0 && isOwnerAdmin && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.375rem' }}>
           <span style={{ fontSize: '0.75rem', color: '#92400e' }}>
@@ -734,6 +788,8 @@ function ScheduleSetupEditor({
   contract,
   hideAmounts,
   prefillBudgetItemId,
+  initialStages,
+  reviseMode,
   onCancel,
   onDone,
 }: {
@@ -743,6 +799,12 @@ function ScheduleSetupEditor({
   /** 113c §4 — the §3.3 award tie when it is UNAMBIGUOUS (exactly one
    *  candidate line); null defers entirely to the picker. */
   prefillBudgetItemId?: string | null;
+  /** 113c §5 — revise mode seeds the editor with the CURRENT stages. */
+  initialStages?: { label: string; amount: string; budget_item_id: string }[];
+  /** 113c §5 — revise-while-unsigned: adds the contract-value input and
+   *  routes save through revise_sub_contract_schedule (tear down +
+   *  re-setup, one transaction; stages land pending → re-approve). */
+  reviseMode?: boolean;
   onCancel: () => void;
   /** Called on success; receives the RPC's advisory warning, if any. */
   onDone: (warning?: string) => void;
@@ -753,16 +815,27 @@ function ScheduleSetupEditor({
   // 113c stage 4: a draft's first stage prefills from the contract — full
   // contract_value on the derived award line (single-stage confirm is the
   // common case; the user reshapes freely before save).
-  const [stages, setStages] = useState<{ label: string; amount: string; budget_item_id: string }[]>([
-    {
-      label: '',
-      amount: contract.contract_value !== null ? String(contract.contract_value) : '',
-      budget_item_id: prefillBudgetItemId ?? '',
-    },
-  ]);
+  const [stages, setStages] = useState<{ label: string; amount: string; budget_item_id: string }[]>(
+    initialStages && initialStages.length > 0
+      ? initialStages
+      : [
+          {
+            label: '',
+            amount: contract.contract_value !== null ? String(contract.contract_value) : '',
+            budget_item_id: prefillBudgetItemId ?? '',
+          },
+        ]
+  );
   const [lines, setLines] = useState<BudgetLineOption[] | null>(null);
-  const [retainageShape, setRetainageShape] = useState<'' | 'percent_across' | 'final_hold'>('');
-  const [retainagePercent, setRetainagePercent] = useState('');
+  const [retainageShape, setRetainageShape] = useState<'' | 'percent_across' | 'final_hold'>(
+    (contract.retainage_shape as '' | 'percent_across' | 'final_hold' | null) ?? ''
+  );
+  const [retainagePercent, setRetainagePercent] = useState(
+    contract.retainage_percent !== null ? String(contract.retainage_percent) : ''
+  );
+  const [reviseValue, setReviseValue] = useState(
+    contract.contract_value !== null ? String(contract.contract_value) : ''
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -791,6 +864,11 @@ function ScheduleSetupEditor({
       setError('Every stage needs a budget line — stages always target a real line (never Miscellaneous).');
       return;
     }
+    const revisedValue = reviseMode && reviseValue.trim() !== '' ? Number(reviseValue) : null;
+    if (reviseMode && revisedValue !== null && !(revisedValue > 0)) {
+      setError('The contract value must be greater than zero.');
+      return;
+    }
     setBusy(true);
     setError(null);
     const parsed: ScheduleStageInput[] = included.map((s) => ({
@@ -798,16 +876,15 @@ function ScheduleSetupEditor({
       amount: Number(s.amount),
       budget_item_id: s.budget_item_id,
     }));
-    const res = await setupPaymentSchedule(
-      contract.id,
-      parsed,
-      retainageShape
-        ? { shape: retainageShape, percent: retainageShape === 'percent_across' ? Number(retainagePercent) : undefined }
-        : undefined
-    );
+    const retainage = retainageShape
+      ? { shape: retainageShape, percent: retainageShape === 'percent_across' ? Number(retainagePercent) : undefined }
+      : undefined;
+    const res = reviseMode
+      ? await reviseSubContractSchedule(contract.id, parsed, retainage, revisedValue)
+      : await setupPaymentSchedule(contract.id, parsed, retainage);
     setBusy(false);
     if (!res.success) {
-      setError(res.error ?? 'Setup failed.');
+      setError(res.error ?? (reviseMode ? 'Revision failed.' : 'Setup failed.'));
       return;
     }
     onDone(res.warning);
@@ -823,8 +900,24 @@ function ScheduleSetupEditor({
   return (
     <div style={{ border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '0.75rem', marginTop: '0.25rem' }}>
       <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
-        Payment schedule
+        {reviseMode ? 'Revise schedule (unsigned — not locked in)' : 'Payment schedule'}
       </div>
+      {reviseMode && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+          <span style={{ fontSize: '0.8125rem', color: '#374151' }}>Contract value:</span>
+          <input
+            type="number"
+            min="0.01"
+            step="0.01"
+            value={reviseValue}
+            onChange={(e) => setReviseValue(e.target.value)}
+            style={{ padding: '0.375rem 0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', fontSize: '0.8125rem', width: '130px' }}
+          />
+          <span style={{ fontSize: '0.6875rem', color: '#6b7280' }}>
+            Saving replaces the current stages — the new stages land pending and need re-approval.
+          </span>
+        </div>
+      )}
       {stages.map((s, i) => (
         <div key={i} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.375rem' }}>
           <input

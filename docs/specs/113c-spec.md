@@ -234,10 +234,17 @@ new. **This is later, gated work — the §5 italic never waits on it; 7D stays 
 
 Inherit the 7C floor: Owner/Admin — everything; **Owner/Admin approve** (commit);
 Owner/Admin/PM set up schedules (pending) and prepare drafts; PM cannot confirm/commit.
-Conversion is Owner/PM-gated (existing). The revise RPC (§5) is Owner/Admin/PM while
-unsigned, mirroring schedule setup. `[BUILD-VERIFY every new RPC follows SECURITY INVOKER
-
-- the existing column-scope/RLS gates, per the 7C precedent]`
+Conversion is Owner/PM-gated (existing). **The revise RPC (§5) is OWNER/ADMIN ONLY —
+as amended 2026-07-31 (S95, Josh's ruling; replaces this section's original
+"Owner/Admin/PM while unsigned, mirroring schedule setup", whose `[BUILD-VERIFY]` tag
+this resolves).** Rationale: revising tears down APPROVED commitments and re-opens
+them for approval — approve-level authority PM explicitly lacks (this section's own
+"PM cannot confirm/commit"); and granting PM would force SECURITY DEFINER, since the
+`expenses_update_authorized` policy lets PM update only own PENDING rows — breaking
+the INVOKER/RLS posture the codebase mandates. Built so in migration
+`20260731050000_113c_stage5_revise_schedule.sql`. `[BUILD-VERIFY resolved: the revise
+RPC follows SECURITY INVOKER + the existing column-scope/RLS gates, per the 7C
+precedent]`
 
 ---
 

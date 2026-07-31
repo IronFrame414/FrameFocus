@@ -225,6 +225,65 @@ export async function setupPaymentSchedule(
   };
 }
 
+/** 113c-spec §5 (stage 5) — revise an unsigned formal contract's schedule
+ *  (and optionally its value): soft-deletes the existing stage rows +
+ *  allocations and re-runs setup_payment_schedule in ONE transaction.
+ *  Owner/Admin only (the RPC checks — tearing down approved committed rows
+ *  is approve-level authority). Closed once signed or once any payment
+ *  exists; the RPC's errors say which. */
+export async function reviseSubContractSchedule(
+  subContractId: string,
+  stages: ScheduleStageInput[],
+  retainage?: RetainageInput,
+  contractValue?: number | null
+): Promise<SetupScheduleResult> {
+  if (stages.length === 0) return { success: false, error: 'At least one stage is required.' };
+  for (const s of stages) {
+    if (!s.label.trim()) return { success: false, error: 'Every stage needs a label.' };
+    if (!(s.amount > 0)) return { success: false, error: 'Every stage needs a positive amount.' };
+  }
+  if (retainage?.shape === 'percent_across' && !(Number(retainage.percent) >= 0)) {
+    return { success: false, error: 'Percent-across retainage needs a percent.' };
+  }
+
+  const supabase = createClient();
+  // revise_sub_contract_schedule ships in migration 20260731050000 (written,
+  // not yet applied) — database.ts learns the name at the post-apply regen;
+  // cast until then (the co-builder contractor_signed_at precedent).
+  const rpc = supabase.rpc.bind(supabase) as (
+    fn: string,
+    args?: Record<string, unknown>
+  ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+  const { data, error } = await rpc('revise_sub_contract_schedule', {
+    p_sub_contract_id: subContractId,
+    p_stages: stages.map((s) => ({
+      label: s.label.trim(),
+      amount: s.amount,
+      budget_item_id: s.budget_item_id ?? null,
+    })),
+    p_retainage_shape: retainage?.shape,
+    p_retainage_percent: retainage?.shape === 'percent_across' ? retainage.percent : undefined,
+    p_contract_value: contractValue ?? undefined,
+  });
+  if (error) {
+    if (error.message.includes('signed')) {
+      return { success: false, error: 'The contract is signed — revise is closed. Corrections go through void and re-enter.' };
+    }
+    if (error.message.includes('payments exist')) {
+      return { success: false, error: 'Payments exist against this schedule — revise is closed. Corrections go through void and re-enter.' };
+    }
+    return { success: false, error: error.message };
+  }
+
+  const result = data as { stage_count: number; stage_total: number; warning: string | null };
+  return {
+    success: true,
+    stageCount: result.stage_count,
+    stageTotal: result.stage_total,
+    warning: result.warning ?? undefined,
+  };
+}
+
 // ----------------------------------------------------------------------------
 // Bills & committed entries (decision 2a — direct INSERTs; PM lands pending)
 // ----------------------------------------------------------------------------
