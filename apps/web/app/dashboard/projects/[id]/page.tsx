@@ -8,6 +8,7 @@ import { getPhases, getTasks, rollupPhases } from '@/lib/services/tasks';
 import { getProjectAssignments } from '@/lib/services/project-assignments';
 import { memberColor } from '@/components/schedule/member-color';
 import { StatusControl } from './status-control';
+import { RateSummary } from './rate-summary';
 import { cardStyle, color, font, microLabelStyle } from '@/lib/theme';
 
 /**
@@ -226,6 +227,11 @@ export default async function ProjectOverviewPage({ params }: { params: { id: st
           </div>
         ))}
       </div>
+
+      {/* §7.1 S-4 (amended 2026-07-31) — read-only rate-in-force summary.
+          Owner/Admin ONLY (Financial Visibility Floor); manage on Budget &
+          Cost. Renders nothing for fixed-price / rateless projects. */}
+      {canSeeFinancials && <RateSummary project={project} changeOrders={allCos} />}
 
       {/* Two-column region */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '18px' }}>

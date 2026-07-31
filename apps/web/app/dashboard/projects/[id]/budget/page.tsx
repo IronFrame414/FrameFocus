@@ -287,10 +287,11 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
         )}
       </div>
 
-      {/* §7.1 S-4 (amended 2026-07-31) — read-only contract rates + history.
+      {/* §7.1 S-4 (amended 2026-07-31) — contract rates + history, with
+          renegotiate (Owner/Admin) and supersede (Owner only, §7.3).
           Owner/Admin ONLY (Financial Visibility Floor): inside this gate the
           component never renders or fetches for PM/Foreman. */}
-      {isOwnerAdmin && <RateSection project={project} />}
+      {isOwnerAdmin && <RateSection project={project} canSupersede={role === 'owner'} />}
 
       {isOwnerAdmin && (
         <p style={{ fontSize: '13px', color: color.muted, margin: '0 0 6px' }}>

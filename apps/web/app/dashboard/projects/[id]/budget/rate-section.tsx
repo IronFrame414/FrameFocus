@@ -7,13 +7,16 @@ import {
 import type { ProjectWithContact } from '@/lib/services/projects';
 import { cardStyle, color, font, microLabelStyle } from '@/lib/theme';
 import { RenegotiateRate } from './renegotiate-rate';
+import { CorrectRates, type RateHistoryRow } from './correct-rates';
 
 // Money representation §7.1 S-4 (as amended 2026-07-31) — project rate
 // section, stages 2+3 of the S-4 build: per-instrument groups (P4) with
 // rate-in-force highlighted, full history below (superseded rows struck
 // through with their reason and excluded from rate-in-force), and the
 // stage-3 "Renegotiate rate" action per instrument+type (renegotiate-rate.tsx
-// — Owner AND Admin per §7.3; supersede is stage 4, not built). Owner/Admin
+// — Owner AND Admin per §7.3) and the "Correct rates" EDIT MODE over each
+// group's history list (correct-rates.tsx — OWNER only via canSupersede;
+// S95 third ruling, replaces the per-row Supersede buttons). Owner/Admin
 // only (Financial Visibility Floor): the page mounts this inside its
 // isOwnerAdmin gate, so it never renders or fetches for PM/Foreman/Crew.
 //
@@ -25,18 +28,20 @@ import { RenegotiateRate } from './renegotiate-rate';
 // force" state instead of hiding — that absence blocks pricing and the
 // Owner should see it.
 
-const RATE_TYPE_META: Record<InstrumentRateType, { label: string; percent: boolean }> = {
+// Exported for the Overview rate-in-force summary (rate-summary.tsx) — one
+// definition of labels/formatting for every project rate surface.
+export const RATE_TYPE_META: Record<InstrumentRateType, { label: string; percent: boolean }> = {
   cost_plus_percent: { label: 'Markup rate', percent: true },
   tm_labor_hourly: { label: 'Labor rate ($/man-hour)', percent: false },
   tm_nonlabor_percent: { label: 'Non-labor markup', percent: true },
 };
 
-const EXPECTED_TYPES: Record<'cost_plus' | 'time_and_materials', InstrumentRateType[]> = {
+export const EXPECTED_TYPES: Record<'cost_plus' | 'time_and_materials', InstrumentRateType[]> = {
   cost_plus: ['cost_plus_percent'],
   time_and_materials: ['tm_labor_hourly', 'tm_nonlabor_percent'],
 };
 
-const TYPE_CAPTIONS: Record<string, string> = {
+export const TYPE_CAPTIONS: Record<string, string> = {
   cost_plus: 'Cost plus',
   time_and_materials: 'Time & materials',
 };
@@ -55,18 +60,10 @@ interface InstrumentGroup {
   draftCoId?: string;
 }
 
-function fmtRate(rate: number, percent: boolean): string {
+export function fmtRate(rate: number, percent: boolean): string {
   return percent
     ? `${rate}%`
     : rate.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
-}
-
-function fmtDate(value: string): string {
-  return new Date(value + 'T00:00:00').toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
 }
 
 /** Latest live (non-superseded) effective_from for a type, or null when the
@@ -96,9 +93,13 @@ function inForceRowIds(rates: InstrumentRate[], asOf: string): Set<string> {
 
 interface RateSectionProps {
   project: Pick<ProjectWithContact, 'id' | 'project_type' | 'source_estimate_id'>;
+  /** OWNER only (§7.3 — deliberately narrower than the section's
+   *  Owner/Admin visibility): shows the "Correct rates" edit-mode control.
+   *  The RPC re-checks Owner inside — this prop is display, not security. */
+  canSupersede: boolean;
 }
 
-export async function RateSection({ project }: RateSectionProps) {
+export async function RateSection({ project, canSupersede }: RateSectionProps) {
   const groups: InstrumentGroup[] = [];
 
   if (project.project_type !== 'fixed_price' && project.source_estimate_id) {
@@ -199,94 +200,29 @@ export async function RateSection({ project }: RateSectionProps) {
             </div>
 
             {group.rates.length > 0 && (
-              <div style={{ padding: '4px 20px 12px' }}>
-                {group.rates.map((rate) => {
-                  const meta = RATE_TYPE_META[rate.rate_type];
+              // History + the Owner-only "Correct rates" edit mode. Rows are
+              // computed HERE (server) and passed as serializable props — a
+              // client file must never import from this module (S93 bundle
+              // rule). P5: a future-dated rate is live but dormant — never
+              // in force before its date.
+              <CorrectRates
+                canSupersede={canSupersede}
+                recomputeDraftCoId={group.draftCoId}
+                rows={group.rates.map((rate): RateHistoryRow => {
                   const superseded = rate.superseded_at !== null;
-                  const current = inForce.has(rate.id);
-                  // P5 as amended 2026-07-31: a future-dated rate is live
-                  // but dormant — never in force before its date.
-                  const pending = !superseded && rate.effective_from > today;
-                  return (
-                    <div
-                      key={rate.id}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'baseline',
-                        gap: '10px',
-                        padding: '4px 0',
-                        fontSize: '13px',
-                      }}
-                    >
-                      <span
-                        style={{
-                          color: superseded ? color.faint : color.body,
-                          textDecoration: superseded ? 'line-through' : 'none',
-                          minWidth: '190px',
-                        }}
-                      >
-                        {meta.label}
-                      </span>
-                      <span
-                        style={{
-                          fontFamily: font.mono,
-                          fontWeight: current ? 700 : 400,
-                          color: superseded ? color.faint : current ? color.navy : color.mutedAlt,
-                          textDecoration: superseded ? 'line-through' : 'none',
-                        }}
-                      >
-                        {fmtRate(rate.rate, meta.percent)}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: '12px',
-                          color: color.faint,
-                          textDecoration: superseded ? 'line-through' : 'none',
-                        }}
-                      >
-                        effective {fmtDate(rate.effective_from)}
-                      </span>
-                      {current && (
-                        <span
-                          style={{
-                            fontSize: '10px',
-                            fontWeight: 700,
-                            letterSpacing: '0.06em',
-                            textTransform: 'uppercase',
-                            color: color.success,
-                            backgroundColor: '#e4f0e6',
-                            borderRadius: '999px',
-                            padding: '1px 8px',
-                          }}
-                        >
-                          In force
-                        </span>
-                      )}
-                      {pending && (
-                        <span
-                          style={{
-                            fontSize: '10px',
-                            fontWeight: 700,
-                            letterSpacing: '0.06em',
-                            textTransform: 'uppercase',
-                            color: color.warningDeep,
-                            backgroundColor: '#fdece0',
-                            borderRadius: '999px',
-                            padding: '1px 8px',
-                          }}
-                        >
-                          pending (effective {fmtDate(rate.effective_from)})
-                        </span>
-                      )}
-                      {superseded && (
-                        <span style={{ fontSize: '12px', color: color.danger }}>
-                          superseded{rate.superseded_reason ? `: ${rate.superseded_reason}` : ''}
-                        </span>
-                      )}
-                    </div>
-                  );
+                  return {
+                    id: rate.id,
+                    label: RATE_TYPE_META[rate.rate_type].label,
+                    percent: RATE_TYPE_META[rate.rate_type].percent,
+                    rate: rate.rate,
+                    effectiveFrom: rate.effective_from,
+                    superseded,
+                    supersededReason: rate.superseded_reason,
+                    inForce: inForce.has(rate.id),
+                    pending: !superseded && rate.effective_from > today,
+                  };
                 })}
-              </div>
+              />
             )}
           </div>
         );
@@ -295,8 +231,9 @@ export async function RateSection({ project }: RateSectionProps) {
       <p style={{ fontSize: '11px', color: color.faint, margin: 0, padding: '8px 20px 12px' }}>
         Cost and hours price at the rate in force when incurred. Renegotiated rates apply
         forward from their effective date and never before the latest existing rate; a
-        future-dated rate sits pending until its date arrives. Correcting a mistyped rate
-        (supersede) arrives in a later build stage.
+        future-dated rate sits pending until its date arrives. &ldquo;Correct rates&rdquo;
+        (Owner only) edits any live rate&rsquo;s amount or date — the original stays listed,
+        struck through with its reason.
       </p>
     </div>
   );
