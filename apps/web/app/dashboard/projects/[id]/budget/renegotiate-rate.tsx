@@ -4,10 +4,12 @@
 // "Renegotiate rate" action on the project rate section. Owner/Admin only
 // by mount position (the section renders inside the page's isOwnerAdmin
 // gate); the instrument_rates INSERT policy backs that at the DB. The DB
-// backdating guard is the authority on dates — the client mirrors its
-// bounds (floor = latest live rate + 1 day since same-date correction is
-// supersede's job, cap = today) so a typed date fails fast with the same
-// wording. Supersede is stage 4 — not here.
+// backdating guard is the authority on dates — the client mirrors its one
+// check (floor = latest live rate + 1 day, since same-date correction is
+// supersede's job) so a typed date fails fast with the same wording. There
+// is NO upper bound: future-dating is permitted (P5 as amended 2026-07-31,
+// migration 20260731010000) — a future rate sits pending, not in force,
+// until its date arrives. Supersede is stage 4 — not here.
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -62,8 +64,8 @@ export function RenegotiateRate({
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [rate, setRate] = useState('');
-  // #111 accepted debt: UTC-derived "today", matching the DB guard's
-  // CURRENT_DATE — do not "fix" this here without fixing the guard.
+  // Default effective date only — any date is selectable, future included
+  // (the guard no longer references CURRENT_DATE, so old debt #111 is moot).
   const today = new Date().toISOString().slice(0, 10);
   const [effectiveFrom, setEffectiveFrom] = useState(today);
   const [error, setError] = useState<string | null>(null);
@@ -88,12 +90,9 @@ export function RenegotiateRate({
       setError('The rate must be zero or more.');
       return;
     }
-    // Mirror the input's min/max so a typed (unpicked) date fails fast with
-    // the same wording; the DB guard remains the authority.
-    if (effectiveFrom > today) {
-      setError('A rate cannot be dated in the future.');
-      return;
-    }
+    // Mirror the input's floor so a typed (unpicked) date fails fast with
+    // the same wording; the DB guard remains the authority. No future
+    // check — future-dating is permitted (P5 as amended 2026-07-31).
     if (floor && effectiveFrom <= floor) {
       setError(
         `A renegotiated rate must be dated after the latest existing rate (${floor}). Correcting that rate is a supersede (Owner).`
@@ -172,13 +171,12 @@ export function RenegotiateRate({
           type="date"
           value={effectiveFrom}
           min={min}
-          max={today}
           disabled={saving}
           onChange={(e) => setEffectiveFrom(e.target.value)}
           title={
             floor
-              ? `Renegotiation: after ${floor}, up to today`
-              : 'First rate of this type: may be backdated to the contract date'
+              ? `Renegotiation: any date after ${floor} — a future date sits pending until it arrives`
+              : 'First rate of this type: any date — backdate to the contract date, or future-date a not-yet-started deal'
           }
           style={{
             padding: '2px 4px',

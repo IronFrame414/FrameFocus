@@ -19,9 +19,11 @@ export { rateInForce } from '@/lib/services/instrument-rates-shared';
 // instrument-rates.ts here: it pulls supabase-server → next/headers into
 // the client bundle and breaks the build (type-only imports are fine).
 // INSERT is Owner/Admin (RLS instrument_rates_insert_authorized); the DB
-// backdating guard is the authority (no future dates, ever; first rate per
-// type may backdate to the signing date; later rates on/after the latest
-// existing rate) — this file just surfaces its errors.
+// backdating guard is the authority (first rate per type takes ANY date —
+// past or future; later rates on/after the latest existing non-superseded
+// rate; no today-cap since P5 as amended 2026-07-31 / migration
+// 20260731010000 — a future rate is dormant until its date) — this file
+// just surfaces its errors.
 // Supersede is Owner-ONLY, through the SECURITY DEFINER RPC (never a
 // direct UPDATE — the table has no UPDATE policy).
 
@@ -54,9 +56,10 @@ export async function getRateInForceToday(
 
 /** New rate row (initial negotiation or renegotiation). Owner/Admin.
  *  effective_from defaults to today. The DB backdating guard is the
- *  authority: no rate may be future-dated; the first rate of a type may be
- *  backdated (signing date); later rates must land between the latest
- *  existing rate and today. */
+ *  authority: the first rate of a type takes any date (signing date, or a
+ *  not-yet-started deal); later rates land on/after the latest existing
+ *  non-superseded rate. No upper bound — a future-dated rate is not in
+ *  force until its date arrives (P5 as amended 2026-07-31). */
 export async function addInstrumentRate(
   ref: InstrumentRef,
   rateType: InstrumentRateType,
@@ -76,9 +79,6 @@ export async function addInstrumentRate(
   if (error) {
     if (error.message.includes('before the latest existing rate')) {
       return { success: false, error: 'The effective date cannot be before the latest existing rate of this type — history before the previous rate is immutable.' };
-    }
-    if (error.message.includes('in the future')) {
-      return { success: false, error: 'A rate cannot be dated in the future.' };
     }
     return { success: false, error: error.message };
   }

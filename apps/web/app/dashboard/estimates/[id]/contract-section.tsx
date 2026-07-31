@@ -1,11 +1,14 @@
 'use client';
 
-// Money representation §7.1 S-3 — estimate settings: contract type, the
-// per-type negotiated rate(s), and the P11 projected value. Type/rate/
-// projection are Owner/Admin only (§7.3); PM sees them read-only. Setting a
-// rate appends an instrument_rates row effective today — the DB backdating
-// guard is the authority (§5.5); the S-4 panel (not yet built) is where
-// history and supersede will live.
+// Money representation §7.1 S-3 (as amended 2026-07-31) — estimate
+// settings: contract type, the per-type negotiated rate AMOUNT (date-free
+// by ruling — the initial row lands effective today as a placeholder;
+// conversion restamps it to the contract start, §5.1 item 4, not yet
+// built), and the P11 projected value. Type/rate/projection are Owner/Admin
+// only (§7.3); PM sees them read-only. The DB backdating guard is the
+// authority (§5.5 — future-dating permitted since 20260731010000, but this
+// screen never sends a date). Rate history, renegotiation, and supersede
+// live on the PROJECT rate section (S-4), not here.
 
 import { useCallback, useEffect, useState } from 'react';
 import {

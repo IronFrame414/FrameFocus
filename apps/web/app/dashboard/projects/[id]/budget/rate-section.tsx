@@ -204,6 +204,9 @@ export async function RateSection({ project }: RateSectionProps) {
                   const meta = RATE_TYPE_META[rate.rate_type];
                   const superseded = rate.superseded_at !== null;
                   const current = inForce.has(rate.id);
+                  // P5 as amended 2026-07-31: a future-dated rate is live
+                  // but dormant — never in force before its date.
+                  const pending = !superseded && rate.effective_from > today;
                   return (
                     <div
                       key={rate.id}
@@ -259,6 +262,22 @@ export async function RateSection({ project }: RateSectionProps) {
                           In force
                         </span>
                       )}
+                      {pending && (
+                        <span
+                          style={{
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            letterSpacing: '0.06em',
+                            textTransform: 'uppercase',
+                            color: color.warningDeep,
+                            backgroundColor: '#fdece0',
+                            borderRadius: '999px',
+                            padding: '1px 8px',
+                          }}
+                        >
+                          pending (effective {fmtDate(rate.effective_from)})
+                        </span>
+                      )}
                       {superseded && (
                         <span style={{ fontSize: '12px', color: color.danger }}>
                           superseded{rate.superseded_reason ? `: ${rate.superseded_reason}` : ''}
@@ -275,8 +294,9 @@ export async function RateSection({ project }: RateSectionProps) {
 
       <p style={{ fontSize: '11px', color: color.faint, margin: 0, padding: '8px 20px 12px' }}>
         Cost and hours price at the rate in force when incurred. Renegotiated rates apply
-        forward from their effective date and never before the latest existing rate.
-        Correcting a mistyped rate (supersede) arrives in a later build stage.
+        forward from their effective date and never before the latest existing rate; a
+        future-dated rate sits pending until its date arrives. Correcting a mistyped rate
+        (supersede) arrives in a later build stage.
       </p>
     </div>
   );
