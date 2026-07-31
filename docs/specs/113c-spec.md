@@ -72,13 +72,22 @@ columns]`) already carries `project_id`, `member_id → company_members(id)`,
   `bid_document_file_id → files`, `notes`, `received_at`, `is_winner`, `is_deleted`.
 - **`set_winning_bid(p_line_item_id, p_sub_bid_id)`** clears any prior winner, marks the
   new one (`is_winner`, one-winner-per-line partial unique index), and upserts the line's
-  single **subcontractor `estimate_line_row`** with `subcontractor_id` + `amount =
-bid_amount`; totals reflow.
+  single **subcontractor `estimate_line_row`**. **As amended 2026-07-31 (S95, Josh's
+  ruling — reverses the S93 TECH_DEBT #113 NON-ISSUE and this bullet's original "amount
+  = bid_amount; totals reflow"):** awarding must NOT overwrite an estimator-entered
+  cost — **fill-only-when-empty** (migration `20260731040000`): a sub row with a
+  non-zero `amount` gets `subcontractor_id` ONLY (no cost change, no reflow); an empty
+  (0/NULL) `amount` is seeded from the bid; a missing sub row is still CREATED with
+  `amount = bid_amount` — the row must exist, stage 4 ties the contract to the budget
+  line via `source_line_row_id`.
 - **Conversion budget baseline** (`convert_estimate_to_project`, now in
   `20260730010000`) inserts one `project_budget_items` row per `estimate_line_rows`; the
   winning subcontractor row becomes a `row_type='subcontractor'` budget line with
-  `budgeted_amount = bid_amount` and `source_line_row_id =` that sub row. **This is the
-  budget line the new sub-contract ties to.**
+  `budgeted_amount =` the sub row's `amount` and `source_line_row_id =` that sub row.
+  **This is the budget line the new sub-contract ties to.** (As amended 2026-07-31:
+  with fill-only-when-empty, that amount is the ESTIMATOR'S cost when one was entered —
+  the bid reaches the project as the draft contract's `contract_value` (§3), and
+  bid-vs-plan surfaces as budgeted-vs-committed variance, §0.6.)
 - **#105 (identity):** there is **no FK** between `subcontractors` and `company_members`
   — `subcontractors_create_member` copies `company_name → display_name` only; today's
   resolution is a fragile **name-match** (`payables-client.ts`). Adopted here as stage 1

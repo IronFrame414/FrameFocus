@@ -103,6 +103,12 @@ rather than backfilling. Confirm no real estimate exists before applying.
   `subcontractor_id = winner`. If the line has exactly one subcontractor row,
   update it; if zero, insert one; **if two or more, the RPC errors** rather than
   guessing. The `estimate_sub_bids` audit table is untouched.
+- **AMENDED 2026-07-31 (S95, Josh's ruling — migration `20260731040000`):** the
+  update branch is now **fill-only-when-empty**. An estimator-entered (non-zero)
+  `amount` is NEVER overwritten by an award — only `subcontractor_id` updates; an
+  empty (0/NULL) amount is seeded from the bid; the zero-rows INSERT branch is
+  unchanged. Awarding records the winner, it does not reprice the line. See
+  113c-spec §1 and TECH_DEBT #113 (NON-ISSUE reversed).
 
 ---
 

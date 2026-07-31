@@ -4282,6 +4282,7 @@ export type Database = {
           member_id: string
           notes: string | null
           project_id: string
+          requires_formal_contract: boolean
           retainage_percent: number | null
           retainage_shape: string | null
           scope_of_work: string | null
@@ -4302,6 +4303,7 @@ export type Database = {
           member_id: string
           notes?: string | null
           project_id: string
+          requires_formal_contract?: boolean
           retainage_percent?: number | null
           retainage_shape?: string | null
           scope_of_work?: string | null
@@ -4322,6 +4324,7 @@ export type Database = {
           member_id?: string
           notes?: string | null
           project_id?: string
+          requires_formal_contract?: boolean
           retainage_percent?: number | null
           retainage_shape?: string | null
           scope_of_work?: string | null
