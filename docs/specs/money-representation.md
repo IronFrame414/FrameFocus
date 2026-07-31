@@ -26,6 +26,10 @@
 > binds it), which deliberately loosens the immutability guarantee for
 > Owner corrections ONLY (P5, §4.2, §5.5 — guard exemption mechanic
 > `[BUILD-VERIFY]`, follow-up migration owed).
+> **Amended 2026-07-31 (S95, S-2 pickers):** sub-contract STAGE targets are
+> REQUIRED real budget lines — no Miscellaneous, no fallback (S94
+> force-targets); PO TOTAL targets may be a real line OR Miscellaneous
+> (§7.1 S-2, §3 A-7 consequence, §6).
 > **Companion specs:** `docs/specs/5A-section8-spec.md` (conversion),
 > `docs/specs/7A-spec.md` (expenses/job cost), `docs/specs/7C-spec.md`
 > (payables), `docs/specs/7G-spec.md` (invoices — owns the T&M billable-hours
@@ -200,8 +204,11 @@
   requires a full split (allocation section now shows for committed rows
   too — their allocations feed the committed rollup under §4.5); the
   post-setup batch-approve (7C Q13) passes each stage's captured target
-  through, falling back to a full-amount Miscellaneous allocation for
-  untargeted stages; and the split editor gains **"New budget line"**
+  through — **as amended 2026-07-31 (S95/S94 force-targets): every stage
+  CARRIES a required target at setup, so the earlier full-amount
+  Miscellaneous fallback for untargeted stages is REMOVED; a legacy
+  untargeted stage prompts for a line at approve instead of silently
+  landing on Miscellaneous**; and the split editor gains **"New budget line"**
   (name + optional cost code, `budgeted_amount` 0) for **Owner/Admin/PM
   only** via the `create_budget_line_at_capture` SECURITY DEFINER RPC
   (§5.5) — foreman/crew pick existing lines or Miscellaneous.
@@ -747,7 +754,7 @@ columns to any `can_view_project()` role — known, accepted, reviewed-against.
 | `apps/web/lib/services/co-signing-service.ts` | `completeCoSignature()` calls `apply_change_order_budget` after the status flip (§5.2). |
 | `apps/web/lib/services/budget.ts` | `getBudgetRollup()` (`:35+`) gains: instrument grouping (original contract / per-CO / ad-hoc+misc); **remaining-committed derivation** (per §4.5 — joins `expense_payments` through allocations; displays remaining, not the stored gross); cost-to-date = actual + remaining. Fix the stale "pre-tax" comment (`:31-34`). |
 | `apps/web/lib/services/expenses-client.ts` | `createExpense` writes the expense **and its allocation split** (≥1 line, Σ = amount) in one flow; picker sourced from `listProjectBudgetLines` (`:257-267`) grouped by instrument, plus "Miscellaneous" resolving through `get_or_create_misc_budget_item`. `createAdHocBudgetLine` (`:186-210`) unchanged. |
-| `apps/web/lib/services/payables-client.ts` / `payables.ts` | Sub-contract schedule setup and PO total entry pass budget-line target(s) through to the amended 7C RPCs (§4.4); payment recording unchanged client-side (recompute is trigger-driven). |
+| `apps/web/lib/services/payables-client.ts` / `payables.ts` | Sub-contract schedule setup and PO total entry pass budget-line target(s) through to the amended 7C RPCs (§4.4). **As amended 2026-07-31 (S95): stage targets are REQUIRED real lines (picker excludes Miscellaneous; save blocked until every stage has one); the PO total target may be a real line OR Miscellaneous.** Payment recording unchanged client-side (recompute is trigger-driven). |
 | `apps/web/lib/services/contract-value.ts` | Fixed-price instruments unchanged (`original + Σ net_delta` of signed fixed COs). Cost-plus/T&M instruments: the stored value is a labeled projection (P11) — excluded from any variance/over-under figure this service feeds. Earned-revenue derivation for cost-plus (Σ cost × rate-in-force) and T&M (hours × labor rate + non-labor cost × `tm_nonlabor_percent`) belongs to 7G invoicing — including the billable-hours definition (which time entries count, rounding, approval gate) — not here. |
 | `apps/web/lib/services/change-orders-client.ts` | CO builder honors `co_type` per P4 (three types already in the CHECK — no schema change): cost-plus COs price rows via the negotiated rate; T&M COs price labor rows via `tm_labor_hourly`; `recalculateChangeOrderTotals` (`:426-515`) unchanged for fixed-price COs. |
 | `apps/web/lib/services/expenses.ts` | Approval queue reads surface the captured split for adjustment (per §4.4). |
@@ -814,6 +821,14 @@ sub-contract/PO entry surfaces (`payables-client.ts` consumers).
   sub-floor roles (line names/cost codes only).
 - Approval popup (`expenses-client.ts:241-267` consumers) shifts from
   "create allocations" to "adjust the captured split".
+- **S-2 pickers on the 7C surfaces (amended 2026-07-31, S95):**
+  sub-contract STAGE setup gains a required single-select budget-line
+  picker per stage — a real line only, **Miscellaneous excluded, no
+  fallback** (S94 force-targets ruling; save blocked until every stage has
+  a line; the legacy batch-approve Miscellaneous fallback is removed — a
+  legacy untargeted stage prompts at approve). PO TOTAL entry gains the
+  same picker with **Miscellaneous included** (Josh, S95) — a PO total may
+  target a real line or Miscellaneous.
 
 **S-3: Estimate builder (edit)** — two authority tiers:
 
