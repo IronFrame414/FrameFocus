@@ -15,8 +15,13 @@ import {
   updateClientContract,
   updateSubcontractorContract,
 } from '@/lib/services/contracts-client';
-import type { PayableListItem, ScheduleStageInput } from '@/lib/services/payables-client';
+import type {
+  AwardBudgetLine,
+  PayableListItem,
+  ScheduleStageInput,
+} from '@/lib/services/payables-client';
 import {
+  deriveAwardBudgetLines,
   setupPaymentSchedule,
   softDeletePayment,
   voidContractWithCloseout,
@@ -409,6 +414,43 @@ function SubSchedulePanel({
   // approve — the Miscellaneous fallback is gone (S94 force-targets).
   const [needsTarget, setNeedsTarget] = useState<PayableListItem[]>([]);
   const [targetPicks, setTargetPicks] = useState<Record<string, string>>({});
+  // 113c stage 4: the §3.3 award tie, re-derived when the review opens —
+  // exactly one candidate prefills the schedule; several defer to the picker.
+  const [awardLines, setAwardLines] = useState<AwardBudgetLine[] | null>(null);
+
+  async function openReview() {
+    setBusy(true);
+    setAwardLines(await deriveAwardBudgetLines(contract.project_id, contract.member_id));
+    setBusy(false);
+    setSettingUp(true);
+  }
+
+  // 113c §0.4/§5 — the per-draft toggle. Committed still counts on approval;
+  // the toggle only decides whether it renders as awaiting the sub's
+  // signature (italic on Budget & Cost) until status='signed'.
+  async function handleToggleFormal(next: boolean) {
+    setBusy(true);
+    const res = await updateSubcontractorContract(contract.id, { requires_formal_contract: next });
+    setBusy(false);
+    if (!res.success) setNotice(res.error ?? 'Could not update the contract.');
+    else router.refresh();
+  }
+
+  const formalToggle =
+    canManage && contract.status !== 'signed' && contract.status !== 'void' ? (
+      <label
+        style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.75rem', color: '#374151', margin: '0.25rem 0' }}
+      >
+        <input
+          type="checkbox"
+          checked={contract.requires_formal_contract}
+          disabled={busy}
+          onChange={(e) => void handleToggleFormal(e.target.checked)}
+        />
+        Needs formal contract — committed counts on approval but shows as
+        &ldquo;awaiting signature&rdquo; until the sub signs
+      </label>
+    ) : null;
 
   async function handleDeletePayment(paymentId: string) {
     if (!confirm('Delete this payment? A recorded payment is immutable — delete and re-enter to correct it.')) return;
@@ -473,22 +515,45 @@ function SubSchedulePanel({
 
   if (stages.length === 0) {
     if (!canManage) return null;
+    // 113c stage 4 (§4) — the Review & confirm flow on a draft: contract
+    // details + the formal-contract toggle + Ruling-B plan-vs-contract
+    // variance, over the shipped 7C schedule editor. Confirm = schedule
+    // setup (pending) + the Owner/Admin batch-approve below.
+    const single = awardLines?.length === 1 ? awardLines[0] : null;
     return (
       <div style={{ marginTop: '0.5rem' }}>
+        {formalToggle}
         {settingUp ? (
-          <ScheduleSetupEditor
-            contract={contract}
-            hideAmounts={!isOwnerAdmin}
-            onCancel={() => setSettingUp(false)}
-            onDone={(warning) => {
-              setSettingUp(false);
-              if (warning) setNotice(warning);
-              router.refresh();
-            }}
-          />
+          <>
+            {single && single.budgeted_amount !== null && contract.contract_value !== null && (
+              <p style={{ fontSize: '0.75rem', color: single.budgeted_amount === contract.contract_value ? '#6b7280' : '#92400e', margin: '0.25rem 0' }}>
+                Budget line plan {money(single.budgeted_amount)} · contract{' '}
+                {money(contract.contract_value)}
+                {single.budgeted_amount !== contract.contract_value &&
+                  ` · variance ${money(contract.contract_value - single.budgeted_amount)} — budgeted stays the plan; the difference shows as budgeted-vs-committed variance once confirmed`}
+              </p>
+            )}
+            {awardLines !== null && awardLines.length > 1 && (
+              <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0.25rem 0' }}>
+                This sub won {awardLines.length} lines — pick each stage&rsquo;s budget line
+                explicitly.
+              </p>
+            )}
+            <ScheduleSetupEditor
+              contract={contract}
+              hideAmounts={!isOwnerAdmin}
+              prefillBudgetItemId={single?.budget_item_id ?? null}
+              onCancel={() => setSettingUp(false)}
+              onDone={(warning) => {
+                setSettingUp(false);
+                if (warning) setNotice(warning);
+                router.refresh();
+              }}
+            />
+          </>
         ) : (
-          <button style={smallButton} onClick={() => setSettingUp(true)}>
-            Set up payment schedule
+          <button style={smallButton} disabled={busy} onClick={() => void openReview()}>
+            {contract.status === 'draft' ? 'Review & confirm' : 'Set up payment schedule'}
           </button>
         )}
         {notice && (
@@ -502,6 +567,7 @@ function SubSchedulePanel({
 
   return (
     <div style={{ marginTop: '0.5rem', paddingLeft: '0.75rem', borderLeft: '2px solid #eef1f6' }}>
+      {formalToggle}
       {pendingStages.length > 0 && isOwnerAdmin && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.375rem' }}>
           <span style={{ fontSize: '0.75rem', color: '#92400e' }}>
@@ -634,6 +700,7 @@ function SubSchedulePanel({
             paidToDate: grossPaid(paying.payments),
             is_retainage: paying.is_retainage,
           }}
+          subContractId={paying.sub_contract_id}
           onClose={() => setPaying(null)}
           onDone={() => {
             setPaying(null);
@@ -666,12 +733,16 @@ function SubSchedulePanel({
 function ScheduleSetupEditor({
   contract,
   hideAmounts,
+  prefillBudgetItemId,
   onCancel,
   onDone,
 }: {
   contract: SubcontractorContract;
   /** Floor: budgeted figures in the picker are Owner/Admin only. */
   hideAmounts: boolean;
+  /** 113c §4 — the §3.3 award tie when it is UNAMBIGUOUS (exactly one
+   *  candidate line); null defers entirely to the picker. */
+  prefillBudgetItemId?: string | null;
   onCancel: () => void;
   /** Called on success; receives the RPC's advisory warning, if any. */
   onDone: (warning?: string) => void;
@@ -679,8 +750,15 @@ function ScheduleSetupEditor({
   // S-2 as amended [S95]: every stage REQUIRES a real budget-line target —
   // Miscellaneous excluded, save blocked until each stage has one (S94
   // force-targets). One fetch, shared across the per-stage pickers.
+  // 113c stage 4: a draft's first stage prefills from the contract — full
+  // contract_value on the derived award line (single-stage confirm is the
+  // common case; the user reshapes freely before save).
   const [stages, setStages] = useState<{ label: string; amount: string; budget_item_id: string }[]>([
-    { label: '', amount: '', budget_item_id: '' },
+    {
+      label: '',
+      amount: contract.contract_value !== null ? String(contract.contract_value) : '',
+      budget_item_id: prefillBudgetItemId ?? '',
+    },
   ]);
   const [lines, setLines] = useState<BudgetLineOption[] | null>(null);
   const [retainageShape, setRetainageShape] = useState<'' | 'percent_across' | 'final_hold'>('');
@@ -792,7 +870,20 @@ function ScheduleSetupEditor({
       ))}
       <button
         style={{ ...smallButton, marginBottom: '0.5rem' }}
-        onClick={() => setStages((prev) => [...prev, { label: '', amount: '', budget_item_id: '' }])}
+        onClick={() =>
+          setStages((prev) => [
+            ...prev,
+            {
+              label: '',
+              amount: '',
+              // A new stage inherits the preceding stage's budget line (which
+              // itself defaults to the derived award tie) — stages on one
+              // sub-contract overwhelmingly target one line. Editable per
+              // stage; the every-stage-needs-a-real-line save gate stands.
+              budget_item_id: prev[prev.length - 1]?.budget_item_id ?? '',
+            },
+          ])
+        }
       >
         + Add stage
       </button>

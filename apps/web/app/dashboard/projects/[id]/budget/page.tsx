@@ -447,9 +447,20 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                           </span>
                         )}
                         {seesCommitted && (
+                          // 113c §5: italic = not locked in — a contributing
+                          // sub-contract is formal-and-unsigned. Signing
+                          // flips it firm. Display only; the money counts
+                          // identically either way.
                           <span
-                            style={item.committed_remaining ? moneyCell : dashCell}
-                            title={`Gross committed ${money(item.committed_amount ?? 0)} − paid = remaining`}
+                            style={{
+                              ...(item.committed_remaining ? moneyCell : dashCell),
+                              fontStyle: item.committed_awaiting_signature ? 'italic' : 'normal',
+                            }}
+                            title={
+                              item.committed_awaiting_signature
+                                ? `Wait on contract signature — committed counts but is not locked in until the sub signs. Gross committed ${money(item.committed_amount ?? 0)} − paid = remaining`
+                                : `Gross committed ${money(item.committed_amount ?? 0)} − paid = remaining`
+                            }
                           >
                             {moneyOrDash(item.committed_remaining)}
                           </span>

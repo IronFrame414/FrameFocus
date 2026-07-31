@@ -84,6 +84,92 @@ export type SetupScheduleResult = {
   error?: string;
 };
 
+/** S95 ruling — formal-contract payment warning: a payment against a stage
+ *  whose sub-contract has requires_formal_contract = true and is NOT yet
+ *  signed warns at the moment of payment (advisory two-step confirm, never
+ *  a block — the italic Committed indicator stays the passive signal).
+ *  Returns null when no warning applies. */
+export async function getFormalContractWarning(
+  subContractId: string
+): Promise<{ subName: string } | null> {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from('subcontractor_contracts')
+    .select('requires_formal_contract, status, member:company_members(display_name)')
+    .eq('id', subContractId)
+    .single();
+  if (!data || !data.requires_formal_contract || data.status === 'signed') return null;
+  const member = Array.isArray(data.member) ? data.member[0] : data.member;
+  return { subName: member?.display_name ?? 'this subcontractor' };
+}
+
+/** 113c-spec §3.3/§4 [S95] — the award budget-line tie, RE-DERIVED at
+ *  confirm (deliberately not stored): the contract's member won bid(s) on
+ *  the source estimate; each winning line's subcontractor row is the
+ *  source_line_row_id of exactly one budget line. One candidate → the
+ *  schedule editor prefills it; several (one sub won several lines — the
+ *  drafts are indistinguishable by member alone) → no prefill, the
+ *  required S-2 picker disambiguates. budgeted_amount rides along for the
+ *  Ruling-B plan-vs-contract variance display (award no longer overwrites
+ *  an estimator-entered cost, so the two legitimately differ). */
+export interface AwardBudgetLine {
+  budget_item_id: string;
+  budgeted_amount: number | null;
+  bid_amount: number;
+  line_name: string | null;
+}
+
+export async function deriveAwardBudgetLines(
+  projectId: string,
+  memberId: string
+): Promise<AwardBudgetLine[]> {
+  const supabase = createClient();
+
+  const { data: project } = await supabase
+    .from('projects')
+    .select('source_estimate_id')
+    .eq('id', projectId)
+    .single();
+  if (!project?.source_estimate_id) return [];
+
+  const { data: bids } = await supabase
+    .from('estimate_sub_bids')
+    .select('line_item_id, bid_amount, subcontractor:subcontractors!inner(member_id)')
+    .eq('estimate_id', project.source_estimate_id)
+    .eq('is_winner', true)
+    .eq('is_deleted', false)
+    .eq('subcontractor.member_id', memberId);
+  if (!bids?.length) return [];
+
+  const lineItemIds = bids.map((b) => b.line_item_id);
+  const { data: subRows } = await supabase
+    .from('estimate_line_rows')
+    .select('id, line_item_id, name')
+    .in('line_item_id', lineItemIds)
+    .eq('row_type', 'subcontractor');
+  if (!subRows?.length) return [];
+
+  const { data: budgetLines } = await supabase
+    .from('project_budget_items')
+    .select('id, budgeted_amount, source_line_row_id, description')
+    .eq('project_id', projectId)
+    .eq('is_deleted', false)
+    .in('source_line_row_id', subRows.map((r) => r.id));
+  if (!budgetLines?.length) return [];
+
+  const bidByLineItem = new Map(bids.map((b) => [b.line_item_id, b.bid_amount]));
+  const rowById = new Map(subRows.map((r) => [r.id, r]));
+  return budgetLines.map((bl) => {
+    const subRow = bl.source_line_row_id ? rowById.get(bl.source_line_row_id) : undefined;
+    return {
+      budget_item_id: bl.id,
+      budgeted_amount: bl.budgeted_amount,
+      bid_amount: (subRow && bidByLineItem.get(subRow.line_item_id)) ?? 0,
+      line_name: bl.description,
+    };
+  });
+}
+
 export async function setupPaymentSchedule(
   subContractId: string,
   stages: ScheduleStageInput[],

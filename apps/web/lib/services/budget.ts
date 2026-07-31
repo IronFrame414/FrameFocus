@@ -18,6 +18,12 @@ export type BudgetItem = Omit<BudgetItemRow, 'row_type'> & {
    *  commitment-origin expenses. The STORED committed_amount is GROSS (the
    *  promise, never mutated) — display shows remaining, never gross. */
   committed_remaining: number;
+  /** 113c-spec §5 (display only, S95): true when any of the line's
+   *  committed contributions comes from a sub-contract with
+   *  requires_formal_contract = true AND status <> 'signed' — the merged
+   *  screen renders that committed italic + "wait on contract signature".
+   *  Signing flips it off; no money-model involvement. */
+  committed_awaiting_signature: boolean;
 };
 
 /** One cost-code group with its items and subtotals (5E §3). */
@@ -125,6 +131,21 @@ export async function getBudgetRollup(projectId: string): Promise<BudgetRollup> 
   const expenses = expenseRows ?? [];
   const expenseIds = expenses.map((e) => e.id);
 
+  // 113c §5 — which sub-contracts are formal-and-unsigned. Their committed
+  // contributions flag the line as awaiting the sub's signature.
+  const subContractIds = [...new Set(expenses.map((e) => e.sub_contract_id).filter(Boolean))] as string[];
+  const { data: contractRows } = subContractIds.length
+    ? await supabase
+        .from('subcontractor_contracts')
+        .select('id, requires_formal_contract, status')
+        .in('id', subContractIds)
+    : { data: [] as { id: string; requires_formal_contract: boolean; status: string }[] };
+  const awaitingContracts = new Set(
+    (contractRows ?? [])
+      .filter((c) => c.requires_formal_contract && c.status !== 'signed')
+      .map((c) => c.id)
+  );
+
   const { data: allocRows } = expenseIds.length
     ? await supabase
         .from('expense_allocations')
@@ -154,6 +175,7 @@ export async function getBudgetRollup(projectId: string): Promise<BudgetRollup> 
 
   const expenseById = new Map(expenses.map((e) => [e.id, e]));
   const remainingByItem = new Map<string, number>();
+  const awaitingByItem = new Set<string>();
   for (const a of allocRows ?? []) {
     const e = expenseById.get(a.expense_id);
     if (!e) continue;
@@ -176,12 +198,16 @@ export async function getBudgetRollup(projectId: string): Promise<BudgetRollup> 
       a.budget_item_id,
       (remainingByItem.get(a.budget_item_id) ?? 0) + lineRemaining
     );
+    if (e.sub_contract_id && awaitingContracts.has(e.sub_contract_id)) {
+      awaitingByItem.add(a.budget_item_id); // 113c §5 italic flag
+    }
   }
 
   const items: BudgetItem[] = ((itemRows ?? []) as BudgetItemRow[]).map((row) => ({
     ...row,
     row_type: row.row_type as BudgetRowType | null,
     committed_remaining: remainingByItem.get(row.id) ?? 0,
+    committed_awaiting_signature: awaitingByItem.has(row.id),
   }));
 
   // --- Instrument grouping ---------------------------------------------------
