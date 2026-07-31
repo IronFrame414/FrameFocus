@@ -1,3 +1,11 @@
+> # ⚠️ SUPERSEDED — DO NOT BUILD FROM THIS FILE
+> **Replaced by `docs/specs/7D1-spec.md` [S94].** Retained unchanged for audit only.
+> This version predates the S94 reconciliation and is known-wrong in four places:
+> cost-plus billing is absent, allowance true-up is absent, T&M bills at
+> `companies.default_labor_rate` (superseded by `instrument_rates`), and the invoice
+> lifecycle has no void state. Any cross-reference to "7D-spec.md" from another
+> 7-series spec means **7D1-spec.md**.
+
 # Module 7D — Invoicing — Spec
 
 > **Derives from** `module7-architecture.md` §7.0 (scope), §7.2 (sub-module table), §7.3
