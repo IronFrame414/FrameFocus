@@ -388,14 +388,19 @@ export interface BudgetLineOption {
   id: string;
   description: string | null;
   cost_code: string | null;
+  /** CO-born lines carry no cost_code — row_type restores the "cost type"
+   *  half of the option label (S95 picker fix). */
+  row_type: string | null;
   budgeted_amount: number | null;
   actual_amount: number | null;
   /** Instrument provenance for picker grouping (money representation §4.3):
-   *  a CO id → that CO's group; else estimate provenance → Original
+   *  a CO id → that CO's OWN group; else estimate provenance → Original
    *  Contract; else ad-hoc/miscellaneous. */
   source_change_order_id: string | null;
   source_line_item_id: string | null;
   is_miscellaneous: boolean;
+  /** Embedded CO identity for the per-CO group header (S95 picker fix). */
+  source_change_order: { co_number: string; title: string | null } | null;
 }
 
 export async function listProjectBudgetLines(projectId: string): Promise<BudgetLineOption[]> {
@@ -403,14 +408,21 @@ export async function listProjectBudgetLines(projectId: string): Promise<BudgetL
   const { data, error } = await supabase
     .from('project_budget_items')
     .select(
-      'id, description, cost_code, budgeted_amount, actual_amount, source_change_order_id, source_line_item_id, is_miscellaneous'
+      'id, description, cost_code, row_type, budgeted_amount, actual_amount, source_change_order_id, source_line_item_id, is_miscellaneous, source_change_order:change_orders!project_budget_items_source_change_order_id_fkey(co_number, title)'
     )
     .eq('project_id', projectId)
     .eq('is_deleted', false)
     .order('cost_code', { ascending: true, nullsFirst: false })
     .order('created_at', { ascending: true });
   if (error) return [];
-  return (data ?? []) as BudgetLineOption[];
+  // The to-one CO embed comes back as an object at runtime, but the
+  // generated types infer an array — normalize either shape.
+  return (data ?? []).map((row) => ({
+    ...row,
+    source_change_order: Array.isArray(row.source_change_order)
+      ? (row.source_change_order[0] ?? null)
+      : row.source_change_order,
+  })) as BudgetLineOption[];
 }
 
 /** Prompt-skip check (§5.1): an expense already born from this segment means

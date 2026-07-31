@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { closePurchaseOrder, softDeletePurchaseOrder } from '@/lib/services/deliveries-client';
 import { setPoTotal } from '@/lib/services/payables-client';
+import { getOrCreateMiscBudgetLine } from '@/lib/services/expenses-client';
+import { BudgetLineSelect, MISC_SENTINEL } from '@/components/expenses/budget-line-select';
 
 // 6D §5.1 — manual close (Owner/Admin; closed_reason required) and
 // Owner/Admin soft-delete. Reopen is deliberately NOT offered (TECH_DEBT #93
@@ -13,6 +15,12 @@ import { setPoTotal } from '@/lib/services/payables-client';
 // The set_po_total_amount RPC upserts the PO's committed expense row; editing
 // the total adjusts it. No line-item pricing (locked). The RPC rejects ≤ 0,
 // so a total can be adjusted but never cleared.
+//
+// S-2 as amended [S95]: the total carries a budget-line target — a real
+// line OR Miscellaneous (Miscellaneous is allowed for POs, unlike sub
+// stages; Josh, S95). Default = Miscellaneous; the sentinel resolves via
+// get_or_create_misc_budget_item at save. On adjust the RPC keeps the
+// single allocation in step with the new total (§10b, 20260730010000).
 
 function fmtUsd(n: number): string {
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
@@ -20,16 +28,22 @@ function fmtUsd(n: number): string {
 
 export function PoTotalControl({
   poId,
+  projectId,
   totalAmount,
   canEdit,
+  hideAmounts,
 }: {
   poId: string;
+  projectId: string;
   totalAmount: number | null;
   canEdit: boolean;
+  /** Floor: budgeted figures in the picker are Owner/Admin only. */
+  hideAmounts: boolean;
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(totalAmount !== null ? String(totalAmount) : '');
+  const [budgetLine, setBudgetLine] = useState<string>(MISC_SENTINEL);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,9 +53,23 @@ export function PoTotalControl({
       setError('Enter a total greater than zero.');
       return;
     }
+    if (!budgetLine) {
+      setError('Pick a budget line (or Miscellaneous) for the total.');
+      return;
+    }
     setBusy(true);
     setError(null);
-    const result = await setPoTotal(poId, parsed);
+    let budgetItemId = budgetLine;
+    if (budgetItemId === MISC_SENTINEL) {
+      const misc = await getOrCreateMiscBudgetLine(projectId);
+      if (!misc.success || !misc.id) {
+        setBusy(false);
+        setError(misc.error ?? 'Could not prepare the Miscellaneous line.');
+        return;
+      }
+      budgetItemId = misc.id;
+    }
+    const result = await setPoTotal(poId, parsed, budgetItemId);
     setBusy(false);
     if (!result.success) {
       setError(result.error ?? 'Failed to set the total.');
@@ -60,7 +88,7 @@ export function PoTotalControl({
         </span>
       </div>
       {editing ? (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <input
             type="number"
             min="0.01"
@@ -68,6 +96,21 @@ export function PoTotalControl({
             value={value}
             onChange={(e) => setValue(e.target.value)}
             className="w-[140px] rounded-[9px] border border-[#e0e4ea] px-3 py-[7px] text-[13px] text-[#14213d] outline-none focus:border-[#2f49d1]"
+          />
+          <BudgetLineSelect
+            projectId={projectId}
+            value={budgetLine}
+            onChange={setBudgetLine}
+            hideAmounts={hideAmounts}
+            disabled={busy}
+            style={{
+              padding: '7px 12px',
+              border: '1px solid #e0e4ea',
+              borderRadius: '9px',
+              fontSize: '13px',
+              color: '#14213d',
+              minWidth: '200px',
+            }}
           />
           <button
             type="button"

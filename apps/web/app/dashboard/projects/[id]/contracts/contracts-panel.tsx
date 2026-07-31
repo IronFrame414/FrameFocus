@@ -4,7 +4,7 @@
 // panel live here (§3.3: no new routes; the contract panel grows). Money
 // derivations come from payables-shared — never re-stated.
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type {
   ClientContract,
@@ -24,9 +24,11 @@ import {
 import { committedRemaining, grossPaid } from '@/lib/services/payables-shared';
 import {
   approveExpense,
-  getOrCreateMiscBudgetLine,
   listExpenseAllocations,
+  listProjectBudgetLines,
+  type BudgetLineOption,
 } from '@/lib/services/expenses-client';
+import { BudgetLineSelect } from '@/components/expenses/budget-line-select';
 import { fmtMoney } from '@/components/expenses/expense-ui';
 import { PaymentModal } from '@/components/expenses/payment-modal';
 import { CloseoutDialog } from '@/components/expenses/closeout-dialog';
@@ -403,6 +405,10 @@ function SubSchedulePanel({
   const [closingOut, setClosingOut] = useState<PayableListItem | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // S-2 as amended [S95]: legacy targetless stages prompt for a REAL line at
+  // approve — the Miscellaneous fallback is gone (S94 force-targets).
+  const [needsTarget, setNeedsTarget] = useState<PayableListItem[]>([]);
+  const [targetPicks, setTargetPicks] = useState<Record<string, string>>({});
 
   async function handleDeletePayment(paymentId: string) {
     if (!confirm('Delete this payment? A recorded payment is immutable — delete and re-enter to correct it.')) return;
@@ -416,22 +422,20 @@ function SubSchedulePanel({
   async function handleApproveAll() {
     setBusy(true);
     setNotice(null);
+    const untargeted: PayableListItem[] = [];
     for (const s of stages.filter((x) => x.status === 'pending')) {
       // A-7: approval requires a full split. A stage keeps its captured
-      // budget-line target (§4.4) when it has one; an untargeted stage
-      // lands on Miscellaneous — adjustable later by Owner/Admin.
+      // budget-line target (§4.4). S-2 as amended [S95]: an untargeted
+      // (legacy) stage is NOT approved onto Miscellaneous — it is skipped
+      // and prompts for a real line below (S94 force-targets).
       const captured = await listExpenseAllocations(s.id);
-      let allocations = captured.map((a) => ({
+      const allocations = captured.map((a) => ({
         budget_item_id: a.budget_item_id,
         amount: a.amount,
       }));
       if (allocations.length === 0) {
-        const misc = await getOrCreateMiscBudgetLine(contract.project_id);
-        if (!misc.success || !misc.id) {
-          setNotice(misc.error ?? 'Could not prepare the Miscellaneous line.');
-          break;
-        }
-        allocations = [{ budget_item_id: misc.id, amount: s.amount }];
+        untargeted.push(s);
+        continue;
       }
       const res = await approveExpense(s.id, allocations);
       if (!res.success) {
@@ -439,7 +443,31 @@ function SubSchedulePanel({
         break;
       }
     }
+    setNeedsTarget(untargeted);
+    if (untargeted.length > 0) {
+      setNotice(
+        `${untargeted.length} stage${untargeted.length === 1 ? ' has' : 's have'} no budget-line target — pick a real line for each below (stages never land on Miscellaneous).`
+      );
+    }
     setBusy(false);
+    router.refresh();
+  }
+
+  async function handleApproveWithTarget(s: PayableListItem) {
+    const picked = targetPicks[s.id];
+    if (!picked) {
+      setNotice('Pick a budget line for the stage first.');
+      return;
+    }
+    setBusy(true);
+    setNotice(null);
+    const res = await approveExpense(s.id, [{ budget_item_id: picked, amount: s.amount }]);
+    setBusy(false);
+    if (!res.success) {
+      setNotice(res.error ?? 'Approval failed.');
+      return;
+    }
+    setNeedsTarget((prev) => prev.filter((x) => x.id !== s.id));
     router.refresh();
   }
 
@@ -450,6 +478,7 @@ function SubSchedulePanel({
         {settingUp ? (
           <ScheduleSetupEditor
             contract={contract}
+            hideAmounts={!isOwnerAdmin}
             onCancel={() => setSettingUp(false)}
             onDone={(warning) => {
               setSettingUp(false);
@@ -570,6 +599,31 @@ function SubSchedulePanel({
         <p style={{ fontSize: '0.75rem', color: '#92400e', margin: '0.25rem 0 0' }}>{notice}</p>
       )}
 
+      {/* S-2 [S95]: legacy targetless stages — inline picker at approve;
+          Miscellaneous excluded (S94 force-targets). */}
+      {needsTarget.length > 0 && isOwnerAdmin && (
+        <div style={{ border: '1px solid #fde68a', borderRadius: '0.375rem', padding: '0.5rem 0.625rem', margin: '0.375rem 0 0', backgroundColor: '#fffbeb' }}>
+          {needsTarget.map((s) => (
+            <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.25rem 0', fontSize: '0.8125rem', flexWrap: 'wrap' }}>
+              <span style={{ fontWeight: 600, color: '#374151' }}>{s.stage_label ?? 'Stage'}</span>
+              <span>{fmtMoney(s.amount)}</span>
+              <BudgetLineSelect
+                projectId={contract.project_id}
+                value={targetPicks[s.id] ?? ''}
+                onChange={(v) => setTargetPicks((prev) => ({ ...prev, [s.id]: v }))}
+                excludeMiscellaneous
+                hideAmounts={!isOwnerAdmin}
+                disabled={busy}
+                style={{ padding: '0.25rem 0.375rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', fontSize: '0.75rem', flex: 1, minWidth: '180px' }}
+              />
+              <button style={smallButton} disabled={busy} onClick={() => void handleApproveWithTarget(s)}>
+                Approve
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {paying && (
         <PaymentModal
           expense={{
@@ -611,21 +665,38 @@ function SubSchedulePanel({
 
 function ScheduleSetupEditor({
   contract,
+  hideAmounts,
   onCancel,
   onDone,
 }: {
   contract: SubcontractorContract;
+  /** Floor: budgeted figures in the picker are Owner/Admin only. */
+  hideAmounts: boolean;
   onCancel: () => void;
   /** Called on success; receives the RPC's advisory warning, if any. */
   onDone: (warning?: string) => void;
 }) {
-  const [stages, setStages] = useState<{ label: string; amount: string }[]>([
-    { label: '', amount: '' },
+  // S-2 as amended [S95]: every stage REQUIRES a real budget-line target —
+  // Miscellaneous excluded, save blocked until each stage has one (S94
+  // force-targets). One fetch, shared across the per-stage pickers.
+  const [stages, setStages] = useState<{ label: string; amount: string; budget_item_id: string }[]>([
+    { label: '', amount: '', budget_item_id: '' },
   ]);
+  const [lines, setLines] = useState<BudgetLineOption[] | null>(null);
   const [retainageShape, setRetainageShape] = useState<'' | 'percent_across' | 'final_hold'>('');
   const [retainagePercent, setRetainagePercent] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void listProjectBudgetLines(contract.project_id).then((rows) => {
+      if (!cancelled) setLines(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [contract.project_id]);
 
   const stageTotal = stages.reduce((sum, s) => {
     const n = Number(s.amount);
@@ -637,11 +708,18 @@ function ScheduleSetupEditor({
     contract.contract_value !== null && stageTotal > 0 && stageTotal !== contract.contract_value;
 
   async function handleSave() {
+    const included = stages.filter((s) => s.label.trim() || s.amount.trim() || s.budget_item_id);
+    if (included.some((s) => !s.budget_item_id)) {
+      setError('Every stage needs a budget line — stages always target a real line (never Miscellaneous).');
+      return;
+    }
     setBusy(true);
     setError(null);
-    const parsed: ScheduleStageInput[] = stages
-      .filter((s) => s.label.trim() || s.amount.trim())
-      .map((s) => ({ label: s.label, amount: Number(s.amount) }));
+    const parsed: ScheduleStageInput[] = included.map((s) => ({
+      label: s.label,
+      amount: Number(s.amount),
+      budget_item_id: s.budget_item_id,
+    }));
     const res = await setupPaymentSchedule(
       contract.id,
       parsed,
@@ -690,6 +768,18 @@ function ScheduleSetupEditor({
             }
             style={{ ...input, width: '110px' }}
           />
+          <BudgetLineSelect
+            projectId={contract.project_id}
+            lines={lines}
+            value={s.budget_item_id}
+            onChange={(v) =>
+              setStages((prev) => prev.map((x, j) => (j === i ? { ...x, budget_item_id: v } : x)))
+            }
+            excludeMiscellaneous
+            hideAmounts={hideAmounts}
+            disabled={busy}
+            style={{ ...input, flex: 1, minWidth: '160px' }}
+          />
           {stages.length > 1 && (
             <button
               style={{ ...smallButton, color: '#991b1b' }}
@@ -702,7 +792,7 @@ function ScheduleSetupEditor({
       ))}
       <button
         style={{ ...smallButton, marginBottom: '0.5rem' }}
-        onClick={() => setStages((prev) => [...prev, { label: '', amount: '' }])}
+        onClick={() => setStages((prev) => [...prev, { label: '', amount: '', budget_item_id: '' }])}
       >
         + Add stage
       </button>
