@@ -19,6 +19,13 @@
 > P5 today-cap reversed (P5, §4.2, §5.5, §6, §7.1 S-4); a future rate is
 > dormant until its effective date; #111 becomes moot once the trigger's
 > `CURRENT_DATE` check is removed (next migration — spec-only until then).
+> **Amended 2026-07-31 (S95, third ruling):** supersede becomes an
+> Owner-only "Correct rates" EDIT MODE over the rate list (§7.1 S-4) — any
+> live row's amount AND date, required reason; a correction REPLACEMENT is
+> EXEMPT from the renegotiation floor (only the no-duplicate-live-date rule
+> binds it), which deliberately loosens the immutability guarantee for
+> Owner corrections ONLY (P5, §4.2, §5.5 — guard exemption mechanic
+> `[BUILD-VERIFY]`, follow-up migration owed).
 > **Companion specs:** `docs/specs/5A-section8-spec.md` (conversion),
 > `docs/specs/7A-spec.md` (expenses/job cost), `docs/specs/7C-spec.md`
 > (payables), `docs/specs/7G-spec.md` (invoices — owns the T&M billable-hours
@@ -66,9 +73,14 @@
   arrives — rate-in-force stays "the newest non-superseded rate with
   `effective_from` ≤ the as-of date," so a future rate sits dormant/pending
   until then (a negotiated step-up entered the day it's agreed, effective
-  the day it starts). This does not reopen OQ-8: history before the
-  previous rate is still immutable — the bound is enforced by a database
-  trigger (§5.5), not app-only.
+  the day it starts). **Immutability, as amended 2026-07-31 (S95):**
+  history before the previous rate is immutable to RENEGOTIATIONS — the
+  floor is enforced by a database trigger (§5.5), not app-only. Owner
+  CORRECTIONS (supersede replacements, §5.5) are deliberately EXEMPT from
+  that floor: re-dating and re-pricing history is a correction's purpose,
+  bounded only by the no-duplicate-live-date rule (§4.2 partial unique
+  indexes). "Immutable" now means "renegotiations can't rewrite history;
+  Owner corrections deliberately can."
 - **P6 — Signed COs write their OWN budget lines.** CO scope is tracked
   independently of the original contract's baseline, labeled by instrument.
 - **P7 — Every expense lands on budget lines via SPLIT-AT-CAPTURE
@@ -309,18 +321,21 @@ CREATE UNIQUE INDEX instrument_rates_co_type_date_key
   incurred/worked date (`expenses.expense_date`,
   `20260728010000_7a_expenses_job_cost.sql:44`; time segment date for T&M
   labor).
-- **Rate correction (supersede).** Without it, a mistyped rate would be
-  permanent (append-only + backdating bounded at the previous rate).
-  `supersede_instrument_rate()`
-  (§5.5) marks a row superseded with a **required reason**, **Owner-only**;
-  the original row is retained for audit and drops out of rate-in-force
-  lookups — so derived sell computed under the typo is retroactively
-  corrected, which is the point. The backdating bound still governs NEW
-  rates: the trigger (§5.5) is not weakened, and the replacement rate is an
-  ordinary new row subject to it — superseded rows drop out of the trigger's
-  floor AND out of the unique indexes, so a correction can reuse the
-  superseded typo's exact date (leaving even one day priced under the prior
-  rate is not acceptable).
+- **Rate correction (supersede) — as amended 2026-07-31 (S95).** Without
+  it, a mistyped rate would be permanent (append-only + backdating bounded
+  at the previous rate). `supersede_instrument_rate()` (§5.5) marks a row
+  superseded with a **required reason**, **Owner-only**; the original row
+  is retained for audit and drops out of rate-in-force lookups — so derived
+  sell computed under the typo is retroactively corrected, which is the
+  point. **The correction/renegotiation split:** the backdating floor
+  governs RENEGOTIATIONS (ordinary Owner/Admin INSERTs) unchanged; a
+  supersede REPLACEMENT is **EXEMPT from that floor** — a correction may
+  re-date and re-price history, constrained ONLY by the
+  no-duplicate-live-date rule (the partial unique indexes, which exclude
+  superseded rows, so a correction can reuse the superseded typo's exact
+  date — leaving even one day priced under the prior rate is not
+  acceptable). Guard-exemption mechanic: §5.5 `[BUILD-VERIFY]`, follow-up
+  migration owed.
 - A cost-plus instrument carries `cost_plus_percent` rows; a T&M instrument
   carries BOTH `tm_labor_hourly` and `tm_nonlabor_percent` rows. Fixed-price
   instruments carry none. All three rate types get identical treatment:
@@ -664,12 +679,21 @@ columns to any `can_view_project()` role — known, accepted, reviewed-against.
   shipped trigger, migration `20260730010000`, still carries the
   future-date `RAISE`; removing it is the NEXT migration — this entry is
   spec only until that lands.)* Combined with the absence of UPDATE/DELETE
-  policies, history before the previous rate is immutable (OQ-8 as amended
-  — DB trigger, not app-only). Superseded rows are excluded from the floor
-  and from the unique indexes (§4.2), so a correction after a supersede can
-  reuse the typo's exact date. Documented known issue (accepted):
-  concurrent renegotiations are not serialized — two simultaneous inserts
-  can read the same floor.
+  policies, history before the previous rate is immutable **to
+  renegotiations** (OQ-8 as amended 2026-07-31 — DB trigger, not app-only;
+  Owner corrections are deliberately exempt, below). Superseded rows are
+  excluded from the floor and from the unique indexes (§4.2), so a
+  correction after a supersede can reuse the typo's exact date.
+  **Supersede-context exemption (2026-07-31 ruling, S95 — NOT built):** the
+  floor must be SKIPPED for replacement inserts made from inside
+  `supersede_instrument_rate()` — a correction may re-date history (§4.2);
+  only the partial unique indexes bind it. `[BUILD-VERIFY]` the mechanic —
+  likely a transaction-local session flag (`set_config(..., true)`) the
+  SECURITY DEFINER RPC sets and the guard checks — in the follow-up
+  migration that implements it; until that lands the shipped guard still
+  floors replacements. Documented known issue (accepted): concurrent
+  renegotiations are not serialized — two simultaneous inserts can read
+  the same floor.
 - **`create_budget_line_at_capture(p_project_id uuid, p_description text,
   p_cost_code text DEFAULT NULL) RETURNS uuid`** — SECURITY DEFINER on the
   `get_or_create_misc_budget_item` model (`can_view_project` checked
@@ -699,13 +723,17 @@ columns to any `can_view_project()` role — known, accepted, reviewed-against.
   if already superseded). The original row is retained; there is no
   un-supersede. This RPC is the table's only mutation path — no UPDATE
   policy exists (§4.2). The replacement rate is written **in the same
-  transaction** (both replacement params or neither) as a normal INSERT
-  still subject to the backdating guard (which excludes superseded rows
-  from its floor) — it may reuse the superseded row's exact date. A
-  **final-state guard** rejects any supersede that would leave the
-  instrument+rate_type with NO live rate (a rateless instrument cannot
-  price), so the replacement may be omitted only when another live rate of
-  that type remains.
+  transaction** (both replacement params or neither); **as amended
+  2026-07-31 (S95)** the replacement INSERT is **EXEMPT from the backdating
+  floor** (supersede-context exemption above, `[BUILD-VERIFY]`) — a
+  correction may re-date history freely, bounded only by the partial
+  unique indexes (it may reuse the superseded row's exact date; no two
+  LIVE rates of a type may share a date). A **final-state guard** rejects
+  any supersede that would leave the instrument+rate_type with NO live
+  rate (a rateless instrument cannot price), so the replacement may be
+  omitted only when another live rate of that type remains. The 4-arg
+  signature already carries the replacement rate + date — only the guard
+  exemption is new.
 
 ---
 
@@ -830,8 +858,18 @@ live-contract terms; they are edited and read where the live job lives:
   picker floors at the latest existing non-superseded rate for that type
   with NO upper bound — future-dating is permitted (2026-07-31 ruling,
   reversing the today-cap); the DB trigger §5.5 is the authority).
-  **"Supersede rate"** (**Owner-only**, required reason,
-  in-transaction replacement — the §5.5 RPC) for correcting a mistyped row.
+  **"Correct rates"** (**Owner-only** — as amended 2026-07-31, S95,
+  replacing the earlier per-row "Supersede rate" buttons): a SINGLE control
+  that opens an EDIT MODE over the rate list. In it the Owner may edit any
+  live (non-superseded) row's **amount AND `effective_from`**, with a
+  required reason per save; each save supersedes the original (it stays
+  listed, struck through, with its reason) and writes the corrected
+  replacement via the §5.5 RPC in one transaction.
+  **The floor split, explicitly:** a RENEGOTIATION is forward-only —
+  floored at the latest non-superseded rate; a CORRECTION replacement is
+  EXEMPT from that floor and may re-date/re-price history, bounded only by
+  the no-duplicate-live-date rule (§4.2/§5.5, exemption mechanic
+  `[BUILD-VERIFY]`).
 - **First rate = contract start (option B, 2026-07-31 ruling):** the first
   rate's `effective_from` is the CONTRACT START, captured at CONVERSION —
   not at estimate entry (S-3 is amount-only) and not "today".
@@ -904,7 +942,7 @@ estimate, so a plain UPDATE would silently match zero rows.
 | S-3 contract type / initial rate / projected value | ✓ | ✓ | — | — | — |
 | S-4 project rate section — see & read (editor + history + Overview summary) | ✓ | ✓ | — | — | — |
 | S-4 renegotiate rate | ✓ | ✓ | — | — | — |
-| S-4 supersede a rate (correction) | ✓ | — | — | — | — |
+| S-4 "Correct rates" edit mode (supersede any live row — amount + date) | ✓ | — | — | — | — |
 | S-5 CO type + rate | ✓ | ✓ | — | — | — |
 | S-6 conversion prompt | ✓ | ✓ | ✓ | — | — |
 
