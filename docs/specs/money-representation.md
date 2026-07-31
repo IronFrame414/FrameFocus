@@ -9,6 +9,12 @@
 > owns which number.
 > **Sources:** S93 Phase 1 trace (verified against live repo) + Josh's approved
 > decisions (S93, four rounds). Everything below is LOCKED.
+> **Amended 2026-07-31 (S95, Josh's rulings):** S-4 relocated from the
+> estimate to project detail (§7.1, §7.2, §7.3); estimate rate entry is
+> amount-only — no effective-date input on S-3; the first rate's
+> `effective_from` = contract start, stamped at conversion (§5.1 item 4,
+> `[BUILD-VERIFY]`); live-project recompute rules stated (§7.1 S-4); §5.5
+> supersede signature corrected to the shipped 4-arg RPC.
 > **Companion specs:** `docs/specs/5A-section8-spec.md` (conversion),
 > `docs/specs/7A-spec.md` (expenses/job cost), `docs/specs/7C-spec.md`
 > (payables), `docs/specs/7G-spec.md` (invoices — owns the T&M billable-hours
@@ -551,6 +557,17 @@ File: `20260704212000_module5_5a_conversion.sql:100-242`. Changes:
    auto-derived. Display only, labeled as such (§7.1), excluded from variance
    and over/under math. NULL is a normal state.
 
+4. **First-rate contract-start stamp (2026-07-31 ruling, option B — NOT
+   built).** The conversion captures the CONTRACT START date and restamps
+   each estimate-instrument rate row that is the FIRST of its `rate_type`
+   (S-3 lands it as a `today`-at-entry placeholder) to
+   `effective_from = contract start`. `[BUILD-VERIFY]` the mechanic:
+   `instrument_rates` is append-only and the backdating guard is BEFORE
+   INSERT only, so this is likely a definer-side UPDATE inside the RPC (the
+   table has no UPDATE policy); where the contract-start date comes from
+   (convert-screen input vs. `client_contracts.executed_date` vs.
+   `accepted_at`) is part of the same build verification. See §7.1 S-4.
+
 No Miscellaneous seeding here (lazy creation, §5.5). Everything else in the
 RPC is unchanged.
 
@@ -653,15 +670,26 @@ columns to any `can_view_project()` role — known, accepted, reviewed-against.
   accepted/frozen. Deliberately narrow — the one column, flat-priced lines
   only (`total_price_override IS NOT NULL`), rejected once the estimate is
   converted. Records a cost basis; can never move sell.
-- **`supersede_instrument_rate(p_rate_id uuid, p_reason text) RETURNS void`**
-  — SECURITY DEFINER RPC, **Owner-only** (checked inside — deliberately
-  stricter than the Owner/Admin INSERT: correcting history is a bigger lever
-  than adding to it). Requires a non-empty reason; stamps
+- **`supersede_instrument_rate(p_rate_id uuid, p_reason text,
+  p_replacement_rate numeric DEFAULT NULL, p_replacement_effective_from
+  date DEFAULT NULL) RETURNS void`** — SECURITY DEFINER RPC, **Owner-only**
+  (checked inside — deliberately stricter than the Owner/Admin INSERT:
+  correcting history is a bigger lever than adding to it). *(Signature
+  corrected 2026-07-31 to match the shipped RPC in migration
+  `20260730010000_money_representation.sql` — the S93 rateless-instrument
+  fix added the replacement params; this entry previously documented the
+  pre-fix 2-arg form.)* Requires a non-empty reason; stamps
   `superseded_at`/`superseded_by`/`superseded_reason` exactly once (`RAISE`
-  if already superseded). The original row is retained; there is no un-supersede.
-  This RPC is the table's only mutation path — no UPDATE policy exists
-  (§4.2). A replacement rate, if needed, is a normal INSERT still subject to
-  the backdating guard (which excludes superseded rows from its floor).
+  if already superseded). The original row is retained; there is no
+  un-supersede. This RPC is the table's only mutation path — no UPDATE
+  policy exists (§4.2). The replacement rate is written **in the same
+  transaction** (both replacement params or neither) as a normal INSERT
+  still subject to the backdating guard (which excludes superseded rows
+  from its floor) — it may reuse the superseded row's exact date. A
+  **final-state guard** rejects any supersede that would leave the
+  instrument+rate_type with NO live rate (a rateless instrument cannot
+  price), so the replacement may be omitted only when another live rate of
+  that type remains.
 
 ---
 
@@ -753,23 +781,62 @@ sub-contract/PO entry surfaces (`payables-client.ts` consumers).
   markup rate, T&M → the labor $/man-hour rate **and the negotiated
   non-labor markup %**, collected together (each writing its initial
   `instrument_rates` row — setting a rate is the same authority as changing
-  one); and, on cost-plus/T&M, an optional **Projected value** input writing
+  one). **Amount-only (2026-07-31 ruling):** the estimate collects NO
+  effective-date input — the bid must price, but the date is not the
+  estimator's call. The S94 stage-1 date field is reverted and does not
+  re-land. The initial row lands `effective_from = today`-at-entry as a
+  placeholder; conversion restamps it to the contract start (§5.1 item 4,
+  §7.1 S-4). And, on cost-plus/T&M, an optional **Projected value** input writing
   `estimates.projected_value` (blank by default, labeled "Projected value
   (non-binding)", never pre-filled from totals). PM sees these read-only.
   The totals footer remains ordinary computed math — it is not the
   projection and is not copied at conversion for non-fixed types (§5.1).
 
-**S-4: Rate history panel** — on the instrument (estimate detail / CO
-detail) for cost-plus and T&M instruments: rate list with effective dates;
-**"Renegotiate rate"** (Owner and Admin; append-only; date picker floors at
-the latest existing non-superseded rate for that type and ALWAYS caps at
-today — no floor when it is the instrument's first rate of that type, which
-may be backdated to the signing date but never future-dated; the DB trigger
-§5.5 is the authority);
-**"Supersede rate"**
-(**Owner-only**, required reason — the §5.5 RPC) for correcting a mistyped
-row. Superseded rows stay listed, struck through with their reason; they are
-excluded from rate-in-force.
+**S-4: Project rate section (editor + history) — RELOCATED to project
+detail (2026-07-31, Josh's ruling — supersedes the estimate-detail /
+CO-detail placement in earlier revisions of this section).** Rates are
+live-contract terms; they are edited and read where the live job lives:
+
+- **Full editor + history — Budget & Cost tab**
+  (`/dashboard/projects/[id]/budget`): a rates section grouped **per
+  instrument** (P4 — never a blended job-level rate): **"Original
+  Contract"** resolved via `projects.source_estimate_id`, then one group
+  per non-fixed CO (via `instrument_rates.change_order_id`). Each group
+  shows the rate(s) in force with edit inputs and an **effective-date**
+  input, with the rate HISTORY listed below — effective dates, superseded
+  rows struck through with their reason (excluded from rate-in-force).
+- **Read-only summary — project Overview:** the rate(s) in force today,
+  per instrument. No editing, no history.
+- **Actions:** **"Renegotiate rate"** (Owner and Admin; append-only; date
+  picker floors at the latest existing non-superseded rate for that type
+  and ALWAYS caps at today — never future-dated; the DB trigger §5.5 is
+  the authority). **"Supersede rate"** (**Owner-only**, required reason,
+  in-transaction replacement — the §5.5 RPC) for correcting a mistyped row.
+- **First rate = contract start (option B, 2026-07-31 ruling):** the first
+  rate's `effective_from` is the CONTRACT START, captured at CONVERSION —
+  not at estimate entry (S-3 is amount-only) and not "today".
+  `[BUILD-VERIFY]` the stamping mechanic: `instrument_rates` is
+  append-only and the backdating guard is BEFORE INSERT, so the conversion
+  RPC likely UPDATEs the first rate's `effective_from` in place (no UPDATE
+  policy exists — a definer-side UPDATE inside the RPC); resolve in the
+  build. See §5.1 item 4.
+- **Visibility (Financial Visibility Floor):** the project rate section —
+  editor AND Overview summary — is **Owner/Admin-only**. PM and Foreman do
+  not see project rates. (Reconciliation: the PM-read-only grant in this
+  spec was S-3 estimate-side and stays there; it does not extend to the
+  project.)
+- **Recompute rules (live project):** do NOT call
+  `recalculateEstimateTotals` for the estimate instrument — on a
+  converted/frozen estimate its UPDATEs RLS-match zero rows and it still
+  returns success: a silent no-op that fakes a recompute. A rate edit on a
+  **draft CO** instrument triggers `recalculateChangeOrderTotals` for that
+  CO. Pricing incurred cost/hours at the rate in force when
+  incurred/worked is **deferred to 7D** — no stored recompute preempts it.
+- **Open (flagged, NOT resolved here):** (a) a directly-created
+  (no-estimate) project has `source_estimate_id IS NULL` — instrument
+  rates have no home on such a project; (b) `[BUILD-VERIFY]` whether a
+  rateless non-fixed estimate can reach conversion (the conversion guard
+  checks `override_cost`, not rates).
 
 **S-5: CO builder (edit)** — CO settings expose `co_type` (already in the
 schema) with the same three types and the same per-type rate fields as S-3,
@@ -799,8 +866,11 @@ estimate, so a plain UPDATE would silently match zero rows.
   linking to `/changes`.
 - **Entry points into S-2:** unchanged 7A/7C capture surfaces (expenses nav,
   material-run prompt, sub-contract schedule setup, PO entry).
-- **Entry points into S-3/S-4/S-5:** estimate builder, estimate detail, CO
-  builder/detail. **S-6:** the existing convert action on estimate detail.
+- **Entry points into S-3/S-5:** estimate builder, estimate detail, CO
+  builder/detail. **S-4 (relocated 2026-07-31):** the project **Budget &
+  Cost** tab (full editor + history) and the project **Overview**
+  (read-only rate-in-force summary) — no longer estimate/CO detail.
+  **S-6:** the existing convert action on estimate detail.
 
 ### 7.3 Roles summary (per screen)
 
@@ -812,6 +882,7 @@ estimate, so a plain UPDATE would silently match zero rows.
 | S-2 capture with split | ✓ | ✓ | ✓ | ✓ | per 7A capture rules |
 | S-3 cost field on flat-priced lines | ✓ | ✓ | ✓ | — | — |
 | S-3 contract type / initial rate / projected value | ✓ | ✓ | — | — | — |
+| S-4 project rate section — see & read (editor + history + Overview summary) | ✓ | ✓ | — | — | — |
 | S-4 renegotiate rate | ✓ | ✓ | — | — | — |
 | S-4 supersede a rate (correction) | ✓ | — | — | — | — |
 | S-5 CO type + rate | ✓ | ✓ | — | — | — |
