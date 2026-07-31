@@ -13,6 +13,7 @@ import {
   fmtMoney,
 } from '@/components/expenses/expense-ui';
 import { ApplyCoBudgetButton } from './apply-co-budget-button';
+import { RateSection } from './rate-section';
 import { cardStyle, color, font, h2Style, microLabelStyle, primaryButtonStyle } from '@/lib/theme';
 
 /**
@@ -285,6 +286,11 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
           </div>
         )}
       </div>
+
+      {/* §7.1 S-4 (amended 2026-07-31) — read-only contract rates + history.
+          Owner/Admin ONLY (Financial Visibility Floor): inside this gate the
+          component never renders or fetches for PM/Foreman. */}
+      {isOwnerAdmin && <RateSection project={project} />}
 
       {isOwnerAdmin && (
         <p style={{ fontSize: '13px', color: color.muted, margin: '0 0 6px' }}>
