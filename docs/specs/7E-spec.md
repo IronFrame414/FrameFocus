@@ -1,3 +1,11 @@
+> # ⚠️ SUPERSEDED — DO NOT BUILD FROM THIS FILE
+> **Replaced by `docs/specs/7e1-spec.md` [S94].** Retained unchanged for audit only.
+> Known-wrong here: §8 and acceptance #3 let a PM record payments received, which
+> contradicts architecture §7.6 and the §7.11 trace (marked "Founder, corrected #9");
+> negative-CO credits and the cost-to-date/revenue pairing are both absent though
+> §7.2 assigns them to 7E; acceptance #5 says "job-named Project" when the QBO
+> Projects feature is explicitly not used; §4's retainage gate reads as enforcing.
+> Any cross-reference to "7E-spec.md" means **7e1-spec.md**.
 # Module 7E — Payments & AR — Spec
 
 > **Derives from** `module7-architecture.md` §7.0 (scope), §7.2 (sub-module table), §7.3

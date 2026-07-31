@@ -1,3 +1,13 @@
+> # ⚠️ SUPERSEDED — DO NOT BUILD FROM THIS FILE
+>
+> **Replaced by `docs/specs/7h1-spec.md` [S94].** Retained unchanged for audit only.
+> Known-wrong here: profit = Contract − actual is undefined for cost-plus and T&M,
+> where P11 forbids using projected_value; §7H.2 #3 defers per-category margin
+> against a blocker money-rep P2 had already resolved; the category rows do not sum
+> to the job total because line-less retainage has no row; and it ships on UI-only
+> gating with no migration batched. Any cross-reference to "7H-spec.md" means
+> **7h1-spec.md**.
+
 # 7H — Job Profitability — Plan
 
 > **Status:** Interview-backed plan, this session. Decisions in §7H.2 are Josh's calls **except where
@@ -52,9 +62,9 @@ existing doc/decision; `[inferred]` = Claude's inference, confirm before treatin
    margin is owner-level. The cut view-only bookkeeper/accountant role stays deferred to `TECH_DEBT`
    (`[inherited]`, cut at M7 architecture time).
 7. **Approved-only.** `[inherited]` (7A gate, P5) The report counts only **approved** actual cost;
-   pending/rejected ledger rows are excluded until an owner/admin approves them. *(P5's
+   pending/rejected ledger rows are excluded until an owner/admin approves them. _(P5's
    "verified" concept shipped as the 7A `approved` status — `pending|approved|rejected`,
-   migration `20260728010000:74-75`; terminology renamed throughout this spec [S91].)*
+   migration `20260728010000:74-75`; terminology renamed throughout this spec [S91].)_
 8. **Cash basis.** `[inherited]` (P1) "Actual" = money that left the account. Committed vs. actual is
    the core cost axis.
 9. **Export to PDF.** `[this session]` The per-job and portfolio reports can be exported to PDF

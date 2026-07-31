@@ -1,3 +1,12 @@
+> # ⚠️ SUPERSEDED — DO NOT BUILD FROM THIS FILE
+>
+> **Replaced by `docs/specs/7g1-spec.md` [S94].** Retained unchanged for audit only.
+> Known-wrong/incomplete here: §7G.4 does not say whether the invoice exports the
+> derived or the billed amount (it must be billed); there is no negative-CO credit
+> row, so QB would permanently overstate income; void-with-a-payment is flagged but
+> unresolved; there is no job naming convention, no disconnected-operation rule, and
+> no sync queue. Any cross-reference to "7G-spec.md" means **7g1-spec.md**.
+
 # 7G — QuickBooks Connector — Integration Plan
 
 > **Status:** Research-backed plan. Decisions in §7G.2 are Josh's calls this session **except where
@@ -60,9 +69,9 @@ confirm before treating as fixed.
    income path's concern.
 
 5. **Sync timing — per-record.** `[this session]` Each financial record exports to QB the moment it clears **its own
-   approval gate** — invoice on send, manual payment on entry, timesheet on approval. *("CO on
+   approval gate** — invoice on send, manual payment on entry, timesheet on approval. _("CO on
    approval" deleted [S91]; RESOLVED [S92] — a signed CO exports nothing; its dollars reach QB
-   on the 7D invoice that bills them. See §7G.4.)* Electronic payments arrive inbound via the webhook. **There is no separate batch "session"
+   on the 7D invoice that bills them. See §7G.4.)_ Electronic payments arrive inbound via the webhook. **There is no separate batch "session"
    approval before export.** ("Only approved sessions export" is read as: only records that have
    passed their own approval sync — not a batch object.)
 
@@ -75,6 +84,7 @@ The only thing docs can't close is the **live-only residual** noted in §7G.6 �
 a real QB-Payments-connected company.
 
 **Auth**
+
 - OAuth 2.0 only — no API keys or basic auth.
 - Scope needed: `com.intuit.quickbooks.accounting` only (customers, items, invoices,
   payments-as-records, bills, vendors, credit memos).
@@ -93,6 +103,7 @@ a real QB-Payments-connected company.
   Owner to reconnect — never silently drop records queued to sync. Store tokens encrypted, per company.
 
 **REST**
+
 - Base: `https://quickbooks.api.intuit.com/v3/company/{realmId}/{resource}` — **sandbox uses a
   separate host** (`sandbox-quickbooks.api.intuit.com`). Include the `minorversion` query param.
 - **No PUT/PATCH.** Updates are POST with the full object, or a **sparse update** (`sparse:true`) that
@@ -102,6 +113,7 @@ a real QB-Payments-connected company.
   transaction entities.
 
 **Limits & metering (per company / realmId)**
+
 - Throttling: 500 requests/min per realmId, 10 concurrent, Batch endpoint 120/min, report/heavy
   endpoints 200/min. Over → HTTP 429 (ThrottleExceeded) → exponential backoff with jitter. Sandbox
   shares the same limits.
@@ -115,6 +127,7 @@ a real QB-Payments-connected company.
   so one large company can't starve others' syncs.
 
 **Entities in play**
+
 - **Customer** — client record; **sub-customer** = same entity with `ParentRef` set to the client.
 - **Item** — the "Construction Income" service Item (income account behind it).
 - **Invoice** — `CustomerRef` = job sub-customer; `Line[]` of `SalesItemLineDetail` with `ItemRef`.
@@ -125,6 +138,7 @@ a real QB-Payments-connected company.
   the connector surface is complete.
 
 **Inbound / catching QB-side changes**
+
 - Subscribe to **webhooks** for Invoice and Payment events → an HTTPS endpoint (Vercel). This is how
   Model A learns a client paid.
 - Use **CDC** (`changedSince`, 30-day window) as a backstop/reconciliation poll so nothing is missed
@@ -132,6 +146,7 @@ a real QB-Payments-connected company.
 - Handle events **idempotently** (dedupe by QB entity id + change token).
 
 **Sandbox**
+
 - Intuit provisions a free sandbox company (up to five) for building and confirming the flows. The one
   **live-only residual** — the pay-link rendering for a QB-Payments-connected company — needs a real
   Payments-enabled company, since sandbox Payments is limited (§7G.6).
@@ -147,22 +162,22 @@ device incoming money is tied to. Neither the original contract nor a signed cha
 touches QB — **promised value stays in FrameFocus; billed value goes to QB.** Consequence,
 stated so this doesn't get re-litigated: QB cannot answer "what is this job worth" — that
 lives in FrameFocus only. Payables are unchanged: sub bill/commitment → Bill and sub payment →
-BillPayment still export — real money out, needed for expense accounting and 1099s.]**
+BillPayment still export — real money out, needed for expense accounting and 1099s.]\*\*
 
-- Client → QB **Customer** *([S92] created lazily at first invoice export, not eagerly at
-  client creation — nothing reaches QB until an invoice needs it)*
-- Job → QB **sub-customer** under the client **(new)** *([S92] created lazily at first invoice
-  export, not eagerly at job creation — satisfies invoices-only in letter and spirit)*
-- Sub / vendor (with EIN) → QB **Vendor** *(7C — live source: the `subcontractors` table, which carries `ein` [S91])*
-- Client invoice → QB **Invoice** (CustomerRef = job sub-customer; single income Item) *(7D)*
-- Client payment, **electronic** → **INBOUND** from QB via webhook (Model A) *(7E)* **(new direction)**
-- Client payment, **manual** (check/cash) → QB **Payment** *(7E)*
-- Credit / refund → QB **CreditMemo / RefundReceipt** *(7E)*
-- Sub bill / commitment → QB **Bill**; sub payment → QB **BillPayment** *(7C — [S91] "pay
+- Client → QB **Customer** _([S92] created lazily at first invoice export, not eagerly at
+  client creation — nothing reaches QB until an invoice needs it)_
+- Job → QB **sub-customer** under the client **(new)** _([S92] created lazily at first invoice
+  export, not eagerly at job creation — satisfies invoices-only in letter and spirit)_
+- Sub / vendor (with EIN) → QB **Vendor** _(7C — live source: the `subcontractors` table, which carries `ein` [S91])_
+- Client invoice → QB **Invoice** (CustomerRef = job sub-customer; single income Item) _(7D)_
+- Client payment, **electronic** → **INBOUND** from QB via webhook (Model A) _(7E)_ **(new direction)**
+- Client payment, **manual** (check/cash) → QB **Payment** _(7E)_
+- Credit / refund → QB **CreditMemo / RefundReceipt** _(7E)_
+- Sub bill / commitment → QB **Bill**; sub payment → QB **BillPayment** _(7C — [S91] "pay
   application" is not a shipped concept; live sources are the payable `expenses` rows
   (bills / schedule stages) and `expense_payments`. Payment `amount` is GROSS; cash out is
-  NET of `retainage_withheld` — map accordingly at 7G build.)*
-- ~~Approved change order → QB **contract adjustment** (raises or lowers contract value; bidirectional) *(7B)*~~
+  NET of `retainage_withheld` — map accordingly at 7G build.)_
+- ~~Approved change order → QB **contract adjustment** (raises or lowers contract value; bidirectional) _(7B)_~~
   **[S91 — deleted, FALSE on two counts: the contributing CO status is `'signed'`
   (`change_orders_status_check`, migration `20260704215000:70`; `contract-value.ts:17-20`), and
   contract value is DERIVED at read (`contract-value.ts`) — there is no FF-side write to mirror.
@@ -171,7 +186,7 @@ BillPayment still export — real money out, needed for expense accounting and 1
   no such object, and the CO's dollars already reach QB on the 7D invoice that bills them —
   pushing at signature would double-count. Governing principle recorded in the preamble above:
   promised value stays in FrameFocus; billed value goes to QB.]**
-- Approved timesheet → QB **Time / Payroll** entry *(M6 / payroll)*
+- Approved timesheet → QB **Time / Payroll** entry _(M6 / payroll)_
 
 **Lifecycle, not just create.** The map above is the create / first-push. Records also change: edits
 propagate as **sparse updates**; a **void** (§7E allows voiding an invoice) propagates as a POST to
@@ -185,7 +200,7 @@ generally can't be voided — reconcile with §7E's void rules so QB income alwa
 
 `module7-architecture.md` §7.3 draws 7G as an **export-only** path at the bottom of the dependency
 map. That is incomplete: for the **electronic-payment path, 7G is also upstream of 7E** — payments
-process *through* QuickBooks and flow back in. This is the Session-72 amendment #1, now **confirmed**
+process _through_ QuickBooks and flow back in. This is the Session-72 amendment #1, now **confirmed**
 against both the committed doc and the QB API research.
 
 Consequence for build order: the **non-QB parts of 7E build first** (manual payment records, aging,
@@ -198,7 +213,7 @@ half is a stub until 7G exists.**
 
 **Do not take table or column names from this document.** CC reads the **live** schemas — 7D/7E
 (invoice, payment), 7C (bill, vendor), and Company Settings — confirms real field names, then builds.
-This section states only *what must be storable*, not how.
+This section states only _what must be storable_, not how.
 
 Storage the connector needs (CC to place in the right live tables):
 
@@ -213,6 +228,7 @@ Storage the connector needs (CC to place in the right live tables):
 - **Webhook handling:** an event log / idempotency key store to dedupe QB events.
 
 CC also confirms, against the live schema:
+
 - That the "Construction Income" default Item and its remap target exist / can be created per company.
 - That the company's QB Payments connection is live, so the pay-link actually renders — the
   `AllowOnline*Payment` fields themselves are accounting-scope and already resolved (§7G.6).
@@ -227,15 +243,16 @@ CC also confirms, against the live schema:
 - **RESOLVED (docs) — pay-link on accounting scope.** Enabling the invoice pay-link is an
   accounting-scope Invoice operation (the `AllowOnline*Payment` flags); no Charges API / payment scope
   needed for Model A. **Live-only residual:** confirm the link renders for a real QB-Payments-enabled
-  company (sandbox Payments is limited). This is the *only* item that a live test — not docs — can close.
+  company (sandbox Payments is limited). This is the _only_ item that a live test — not docs — can close.
 - **RESOLVED (docs) — sub-customer income posting.** A job is created as a Customer with `Job: true`
   and `ParentRef` = the client (accounting scope; up to 4 nesting levels). An invoice with `CustomerRef`
   = that job sub-customer posts its income to the job — Intuit's Customer docs state sales transactions
   attribute to whichever customer/sub-customer/job the `CustomerRef` names. Note: QBO's `IsProject` flag
-  is **read-only and ignored on create**, so the Projects feature genuinely *cannot* be created via API,
+  is **read-only and ignored on create**, so the Projects feature genuinely _cannot_ be created via API,
   which confirms the sub-customer decision (§7G.2 #2) was the only viable path.
 
 **Build notes surfaced while resolving these (for CC):**
+
 - **Job `DisplayName` must be unique** across all Customers/Vendors/Employees and may not contain `:`,
   tab, or newline — CC needs a naming convention that guarantees per-job uniqueness.
 - **`BillWithParent`** on the job controls billed-with-parent vs. billed-separately; set for per-job
@@ -244,11 +261,11 @@ CC also confirms, against the live schema:
   `ProcessPayment: false` (record only, do not attempt to charge).
 - **Pre-Module 9 external-surface gate:** Model A **sidesteps** it for the pay surface — QB hosts the
   pay page, FrameFocus only shows the redirect notice. The gate no longer blocks electronic pay. (It
-  still governs any *other* client-facing surface, e.g. the 7F e-signature link.)
+  still governs any _other_ client-facing surface, e.g. the 7F e-signature link.)
 - **QB Payments onboarding:** a company with no QB Payments account gets manual-only pay; surface this
   clearly at connect time.
 - **"Each financial action optionally syncs"** (existing QB-strategy rule): per-record sync fires at
-  approval, but a per-action/company toggle for *whether* a given action syncs at all may exist.
+  approval, but a per-action/company toggle for _whether_ a given action syncs at all may exist.
   Reconcile against the live Company Settings model at build — do not over-design it here.
 
 ---

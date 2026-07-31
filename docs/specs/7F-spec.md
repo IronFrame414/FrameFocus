@@ -1,3 +1,10 @@
+> # ⚠️ SUPERSEDED — DO NOT BUILD FROM THIS FILE
+> **Replaced by `docs/specs/7f1-spec.md` [S94].** Retained unchanged for audit only.
+> Known-wrong here: #11's collection gate reads as enforcing (it is advisory); #4
+> fixes the model at two templates, which cannot serve four-form statutory states;
+> #10's "$ to match the invoice" is ambiguous once retainage is withheld; §7F.9
+> flags a linked release for review instead of voiding it, and misattributes the
+> invoice void to 7E. Any cross-reference to "7F-spec.md" means **7f1-spec.md**.
 # 7F — Lien Releases & Waivers — Plan
 
 > **Status:** Interview-backed plan, this session. Decisions in §7F.2 are Josh's calls **except where
