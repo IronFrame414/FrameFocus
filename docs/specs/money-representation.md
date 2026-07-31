@@ -15,6 +15,10 @@
 > `effective_from` = contract start, stamped at conversion (§5.1 item 4,
 > `[BUILD-VERIFY]`); live-project recompute rules stated (§7.1 S-4); §5.5
 > supersede signature corrected to the shipped 4-arg RPC.
+> **Amended 2026-07-31 (later same session):** future-dated rates ALLOWED —
+> P5 today-cap reversed (P5, §4.2, §5.5, §6, §7.1 S-4); a future rate is
+> dormant until its effective date; #111 becomes moot once the trigger's
+> `CURRENT_DATE` check is removed (next migration — spec-only until then).
 > **Companion specs:** `docs/specs/5A-section8-spec.md` (conversion),
 > `docs/specs/7A-spec.md` (expenses/job cost), `docs/specs/7C-spec.md`
 > (payables), `docs/specs/7G-spec.md` (invoices — owns the T&M billable-hours
@@ -44,21 +48,27 @@
   mixing within one instrument. A project may hold instruments of different
   types simultaneously.
 - **P5 — Negotiated rates are effective-dated; backdating is bounded by the
-  previous rate.** (Amended 2026-07-30, Josh's ruling — replaces the earlier
-  strict forward-only rule.) Both the cost-plus markup rate and the T&M
-  labor sell rate. A rate applies from its effective date forward;
-  cost/hours mark up or bill at the rate in force when incurred/worked. The
-  FIRST rate on an instrument+rate_type may take any past-or-today
+  previous rate; future-dating is allowed.** (Amended 2026-07-31, Josh's
+  ruling — REVERSES the 2026-07-30 "no future rate" rule; that amendment in
+  turn replaced the earlier strict forward-only rule.) Both the cost-plus
+  markup rate and the T&M labor sell rate. A rate applies from its
+  effective date forward; cost/hours mark up or bill at the rate in force
+  when incurred/worked. `effective_from` may be ANY date — past, today, or
+  future. The FIRST rate on an instrument+rate_type may take any
   `effective_from`, months back included — it records the contract signing
-  date. An
-  agreement is often struck days before it can be entered; the delay is
-  data entry, not a change in the deal. Costs entered between the handshake
-  and the entry DO reprice — correct, the deal was in force. LATER rates
-  must be dated on or after the latest existing rate for that
-  instrument+rate_type. NO rate — first or later — may be dated in the
-  future: nothing legitimate needs a future rate. This does not reopen OQ-8:
-  history before the previous rate is still immutable — the bound is
-  enforced by a database trigger (§5.5), not app-only.
+  date. An agreement is often struck days before it can be entered; the
+  delay is data entry, not a change in the deal. Costs entered between the
+  handshake and the entry DO reprice — correct, the deal was in force.
+  LATER rates must be dated on or after the latest existing non-superseded
+  rate for that instrument+rate_type — no rewriting already-priced history.
+  Same-date correction is a supersede, never a re-entry. **Future-rate
+  semantics:** a future-dated rate is NOT in force until its effective date
+  arrives — rate-in-force stays "the newest non-superseded rate with
+  `effective_from` ≤ the as-of date," so a future rate sits dormant/pending
+  until then (a negotiated step-up entered the day it's agreed, effective
+  the day it starts). This does not reopen OQ-8: history before the
+  previous rate is still immutable — the bound is enforced by a database
+  trigger (§5.5), not app-only.
 - **P6 — Signed COs write their OWN budget lines.** CO scope is tracked
   independently of the original contract's baseline, labeled by instrument.
 - **P7 — Every expense lands on budget lines via SPLIT-AT-CAPTURE
@@ -320,9 +330,11 @@ CREATE UNIQUE INDEX instrument_rates_co_type_date_key
   the estimate-level markup defaults (`baseline_schema.sql:1323-1326`) for
   all sell derivation.
 - **The backdating bound is DB-enforced:** the
-  `instrument_rates_backdating_guard` trigger (§5.5) caps EVERY rate at
-  today, lets the first rate per instrument+rate_type backdate freely, and
-  pins later rates to [latest existing non-superseded rate, today]. RLS:
+  `instrument_rates_backdating_guard` trigger (§5.5) lets the first rate
+  per instrument+rate_type take any date, and floors later rates at the
+  latest existing non-superseded rate. No upper bound — future-dating is
+  allowed (P5 as amended 2026-07-31; the shipped trigger's today-cap is
+  removed by the next migration). RLS:
   SELECT
   company-scoped; INSERT **Owner and Admin** (per the Admin Role Principle —
   rate renegotiation is not on the owner-only list); no UPDATE/DELETE
@@ -638,22 +650,26 @@ columns to any `can_view_project()` role — known, accepted, reviewed-against.
   inside the function. Lazy creation means it works for estimate-born,
   no-estimate, and T&M projects alike (OQ-9 resolution).
 - **`instrument_rates_backdating_guard`** — BEFORE INSERT trigger on
-  `instrument_rates` (P5 as amended 2026-07-30 — replaces the earlier
-  `instrument_rates_forward_only`). First check, on EVERY insert: `RAISE
-  EXCEPTION` when `NEW.effective_from > CURRENT_DATE` — no rate is ever
-  future-dated. Then, if no non-superseded row exists for the same
-  instrument+`rate_type`, the insert passes with any past-or-today
-  `effective_from` (the first rate records the contract signing date).
-  Otherwise it `RAISE EXCEPTION`s when `NEW.effective_from` is before the
-  latest existing non-superseded rate's `effective_from`. Combined with the
-  absence of UPDATE/DELETE policies, history before the previous rate is
-  immutable (OQ-8 as amended — DB trigger, not app-only). Superseded rows
-  are excluded from the floor and from the unique indexes (§4.2), so a
-  correction after a supersede can reuse the typo's exact date. Documented
-  known issues (accepted): `CURRENT_DATE` is UTC — users in timezones ahead
-  of UTC entering "today" late in their day can trip the future-date
-  rejection; and concurrent renegotiations are not serialized — two
-  simultaneous inserts can read the same floor.
+  `instrument_rates` (P5 as amended 2026-07-31 — future-dating allowed,
+  reversing the 2026-07-30 today-cap; the original replaced
+  `instrument_rates_forward_only`). If no non-superseded row exists for the
+  same instrument+`rate_type`, the insert passes with ANY `effective_from`
+  — past, today, or future (the first rate records the contract signing
+  date, or a not-yet-started contract). Otherwise it `RAISE EXCEPTION`s
+  when `NEW.effective_from` is before the latest existing non-superseded
+  rate's `effective_from` — that floor is the only date check. With the
+  future cap gone the guard no longer references `CURRENT_DATE` at all,
+  which makes accepted debt **#111** (UTC `CURRENT_DATE` vs. a user's local
+  "today") **moot** — there is no today-boundary left to trip. *(The
+  shipped trigger, migration `20260730010000`, still carries the
+  future-date `RAISE`; removing it is the NEXT migration — this entry is
+  spec only until that lands.)* Combined with the absence of UPDATE/DELETE
+  policies, history before the previous rate is immutable (OQ-8 as amended
+  — DB trigger, not app-only). Superseded rows are excluded from the floor
+  and from the unique indexes (§4.2), so a correction after a supersede can
+  reuse the typo's exact date. Documented known issue (accepted):
+  concurrent renegotiations are not serialized — two simultaneous inserts
+  can read the same floor.
 - **`create_budget_line_at_capture(p_project_id uuid, p_description text,
   p_cost_code text DEFAULT NULL) RETURNS uuid`** — SECURITY DEFINER on the
   `get_or_create_misc_budget_item` model (`can_view_project` checked
@@ -699,7 +715,7 @@ columns to any `can_view_project()` role — known, accepted, reviewed-against.
 | --- | --- |
 | `packages/shared/utils/estimate-totals.ts` | Sell math unchanged. Add `computeRowBudgetCost()` — cost × (1 + tax) for any taxed non-labor row (mirrors §5.1 SQL). Add `deriveCostPlusSell(cost, ratePercent)` and `deriveTmLaborSell(hours, hourlyRate)` honoring P4/P5: `cost_plus_percent` (cost-plus) and `tm_nonlabor_percent` (T&M non-labor) each override per-row markup / `resolveRowMarkupPercent` (`:119-136`); T&M labor rate is sell-only, no burden, no markup. Unit tests alongside (the `apps/web/lib/services/payables-shared.test.ts` precedent). |
 | `apps/web/lib/services/estimate-items-client.ts` | Flat-price lines persist `override_cost`. Settings save persists `contract_type` and the user-entered `projected_value` (nullable — never derived or defaulted from totals). Cost-plus estimates: sell derivation swaps per-row markup for the rate in force. T&M estimates: labor rows display sell at `tm_labor_hourly` (hours × rate); non-labor rows price at the `tm_nonlabor_percent` rate in force. Recompute (`:554-609`) structure untouched. |
-| New `apps/web/lib/services/instrument-rates(-client).ts` | Server/client pair for `instrument_rates`: list (rate-in-force + history, superseded rows included but marked), append (Owner/Admin; the DB backdating guard is the authority — every rate capped at today, first rate per type backdatable to the signing date, later rates floored at the latest existing rate — the service surfaces its errors), and supersede via the `supersede_instrument_rate` RPC (Owner-only, required reason). Standard service-pair pattern (CLAUDE.md → Service Layer Pattern). |
+| New `apps/web/lib/services/instrument-rates(-client).ts` | Server/client pair for `instrument_rates`: list (rate-in-force + history, superseded rows included but marked), append (Owner/Admin; the DB backdating guard is the authority — first rate per type takes any date, later rates floored at the latest existing non-superseded rate, no today-cap (future-dating allowed, P5 as amended 2026-07-31) — the service surfaces its errors), and supersede via the `supersede_instrument_rate` RPC (Owner-only, required reason). Standard service-pair pattern (CLAUDE.md → Service Layer Pattern). |
 | `apps/web/lib/services/co-signing-service.ts` | `completeCoSignature()` calls `apply_change_order_budget` after the status flip (§5.2). |
 | `apps/web/lib/services/budget.ts` | `getBudgetRollup()` (`:35+`) gains: instrument grouping (original contract / per-CO / ad-hoc+misc); **remaining-committed derivation** (per §4.5 — joins `expense_payments` through allocations; displays remaining, not the stored gross); cost-to-date = actual + remaining. Fix the stale "pre-tax" comment (`:31-34`). |
 | `apps/web/lib/services/expenses-client.ts` | `createExpense` writes the expense **and its allocation split** (≥1 line, Σ = amount) in one flow; picker sourced from `listProjectBudgetLines` (`:257-267`) grouped by instrument, plus "Miscellaneous" resolving through `get_or_create_misc_budget_item`. `createAdHocBudgetLine` (`:186-210`) unchanged. |
@@ -804,13 +820,17 @@ live-contract terms; they are edited and read where the live job lives:
   per non-fixed CO (via `instrument_rates.change_order_id`). Each group
   shows the rate(s) in force with edit inputs and an **effective-date**
   input, with the rate HISTORY listed below — effective dates, superseded
-  rows struck through with their reason (excluded from rate-in-force).
+  rows struck through with their reason (excluded from rate-in-force), and
+  not-yet-effective rates marked **"pending (effective <date>)"** (P5 as
+  amended 2026-07-31: dormant until their date arrives, never in force
+  early).
 - **Read-only summary — project Overview:** the rate(s) in force today,
   per instrument. No editing, no history.
 - **Actions:** **"Renegotiate rate"** (Owner and Admin; append-only; date
   picker floors at the latest existing non-superseded rate for that type
-  and ALWAYS caps at today — never future-dated; the DB trigger §5.5 is
-  the authority). **"Supersede rate"** (**Owner-only**, required reason,
+  with NO upper bound — future-dating is permitted (2026-07-31 ruling,
+  reversing the today-cap); the DB trigger §5.5 is the authority).
+  **"Supersede rate"** (**Owner-only**, required reason,
   in-transaction replacement — the §5.5 RPC) for correcting a mistyped row.
 - **First rate = contract start (option B, 2026-07-31 ruling):** the first
   rate's `effective_from` is the CONTRACT START, captured at CONVERSION —
