@@ -38,6 +38,22 @@ export interface RateInForceInput {
   superseded_at: string | null;
 }
 
+/** Latest live (non-superseded) effective_from for a type, or null when the
+ *  next rate would be the instrument's first of that type (free date — P5).
+ *  The renegotiation date floor derives from this (floor + 1 day in the UI;
+ *  the DB trigger is the authority). */
+export function latestLiveEffectiveFrom(
+  rates: RateInForceInput[],
+  rateType: InstrumentRateType
+): string | null {
+  let latest: string | null = null;
+  for (const r of rates) {
+    if (r.rate_type !== rateType || r.superseded_at !== null) continue;
+    if (!latest || r.effective_from > latest) latest = r.effective_from;
+  }
+  return latest;
+}
+
 /** Pure rate-in-force selection — shared by server and client callers.
  *  Superseded rows never win (their correction is the point, §5.5). */
 export function rateInForce(

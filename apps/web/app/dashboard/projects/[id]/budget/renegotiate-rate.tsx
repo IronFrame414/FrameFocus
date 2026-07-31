@@ -50,6 +50,9 @@ interface RenegotiateRateProps {
    *  converted/frozen estimate recalculateEstimateTotals is a silent no-op
    *  that fakes success (spec §7.1 S-4 recompute rules). */
   recomputeDraftCoId?: string;
+  /** Client-state refresh hook for parents that hold rates in useState
+   *  (router.refresh() only re-renders server components — #114 posture). */
+  onSaved?: () => void;
 }
 
 export function RenegotiateRate({
@@ -60,6 +63,7 @@ export function RenegotiateRate({
   percent,
   floor,
   recomputeDraftCoId,
+  onSaved,
 }: RenegotiateRateProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -116,6 +120,7 @@ export function RenegotiateRate({
       if (!r.success) {
         setSaving(false);
         setError(`Rate saved, but the change order did not reprice: ${r.error ?? 'recompute failed'}`);
+        onSaved?.(); // the rate DID land — parents must not show stale rates
         router.refresh();
         return;
       }
@@ -124,6 +129,7 @@ export function RenegotiateRate({
     reset();
     // Re-render the server section so the new rate appears immediately
     // (#114: never leave the panel stale until a manual reload).
+    onSaved?.();
     router.refresh();
   }
 

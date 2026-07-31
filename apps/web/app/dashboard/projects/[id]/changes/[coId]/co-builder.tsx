@@ -20,6 +20,7 @@ import {
   type CoRowType,
   type UpdateCoLineRowInput,
 } from '@/lib/services/change-orders-client';
+import { CoRateSection } from './co-rate-section';
 
 // 5D — estimate-style CO builder (D-1). Typed rows carry SIGNED values:
 // enter a negative rate / unit cost / amount for a credit and put the
@@ -129,6 +130,9 @@ interface CoBuilderProps {
   changeOrder: ChangeOrderWithChildren;
   subcontractors: Array<{ id: string; name: string }>;
   canManage: boolean;
+  /** Owner/Admin only (§7.3 S-5) — sets this CO's instrument rates; PM
+   *  builds lines but sees type/rate read-only. */
+  canEditRates: boolean;
   pendingSigningToken: string | null;
   companyName: string;
   hasSavedSignature: boolean;
@@ -139,6 +143,7 @@ export function CoBuilder({
   changeOrder: co,
   subcontractors,
   canManage,
+  canEditRates,
   pendingSigningToken,
   companyName,
   hasSavedSignature,
@@ -367,6 +372,17 @@ export function CoBuilder({
             )}
           </div>
         </div>
+
+        {/* §7.1 S-5 — non-fixed COs carry their own instrument rate(s); a
+            rateless CO cannot price (the recompute refuses 0% margin). */}
+        {(co.co_type === 'cost_plus' || co.co_type === 'time_and_materials') && (
+          <CoRateSection
+            changeOrderId={co.id}
+            coType={co.co_type}
+            canEditRates={canEditRates}
+            isDraft={co.status === 'draft'}
+          />
+        )}
 
         {sendOpen && co.status === 'draft' && (
           <div

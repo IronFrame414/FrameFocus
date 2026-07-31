@@ -11,7 +11,7 @@ export type {
   InstrumentRef,
   RateInForceInput,
 } from '@/lib/services/instrument-rates-shared';
-export { rateInForce } from '@/lib/services/instrument-rates-shared';
+export { latestLiveEffectiveFrom, rateInForce } from '@/lib/services/instrument-rates-shared';
 
 // Money representation §4.2/§6 — client writes for instrument rates.
 // Types and the pure rateInForce live in instrument-rates-shared.ts (no
