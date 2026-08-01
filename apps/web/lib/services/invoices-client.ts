@@ -13,8 +13,19 @@ import {
   type SelectedCost,
   type SelectedSegment,
 } from '@framefocus/shared/utils/invoice-derivation';
-import { laborRateType, nonLaborRateType, rateRowInForce } from '@/lib/services/invoices-shared';
-import type { ContractType, InstrumentRef, InvoiceLineType } from '@/lib/services/invoices-shared';
+import {
+  canVoidInvoice,
+  laborRateType,
+  nonLaborRateType,
+  rateRowInForce,
+} from '@/lib/services/invoices-shared';
+import type {
+  ContractType,
+  InstrumentRef,
+  InvoiceLineType,
+  InvoiceStatus,
+  VoidContext,
+} from '@/lib/services/invoices-shared';
 
 export type {
   ContractType,
@@ -566,51 +577,23 @@ export async function markInvoiceSent(invoiceId: string): Promise<Result> {
   return { success: true };
 }
 
-export interface VoidContext {
-  /** Whether any payment has been applied. 7E owns payments; until 7E exists
-   *  this is false in practice — the caller passes what it knows. */
-  hasPayment: boolean;
-  /** 7G G3: a payment queued while QuickBooks is disconnected. */
-  paymentSyncedToQuickBooks: boolean;
-  role: 'owner' | 'admin' | 'project_manager' | string;
-}
-
 /**
- * §9 — void requires a REASON, always. The actor narrows once money is applied:
- *   unpaid                              -> Owner/Admin
- *   partially paid, NOT yet in QB       -> Owner ONLY, with a warning
- *   partially paid, already in QB       -> NOT voidable (7E credit/refund)
- *   fully paid                          -> NOT voidable (7E credit/refund)
+ * §9 — void requires a REASON, always. WHO may void narrows once money is
+ * applied; the decision itself is canVoidInvoice in invoices-shared.ts (pure,
+ * unit-tested against §9's matrix) and is not restated here.
  *
  * Voiding also RELEASES the invoice's cost and hour claims so those rows
- * return to the pickers and the reissue can bill them (§6.2/§10). The invoice
+ * return to the pickers and a reissue can bill them (§6.2/§10). The invoice
  * and its lines are retained frozen forever (§9) — only the claims are freed.
  */
 export async function voidInvoice(
   invoiceId: string,
   reason: string,
   memberId: string,
-  context: VoidContext
+  context: Omit<VoidContext, 'status'>
 ): Promise<Result> {
   if (!reason.trim()) {
     return { success: false, error: 'A reason is required to void an invoice (7D §9).' };
-  }
-
-  if (context.hasPayment && context.paymentSyncedToQuickBooks) {
-    return {
-      success: false,
-      error:
-        'This invoice has a payment already in QuickBooks and cannot be voided. Correct it with a credit or refund in 7E (§9).',
-    };
-  }
-  if (context.hasPayment && context.role !== 'owner') {
-    return {
-      success: false,
-      error: 'Once a payment has been applied, only the Owner can void this invoice (7D §9).',
-    };
-  }
-  if (!['owner', 'admin'].includes(context.role)) {
-    return { success: false, error: 'Only Owner or Admin can void an invoice (7D §9/§12).' };
   }
 
   const supabase = createClient();
@@ -620,9 +603,9 @@ export async function voidInvoice(
     .eq('id', invoiceId)
     .single();
   if (!invoice) return { success: false, error: 'Invoice not found' };
-  if (invoice.status === 'voided') {
-    return { success: false, error: 'This invoice is already voided.' };
-  }
+
+  const decision = canVoidInvoice({ ...context, status: invoice.status as InvoiceStatus });
+  if (!decision.allowed) return { success: false, error: decision.reason };
 
   const { error } = await supabase
     .from('invoices')

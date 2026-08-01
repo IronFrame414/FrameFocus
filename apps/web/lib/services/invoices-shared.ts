@@ -178,6 +178,69 @@ export function findSplitDays(
   return splits;
 }
 
+// ── §9 — who may void, and when ─────────────────────────────────────────────
+
+export interface VoidContext {
+  /** Whether any payment has been applied. 7E owns payments and is not built,
+   *  so this is false in practice today; the caller passes what it knows. */
+  hasPayment: boolean;
+  /** 7G G3 — a payment queued while QuickBooks is disconnected. */
+  paymentSyncedToQuickBooks: boolean;
+  role: string;
+  status: InvoiceStatus;
+}
+
+export type VoidDecision =
+  | { allowed: true; warning?: string }
+  | { allowed: false; reason: string };
+
+/**
+ * §9's actor matrix, as a pure decision so it can be proven:
+ *
+ *   unpaid                          -> Owner/Admin, reason required
+ *   partially paid, NOT yet in QB   -> Owner ONLY, with a warning
+ *   partially paid, already in QB   -> NOT voidable (7E credit/refund)
+ *   fully paid                      -> NOT voidable (7E credit/refund)
+ *
+ * §9 notes the "not yet in QuickBooks" row exists ONLY while QB is
+ * disconnected and a payment sits queued — build it as the exception it is.
+ */
+export function canVoidInvoice(ctx: VoidContext): VoidDecision {
+  if (ctx.status === 'voided') {
+    return { allowed: false, reason: 'This invoice is already voided.' };
+  }
+  if (ctx.status === 'draft' || ctx.status === 'pending_approval') {
+    return {
+      allowed: false,
+      reason: 'A draft invoice is deleted, not voided — voiding is for invoices already sent (§9).',
+    };
+  }
+  if (ctx.hasPayment && ctx.paymentSyncedToQuickBooks) {
+    return {
+      allowed: false,
+      reason:
+        'This invoice has a payment already in QuickBooks and cannot be voided. Correct it with a credit or refund in 7E (§9).',
+    };
+  }
+  if (ctx.hasPayment) {
+    if (ctx.role !== 'owner') {
+      return {
+        allowed: false,
+        reason: 'Once a payment has been applied, only the Owner can void this invoice (§9).',
+      };
+    }
+    return {
+      allowed: true,
+      warning:
+        'A payment has been applied to this invoice. Voiding it turns that payment into a client credit.',
+    };
+  }
+  if (!['owner', 'admin'].includes(ctx.role)) {
+    return { allowed: false, reason: 'Only Owner or Admin can void an invoice (§9/§12).' };
+  }
+  return { allowed: true };
+}
+
 // ── date/duration helpers ───────────────────────────────────────────────────
 
 /** The company-timezone calendar day of a timestamp.
