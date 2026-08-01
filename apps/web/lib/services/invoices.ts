@@ -212,7 +212,12 @@ export async function getPickableCosts(
  */
 export async function getPickableHours(
   projectId: string,
-  today: string
+  today: string,
+  /** companies.timezone — the day an hour belongs to is a COMPANY-tz calendar
+   *  day, matching Module 6 (see companyDay). The caller reads it once via
+   *  getCompanyTimeSettings() and passes it down, the daily-logs/new/page.tsx
+   *  pattern, so this page makes one settings fetch rather than two. */
+  timeZone: string
 ): Promise<PickableHour[]> {
   const supabase = await createClient();
 
@@ -267,7 +272,7 @@ export async function getPickableHours(
     if (!session) continue; // not approved
     if (!seg.segment_end) continue;
 
-    const workDate = companyDay(seg.segment_start);
+    const workDate = companyDay(seg.segment_start, timeZone);
     out.push({
       segmentId: seg.id,
       memberId: session.member_id,

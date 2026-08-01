@@ -243,12 +243,34 @@ export function canVoidInvoice(ctx: VoidContext): VoidDecision {
 
 // ── date/duration helpers ───────────────────────────────────────────────────
 
-/** The company-timezone calendar day of a timestamp.
- *  PROVISIONAL on the §S K6 cross-midnight question: a segment belongs to the
- *  day it STARTED, matching 6B's log_date convention. Flagged for Josh — it
- *  changes real invoices. */
-export function companyDay(timestamp: string): string {
-  return new Date(timestamp).toISOString().slice(0, 10);
+/**
+ * The COMPANY-TIMEZONE calendar day of a timestamp (§S K6 cross-midnight).
+ *
+ * RULED [S97]: a segment belongs to the day it STARTED, in the company's
+ * timezone — the convention Module 6 already uses in all three of its layers:
+ *   - packages/shared/utils/time-tracking.ts (paidHoursPerSession, §13 break
+ *     cap) buckets segment_start via zonedParts(…, timeZone)
+ *   - the timesheet queue keys dayKey off Intl.DateTimeFormat('en-CA', {timeZone})
+ *   - get_project_day_presence() (20260721060000) filters segment_start with
+ *     `AT TIME ZONE z.timezone`
+ * and the convention 6B's log_date default follows.
+ *
+ * This function previously derived the day from toISOString() — i.e. UTC. The
+ * ANCHOR (the day it started) matched 6B; the TIMEZONE did not. At
+ * America/New_York that misdated every segment starting at/after 20:00 EDT,
+ * which splits one worked day into two rounding groups and OVER-BILLS the
+ * client up to half an hour per person per day (§7.2 rounds each group up).
+ *
+ * 'en-CA' yields YYYY-MM-DD directly — the same idiom as
+ * daily-logs/new/page.tsx and timeclock/timesheets/page.tsx.
+ */
+export function companyDay(timestamp: string, timeZone: string): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(timestamp));
 }
 
 export function hoursBetween(start: string, end: string): number {

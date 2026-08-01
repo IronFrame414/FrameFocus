@@ -1,13 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import {
   canVoidInvoice,
+  companyDay,
   findSplitDays,
   laborRateType,
   nonLaborRateType,
   rateRowInForce,
   type RateRow,
 } from '@/lib/services/invoices-shared';
-import type { SelectedSegment } from '@framefocus/shared/utils/invoice-derivation';
+import {
+  groupSelectedHours,
+  type SelectedSegment,
+} from '@framefocus/shared/utils/invoice-derivation';
 
 // Module 7D1 §9/§10 lifecycle rules and §6.1 rate resolution.
 
@@ -92,6 +96,69 @@ describe('§6.1 — rate-type mapping and rate-row resolution (A-9)', () => {
   it('returns null before any rate exists — the caller must refuse to price at 0%', () => {
     expect(rateRowInForce(rows, 'cost_plus_material_percent', '2026-04-01')).toBeNull();
     expect(rateRowInForce(rows, 'cost_plus_other_percent', '2026-06-01')).toBeNull();
+  });
+});
+
+describe('§S K6 — an hour belongs to its COMPANY-tz calendar day [S97]', () => {
+  const NY = 'America/New_York';
+
+  // 2026-06-02 20:00 EDT is stored as 2026-06-03T00:00:00Z. Evening work is
+  // ordinary on a jobsite, so this is the common case, not an edge case.
+  const eveningEdt = '2026-06-03T00:00:00.000Z';
+
+  it('a 20:00 EDT segment belongs to June 2, not June 3', () => {
+    expect(companyDay(eveningEdt, NY)).toBe('2026-06-02');
+  });
+
+  it('REGRESSION: it must not fall back to the UTC day', () => {
+    // The pre-[S97] implementation returned the toISOString() slice.
+    expect(new Date(eveningEdt).toISOString().slice(0, 10)).toBe('2026-06-03');
+    expect(companyDay(eveningEdt, NY)).not.toBe(
+      new Date(eveningEdt).toISOString().slice(0, 10)
+    );
+  });
+
+  it('holds in winter too — 19:00 EST is still the same local day (DST)', () => {
+    // 2026-01-14 19:00 EST = 2026-01-15T00:00:00Z.
+    expect(companyDay('2026-01-15T00:00:00.000Z', NY)).toBe('2026-01-14');
+  });
+
+  it('is driven by the passed timezone, never hardcoded', () => {
+    // The same instant is still Jun 2 on the west coast (17:00 PDT).
+    expect(companyDay(eveningEdt, 'America/Los_Angeles')).toBe('2026-06-02');
+    // …and genuinely Jun 3 for a company that keeps UTC.
+    expect(companyDay(eveningEdt, 'UTC')).toBe('2026-06-03');
+  });
+
+  it('midday work is unaffected — the fix moves only the evening tail', () => {
+    // 2026-06-02 13:00 EDT = 17:00Z, same day either way.
+    expect(companyDay('2026-06-02T17:00:00.000Z', NY)).toBe('2026-06-02');
+  });
+
+  // The money consequence: §7.2 rounds each person-day UP to the half hour, so
+  // splitting one worked day into two groups bills the client for MORE time.
+  it('keeps one worked day in ONE rounding group — 5h00m bills 5.0, not 5.5', () => {
+    const afternoon = '2026-06-02T19:00:00.000Z'; // 15:00 EDT, 3h10m
+    const evening = eveningEdt; //                  20:00 EDT, 1h50m
+
+    const correct: SelectedSegment[] = [
+      { segmentId: 's1', memberId: 'm1', workDate: companyDay(afternoon, NY), rawHours: 3.1667 },
+      { segmentId: 's2', memberId: 'm1', workDate: companyDay(evening, NY), rawHours: 1.8333 },
+    ];
+    const groups = groupSelectedHours(correct);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].workDate).toBe('2026-06-02');
+    expect(groups[0].billableHours).toBe(5);
+
+    // Under the old UTC day the same two segments split into two groups, each
+    // rounding up on its own — half an hour of over-billing per person per day.
+    const utcSplit: SelectedSegment[] = [
+      { segmentId: 's1', memberId: 'm1', workDate: afternoon.slice(0, 10), rawHours: 3.1667 },
+      { segmentId: 's2', memberId: 'm1', workDate: evening.slice(0, 10), rawHours: 1.8333 },
+    ];
+    const splitGroups = groupSelectedHours(utcSplit);
+    expect(splitGroups).toHaveLength(2);
+    expect(splitGroups.reduce((sum, g) => sum + g.billableHours, 0)).toBe(5.5);
   });
 });
 

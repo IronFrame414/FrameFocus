@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
 import { getProject } from '@/lib/services/projects';
 import { getChangeOrders } from '@/lib/services/change-orders';
+import { getCompanyTimeSettings } from '@/lib/services/company';
 import { getMyMember } from '@/lib/services/members';
 import {
   getAvailableCredits,
@@ -75,7 +76,17 @@ export default async function InvoiceDetailPage({
     project.project_type ??
     'fixed_price') as ContractType;
 
-  const today = new Date().toISOString().slice(0, 10);
+  // Company-tz "today" and the timezone the hour pickers bucket by — read once
+  // here and threaded down (daily-logs/new/page.tsx pattern). Deriving the day
+  // from toISOString() would be UTC and would misdate evening work; see
+  // companyDay in invoices-shared.ts [S97].
+  const { timezone } = await getCompanyTimeSettings();
+  const today = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
   const derived = contractType === 'cost_plus' || contractType === 'time_and_materials';
 
   const [rateRows, pickableCosts, pickableHours, credits] = await Promise.all([
@@ -83,7 +94,7 @@ export default async function InvoiceDetailPage({
     instrument && derived
       ? getPickableCosts(params.id, instrument, today)
       : Promise.resolve([]),
-    derived ? getPickableHours(params.id, today) : Promise.resolve([]),
+    derived ? getPickableHours(params.id, today, timezone) : Promise.resolve([]),
     getAvailableCredits(params.id),
   ]);
 
