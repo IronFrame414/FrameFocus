@@ -198,7 +198,25 @@ push has run).**
     switches (`percent_across` ↔ `final_hold`), forward-only via per-payment
     computation; the withheld accrual row is NEVER touched. (113c-spec §5 as
     amended.)
-12. **UI direction (NEXT RUN, not built):** ONE panel-level edit mode subsuming
-    the per-draft "Review & confirm" — setup view for contracts without a
-    schedule (keeping the award budget-line tie + plan-vs-contract variance),
+12. **UI direction (since BUILT — commit `7fa48f4`):** ONE panel-level edit mode
+    subsuming the per-draft "Review & confirm" — setup view for contracts without
+    a schedule (keeping the award budget-line tie + plan-vs-contract variance),
     editable stages for contracts with one. (113c-spec §5 as amended.)
+13. **Mismatch confirm, both directions** (refines ruling 10): Σ stages ≠
+    contract value still NEVER blocks, but the save now requires an EXPLICIT
+    CONFIRM — over AND under — as an inline confirm step (the PaymentModal
+    formal-contract pattern, not a browser dialog), acknowledged once per open
+    editor and re-armed when the numbers change; plus a persistent read-mode
+    advisory with direction-specific wording. Fixes the click-test bug it was
+    ruled against: the advisory previously lived only inside an OPEN editor's
+    live line and a transient post-save notice, so a SAVED over-committed
+    schedule went permanently silent once the box collapsed.
+    (contracts-panel.tsx; commit `7fa48f4`.)
+14. **PM setup-only in panel edit mode** (refines rulings 7 and 12): "Edit
+    schedules" is visible to Owner/Admin AND PM, but PM sees ONLY schedule-less
+    contracts — the setup form, stages landing pending for Owner/Admin
+    approval — and can never reach `revise_sub_contract_schedule` (the UI never
+    routes PM there; the RPC's Owner/Admin check stays the authority). Restores
+    a regression the panel-level rework introduced — it had swallowed PM's old
+    per-draft "Review & confirm" entry point; spec §4 preserves PM setup.
+    (113c-spec §4; contracts-panel.tsx; commit `7fa48f4`.)
