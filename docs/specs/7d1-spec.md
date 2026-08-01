@@ -9,8 +9,11 @@
 >
 > **Status:** WORKFLOW APPROVED + PROVEN (interviews S89–S92, extended and reconciled **[S96]**,
 > traces completed and four rulings corrected against practice **[S97]**).
-> **Schema layer deliberately absent** — see §S. No table names, columns, or file paths are asserted
-> as fact. CC writes the schema layer after reading the live upstream schemas named in §S.
+> ~~**Schema layer deliberately absent** — see §S. No table names, columns, or file paths are
+> asserted as fact. CC writes the schema layer after reading the live upstream schemas named in
+> §S.~~ **[S97] Superseded: §S is FILLED.** CC read all ten upstream areas against the live repo and
+> rebuild-test; §S now carries real table/column/FK/RLS/trigger/service/route names, seven recorded
+> conflicts, and the NEW-vs-EXISTS split. Outside §S the body text still asserts no schema.
 >
 > **[S97] — what changed.** Every calculated variant now carries a **founder-corrected** trace
 > (§15 B and C were illustrative; both are now real). Four rulings changed against practice:
@@ -18,6 +21,12 @@
 > **hours round up to the HALF hour, not the quarter** (§7); and the **void actor** is narrowed once
 > a payment is applied (§9, §12). §11's three presentation levels are confirmed real, and full
 > detail is pinned to a layout (§11, §15).
+>
+> **[S97 — third batch: BILLABLE HOURS.]** **D1 — the Owner approves their own hours** (no
+> auto-approval, no special case in billing math). **D2 — billable hours are USER-SELECTED**, the
+> same picker as §6.2's costs; the task on an hour is context, not a filter, and a task→line-item
+> rule floated earlier this session is **WITHDRAWN** (no `tasks` schema). Both are in §7.2; they
+> close §S's K3 and K4. **§S itself is no longer a TODO** — it was filled from the live repo.
 >
 > **[S96] — the prior revision.** Closed four holes and one stale model found by reconciling the
 > spec against `money-representation.md` and the architecture traces: cost-plus billing was absent
@@ -32,6 +41,14 @@
 > ruled (§11); **R4** negative COs produce a credit LINE, not a credit document — §A.5 REVERSED, no
 > QB CreditMemo (§4a, trace H); **R5** trace B's line text + incurred dates supplied (§15-B);
 > **R6** deposits on cost-plus/T&M draw down as a job credit balance (§3a).
+>
+> **[S97 — third batch: BILLABLE HOURS ruled, D1 + D2.]** **D1** — the **Owner approves their own
+> hours**; the gate is unchanged for everyone and billing math has no Owner case (§7.2). **D2** —
+> **billable hours are USER-SELECTED**, the same picker shape as §6.2's costs: approved unbilled
+> hours are listed with their task and date, the user ticks what to bill, unselected hours reappear
+> next time. An hour with **no task is still billable**; the task→line-item rule floated earlier in
+> S97 is **WITHDRAWN** and no `tasks` schema is to be built (§S S.6a). Half-hour per-person-per-day
+> rounding now applies to the **selected** hours. Conflicts **K3 and K4 are CLOSED** (§S).
 >
 > **Provenance tags** (repo convention): `[S96]` = ruled in the spec-reconciliation session ·
 > `[S97]` = ruled in the trace-completion session · `[inherited]` = carried from an existing
@@ -309,6 +326,9 @@ contains, and it accommodates deliberately holding something back.
   IS the hold-back** — it stays unbilled and keeps appearing here (with its age) until billed.
 - **[S96]** The picker **shows how long each cost has sat unbilled**, so age is visible and costs are
   not accidentally left behind — which matters precisely because the user selects rows by hand.
+- **[S97 — D2] The same picker shape governs HOURS.** §7.2 now selects billable hours by the identical
+  mechanic (present approved-and-unbilled, user ticks, unselected reappear with their age). Costs and
+  hours are two populations in one control, not two different rules — build them as one pattern.
 
 ### §6.3 — Tax base
 
@@ -382,13 +402,61 @@ is needed and how far the job is; it does not vary within a job.
 
 Missing either rate → `NoRateInForceError`. Never price at 0%.
 
-### §7.2 — Billable hours — **[S96, increment corrected [S97]]**
+### §7.2 — Billable hours — **[S96; increment corrected [S97]; population and selection RULED [S97 — D1/D2]]**
 
-- **Population:** every **approved** hour logged against the job. Approval is the existing Module 6
-  timesheet gate; unapproved hours never reach a client bill.
-- **[S97] Rounding: sum each person's approved hours for the day, then round that daily total UP to
-  the HALF hour.** One rounding per person per day — **not** per time entry, and **not** to the
-  quarter hour.
+**[S97 — D2] The user PICKS the hours, exactly as §6.2 picks the costs.** The invoice presents the
+instrument's **approved, unbilled** work hours — each showing its **task (where it has one)** and its
+**date** — and the user **ticks which to bill**. Selection is the mechanism; there is no derivation
+from tasks, line items, or segment type.
+
+> _Superseded [S96] clause:_ **"Population:** every **approved** hour logged against the job.
+> Approval is the existing Module 6 timesheet gate; unapproved hours never reach a client bill."
+> Approval still gates **eligibility** — unapproved hours never appear in the picker and never reach
+> a client bill — but approval alone no longer puts an hour on an invoice. **The user's tick does.**
+
+> **[S97] WITHDRAWN — the task→line-item chain.** An earlier S97 statement held that _"hours are tied
+> to tasks, tasks are tied to line items, and the hours on those tasks are the billable hours."_
+> **Josh withdrew this and ruled selection instead.** It is recorded here only so the withdrawal is
+> not re-litigated: **no `tasks`→line-item link is to be specced or built**, and CC verified the link
+> does not exist today (§S S.6a). Had the rule stood it would have required schema on `tasks` plus a
+> backfill of every existing task.
+
+**The rules that follow from selection:**
+
+- **Task is CONTEXT, not a filter.** The task on an hour is shown to inform the user's choice. **An
+  hour with no task still appears in the picker and is still fully billable.** This matters
+  immediately: on rebuild-test **11 of 12** live work segments carry no task (§S S.6a).
+- **[S97 — D2, closing K4] Selection replaces classification.** No segment type is billable or
+  unbillable by rule. `material_run` and `warranty` segments carry a `project_id` but — by the live
+  `time_segments_task_gate_check` — can **never** carry a task, so they appear in the picker with a
+  blank task column. **They DO appear**, because the user decides: a material run made for the job is
+  often legitimately billable on a T&M job, and hiding it would silently forfeit revenue with no
+  visible trace. `travel`, `shop` and `break` segments carry no `project_id` at all and therefore
+  never enter an instrument's picker.
+- **Unselected hours stay unbilled and reappear**, with their age, on the next invoice's picker —
+  identical to §6.2's unselected costs. **Not selecting an hour IS the hold-back.** Nothing silently
+  disappears.
+- **Instrument attribution is project→instrument, as today.** An hour belongs to the instrument its
+  **project** resolves to. **Per-line (line-item-grain) attribution is explicitly out of scope for
+  v1** — it was the withdrawn chain's only benefit and it is not worth schema on `tasks`.
+- **[S97 — D1] The approval gate is unchanged for everyone, and the OWNER APPROVES THEIR OWN TIME.**
+  There is **no auto-approval and no special case anywhere in the billing math** — the Owner's hours
+  enter the picker through the same "approved" door as everyone else's. This **closes K3: the
+  Owner's field hours DO reach an invoice.** See §S S.6b for the two live app-layer gaps that must
+  close for this to function (the Owner's sessions are currently written `status = NULL`, and the
+  bulk week-approval RPC refuses self-approval) — **both are Module 6 changes, not 7D ones.**
+
+**Rounding — [S97], now applied to the SELECTED hours:**
+
+- **Sum each person's SELECTED hours for the day, then round that daily total UP to the HALF hour.**
+  One rounding per person per day — **not** per time entry, and **not** to the quarter hour.
+
+> _Amended [S97 — D2]:_ the superseded text rounded _"each person's **approved** hours for the day."_
+> The arithmetic is unchanged; only its input narrows from *approved* to *approved **and selected***.
+> **Consequence to honor at build:** if a person's day is split across two invoices, each invoice
+> rounds the part it bills — so two partial days can round up to slightly more than the whole day
+> would have. Billing a person's day in one piece is the norm; the picker should keep a day together
+> by default.
 
 > **Worked example (founder-sourced, [S97]).** One person, one day, one job: 3h10m in the morning and
 > 4h05m in the afternoon = **7h15m actual → 7.5 billable hours.** Rounding once per person per day is
@@ -399,9 +467,18 @@ Missing either rate → `NoRateInForceError`. Never price at 0%.
 > increment appears in `7g1-spec.md:238` and `7h1-spec.md:89, :349` as well. **All must be corrected
 > together** — 7D and 7H otherwise compute different labor totals from the same hours.
 
-- **No billable flag in v1** — the population is "approved hours on this job." Non-billable time must
-  be kept off the job rather than flagged on it. If that proves insufficient, a billable flag on time
-  entries is a Module 6 change, not a 7D one; file to `TECH_DEBT.md` at build.
+**The picker's grain — [S97], CC-verified.** Approval and task attribution live on **different
+tables**: `time_clock_sessions.status` carries approval, `time_segments.task_id` carries the task and
+`time_segments.project_id` the job. **The picker joins them via `time_segments.session_id`** — it
+reads segments for the instrument's project, and takes each segment's approval state from its parent
+session. An hour is eligible iff its **session** is approved and its **segment** is on the job.
+
+> _Superseded [S96] bullet:_ **"No billable flag in v1** — the population is 'approved hours on this
+> job.' Non-billable time must be kept off the job rather than flagged on it. If that proves
+> insufficient, a billable flag on time entries is a Module 6 change, not a 7D one."
+> **[S97 — D2]** Selection supersedes this: non-billable time is simply **not ticked**, and no
+> Module 6 billable flag is needed. What IS needed is a **billed/unbilled marker on hours** so a
+> billed hour stops reappearing in the picker — that is **7D's own schema**, not Module 6's (§S).
 
 **Instrument scope.** **[S96]** Both a T&M **change order** and a T&M **estimate-contract** are in
 scope (P4 permits both).
@@ -709,7 +786,8 @@ OUTPUT  Presentation chosen per invoice (§11); this one FULL DETAIL (layout A) 
 ```
 INPUT   T&M ESTIMATE-CONTRACT — all in-house, per §7.1.
         Rates: labor $100 per man-hour; non-labor markup 20%.
-        Approved labor: 42 hours.
+        Approved labor: 42 hours (all SELECTED in the picker — §7.2 as ruled [S97];
+          the trace bills every approved hour because the user ticked every one).
         Materials: $175.20 and $168.20.
 
 DERIVE  Labor     42 h x $100        = $4,200.00   (no burden, no markup)
@@ -729,6 +807,7 @@ OUTPUT  Client bill $4,612.08. NO RETAINAGE on T&M (§5, §7).
 
 ```
 INPUT   One person, one day, one job. Morning 3h10m; afternoon 4h05m.
+        Both segments approved AND selected (D2) — the day is billed whole.
 DERIVE  Sum the person's day FIRST: 7h15m actual.
         Round the daily total UP to the half hour: 7.5 billable hours.
         (Rounding each session separately would give 3.5 + 4.5 = 8.0 — WRONG.)
@@ -837,10 +916,19 @@ OUTPUT  The next invoice nets $5,000 lower; QB sees the smaller invoice,
 6. A signed CO prompts bill-now vs. next-invoice.
 7. A material-selection overage auto-generates a **draft** difference invoice and prompts bill-now vs.
    next-invoice.
-8. **[S97, replaces the quarter-hour criterion]** A **T&M** invoice bills labor at the labor rate
-   **in force on the worked date**, where billable hours are **approved hours summed per person per
-   day and then rounded UP to the half hour**, and non-labor at cost × the non-labor markup in force
-   on the incurred date — with **no burden, no markup on labor, and no retainage**.
+8. **[S97, replaces the quarter-hour criterion; amended again S97 — D2]** A **T&M** invoice bills
+   labor at the labor rate **in force on the worked date**, where billable hours are **approved,
+   USER-SELECTED hours summed per person per day and then rounded UP to the half hour** — _superseded
+   clause: "approved hours summed per person per day"_, which implied every approved hour billed
+   automatically — and non-labor at cost × the non-labor markup in force on the incurred date — with
+   **no burden, no markup on labor, and no retainage**.
+   - **8a. [S97, NEW — D2]** The hours picker presents **every approved, unbilled** hour for the
+     instrument with its **task (blank where none)** and **date**; an hour with **no task is
+     billable**; `material_run`/`warranty` hours appear and `travel`/`shop`/`break` never do; an
+     **unselected hour stays unbilled and reappears** on the next invoice's picker with its age; and
+     a **billed hour never reappears** (§7.2, §6.2).
+   - **8b. [S97, NEW — D1]** An **Owner's** approved hours bill exactly like anyone else's — the
+     billing math contains **no Owner special case and no auto-approval** (§7.2).
 9. **[S97, replaces the single-rate criterion]** A **cost-plus** invoice bills each user-selected
    approved cost at **its own category's** rate in force on that cost's incurred date; crew labor
    bills at the flat per-man-hour rate, not as marked-up cost; and an instrument missing any rate it
@@ -1073,13 +1161,56 @@ work/material_run/warranty and FORBIDDEN for travel/shop/break; `task_id` only o
 `segment_start` in the company timezone (`companies.timezone`, `20260719000000`;
 `company_time_settings` `20260721050000`; `weekWindow()` in
 `packages/shared/utils/time-tracking.ts`), hours = Σ segment durations on that project → round UP
-to the half hour once per person per day. The data supports this exactly; what counts as
-billable segment types and the Owner's hours need rulings (D1/D2). Cost-side (never client-facing):
-`member_pay_rates` (`20260721040000`), `member_burden_settings` (7A).
+to the half hour once per person per day. The data supports this exactly. **[S97] D1 and D2 are now
+RULED (§7.2)** — _superseded note: "what counts as billable segment types and the Owner's hours need
+rulings (D1/D2)."_ Cost-side (never client-facing): `member_pay_rates` (`20260721040000`),
+`member_burden_settings` (7A).
+
+#### S.6a — The task→line-item chain does NOT exist (verified [S97]; rule since WITHDRAWN)
+
+Verified before the rule was withdrawn, and retained so it is not re-investigated:
+
+- **Hours→task: EXISTS but is optional and type-gated.** `time_segments.task_id` (uuid, **nullable**,
+  FK → `tasks.id`). `time_segments_task_gate_check` permits a task **only on a `'work'` segment** —
+  `material_run` and `warranty` carry `project_id` but can never carry a task.
+- **Task→line item: DOES NOT EXIST.** `tasks` (`20260704213000`, confirmed against live
+  `information_schema` on rebuild-test) ties to `project_id` (NOT NULL), `phase_id` (nullable →
+  `phases`, which itself carries **no** estimate reference), `change_order_id` (nullable, the 5D
+  hook), and `assignee_id`. There is **no** `estimate_line_item_id` / line-row column anywhere.
+- **Live rows on rebuild-test:** 12 work segments, **11 with no task**; 5 `material_run`/`warranty`
+  segments (task structurally impossible); 6 tasks — all phase-linked, **0** CO-linked, 0
+  line-item-linked. Under the withdrawn rule **zero** hours would have been billable.
+- **Instrument resolution** would have worked had the link existed (estimate line → `estimate_id`;
+  CO line → `change_order_id`), but it needed an XOR-style pair since estimate lines and CO lines are
+  separate tables. **Moot under D2** — attribution is project→instrument (§7.2).
+
+#### S.6b — Owner self-approval: two APP-LAYER gaps, no schema wall — **[S97, correcting K3]**
+
+D1 requires the Owner's hours to become "approved" like anyone else's. CC's earlier K3 claim that
+this was structurally impossible was **too strong** — corrected here:
+
+- **The DB permits it today.** `time_clock_sessions_update_authorized` has a blanket Owner/Admin arm
+  (`get_my_role() IN ('owner','admin')`, with no self-exclusion), and
+  `enforce_time_clock_sessions_column_scope()` **returns early and unrestricted for Owner/Admin**
+  (§8.1). An Owner can therefore write `status`/`approved_by`/`approved_at` on their **own** session
+  via an ordinary UPDATE. No migration is required for D1.
+- **Gap 1 — Owner sessions are written with NO approval state.**
+  `apps/web/lib/services/time-tracking-client.ts:81`:
+  `const status = role === 'owner' ? null : 'pending'`. Confirmed live: all **4** Owner sessions on
+  rebuild-test carry `status = NULL` (crew 5 and PM 2 are `'approved'`). A NULL-status session is
+  outside any "approved" population, so today the Owner's hours would never reach the picker.
+- **Gap 2 — the bulk week path refuses self-approval.** `approve_member_week()` raises _"You may only
+  approve members strictly below your role"_ via `can_approve_member()`, which tests
+  `p_target_member_id IS DISTINCT FROM get_my_member_id()` **and** strictly-greater rank — so it
+  rejects self for everyone and rejects the Owner as a target for anyone. The **per-session** UPDATE
+  path is unaffected; only the week RPC and any UI keyed on `can_approve_member` are.
+- **Both gaps are Module 6 changes** (an Owner self-approval affordance + writing a real status for
+  Owner sessions), not 7D schema. 7D consumes whatever "approved" means; it must not special-case the
+  Owner in billing math (D1). **File as an M6 dependency at build.**
 
 ### S.7 — Project finances model (item 7)
 
-**No invoice-side schema exists.** Today's финance surface = `project_budget_items`
+**No invoice-side schema exists.** Today's finance surface = `project_budget_items`
 (budgeted/committed/actual + misc bucket) + `expenses`/`expense_payments` + the 7B contract-value
 derivation + `budget.ts`/`dashboard.ts` reads. A standalone invoice's amount/category has **no
 landing place** — §2's standalone posting (incl. deposit-to-budget crediting, §3) is green-field.
@@ -1136,6 +1267,14 @@ exists, a selection overage reaches 7D only as a **manually authored CO** (confl
   amount · billed amount — **NEW**. Discount = ordinary negative line [R1].
 - **Per cost row:** billed/unbilled marker — **NEW**; must cover BOTH `expenses`-side costs and
   labor hours (which are not expense rows — S.5/S.6), and resolve K1/K2 first.
+- **[S97 — D2] Per HOUR: a billed/unbilled marker, the same as a cost row** — **NEW**. §7.2's picker
+  presents approved-and-**unbilled** hours and unselected ones must reappear next time, so a billed
+  hour has to be markable. Two live constraints shape it: `time_segments` is **Module 6's** table
+  (7D should not add billing state to it — the 7A/7C precedent is that 7D-side state lives in 7D's
+  own tables), and the marker's grain is the **segment** (the task/job tie) while approval is the
+  **session** — so an invoice-line→segment claim table is the natural shape. The **rounded** billed
+  quantity must also survive, because rounding happens per person per day on the SELECTED set and is
+  therefore not recomputable from the segments alone. Design with K2.
 - **Per job:** deposit credit balance with visible draw-down (§3a) — **NEW** (S.3: no deposit
   schema at all).
 - **Credit lines** (negative-CO §4a incl. available-until-placed state, allowance under-credit
@@ -1148,9 +1287,9 @@ exists, a selection overage reaches 7D only as a **manually authored CO** (confl
 | #  | Conflict |
 | -- | -------- |
 | K1 | **§6.2 vs S.5 — costs have no direct instrument tag.** Attribution is transitive (allocation → budget item → source estimate/CO), and works ONLY when the budget item has instrument identity. The `is_miscellaneous` bucket has none: a cost-plus job's misc-allocated expense is **unattributable to any instrument**, so §6's "which instrument's rates price this cost" has a hole. Needs a rule or a direct per-cost instrument ref (decision D3). |
-| K2 | **§6.2's "cost row" is two populations.** Non-labor costs are `expenses` rows; labor "costs" are derived hours (S.6) with no row to mark billed. The billed/unbilled marker needs a design that covers hours (e.g., billed-through-date per person/instrument or an invoice-lines-claim model) — not just an `expenses` flag. |
-| K3 | **§7.2 vs S.6 — the Owner's hours can never be "approved".** `time_clock_sessions.status` is NULL for the Owner by design (`can_approve_member` rejects the Owner; nobody outranks them). §7.2's population "every approved hour" would silently exclude the founder's own field hours from every T&M/cost-plus invoice. Decision D1. |
-| K4 | **§7.2 does not say which segment types bill.** work / material_run / warranty all carry `project_id`; travel/shop/break never do. Whether a material run or warranty hour is billable is undefined. Decision D2. |
+| K2 | **§6.2's "cost row" is two populations.** Non-labor costs are `expenses` rows; labor "costs" are derived hours (S.6) with no row to mark billed. The billed/unbilled marker needs a design that covers hours (e.g., billed-through-date per person/instrument or an invoice-lines-claim model) — not just an `expenses` flag. **[S97 — D2] STILL OPEN, and now firmly in scope:** selection makes the hours marker mandatory (storage list above). The two populations stay two populations; one picker presents them. |
+| K3 | ~~**§7.2 vs S.6 — the Owner's hours can never be "approved".**~~ **[S97 — D1] CLOSED, and the original claim CORRECTED.** _Superseded text: "`time_clock_sessions.status` is NULL for the Owner by design (`can_approve_member` rejects the Owner; nobody outranks them). §7.2's population 'every approved hour' would silently exclude the founder's own field hours."_ The exclusion was real but the impossibility was **overstated** — the DB's Owner/Admin arms permit Owner self-approval today (S.6b). Ruling: **the Owner approves their own time**; billing math gets no special case. What remains is **two Module 6 app-layer gaps** (S.6b), not a 7D conflict. |
+| K4 | ~~**§7.2 does not say which segment types bill.**~~ **[S97 — D2] CLOSED: selection replaces classification.** No type is billable by rule. `material_run`/`warranty` **do** appear in the picker (project-attached, task-impossible → blank task column); `travel`/`shop`/`break` never do, because they carry no `project_id`. The user decides (§7.2). |
 | K5 | **§4/S.10 — no structured selection.** A selection-overage CO is indistinguishable from any other CO (`reason_category` free text). If §4's flows need to KNOW a CO is a selection overage (reporting, client copy), v1 needs a convention or column. Decision D5. |
 | K6 | **Session-day boundary.** §7.2 groups per person per DAY, but approval is per session and a session may cross midnight (no constraint prevents it). Which day a cross-midnight segment's hours belong to (segment_start's day vs. split at the boundary) is unstated. CC can propose (segment_start's company-tz day — matches 6B's log_date convention) but it changes real invoices; flagged for confirmation. |
 | K7 | **Doc staleness recorded:** money-rep's "no migration exists" header is stale (S.4); §S item 7's "M6 unverified/unmerged — largest upstream risk" is stale (S.6); item 6's "7C rebuild-test only, never click-tested" is still TRUE (prod batch owed — everything `20260728000000`+ is pending on production). The A-9 app-code layer is committed (`c332382`). |
@@ -1159,8 +1298,8 @@ exists, a selection overage reaches 7D only as a **manually authored CO** (confl
 
 | #  | Decision |
 | -- | -------- |
-| D1 | **Do the Owner's own hours bill on T&M/cost-plus?** (K3). If yes: the billable population must be "approved OR owner" (status IS NULL AND member is Owner), or the Owner gets an approval path. |
-| D2 | **Which segment types are billable hours?** work only, or work + material_run (+ warranty?) (K4). |
+| ~~D1~~ | **[S97] RULED — CLOSED.** _Was: "Do the Owner's own hours bill on T&M/cost-plus? If yes: the billable population must be 'approved OR owner' … or the Owner gets an approval path."_ **The Owner APPROVES THEIR OWN HOURS.** The approval gate stands unchanged for everyone; no auto-approval; no special case in billing math (§7.2). Josh chose the approval-path option, not the "approved OR owner" predicate — so 7D never tests for the Owner. Carries an **M6 dependency** (S.6b). |
+| ~~D2~~ | **[S97] RULED — CLOSED.** _Was: "Which segment types are billable hours? work only, or work + material_run (+ warranty?)"_ **Neither — the question is void: hours are USER-SELECTED, not classified** (§7.2). The earlier task→line-item chain is **WITHDRAWN**; no `tasks` schema is to be specced. Task is context; hours with no task are billable; unselected hours reappear. |
 | D3 | **Misc-bucket costs on a cost-plus/T&M job:** unbillable by definition, billed at a default instrument (original contract?), or must every billable cost be allocated to an instrument-bearing budget item? (K1). |
 | D4 | **Invoice numbering + format defaults** (S.9): prefix/sequence like estimates (`INV-`…)? Which company-level defaults (detail level, payment terms) exist in v1? |
 | D5 | **Selection-overage marking** (K5): is a free-text `reason_category` convention enough for v1, or does the CO need a structured origin marker now so 7D/M9 reporting can find them later? |
@@ -1178,8 +1317,11 @@ exists, a selection overage reaches 7D only as a **manually authored CO** (confl
 - **Tax-component recoverability** (§6.3) — may collapse the per-instrument tax-base setting to
   tax-inclusive only. CC verification, not a Josh decision.
 - **Module 6 hours** — ~~§7 cannot be exercised until M6's time entries are readable and merged.~~
-  **[S97: CLOSED — M6 is merged and applied (§S S.6, verified against git).** §7's remaining
-  blockers are the D1/D2 rulings, not schema availability.]
+  **[S97: CLOSED — M6 is merged and applied (§S S.6, verified against git); D1 and D2 are now ruled
+  (§7.2).** One **M6 dependency remains** and is owed by Module 6, not 7D: the Owner needs a
+  self-approval affordance and Owner sessions must carry a real approval state rather than
+  `status = NULL` (§S S.6b). Until that lands, D1 is correct in spec and inert in practice —
+  the Owner's hours cannot become "approved" through the UI.]
 
 ### Outstanding items owed by JOSH — **[S97: table EMPTY — all five closed]**
 
@@ -1204,11 +1346,23 @@ exists, a selection overage reaches 7D only as a **manually authored CO** (confl
   round up to the **half** hour, summed per person per day (§7.2); void actor narrows to Owner once a
   payment is applied and all payments auto-sync to QB (§9, §12); §11's three levels confirmed real and
   full detail pinned to layout A; §A.5 and §A.6 recorded.
+- **[S97 third batch] rulings (Josh, D1 + D2 — billable hours):** **D1** — the Owner **approves their
+  own hours**; the approval gate is unchanged for everyone, there is no auto-approval and no Owner
+  special case in billing math (§7.2; closes K3, which CC had overstated — see S.6b). **D2** —
+  billable hours are **USER-SELECTED**, not derived: the invoice presents approved unbilled hours with
+  task and date and the user ticks them, exactly like §6.2's cost picker (§7.2; closes K4). Josh's
+  earlier same-session statement that _"hours tie to tasks tie to line items"_ is **WITHDRAWN by him**
+  — CC had verified the chain does not exist (S.6a) and no `tasks` schema is to be built. Rounding now
+  applies to the **selected** hours; hours gain a billed/unbilled marker in 7D's own tables.
 - **§15 traces A, D, E:** founder-sourced from architecture §7.10 / §7.8.6.
   **§15 traces B, C, C-1: founder-sourced [S97]** — walked through against real jobs, replacing the
   illustrative values the prior revision carried. Trace F is a mechanism illustration.
-- All money figures in §15 computed with the shipped `deriveCostPlusSell` / `deriveTmLaborSell` and
-  `roundMoney` (`estimate-totals.ts:35,159,166`), applied per row.
+- All money figures in §15 computed with the shipped `deriveCostPlusSell` / ~~`deriveTmLaborSell`~~
+  and `roundMoney` (`estimate-totals.ts:35,159,166`), applied per row. **[S97 citation refresh]**
+  `deriveTmLaborSell` was **renamed `deriveFlatLaborSell`** by the A-9/S97 app-code pass (`c332382`)
+  — both T&M and cost-plus bill flat labor through it. Current lines:
+  `roundMoney:35`, `deriveCostPlusSell:159`, `deriveFlatLaborSell:167`. **The computed figures are
+  unaffected** (rename only; the arithmetic `hours × rate` is unchanged).
 - **[S97 second batch] rulings (Josh, closing §O's owed list):** discounts replace the
   write-off/hold-back override mechanic — build scope removed (§8, R1); percentage-of-source proven
   real, priced off the ORIGINAL contract value with a remainder final draw (§2 / trace G, R2); labor
@@ -1221,5 +1375,8 @@ exists, a selection overage reaches 7D only as a **manually authored CO** (confl
 - The `[inferred]` provenance tag class was **removed [S97]** — it was declared in the legend and
   promised in provenance but never applied to any claim in this file. It remains live and meaningful
   in `7f1-spec.md` and `7g1-spec.md`, which carry real `[inferred]` body tags awaiting confirmation.
-- FrameFocus schema: **not** verified against the live repo beyond the specific file:line citations
-  above — the schema layer is deferred to CC by design (§S).
+- ~~FrameFocus schema: **not** verified against the live repo beyond the specific file:line citations
+  above — the schema layer is deferred to CC by design (§S).~~ **[S97] Superseded: §S is now FILLED**
+  from the live repo and rebuild-test (all ten items, `88e4657`), and the D1/D2 findings in S.6a/S.6b
+  were verified against live schema **and live row counts**. What remains unverified is only what §S
+  names as NEW/green-field.
