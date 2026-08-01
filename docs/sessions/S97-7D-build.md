@@ -5,10 +5,10 @@
 > memory — every claim below was re-read out of the working tree or the commit history.
 > Where I could not verify something, it says so.
 >
-> **UPDATED 2026-08-01 (same session):** Josh ruled on three of the open items and they
-> were built — see **§6a Rulings applied**. P-5 (timezone), P-2 (numbering) and C1 (PM
-> visibility) are **no longer provisional**; §2, §3, §5 and §6 below are updated to match
-> the shipped behavior.
+> **UPDATED 2026-08-01 (same session):** Josh ruled on four of the open items and they
+> were built — see **§6a Rulings applied**. P-5 (timezone), P-2 (numbering), C1 (PM
+> visibility) and the `issue_date` UTC defect are **no longer provisional/open**; §2, §3,
+> §5 and §6 below are updated to match the shipped behavior.
 >
 > **Branch:** `feature/113c-award-commitment-spec` (7D was built on the 113c branch; it
 > was never merged to `main`).
@@ -33,9 +33,9 @@ tree. Results, all real:
 | Type-check | `npm run type-check` | **PASS** (5/5 tasks; turbo cache hit, so it had already passed on this exact tree). |
 | Tests | `npm run test -w @framefocus/web` | **PASS** — 7 files, **120 tests**, 0 failures. The 7D share is 31 derivation + 13 lifecycle = 44. |
 
-*After the three rulings landed (§6a), the same set was re-run: type-check **PASS**, tests
-**126/126 PASS** (+6 new `companyDay` cases), full `npm run build` **PASS** before the
-final push, with no dev server running.*
+*After the four rulings landed (§6a), the same set was re-run: type-check **PASS**, tests
+**132/132 PASS** (+6 `companyDay`, +6 `companyToday`), full `npm run build` **PASS**
+uncached before each push, with no dev server running.*
 
 One caveat on how you run the tests: they must run through the web workspace
 (`npm run test -w @framefocus/web`) because the `@/*` alias lives in
@@ -449,6 +449,10 @@ with segments on the project.
     *Expect:* **the number appears only now** — the header changes from "Draft invoice" to
     the allocated `INV-000N`. *(A deposit only becomes an available credit once it is sent
     or paid.)*
+21a. **Evening-send check (`issue_date` fix).** If you are testing after ~8pm local, read
+    the **Issued** column on the invoice list for the invoice you just sent.
+    *Expect:* **today's** date, not tomorrow's. This is the one that would otherwise put a
+    wrong date on a client's bill, and it only shows up when testing late in the day.
 22. Go back to the Invoices list.
     *Expect:* an **Available credits** panel showing "Deposit INV-000N — deposit balance,
     draws down §3a", with the note that credits are never applied automatically.
@@ -499,14 +503,14 @@ with segments on the project.
 
 ## 6a. Rulings applied [S97, 2026-08-01]
 
-Josh ruled the top three; all three are built, tested and pushed on
-`feature/113c-award-commitment-spec`.
+All built, tested and pushed on `feature/113c-award-commitment-spec`.
 
 | # | Ruling | Commit |
 | --- | --- | --- |
 | P-5 | `companyDay()` buckets on the **company timezone**, not UTC | `54e623a` |
 | P-2 | Invoice number allocated **at send**; drafts are unnumbered | `86686e6` |
 | C1 | A PM sees the amounts **on** an invoice, **nothing wider** | `27bfe2e` |
+| — | `issue_date` on the company timezone + a UTC date sweep of 7D | `09ec8cd` |
 
 **P-5 — timezone.** Verified first that Module 6 already uses the company timezone in all
 three of its layers, making 7D the sole outlier, so the fix was 7D alone. `companyDay()`
@@ -535,6 +539,36 @@ contract/budget/margin figure **about** the job is not. The code was wider than 
 place — the "Original contract" tile on the invoice list — so that tile is now Owner/Admin
 only.
 
+**`issue_date` + the UTC date sweep.** `markInvoiceSent()` stamped `issue_date` from
+`toISOString()`, so an invoice sent after ~20:00 EDT was dated **tomorrow** on the client's
+bill. New `companyToday(timeZone, now)` in `invoices-shared.ts` — same idiom as
+`companyDay`, with an injectable `now` so the boundary is testable without touching the
+clock. The timezone threads from the server page through `InvoiceBuilder` →
+`LifecycleActions` → `markInvoiceSent` (a client module cannot read company settings
+itself; the page already reads them once for P-5, so no extra fetch). The page's inline
+`Intl` block from P-5 now calls `companyToday` too, so **the date rule lives in one place
+rather than two copies.** Six more tests.
+
+**The sweep — every date derivation in 7D, audited:**
+
+| Where | Verdict |
+| --- | --- |
+| `issue_date` | **Was wrong, fixed.** |
+| `sent_at`, `approved_at`, `voided_at`, `deleted_at` | **Correct as-is.** These are INSTANTS in `timestamptz`. An instant is unambiguous and carries no timezone question — `new Date().toISOString()` is right. Now commented so nobody "fixes" them later. |
+| `daysBetween()` (both age columns) | **Correct as-is.** It anchors both operands at `T00:00:00Z`, but both are already company-tz calendar-date *strings*, so it is symmetric date arithmetic, not an instant→date conversion. |
+| hour picker `workDate`, pickers' `today` | **Correct** — fixed under P-5. |
+| `due_date` | **Not a date bug, but noted:** there is **no UI control for it anywhere in 7D.** The column exists and `updateInvoiceSettings` accepts it, but nothing sets it, so every invoice ships with a null due date. Flagged for Josh below — that is a UI decision, not a timezone fix. |
+
+**Outside 7D — flagged, not touched.** Nine other call sites still derive a calendar date
+from `toISOString()`: `instrument-rates-client.ts:54,77` (rate-in-force "today" and the
+`effective_from` default — money-relevant, and the closest of these to 7D),
+`payables.ts:185` (7C), `estimate-items-client.ts:48` and the M4 estimate screens,
+`projects-client.ts:163,165` (`actual_end_date`), `dashboard.ts:36`,
+`projects/[id]/page.tsx:96`, `rate-summary.tsx:33`, the two budget rate components,
+`co-rate-section.tsx:100`, and `bills-tab.tsx:76`. **7D's own billing is not corrupted by
+the instrument-rates ones** — 7D passes its own company-tz dates into `rateInForce` and
+never uses that module's "today".
+
 ---
 
 ## 6. What I want you to rule on
@@ -549,12 +583,13 @@ only.
    their own hours, but Module 6 writes Owner sessions `status = NULL`, so they never reach
    the picker. **This is a Module 6 fix, not a 7D one.** If you run your own hours on jobs,
    this blocks you in practice — worth scheduling.
-3. **NEW — `issue_date` is still UTC.** `markInvoiceSent()` stamps `issue_date` from
-   `isoToday()` (`toISOString()`), so an invoice sent after ~8pm local is dated **tomorrow**
-   on the client's bill. Same class of bug as P-5, in the one place P-5's fix did not
-   reach, because it is computed client-side where the timezone is not currently to hand.
-   Left alone deliberately — it was outside the three authorized fixes. **Small, and worth
-   doing before real invoices go out.**
+3. **NEW — `due_date` has no UI control.** Surfaced by the date sweep. The column exists
+   and the service accepts it, but nothing in the 7D UI sets it, so **every invoice ships
+   with a null due date** — and payment terms are the sort of thing a client bill is
+   expected to carry. This is the M4 "a setting with no control is a bug" lesson again.
+   **Ruling wanted:** do invoices carry terms (Net 15/30, due on receipt), and is it a
+   per-invoice field, a company default, or both? I did not guess — it is a UI/policy
+   decision, not a bug fix.
 4. **P-4 — split days warn rather than block.** Confirm warn-only is right, or promote it
    to a hard block.
 5. **P-9 — reissue copies credit lines** without re-validating availability against the
@@ -602,15 +637,17 @@ packages/shared/types/database.ts                            +427  (regenerated)
 apps/web/app/dashboard/projects/[id]/project-header.tsx        +8  (Invoices tab)
 ```
 
-**Rulings pass [S97] — `54e623a`, `86686e6`, `27bfe2e`**
+**Rulings pass [S97] — `54e623a`, `86686e6`, `27bfe2e`, `09ec8cd`**
 ```
 NEW  supabase/migrations/20260803000000_7d_invoice_number_at_send.sql   (numbering at send)
-     apps/web/lib/services/invoices-shared.ts        companyDay(ts, timeZone)
+     apps/web/lib/services/invoices-shared.ts        companyDay(ts, tz) + companyToday(tz, now)
      apps/web/lib/services/invoices.ts               tz threaded; C1 comment; null coercions
-     apps/web/lib/services/invoices-client.ts        send-time numbering + race guard
-     apps/web/lib/services/invoice-lifecycle.test.ts +6 companyDay cases (13 -> 19)
-     apps/web/app/.../invoices/[invoiceId]/page.tsx  company-tz today + tz thread
-     apps/web/app/.../invoices/[invoiceId]/invoice-builder.tsx   unnumbered-draft header
+     apps/web/lib/services/invoices-client.ts        send-time numbering + race guard;
+                                                     issue_date on company tz (isoToday gone)
+     apps/web/lib/services/invoice-lifecycle.test.ts +12 date cases (13 -> 25)
+     apps/web/app/.../invoices/[invoiceId]/page.tsx  companyToday + tz threaded to builder
+     apps/web/app/.../invoices/[invoiceId]/invoice-builder.tsx   unnumbered-draft header;
+                                                     timeZone prop -> markInvoiceSent
      apps/web/app/.../invoices/page.tsx              "Draft" label; contract tile gated
      packages/shared/types/database.ts               regenerated (invoice_number nullable)
      docs/specs/7d1-spec.md                          §12a amendment (C1 ruled)
