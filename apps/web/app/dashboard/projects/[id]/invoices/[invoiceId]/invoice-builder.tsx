@@ -77,6 +77,10 @@ interface InvoiceBuilderProps {
   originalContractValue: number | null;
   alreadyBilled: number;
   projectRetainagePercent: number | null;
+  /** companies.timezone — the invoice's issue_date is a company-tz calendar
+   *  date, not a UTC one [S97]. Read on the server and passed down; a client
+   *  component cannot read company settings itself. */
+  timeZone: string;
 }
 
 function money(value: number | null | undefined): string {
@@ -118,6 +122,7 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
     availableCredits,
     originalContractValue,
     alreadyBilled,
+    timeZone,
   } = props;
 
   const router = useRouter();
@@ -251,6 +256,7 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
           role={role}
           memberId={memberId}
           canApprove={canApprove}
+          timeZone={timeZone}
           busy={busy}
           run={run}
           projectId={projectId}
@@ -1053,6 +1059,7 @@ function LifecycleActions({
   role,
   memberId,
   canApprove,
+  timeZone,
   busy,
   run,
   projectId,
@@ -1061,6 +1068,7 @@ function LifecycleActions({
   role: string;
   memberId: string | null;
   canApprove: boolean;
+  timeZone: string;
   busy: boolean;
   run: (fn: () => Promise<{ success: boolean; error?: string }>, msg?: string) => Promise<boolean>;
   projectId: string;
@@ -1094,7 +1102,7 @@ function LifecycleActions({
           style={primaryButtonStyle}
           onClick={() => {
             if (!window.confirm('Mark this invoice sent? A sent invoice is immutable — corrections go through void and reissue.')) return;
-            run(() => markInvoiceSent(invoice.id), 'Invoice marked sent.');
+            run(() => markInvoiceSent(invoice.id, timeZone), 'Invoice marked sent.');
           }}
         >
           Mark sent

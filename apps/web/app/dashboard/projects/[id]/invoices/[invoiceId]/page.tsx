@@ -7,6 +7,7 @@ import { getMyMember } from '@/lib/services/members';
 import {
   getAvailableCredits,
   getInvoice,
+  companyToday,
   getPickableCosts,
   getPickableHours,
   loadInstrumentRates,
@@ -76,17 +77,14 @@ export default async function InvoiceDetailPage({
     project.project_type ??
     'fixed_price') as ContractType;
 
-  // Company-tz "today" and the timezone the hour pickers bucket by — read once
-  // here and threaded down (daily-logs/new/page.tsx pattern). Deriving the day
-  // from toISOString() would be UTC and would misdate evening work; see
-  // companyDay in invoices-shared.ts [S97].
+  // Company-tz "today" and the timezone every calendar date on this screen is
+  // derived in — read once here and threaded down (daily-logs/new/page.tsx
+  // pattern): the hour pickers bucket by it, the age columns count against it,
+  // and markInvoiceSent stamps issue_date with it. Deriving any of those from
+  // toISOString() would be UTC and would misdate evening work and evening
+  // sends; see companyDay / companyToday in invoices-shared.ts [S97].
   const { timezone } = await getCompanyTimeSettings();
-  const today = new Intl.DateTimeFormat('en-CA', {
-    timeZone: timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
+  const today = companyToday(timezone);
   const derived = contractType === 'cost_plus' || contractType === 'time_and_materials';
 
   const [rateRows, pickableCosts, pickableHours, credits] = await Promise.all([
@@ -139,6 +137,7 @@ export default async function InvoiceDetailPage({
       originalContractValue={project.contract_value ?? null}
       alreadyBilled={alreadyBilled}
       projectRetainagePercent={project.retainage_percent ?? null}
+      timeZone={timezone}
     />
   );
 }

@@ -43,6 +43,7 @@ export type {
 } from '@/lib/services/invoices-shared';
 export {
   companyDay,
+  companyToday,
   daysBetween,
   findSplitDays,
   hoursBetween,

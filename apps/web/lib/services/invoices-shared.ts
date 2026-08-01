@@ -273,6 +273,30 @@ export function companyDay(timestamp: string, timeZone: string): string {
   }).format(new Date(timestamp));
 }
 
+/**
+ * TODAY as a company-timezone calendar date (YYYY-MM-DD) [S97].
+ *
+ * Every CALENDAR DATE in 7D is a company-tz date — the invoice's issue_date
+ * that a client reads on the bill, and the "today" the pickers age against.
+ * Deriving it from toISOString() dates an invoice sent after ~20:00 EDT to
+ * TOMORROW on the client's bill.
+ *
+ * `now` is injectable so the boundary is testable without touching the clock.
+ *
+ * NOTE — this is for calendar DATES only. An INSTANT (sent_at, approved_at,
+ * voided_at, deleted_at) is stored as timestamptz and is correctly written as
+ * new Date().toISOString(): an instant is unambiguous and carries no timezone
+ * question. Do not "fix" those.
+ */
+export function companyToday(timeZone: string, now: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+}
+
 export function hoursBetween(start: string, end: string): number {
   const ms = new Date(end).getTime() - new Date(start).getTime();
   return Math.max(0, Math.round((ms / 3_600_000) * 10000) / 10000);

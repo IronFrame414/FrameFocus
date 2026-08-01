@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   canVoidInvoice,
   companyDay,
+  companyToday,
   findSplitDays,
   laborRateType,
   nonLaborRateType,
@@ -159,6 +160,44 @@ describe('§S K6 — an hour belongs to its COMPANY-tz calendar day [S97]', () =
     const splitGroups = groupSelectedHours(utcSplit);
     expect(splitGroups).toHaveLength(2);
     expect(splitGroups.reduce((sum, g) => sum + g.billableHours, 0)).toBe(5.5);
+  });
+});
+
+describe('§9 — issue_date is a COMPANY-tz calendar date [S97]', () => {
+  const NY = 'America/New_York';
+
+  it('an invoice sent at 9pm EDT is dated TODAY, not tomorrow', () => {
+    // 2026-06-02 21:00 EDT = 2026-06-03T01:00:00Z.
+    const sentAt9pm = new Date('2026-06-03T01:00:00.000Z');
+    expect(companyToday(NY, sentAt9pm)).toBe('2026-06-02');
+  });
+
+  it('REGRESSION: it must not fall back to the UTC date', () => {
+    const sentAt9pm = new Date('2026-06-03T01:00:00.000Z');
+    // The pre-[S97] isoToday() returned this, dating the client's bill a day
+    // ahead of the day it was actually sent.
+    expect(sentAt9pm.toISOString().slice(0, 10)).toBe('2026-06-03');
+    expect(companyToday(NY, sentAt9pm)).not.toBe(sentAt9pm.toISOString().slice(0, 10));
+  });
+
+  it('holds across the DST boundary — 8pm EST is still the same local day', () => {
+    // 2026-01-14 20:00 EST = 2026-01-15T01:00:00Z.
+    expect(companyToday(NY, new Date('2026-01-15T01:00:00.000Z'))).toBe('2026-01-14');
+  });
+
+  it('a daytime send is unchanged', () => {
+    expect(companyToday(NY, new Date('2026-06-02T15:00:00.000Z'))).toBe('2026-06-02');
+  });
+
+  it('is driven by the passed timezone, never hardcoded', () => {
+    const instant = new Date('2026-06-03T01:00:00.000Z');
+    expect(companyToday('America/Los_Angeles', instant)).toBe('2026-06-02');
+    expect(companyToday('UTC', instant)).toBe('2026-06-03');
+  });
+
+  it('agrees with companyDay for the same instant — one date rule, not two', () => {
+    const instant = '2026-06-03T01:00:00.000Z';
+    expect(companyToday(NY, new Date(instant))).toBe(companyDay(instant, NY));
   });
 });
 

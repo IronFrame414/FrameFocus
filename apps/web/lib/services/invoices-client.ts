@@ -15,6 +15,7 @@ import {
 } from '@framefocus/shared/utils/invoice-derivation';
 import {
   canVoidInvoice,
+  companyToday,
   laborRateType,
   nonLaborRateType,
   rateRowInForce,
@@ -50,8 +51,6 @@ export type {
 
 type Result = { success: boolean; error?: string };
 type CreateResult = { success: boolean; id?: string; error?: string };
-
-const isoToday = () => new Date().toISOString().slice(0, 10);
 
 /** A rate a derived invoice needs but does not have. §6.1/§7: a rateless
  *  instrument must NEVER price at 0% — that would silently sell at cost. */
@@ -566,8 +565,14 @@ export async function approveInvoice(invoiceId: string, memberId: string): Promi
  * re-stamping sent_at over a live invoice. (The trigger is independently safe
  * — it only allocates when the number is still NULL — this makes the failure
  * visible to the caller instead of silent.)
+ *
+ * `timeZone` is companies.timezone, threaded down from the server page (this
+ * is a client module and cannot read it itself). issue_date is the CALENDAR
+ * DATE the client reads on the bill, so it is a company-tz date [S97] —
+ * sending at 9pm must not date the invoice tomorrow. sent_at beside it is an
+ * INSTANT and correctly stays a UTC timestamptz.
  */
-export async function markInvoiceSent(invoiceId: string): Promise<Result> {
+export async function markInvoiceSent(invoiceId: string, timeZone: string): Promise<Result> {
   const supabase = createClient();
   const { data: invoice } = await supabase
     .from('invoices')
@@ -582,7 +587,11 @@ export async function markInvoiceSent(invoiceId: string): Promise<Result> {
 
   const { data: updated, error } = await supabase
     .from('invoices')
-    .update({ status: 'sent', sent_at: new Date().toISOString(), issue_date: isoToday() })
+    .update({
+      status: 'sent',
+      sent_at: new Date().toISOString(), // instant — correctly UTC
+      issue_date: companyToday(timeZone), // calendar date — company-tz [S97]
+    })
     .eq('id', invoiceId)
     .in('status', ['draft', 'pending_approval'])
     .select('invoice_number');
