@@ -26,7 +26,9 @@ branding, and delivery must be settled first.
   today it is the `requires_formal_contract` toggle plus an advisory payment-time
   warning (S95), not an observed signature. Detail: `docs/specs/113c-spec.md` §7 and
   §10.6. Stages 1–5 are internal-only and shipped (through migration
-  `20260731050000`).
+  `20260731050000`) — but stage 5's RPC body is SUPERSEDED by the S95 second ruling
+  set (rulings 8–12 below): replacement migration `20260731060000` is written,
+  **UNAPPLIED**.
 - **Project material record.** Client-visible, semi-structured list + open notes +
   photos, logged as work proceeds. PARKED, interview-first — do not build without an
   interview. Detail: `docs/sessions/context93.md` §8 (restated context94 §9).
@@ -170,6 +172,33 @@ Each is also recorded at the cited authority — that document wins on detail.
    amended.)
 6. **Formal-contract payment warning is advisory** — banner + explicit confirm, never
    a block. (113c build, S95; PaymentModal.)
-7. **Revise-while-unsigned is Owner/Admin only** — PM excluded (approve-level
-   authority; INVOKER/RLS posture). (113c-spec §8 as amended; migration
-   `20260731050000`.)
+7. **Revise is Owner/Admin only** — PM excluded (approve-level authority;
+   INVOKER/RLS posture). Role floor unchanged by the second ruling set below; the
+   citation migration `20260731050000` is otherwise superseded (ruling 8).
+   (113c-spec §8 as amended.)
+
+**Second ruling set, same day (2026-07-31, S95 — partial revise). Supersedes
+stage 5 as shipped: migration `20260731050000`'s RPC body is replaced by
+`20260731060000_113c_partial_revise_schedule.sql` (written, UNAPPLIED — no db
+push has run).**
+
+8. **Revise applies to ANY contract — the `requires_formal_contract` gate is
+   DROPPED.** Editability is decoupled from the formal flag; italic stays a
+   display signal only. (113c-spec §0.5/§5 as amended.)
+9. **Partial revise.** Unpaid stages fully editable — torn down and replaced;
+   replacements land PENDING and need Owner/Admin re-approval before they count
+   toward committed. A PARTIALLY-PAID stage stays editable in place, its amount
+   FLOORED AT GROSS PAID — never below money already out; it keeps
+   `status='approved'`. FROZEN: closed-out stages, and any stage on a signed or
+   void contract. (113c-spec §5 as amended.)
+10. **`contract_value` is warn-only on revise** — Σ stages vs contract value
+    warns, never blocks (the standing P2 posture); no hard floor. (113c-spec §5
+    as amended.)
+11. **Retainage mid-stream changes allowed** — percent changes AND shape
+    switches (`percent_across` ↔ `final_hold`), forward-only via per-payment
+    computation; the withheld accrual row is NEVER touched. (113c-spec §5 as
+    amended.)
+12. **UI direction (NEXT RUN, not built):** ONE panel-level edit mode subsuming
+    the per-draft "Review & confirm" — setup view for contracts without a
+    schedule (keeping the award budget-line tie + plan-vs-contract variance),
+    editable stages for contracts with one. (113c-spec §5 as amended.)

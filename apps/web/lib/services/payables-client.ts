@@ -225,15 +225,27 @@ export async function setupPaymentSchedule(
   };
 }
 
-/** 113c-spec §5 (stage 5) — revise an unsigned formal contract's schedule
- *  (and optionally its value): soft-deletes the existing stage rows +
- *  allocations and re-runs setup_payment_schedule in ONE transaction.
- *  Owner/Admin only (the RPC checks — tearing down approved committed rows
- *  is approve-level authority). Closed once signed or once any payment
- *  exists; the RPC's errors say which. */
+export interface ReviseStageInput extends ScheduleStageInput {
+  /** PARTIAL REVISE payload contract (migration 20260731060000): present =
+   *  in-place edit of a PARTIALLY-PAID stage (the RPC floors its amount at
+   *  gross paid; the row stays approved); absent = replacement stage that
+   *  lands pending. An omitted partially-paid stage is left untouched. */
+  id?: string | null;
+}
+
+/** 113c-spec §5 as amended (PARTIAL REVISE — S95 second ruling set) —
+ *  revise_sub_contract_schedule, migration 20260731060000 (applied to
+ *  rebuild-test; supersedes the 20260731050000 body). Owner/Admin only (the
+ *  RPC checks). Open on ANY draft/sent contract — the formal-contract gate
+ *  is dropped; signed/void contracts and closed-out stages are frozen.
+ *  Unpaid stages are torn down and replaced (land pending → re-approve);
+ *  entries WITH id edit a partially-paid stage in place. Retainage params
+ *  are the NEW full state (undefined shape = no retainage); contractValue
+ *  null = keep. Σ-vs-value mismatch comes back as an advisory warning,
+ *  never an error (P2). */
 export async function reviseSubContractSchedule(
   subContractId: string,
-  stages: ScheduleStageInput[],
+  stages: ReviseStageInput[],
   retainage?: RetainageInput,
   contractValue?: number | null
 ): Promise<SetupScheduleResult> {
@@ -247,9 +259,9 @@ export async function reviseSubContractSchedule(
   }
 
   const supabase = createClient();
-  // revise_sub_contract_schedule ships in migration 20260731050000 (written,
-  // not yet applied) — database.ts learns the name at the post-apply regen;
-  // cast until then (the co-builder contractor_signed_at precedent).
+  // revise_sub_contract_schedule is applied (20260731060000) but database.ts
+  // has not been regenerated since — cast until the next db:types run (the
+  // co-builder contractor_signed_at precedent).
   const rpc = supabase.rpc.bind(supabase) as (
     fn: string,
     args?: Record<string, unknown>
@@ -257,6 +269,7 @@ export async function reviseSubContractSchedule(
   const { data, error } = await rpc('revise_sub_contract_schedule', {
     p_sub_contract_id: subContractId,
     p_stages: stages.map((s) => ({
+      ...(s.id ? { id: s.id } : {}),
       label: s.label.trim(),
       amount: s.amount,
       budget_item_id: s.budget_item_id ?? null,
@@ -266,12 +279,11 @@ export async function reviseSubContractSchedule(
     p_contract_value: contractValue ?? undefined,
   });
   if (error) {
-    if (error.message.includes('signed')) {
-      return { success: false, error: 'The contract is signed — revise is closed. Corrections go through void and re-enter.' };
+    if (error.message.includes('is signed')) {
+      return { success: false, error: 'The contract is signed — its schedule is frozen. Corrections go through void and re-enter.' };
     }
-    if (error.message.includes('payments exist')) {
-      return { success: false, error: 'Payments exist against this schedule — revise is closed. Corrections go through void and re-enter.' };
-    }
+    // Per-stage refusals (gross-paid floor, closed-out, unpaid-with-id) come
+    // back with the stage named — already user-readable, pass through.
     return { success: false, error: error.message };
   }
 

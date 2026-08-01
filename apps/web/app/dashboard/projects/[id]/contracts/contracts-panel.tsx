@@ -18,7 +18,7 @@ import {
 import type {
   AwardBudgetLine,
   PayableListItem,
-  ScheduleStageInput,
+  ReviseStageInput,
 } from '@/lib/services/payables-client';
 import {
   deriveAwardBudgetLines,
@@ -78,6 +78,10 @@ export function ContractsPanel({
   const [value, setValue] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // PARTIAL REVISE [S95 second ruling set, ruling 12] — ONE panel-level edit
+  // mode across ALL sub contracts (the Correct-rates pattern), subsuming the
+  // per-draft "Review & confirm" and the per-contract "Revise schedule".
+  const [editingSchedules, setEditingSchedules] = useState(false);
 
   async function handleAddSubContract() {
     if (!memberId) {
@@ -244,11 +248,55 @@ export function ContractsPanel({
       </div>
 
       <div style={cardStyle}>
-        <div style={titleStyle}>Subcontractor Contracts ({subContracts.length})</div>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: '0.75rem',
+          }}
+        >
+          <div style={{ ...titleStyle, marginBottom: 0 }}>
+            Subcontractor Contracts ({subContracts.length})
+          </div>
+          {/* Owner/Admin/PM — display gate; spec §4: PM may SET UP a
+              schedule (lands pending). Revise stays Owner/Admin — the panel
+              never routes a PM to the revise RPC, and the RPC re-checks. */}
+          {canManage && subContracts.length > 0 && (
+            <button
+              style={{
+                ...smallButton,
+                ...(editingSchedules
+                  ? { backgroundColor: '#eef2ff', borderColor: '#c7d2fe', color: '#3730a3' }
+                  : {}),
+              }}
+              onClick={() => setEditingSchedules((v) => !v)}
+            >
+              {editingSchedules ? 'Done editing' : 'Edit schedules'}
+            </button>
+          )}
+        </div>
         <p style={{ fontSize: '0.8125rem', color: '#6b7280', marginBottom: '0.75rem' }}>
           Payment schedules commit the contract to job cost; payments settle stages as they are
           released.
         </p>
+        {editingSchedules && (
+          <p
+            style={{
+              fontSize: '0.75rem',
+              color: '#3730a3',
+              backgroundColor: '#eef2ff',
+              border: '1px solid #c7d2fe',
+              borderRadius: '0.375rem',
+              padding: '0.375rem 0.5rem',
+              marginBottom: '0.75rem',
+            }}
+          >
+            {isOwnerAdmin
+              ? 'Edit mode — every contract’s schedule is editable below. Unpaid stages are replaced on save and land pending (re-approve to count them toward committed); paid stages edit in place, floored at the amount already paid; signed, void, and closed-out items are frozen. A contract-value mismatch warns, never blocks.'
+              : 'Edit mode — contracts without a schedule are editable below; saved stages land pending for Owner/Admin approval. An Owner or Admin revises an existing schedule.'}
+          </p>
+        )}
 
         {canManage && (
           <div
@@ -343,13 +391,20 @@ export function ContractsPanel({
                 )}
               </div>
               {/* 7C §4.3/§4.4 — payment schedule + stage/payment panel. */}
-              {c.status !== 'void' && (
+              {c.status !== 'void' ? (
                 <SubSchedulePanel
                   contract={c}
                   rows={schedules[c.id] ?? []}
                   canManage={canManage}
                   role={role}
+                  editMode={editingSchedules}
                 />
+              ) : (
+                editingSchedules && (
+                  <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0.25rem 0 0' }}>
+                    Void — the schedule is frozen and cannot be edited.
+                  </p>
+                )
               )}
             </div>
           ))
@@ -388,16 +443,37 @@ const smallButton: React.CSSProperties = {
   cursor: 'pointer',
 };
 
+/** Stage rows as the schedule editor holds them. Paid/closed-out meta rides
+ *  along so the editor can render closed-out rows frozen and floor a
+ *  partially-paid row at its gross paid — client-side courtesy only, the
+ *  RPC is the authority. */
+interface EditorStage {
+  /** Existing row id. Sent to the RPC ONLY for partially-paid stages
+   *  (in-place edit); unpaid rows go without it (replacement → pending). */
+  id?: string;
+  label: string;
+  amount: string;
+  budget_item_id: string;
+  grossPaid?: number;
+  closedOut?: boolean;
+}
+
 function SubSchedulePanel({
   contract,
   rows,
   canManage,
   role,
+  editMode,
 }: {
   contract: SubcontractorContract;
   rows: PayableListItem[];
   canManage: boolean;
   role: string;
+  /** PARTIAL REVISE [S95] — the panel-level "Edit schedules" mode, toggled
+   *  once for ALL contracts by the parent. Owner/Admin: full (setup +
+   *  revise). PM (ruling B restore): setup-only — schedule-less contracts
+   *  render the setup form; scheduled ones are read-only with a reason. */
+  editMode: boolean;
 }) {
   const router = useRouter();
   const isOwnerAdmin = role === 'owner' || role === 'admin';
@@ -406,7 +482,6 @@ function SubSchedulePanel({
   const stages = rows.filter((r) => !r.is_retainage && !r.is_deleted);
   const retainageRow = rows.find((r) => r.is_retainage && !r.is_deleted) ?? null;
 
-  const [settingUp, setSettingUp] = useState(false);
   const [paying, setPaying] = useState<PayableListItem | null>(null);
   const [closingOut, setClosingOut] = useState<PayableListItem | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -415,22 +490,76 @@ function SubSchedulePanel({
   // approve — the Miscellaneous fallback is gone (S94 force-targets).
   const [needsTarget, setNeedsTarget] = useState<PayableListItem[]>([]);
   const [targetPicks, setTargetPicks] = useState<Record<string, string>>({});
-  // 113c stage 4: the §3.3 award tie, re-derived when the review opens —
-  // exactly one candidate prefills the schedule; several defer to the picker.
+  // 113c stage 4: the §3.3 award tie, re-derived when edit mode opens on a
+  // schedule-less contract — exactly one candidate prefills the setup;
+  // several defer to the picker.
   const [awardLines, setAwardLines] = useState<AwardBudgetLine[] | null>(null);
-  // 113c stage 5: revise-while-unsigned — the editor reopens seeded with the
-  // CURRENT stages (labels/amounts/targets fetched at open).
-  const [revising, setRevising] = useState(false);
-  const [reviseInitial, setReviseInitial] = useState<
-    { label: string; amount: string; budget_item_id: string }[] | null
-  >(null);
+  // PARTIAL REVISE [S95]: edit mode seeds from the CURRENT stages
+  // (labels/amounts/targets + paid/closed-out meta fetched at open).
+  const [editSeed, setEditSeed] = useState<EditorStage[] | null>(null);
 
-  async function openReview() {
-    setBusy(true);
-    setAwardLines(await deriveAwardBudgetLines(contract.project_id, contract.member_id));
-    setBusy(false);
-    setSettingUp(true);
-  }
+  // §5 rule 3 — signed/void contracts are wholly frozen: read-only in edit
+  // mode with a reason. The RPC re-checks.
+  const frozen = contract.status === 'signed' || contract.status === 'void';
+  // PM (canManage, not Owner/Admin) edits ONLY schedule-less contracts —
+  // its save routes to setup_payment_schedule (stages land pending); the
+  // revise editor below is unreachable for PM, so the revise RPC is never
+  // called with a PM caller (its Owner/Admin check stays the authority).
+  const editingThis =
+    editMode && !frozen && (isOwnerAdmin || (canManage && stages.length === 0));
+  // Save feedback (S95 click-test fix — the 200-with-no-feedback finding):
+  // a successful save COLLAPSES this contract's editor back to read-only
+  // and confirms; the panel stays in edit mode for the other contracts
+  // ("Done editing" exits the whole mode). Failures keep the box open with
+  // the error inline in the editor.
+  const [collapsed, setCollapsed] = useState(false);
+  const [savedNote, setSavedNote] = useState<string | null>(null);
+  const showEditor = editingThis && !collapsed;
+
+  useEffect(() => {
+    if (!editMode) {
+      setCollapsed(false);
+      setSavedNote(null);
+    }
+  }, [editMode]);
+  // Replacement stages carry NEW ids after a save + refresh — key the seed
+  // (and the editor remount) on the row-id set so it re-derives.
+  const stageIdsKey = stages.map((s) => s.id).join('|');
+
+  useEffect(() => {
+    if (!editingThis) {
+      setEditSeed(null);
+      setAwardLines(null);
+      return;
+    }
+    let cancelled = false;
+    if (stages.length === 0) {
+      void deriveAwardBudgetLines(contract.project_id, contract.member_id).then((lines) => {
+        if (!cancelled) setAwardLines(lines);
+      });
+    } else {
+      void Promise.all(
+        stages.map(async (s): Promise<EditorStage> => {
+          const allocs = await listExpenseAllocations(s.id);
+          return {
+            id: s.id,
+            label: s.stage_label ?? '',
+            amount: String(s.amount),
+            budget_item_id: allocs[0]?.budget_item_id ?? '',
+            grossPaid: grossPaid(s.payments),
+            closedOut: s.closed_out_at !== null,
+          };
+        })
+      ).then((seed) => {
+        if (!cancelled) setEditSeed(seed);
+      });
+    }
+    return () => {
+      cancelled = true;
+    };
+    // stages derives from the rows prop — stageIdsKey is its identity here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingThis, contract.id, stageIdsKey]);
 
   // 113c §0.4/§5 — the per-draft toggle. Committed still counts on approval;
   // the toggle only decides whether it renders as awaiting the sub's
@@ -522,47 +651,74 @@ function SubSchedulePanel({
 
   if (stages.length === 0) {
     if (!canManage) return null;
-    // 113c stage 4 (§4) — the Review & confirm flow on a draft: contract
-    // details + the formal-contract toggle + Ruling-B plan-vs-contract
-    // variance, over the shipped 7C schedule editor. Confirm = schedule
-    // setup (pending) + the Owner/Admin batch-approve below.
-    const single = awardLines?.length === 1 ? awardLines[0] : null;
+    // 113c stage 4 (§4), SUBSUMED into panel edit mode [S95 ruling 12] —
+    // the former per-draft "Review & confirm": contract details + the
+    // formal-contract toggle + Ruling-B plan-vs-contract variance, over the
+    // shipped 7C schedule editor. Confirm = schedule setup (pending) + the
+    // Owner/Admin batch-approve below.
+    if (showEditor) {
+      const single = awardLines?.length === 1 ? awardLines[0] : null;
+      return (
+        <div style={{ marginTop: '0.5rem' }}>
+          {formalToggle}
+          {awardLines === null ? (
+            <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0.25rem 0' }}>Loading…</p>
+          ) : (
+            <>
+              {single && single.budgeted_amount !== null && contract.contract_value !== null && (
+                <p style={{ fontSize: '0.75rem', color: single.budgeted_amount === contract.contract_value ? '#6b7280' : '#92400e', margin: '0.25rem 0' }}>
+                  Budget line plan {money(single.budgeted_amount)} · contract{' '}
+                  {money(contract.contract_value)}
+                  {single.budgeted_amount !== contract.contract_value &&
+                    ` · variance ${money(contract.contract_value - single.budgeted_amount)} — budgeted stays the plan; the difference shows as budgeted-vs-committed variance once confirmed`}
+                </p>
+              )}
+              {awardLines.length > 1 && (
+                <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0.25rem 0' }}>
+                  This sub won {awardLines.length} lines — pick each stage&rsquo;s budget line
+                  explicitly.
+                </p>
+              )}
+              <ScheduleSetupEditor
+                contract={contract}
+                hideAmounts={!isOwnerAdmin}
+                prefillBudgetItemId={single?.budget_item_id ?? null}
+                onDone={(warning) => {
+                  if (warning) setNotice(warning);
+                  setSavedNote('Saved — stages created, pending approval.');
+                  setCollapsed(true);
+                  router.refresh();
+                }}
+              />
+            </>
+          )}
+          {notice && (
+            <p style={{ fontSize: '0.75rem', color: '#92400e', margin: '0.5rem 0 0' }}>{notice}</p>
+          )}
+        </div>
+      );
+    }
     return (
       <div style={{ marginTop: '0.5rem' }}>
         {formalToggle}
-        {settingUp ? (
-          <>
-            {single && single.budgeted_amount !== null && contract.contract_value !== null && (
-              <p style={{ fontSize: '0.75rem', color: single.budgeted_amount === contract.contract_value ? '#6b7280' : '#92400e', margin: '0.25rem 0' }}>
-                Budget line plan {money(single.budgeted_amount)} · contract{' '}
-                {money(contract.contract_value)}
-                {single.budgeted_amount !== contract.contract_value &&
-                  ` · variance ${money(contract.contract_value - single.budgeted_amount)} — budgeted stays the plan; the difference shows as budgeted-vs-committed variance once confirmed`}
-              </p>
-            )}
-            {awardLines !== null && awardLines.length > 1 && (
-              <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0.25rem 0' }}>
-                This sub won {awardLines.length} lines — pick each stage&rsquo;s budget line
-                explicitly.
-              </p>
-            )}
-            <ScheduleSetupEditor
-              contract={contract}
-              hideAmounts={!isOwnerAdmin}
-              prefillBudgetItemId={single?.budget_item_id ?? null}
-              onCancel={() => setSettingUp(false)}
-              onDone={(warning) => {
-                setSettingUp(false);
-                if (warning) setNotice(warning);
-                router.refresh();
-              }}
-            />
-          </>
-        ) : (
-          <button style={smallButton} disabled={busy} onClick={() => void openReview()}>
-            {contract.status === 'draft' ? 'Review & confirm' : 'Set up payment schedule'}
-          </button>
+        {savedNote && (
+          <p style={{ fontSize: '0.75rem', color: '#166534', margin: '0.25rem 0' }}>
+            ✓ {savedNote}
+          </p>
         )}
+        {editMode && frozen && contract.status === 'signed' && (
+          <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0.25rem 0' }}>
+            Signed — the schedule is locked. Corrections go through void and re-enter.
+          </p>
+        )}
+        {/* Owner/Admin/PM all set up schedules (spec §4) — PM's save lands
+            pending for Owner/Admin approval. */}
+        <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0.25rem 0' }}>
+          No payment schedule yet —{' '}
+          {contract.status === 'draft'
+            ? 'confirm this draft in “Edit schedules” above.'
+            : 'set one up in “Edit schedules” above.'}
+        </p>
         {notice && (
           <p style={{ fontSize: '0.75rem', color: '#92400e', margin: '0.5rem 0 0' }}>{notice}</p>
         )}
@@ -572,55 +728,81 @@ function SubSchedulePanel({
 
   const pendingStages = stages.filter((s) => s.status === 'pending');
 
-  // 113c §5 — revise is open only while formal-and-unsigned with NO payments
-  // (the RPC re-checks; signing or paying closes the path for good).
-  const hasPayments = rows.some((r) => r.payments.some((p) => !p.is_deleted));
-  const canRevise =
-    isOwnerAdmin &&
-    contract.requires_formal_contract &&
-    contract.status !== 'signed' &&
-    contract.status !== 'void' &&
-    !hasPayments;
+  // Persistent Σ-vs-value advisory (S95 click-test fix): the mismatch
+  // warning previously lived only in the OPEN editor's live line and the
+  // transient post-save notice — a saved over-committed schedule went
+  // quiet on collapse/reload. Derived from the same rows the stage list
+  // renders, so it survives both. Ruling 4: advisory, never a block.
+  const readStageTotal = stages.reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+  const readValue = contract.contract_value === null ? null : Number(contract.contract_value);
+  const readMismatch = readValue !== null && readStageTotal > 0 && readStageTotal !== readValue;
 
-  async function openRevise() {
-    setBusy(true);
-    const seeded = await Promise.all(
-      stages.map(async (s) => {
-        const allocs = await listExpenseAllocations(s.id);
-        return {
-          label: s.stage_label ?? '',
-          amount: String(s.amount),
-          budget_item_id: allocs[0]?.budget_item_id ?? '',
-        };
-      })
+  // PARTIAL REVISE [S95 second ruling set] — the panel edit mode replaces
+  // the per-contract "Revise schedule" button. ANY draft/sent contract is
+  // editable (the formal flag and existing payments no longer close the
+  // path); the per-stage rules live in the editor + the RPC.
+  if (showEditor) {
+    return (
+      <div style={{ marginTop: '0.5rem', paddingLeft: '0.75rem', borderLeft: '2px solid #eef1f6' }}>
+        {formalToggle}
+        {editSeed === null ? (
+          <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0.25rem 0' }}>
+            Loading schedule…
+          </p>
+        ) : (
+          <ScheduleSetupEditor
+            key={stageIdsKey}
+            contract={contract}
+            hideAmounts={!isOwnerAdmin}
+            initialStages={editSeed}
+            reviseMode
+            onDone={(warning) => {
+              if (warning) setNotice(warning);
+              setSavedNote('Saved — schedule updated.');
+              setCollapsed(true);
+              router.refresh();
+            }}
+          />
+        )}
+        {retainageRow && (
+          <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0.25rem 0 0' }}>
+            Retainage already withheld stays exactly as it is — shape/percent changes apply to
+            payments from here forward.
+          </p>
+        )}
+        {notice && (
+          <p style={{ fontSize: '0.75rem', color: '#92400e', margin: '0.25rem 0 0' }}>{notice}</p>
+        )}
+      </div>
     );
-    setReviseInitial(seeded);
-    setBusy(false);
-    setRevising(true);
   }
 
   return (
     <div style={{ marginTop: '0.5rem', paddingLeft: '0.75rem', borderLeft: '2px solid #eef1f6' }}>
       {formalToggle}
-      {canRevise && !revising && (
-        <button style={smallButton} disabled={busy} onClick={() => void openRevise()}>
-          Revise schedule
-        </button>
+      {savedNote && (
+        <p style={{ fontSize: '0.75rem', color: '#166534', margin: '0.25rem 0' }}>
+          ✓ {savedNote} The stages below reflect the saved schedule.
+        </p>
       )}
-      {revising && reviseInitial && (
-        <ScheduleSetupEditor
-          contract={contract}
-          hideAmounts={!isOwnerAdmin}
-          initialStages={reviseInitial}
-          reviseMode
-          onCancel={() => setRevising(false)}
-          onDone={(warning) => {
-            setRevising(false);
-            setReviseInitial(null);
-            if (warning) setNotice(warning);
-            router.refresh();
-          }}
-        />
+      {readMismatch && readValue !== null && (
+        <p style={{ fontSize: '0.75rem', color: '#92400e', margin: '0.25rem 0' }}>
+          {readStageTotal > readValue
+            ? `Stages total ${money(readStageTotal)}, which is MORE than the ${money(readValue)} contract value — advisory only, nothing is blocked.`
+            : `Stages total ${money(readStageTotal)} of the ${money(readValue)} contract value — totals differ; advisory only.`}
+        </p>
+      )}
+      {editMode && contract.status === 'signed' && (
+        <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0.25rem 0' }}>
+          Signed — the schedule is locked. Corrections go through void and re-enter.
+        </p>
+      )}
+      {/* PM in edit mode: an existing schedule is read-only (ruling B
+          restore) — revise is Owner/Admin, enforced by the RPC. */}
+      {editMode && !frozen && !isOwnerAdmin && (
+        <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0.25rem 0' }}>
+          An Owner or Admin revises an existing schedule.
+        </p>
       )}
       {pendingStages.length > 0 && isOwnerAdmin && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.375rem' }}>
@@ -799,13 +981,17 @@ function ScheduleSetupEditor({
   /** 113c §4 — the §3.3 award tie when it is UNAMBIGUOUS (exactly one
    *  candidate line); null defers entirely to the picker. */
   prefillBudgetItemId?: string | null;
-  /** 113c §5 — revise mode seeds the editor with the CURRENT stages. */
-  initialStages?: { label: string; amount: string; budget_item_id: string }[];
-  /** 113c §5 — revise-while-unsigned: adds the contract-value input and
-   *  routes save through revise_sub_contract_schedule (tear down +
-   *  re-setup, one transaction; stages land pending → re-approve). */
+  /** PARTIAL REVISE [S95] — edit mode seeds the editor with the CURRENT
+   *  stages, including paid/closed-out meta. */
+  initialStages?: EditorStage[];
+  /** PARTIAL REVISE [S95] — adds the contract-value input and routes save
+   *  through revise_sub_contract_schedule (migration 20260731060000):
+   *  unpaid stages replaced → pending; partially-paid stages edited in
+   *  place, floored at gross paid; closed-out rows and the retainage
+   *  accrual untouched. */
   reviseMode?: boolean;
-  onCancel: () => void;
+  /** Omitted in panel edit mode — the panel-level "Done editing" exits. */
+  onCancel?: () => void;
   /** Called on success; receives the RPC's advisory warning, if any. */
   onDone: (warning?: string) => void;
 }) {
@@ -815,7 +1001,7 @@ function ScheduleSetupEditor({
   // 113c stage 4: a draft's first stage prefills from the contract — full
   // contract_value on the derived award line (single-stage confirm is the
   // common case; the user reshapes freely before save).
-  const [stages, setStages] = useState<{ label: string; amount: string; budget_item_id: string }[]>(
+  const [stages, setStages] = useState<EditorStage[]>(
     initialStages && initialStages.length > 0
       ? initialStages
       : [
@@ -849,29 +1035,72 @@ function ScheduleSetupEditor({
     };
   }, [contract.project_id]);
 
+  // Closed-out rows count toward the schedule total (they stay live) even
+  // though they are frozen in the editor.
   const stageTotal = stages.reduce((sum, s) => {
     const n = Number(s.amount);
     return sum + (Number.isNaN(n) ? 0 : n);
   }, 0);
-  // Live Σ-vs-contract_value check — advisory in the editor AND returned by
-  // the RPC post-save (P2: warn, never block).
-  const mismatch =
-    contract.contract_value !== null && stageTotal > 0 && stageTotal !== contract.contract_value;
+  // Live Σ-vs-value check against the value being SAVED — advisory in the
+  // editor AND returned by the RPC post-save (P2 / ruling 4: warn, never
+  // block).
+  const compareValue =
+    reviseMode && reviseValue.trim() !== '' ? Number(reviseValue) : contract.contract_value;
+  const mismatch = compareValue !== null && stageTotal > 0 && stageTotal !== compareValue;
 
-  async function handleSave() {
-    const included = stages.filter((s) => s.label.trim() || s.amount.trim() || s.budget_item_id);
+  // Mismatch confirm (S95 ruling): Σ ≠ value intercepts the save with an
+  // explicit confirm step — the PaymentModal formal-contract pattern, not a
+  // browser dialog. Still ruling 4: a confirm, never a block. Acknowledged
+  // once per open editor via the totals pair; changing the numbers re-arms
+  // it. Any future confirm would chain after this one (save proceeds only
+  // from "Save anyway"), never loop.
+  const [confirmingMismatch, setConfirmingMismatch] = useState(false);
+  const [ackedTotalsKey, setAckedTotalsKey] = useState<string | null>(null);
+  const totalsKey = `${stageTotal}|${compareValue ?? 'none'}`;
+
+  async function handleSave(confirmedMismatch = false) {
+    // Closed-out rows are frozen and NEVER enter the payload (the RPC leaves
+    // them untouched); blank replacement rows drop out; partially-paid rows
+    // are always included (omission would mean "leave untouched", but the
+    // editor shows them, so what is shown is what is saved).
+    const included = stages.filter(
+      (s) =>
+        !s.closedOut &&
+        ((s.grossPaid ?? 0) > 0 || s.label.trim() || s.amount.trim() || s.budget_item_id)
+    );
     if (included.some((s) => !s.budget_item_id)) {
       setError('Every stage needs a budget line — stages always target a real line (never Miscellaneous).');
       return;
+    }
+    // Ruling 2's gross-paid floor, enforced here for the friendly message —
+    // the RPC is the authority.
+    for (const s of included) {
+      const floor = s.grossPaid ?? 0;
+      if (floor > 0 && !(Number(s.amount) >= floor)) {
+        setError(
+          `"${s.label.trim() || 'Stage'}" already has ${money(floor)} paid (gross) — its amount can't go below that.`
+        );
+        return;
+      }
     }
     const revisedValue = reviseMode && reviseValue.trim() !== '' ? Number(reviseValue) : null;
     if (reviseMode && revisedValue !== null && !(revisedValue > 0)) {
       setError('The contract value must be greater than zero.');
       return;
     }
+    // Σ ≠ value → explicit confirm BEFORE the RPC, both directions. Skipped
+    // when these exact totals were already acknowledged in this editor.
+    if (mismatch && !confirmedMismatch && ackedTotalsKey !== totalsKey) {
+      setConfirmingMismatch(true);
+      setError(null);
+      return;
+    }
     setBusy(true);
     setError(null);
-    const parsed: ScheduleStageInput[] = included.map((s) => ({
+    // Payload contract (migration 20260731060000): WITH id = in-place edit
+    // of a partially-paid stage; WITHOUT id = replacement landing pending.
+    const parsed: ReviseStageInput[] = included.map((s) => ({
+      ...(s.id && (s.grossPaid ?? 0) > 0 ? { id: s.id } : {}),
       label: s.label,
       amount: Number(s.amount),
       budget_item_id: s.budget_item_id,
@@ -879,15 +1108,22 @@ function ScheduleSetupEditor({
     const retainage = retainageShape
       ? { shape: retainageShape, percent: retainageShape === 'percent_across' ? Number(retainagePercent) : undefined }
       : undefined;
-    const res = reviseMode
-      ? await reviseSubContractSchedule(contract.id, parsed, retainage, revisedValue)
-      : await setupPaymentSchedule(contract.id, parsed, retainage);
-    setBusy(false);
-    if (!res.success) {
-      setError(res.error ?? (reviseMode ? 'Revision failed.' : 'Setup failed.'));
-      return;
+    try {
+      const res = reviseMode
+        ? await reviseSubContractSchedule(contract.id, parsed, retainage, revisedValue)
+        : await setupPaymentSchedule(contract.id, parsed, retainage);
+      if (!res.success) {
+        setError(res.error ?? (reviseMode ? 'Revision failed.' : 'Setup failed.'));
+        return;
+      }
+      onDone(res.warning);
+    } catch (e) {
+      // A thrown failure (network, unexpected) previously vanished and left
+      // the button stuck on "Saving…" — surface it where the user is looking.
+      setError(e instanceof Error ? e.message : 'Save failed unexpectedly — try again.');
+    } finally {
+      setBusy(false);
     }
-    onDone(res.warning);
   }
 
   const input: React.CSSProperties = {
@@ -900,10 +1136,10 @@ function ScheduleSetupEditor({
   return (
     <div style={{ border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '0.75rem', marginTop: '0.25rem' }}>
       <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
-        {reviseMode ? 'Revise schedule (unsigned — not locked in)' : 'Payment schedule'}
+        {reviseMode ? 'Edit schedule' : 'Payment schedule'}
       </div>
       {reviseMode && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
           <span style={{ fontSize: '0.8125rem', color: '#374151' }}>Contract value:</span>
           <input
             type="number"
@@ -914,53 +1150,98 @@ function ScheduleSetupEditor({
             style={{ padding: '0.375rem 0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', fontSize: '0.8125rem', width: '130px' }}
           />
           <span style={{ fontSize: '0.6875rem', color: '#6b7280' }}>
-            Saving replaces the current stages — the new stages land pending and need re-approval.
+            Unpaid stages are replaced on save and land pending — re-approve to count them toward
+            committed. Paid stages update in place.
           </span>
         </div>
       )}
-      {stages.map((s, i) => (
-        <div key={i} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.375rem' }}>
-          <input
-            placeholder={`Stage ${i + 1} label (e.g. Rough-in)`}
-            value={s.label}
-            onChange={(e) =>
-              setStages((prev) => prev.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))
-            }
-            style={{ ...input, flex: 1 }}
-          />
-          <input
-            placeholder="Amount"
-            type="number"
-            min="0.01"
-            step="0.01"
-            value={s.amount}
-            onChange={(e) =>
-              setStages((prev) => prev.map((x, j) => (j === i ? { ...x, amount: e.target.value } : x)))
-            }
-            style={{ ...input, width: '110px' }}
-          />
-          <BudgetLineSelect
-            projectId={contract.project_id}
-            lines={lines}
-            value={s.budget_item_id}
-            onChange={(v) =>
-              setStages((prev) => prev.map((x, j) => (j === i ? { ...x, budget_item_id: v } : x)))
-            }
-            excludeMiscellaneous
-            hideAmounts={hideAmounts}
-            disabled={busy}
-            style={{ ...input, flex: 1, minWidth: '160px' }}
-          />
-          {stages.length > 1 && (
-            <button
-              style={{ ...smallButton, color: '#991b1b' }}
-              onClick={() => setStages((prev) => prev.filter((_, j) => j !== i))}
+      {stages.map((s, i) => {
+        // §5 rule 3 — closed-out stages are frozen: rendered, never editable.
+        if (s.closedOut) {
+          return (
+            <div
+              key={s.id ?? i}
+              style={{
+                display: 'flex',
+                gap: '0.625rem',
+                alignItems: 'center',
+                marginBottom: '0.375rem',
+                padding: '0.375rem 0.5rem',
+                backgroundColor: '#f9fafb',
+                border: '1px dashed #d1d5db',
+                borderRadius: '0.375rem',
+                fontSize: '0.8125rem',
+                color: '#6b7280',
+              }}
             >
-              ×
-            </button>
-          )}
-        </div>
-      ))}
+              <span style={{ fontWeight: 600 }}>{s.label || 'Stage'}</span>
+              <span>{money(Number(s.amount))}</span>
+              <span>closed out — frozen</span>
+            </div>
+          );
+        }
+        // §5 rule 2 — a partially-paid stage edits in place, floored at
+        // gross paid; it cannot be removed.
+        const floor = s.grossPaid ?? 0;
+        const partiallyPaid = floor > 0;
+        return (
+          <div
+            key={s.id ?? i}
+            style={{
+              marginBottom: '0.375rem',
+              ...(partiallyPaid ? { borderLeft: '3px solid #f59e0b', paddingLeft: '0.5rem' } : {}),
+            }}
+          >
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <input
+                placeholder={`Stage ${i + 1} label (e.g. Rough-in)`}
+                value={s.label}
+                onChange={(e) =>
+                  setStages((prev) => prev.map((x, j) => (j === i ? { ...x, label: e.target.value } : x)))
+                }
+                style={{ ...input, flex: 1 }}
+              />
+              <input
+                placeholder="Amount"
+                type="number"
+                min={partiallyPaid ? floor : 0.01}
+                step="0.01"
+                value={s.amount}
+                onChange={(e) =>
+                  setStages((prev) => prev.map((x, j) => (j === i ? { ...x, amount: e.target.value } : x)))
+                }
+                style={{ ...input, width: '110px' }}
+              />
+              <BudgetLineSelect
+                projectId={contract.project_id}
+                lines={lines}
+                value={s.budget_item_id}
+                onChange={(v) =>
+                  setStages((prev) => prev.map((x, j) => (j === i ? { ...x, budget_item_id: v } : x)))
+                }
+                excludeMiscellaneous
+                hideAmounts={hideAmounts}
+                disabled={busy}
+                style={{ ...input, flex: 1, minWidth: '160px' }}
+              />
+              {stages.length > 1 && !partiallyPaid && (
+                <button
+                  style={{ ...smallButton, color: '#991b1b' }}
+                  onClick={() => setStages((prev) => prev.filter((_, j) => j !== i))}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+            {partiallyPaid && (
+              <p style={{ fontSize: '0.6875rem', color: '#92400e', margin: '0.125rem 0 0' }}>
+                Partially paid — edits in place (stays approved), floored at {money(floor)} already
+                paid. It cannot be removed.
+              </p>
+            )}
+          </div>
+        );
+      })}
       <button
         style={{ ...smallButton, marginBottom: '0.5rem' }}
         onClick={() =>
@@ -981,11 +1262,17 @@ function ScheduleSetupEditor({
         + Add stage
       </button>
 
+      {/* Ruling 4 — both directions WARN, never block. The over case gets
+          direction-specific wording; under keeps the original. */}
       <div style={{ fontSize: '0.8125rem', marginBottom: '0.5rem', color: mismatch ? '#92400e' : '#374151' }}>
         Stages total {money(stageTotal)}
-        {contract.contract_value !== null && ` of ${money(contract.contract_value)} contract`}
-        {mismatch && ' — totals differ (saving is allowed; this is a warning)'}
-        {contract.contract_value === null && ' — no contract value on record to check against'}
+        {compareValue !== null &&
+          (mismatch && stageTotal > compareValue
+            ? `, which is MORE than the ${money(compareValue)} contract value (saving is allowed; this is a warning)`
+            : ` of ${money(compareValue)} contract${
+                mismatch ? ' — totals differ (saving is allowed; this is a warning)' : ''
+              }`)}
+        {compareValue === null && ' — no contract value on record to check against'}
       </div>
 
       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.625rem', flexWrap: 'wrap' }}>
@@ -1014,18 +1301,56 @@ function ScheduleSetupEditor({
 
       {error && <p style={{ fontSize: '0.75rem', color: '#991b1b', margin: '0 0 0.5rem' }}>{error}</p>}
 
-      <div style={{ display: 'flex', gap: '0.5rem' }}>
-        <button
-          style={{ ...smallButton, backgroundColor: busy ? '#93c5fd' : '#2563eb', color: '#fff', border: 'none' }}
-          disabled={busy}
-          onClick={() => void handleSave()}
+      {confirmingMismatch && mismatch && compareValue !== null ? (
+        // Explicit confirm step (S95 ruling) — direction-specific wording;
+        // rendered from live totals, so editing the numbers underneath keeps
+        // the message honest (and clearing the mismatch dismisses it).
+        <div
+          style={{
+            border: '1px solid #fde68a',
+            backgroundColor: '#fffbeb',
+            borderRadius: '0.375rem',
+            padding: '0.5rem 0.625rem',
+          }}
         >
-          {busy ? 'Saving…' : 'Save — commits the schedule'}
-        </button>
-        <button style={smallButton} disabled={busy} onClick={onCancel}>
-          Cancel
-        </button>
-      </div>
+          <p style={{ fontSize: '0.8125rem', color: '#92400e', margin: '0 0 0.5rem' }}>
+            {stageTotal > compareValue
+              ? `Stages total ${money(stageTotal)}, which is MORE than the ${money(compareValue)} contract value. Save anyway?`
+              : `Stages total ${money(stageTotal)} of the ${money(compareValue)} contract value. Save anyway?`}
+          </p>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              style={{ ...smallButton, backgroundColor: busy ? '#fcd34d' : '#d97706', color: '#fff', border: 'none' }}
+              disabled={busy}
+              onClick={() => {
+                setAckedTotalsKey(totalsKey);
+                setConfirmingMismatch(false);
+                void handleSave(true);
+              }}
+            >
+              {busy ? 'Saving…' : 'Save anyway'}
+            </button>
+            <button style={smallButton} disabled={busy} onClick={() => setConfirmingMismatch(false)}>
+              Back
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button
+            style={{ ...smallButton, backgroundColor: busy ? '#93c5fd' : '#2563eb', color: '#fff', border: 'none' }}
+            disabled={busy}
+            onClick={() => void handleSave()}
+          >
+            {busy ? 'Saving…' : reviseMode ? 'Save changes' : 'Save — commits the schedule'}
+          </button>
+          {onCancel && (
+            <button style={smallButton} disabled={busy} onClick={onCancel}>
+              Cancel
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

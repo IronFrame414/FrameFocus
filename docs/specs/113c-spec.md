@@ -35,6 +35,14 @@ budget line as **committed**, not only as budgeted cost. The seven locked decisi
 5. **Italic = not locked in.** While a formal-contract sub is unsigned (and has no
    payments), the user can **change** it (amount / schedule / terms). Signing locks it;
    later changes go through the normal amend/void path.
+   **As amended 2026-07-31 (S95, second ruling set — supersedes this item's
+   editability clause):** superseded text: _"While a formal-contract sub is unsigned
+   (and has no payments), the user can **change** it."_ Editability is now DECOUPLED
+   from the formal flag AND from the existence of payments: revise applies to ANY
+   draft/sent contract, with per-stage rules (§5 as amended — unpaid stages replace;
+   partially-paid stages edit in place floored at gross paid; closed-out stages and
+   signed/void contracts are frozen). Italic remains exactly what this item's first
+   sentence says — a display signal only.
 6. `budgeted_amount` stays the **plan** (from the estimate baseline); `committed_amount`
    reflects the **sub-contract**. They sit side by side on the merged Budget & Cost
    screen; a renegotiation before confirm shows as variance.
@@ -188,15 +196,71 @@ reinvent it.
   Signing (`status='signed'`) removes the italic. **No money-model change** — this reads
   the contract's columns, not the expense predicate. `[BUILD-VERIFY the merged screen can
 join committed contributions back to their sub-contract for this flag]`
-- **Editable-while-unsigned (revise path):** while a sub-contract is
-  `requires_formal_contract = true` AND `status <> 'signed'` AND **no `expense_payments`
-  exist against its rows**, the user may revise amount / schedule / terms. Mechanism
-  (new, constrained), given the shipped "one schedule per contract" + approved-row
-  immutability: a `revise_sub_contract_schedule` RPC that **soft-deletes the existing
-  stage rows** (and their allocations) and re-runs `setup_payment_schedule` in one
-  transaction, gated to the above conditions. `[BUILD-VERIFY against the column-scope
-immutability trigger + the one-schedule guard]` Once signed, the revise path is closed;
-  corrections go through the normal 7C void → re-enter.
+- **Revise path — PARTIAL REVISE. As amended 2026-07-31 (S95, second ruling set —
+  Josh's rulings). This amendment supersedes BOTH the original S94 bullet AND
+  today's earlier stage-5 build (migration `20260731050000` and the same-day §8
+  amendment's description of it).** The superseded texts, quoted:
+
+  > _Original S94 bullet (superseded):_ "**Editable-while-unsigned (revise path):**
+  > while a sub-contract is `requires_formal_contract = true` AND `status <> 'signed'`
+  > AND **no `expense_payments` exist against its rows**, the user may revise
+  > amount / schedule / terms. Mechanism (new, constrained), given the shipped 'one
+  > schedule per contract' + approved-row immutability: a
+  > `revise_sub_contract_schedule` RPC that **soft-deletes the existing stage rows**
+  > (and their allocations) and re-runs `setup_payment_schedule` in one transaction,
+  > gated to the above conditions. `[BUILD-VERIFY against the column-scope
+  > immutability trigger + the one-schedule guard]` Once signed, the revise path is
+  > closed; corrections go through the normal 7C void → re-enter."
+
+  > _Stage 5 as shipped earlier today (superseded — migration
+  > `20260731050000_113c_stage5_revise_schedule.sql`):_ the RPC required
+  > `requires_formal_contract = true`, RAISEd if ANY payment existed against the
+  > schedule, soft-deleted the WHOLE schedule, and delegated the rebuild to
+  > `setup_payment_schedule`.
+
+  **The rules now in force:**
+
+  1. **Any contract.** The `requires_formal_contract` gate is DROPPED — editability
+     is decoupled from the formal flag. Italic stays a display signal only
+     (§0.4/§0.5 display semantics unchanged).
+  2. **Partial revise.** Unpaid stages are fully editable: torn down (soft-delete,
+     with their allocations) and replaced by directly-INSERTed new rows. A
+     **partially-paid** stage stays editable **in place**, its amount **floored at
+     GROSS paid** (Σ `expense_payments.amount`, withholding included) — never below
+     money already out.
+  3. **Frozen:** closed-out stages (`closed_out_at IS NOT NULL`), and every stage on
+     a **signed** or **void** contract — wholly un-revisable. Signed-contract
+     corrections still go through the normal 7C void → re-enter.
+  4. **`contract_value` is warn-only** — Σ stages vs contract value warns, never
+     blocks (the standing P2 posture). No hard floor against paid money either.
+  5. **Retainage:** the `is_retainage` withheld-accrual row is NEVER touched.
+     Percent changes AND shape switches (`percent_across` ↔ `final_hold`) are
+     allowed mid-stream, forward-only — automatic, because withholding is computed
+     per payment at record time.
+  6. **Re-approval:** edited/replaced unpaid stages land `status='pending'` and need
+     Owner/Admin approval before they count toward committed (the existing recompute
+     predicate gives this for free). An edited partially-paid stage KEEPS
+     `status='approved'` — flipping it pending would drop committed while money is
+     already out.
+  7. **Owner/Admin only** (unchanged — §8).
+
+  **Mechanism (Option A — migration `20260731060000_113c_partial_revise_schedule.sql`,
+  which CREATE-OR-REPLACEs the `20260731050000` body):** `revise_sub_contract_schedule`
+  soft-deletes ONLY unpaid/unclosed non-retainage stage rows plus their allocations;
+  INSERTs replacement rows directly — NOT via `setup_payment_schedule`, whose
+  one-schedule guard the surviving partially-paid rows would trip; edits
+  partially-paid rows in place (single-allocation tracking per the
+  `set_po_total_amount` precedent; a manual multi-line split is left for review with
+  a warning); and leaves frozen rows and the retainage accrual untouched.
+  Stage/retainage validation is RESTATED once from `setup_payment_schedule` — the
+  two statements must change together. SECURITY INVOKER + `SET search_path`,
+  Owner/Admin check inside, signed/void guards.
+
+  **UI (NEXT RUN — direction recorded here, not built in this one):** ONE
+  panel-level edit mode that SUBSUMES the per-draft "Review & confirm" popup (§4's
+  entry point): a contract without a schedule shows setup — keeping the award
+  budget-line tie and the plan-vs-contract variance display; a contract with a
+  schedule shows its stages editable under the rules above.
 - **Renegotiate-before-confirm:** committed reflects the confirmed number; budgeted stays
   the plan (variance shown).
 - **Decline/delete a draft** (self-perform / re-bid): allowed; budget doesn't change
@@ -246,6 +310,14 @@ the INVOKER/RLS posture the codebase mandates. Built so in migration
 RPC follows SECURITY INVOKER + the existing column-scope/RLS gates, per the 7C
 precedent]`
 
+**Further amended 2026-07-31 (S95, second ruling set):** the Owner/Admin-only role
+floor above is UNCHANGED, but the RPC body shipped in `20260731050000` is
+**SUPERSEDED** by the PARTIAL REVISE rules of §5 as amended — replacement migration
+`20260731060000_113c_partial_revise_schedule.sql` (written this session,
+**UNAPPLIED** — no db push has run). The unsigned-only (`requires_formal_contract`)
+and no-payments gates the earlier build enforced no longer describe the revise path;
+signed/void remain the only contract-level freezes.
+
 ---
 
 ## 9. Explicitly NOT touched
@@ -270,8 +342,15 @@ precedent]`
 4. **Confirm flow** (§4) — Review popup → schedule → approve. _Test:_ confirm a
    no-contract draft → committed **firm**; toggle needs-contract → committed **italic +
    hover**.
-5. **Editable-while-unsigned revise** (§5). _Test:_ revise an unsigned italic contract's
-   amount/schedule; confirm the path closes once `status='signed'` and once a payment exists.
+5. **Revise — PARTIAL REVISE (§5 as amended 2026-07-31, S95 second ruling set).**
+   _Superseded test (original):_ "revise an unsigned italic contract's
+   amount/schedule; confirm the path closes once `status='signed'` and once a payment
+   exists." _Test now:_ revise ANY draft/sent contract's stages (formal flag
+   irrelevant); a partially-paid stage edits in place and REFUSES an amount below
+   gross paid; unpaid stages replace and land pending — committed drops until
+   Owner/Admin re-approval; closed-out stages and signed/void contracts refuse
+   wholly; a retainage shape/percent switch mid-stream leaves the withheld accrual
+   row untouched; a Σ-stages-vs-contract-value mismatch WARNS, never blocks.
 6. **(GATED, later — not this build)** 7F sub-contract template + sub-facing e-signature
    (§7).
 
