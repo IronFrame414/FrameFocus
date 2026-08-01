@@ -559,15 +559,21 @@ rather than two copies.** Six more tests.
 | hour picker `workDate`, pickers' `today` | **Correct** — fixed under P-5. |
 | `due_date` | **Not a date bug, but noted:** there is **no UI control for it anywhere in 7D.** The column exists and `updateInvoiceSettings` accepts it, but nothing sets it, so every invoice ships with a null due date. Flagged for Josh below — that is a UI decision, not a timezone fix. |
 
-**Outside 7D — flagged, not touched.** Nine other call sites still derive a calendar date
-from `toISOString()`: `instrument-rates-client.ts:54,77` (rate-in-force "today" and the
-`effective_from` default — money-relevant, and the closest of these to 7D),
-`payables.ts:185` (7C), `estimate-items-client.ts:48` and the M4 estimate screens,
-`projects-client.ts:163,165` (`actual_end_date`), `dashboard.ts:36`,
-`projects/[id]/page.tsx:96`, `rate-summary.tsx:33`, the two budget rate components,
-`co-rate-section.tsx:100`, and `bills-tab.tsx:76`. **7D's own billing is not corrupted by
-the instrument-rates ones** — 7D passes its own company-tz dates into `rateInForce` and
+**Outside 7D.** Other call sites derive a calendar date from `toISOString()`.
+**`instrument-rates-client.ts:54,77` was subsequently fixed** under the same ruling
+(`3b45988`) — Josh escalated it because future-dating is now permitted, so an
+evening-entered rate defaulted to tomorrow and saved as a *dormant* rate that priced
+nothing, where the old backdating guard would have rejected it loudly. **7D's own billing
+was never corrupted by it** — 7D passes its own company-tz dates into `rateInForce` and
 never uses that module's "today".
+
+**Count correction:** this report originally said "nine other call sites". That grouped
+multi-occurrence files and undercounted. The accurate figure after the rates fix is **14
+occurrences across 13 files**, now enumerated by severity in **TECH_DEBT #116** — with the
+warning that it is *not* a blanket find-and-replace, since an instant in `timestamptz` is
+correctly `toISOString()`. The highest-severity remainder is
+`budget/renegotiate-rate.tsx:79`, which is the save path behind the **CO rate-section**:
+that surface delegates to `RenegotiateRate` and so did **not** inherit the fix.
 
 ---
 
