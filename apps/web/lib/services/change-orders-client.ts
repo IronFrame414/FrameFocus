@@ -456,15 +456,6 @@ export async function recalculateChangeOrderTotals(changeOrderId: string): Promi
     (co.co_type ?? 'fixed_price') as ContractType
   );
 
-  // A rateless non-fixed instrument must never price (0% would silently sell
-  // at cost) — bail BEFORE any row/line/net_delta is persisted.
-  try {
-    assertInstrumentRatesInForce(rateCtx);
-  } catch (e) {
-    if (e instanceof NoRateInForceError) return { success: false, error: e.message };
-    throw e;
-  }
-
   const { data: lines, error: linesError } = await supabase
     .from('change_order_line_items')
     .select('id')
@@ -483,6 +474,20 @@ export async function recalculateChangeOrderTotals(changeOrderId: string): Promi
           .in('line_item_id', lineIds)
           .order('sort_order', { ascending: true })
       : { data: [] };
+
+  // An instrument missing a rate its rows actually use must never price (0%
+  // would silently sell at cost). Usage-based (A-9/7d1 §6.1) — the guard
+  // needs the CO's row types, so it runs after the row fetch but still
+  // bails BEFORE any row/line/net_delta is persisted.
+  try {
+    assertInstrumentRatesInForce(
+      rateCtx,
+      (rows ?? []).map((r) => ({ row_type: r.row_type as CoRowType }))
+    );
+  } catch (e) {
+    if (e instanceof NoRateInForceError) return { success: false, error: e.message };
+    throw e;
+  }
 
   type RowRec = NonNullable<typeof rows>[number];
   const rowsByLine = new Map<string, RowRec[]>();
@@ -512,7 +517,9 @@ export async function recalculateChangeOrderTotals(changeOrderId: string): Promi
       pricing_mode: pricingMode,
       tax_rate: co.tax_rate,
       defaults,
-      tm_labor_hourly: rateCtx.tm_labor_hourly,
+      // S97: on non-fixed instruments labor bills flat at the ROW's rate
+      // (defaulted from the instrument labor rate at creation, editable).
+      flat_rate_labor: rateCtx.contract_type !== 'fixed_price',
     });
 
     for (let i = 0; i < lineRows.length; i++) {

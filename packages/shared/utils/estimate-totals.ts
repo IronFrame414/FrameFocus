@@ -160,10 +160,11 @@ export function deriveCostPlusSell(cost: number, ratePercent: number): number {
   return roundMoney(cost * (1 + ratePercent / 100));
 }
 
-/** T&M labor sell: man-hours × the negotiated flat rate. Sell-side only —
- *  overhead + profit are baked into the rate; it never touches cost, markup,
- *  or the burden multiplier (spec §4.2). */
-export function deriveTmLaborSell(hours: number, hourlyRate: number): number {
+/** Flat labor sell: man-hours × the negotiated flat rate. Both T&M and
+ *  cost-plus (A-9) bill own-crew labor this way. Sell-side only — overhead +
+ *  profit are baked into the rate; it never touches cost, markup, or the
+ *  burden multiplier (spec §4.2, 7d1 §6.1). */
+export function deriveFlatLaborSell(hours: number, hourlyRate: number): number {
   return roundMoney(hours * hourlyRate);
 }
 
@@ -171,15 +172,29 @@ export type ContractType = 'fixed_price' | 'cost_plus' | 'time_and_materials';
 
 export interface InstrumentPricingContext {
   contract_type: ContractType;
-  /** Rate in force for a cost-plus instrument (cost_plus_percent). */
-  cost_plus_percent?: number | null;
-  /** Rates in force for a T&M instrument. */
+  /** Rates in force for a cost-plus instrument (A-9 — four independent
+   *  effective-dated rates; the legacy single cost_plus_percent is read-only
+   *  history and never prices). Labor is a flat $/man-hour, the rest are
+   *  per-category markups.
+   *  S97 corrected ruling: the LABOR rates are NOT consumed by estimate/CO
+   *  pricing — a labor row bills at its OWN rate (defaulted from the
+   *  instrument rate at row creation, editable; the estimate is a
+   *  projection). They default new labor rows and drive 7D invoicing
+   *  (approved hours × rate-in-force at the worked date, 7d1 §7). */
+  cost_plus_labor_hourly?: number | null;
+  cost_plus_material_percent?: number | null;
+  cost_plus_subcontractor_percent?: number | null;
+  cost_plus_other_percent?: number | null;
+  /** Rates in force for a T&M instrument (same labor caveat as above). */
   tm_labor_hourly?: number | null;
   tm_nonlabor_percent?: number | null;
 }
 
 const RATE_TYPE_LABELS = {
-  cost_plus_percent: 'markup rate',
+  cost_plus_labor_hourly: 'labor rate',
+  cost_plus_material_percent: 'material markup rate',
+  cost_plus_subcontractor_percent: 'subcontractor markup rate',
+  cost_plus_other_percent: 'other markup rate',
   tm_labor_hourly: 'labor rate',
   tm_nonlabor_percent: 'non-labor markup rate',
 } as const;
@@ -204,38 +219,75 @@ export class NoRateInForceError extends Error {
   }
 }
 
+/** The cost-plus markup in force for a non-labor row's category (A-9 — each
+ *  category prices at ITS OWN independent rate, never a shared percent).
+ *  Labor has no markup: it bills flat at the row's own rate (S97). */
+function costPlusMarkupFor(
+  ctx: InstrumentPricingContext,
+  rowType: RowType
+): number | null | undefined {
+  switch (rowType) {
+    case 'material':
+      return ctx.cost_plus_material_percent;
+    case 'subcontractor':
+      return ctx.cost_plus_subcontractor_percent;
+    case 'other':
+      return ctx.cost_plus_other_percent;
+    default:
+      return undefined;
+  }
+}
+
 /**
- * Throws NoRateInForceError when the context's contract type requires a rate
- * that is null (none in force — e.g. the only rate was superseded). Call
- * before any pricing loop so nothing is persisted for a rateless instrument.
+ * Throws NoRateInForceError when a MARKUP rate the instrument actually uses
+ * is null (none in force — e.g. the only rate was superseded). Call before
+ * any pricing loop so nothing is persisted at a silent 0% markup.
+ * Cost-plus markups are usage-based (7d1 §6.1 — fire when a rate the job's
+ * rows actually need is missing); T&M requires its non-labor markup
+ * regardless of rows (unchanged).
+ * LABOR rates are NOT checked here (S97 corrected ruling): a labor row
+ * bills flat at its OWN rate — the instrument labor rate only defaults new
+ * rows and drives 7D invoicing — so estimate/CO pricing never needs it.
  * Fixed-price needs no rates and always passes.
  */
-export function assertInstrumentRatesInForce(ctx: InstrumentPricingContext): void {
-  if (ctx.contract_type === 'cost_plus' && ctx.cost_plus_percent == null) {
-    throw new NoRateInForceError('cost_plus_percent');
+export function assertInstrumentRatesInForce(
+  ctx: InstrumentPricingContext,
+  rows: readonly Pick<RowPricingInput, 'row_type'>[]
+): void {
+  if (ctx.contract_type === 'cost_plus') {
+    const used = new Set(rows.map((r) => r.row_type));
+    for (const rowType of ['material', 'subcontractor', 'other'] as const) {
+      if (used.has(rowType) && costPlusMarkupFor(ctx, rowType) == null) {
+        throw new NoRateInForceError(`cost_plus_${rowType}_percent`);
+      }
+    }
   }
   if (ctx.contract_type === 'time_and_materials') {
-    if (ctx.tm_labor_hourly == null) throw new NoRateInForceError('tm_labor_hourly');
     if (ctx.tm_nonlabor_percent == null) throw new NoRateInForceError('tm_nonlabor_percent');
   }
 }
 
 /**
  * Applies the instrument's negotiated-rate overrides to row inputs (P4):
- * cost-plus — every row's markup_percent becomes the negotiated rate;
- * T&M — non-labor rows take tm_nonlabor_percent (labor rows are priced by
- * deriveTmLaborSell via the tm_labor_hourly passthrough below, so their
- * markup is irrelevant). Fixed-price returns the rows untouched.
- * A null rate on a non-fixed instrument throws NoRateInForceError — never
- * 0%, which would silently price at cost.
+ * cost-plus — each non-labor row's markup_percent becomes ITS category's
+ * rate (A-9 — independent material/sub/other markups, never one percent
+ * across the board);
+ * T&M — non-labor rows take tm_nonlabor_percent.
+ * Labor rows on both are left untouched — they bill flat at their OWN rate
+ * (hours × row rate via the flat_rate_labor path below, S97), so their
+ * markup is irrelevant. Fixed-price returns the rows untouched.
+ * A null markup rate a row actually needs throws NoRateInForceError —
+ * never 0%, which would silently price at cost.
  */
 export function applyInstrumentRateOverrides(
   rows: RowPricingInput[],
   ctx: InstrumentPricingContext
 ): RowPricingInput[] {
-  assertInstrumentRatesInForce(ctx);
+  assertInstrumentRatesInForce(ctx, rows);
   if (ctx.contract_type === 'cost_plus') {
-    return rows.map((r) => ({ ...r, markup_percent: ctx.cost_plus_percent }));
+    return rows.map((r) =>
+      r.row_type === 'labor' ? r : { ...r, markup_percent: costPlusMarkupFor(ctx, r.row_type) }
+    );
   }
   if (ctx.contract_type === 'time_and_materials') {
     return rows.map((r) =>
@@ -261,23 +313,21 @@ export function computeRowPricing(input: {
   pricing_mode: PricingMode;
   tax_rate: number | null | undefined;
   defaults: EstimateMarkupDefaults;
-  /** T&M instruments only: labor rows price at hours × this rate (sell-side
-   *  flat rate, spec §4.2) instead of rate × qty × markup. Tri-state:
-   *  `undefined` = not a T&M instrument (ordinary markup path); a number =
-   *  the rate in force; `null` = T&M with NO rate in force — an error, never
-   *  a fall-through to per-row markup (that would silently downgrade the
-   *  contract type). */
-  tm_labor_hourly?: number | null;
+  /** Non-fixed instruments (cost-plus and T&M): labor rows bill FLAT —
+   *  hours × the ROW's own rate, no markup, no tax, no burden (spec §4.2 /
+   *  7d1 §6.1). S97 corrected ruling: the row rate IS the charge rate for
+   *  the projection — it defaults from the instrument's labor rate in force
+   *  at row creation and stays editable; 7D invoicing (not this function)
+   *  bills approved hours at the rate in force per 7d1 §7. Omit/false on
+   *  fixed-price: labor prices by the ordinary markup path. */
+  flat_rate_labor?: boolean;
 }): RowPricing {
   const cost = computeRowCost(input.row);
-  if (input.row.row_type === 'labor' && input.tm_labor_hourly !== undefined) {
-    if (input.tm_labor_hourly === null) {
-      throw new NoRateInForceError('tm_labor_hourly');
-    }
+  if (input.row.row_type === 'labor' && input.flat_rate_labor) {
     return {
       cost,
       tax_amount: 0,
-      total: deriveTmLaborSell(input.row.quantity ?? 0, input.tm_labor_hourly),
+      total: deriveFlatLaborSell(input.row.quantity ?? 0, input.row.rate ?? 0),
     };
   }
   const taxable = input.row.row_type !== 'labor' && !!input.row.apply_tax;
@@ -307,8 +357,8 @@ export function computeLineTotalsFromRows(input: {
   discount_type?: DiscountType | null;
   discount_amount?: number | null;
   total_price_override?: number | null;
-  /** T&M instruments only — see computeRowPricing. */
-  tm_labor_hourly?: number | null;
+  /** Non-fixed instruments only — see computeRowPricing. */
+  flat_rate_labor?: boolean;
 }): LineTotals {
   let sum = 0;
   let tax = 0;
@@ -319,7 +369,7 @@ export function computeLineTotalsFromRows(input: {
       pricing_mode: input.pricing_mode,
       tax_rate: input.tax_rate,
       defaults: input.defaults,
-      tm_labor_hourly: input.tm_labor_hourly,
+      flat_rate_labor: input.flat_rate_labor,
     });
     rowTotals.push(p.total);
     sum += p.total;

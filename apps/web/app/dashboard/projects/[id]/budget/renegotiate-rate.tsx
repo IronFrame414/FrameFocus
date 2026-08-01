@@ -45,6 +45,11 @@ interface RenegotiateRateProps {
    *  when this is the instrument's first rate of the type (free backdate —
    *  P5 signing-date rule). */
   floor: string | null;
+  /** Prefill for the rate input, applied when the panel OPENS (so a value
+   *  fetched after mount still lands). S97 ruling: a CO's first rate of a
+   *  type defaults to the source estimate's rate in force — editable, and
+   *  the row written is still the CO's own. Null/undefined = start blank. */
+  defaultRate?: number | null;
   /** Set when the instrument is a DRAFT change order — its totals reprice
    *  at the new rate. NEVER set for the estimate instrument: on a
    *  converted/frozen estimate recalculateEstimateTotals is a silent no-op
@@ -62,6 +67,7 @@ export function RenegotiateRate({
   label,
   percent,
   floor,
+  defaultRate,
   recomputeDraftCoId,
   onSaved,
 }: RenegotiateRateProps) {
@@ -136,7 +142,12 @@ export function RenegotiateRate({
   if (!open) {
     return (
       <button
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          // Read the prefill at open time — it may have been fetched after
+          // this component mounted.
+          setRate(defaultRate != null ? String(defaultRate) : '');
+          setOpen(true);
+        }}
         style={{
           fontSize: '11px',
           fontWeight: 600,

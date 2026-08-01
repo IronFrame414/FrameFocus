@@ -48,10 +48,17 @@ export async function loadInstrumentPricingContext(
   const today = new Date().toISOString().slice(0, 10);
   const rates = data ?? [];
 
+  // A-9: cost-plus reads ONLY the four new types. The legacy
+  // cost_plus_percent is read-only history — the 20260801000000 expansion
+  // copied every live legacy row into the three category markups, so
+  // pre-A-9 instruments price identically through the new types.
   if (contractType === 'cost_plus') {
     return {
       contract_type: 'cost_plus',
-      cost_plus_percent: rateInForce(rates, 'cost_plus_percent', today),
+      cost_plus_labor_hourly: rateInForce(rates, 'cost_plus_labor_hourly', today),
+      cost_plus_material_percent: rateInForce(rates, 'cost_plus_material_percent', today),
+      cost_plus_subcontractor_percent: rateInForce(rates, 'cost_plus_subcontractor_percent', today),
+      cost_plus_other_percent: rateInForce(rates, 'cost_plus_other_percent', today),
     };
   }
   return {
@@ -76,7 +83,10 @@ type EstimateFileInsert = Database['public']['Tables']['estimate_files']['Insert
 type Result = { success: boolean; error?: string };
 type CreateResult = { success: boolean; id?: string; error?: string };
 
-/** Company-wide default labor rate (4D-rev) — pre-fills new labor rows. */
+/** Company-wide default labor CHARGE rate (4D-rev) — pre-fills new labor
+ *  rows on FIXED-PRICE estimates. On non-fixed instruments a new labor
+ *  row's rate defaults from the instrument's labor rate in force instead
+ *  (S97 corrected ruling — items-tab addRow). */
 export async function getCompanyDefaultLaborRate(): Promise<number | null> {
   const supabase = createClient();
   const { data } = await supabase.from('companies').select('default_labor_rate').single();
@@ -605,22 +615,13 @@ export async function recalculateEstimateTotals(estimateId: string): Promise<Res
 
   // Money representation P4/P5: on cost-plus/T&M instruments the negotiated
   // rate(s) in force TODAY (nothing is incurred at estimate time) override
-  // per-row markup; T&M labor prices at hours × the flat rate.
+  // per-row markup; labor on both prices at hours × the flat rate (A-9).
   const contractType = (estimate.contract_type ?? 'fixed_price') as ContractType;
   const rateCtx = await loadInstrumentPricingContext(
     supabase,
     { estimate_id: estimateId },
     contractType
   );
-
-  // A rateless non-fixed instrument must never price (0% would silently sell
-  // at cost) — bail BEFORE any row/line/total is persisted.
-  try {
-    assertInstrumentRatesInForce(rateCtx);
-  } catch (e) {
-    if (e instanceof NoRateInForceError) return { success: false, error: e.message };
-    throw e;
-  }
 
   const { data: lines, error: linesError } = await supabase
     .from('estimate_line_items')
@@ -640,6 +641,20 @@ export async function recalculateEstimateTotals(estimateId: string): Promise<Res
           .in('line_item_id', lineIds)
           .order('sort_order', { ascending: true })
       : { data: [] };
+
+  // An instrument missing a rate its rows actually use must never price (0%
+  // would silently sell at cost). Usage-based (A-9/7d1 §6.1) — the guard
+  // needs the estimate's row types, so it runs after the row fetch but
+  // still bails BEFORE any row/line/total is persisted.
+  try {
+    assertInstrumentRatesInForce(
+      rateCtx,
+      (rows ?? []).map((r) => ({ row_type: r.row_type as RowType }))
+    );
+  } catch (e) {
+    if (e instanceof NoRateInForceError) return { success: false, error: e.message };
+    throw e;
+  }
 
   // Group rows by line, preserving sort order.
   type RowRec = NonNullable<typeof rows>[number];
@@ -673,7 +688,9 @@ export async function recalculateEstimateTotals(estimateId: string): Promise<Res
       discount_type: line.discount_type as DiscountType | null,
       discount_amount: line.discount_amount,
       total_price_override: line.total_price_override,
-      tm_labor_hourly: rateCtx.tm_labor_hourly,
+      // S97: on non-fixed instruments labor bills flat at the ROW's rate
+      // (defaulted from the instrument labor rate at creation, editable).
+      flat_rate_labor: contractType !== 'fixed_price',
     });
 
     // Persist each row's marked-up total.

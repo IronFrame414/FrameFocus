@@ -51,6 +51,15 @@ export default async function ChangeOrderPage({
     (company as { contractor_signature_path?: string | null } | null)?.contractor_signature_path
   );
 
+  // S97 ruling: a new non-fixed CO DEFAULTS to the source estimate's
+  // negotiated rates — the rate section prefills from them (the CO still
+  // writes its own rate rows). NULL for a no-estimate project: no prefill.
+  const { data: project } = await supabase
+    .from('projects')
+    .select('source_estimate_id')
+    .eq('id', params.id)
+    .maybeSingle();
+
   const [subcontractors, sessions] = await Promise.all([
     getSubcontractors({ status: 'active' }),
     canManage && changeOrder.status === 'sent'
@@ -70,6 +79,7 @@ export default async function ChangeOrderPage({
       subcontractors={subcontractors.map((s) => ({ id: s.id, name: s.company_name }))}
       canManage={canManage}
       canEditRates={canEditRates}
+      sourceEstimateId={project?.source_estimate_id ?? null}
       pendingSigningToken={pendingSession?.token ?? null}
       companyName={companyName}
       hasSavedSignature={hasSavedSignature}

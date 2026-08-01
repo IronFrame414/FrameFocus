@@ -16,7 +16,16 @@ import type { Database } from '@framefocus/shared/types/database';
 type InstrumentRateRow = Database['public']['Tables']['instrument_rates']['Row'];
 
 export type InstrumentRateType =
+  /** LEGACY pre-A-9 single markup — read-only: existing rows still read and
+   *  render in history, but nothing writes it and pricing never consumes it
+   *  (the A-9 expansion copied live rows into the three category markups). */
   | 'cost_plus_percent'
+  // A-9: a cost-plus instrument carries four independent effective-dated
+  // rates — flat labor $/man-hour + material/sub/other markup %.
+  | 'cost_plus_labor_hourly'
+  | 'cost_plus_material_percent'
+  | 'cost_plus_subcontractor_percent'
+  | 'cost_plus_other_percent'
   | 'tm_labor_hourly'
   | 'tm_nonlabor_percent';
 

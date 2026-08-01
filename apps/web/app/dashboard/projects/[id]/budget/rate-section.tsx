@@ -30,14 +30,28 @@ import { CorrectRates, type RateHistoryRow } from './correct-rates';
 
 // Exported for the Overview rate-in-force summary (rate-summary.tsx) — one
 // definition of labels/formatting for every project rate surface.
+// cost_plus_percent is the LEGACY pre-A-9 single markup: it renders in
+// history (labeled so a reader knows why it no longer prices) but is never
+// expected, never offered for entry, and pricing ignores it.
 export const RATE_TYPE_META: Record<InstrumentRateType, { label: string; percent: boolean }> = {
-  cost_plus_percent: { label: 'Markup rate', percent: true },
+  cost_plus_percent: { label: 'Markup rate (legacy single markup)', percent: true },
+  cost_plus_labor_hourly: { label: 'Labor rate ($/man-hour)', percent: false },
+  cost_plus_material_percent: { label: 'Material markup', percent: true },
+  cost_plus_subcontractor_percent: { label: 'Subcontractor markup', percent: true },
+  cost_plus_other_percent: { label: 'Other markup', percent: true },
   tm_labor_hourly: { label: 'Labor rate ($/man-hour)', percent: false },
   tm_nonlabor_percent: { label: 'Non-labor markup', percent: true },
 };
 
+// A-9: a cost-plus instrument carries four independent rates. Set each on
+// its own — commonly all equal, never auto-filled or linked.
 export const EXPECTED_TYPES: Record<'cost_plus' | 'time_and_materials', InstrumentRateType[]> = {
-  cost_plus: ['cost_plus_percent'],
+  cost_plus: [
+    'cost_plus_labor_hourly',
+    'cost_plus_material_percent',
+    'cost_plus_subcontractor_percent',
+    'cost_plus_other_percent',
+  ],
   time_and_materials: ['tm_labor_hourly', 'tm_nonlabor_percent'],
 };
 

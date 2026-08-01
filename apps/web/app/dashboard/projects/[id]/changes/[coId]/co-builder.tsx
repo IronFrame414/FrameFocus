@@ -133,6 +133,10 @@ interface CoBuilderProps {
   /** Owner/Admin only (§7.3 S-5) — sets this CO's instrument rates; PM
    *  builds lines but sees type/rate read-only. */
   canEditRates: boolean;
+  /** projects.source_estimate_id — the CO rate section prefills first rates
+   *  from the source estimate's rates in force (S97 ruling). Null for a
+   *  no-estimate project: no prefill. */
+  sourceEstimateId: string | null;
   pendingSigningToken: string | null;
   companyName: string;
   hasSavedSignature: boolean;
@@ -144,6 +148,7 @@ export function CoBuilder({
   subcontractors,
   canManage,
   canEditRates,
+  sourceEstimateId,
   pendingSigningToken,
   companyName,
   hasSavedSignature,
@@ -381,6 +386,7 @@ export function CoBuilder({
             coType={co.co_type}
             canEditRates={canEditRates}
             isDraft={co.status === 'draft'}
+            sourceEstimateId={sourceEstimateId}
           />
         )}
 
