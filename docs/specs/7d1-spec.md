@@ -925,11 +925,11 @@ cost-plus estimates price through the same rate — so both must change together
 
 ## §S — Schema layer — **READ FROM THE LIVE REPO [S97]** (was: TODO; now filled)
 
-Read 2026-08-01 [S97] at commit `0f9d91c` on `feature/113c-award-commitment-spec`, verified
-against **rebuild-test** (`nmyphyhmfttxkdoposvf` — `supabase migration list` shows every migration
-below applied there through `20260801000000`; **production has the whole batch from
-`20260728000000` onward still pending**). Where a fact comes from the uncommitted working tree
-(the A-9 app-code pass awaiting click-test) it is marked **[WT]**.
+Read 2026-08-01 [S97] on `feature/113c-award-commitment-spec` (schema at `0f9d91c`; the A-9
+app-code pass landed as `c332382` while this section was being written), verified against
+**rebuild-test** (`nmyphyhmfttxkdoposvf` — `supabase migration list` shows every migration below
+applied there through `20260801000000`; **production has the whole batch from `20260728000000`
+onward still pending**). Facts from the A-9/S97 app-code pass (`c332382`) are marked **[A9]**.
 
 ### S.1 — Change orders + signed artifacts (item 1)
 
@@ -956,7 +956,7 @@ Signed-artifact columns (`20260710120000`): on `change_orders` —
 `co_signing_session_id` (both `ON DELETE SET NULL`) — the signed CO PDF is a `files` row.
 
 Services/routes: `change-orders.ts` (server reads), `change-orders-client.ts`
-(`recalculateChangeOrderTotals` — **[WT]** now prices per A-9/S97), `co-signing-service.ts`,
+(`recalculateChangeOrderTotals` — **[A9]** prices per A-9/S97), `co-signing-service.ts`,
 `co-pdf-service.ts`; `/api/change-orders/[id]/send|void`, `/api/sign-co/[token]/complete|decline`,
 `/api/cron/co-reminders`; UI `/dashboard/projects/[id]/changes[/coId]`.
 7B: `contract-value.ts` derives revised = `projects.contract_value` + Σ `net_delta` over
@@ -1030,9 +1030,9 @@ legacy row into the three category markups (same rate/date/instrument — the "a
 
 Selector: `instrument-rates-shared.ts` — `rateInForce(rates, rateType, asOf)` (greatest live
 `effective_from ≤ asOf`) and `latestLiveEffectiveFrom` are THE definitions; 7D consumes them and
-never restates. **[WT]** The §S item-5 consumer list is DONE in the working tree (four-rate
-context, per-category markups, usage-based `NoRateInForceError`, four-field entry surfaces,
-legacy row labeled in history) — uncommitted pending click-test. **[WT, S97 corrected labor
+never restates. **[A9]** The §S item-5 consumer list is DONE (`c332382`: four-rate context,
+per-category markups, usage-based `NoRateInForceError`, four-field entry surfaces, legacy row
+labeled in history). **[A9, S97 corrected labor
 ruling]** estimate/CO **projections** bill labor at the ROW's own editable rate (defaulted from
 the instrument labor rate at row creation); the instrument labor rate-in-force at the worked date
 is **7D's** billing basis (§7) — 7D is its first real consumer.
@@ -1109,7 +1109,7 @@ default payment terms. Which invoice defaults exist at all is decision D4.
 **`default_labor_rate`: LIVE; keep.** [S97 corrected ruling] It is the **fixed-price default
 CHARGE rate** — pre-fills new labor rows on fixed-price estimates
 (`getCompanyDefaultLaborRate`, `estimate-items-client.ts`; settings control in
-`estimating-settings-form.tsx`; read/write plumbing `company.ts`). **[WT]** Non-fixed estimates
+`estimating-settings-form.tsx`; read/write plumbing `company.ts`). **[A9]** Non-fixed estimates
 now default new labor rows from the instrument labor rate instead. It is NOT the T&M/cost-plus
 billing basis and must NOT be retired or repurposed.
 
@@ -1153,7 +1153,7 @@ exists, a selection overage reaches 7D only as a **manually authored CO** (confl
 | K4 | **§7.2 does not say which segment types bill.** work / material_run / warranty all carry `project_id`; travel/shop/break never do. Whether a material run or warranty hour is billable is undefined. Decision D2. |
 | K5 | **§4/S.10 — no structured selection.** A selection-overage CO is indistinguishable from any other CO (`reason_category` free text). If §4's flows need to KNOW a CO is a selection overage (reporting, client copy), v1 needs a convention or column. Decision D5. |
 | K6 | **Session-day boundary.** §7.2 groups per person per DAY, but approval is per session and a session may cross midnight (no constraint prevents it). Which day a cross-midnight segment's hours belong to (segment_start's day vs. split at the boundary) is unstated. CC can propose (segment_start's company-tz day — matches 6B's log_date convention) but it changes real invoices; flagged for confirmation. |
-| K7 | **Doc staleness recorded:** money-rep's "no migration exists" header is stale (S.4); §S item 7's "M6 unverified/unmerged — largest upstream risk" is stale (S.6); item 6's "7C rebuild-test only, never click-tested" is still TRUE (prod batch owed — everything `20260728000000`+ is pending on production). The A-9 app-code layer is **[WT] uncommitted** pending click-test. |
+| K7 | **Doc staleness recorded:** money-rep's "no migration exists" header is stale (S.4); §S item 7's "M6 unverified/unmerged — largest upstream risk" is stale (S.6); item 6's "7C rebuild-test only, never click-tested" is still TRUE (prod batch owed — everything `20260728000000`+ is pending on production). The A-9 app-code layer is committed (`c332382`). |
 
 ### Decisions owed by JOSH before the 7D migration is written
 
