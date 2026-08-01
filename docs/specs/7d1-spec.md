@@ -923,76 +923,247 @@ cost-plus estimates price through the same rate — so both must change together
 
 ---
 
-## §S — Schema layer — TODO for Claude Code (BLOCKS "complete")
+## §S — Schema layer — **READ FROM THE LIVE REPO [S97]** (was: TODO; now filled)
 
-This spec is **not** build-ready until CC reads the following live schemas and fills in table
-names, columns, FKs, RLS, triggers, service files, and route paths. Do **not** assert any of these
-from context — read them.
+Read 2026-08-01 [S97] at commit `0f9d91c` on `feature/113c-award-commitment-spec`, verified
+against **rebuild-test** (`nmyphyhmfttxkdoposvf` — `supabase migration list` shows every migration
+below applied there through `20260801000000`; **production has the whole batch from
+`20260728000000` onward still pending**). Where a fact comes from the uncommitted working tree
+(the A-9 app-code pass awaiting click-test) it is marked **[WT]**.
 
-**CC must read and reconcile:**
+### S.1 — Change orders + signed artifacts (item 1)
 
-1. **Signed-artifact / change-order tables** — 7D converts signed COs into invoices and, per §4a
-   as amended **[S97, R4]**, lands a signed negative CO as a **credit line on the next invoice**
-   (the credit document is REMOVED — do not build one). _(Merged and live: `change_orders` —
-   migration `20260704215000`, status `draft|sent|signed|voided`, `net_delta` — plus the
-   signed-artifact columns (`20260710120000`); 7B reads them via `contract-value.ts`.)_
-2. **Estimate line model** (Module 4) — invoice detail format mirrors the source.
-3. **Module 5 project / budget / `contract_value` tables** — deposit-to-budget crediting,
-   standalone-amount posting, and the project-level retainage setting.
-4. **`instrument_rates` + the shared rate logic** — `money-representation.md` §4.2/§6 and
-   `instrument-rates-shared.ts`. **7D consumes the rate-in-force selector; it must not restate it.**
-   **Confirm `20260730010000_money_representation.sql` is actually applied** — money-rep's own header
-   still says _"Not built. No migration exists"_ while the migration file is in the tree.
-   **[S97] The `rate_type` CHECK must widen for §6.1's four cost-plus rates** (currently exactly
-   `cost_plus_percent`, `tm_labor_hourly`, `tm_nonlabor_percent`). **CC decides** whether cost-plus
-   reuses the existing T&M labor-hourly rate type or gets its own — both contract types now share a
-   flat per-man-hour labor mechanic.
-5. **[S97] Every consumer of the single cost-plus rate must change with it:**
-   `packages/shared/utils/estimate-totals.ts:238` (applies one percent to every row regardless of
-   category), `:214` (`NoRateInForceError` checks one rate),
-   `apps/web/app/dashboard/estimates/[id]/contract-section.tsx:42`,
-   `apps/web/app/dashboard/projects/[id]/changes/[coId]/co-rate-section.tsx:35`,
-   `apps/web/app/dashboard/projects/[id]/budget/rate-section.tsx:40`,
-   `apps/web/lib/services/instrument-rates-shared.ts:19`.
-6. **The 7A/7C cost ledger** — approved `expenses` + `expense_allocations`, `expense_date`, cost
-   category, approval state, and **the instrument tag per cost row** (money-rep P6/P7) so §6 can
-   attribute costs to the right instrument. _(7C is BUILT but per `context91` §10 has **never been
-   click-tested**, and `20260729010000` is rebuild-test only — prod batch and merge owed.)_
-7. **Module 6 time entries** — worked date, approved state, and **per-person-per-day grouping** for
-   §7.2's rounding. **UNVERIFIED and unmerged; this is 7D's largest upstream risk.**
-8. **Project finances model** — where standalone invoice amounts + categories post.
-9. **File storage (Module 3)** — where the invoice PDF is stored (inherited pattern).
-10. **Company settings** — invoice-format defaults. **[S97] `companies.default_labor_rate` question is
-    ANSWERED: it exists (`baseline_schema.sql:1066`) and is LIVE**, with three consumers —
-    `estimate-items-client.ts:82`, `company.ts:171,192`, and a working control in
-    `estimating-settings-form.tsx`. It is **no longer** the T&M billing basis, but **retiring or
-    repurposing it breaks Module 4 estimating settings.** Leave it alone.
+`change_orders` (`20260704215000`, applied): standard per-tenant columns + soft delete;
+`project_id NOT NULL → projects`; `co_number` (CO-####-##, `projects.change_order_sequence`);
+`title`, `description`, `reason_category` (**free text, no CHECK** — see conflict K5);
+`co_type CHECK fixed_price|time_and_materials|cost_plus` (per-CO, independent of project type);
+`author_member_id → company_members`; `status CHECK draft|sent|signed|voided`; `sent_at`,
+`signed_at`; pricing context copied at creation (`pricing_mode CHECK markup|margin`, `tax_rate`,
+`subcontractor|material|labor_markup_percent`); **`net_delta numeric NOT NULL` — SIGNED**, negative
+for net-credit COs (this is §4a's credit source — no other negative-CO artifact exists);
+`schedule_impact_days`; `requires_client_signature DEFAULT true`. Triggers
+`change_orders_updated_at` / `change_orders_set_updated_by`. RLS: `change_orders_select_visible` /
+`insert_authorized` / `update_authorized` (no DELETE policy — soft delete via UPDATE).
+Children mirror the estimate line model (D-1): `change_order_line_items` (`total_price`,
+`total_price_override`) → `change_order_line_rows` (same `row_type` CHECK + type-column CHECK and
+`unit_of_measure` CHECK — incl. `allowance` — as estimate rows). `co_signing_sessions`
+(`status CHECK pending|completed|declined|expired|invalidated`, `signature_type draw|type`).
 
-**What must now be storable (concepts, not columns):**
+Signed-artifact columns (`20260710120000`): on `change_orders` —
+`contractor_signature_mode|ref|name`, `contractor_signed_at`, `contractor_signed_by`
+(→ company_members), `reminder_schedule jsonb`, `reminder_count`, `last_reminder_sent_at`; on
+`companies` — `contractor_signature_path`; on `files` — `change_order_id` and
+`co_signing_session_id` (both `ON DELETE SET NULL`) — the signed CO PDF is a `files` row.
 
-- **Per instrument:** **[S97]** four cost-plus rates (one flat labor $/man-hour + three category
-  markups) or two T&M rates; and the **tax base for markup** — tax-inclusive or pre-tax-with-
-  passthrough (§6.3). The tax base is a policy flag, **not** a rate. **Fixed at signing — NOT
-  effective-dated.** The rates **are** effective-dated.
-- **Per invoice:** status incl. **voided**; **void reason**, voided-by, voided-at; an **optional
-  supersedes link** to a successor; the chosen **presentation detail level** (§11); retainage withheld
-  and the resulting receivable (§5).
-- **Per derived line:** cost/hours basis · **category** · **the rate row's identity** · derived amount
-  · billed amount. **[S97, R1]** The disposition field is **REMOVED** with §8's write-off/hold-back
-  pair; a **discount line** is an ordinary invoice line with a negative amount.
-- **Per cost row:** a billed/unbilled marker (§6.2). **[S97, R1]** The held-back-shortfall amount is
-  **REMOVED** with the hold-back mechanism — an unbilled cost is simply an unselected one.
-- **[S97, R6] Per job: the deposit CREDIT BALANCE** for cost-plus/T&M deposits (§3a), with its
-  **remaining amount visible** as it draws down across invoices.
-- **[S97] Credit lines on invoices** (negative amounts, client-visible): negative-CO credit (§4a),
-  allowance under-credit (§4b), deposit draw-down (§3a), and R1 discount lines (§8).
-  **[S97 later ruling]** A signed negative CO's credit additionally needs an **AVAILABLE state
-  before placement** — it sits available until the user chooses its carrying invoice (§4a); its
-  available/placed status must be storable and visible.
-- **QB memo text** for void/reissue pairs (§10, 7G G4).
+Services/routes: `change-orders.ts` (server reads), `change-orders-client.ts`
+(`recalculateChangeOrderTotals` — **[WT]** now prices per A-9/S97), `co-signing-service.ts`,
+`co-pdf-service.ts`; `/api/change-orders/[id]/send|void`, `/api/sign-co/[token]/complete|decline`,
+`/api/cron/co-reminders`; UI `/dashboard/projects/[id]/changes[/coId]`.
+7B: `contract-value.ts` derives revised = `projects.contract_value` + Σ `net_delta` over
+`CONTRACT_CONTRIBUTING_CO_FILTER = { status:'signed', is_deleted:false }` — 7D must reuse that
+exported filter, never restate it. The §4a **available-until-placed credit state is NEW 7D
+schema** — nothing stores it today.
 
-**Also confirm before building:** the material-selection-overage source (§4) — a selection _is_ a
-change order (architecture §7.4); verify that class exists and read its shape.
+### S.2 — Estimate line model (item 2)
+
+Baseline `20260101000000` + `20260730010000`: `estimates` (`status CHECK
+draft|review|sent|viewed|accepted|declined|expired|revised`; `proposal_pricing_level CHECK
+lump_sum|category_with_price|category_no_price|detail_with_price_qty|detail_no_price` — §11's
+detail levels live HERE, per estimate, defaulted by `companies.default_proposal_pricing_level`;
+`contract_type CHECK fixed_price|cost_plus|time_and_materials` + `projected_value` added by
+money-rep; estimate-level discounts + `tax_rate`). Hierarchy: `estimate_categories` →
+`estimate_subcategories` → `estimate_line_items` (`total_price`, `total_price_override`,
+`override_cost` — money-rep §4.1 cost basis for flat-priced lines, set via
+`set_line_override_cost` RPC — `discount_type|amount`, `notes`, `sort_order`) →
+`estimate_line_rows` (`row_type CHECK labor|material|subcontractor|other`; type-column CHECK:
+labor = `rate`×`quantity`+`labor_unit hours|days`, `apply_tax` pinned false; material =
+`unit_cost`×`quantity`+`unit_of_measure` incl. **`allowance`** (allowance amount = `unit_cost`,
+quantity ignored)+`catalog_item_id`; sub = `amount`+`subcontractor_id`; other = `amount`;
+shared `markup_percent`, `apply_tax`, `total`). Services: `estimates(-client).ts`,
+`estimate-items-client.ts` (`recalculateEstimateTotals`), `proposal-service.ts`,
+`/api/proposals/*`; shared math `packages/shared/utils/estimate-totals.ts`.
+
+### S.3 — Project / budget / contract value (item 3)
+
+`projects` (`20260704211000`): `project_type CHECK fixed_price|time_and_materials|cost_plus`;
+`status CHECK active|on_hold|complete|archived|cancelled`; `contract_value numeric` (original,
+NEVER mutated — 7B); **`retainage_percent numeric` EXISTS and is currently consumed by NOTHING**
+(all `retainage_percent` reads in app code are `subcontractor_contracts.retainage_percent`,
+7C-side) — §5 gets a live, empty column to consume; `tax_rate`; `source_estimate_id`;
+carry-over content columns; `change_order_sequence`. `project_budget_items` (`20260704212000` +
+money-rep): `source_line_row_id`/`source_line_item_id` (→ original-estimate rows),
+**`source_change_order_id`** (→ CO instrument, P6) and **`is_miscellaneous`** (one per project,
+partial unique idx; NO instrument identity), `row_type`, `budgeted_amount`, `committed_amount`,
+`actual_amount` (maintained by `recompute_budget_item_actual` + the
+`expense_allocations_recompute_actual` / `expenses_recompute_on_change` /
+`expense_payments_recompute_budget` triggers). RPCs: `convert_estimate_to_project`,
+`apply_change_order_budget`. Service `budget.ts`; page `/dashboard/projects/[id]/budget`.
+**No deposit schema exists anywhere** — §3/§3a (deposit row, credit balance, draw-down lines) and
+trace G's draw schedule are green-field 7D schema. No client-side retainage-withheld storage
+exists either (§5's per-invoice withheld/receivable is NEW).
+
+### S.4 — instrument_rates + shared selector (item 4) — **A-9 SHIPPED**
+
+`instrument_rates` (`20260730010000`; guard amended `20260731010000`, supersede exemption
+`20260731020000`, **A-9 `20260801000000` — committed and APPLIED to rebuild-test**): columns
+`id, company_id, created_at, created_by, estimate_id, change_order_id, rate_type,
+rate numeric(8,2) ≥ 0, effective_from date, superseded_at|by|reason` — deliberately **no**
+`updated_at/updated_by/is_deleted` (append-only with a one-way supersede stamp;
+`instrument_rates_superseded_shape` CHECK). `instrument_rates_one_instrument` CHECK: `estimate_id`
+XOR `change_order_id` — **there is no project_id anchor** (§6.5's open item stands). Partial
+unique indexes `instrument_rates_estimate_type_date_key` / `_co_type_date_key` on
+(instrument, rate_type, effective_from) WHERE live. BEFORE INSERT trigger
+`instrument_rates_backdating_guard` (floor = latest live same instrument+type; transaction-local
+`app.superseding` exemption — exactly two setters: `supersede_instrument_rate` RPC and the A-9
+expansion INSERT). RLS: `instrument_rates_select_company`, `instrument_rates_insert_authorized`
+(Owner/Admin); no UPDATE/DELETE policies — supersede only via the Owner-only SECURITY DEFINER RPC.
+
+**`rate_type` CHECK now holds SEVEN values** (A-9): `cost_plus_percent` (LEGACY, read-only —
+kept so history reads; nothing writes it), `cost_plus_labor_hourly`, `cost_plus_material_percent`,
+`cost_plus_subcontractor_percent`, `cost_plus_other_percent`, `tm_labor_hourly`,
+`tm_nonlabor_percent`. The §S question "own labor type vs tm reuse" was DECIDED: **own type** —
+rate rows are audit data (§8 stores the rate row's identity on derived lines); a `tm_`-prefixed
+row on a cost-plus contract would mislead every future filter. The A-9 expansion copied each live
+legacy row into the three category markups (same rate/date/instrument — the "all equal" case);
+**no labor rate was seeded** (no source data; entry surfaces demand it). The money-rep header's
+"Not built. No migration exists" is **STALE** — confirmed applied on rebuild-test.
+
+Selector: `instrument-rates-shared.ts` — `rateInForce(rates, rateType, asOf)` (greatest live
+`effective_from ≤ asOf`) and `latestLiveEffectiveFrom` are THE definitions; 7D consumes them and
+never restates. **[WT]** The §S item-5 consumer list is DONE in the working tree (four-rate
+context, per-category markups, usage-based `NoRateInForceError`, four-field entry surfaces,
+legacy row labeled in history) — uncommitted pending click-test. **[WT, S97 corrected labor
+ruling]** estimate/CO **projections** bill labor at the ROW's own editable rate (defaulted from
+the instrument labor rate at row creation); the instrument labor rate-in-force at the worked date
+is **7D's** billing basis (§7) — 7D is its first real consumer.
+
+### S.5 — 7A/7C cost ledger (item 5)
+
+`expenses` (`20260728010000`; 7C adds `20260729010000` — both applied on rebuild-test; 7C
+never click-tested per context91 §10): `project_id NOT NULL`, `author_member_id`, `supplier`,
+**`expense_date date`** (company-tz calendar day), `amount > 0`,
+`cost_category CHECK material|subcontractor|other` (**labor deliberately excluded** — labor cost
+derives from time × pay rate × burden, never expense rows), `state CHECK committed|actual`,
+`status CHECK pending|approved|rejected` (+ mandatory `rejection_note`), `approved_by|at`,
+`source_segment_id → time_segments`, `qb_export_status` stub; 7C: `is_retainage` accrual rows,
+`expense_payments` (`amount`, `retainage_withheld ≥ 0`), `subcontractor_contracts` (+ compliance
+docs, `approve_expense`, `setup_payment_schedule` — all SUB-side, not client invoicing).
+`expense_allocations`: `expense_id` (CASCADE), `budget_item_id → project_budget_items`,
+`amount > 0`; triggers keep `actual_amount` true. **There is NO instrument tag on the expense
+row and NO billed/unbilled marker** — instrument attribution is TRANSITIVE:
+allocation → budget item → (`source_line_*` = original estimate | `source_change_order_id` = CO |
+`is_miscellaneous` = **no instrument**). See conflicts K1/K2. Services `expenses(-client).ts`,
+`payables(-client|-shared).ts`; pages `/dashboard/expenses`, `/dashboard/projects/[id]/costs`,
+`/contracts`.
+
+### S.6 — Module 6 time entries (item 6) — **MERGED. Josh is right; the §S risk note is stale.**
+
+Verified against git, not context files: 6A tables `20260710130000`, 6A UI merge `6e01f19`, M6B
+merged + deployed (`8b6972a`, types regen `305ffe4`), tiered RLS + week-approval batch
+(`20260721000000`–`20260721050000`) all in tree and applied on rebuild-test. Shape:
+**`time_clock_sessions`** (payroll truth; `member_id`, `clock_in`/`clock_out timestamptz`,
+**`status` NULLABLE CHECK pending|approved — NULL means "no approval state" and is the OWNER's
+permanent state** (`can_approve_member` rejects the Owner; see decision D1), `approved_by|at`,
+one-open-per-member partial unique index) and **`time_segments`** (`session_id`,
+`segment_type CHECK work|material_run|warranty|travel|shop|break`; `project_id` REQUIRED for
+work/material_run/warranty and FORBIDDEN for travel/shop/break; `task_id` only on work;
+`segment_start`/`segment_end`). Approval is **session-grain** (per-day 4b UI + atomic
+`approve_member_week` RPC). **There is no stored worked-date column and no daily rollup table** —
+§7.2's per-person-per-day grouping is DERIVED: person = session `member_id`, day =
+`segment_start` in the company timezone (`companies.timezone`, `20260719000000`;
+`company_time_settings` `20260721050000`; `weekWindow()` in
+`packages/shared/utils/time-tracking.ts`), hours = Σ segment durations on that project → round UP
+to the half hour once per person per day. The data supports this exactly; what counts as
+billable segment types and the Owner's hours need rulings (D1/D2). Cost-side (never client-facing):
+`member_pay_rates` (`20260721040000`), `member_burden_settings` (7A).
+
+### S.7 — Project finances model (item 7)
+
+**No invoice-side schema exists.** Today's финance surface = `project_budget_items`
+(budgeted/committed/actual + misc bucket) + `expenses`/`expense_payments` + the 7B contract-value
+derivation + `budget.ts`/`dashboard.ts` reads. A standalone invoice's amount/category has **no
+landing place** — §2's standalone posting (incl. deposit-to-budget crediting, §3) is green-field.
+QB account mapping exists: `companies.gl_account_labor|material|subcontractor|other` (7A).
+
+### S.8 — File storage for the invoice PDF (item 8)
+
+`files` (baseline): `project_id`, **`category` CHECK already includes `'invoices'`**, `file_path`
+in the `project-files` bucket (path convention `{company_id}/{project_id}/…`; storage RLS uses the
+inline-subquery pattern, `20260714175906`), `version`/`supersedes_id`, `client_visible`
+(`20260721070000`), plus per-feature link columns accreted by migrations (`change_order_id`,
+`co_signing_session_id`, `expense_id`, daily-log/incident/delivery links — all
+`ON DELETE SET NULL`). The `20260728000000` security pass gates `category='invoices'` to
+Owner/Admin/PM. PDF generation precedent: `co-pdf-service.ts` / `daily-log-pdf-service.ts` /
+`delivery-pdf-service.ts` + `/api/*/pdf` routes; signed URLs via `/api/files/signed-url`
+(`?download=` for attachment disposition). 7D inherits the whole pattern; it needs only a
+`files.invoice_id` link column (NEW) in its own migration.
+
+### S.9 — Company settings (item 9)
+
+`companies` carries a full estimating-defaults block (`estimate_number_prefix`/`_sequence`,
+per-category markup/margin defaults, `default_tax_rate`, `default_pricing_mode`,
+`default_proposal_pricing_level`, `default_terms_sections`, proposal/reminder email defaults,
+`default_expiration_days`, `brand_color`, `timezone`, `contractor_signature_path`) — and
+**nothing invoice-side**: no invoice number prefix/sequence, no default invoice detail level, no
+default payment terms. Which invoice defaults exist at all is decision D4.
+**`default_labor_rate`: LIVE; keep.** [S97 corrected ruling] It is the **fixed-price default
+CHARGE rate** — pre-fills new labor rows on fixed-price estimates
+(`getCompanyDefaultLaborRate`, `estimate-items-client.ts`; settings control in
+`estimating-settings-form.tsx`; read/write plumbing `company.ts`). **[WT]** Non-fixed estimates
+now default new labor rows from the instrument labor rate instead. It is NOT the T&M/cost-plus
+billing basis and must NOT be retired or repurposed.
+
+### S.10 — Material-selection overage source (item 10)
+
+The **class exists; the selection does not.** `change_orders` is fully capable of carrying a
+selection-overage CO (per-CO type, signable, signed `net_delta`, budget write-through), and
+architecture §7.4's "a selection IS a change order" holds structurally — but nothing in schema or
+code implements a selection: no selection entity, no allowance-vs-selection comparison, and
+`reason_category` is free text with no `selection` value convention (the only 'selection' string
+in the tree is an unrelated `tag_options` seed). Allowance rows DO exist
+(`estimate_line_rows.unit_of_measure='allowance'`, amount = `unit_cost`) and carry to budget items
+via conversion — §4b's true-up has its baseline. Until the Module-9-gated selection surface
+exists, a selection overage reaches 7D only as a **manually authored CO** (conflict K5).
+
+### What must now be storable — annotated (EXISTS vs NEW)
+
+- **Per instrument:** four cost-plus / two T&M effective-dated rates — **EXISTS** (S.4). The
+  **tax base for markup** (§6.3, fixed at signing, not effective-dated) — **NEW** (no column).
+- **Per invoice:** status incl. voided + void reason/by/at; optional supersedes link; presentation
+  detail level; retainage withheld + receivable — **ALL NEW** (no invoice tables exist).
+- **Per derived line:** cost/hours basis · category · **rate row identity** (FK into
+  `instrument_rates.id` — the row is immutable-by-supersede, so the FK is audit-stable) · derived
+  amount · billed amount — **NEW**. Discount = ordinary negative line [R1].
+- **Per cost row:** billed/unbilled marker — **NEW**; must cover BOTH `expenses`-side costs and
+  labor hours (which are not expense rows — S.5/S.6), and resolve K1/K2 first.
+- **Per job:** deposit credit balance with visible draw-down (§3a) — **NEW** (S.3: no deposit
+  schema at all).
+- **Credit lines** (negative-CO §4a incl. available-until-placed state, allowance under-credit
+  §4b, deposit draw-down §3a, discounts §8) — **NEW**; source data exists (signed negative
+  `net_delta`, allowance rows, deposit-to-be-built).
+- **QB memo text** for void/reissue pairs — **NEW**.
+
+### Conflicts found (spec vs. live repo) — **NOT resolved here**
+
+| #  | Conflict |
+| -- | -------- |
+| K1 | **§6.2 vs S.5 — costs have no direct instrument tag.** Attribution is transitive (allocation → budget item → source estimate/CO), and works ONLY when the budget item has instrument identity. The `is_miscellaneous` bucket has none: a cost-plus job's misc-allocated expense is **unattributable to any instrument**, so §6's "which instrument's rates price this cost" has a hole. Needs a rule or a direct per-cost instrument ref (decision D3). |
+| K2 | **§6.2's "cost row" is two populations.** Non-labor costs are `expenses` rows; labor "costs" are derived hours (S.6) with no row to mark billed. The billed/unbilled marker needs a design that covers hours (e.g., billed-through-date per person/instrument or an invoice-lines-claim model) — not just an `expenses` flag. |
+| K3 | **§7.2 vs S.6 — the Owner's hours can never be "approved".** `time_clock_sessions.status` is NULL for the Owner by design (`can_approve_member` rejects the Owner; nobody outranks them). §7.2's population "every approved hour" would silently exclude the founder's own field hours from every T&M/cost-plus invoice. Decision D1. |
+| K4 | **§7.2 does not say which segment types bill.** work / material_run / warranty all carry `project_id`; travel/shop/break never do. Whether a material run or warranty hour is billable is undefined. Decision D2. |
+| K5 | **§4/S.10 — no structured selection.** A selection-overage CO is indistinguishable from any other CO (`reason_category` free text). If §4's flows need to KNOW a CO is a selection overage (reporting, client copy), v1 needs a convention or column. Decision D5. |
+| K6 | **Session-day boundary.** §7.2 groups per person per DAY, but approval is per session and a session may cross midnight (no constraint prevents it). Which day a cross-midnight segment's hours belong to (segment_start's day vs. split at the boundary) is unstated. CC can propose (segment_start's company-tz day — matches 6B's log_date convention) but it changes real invoices; flagged for confirmation. |
+| K7 | **Doc staleness recorded:** money-rep's "no migration exists" header is stale (S.4); §S item 7's "M6 unverified/unmerged — largest upstream risk" is stale (S.6); item 6's "7C rebuild-test only, never click-tested" is still TRUE (prod batch owed — everything `20260728000000`+ is pending on production). The A-9 app-code layer is **[WT] uncommitted** pending click-test. |
+
+### Decisions owed by JOSH before the 7D migration is written
+
+| #  | Decision |
+| -- | -------- |
+| D1 | **Do the Owner's own hours bill on T&M/cost-plus?** (K3). If yes: the billable population must be "approved OR owner" (status IS NULL AND member is Owner), or the Owner gets an approval path. |
+| D2 | **Which segment types are billable hours?** work only, or work + material_run (+ warranty?) (K4). |
+| D3 | **Misc-bucket costs on a cost-plus/T&M job:** unbillable by definition, billed at a default instrument (original contract?), or must every billable cost be allocated to an instrument-bearing budget item? (K1). |
+| D4 | **Invoice numbering + format defaults** (S.9): prefix/sequence like estimates (`INV-`…)? Which company-level defaults (detail level, payment terms) exist in v1? |
+| D5 | **Selection-overage marking** (K5): is a free-text `reason_category` convention enough for v1, or does the CO need a structured origin marker now so 7D/M9 reporting can find them later? |
 
 ---
 
@@ -1006,7 +1177,9 @@ change order (architecture §7.4); verify that class exists and read its shape.
 - **Notification system** must be designed before §14's events can deliver.
 - **Tax-component recoverability** (§6.3) — may collapse the per-instrument tax-base setting to
   tax-inclusive only. CC verification, not a Josh decision.
-- **Module 6 hours** — §7 cannot be exercised until M6's time entries are readable and merged.
+- **Module 6 hours** — ~~§7 cannot be exercised until M6's time entries are readable and merged.~~
+  **[S97: CLOSED — M6 is merged and applied (§S S.6, verified against git).** §7's remaining
+  blockers are the D1/D2 rulings, not schema availability.]
 
 ### Outstanding items owed by JOSH — **[S97: table EMPTY — all five closed]**
 
