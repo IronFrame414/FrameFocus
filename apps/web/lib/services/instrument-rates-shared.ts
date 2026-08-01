@@ -65,6 +65,35 @@ export function latestLiveEffectiveFrom(
 
 /** Pure rate-in-force selection — shared by server and client callers.
  *  Superseded rows never win (their correction is the point, §5.5). */
+/**
+ * TODAY as a company-timezone calendar date (YYYY-MM-DD) [S97].
+ *
+ * `effective_from` is a calendar DATE, so the "today" that defaults it — and
+ * the "today" that asks what is in force NOW — must be a company-tz date.
+ * Deriving it from toISOString() is UTC: after ~20:00 EDT that is TOMORROW,
+ * so a rate entered in the evening defaults to tomorrow and saves as a
+ * DORMANT future rate that does not price today's work. Before future-dating
+ * was permitted (P5 as amended 2026-07-31, migration 20260731010000) the
+ * backdating guard rejected that outright; now it is accepted silently, which
+ * is what makes this urgent rather than cosmetic.
+ *
+ * `now` is injectable so the boundary is testable without touching the clock.
+ *
+ * Deliberately restated here rather than imported from 7D's invoices-shared
+ * `companyToday`: instrument rates are UPSTREAM of invoicing and must not
+ * depend on it. Same precedent as co-rate-section restating RATE_FIELDS —
+ * six lines is a smaller cost than a backwards module dependency. The two
+ * are pinned to the same rule by test.
+ */
+export function todayInZone(timeZone: string, now: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+}
+
 export function rateInForce(
   rates: RateInForceInput[],
   rateType: InstrumentRateType,

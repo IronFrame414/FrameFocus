@@ -4,14 +4,18 @@ import type {
   InstrumentRateType,
   InstrumentRef,
 } from '@/lib/services/instrument-rates-shared';
-import { rateInForce } from '@/lib/services/instrument-rates-shared';
+import { rateInForce, todayInZone } from '@/lib/services/instrument-rates-shared';
 export type {
   InstrumentRate,
   InstrumentRateType,
   InstrumentRef,
   RateInForceInput,
 } from '@/lib/services/instrument-rates-shared';
-export { latestLiveEffectiveFrom, rateInForce } from '@/lib/services/instrument-rates-shared';
+export {
+  latestLiveEffectiveFrom,
+  rateInForce,
+  todayInZone,
+} from '@/lib/services/instrument-rates-shared';
 
 // Money representation §4.2/§6 — client writes for instrument rates.
 // Types and the pure rateInForce live in instrument-rates-shared.ts (no
@@ -28,6 +32,44 @@ export { latestLiveEffectiveFrom, rateInForce } from '@/lib/services/instrument-
 // direct UPDATE — the table has no UPDATE policy).
 
 type MutationResult = { success: boolean; error?: string };
+
+/**
+ * The caller's company timezone, for the two places this module needs a
+ * CALENDAR DATE (rate-in-force "today" and the effective_from default) [S97].
+ *
+ * WHY THIS READS IT RATHER THAN TAKING IT AS A PARAMETER. 7D threads the
+ * timezone down from its server page, and that was right there: one page, one
+ * settings read, one component tree. Here the callers are
+ * contract-section / items-tab / renegotiate-rate (via co-rate-section),
+ * mounted several levels inside two CLIENT trees whose server pages do not
+ * read company settings at all. Threading would have meant editing ~8 files
+ * across M4 and M5 — including files explicitly out of scope for this fix —
+ * to carry a value this module can read for itself in one query. Reading it
+ * here also makes the correct behavior unmissable: no caller can forget to
+ * pass a timezone, so no call site can silently fall back to UTC.
+ *
+ * Memoized per page load — this is a save-path read, not a render-path one.
+ * RLS scopes `companies` to the caller's own row (getTimeTrackingSettings
+ * relies on the same property server-side). The fallback mirrors
+ * getCompanyTimeSettings' fallback — the column default, NEVER UTC.
+ */
+let timeZonePromise: Promise<string> | null = null;
+
+function companyTimeZone(): Promise<string> {
+  if (!timeZonePromise) {
+    // Wrapped in an async IIFE: the supabase builder is a PromiseLike, so it
+    // has no .catch of its own.
+    timeZonePromise = (async () => {
+      try {
+        const { data } = await createClient().from('companies').select('timezone').maybeSingle();
+        return data?.timezone || 'America/New_York';
+      } catch {
+        return 'America/New_York';
+      }
+    })();
+  }
+  return timeZonePromise;
+}
 
 /** Client-side history read (rate panels fetch at interaction time). */
 export async function listInstrumentRatesClient(ref: InstrumentRef): Promise<InstrumentRate[]> {
@@ -51,11 +93,13 @@ export async function getRateInForceToday(
   rateType: InstrumentRateType
 ): Promise<number | null> {
   const rates = await listInstrumentRatesClient(ref);
-  return rateInForce(rates, rateType, new Date().toISOString().slice(0, 10));
+  // Company-tz calendar date, never the UTC one [S97] — see todayInZone.
+  return rateInForce(rates, rateType, todayInZone(await companyTimeZone()));
 }
 
 /** New rate row (initial negotiation or renegotiation). Owner/Admin.
- *  effective_from defaults to today. The DB backdating guard is the
+ *  effective_from defaults to the COMPANY-timezone today [S97] — never the
+ *  UTC one, which would date an evening entry tomorrow. The DB backdating guard is the
  *  authority: the first rate of a type takes any date (signing date, or a
  *  not-yet-started deal); later rates land on/after the latest existing
  *  non-superseded rate. No upper bound — a future-dated rate is not in
@@ -74,7 +118,10 @@ export async function addInstrumentRate(
     change_order_id: ref.change_order_id ?? null,
     rate_type: rateType,
     rate,
-    effective_from: effectiveFrom ?? new Date().toISOString().slice(0, 10),
+    // Company-tz calendar date [S97]. A UTC default dated an evening-entered
+    // rate TOMORROW, which — now that future-dating is permitted — saves
+    // quietly as a dormant rate that does not price today's work.
+    effective_from: effectiveFrom ?? todayInZone(await companyTimeZone()),
   });
   if (error) {
     if (error.message.includes('before the latest existing rate')) {
