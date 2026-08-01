@@ -685,6 +685,52 @@ The approval notice pings Owner/Admin for quick action — an unapproved invoice
 Phone-push depends on mobile infrastructure that may not be built (architecture §7.7 #8); the approval
 flow works in-app regardless.
 
+### §12a — PM financial visibility on invoices — **AMENDMENT [S97, 2026-08-01 — RULED by Josh]**
+
+**Resolves conflict C1** (raised in `docs/sessions/S97-7D-build.md` §3). The 7D build hit a direct
+contradiction between this spec and the platform-wide Financial Visibility Floor, and shipped
+following §12 while flagging it for a ruling. This amendment records the ruling.
+
+**What this supersedes.** CLAUDE.md → "Financial Visibility Floor (authoritative — added
+2026-07-20)" reads:
+
+> **Only Owner and Admin may see contract/budget/sell/CO dollar figures. Project Manager, Foreman,
+> and Crew see ACTUAL COST ONLY.**
+
+and gates, among other figures, "budgeted and sell/price amounts". Read literally and without this
+amendment, that floor would forbid a PM from seeing the amounts on the very invoice §12 authorizes
+them to create.
+
+**The ruling.** A **PM CAN see the invoice amounts on an invoice they are creating.** This is a
+narrow, named carve-out from the floor, not a revision of it.
+
+**Nothing wider.** This does **not** open any other financial surface to a PM. Specifically it does
+NOT grant a PM:
+
+- `projects.contract_value` as a reporting figure — including the "Original contract" tile on the
+  project invoice list, which is a job-position figure, not an amount on an invoice being created.
+  That tile is **Owner/Admin only.**
+- `project_budget_items.budgeted_amount` / any sell column, committed amounts, variance, or
+  projected margin (7A/7B surfaces).
+- `change_orders.net_delta` or any dollar sum derived from it (7B surfaces).
+
+The line the ruling draws: **an amount ON the invoice** (a derived cost or labor line, a draw, a
+discount, a credit, the invoice's own totals and retainage) is visible to a PM who can reach that
+invoice. **A contract/budget/margin figure ABOUT the job** is not. A draw's contract-value basis is
+shown while composing that draw, because the draw amount *is* the invoice amount being created.
+
+**Row scope is unchanged** and continues to ride `can_view_project()`: a PM sees invoices on
+projects they are assigned to. Foreman and Crew have no access to client billing at all (§12,
+enforced by the `invoices` RLS policies, the page guards, and the nav tab).
+
+**Enforcement note.** 7D's own RLS is role-gated at the DB, so 7D is not the weak point in the
+floor. The platform-wide DB-level floor (`FINANCIAL-RLS-FLOOR`, ui-01 §10) remains owed and
+unaffected by this amendment.
+
+**Open question, NOT ruled:** whether a PM should see invoices authored by *others* on an assigned
+job, or only their own. The build ships the former (whole-project visibility), because a partial
+invoice list would make the job-position figures incoherent. Flagged rather than assumed.
+
 ---
 
 ## §13 — Delivery & landing

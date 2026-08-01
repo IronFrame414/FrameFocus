@@ -22,9 +22,9 @@ import type { CostCategory } from '@framefocus/shared/utils/invoice-derivation';
 //
 // Financial Visibility Floor: client billing is Owner/Admin/PM only, enforced
 // by the invoices RLS policies (20260802000000). Foreman/Crew read nothing
-// here. See the CONFLICT note in docs/sessions/S97-7D-build.md — CLAUDE.md's
-// floor gates "sell amounts" to Owner/Admin, while 7D §12 explicitly lets a PM
-// create invoices; §12 (module-specific, later) is followed.
+// here. Conflict C1 is RULED — see 7d1-spec.md §12a (amendment, S97): a PM may
+// see the amounts ON an invoice they can reach, and nothing wider. Figures
+// ABOUT the job (contract value, budget/sell, CO deltas) stay Owner/Admin.
 
 export type {
   AvailableCredit,

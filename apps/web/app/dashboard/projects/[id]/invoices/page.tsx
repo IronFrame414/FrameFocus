@@ -112,6 +112,9 @@ export default async function InvoicesPage({ params }: { params: { id: string } 
   const retainageHeld = round2(live.reduce((sum, i) => sum + Number(i.retainage_withheld ?? 0), 0));
   const receivable = round2(live.reduce((sum, i) => sum + Number(i.amount_receivable ?? 0), 0));
   const contractValue = project.contract_value === null ? null : Number(project.contract_value);
+  // §12a (S97) — the PM carve-out covers amounts ON an invoice, not the job's
+  // contract value (CLAUDE.md Financial Visibility Floor keeps that Owner/Admin).
+  const canSeeContractValue = profile.role === 'owner' || profile.role === 'admin';
 
   return (
     <div style={{ padding: '20px 0' }}>
@@ -188,7 +191,10 @@ export default async function InvoicesPage({ params }: { params: { id: string } 
           <Figure label="Billed to date" value={billedToDate} />
           <Figure label="Retainage held" value={retainageHeld} warn />
           <Figure label="Receivable (ages in collections)" value={receivable} bold />
-          {contractValue !== null && (
+          {/* §12a (S97) — the contract value is a figure ABOUT the job, not an
+              amount on an invoice being created, so it stays Owner/Admin.
+              A PM sees the billed/retainage/receivable figures beside it. */}
+          {contractValue !== null && canSeeContractValue && (
             <Figure label="Original contract" value={contractValue} muted />
           )}
         </div>
