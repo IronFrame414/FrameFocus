@@ -41,6 +41,37 @@ const tdStyle: React.CSSProperties = {
   borderBottom: `1px solid ${color.rowDivider}`,
 };
 
+function Figure({
+  label,
+  value,
+  bold,
+  muted,
+  warn,
+}: {
+  label: string;
+  value: number;
+  bold?: boolean;
+  muted?: boolean;
+  warn?: boolean;
+}) {
+  return (
+    <div>
+      <span style={microLabelStyle}>{label}</span>
+      <div
+        style={{
+          fontFamily: font.mono,
+          fontSize: bold ? '18px' : '15px',
+          fontWeight: bold ? 700 : 600,
+          color: muted ? color.faint : warn ? color.warningDeep : color.navy,
+          marginTop: '2px',
+        }}
+      >
+        {money(value)}
+      </div>
+    </div>
+  );
+}
+
 export default async function InvoicesPage({ params }: { params: { id: string } }) {
   const supabase = await createClient();
   const {
@@ -73,6 +104,14 @@ export default async function InvoicesPage({ params }: { params: { id: string } 
 
   const flaggedIds = new Set(flagged.map((f) => f.invoiceId));
   const base = `/dashboard/projects/${params.id}/invoices`;
+
+  // §5 job position. A voided invoice billed nothing, so it is excluded.
+  const live = invoices.filter((i) => i.status !== 'voided');
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  const billedToDate = round2(live.reduce((sum, i) => sum + Number(i.billed_total ?? 0), 0));
+  const retainageHeld = round2(live.reduce((sum, i) => sum + Number(i.retainage_withheld ?? 0), 0));
+  const receivable = round2(live.reduce((sum, i) => sum + Number(i.amount_receivable ?? 0), 0));
+  const contractValue = project.contract_value === null ? null : Number(project.contract_value);
 
   return (
     <div style={{ padding: '20px 0' }}>
@@ -138,6 +177,20 @@ export default async function InvoicesPage({ params }: { params: { id: string } 
           <p style={{ fontSize: '11px', color: color.faint, margin: '6px 0 0' }}>
             Open a draft invoice to place a credit on it — credits are never applied automatically.
           </p>
+        </div>
+      )}
+
+      {/* §5 — the job's billing position. Retainage held is shown SEPARATELY
+          and deliberately sits OUTSIDE the receivable: it is not overdue,
+          because it is not yet owed. Voided invoices contribute nothing. */}
+      {live.length > 0 && (
+        <div style={{ ...cardStyle, padding: '12px 16px', marginBottom: '14px', display: 'flex', gap: '28px', flexWrap: 'wrap' }}>
+          <Figure label="Billed to date" value={billedToDate} />
+          <Figure label="Retainage held" value={retainageHeld} warn />
+          <Figure label="Receivable (ages in collections)" value={receivable} bold />
+          {contractValue !== null && (
+            <Figure label="Original contract" value={contractValue} muted />
+          )}
         </div>
       )}
 

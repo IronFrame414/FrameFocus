@@ -484,14 +484,33 @@ export async function updateInvoiceSettings(
     due_date?: string | null;
     is_final?: boolean;
     notes?: string | null;
-  }
+  },
+  /** Required whenever retainage_percent is being set — §5's "never on a T&M
+   *  invoice" is a money rule and is enforced HERE, not only by a disabled
+   *  input. (The deposit half of the rule is additionally a DB CHECK.) */
+  contractType?: ContractType
 ): Promise<Result> {
   const supabase = createClient();
+
+  if (updates.retainage_percent != null) {
+    const { data: invoice } = await supabase
+      .from('invoices')
+      .select('invoice_type')
+      .eq('id', invoiceId)
+      .single();
+    if (invoice?.invoice_type === 'deposit') {
+      return { success: false, error: 'A deposit invoice never withholds retainage (7D §5).' };
+    }
+    if (contractType === 'time_and_materials') {
+      return { success: false, error: 'A T&M invoice never withholds retainage (7D §5/§7).' };
+    }
+  }
+
   // BEFORE UPDATE triggers handle updated_at / updated_by.
   const { error } = await supabase.from('invoices').update(updates).eq('id', invoiceId);
   if (error) return { success: false, error: error.message };
   if (updates.retainage_percent !== undefined) {
-    return recalculateInvoiceTotals(invoiceId);
+    return recalculateInvoiceTotals(invoiceId, { contractType });
   }
   return { success: true };
 }

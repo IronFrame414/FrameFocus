@@ -292,6 +292,7 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
           invoiceId={invoice.id}
           originalContractValue={originalContractValue}
           alreadyBilled={alreadyBilled}
+          contractType={contractType}
           busy={busy}
           run={run}
         />
@@ -456,7 +457,7 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
       )}
 
       {/* Lines + totals */}
-      <LinesPanel invoice={invoice} isDraft={isDraft} busy={busy} run={run} presented={presented} />
+      <LinesPanel invoice={invoice} isDraft={isDraft} contractType={contractType} busy={busy} run={run} presented={presented} />
 
       {/* Adjustments — §8 discount, §4a/§4b/§3a credits */}
       {isDraft && (
@@ -464,6 +465,7 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
           invoice={invoice}
           credits={availableCredits}
           canApprove={canApprove}
+          contractType={contractType}
           busy={busy}
           run={run}
         />
@@ -502,12 +504,14 @@ function DrawPanel({
   invoiceId,
   originalContractValue,
   alreadyBilled,
+  contractType,
   busy,
   run,
 }: {
   invoiceId: string;
   originalContractValue: number | null;
   alreadyBilled: number;
+  contractType: ContractType;
   busy: boolean;
   run: (fn: () => Promise<{ success: boolean; error?: string }>, msg?: string) => Promise<boolean>;
 }) {
@@ -577,7 +581,7 @@ function DrawPanel({
                   alreadyBilled
                 ).then(async (r) => {
                   if (!r.success) return r;
-                  return recalculateInvoiceTotals(invoiceId);
+                  return recalculateInvoiceTotals(invoiceId, { contractType });
                 }),
               'Draw added.'
             );
@@ -607,12 +611,14 @@ function DrawPanel({
 function LinesPanel({
   invoice,
   isDraft,
+  contractType,
   busy,
   run,
   presented,
 }: {
   invoice: InvoiceWithLines;
   isDraft: boolean;
+  contractType: ContractType;
   busy: boolean;
   run: (fn: () => Promise<{ success: boolean; error?: string }>, msg?: string) => Promise<boolean>;
   presented: ReturnType<typeof presentInvoice>;
@@ -673,7 +679,7 @@ function LinesPanel({
                         run(
                           () =>
                             deleteInvoiceLine(line.id).then(async (r) =>
-                              r.success ? recalculateInvoiceTotals(invoice.id) : r
+                              r.success ? recalculateInvoiceTotals(invoice.id, { contractType }) : r
                             ),
                           'Line removed.'
                         )
@@ -777,7 +783,7 @@ function LinesPanel({
                     invoiceId: invoice.id,
                     description: manualLabel.trim(),
                     amount: Number(manualAmount),
-                  }).then(async (r) => (r.success ? recalculateInvoiceTotals(invoice.id) : r)),
+                  }).then(async (r) => (r.success ? recalculateInvoiceTotals(invoice.id, { contractType }) : r)),
                 'Line added.'
               );
               if (ok) {
@@ -813,12 +819,14 @@ function AdjustmentsPanel({
   invoice,
   credits,
   canApprove,
+  contractType,
   busy,
   run,
 }: {
   invoice: InvoiceWithLines;
   credits: AvailableCredit[];
   canApprove: boolean;
+  contractType: ContractType;
   busy: boolean;
   run: (fn: () => Promise<{ success: boolean; error?: string }>, msg?: string) => Promise<boolean>;
 }) {
@@ -844,7 +852,7 @@ function AdjustmentsPanel({
             const ok = await run(
               () =>
                 addDiscountLine(invoice.id, discountLabel.trim(), Number(discountAmount)).then(
-                  async (r) => (r.success ? recalculateInvoiceTotals(invoice.id) : r)
+                  async (r) => (r.success ? recalculateInvoiceTotals(invoice.id, { contractType }) : r)
                 ),
               'Discount line added.'
             );
@@ -888,7 +896,7 @@ function AdjustmentsPanel({
                         totalBeforeCredit,
                         credit.label
                       )
-                  ).then(async (r) => (r.success ? recalculateInvoiceTotals(invoice.id) : r)),
+                  ).then(async (r) => (r.success ? recalculateInvoiceTotals(invoice.id, { contractType }) : r)),
                 'Credit placed on this invoice.'
               )
             }
@@ -910,7 +918,7 @@ function AdjustmentsPanel({
               const ok = await run(
                 () =>
                   addAllowanceCredit(invoice.id, 'Allowance under-run credit', Number(allowanceAmount)).then(
-                    async (r) => (r.success ? recalculateInvoiceTotals(invoice.id) : r)
+                    async (r) => (r.success ? recalculateInvoiceTotals(invoice.id, { contractType }) : r)
                   ),
                 'Allowance credit applied.'
               );
@@ -958,9 +966,11 @@ function SettingsPanel({
             onChange={(e) =>
               run(
                 () =>
-                  updateInvoiceSettings(invoice.id, {
-                    presentation_level: e.target.value as PresentationLevel,
-                  }),
+                  updateInvoiceSettings(
+                    invoice.id,
+                    { presentation_level: e.target.value as PresentationLevel },
+                    contractType
+                  ),
                 'Presentation updated.'
               )
             }
@@ -991,9 +1001,11 @@ function SettingsPanel({
             onClick={() =>
               run(
                 () =>
-                  updateInvoiceSettings(invoice.id, {
-                    retainage_percent: retainage === '' ? null : Number(retainage),
-                  }),
+                  updateInvoiceSettings(
+                    invoice.id,
+                    { retainage_percent: retainage === '' ? null : Number(retainage) },
+                    contractType
+                  ),
                 'Retainage updated.'
               )
             }
@@ -1014,7 +1026,10 @@ function SettingsPanel({
           checked={invoice.is_final}
           disabled={busy}
           onChange={(e) =>
-            run(() => updateInvoiceSettings(invoice.id, { is_final: e.target.checked }), 'Updated.')
+            run(
+              () => updateInvoiceSettings(invoice.id, { is_final: e.target.checked }, contractType),
+              'Updated.'
+            )
           }
         />
         Final invoice
