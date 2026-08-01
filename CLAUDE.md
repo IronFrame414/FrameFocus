@@ -496,6 +496,7 @@ When generating code, migrations, or instructions for Josh:
 - `docs/roadmap/FrameFocus_Platform_Roadmap.xlsx` — planning spreadsheet
 - `docs/sessions/contextN.md` — one per session; read the most recent at session start
 - `STATE.md` — live repo state; tech debt in `TECH_DEBT.md`
+- `GATED.md` — register of gated/blocked work: what is blocked, behind what, and what unblocks it (Pre-M9 gate, test identities, 7D–7H readiness, deferred-by-decision, standing rulings)
 
 ```
 

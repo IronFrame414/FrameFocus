@@ -336,7 +336,7 @@ Add a SECOND SELECT policy on `files` to grant clients read access to specifical
    bash scripts/session-start.sh
    ```
 3. Open a new Claude Chat (inside the FrameFocus Claude Project with `CLAUDE.md`, `STATE.md`, `CLAUDE_MODULES.md`, and Quick Reference as project knowledge)
-4. Paste the snapshot output plus the latest `docs/sessions/contextN.md`
+4. Paste the snapshot output plus the latest `docs/sessions/contextN.md`; check `GATED.md` (repo root) for what is blocked, behind what, and what unblocks it before picking up gated work
 5. State goal for the session — next Module 4 build target is **4D (Estimate Builder UI)**, spec in `docs/specs/4D-spec.md`; OR open Pre-Module 9 Decision Gate, OR polish work
 6. Switch to Claude Code in the terminal once a plan is agreed
 7. Return to Claude Chat at end of session to generate next context file and update `STATE.md`
