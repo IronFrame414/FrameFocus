@@ -3133,7 +3133,7 @@ export type Database = {
           derived_total: number
           due_date: string | null
           id: string
-          invoice_number: string
+          invoice_number: string | null
           invoice_type: string
           is_deleted: boolean | null
           is_final: boolean
@@ -3166,7 +3166,7 @@ export type Database = {
           derived_total?: number
           due_date?: string | null
           id?: string
-          invoice_number?: string
+          invoice_number?: string | null
           invoice_type?: string
           is_deleted?: boolean | null
           is_final?: boolean
@@ -3199,7 +3199,7 @@ export type Database = {
           derived_total?: number
           due_date?: string | null
           id?: string
-          invoice_number?: string
+          invoice_number?: string | null
           invoice_type?: string
           is_deleted?: boolean | null
           is_final?: boolean
@@ -5502,6 +5502,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      allocate_invoice_number: {
+        Args: { p_company_id: string }
+        Returns: string
+      }
       apply_change_order_budget: {
         Args: { p_change_order_id: string }
         Returns: number

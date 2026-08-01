@@ -78,9 +78,9 @@ export interface CreateInvoiceInput {
   retainagePercent?: number | null;
 }
 
-/** Creates the DRAFT shell. invoice_number comes from the DB default
- *  (next_invoice_number()) — strictly sequential per company, immutable, no
- *  reuse, no suffixes (§10, P-2). */
+/** Creates the DRAFT shell. A draft is UNNUMBERED (§10 as ruled S97): the
+ *  number is allocated at SEND, so deleting a draft cannot leave a gap in the
+ *  sent series. See markInvoiceSent. */
 export async function createInvoice(input: CreateInvoiceInput): Promise<CreateResult> {
   const supabase = createClient();
   const { data, error } = await supabase
@@ -555,6 +555,17 @@ export async function approveInvoice(invoiceId: string, memberId: string): Promi
  * immutability trigger takes over from here). It does NOT email, does not
  * generate a pay link and does not touch QuickBooks: those are 7G/§13 behind
  * the Pre-M9 gate and the RESEND secret, deliberately not built.
+ *
+ * §10 as ruled S97 — THIS is where the invoice number is allocated. The
+ * `invoices_assign_number` BEFORE trigger stamps it inside this very UPDATE,
+ * so numbering is atomic with the status change and the sent series has no
+ * gaps from deleted drafts. The service does not compute or send a number.
+ *
+ * The UPDATE is scoped to the open statuses so two racing sends cannot both
+ * transition the row: the loser matches ZERO rows and reports it, rather than
+ * re-stamping sent_at over a live invoice. (The trigger is independently safe
+ * — it only allocates when the number is still NULL — this makes the failure
+ * visible to the caller instead of silent.)
  */
 export async function markInvoiceSent(invoiceId: string): Promise<Result> {
   const supabase = createClient();
@@ -569,11 +580,16 @@ export async function markInvoiceSent(invoiceId: string): Promise<Result> {
     return { success: false, error: `An invoice with status ${invoice.status} cannot be sent.` };
   }
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from('invoices')
     .update({ status: 'sent', sent_at: new Date().toISOString(), issue_date: isoToday() })
-    .eq('id', invoiceId);
+    .eq('id', invoiceId)
+    .in('status', ['draft', 'pending_approval'])
+    .select('invoice_number');
   if (error) return { success: false, error: error.message };
+  if (!updated || updated.length === 0) {
+    return { success: false, error: 'This invoice was already sent by someone else.' };
+  }
   return { success: true };
 }
 
@@ -636,9 +652,11 @@ export async function voidInvoice(
 }
 
 /**
- * §10 — reissue: a NEW invoice with its own number, pre-filled from the
- * original so nothing is retyped, and linked back by the optional supersedes
- * link. Numbering stays strictly sequential — no reuse, no suffixes.
+ * §10 — reissue: a NEW invoice, pre-filled from the original so nothing is
+ * retyped, and linked back by the optional supersedes link. It starts as an
+ * unnumbered DRAFT and takes the next number when IT is sent (S97); the voided
+ * original keeps its own number forever. Numbering stays strictly sequential —
+ * no reuse, no suffixes.
  *
  * Claims are NOT copied: voiding released them, and the new invoice re-claims
  * them when its derived lines are written.

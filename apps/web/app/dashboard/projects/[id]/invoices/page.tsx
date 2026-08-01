@@ -221,7 +221,9 @@ export default async function InvoicesPage({ params }: { params: { id: string } 
                         href={`${base}/${invoice.id}`}
                         style={{ color: color.primary, fontWeight: 600, textDecoration: 'none' }}
                       >
-                        {invoice.invoice_number}
+                        {/* §10 (S97) — a draft is unnumbered until it is sent,
+                            so the series has no gaps. Show what it IS. */}
+                        {invoice.invoice_number ?? 'Draft'}
                       </Link>
                       {invoice.title ? (
                         <span style={{ color: color.faint }}> — {invoice.title}</span>

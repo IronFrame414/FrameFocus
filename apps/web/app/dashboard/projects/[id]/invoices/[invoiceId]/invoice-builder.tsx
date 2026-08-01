@@ -234,13 +234,16 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: '8px' }}>
         <div>
+          {/* §10 (S97) — the number is allocated at SEND, so a draft has none
+              and must not pretend otherwise. */}
           <h2 style={h2Style}>
-            {invoice.invoice_number}
+            {invoice.invoice_number ?? 'Draft invoice'}
             {invoice.title ? ` — ${invoice.title}` : ''}
           </h2>
           <div style={{ fontSize: '12px', color: color.faint }}>
             {invoice.status.replace('_', ' ')} · {instrumentLabel} · {contractType.replace(/_/g, ' ')}
             {invoice.invoice_type === 'deposit' ? ' · deposit' : ''}
+            {invoice.invoice_number === null ? ' · numbered when sent' : ''}
           </div>
         </div>
         <LifecycleActions

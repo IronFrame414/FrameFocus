@@ -358,7 +358,9 @@ export async function getInvoicesFlaggedBySupersededRates(
     .filter((i) => byInvoice.has(i.id))
     .map((i) => ({
       invoiceId: i.id,
-      invoiceNumber: i.invoice_number,
+      // Only sent/paid invoices reach here, and §10's CHECK guarantees every
+      // issued invoice carries a number — the fallback is for the type only.
+      invoiceNumber: i.invoice_number ?? '(unnumbered)',
       supersededRateIds: [...(byInvoice.get(i.id) as Set<string>)],
     }));
 }
@@ -436,7 +438,8 @@ export async function getAvailableCredits(projectId: string): Promise<AvailableC
     out.push({
       kind: 'deposit',
       amount: remaining,
-      label: `Deposit ${dep.invoice_number}`,
+      // Deposits only become credits once sent/paid, so they are always numbered.
+      label: `Deposit ${dep.invoice_number ?? ''}`.trim(),
       depositInvoiceId: dep.id,
     });
   }
