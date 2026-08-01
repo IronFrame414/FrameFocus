@@ -575,6 +575,8 @@ export type Database = {
           gl_account_subcontractor: string | null
           gps_clock_mode: string
           id: string
+          invoice_number_prefix: string
+          invoice_number_sequence: number
           license_number: string | null
           logo_url: string | null
           name: string
@@ -631,6 +633,8 @@ export type Database = {
           gl_account_subcontractor?: string | null
           gps_clock_mode?: string
           id?: string
+          invoice_number_prefix?: string
+          invoice_number_sequence?: number
           license_number?: string | null
           logo_url?: string | null
           name: string
@@ -687,6 +691,8 @@ export type Database = {
           gl_account_subcontractor?: string | null
           gps_clock_mode?: string
           id?: string
+          invoice_number_prefix?: string
+          invoice_number_sequence?: number
           license_number?: string | null
           logo_url?: string | null
           name?: string
@@ -2509,6 +2515,7 @@ export type Database = {
           file_path: string
           file_size: number
           id: string
+          invoice_id: string | null
           is_deleted: boolean | null
           is_favorite: boolean
           markup_data: Json | null
@@ -2537,6 +2544,7 @@ export type Database = {
           file_path: string
           file_size: number
           id?: string
+          invoice_id?: string | null
           is_deleted?: boolean | null
           is_favorite?: boolean
           markup_data?: Json | null
@@ -2565,6 +2573,7 @@ export type Database = {
           file_path?: string
           file_size?: number
           id?: string
+          invoice_id?: string | null
           is_deleted?: boolean | null
           is_favorite?: boolean
           markup_data?: Json | null
@@ -2611,6 +2620,13 @@ export type Database = {
             columns: ["expense_id"]
             isOneToOne: false
             referencedRelation: "expenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "files_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
             referencedColumns: ["id"]
           },
           {
@@ -2842,6 +2858,406 @@ export type Database = {
           {
             foreignKeyName: "invitations_member_id_fkey"
             columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoice_cost_claims: {
+        Row: {
+          claimed_amount: number
+          company_id: string
+          cost_category: string
+          created_at: string | null
+          created_by: string | null
+          expense_allocation_id: string
+          expense_date: string
+          id: string
+          invoice_id: string
+          invoice_line_id: string
+        }
+        Insert: {
+          claimed_amount: number
+          company_id?: string
+          cost_category: string
+          created_at?: string | null
+          created_by?: string | null
+          expense_allocation_id: string
+          expense_date: string
+          id?: string
+          invoice_id: string
+          invoice_line_id: string
+        }
+        Update: {
+          claimed_amount?: number
+          company_id?: string
+          cost_category?: string
+          created_at?: string | null
+          created_by?: string | null
+          expense_allocation_id?: string
+          expense_date?: string
+          id?: string
+          invoice_id?: string
+          invoice_line_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_cost_claims_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_cost_claims_expense_allocation_id_fkey"
+            columns: ["expense_allocation_id"]
+            isOneToOne: false
+            referencedRelation: "expense_allocations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_cost_claims_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_cost_claims_invoice_line_id_fkey"
+            columns: ["invoice_line_id"]
+            isOneToOne: false
+            referencedRelation: "invoice_lines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoice_hour_claims: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          invoice_id: string
+          invoice_line_id: string
+          member_id: string
+          raw_hours: number
+          time_segment_id: string
+          work_date: string
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          invoice_id: string
+          invoice_line_id: string
+          member_id: string
+          raw_hours: number
+          time_segment_id: string
+          work_date: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          invoice_id?: string
+          invoice_line_id?: string
+          member_id?: string
+          raw_hours?: number
+          time_segment_id?: string
+          work_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_hour_claims_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_hour_claims_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_hour_claims_invoice_line_id_fkey"
+            columns: ["invoice_line_id"]
+            isOneToOne: false
+            referencedRelation: "invoice_lines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_hour_claims_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_hour_claims_time_segment_id_fkey"
+            columns: ["time_segment_id"]
+            isOneToOne: false
+            referencedRelation: "time_segments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoice_lines: {
+        Row: {
+          billed_amount: number
+          category: string | null
+          company_id: string
+          cost_basis: number | null
+          created_at: string | null
+          created_by: string | null
+          derived_amount: number | null
+          description: string
+          id: string
+          instrument_rate_id: string | null
+          invoice_id: string
+          line_type: string
+          quantity: number | null
+          sort_order: number
+          source_change_order_id: string | null
+          source_deposit_invoice_id: string | null
+          source_estimate_id: string | null
+          unit_rate: number | null
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          billed_amount?: number
+          category?: string | null
+          company_id?: string
+          cost_basis?: number | null
+          created_at?: string | null
+          created_by?: string | null
+          derived_amount?: number | null
+          description: string
+          id?: string
+          instrument_rate_id?: string | null
+          invoice_id: string
+          line_type: string
+          quantity?: number | null
+          sort_order?: number
+          source_change_order_id?: string | null
+          source_deposit_invoice_id?: string | null
+          source_estimate_id?: string | null
+          unit_rate?: number | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          billed_amount?: number
+          category?: string | null
+          company_id?: string
+          cost_basis?: number | null
+          created_at?: string | null
+          created_by?: string | null
+          derived_amount?: number | null
+          description?: string
+          id?: string
+          instrument_rate_id?: string | null
+          invoice_id?: string
+          line_type?: string
+          quantity?: number | null
+          sort_order?: number
+          source_change_order_id?: string | null
+          source_deposit_invoice_id?: string | null
+          source_estimate_id?: string | null
+          unit_rate?: number | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_lines_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_lines_instrument_rate_id_fkey"
+            columns: ["instrument_rate_id"]
+            isOneToOne: false
+            referencedRelation: "instrument_rates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_lines_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_lines_source_change_order_id_fkey"
+            columns: ["source_change_order_id"]
+            isOneToOne: false
+            referencedRelation: "change_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_lines_source_deposit_invoice_id_fkey"
+            columns: ["source_deposit_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_lines_source_estimate_id_fkey"
+            columns: ["source_estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoices: {
+        Row: {
+          amount_receivable: number
+          approved_at: string | null
+          approved_by: string | null
+          author_member_id: string
+          billed_total: number
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          derived_total: number
+          due_date: string | null
+          id: string
+          invoice_number: string
+          invoice_type: string
+          is_deleted: boolean | null
+          is_final: boolean
+          issue_date: string
+          notes: string | null
+          presentation_level: string
+          project_id: string
+          retainage_percent: number | null
+          retainage_withheld: number
+          sent_at: string | null
+          status: string
+          supersedes_invoice_id: string | null
+          title: string | null
+          updated_at: string | null
+          updated_by: string | null
+          void_reason: string | null
+          voided_at: string | null
+          voided_by: string | null
+        }
+        Insert: {
+          amount_receivable?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          author_member_id?: string
+          billed_total?: number
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          derived_total?: number
+          due_date?: string | null
+          id?: string
+          invoice_number?: string
+          invoice_type?: string
+          is_deleted?: boolean | null
+          is_final?: boolean
+          issue_date?: string
+          notes?: string | null
+          presentation_level?: string
+          project_id: string
+          retainage_percent?: number | null
+          retainage_withheld?: number
+          sent_at?: string | null
+          status?: string
+          supersedes_invoice_id?: string | null
+          title?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
+        }
+        Update: {
+          amount_receivable?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          author_member_id?: string
+          billed_total?: number
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          derived_total?: number
+          due_date?: string | null
+          id?: string
+          invoice_number?: string
+          invoice_type?: string
+          is_deleted?: boolean | null
+          is_final?: boolean
+          issue_date?: string
+          notes?: string | null
+          presentation_level?: string
+          project_id?: string
+          retainage_percent?: number | null
+          retainage_withheld?: number
+          sent_at?: string | null
+          status?: string
+          supersedes_invoice_id?: string | null
+          title?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_author_member_id_fkey"
+            columns: ["author_member_id"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_supersedes_invoice_id_fkey"
+            columns: ["supersedes_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_voided_by_fkey"
+            columns: ["voided_by"]
             isOneToOne: false
             referencedRelation: "company_members"
             referencedColumns: ["id"]
@@ -5219,6 +5635,7 @@ export type Database = {
       is_project_creator: { Args: { p_project_id: string }; Returns: boolean }
       next_co_number: { Args: { p_project_id: string }; Returns: string }
       next_estimate_number: { Args: never; Returns: string }
+      next_invoice_number: { Args: never; Returns: string }
       next_project_internal_seq: { Args: never; Returns: number }
       next_project_number: { Args: never; Returns: string }
       owns_open_session: { Args: { p_session_id: string }; Returns: boolean }
@@ -5247,6 +5664,16 @@ export type Database = {
           p_note?: string
           p_override_over_stage?: boolean
           p_paid_date: string
+        }
+        Returns: Json
+      }
+      revise_sub_contract_schedule: {
+        Args: {
+          p_contract_value?: number
+          p_retainage_percent?: number
+          p_retainage_shape?: string
+          p_stages: Json
+          p_sub_contract_id: string
         }
         Returns: Json
       }
