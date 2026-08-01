@@ -71,6 +71,16 @@ function companyTimeZone(): Promise<string> {
   return timeZonePromise;
 }
 
+/**
+ * TODAY as a company-timezone calendar date, for client date controls that
+ * default an `effective_from` [S97]. Same in-module approach as the two
+ * defaults below — the caller does not supply a timezone, so no control can
+ * pre-fill a UTC date by omission. `now` is injectable for tests.
+ */
+export async function todayForCompany(now?: Date): Promise<string> {
+  return todayInZone(await companyTimeZone(), now);
+}
+
 /** Client-side history read (rate panels fetch at interaction time). */
 export async function listInstrumentRatesClient(ref: InstrumentRef): Promise<InstrumentRate[]> {
   const supabase = createClient();

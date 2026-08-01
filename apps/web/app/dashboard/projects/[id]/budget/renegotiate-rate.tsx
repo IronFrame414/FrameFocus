@@ -15,6 +15,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   addInstrumentRate,
+  todayForCompany,
   type InstrumentRateType,
 } from '@/lib/services/instrument-rates-client';
 import { recalculateChangeOrderTotals } from '@/lib/services/change-orders-client';
@@ -76,8 +77,16 @@ export function RenegotiateRate({
   const [rate, setRate] = useState('');
   // Default effective date only — any date is selectable, future included
   // (the guard no longer references CURRENT_DATE, so old debt #111 is moot).
-  const today = new Date().toISOString().slice(0, 10);
-  const [effectiveFrom, setEffectiveFrom] = useState(today);
+  //
+  // [S97] This is a COMPANY-timezone calendar date, resolved before the panel
+  // opens. It used to be new Date().toISOString().slice(0, 10) — the UTC day —
+  // so an evening entry pre-filled TOMORROW and, since future-dating is
+  // permitted (P5 as amended 2026-07-31), saved quietly as a dormant rate that
+  // priced nothing today. Resolved at open rather than on mount so the input
+  // never renders a wrong date first; todayForCompany memoizes its one
+  // settings read, so reopening is instant.
+  const [today, setToday] = useState('');
+  const [effectiveFrom, setEffectiveFrom] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -98,6 +107,13 @@ export function RenegotiateRate({
     }
     if (parsed < 0) {
       setError('The rate must be zero or more.');
+      return;
+    }
+    // Defensive: the panel resolves the company-tz date before it opens, so
+    // this cannot normally be empty. Refuse rather than let addInstrumentRate
+    // fall back to its own default and hide a cleared date [S97].
+    if (!effectiveFrom) {
+      setError('Pick an effective date.');
       return;
     }
     // Mirror the input's floor so a typed (unpicked) date fails fast with
@@ -142,10 +158,15 @@ export function RenegotiateRate({
   if (!open) {
     return (
       <button
-        onClick={() => {
+        onClick={async () => {
           // Read the prefill at open time — it may have been fetched after
           // this component mounted.
           setRate(defaultRate != null ? String(defaultRate) : '');
+          // [S97] Company-tz today, resolved BEFORE the panel opens so the
+          // date input never shows a UTC date even for one frame.
+          const t = await todayForCompany();
+          setToday(t);
+          setEffectiveFrom(t);
           setOpen(true);
         }}
         style={{
