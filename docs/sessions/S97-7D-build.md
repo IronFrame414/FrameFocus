@@ -5,6 +5,11 @@
 > memory — every claim below was re-read out of the working tree or the commit history.
 > Where I could not verify something, it says so.
 >
+> **UPDATED 2026-08-01 (same session):** Josh ruled on three of the open items and they
+> were built — see **§6a Rulings applied**. P-5 (timezone), P-2 (numbering) and C1 (PM
+> visibility) are **no longer provisional**; §2, §3, §5 and §6 below are updated to match
+> the shipped behavior.
+>
 > **Branch:** `feature/113c-award-commitment-spec` (7D was built on the 113c branch; it
 > was never merged to `main`).
 > **Authority:** `docs/specs/7d1-spec.md` as committed (§S filled, S97 rulings D1/D2),
@@ -28,19 +33,23 @@ tree. Results, all real:
 | Type-check | `npm run type-check` | **PASS** (5/5 tasks; turbo cache hit, so it had already passed on this exact tree). |
 | Tests | `npm run test -w @framefocus/web` | **PASS** — 7 files, **120 tests**, 0 failures. The 7D share is 31 derivation + 13 lifecycle = 44. |
 
+*After the three rulings landed (§6a), the same set was re-run: type-check **PASS**, tests
+**126/126 PASS** (+6 new `companyDay` cases), full `npm run build` **PASS** before the
+final push, with no dev server running.*
+
 One caveat on how you run the tests: they must run through the web workspace
 (`npm run test -w @framefocus/web`) because the `@/*` alias lives in
 `apps/web/vitest.config.ts`. Invoking `npx vitest` from the repo root resolves no alias
 and the lifecycle suite fails to import. That is an invocation error, not a defect — I
 made it once while writing this report and confirmed it.
 
-**Migration state (verified read-only via `list_migrations`, no SQL executed):** on the
-currently-linked Supabase project (the rebuild-test target), **both `20260801000000`
-(A-9 four cost-plus rates) and `20260802000000` (7d_invoicing) are applied.** Note this
-corrects the A-9 commit message (`0f9d91c`, "WRITTEN NOT APPLIED") — it was applied
-afterwards. **Production is a different project and I cannot see it from here**; 7D joins
-the pending prod migration batch tracked in STATE.md (nine M6 migrations + `20260731060000`
-+ A-9 + 7D), which is still owed.
+**Migration state (verified read-only via `list_migrations`):** on the currently-linked
+Supabase project (the rebuild-test target), **`20260801000000` (A-9 four cost-plus rates),
+`20260802000000` (7d_invoicing) and `20260803000000` (7d_invoice_number_at_send) are all
+applied.** Note this corrects the A-9 commit message (`0f9d91c`, "WRITTEN NOT APPLIED") —
+it was applied afterwards. **Production is a different project and I cannot see it from
+here**; 7D joins the pending prod migration batch tracked in STATE.md (nine M6 migrations
++ `20260731060000` + A-9 + 7D + `20260803000000`), which is still owed.
 
 ---
 
@@ -55,6 +64,8 @@ Five commits, in dependency order. Nothing was committed to `main`; nothing was 
 Creates:
 1. `companies.invoice_number_prefix` / `invoice_number_sequence`, and
    `next_invoice_number()` — SECURITY DEFINER, mirrors `next_project_number()`.
+   *(The column DEFAULT half of this is **superseded** by `20260803000000` — numbering
+   moved to send time, ruling P-2. The counter and format are unchanged.)*
 2. **`invoices`** — status model `draft → pending_approval → sent → paid` plus `voided`;
    `invoice_type` (`standard`/`deposit`); `is_final`; `presentation_level`;
    retainage percent + withheld; **three money figures that all survive**
@@ -144,9 +155,11 @@ burden multiplier (burden is cost-side only and never reaches a client bill, §6
 
 ## 2. PROVISIONAL decisions I made unattended
 
-**Josh has ruled none of these.** Each was taken as the safest reversible option. P-1
-through P-4 are recorded in the migration header; P-5 through P-9 were found in the code
-while writing this report and are recorded here for the first time.
+Each was taken as the safest reversible option. P-1 through P-4 are recorded in the
+migration header; P-5 through P-9 were found in the code while writing this report.
+
+> **Status: P-2 and P-5 are now RULED and rebuilt (§6a). The rest are still provisional
+> and Josh has ruled none of them.**
 
 ### P-1 — Miscellaneous / unattributed costs are NOT billable
 **Chose:** a cost reaches an instrument only transitively
@@ -163,20 +176,14 @@ sells at the wrong markup. Showing-and-blocking loses no money and loses no visi
 only — pick a fallback rate policy and drop the `blockedReason`. **No schema change, no
 data migration.** This is the cheapest of all nine to reverse.
 
-### P-2 — Invoice numbering: `INV-0001`, strictly sequential per company
-**Chose:** a company counter (`companies.invoice_number_sequence`), prefix defaulting to
-`'INV'`, four-digit zero-padded, growing past 9999 without truncation. Immutable, no
-reuse, no suffixes — exactly the estimates/projects pattern.
-**Why:** §10 requires strict sequence and no reuse; a correction is a new number, not
-`INV-0007-A`.
-**To reverse:** change the format inside `next_invoice_number()` and/or the prefix
-default. **Existing numbers are immutable by design and would NOT be rewritten** — so a
-format change produces a visible discontinuity in the series. Reverse this before real
-invoices go out, or not at all.
-**⚠️ Consequence you should rule on (§6 below):** the number is assigned by the column
-DEFAULT **at draft creation**, not at send. A draft that is created and then deleted
-**burns its number**, leaving a permanent gap in the sequence. Some accountants care about
-gap-free invoice series.
+### ~~P-2~~ → **RULED [S97]** — numbering at SEND, format `INV-0001`
+**Was provisional:** the number came from the column DEFAULT **at draft creation**, so a
+draft created and then deleted burned its number and left a permanent gap.
+**Josh ruled:** *"invoice number assigned AT SEND, not at draft creation. Drafts are
+unnumbered; the number is allocated when the invoice is sent, so the sent series has NO
+gaps from deleted drafts."* Format stays `INV-0001`.
+**Built** in migration `20260803000000` (commit `86686e6`) — see §6a. The format and
+prefix half of P-2 stands as originally chosen and is now confirmed.
 
 ### P-3 — No structured selection-overage marker
 **Chose:** a selection overage is an ordinary change order, with no dedicated column or
@@ -199,18 +206,17 @@ over-bill the client by up to half an hour per split, per person.
 **To reverse:** drop the warning (UI/service only), or promote it to a hard block. No
 schema change — the claim rows already store the rounding groups.
 
-### P-5 — Cross-midnight segments belong to the day they STARTED
-**Chose:** `companyDay()` takes the calendar day of `segment_start`, matching 6B's
-`log_date` convention. A segment running 22:00 → 02:00 bills entirely on the start day.
-**Why:** §S K6 left this open; the start-day rule matches the existing daily-log
-convention, so a night shift appears on one invoice line rather than two half-days.
-**To reverse:** change `companyDay()` in `invoices-shared.ts`. **⚠️ This one changes real
-invoice amounts** — it moves hours between rounding groups, and re-rounding a different
-grouping can change the billed total. Reverse it before any night-shift hours are billed.
-**Also note:** `companyDay()` currently derives the day via `toISOString()`, i.e. **UTC**,
-not the company timezone (`companies` has a timezone column, added `20260719000000`). For
-a US contractor this shifts late-afternoon work forward a day. **I consider this a real
-bug rather than a preference — flagged in §6.**
+### ~~P-5~~ → **RULED [S97]** — the day it STARTED, in the COMPANY timezone
+**Was provisional, and half of it was a bug.** The *anchor* (a segment belongs to the day
+it started) matched 6B's `log_date` convention and stands. The *timezone* did not:
+`companyDay()` derived the day via `toISOString()`, i.e. **UTC**.
+**Verified before fixing** (findings in full in the session transcript): Module 6 keys the
+day off `segment_start` in the **company timezone** in all three of its layers —
+`paidHoursPerSession` (`zonedParts`), the timesheet `dayKey`
+(`Intl.DateTimeFormat('en-CA', { timeZone })`), and `get_project_day_presence()`
+(`AT TIME ZONE z.timezone`). **7D was the sole outlier**, so the fix was 7D alone and it
+*converged* onto an existing convention rather than establishing a new one.
+**Built** in commit `54e623a` — see §6a.
 
 ### P-6 — Money rounds PER ROW, not per invoice
 **Chose:** `roundMoney` applies to each line, and the totals sum already-rounded lines.
@@ -252,15 +258,19 @@ prevented. **To reverse:** re-derive credits on reissue instead of copying them.
 
 ## 3. CONFLICTS between spec and live schema, and how I handled each
 
-**C1 — Financial Visibility Floor vs 7D §12.** CLAUDE.md's floor (added 2026-07-20) gates
-sell/contract/CO dollar figures to **Owner and Admin only**. 7D §12 explicitly lets a
-**PM create invoices** — which necessarily shows the PM billed amounts.
-**Handled:** followed §12 (module-specific and later) over the general floor. Invoices are
-Owner/Admin/PM at the RLS layer, the page layer and the nav tab, scoped by
-`can_view_project()` so a PM sees only assigned jobs. Recorded as a conflict note in
-`invoices.ts:23-27`. **This is a real widening of the floor and Josh should confirm it**
-(§6). Note also that the floor's DB-level enforcement is still owed platform-wide
-(`FINANCIAL-RLS-FLOOR`); 7D's own RLS *is* role-gated, so 7D is not the weak point.
+**~~C1~~ — Financial Visibility Floor vs 7D §12. → RULED [S97], see §6a.** CLAUDE.md's
+floor (added 2026-07-20) gates sell/contract/CO dollar figures to **Owner and Admin only**.
+7D §12 explicitly lets a **PM create invoices** — which necessarily shows the PM billed
+amounts.
+**Handled at build time:** followed §12 (module-specific and later) over the general floor,
+and flagged it.
+**Ruled:** a PM **can** see the amounts *on* an invoice they can reach, and **nothing
+wider**. Recorded as a dated amendment at **`7d1-spec.md` §12a**, which quotes the floor
+text it carves out of, plus a named cross-reference from CLAUDE.md's floor so the conflict
+cannot recur. The one place the code was wider than the ruling — the "Original contract"
+tile on the invoice list — is now Owner/Admin only. The floor's DB-level enforcement
+remains owed platform-wide (`FINANCIAL-RLS-FLOOR`); 7D's own RLS *is* role-gated, so 7D is
+not the weak point.
 
 **C2 — §6.3 tax-base-per-instrument has no data to stand on.** §6.3 wanted a per-instrument
 choice of taxed vs pre-tax markup base. I read the live `expenses` table
@@ -354,8 +364,13 @@ with segments on the project.
    *Expect:* an empty state reading "No invoices yet. Every dollar of income ties to an
    invoice (§1)."
 2. Click **New Invoice** → type a title → **Create draft**.
-   *Expect:* you land on the builder. The invoice number is **INV-0001** (or the next in
-   your company's sequence). Status **Draft**.
+   *Expect:* you land on the builder. Status **Draft**, and the header reads **"Draft
+   invoice"** with **"· numbered when sent"** beside the status — **a draft has no number**
+   (ruling P-2). In the list it shows as **Draft**, not a blank cell.
+2a. **Gap check (do this once).** Create a second draft, then delete it. Now take a draft
+   all the way to sent (step 21 or 25) and read its number.
+   *Expect:* **INV-0001** — the deleted draft consumed nothing. Send another and expect
+   **INV-0002**. The sent series has no holes.
 3. Look at **Unbilled approved costs**.
    *Expect:* one row per approved, unbilled allocation, with **Category**, **Incurred**
    date, **Amount**, and an **Age** column showing how long it has sat unbilled. Any cost
@@ -387,6 +402,11 @@ with segments on the project.
     *Expect:* labor renders as **one line per rate**, "Labor — 42 hrs @ $100/hr", with
     hours rounded **up to the half hour once per person per day**. Check the arithmetic:
     3h10m + 4h05m on one day = 7h15m → **7.5 h**, *not* 8.0 h.
+11a. **Evening-work check (ruling P-5).** If any crew member has a segment that **started
+    at or after 8pm** local, confirm the picker's **Date** column shows the day the work
+    actually happened — **not the next day** — and that it groups with that day's earlier
+    segments rather than forming a second group. Cross-check one against the timesheet:
+    the invoice's date for that segment must match what the timesheet shows.
 12. Check the preview.
     *Expect:* the **labor line sits OUTSIDE** the Subtotal/Markup block; Subtotal and
     Markup cover **non-labor only**; TOTAL sums both (§11 layout A / R3).
@@ -426,7 +446,9 @@ with segments on the project.
 20. From the list page, **New Invoice** → tick **Deposit** → **Create draft**.
     *Expect:* Retainage is **disabled** ("Never withheld on a deposit").
 21. Add a fixed line for the deposit amount, then **Mark sent** and confirm the dialog.
-    *(A deposit only becomes an available credit once it is sent or paid.)*
+    *Expect:* **the number appears only now** — the header changes from "Draft invoice" to
+    the allocated `INV-000N`. *(A deposit only becomes an available credit once it is sent
+    or paid.)*
 22. Go back to the Invoices list.
     *Expect:* an **Available credits** panel showing "Deposit INV-000N — deposit balance,
     draws down §3a", with the note that credits are never applied automatically.
@@ -453,56 +475,96 @@ with segments on the project.
     *Expect:* blocked — the DB trigger raises "A sent invoice is immutable (7D §8). Void
     and reissue instead." Owner is **not** exempt.
 29. On the voided invoice, click **Reissue as new invoice**.
-    *Expect:* you land on a **new** invoice with **the next number** (never a suffix, never
-    a reused number), pre-filled with the original's lines and settings, linked back to its
-    predecessor. The voided original is **retained forever**, not deleted.
+    *Expect:* you land on a **new, unnumbered DRAFT** ("Draft invoice · numbered when
+    sent"), pre-filled with the original's lines and settings, linked back to its
+    predecessor. The voided original **keeps its own number forever** and is retained, not
+    deleted. Send the reissue and it takes **the next number** — never a suffix, never the
+    original's number back.
 
 ### G. Role check
 30. Sign in as a **Foreman** or **Crew** member and open the same project.
     *Expect:* **no Invoices tab.** Navigating directly to
     `/dashboard/projects/<id>/invoices` **redirects** to the project overview. RLS,
     the page guard and the nav all enforce the same set.
-31. *(Optional)* As a **PM** on an assigned job: you can create and derive an invoice, and
-    you see **Submit for approval** instead of Mark sent — a PM cannot send. Note this
-    also means a PM sees billed dollar figures — **conflict C1, please confirm.**
+31. As a **PM** on an assigned job (ruling C1 / spec §12a):
+    *Expect:* you **can** open invoices, create one, derive it and read every amount on it
+    — lines, totals, retainage, receivable. You see **Submit for approval** instead of
+    Mark sent; a PM cannot send.
+    *Expect:* on the invoice list, the **"Original contract" tile is ABSENT** — that is a
+    figure about the job, not an amount on an invoice. Billed to date / Retainage held /
+    Receivable are all still visible. Sign in as Owner on the same screen and the tile
+    reappears; that difference is the whole of the carve-out.
+
+---
+
+## 6a. Rulings applied [S97, 2026-08-01]
+
+Josh ruled the top three; all three are built, tested and pushed on
+`feature/113c-award-commitment-spec`.
+
+| # | Ruling | Commit |
+| --- | --- | --- |
+| P-5 | `companyDay()` buckets on the **company timezone**, not UTC | `54e623a` |
+| P-2 | Invoice number allocated **at send**; drafts are unnumbered | `86686e6` |
+| C1 | A PM sees the amounts **on** an invoice, **nothing wider** | `27bfe2e` |
+
+**P-5 — timezone.** Verified first that Module 6 already uses the company timezone in all
+three of its layers, making 7D the sole outlier, so the fix was 7D alone. `companyDay()`
+now takes a timezone and uses the existing `Intl.DateTimeFormat('en-CA', { timeZone })`
+idiom; the timezone is threaded in from the page via `getCompanyTimeSettings()` (one
+settings read, the `daily-logs/new/page.tsx` pattern). The cosmetic UTC `today` behind
+`ageDays` went with it. **Six tests added** — nothing exercised `companyDay()` before —
+including the money consequence proven end-to-end: one worked day billing **5.0 h**
+together versus **5.5 h** under the old UTC split. **No stale data to clean:**
+`invoice_hour_claims` was empty on rebuild-test (0 rows), so no `work_date` was ever
+written under the UTC rule.
+
+**P-2 — numbering at send.** Migration `20260803000000`, applied to rebuild-test. Drafts
+carry `NULL`; a BEFORE trigger stamps the number inside the same UPDATE that flips the
+status, so allocation is atomic with the transition. Race-safe on both axes: the counter
+row-locks the company, and the trigger only allocates when the number is still NULL, with
+the service UPDATE additionally scoped to the open statuses so a losing racer matches zero
+rows and says so. **Verified against the DB in a rolled-back transaction, 9 assertions** —
+including the one that matters: send after a *deleted* draft yields `INV-0002`, not
+`INV-0003`. The DB was left untouched (0 invoices, sequence 0).
+
+**C1 — PM visibility.** Recorded as a dated amendment at **`7d1-spec.md` §12a**, quoting
+the CLAUDE.md floor text it carves out of, with a named cross-reference added to the floor
+itself. The line drawn: an amount **on** the invoice is visible to a PM who can reach it; a
+contract/budget/margin figure **about** the job is not. The code was wider than that in one
+place — the "Original contract" tile on the invoice list — so that tile is now Owner/Admin
+only.
 
 ---
 
 ## 6. What I want you to rule on
 
-**Ranked — the first three change money or client-visible output.**
+**Still open. Renumbered — the three above are settled.**
 
-1. **`companyDay()` uses UTC, not the company timezone.** *(P-5, and I think this is a
-   genuine bug, not a preference.)* It derives an hour's calendar day via `toISOString()`,
-   while `companies` has had a timezone column since `20260719000000`. For a US
-   contractor, work logged in the late afternoon lands on the **next** day, which changes
-   the rounding groups and therefore the billed hours. **Ruling wanted:** confirm I should
-   switch it to the company timezone. I did not change it unattended because it moves real
-   invoice amounts and the surrounding 6B convention deserves a look at the same time.
-2. **C1 — does a PM really see billed dollar figures?** 7D §12 says a PM creates invoices;
-   CLAUDE.md's Financial Visibility Floor says sell amounts are Owner/Admin only. I
-   followed §12. If the floor wins instead, a PM should lose the Invoices tab entirely —
-   "create but never see the numbers" is not a coherent screen.
-3. **P-2 — invoice-number gaps.** Numbers are assigned when a **draft is created**, so a
-   deleted draft permanently burns a number. Acceptable, or should numbering move to
-   **send** time? (Moving it to send is a real change: `next_invoice_number()` becomes a
-   service-layer call instead of a column default, and drafts would display "unnumbered".)
-   Also confirm the **`INV-0001`** format and the `INV` prefix before any real invoice
-   goes out — the series cannot be rewritten afterwards.
-4. **P-1 — miscellaneous-bucket costs.** I made them non-billable-but-visible. The
+1. **P-1 — miscellaneous-bucket costs.** I made them non-billable-but-visible. The
    alternative is a fallback rate, which means picking *which* rate. This is the cheapest
    decision on the list to reverse (service layer only), so it is safe to leave as-is for
    now — but it is your call whether misc costs should ever bill.
-5. **C4 — the Owner's own hours are currently unbillable.** D1 says the Owner approves
+2. **C4 — the Owner's own hours are currently unbillable.** D1 says the Owner approves
    their own hours, but Module 6 writes Owner sessions `status = NULL`, so they never reach
    the picker. **This is a Module 6 fix, not a 7D one.** If you run your own hours on jobs,
    this blocks you in practice — worth scheduling.
-6. **P-4 — split days warn rather than block.** Confirm warn-only is right, or promote it
+3. **NEW — `issue_date` is still UTC.** `markInvoiceSent()` stamps `issue_date` from
+   `isoToday()` (`toISOString()`), so an invoice sent after ~8pm local is dated **tomorrow**
+   on the client's bill. Same class of bug as P-5, in the one place P-5's fix did not
+   reach, because it is computed client-side where the timezone is not currently to hand.
+   Left alone deliberately — it was outside the three authorized fixes. **Small, and worth
+   doing before real invoices go out.**
+4. **P-4 — split days warn rather than block.** Confirm warn-only is right, or promote it
    to a hard block.
-7. **P-9 — reissue copies credit lines** without re-validating availability against the
+5. **P-9 — reissue copies credit lines** without re-validating availability against the
    credit's current state. Harmless in a single-user flow; tell me if you want it
    re-derived instead.
-8. **P-6 / P-7** — per-row money rounding, and retainage computed on positive work only.
+6. **NEW (from §12a) — should a PM see invoices authored by *others*** on a job they are
+   assigned to, or only their own? Ships as whole-project visibility, because a partial
+   list would make the job-position figures incoherent. Flagged in the amendment rather
+   than assumed.
+7. **P-6 / P-7** — per-row money rounding, and retainage computed on positive work only.
    Both are one-line reversals with a test each. I believe both are right; flagging them
    because §8 carried an explicit `[VERIFY — CC]` on the first and the spec was silent on
    the second.
@@ -512,13 +574,14 @@ P-5 specifically) were made in code and were **not** written into the spec or th
 header at the time — I found them by re-reading my own code for this report. The four
 recorded in the migration header (P-1…P-4) were the ones I could recover reliably. Worth
 tightening: a provisional decision belongs in the header **as it is made**, not at
-write-up time.
+write-up time. The P-5 ruling shows the cost of the miss: the one decision that was never
+written down was also the one that was quietly wrong.
 
 ---
 
 ## 7. Files touched
 
-**New**
+**New — original build**
 ```
 supabase/migrations/20260802000000_7d_invoicing.sql          749
 packages/shared/utils/invoice-derivation.ts                  449
@@ -533,11 +596,27 @@ apps/web/app/dashboard/projects/[id]/invoices/[invoiceId]/page.tsx        133
 apps/web/app/dashboard/projects/[id]/invoices/[invoiceId]/invoice-builder.tsx  1163
 ```
 
-**Modified**
+**Modified — original build**
 ```
 packages/shared/types/database.ts                            +427  (regenerated)
 apps/web/app/dashboard/projects/[id]/project-header.tsx        +8  (Invoices tab)
 ```
 
-**Owed next:** production migration batch (M6's nine + `20260731060000` + A-9 + 7D,
-in order) → branch merge → then the rulings above, in the order listed.
+**Rulings pass [S97] — `54e623a`, `86686e6`, `27bfe2e`**
+```
+NEW  supabase/migrations/20260803000000_7d_invoice_number_at_send.sql   (numbering at send)
+     apps/web/lib/services/invoices-shared.ts        companyDay(ts, timeZone)
+     apps/web/lib/services/invoices.ts               tz threaded; C1 comment; null coercions
+     apps/web/lib/services/invoices-client.ts        send-time numbering + race guard
+     apps/web/lib/services/invoice-lifecycle.test.ts +6 companyDay cases (13 -> 19)
+     apps/web/app/.../invoices/[invoiceId]/page.tsx  company-tz today + tz thread
+     apps/web/app/.../invoices/[invoiceId]/invoice-builder.tsx   unnumbered-draft header
+     apps/web/app/.../invoices/page.tsx              "Draft" label; contract tile gated
+     packages/shared/types/database.ts               regenerated (invoice_number nullable)
+     docs/specs/7d1-spec.md                          §12a amendment (C1 ruled)
+     CLAUDE.md                                       floor cross-reference to §12a
+```
+
+**Owed next:** production migration batch (M6's nine + `20260731060000` + A-9 + 7D +
+`20260803000000`, in order) → branch merge → then the still-open rulings in §6, in the
+order listed.
