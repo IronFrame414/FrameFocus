@@ -2,8 +2,11 @@
 
 > **Status:** FINAL — Session 93, FULLY LOCKED, no carve-outs. Every open
 > question across four decision rounds is resolved by Josh, including the
-> last (origin test = 7C's shipped payable predicate, §4.5). Not built. No
-> migration exists.
+> last (origin test = 7C's shipped payable predicate, §4.5). ~~Not built. No
+> migration exists.~~ **[Corrected 2026-08-01 (S97) — that status went
+> stale: BUILT. `20260730010000_money_representation.sql` is in the tree
+> AND applied to rebuild-test (`nmyphyhmfttxkdoposvf`); production
+> application still owed.]**
 > **Scope:** How money is represented across estimates, change orders, budget
 > lines, and expenses: what is stored, what is derived, and which instrument
 > owns which number.
@@ -30,10 +33,18 @@
 > REQUIRED real budget lines — no Miscellaneous, no fallback (S94
 > force-targets); PO TOTAL targets may be a real line OR Miscellaneous
 > (§7.1 S-2, §3 A-7 consequence, §6).
+> **Amended 2026-08-01 (S97, 7D spec reconciliation — incoming amendments
+> A-8/A-9/A-10, recorded in §3):** invoicing is **7D, not 7G** (drafting
+> error corrected in the companion list and §6); **cost-plus carries FOUR
+> rates** — flat labor $/man-hour + three per-category markups — superseding
+> §4.2's single `cost_plus_percent` (**REQUIRES A MIGRATION**, not yet
+> written); §4.2's T&M-vs-cost-plus account corrected — the distinction is
+> WHO does the work (T&M = in-house-only).
 > **Companion specs:** `docs/specs/5A-section8-spec.md` (conversion),
 > `docs/specs/7A-spec.md` (expenses/job cost), `docs/specs/7C-spec.md`
-> (payables), `docs/specs/7G-spec.md` (invoices — owns the T&M billable-hours
-> definition, §6 note),
+> (payables), `docs/specs/7d1-spec.md` (invoicing — owns the T&M
+> billable-hours definition, §6 note; **corrected from "7G-spec.md" per
+> A-8 — 7G is the QuickBooks Connector, not invoicing**),
 > `docs/specs/ui-05-budget-spec.md` (budget screen),
 > `docs/specs/ui-01-foundation-spec.md` §10–11 (financial floor).
 
@@ -217,13 +228,61 @@
   pre-spec flat lines without cost are left as-is and disregarded. No
   migration touches existing rows.
 
+### Incoming amendments — recorded 2026-08-01 (S97, from `7d1-spec.md` §A)
+
+> This spec is FINAL/LOCKED, so changes arrive as formal entries here —
+> never silent edits. The amended sites carry pointers back to these
+> entries. (The 7G→7D item was also slated for `S94-upstream-amendments.md`;
+> that file is EMPTY on disk as of this writing, so `context96.md` §3 is
+> the tracked record of the ruling.)
+
+- **A-8 (drafting-error correction): invoicing is 7D, not 7G.** Two places
+  handed invoicing to "7G" — the header's companion-specs list, and §6's
+  `contract-value.ts` row ("belongs to 7G invoicing"). Every other M7
+  document holds **invoicing = 7D** and **7G = QuickBooks Connector**.
+  Ruled a drafting error (`context96.md` §3); both sites now read 7D. The
+  substance stands: earned-revenue derivation and the billable-hours
+  definition live with invoicing, outside `contract-value.ts`.
+- **A-9 (behavior change — REQUIRES A MIGRATION, not yet written):
+  cost-plus carries FOUR rates, not one.** Supersedes §4.2's single
+  `cost_plus_percent` (one markup on every row, labor included). Per
+  `7d1-spec.md` §6.1: a cost-plus instrument carries a **flat labor $ rate
+  per man-hour** — its own crew bills exactly as under T&M, overhead and
+  profit baked in, never cost × markup, and 7A burden never reaches it —
+  plus **three independent non-labor markups** (material / subcontractor /
+  other; they may be equal — a real job ran a flat 20% across the board —
+  but must be able to differ). `NoRateInForceError` must fire when **any**
+  rate the job actually uses is missing, not merely when a single rate is
+  absent. The `rate_type` CHECK in `20260730010000_money_representation.sql`
+  allows exactly three values (`cost_plus_percent`, `tm_labor_hourly`,
+  `tm_nonlabor_percent`) and **must be widened by migration**. **This
+  reaches the ESTIMATE side as well as invoicing** — cost-plus estimates
+  price through the same rates (`estimate-totals.ts` applies one percent to
+  every row today) — so estimate pricing and invoicing change together
+  (M4 Lesson 3). Until that migration lands, the shipped single-rate model
+  is what runs; this entry changes no code.
+- **A-10 (definition correction): the T&M/cost-plus distinction is WHO does
+  the work.** §4.2's account — _"T&M is a full third type (not mapped onto
+  cost-plus): a hybrid where labor bills at a flat sell rate per
+  man-hour…"_ — kept the right **separation** for the wrong **reason**, and
+  its implied cost-plus definition (labor marked up like any other row) is
+  wrong. Per `7d1-spec.md` §7.1: **T&M is the in-house-only contract type;
+  where subcontractors are involved, the job is cost-plus.** BOTH types
+  bill own-crew labor at a flat sell rate per man-hour; T&M needs only ONE
+  non-labor markup because its non-labor is essentially materials, while
+  cost-plus splits material / sub / other (A-9). §4.2's clause _"exactly as
+  `cost_plus_percent` does on a cost-plus instrument"_ dissolves under A-9.
+
 ---
 
 ## 4. Schema changes
 
 All migrations follow the standard conventions (CLAUDE.md → Database
 Conventions: column defaults, twin `updated_at`/`updated_by` triggers, RLS).
-Nothing below has been built.
+~~Nothing below has been built.~~ **[Corrected 2026-08-01 (S97), with the
+header:** `20260730010000_money_representation.sql` shipped this section
+and is applied to rebuild-test. §4.2's `rate_type` CHECK is now subject to
+A-9's widening migration (owed).**]**
 
 ### 4.1 `estimate_line_items` — cost field for flat-priced lines
 
@@ -276,6 +335,16 @@ does on a cost-plus instrument. One labor rate and one non-labor markup per
 instrument — no per-person or per-trade variation. The burden multiplier
 (`member_burden_settings`, 7A) stays **cost-side only** and never appears in
 T&M billing.
+
+> **[AMENDED 2026-08-01 (S97) — see §3 A-9/A-10.]** This paragraph's
+> **reason** and its implied cost-plus definition are superseded. The real
+> distinction is **who does the work** — T&M is entirely in-house; where
+> subs are involved the job is cost-plus — and **both** types bill own-crew
+> labor at a flat sell rate per man-hour. Cost-plus carries **four** rates
+> (flat labor $/man-hour + material/sub/other markups), so _"exactly as
+> `cost_plus_percent` does"_ no longer holds, and the `rate_type` CHECK
+> below must be **widened by migration** (owed, not yet written). The
+> burden and effective-dating rules in this section are unchanged.
 
 **New table `instrument_rates`** — effective-dated negotiated rates (P5).
 Covers both rate kinds. Append-only with one narrow, one-way exception: the
@@ -755,7 +824,7 @@ columns to any `can_view_project()` role — known, accepted, reviewed-against.
 | `apps/web/lib/services/budget.ts` | `getBudgetRollup()` (`:35+`) gains: instrument grouping (original contract / per-CO / ad-hoc+misc); **remaining-committed derivation** (per §4.5 — joins `expense_payments` through allocations; displays remaining, not the stored gross); cost-to-date = actual + remaining. Fix the stale "pre-tax" comment (`:31-34`). |
 | `apps/web/lib/services/expenses-client.ts` | `createExpense` writes the expense **and its allocation split** (≥1 line, Σ = amount) in one flow; picker sourced from `listProjectBudgetLines` (`:257-267`) grouped by instrument, plus "Miscellaneous" resolving through `get_or_create_misc_budget_item`. `createAdHocBudgetLine` (`:186-210`) unchanged. |
 | `apps/web/lib/services/payables-client.ts` / `payables.ts` | Sub-contract schedule setup and PO total entry pass budget-line target(s) through to the amended 7C RPCs (§4.4). **As amended 2026-07-31 (S95): stage targets are REQUIRED real lines (picker excludes Miscellaneous; save blocked until every stage has one); the PO total target may be a real line OR Miscellaneous.** Payment recording unchanged client-side (recompute is trigger-driven). |
-| `apps/web/lib/services/contract-value.ts` | Fixed-price instruments unchanged (`original + Σ net_delta` of signed fixed COs). Cost-plus/T&M instruments: the stored value is a labeled projection (P11) — excluded from any variance/over-under figure this service feeds. Earned-revenue derivation for cost-plus (Σ cost × rate-in-force) and T&M (hours × labor rate + non-labor cost × `tm_nonlabor_percent`) belongs to 7G invoicing — including the billable-hours definition (which time entries count, rounding, approval gate) — not here. |
+| `apps/web/lib/services/contract-value.ts` | Fixed-price instruments unchanged (`original + Σ net_delta` of signed fixed COs). Cost-plus/T&M instruments: the stored value is a labeled projection (P11) — excluded from any variance/over-under figure this service feeds. Earned-revenue derivation for cost-plus (Σ cost × rate-in-force) and T&M (hours × labor rate + non-labor cost × `tm_nonlabor_percent`) belongs to **7D invoicing** (**corrected from "7G" — A-8, 2026-08-01**) — including the billable-hours definition (which time entries count, rounding, approval gate) — not here. |
 | `apps/web/lib/services/change-orders-client.ts` | CO builder honors `co_type` per P4 (three types already in the CHECK — no schema change): cost-plus COs price rows via the negotiated rate; T&M COs price labor rows via `tm_labor_hourly`; `recalculateChangeOrderTotals` (`:426-515`) unchanged for fixed-price COs. |
 | `apps/web/lib/services/expenses.ts` | Approval queue reads surface the captured split for adjustment (per §4.4). |
 
