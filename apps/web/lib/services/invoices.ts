@@ -1,17 +1,24 @@
 import { createClient } from '@/lib/supabase-server';
-import type { Database } from '@framefocus/shared/types/database';
-import { rateInForce, type InstrumentRateType } from '@/lib/services/instrument-rates-shared';
 import type {
-  CostCategory,
-  PresentationLevel,
-  SelectedSegment,
-} from '@framefocus/shared/utils/invoice-derivation';
+  AvailableCredit,
+  ContractType,
+  FlaggedInvoice,
+  InstrumentRef,
+  Invoice,
+  InvoiceLine,
+  InvoiceWithLines,
+  PickableCost,
+  PickableHour,
+  RateRow,
+} from '@/lib/services/invoices-shared';
+import { companyDay, daysBetween, hoursBetween } from '@/lib/services/invoices-shared';
+import type { CostCategory } from '@framefocus/shared/utils/invoice-derivation';
 
 // Module 7D1 — server-side invoice reads (docs/specs/7d1-spec.md).
-// Writes live in invoices-client.ts. The derivation MATH lives in
-// packages/shared/utils/invoice-derivation.ts and is never restated here;
-// rate SELECTION is instrument-rates-shared's rateInForce and is never
-// restated either (§S S.4 — "7D consumes the rate-in-force selector").
+// Writes live in invoices-client.ts; the shared TYPES and pure logic live in
+// invoices-shared.ts (no supabase import — safe in either bundle). The
+// derivation MATH is packages/shared/utils/invoice-derivation.ts and rate
+// SELECTION is instrument-rates-shared's rateInForce; neither is restated.
 //
 // Financial Visibility Floor: client billing is Owner/Admin/PM only, enforced
 // by the invoices RLS policies (20260802000000). Foreman/Crew read nothing
@@ -19,44 +26,30 @@ import type {
 // floor gates "sell amounts" to Owner/Admin, while 7D §12 explicitly lets a PM
 // create invoices; §12 (module-specific, later) is followed.
 
-type InvoiceRow = Database['public']['Tables']['invoices']['Row'];
-type InvoiceLineRow = Database['public']['Tables']['invoice_lines']['Row'];
-
-export type InvoiceStatus = 'draft' | 'pending_approval' | 'sent' | 'paid' | 'voided';
-export type InvoiceType = 'standard' | 'deposit';
-export type InvoiceLineType =
-  | 'derived_cost'
-  | 'derived_labor'
-  | 'fixed'
-  | 'discount'
-  | 'credit_negative_co'
-  | 'credit_allowance'
-  | 'credit_deposit';
-
-/** CHECK-constrained columns come back as loose `string` from the generator —
- *  re-narrow them (CLAUDE.md generated-types rule). */
-export type Invoice = Omit<InvoiceRow, 'status' | 'invoice_type' | 'presentation_level'> & {
-  status: InvoiceStatus;
-  invoice_type: InvoiceType;
-  presentation_level: PresentationLevel;
-};
-
-export type InvoiceLine = Omit<InvoiceLineRow, 'line_type' | 'category'> & {
-  line_type: InvoiceLineType;
-  category: CostCategory | 'labor' | null;
-};
-
-export interface InvoiceWithLines extends Invoice {
-  lines: InvoiceLine[];
-}
-
-/** The instrument an invoice or picker is scoped to (P4 — type and rates live
- *  on the INSTRUMENT, never the job). */
-export type InstrumentRef =
-  | { estimate_id: string; change_order_id?: undefined }
-  | { change_order_id: string; estimate_id?: undefined };
-
-export type ContractType = 'fixed_price' | 'cost_plus' | 'time_and_materials';
+export type {
+  AvailableCredit,
+  ContractType,
+  FlaggedInvoice,
+  InstrumentRef,
+  Invoice,
+  InvoiceLine,
+  InvoiceLineType,
+  InvoiceStatus,
+  InvoiceType,
+  InvoiceWithLines,
+  PickableCost,
+  PickableHour,
+  RateRow,
+} from '@/lib/services/invoices-shared';
+export {
+  companyDay,
+  daysBetween,
+  findSplitDays,
+  hoursBetween,
+  laborRateType,
+  nonLaborRateType,
+  rateRowInForce,
+} from '@/lib/services/invoices-shared';
 
 // ── Reads ───────────────────────────────────────────────────────────────────
 
@@ -93,24 +86,6 @@ export async function getInvoice(id: string): Promise<InvoiceWithLines | null> {
 }
 
 // ── §6.2 — the COST picker ──────────────────────────────────────────────────
-
-export interface PickableCost {
-  allocationId: string;
-  expenseId: string;
-  description: string;
-  supplier: string;
-  category: CostCategory;
-  amount: number;
-  expenseDate: string;
-  /** §6.2 — "shows how long each cost has sat unbilled", so age is visible and
-   *  costs are not accidentally left behind. */
-  ageDays: number;
-  /** PROVISIONAL P-1: a cost with no instrument cannot be priced by any
-   *  instrument's rates (§S K1), so it is not billable — but it is SHOWN with
-   *  this reason rather than hidden, honoring §6.2's "nothing silently
-   *  disappears". Josh's D3 ruling can flip this in the service layer alone. */
-  blockedReason: string | null;
-}
 
 /**
  * §6.2 — every UNBILLED, APPROVED cost for this instrument, plus the
@@ -217,19 +192,6 @@ export async function getPickableCosts(
 
 // ── §7.2 — the HOURS picker ─────────────────────────────────────────────────
 
-export interface PickableHour {
-  segmentId: string;
-  memberId: string;
-  memberName: string;
-  workDate: string;
-  rawHours: number;
-  segmentType: string;
-  /** §7.2 — task is CONTEXT for the user's choice, never a filter. NULL is
-   *  normal and fully billable. */
-  taskTitle: string | null;
-  ageDays: number;
-}
-
 /**
  * §7.2 — approved, unbilled, project-attached hours.
  *
@@ -324,41 +286,9 @@ export async function getPickableHours(
   return out;
 }
 
-/** §7.2 build consequence (PROVISIONAL P-4): rounding is per person per day,
- *  so splitting one person's day across two invoices rounds each part and can
- *  bill more than the whole day would. The picker keeps a day together by
- *  default and WARNS when a selection would split one. */
-export function findSplitDays(
-  selected: SelectedSegment[],
-  available: PickableHour[]
-): Array<{ memberId: string; workDate: string }> {
-  const selectedKeys = new Set(selected.map((s) => `${s.memberId}|${s.workDate}`));
-  const selectedIds = new Set(selected.map((s) => s.segmentId));
-  const splits: Array<{ memberId: string; workDate: string }> = [];
-  const seen = new Set<string>();
-
-  for (const hour of available) {
-    const key = `${hour.memberId}|${hour.workDate}`;
-    if (!selectedKeys.has(key) || seen.has(key)) continue;
-    // A day is split when some of its segments are selected and some are not.
-    if (!selectedIds.has(hour.segmentId)) {
-      splits.push({ memberId: hour.memberId, workDate: hour.workDate });
-      seen.add(key);
-    }
-  }
-  return splits;
-}
-
 // ── Rate resolution (§6.1 / §7 — consumes rateInForce, never restates it) ────
 
-export interface InstrumentRateSet {
-  contractType: ContractType;
-  rows: Array<{ id: string; rate_type: string; rate: number; effective_from: string; superseded_at: string | null }>;
-}
-
-export async function loadInstrumentRates(instrument: InstrumentRef): Promise<
-  InstrumentRateSet['rows']
-> {
+export async function loadInstrumentRates(instrument: InstrumentRef): Promise<RateRow[]> {
   const supabase = await createClient();
   let query = supabase
     .from('instrument_rates')
@@ -370,51 +300,7 @@ export async function loadInstrumentRates(instrument: InstrumentRef): Promise<
   return data ?? [];
 }
 
-/** The rate type a non-labor category bills through, per contract type.
- *  Cost-plus has four independent rates (A-9); T&M has one non-labor markup. */
-export function nonLaborRateType(
-  contractType: ContractType,
-  category: CostCategory
-): InstrumentRateType {
-  if (contractType === 'time_and_materials') return 'tm_nonlabor_percent';
-  return `cost_plus_${category}_percent` as InstrumentRateType;
-}
-
-export function laborRateType(contractType: ContractType): InstrumentRateType {
-  return contractType === 'time_and_materials' ? 'tm_labor_hourly' : 'cost_plus_labor_hourly';
-}
-
-/**
- * The rate ROW in force for a type on a date — value AND identity. §8 requires
- * the identity on every derived line so §10 can find the invoices priced under
- * a rate that is later superseded. Selection itself is rateInForce's — this
- * only carries the row id alongside.
- */
-export function rateRowInForce(
-  rows: InstrumentRateSet['rows'],
-  rateType: InstrumentRateType,
-  asOf: string
-): { id: string; rate: number } | null {
-  const value = rateInForce(rows, rateType, asOf);
-  if (value === null) return null;
-  let best: { id: string; rate: number; effective_from: string } | null = null;
-  for (const r of rows) {
-    if (r.rate_type !== rateType || r.superseded_at !== null) continue;
-    if (r.effective_from > asOf) continue;
-    if (!best || r.effective_from > best.effective_from) {
-      best = { id: r.id, rate: Number(r.rate), effective_from: r.effective_from };
-    }
-  }
-  return best ? { id: best.id, rate: best.rate } : null;
-}
-
 // ── §10 — invoices affected by a superseded rate (DERIVED, never stored) ─────
-
-export interface FlaggedInvoice {
-  invoiceId: string;
-  invoiceNumber: string;
-  supersededRateIds: string[];
-}
 
 /**
  * §10 — "when a rate is superseded and invoices have already gone out priced
@@ -473,14 +359,6 @@ export async function getInvoicesFlaggedBySupersededRates(
 }
 
 // ── §4a / §3a — available credits (DERIVED, never stored) ───────────────────
-
-export interface AvailableCredit {
-  kind: 'negative_co' | 'deposit';
-  amount: number;
-  label: string;
-  changeOrderId?: string;
-  depositInvoiceId?: string;
-}
 
 /**
  * §4a — a signed negative CO's credit sits AVAILABLE until the user chooses
@@ -562,20 +440,3 @@ export async function getAvailableCredits(projectId: string): Promise<AvailableC
 }
 
 // ── helpers ─────────────────────────────────────────────────────────────────
-
-/** The company-timezone calendar day of a timestamp. PROVISIONAL on the K6
- *  cross-midnight question: a segment belongs to the day it STARTED, matching
- *  6B's log_date convention. Flagged for Josh — it changes real invoices. */
-export function companyDay(timestamp: string): string {
-  return new Date(timestamp).toISOString().slice(0, 10);
-}
-
-export function hoursBetween(start: string, end: string): number {
-  const ms = new Date(end).getTime() - new Date(start).getTime();
-  return Math.max(0, Math.round((ms / 3_600_000) * 10000) / 10000);
-}
-
-export function daysBetween(from: string, to: string): number {
-  const ms = new Date(`${to}T00:00:00Z`).getTime() - new Date(`${from}T00:00:00Z`).getTime();
-  return Math.max(0, Math.round(ms / 86_400_000));
-}

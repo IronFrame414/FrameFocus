@@ -13,8 +13,8 @@ import {
   type SelectedCost,
   type SelectedSegment,
 } from '@framefocus/shared/utils/invoice-derivation';
-import { laborRateType, nonLaborRateType, rateRowInForce } from '@/lib/services/invoices';
-import type { ContractType, InstrumentRef, InvoiceLineType } from '@/lib/services/invoices';
+import { laborRateType, nonLaborRateType, rateRowInForce } from '@/lib/services/invoices-shared';
+import type { ContractType, InstrumentRef, InvoiceLineType } from '@/lib/services/invoices-shared';
 
 export type {
   ContractType,
@@ -27,7 +27,7 @@ export type {
   InvoiceWithLines,
   PickableCost,
   PickableHour,
-} from '@/lib/services/invoices';
+} from '@/lib/services/invoices-shared';
 
 // Module 7D1 — client-side invoice writes (docs/specs/7d1-spec.md).
 // The math is packages/shared/utils/invoice-derivation.ts; rate selection is
