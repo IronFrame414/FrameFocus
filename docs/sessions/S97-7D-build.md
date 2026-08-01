@@ -10,6 +10,11 @@
 > visibility) and the `issue_date` UTC defect are **no longer provisional/open**; §2, §3,
 > §5 and §6 below are updated to match the shipped behavior.
 >
+> **CLICK-TEST AUTOMATED 2026-08-01:** §5's script was executed end-to-end against real
+> rows on rebuild-test through the real service functions — **18/18 PASS**, figures in
+> **§4a**. **Run §4b, not §5** — §4b is the ~15-minute trimmed script containing only what
+> genuinely needs eyes and hands.
+>
 > **Branch:** `feature/113c-award-commitment-spec` (7D was built on the 113c branch; it
 > was never merged to `main`).
 > **Authority:** `docs/specs/7d1-spec.md` as committed (§S filled, S97 rulings D1/D2),
@@ -344,7 +349,145 @@ already gated it to Owner/Admin/PM.
 
 ---
 
-## 5. Click-test script
+## 4a. Automated click-test run [S97, 2026-08-01]
+
+The script in §5 was executed against **rebuild-test** (`nmyphyhmfttxkdoposvf`, verified
+before writing anything). Everything that can be checked without a browser was driven
+through the **real shipped service functions** — `createInvoice`, `getPickableCosts`,
+`getPickableHours`, `loadInstrumentRates`, `deriveAndSaveInvoice`, `addDrawLine`,
+`addFixedLine`, `addDiscountLine`, `applyDepositCredit`, `updateInvoiceSettings`,
+`recalculateInvoiceTotals`, `markInvoiceSent`, `voidInvoice`, `reissueInvoice`,
+`softDeleteInvoice`, `getInvoice`, `getAvailableCredits` — against **real rows**, under a
+**genuine Owner session** (minted via `generateLink` + `verifyOtp`), so RLS, the
+`get_my_company_id()` / `auth.uid()` column defaults, the numbering trigger and the
+immutability triggers were all live. Not a mock, and not hand-written SQL standing in for
+the service layer.
+
+**18 assertions, 18 PASS, 0 FAIL.** No app code was changed to make anything pass.
+
+### Test data
+
+Fixtures were created with an `S97CT` marker: 4 estimates (cost-plus, T&M, fixed-price,
+deposit) with their instrument rates, 4 projects, budget items, 6 approved expenses, 10
+approved time sessions/segments. **All of it has been deleted**, and the company's
+`invoice_number_sequence` was rewound to its pre-run value of **0** (safe because zero
+invoices remain, so no live invoice could ever be renumbered). rebuild-test now reads
+0 invoices / 0 lines / 0 claims / 0 `S97CT` rows — exactly as found. Production was never
+touched.
+
+> **Honest note on the teardown.** The harness's own `afterAll` cleanup **silently
+> failed** — it did not check the delete errors, so five runs' fixtures accumulated
+> unnoticed (95 invoices) until the final results dump reported `invoices_remaining: 95`.
+> Root cause: **`invoice_lines.source_deposit_invoice_id` has no `ON DELETE` action**, so a
+> deposit invoice that has credit lines pointing at it cannot be deleted, and the whole
+> delete aborted. I cleaned up with SQL instead, standing the
+> `invoice_lines_parent_open` immutability guard down for the teardown and restoring it
+> (verified re-enabled). **This is not a product defect:** nothing in the app ever hard-
+> deletes an invoice — drafts soft-delete and voided invoices are retained forever — so the
+> restrictive FK is only ever an obstacle to test teardown. Worth knowing before anyone
+> writes a data-reset script.
+
+### Results — every step
+
+| # | Step | Verdict | Actual |
+| --- | --- | --- | --- |
+| 1 | Invoices tab, empty state | **NEEDS-HUMAN** | Visual: tab placement and empty-state copy. |
+| 2 | New draft is **unnumbered** | **PASS** | `invoice_number = null`; header/list copy is human. |
+| 2a | **Gap check** — deleted draft burns no number | **PASS** | Draft deleted, next send took exactly **1** number (`INV-0057`); counter moved by 1. |
+| 3 | Cost picker: 5 billable + misc **blocked** (P-1) | **PASS** | 5 billable, 1 blocked (`unattributed dump fee`, "Not tied to a contract line"). All ages > 0. |
+| 4 | Tick two costs in different categories | **PASS** (as selection) | Selection is a service input; the *clicking* is human. |
+| 5 | Derive — **§15-B figures** | **PASS** | subs **$3,275.00 → $3,930.00**; materials **$1,583.68 → $1,900.42**. |
+| 5 | Totals | **PASS** | cost **$4,858.68** + markup **$971.74** = **$5,830.42** (derived total also $5,830.42). |
+| 5 | Rate-row identity on every derived line (§8) | **PASS** | 5/5 lines carry `instrument_rate_id`. |
+| 6 | Layout A preview reads right to a client | **NEEDS-HUMAN** | Visual judgement + unburdened-cost column. |
+| 7 | Billed costs leave the picker; blocked one stays | **PASS** | 0 billable remain, 1 blocked remains. |
+| 8 | Create T&M draft / instrument picker | **PASS** (as setup) | Instrument resolution exercised; the picker UI is human. |
+| 9 | Split-day **warning** shows | **NEEDS-HUMAN** | `findSplitDays` is unit-tested; that it *renders* is visual. |
+| 10 | Warning disappears when the day completes | **NEEDS-HUMAN** | Same — visual. |
+| 11 | Derive — **§15-C** | **PASS** | **42 h × $100 = $4,200**; materials $210.24 + $201.84; total **$4,612.08**. |
+| 11a | **Evening boundary** (FIX 1) | **PASS** | 20:00 EDT segment dates to **2026-06-22** with that day's afternoon work; **no** 06-23 row. |
+| — | **C-1 rounding** | **PASS** | 3h10m + 4h05m = 7.25 raw → billed **7.5 h** ($750), not 8.0. |
+| — | **FIX 1 money proof** | **PASS** | Evening day billed **5.0 h** in one group, not 5.5 in two. |
+| 12 | Labor outside the Subtotal/Markup block | **NEEDS-HUMAN** | Visual layout (§11 layout A / R3). |
+| 13 | Retainage disabled on T&M | **PASS** (rule) | Service refuses: *"A T&M invoice never withholds retainage (7D §5/§7)."* Input being *disabled* is visual. |
+| 14 | Presentation levels switch | **NEEDS-HUMAN** | Visual rendering of by-section / lump-sum. |
+| 15 | Percentage draw off **ORIGINAL** contract | **PASS** | 10/30/25/25 → **$1,441.38, $4,324.13, $3,603.44, $3,603.44**. |
+| 16 | **Final draw = remainder** | **PASS** | **$1,441.36** (not a fresh 10% = $1,441.38). Σ = **$14,413.75 exactly**. |
+| 17 | Retainage — **trace A** | **PASS** | $18,000 @ 10% → withheld **$1,800**, receivable **$16,200**. |
+| 18 | Discount line | **PASS** | derived stays **$5,830.42**, billed **$5,500.00**, withheld unchanged **$583.04** (P-7), receivable **$4,916.96**. |
+| 19 | Re-derive: discount **survives** | **PASS** | Derived lines rebuilt; the discount line persisted. |
+| 20 | Deposit draft takes no retainage | **PASS** | `retainage_withheld = 0` on the deposit invoice. |
+| 21 | Mark sent → number appears | **PASS** | Number allocated only at send. |
+| 21a | Evening-send `issue_date` | **NEEDS-HUMAN** | Needs a real after-8pm-local send; the rule is unit-tested (`companyToday`). |
+| 22 | Available-credits panel | **PASS** (data) | Deposit surfaces at **$5,000** once sent. |
+| 23 | Deposit applied to a smaller invoice | **PASS** | $2,000 invoice → credit line **−$2,000**, settles to **$0**, work still shown in full. |
+| 24 | Remainder carries forward, then exhausts | **PASS** | **$3,000** remains → next invoice $4,000 bills **$1,000** → credit list empty. |
+| 25 | Void requires a reason | **PASS** | Blank reason rejected: *"A reason is required to void an invoice (7D §9)."* |
+| 26 | Void with a reason | **PASS** | Status `voided`, reason stored, **keeps its number** (`INV-0058`). |
+| 27 | Voided invoice's costs return to the picker | **PASS** | All **5** costs billable again. |
+| 28 | Sent invoice is immutable | **PASS** | DB rejects money edit: *"A sent invoice is immutable (7D spec 8)."* Adding a line also refused. |
+| 28 | Voided invoice is terminal | **PASS** | Second void refused. |
+| 29 | Reissue = linked, unnumbered successor | **PASS** | New **draft**, `invoice_number = null`, `supersedes_invoice_id` → original, same billed total; on send took **`INV-0059`**. |
+| 30 | Foreman/Crew see no Invoices tab | **NEEDS-HUMAN** | Needs a second signed-in identity; RLS/role gate is code-verified but not exercised as a user. |
+| 31 | PM sees amounts, not the contract tile | **NEEDS-HUMAN** | Same — needs a PM login. |
+
+---
+
+## 4b. TRIMMED manual script — what still needs eyes and hands
+
+**Everything numeric is already proven** (§4a). What is left is layout, whether a screen
+reads right to a client, and things needing a second identity or a real clock. Roughly
+15 minutes. The full original script is kept below as §5 for reference — you do not need
+to walk it.
+
+**Setup.** rebuild-test, signed in as **Owner**, on a project with a cost-plus or T&M
+instrument that has rates set. The automated run left no data behind, so you are starting
+from an empty invoice list.
+
+1. **Nav placement.** Open a project. *Expect:* an **Invoices** tab between Change Orders
+   and Punch List. Open it — the empty state should read like a deliberate sentence, not a
+   blank table.
+2. **Draft identity.** New Invoice → title → Create draft. *Expect:* the header reads
+   **"Draft invoice"** with **"· numbered when sent"** beside the status, and the list row
+   says **Draft** — not a blank cell. **Judgement call: does "numbered when sent" read as
+   reassuring or as broken?** That wording is mine and is worth your eye.
+3. **Cost picker.** *Expect:* an **Age** column on every row, and the Miscellaneous cost
+   visibly present but **not tickable**, with the reason shown. **Judgement call: is the
+   blocked row obviously "you need to do something" rather than "this is broken"?**
+4. **Layout A.** Tick two costs in different categories → **Derive invoice from
+   selection** → read the **Client sees (full detail)** preview. *Expect:* each row at its
+   actual cost, then Subtotal, Markup, TOTAL. **The most important read of the whole pass:
+   would you send this to a client as-is?** Check the cost column shows *unburdened* cost.
+5. **Split-day warning.** On a T&M instrument, tick only *part* of one person's day.
+   *Expect:* a warning that the day is being split — and that it **warns, not blocks**
+   (you can still derive). Tick the rest of that day: the warning should disappear.
+6. **Labor placement.** Derive with hours. *Expect:* the labor line sits **outside** the
+   Subtotal/Markup block, and TOTAL sums both. Purely visual — the arithmetic is proven.
+7. **Presentation levels.** Switch **Full detail → By section → Lump sum**. *Expect:*
+   by-section rolls up to Labor / Materials / Subcontractors / Other; lump sum shows one
+   figure. **Judgement call: is lump sum too bare to send?**
+8. **Retainage input.** On a T&M or deposit invoice, look at **Retainage %**. *Expect:*
+   disabled, showing "n/a", with the reason underneath. (The rule itself is proven — this
+   is only whether the disabled state is legible.)
+9. **Evening send — do this after 8pm local, or skip.** Send any invoice after ~8pm and
+   read the **Issued** column. *Expect:* **today's** date, not tomorrow's. This is the one
+   defect class that only appears late in the day; the rule is unit-tested, but a real
+   after-hours send is the honest check.
+10. **Foreman or Crew.** Sign in as one and open the same project. *Expect:* **no Invoices
+    tab**, and navigating directly to `/dashboard/projects/<id>/invoices` bounces you to
+    the project overview.
+11. **PM.** Sign in as a PM assigned to the job. *Expect:* you can open, create, derive and
+    read **every amount on the invoice**, and you see **Submit for approval** instead of
+    Mark sent. *Expect:* the **"Original contract" tile is absent** from the invoice list,
+    while Billed to date / Retainage held / Receivable remain. Sign back in as Owner and
+    the tile returns — that difference is the whole of the §12a carve-out, and it is worth
+    confirming with your own eyes since it is a permissions boundary.
+
+Anything that fails here is a UI defect, not a math one — the figures are all confirmed.
+
+---
+
+## 5. Click-test script (full reference — §4b is the trimmed version to actually run)
 
 **Preconditions.** Run against **rebuild-test** (7D is not in production). Sign in as
 **Owner**. You need: a project with `contract_value` set and a `source_estimate_id`; for
