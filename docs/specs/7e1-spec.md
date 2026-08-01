@@ -6,11 +6,11 @@
 > spec obliges are in §A. When this spec and shipped code conflict, **git is ground truth** — amend
 > the spec.
 >
-> **Status:** WORKFLOW APPROVED + PROVEN (interviews S89–S92, extended and reconciled **[S94]**).
+> **Status:** WORKFLOW APPROVED + PROVEN (interviews S89–S92, extended and reconciled **[S96]**).
 > **Schema layer deliberately absent** — see §S. No table names, columns, or file paths are asserted
 > as fact.
 >
-> **[S94] — what changed.** This revision corrects one contradiction and closes two holes found by
+> **[S96] — what changed.** This revision corrects one contradiction and closes two holes found by
 > reconciling the spec against architecture §7.6/§7.11. **§8 let a PM record payments** — which §7.6
 > and the §7.11 trace both forbid, the trace marking it a founder correction (§8). **Negative-CO
 > credits** (§3a) and **the cost-to-date-vs-revenue pairing** (§6a) are both assigned to 7E by §7.2
@@ -18,8 +18,8 @@
 > It also fixes a drafting error in acceptance #5, adds the void rules 7D now supplies, and adds the
 > **acceptance trace** §2a requires (§9).
 >
-> **Provenance tags:** `[S94]` = Josh's ruling this session · `[inherited]` = carried from an existing
-> doc/decision · `[inferred]` = Claude's inference — **confirm before treating as fixed.**
+> **Provenance tags:** `[S96]` = Josh's ruling this session · `[inherited]` = carried from an existing
+> doc/decision.
 >
 > **Conventions:** follow `CLAUDE.md` — standard columns, per-tenant triggers, RLS naming,
 > `get_my_company_id()` / `get_my_member_id()`, soft-delete/trash, server/client service split,
@@ -34,10 +34,10 @@ invoices, over/under payment, credits, refunds, AR aging + reminders, and retain
 does **not** create invoices (7D) or handle the cost side (7C).
 
 **Governing invariant (inherited from 7D, locked):** all income ties to an invoice. Every payment
-applies to one or more invoices — no orphan income. **[S94]** The mirror holds for money out: every
+applies to one or more invoices — no orphan income. **[S96]** The mirror holds for money out: every
 refund or credit ties to a credit document (§5).
 
-**[S94] Also in 7E's scope, per architecture §7.2 and §7.11, and previously absent:**
+**[S96] Also in 7E's scope, per architecture §7.2 and §7.11, and previously absent:**
 **negative-CO credits** (§3a) and **the cost-to-date-vs-revenue pairing** (§6a).
 
 ---
@@ -59,7 +59,7 @@ refund or credit ties to a credit document (§5).
   Customer via `ParentRef`). It is **not** a new chart-of-accounts account, and it is **not** the QBO
   "Projects" feature, which is explicitly not used (`7G-spec.md` §7G.2 #2, §7G.6 — its `IsProject`
   flag is read-only on create).
-- **[S94] Payment records follow QuickBooks' own semantics.** Ruling: _"handle it exactly how
+- **[S96] Payment records follow QuickBooks' own semantics.** Ruling: _"handle it exactly how
   QuickBooks does."_ In QB a Payment can be **corrected or removed** — it is not a frozen record — and
   FrameFocus mirrors that so the two stay reconcilable. **Implement it as 7C shipped money-out**
   (`expense_payments`): money fields locked by a column-scope trigger, corrections by **soft-delete and
@@ -78,16 +78,16 @@ refund or credit ties to a credit document (§5).
 - **Underpayment** → the invoice **stays open / partial**, and continues to age (§6).
 - **Overpayment** → the surplus becomes a **credit on the client's account.** The credit is applied
   **only when the user chooses** — never auto-applied. (Manual application mechanics mirror §2.)
-- **[S94] Mid-job versus final.** §7.11 distinguishes them: an overpayment mid-job is _"CREDITED to the
+- **[S96] Mid-job versus final.** §7.11 distinguishes them: an overpayment mid-job is _"CREDITED to the
   next payment"_; on the **final** payment the founder _"SENDS A CHECK BACK."_ The first is a credit
   on account, the second is a refund (§5) — and they are **different objects in QuickBooks**.
 
 ---
 
-## §3a — Negative change-order credits — **[S94, NEW — was absent]**
+## §3a — Negative change-order credits — **[S96, NEW — was absent]**
 
 Architecture §7.2 assigns _"negative-CO credits"_ to 7E and §7.11 details the behavior. Neither this
-spec nor 7D carried it. **Ruling [S94]: the work splits between 7D and 7E.**
+spec nor 7D carried it. **Ruling [S96]: the work splits between 7D and 7E.**
 
 - **7D issues the credit document** off the signed negative CO (7D §4a) — the client gets paper
   showing the reduction, symmetric with how a positive CO gets its own invoice.
@@ -98,7 +98,7 @@ spec nor 7D carried it. **Ruling [S94]: the work splits between 7D and 7E.**
 - **It reaches QuickBooks as a CreditMemo** — see §5 and 7G. Omitting it would leave QB permanently
   overstating income.
 
-**[S94] Where the credit lands is the user's choice.** §7.11 says the credit _"REDUCES the remaining
+**[S96] Where the credit lands is the user's choice.** §7.11 says the credit _"REDUCES the remaining
 amount owed"_ **and** _"comes off the FINAL PAYMENT"_ — and both are real behaviours, so **both are
 built and the user picks**: apply it against an **existing unpaid invoice**, or **hold it for the final
 payment**. This mirrors §3's never-auto-applied rule; a credit is never placed without a decision.
@@ -116,7 +116,7 @@ payment**. This mirrors §3's never-auto-applied rule; a credit is never placed 
 - **Optional lien-release prompt:** collecting the released money may prompt the contractor to send
   an **outbound lien release** to the client first. The prompt is a **global company setting**, and
   each company **uploads the lien-release format it uses.**
-  **[S94 — this is ADVISORY, not a gate.]** Per 7F's F1 ruling it **warns and proceeds; it never
+  **[S96 — this is ADVISORY, not a gate.]** Per 7F's F1 ruling it **warns and proceeds; it never
   blocks.** The prior wording (_"may require… this requirement is toggleable off"_) read as
   enforcing, which contradicted 7C's shipped posture (_"warn-never-block"_, advisory compliance
   chips) and architecture **P2** (advisory-not-enforced). **Nothing in the money path is ever
@@ -134,14 +134,14 @@ payment**. This mirrors §3's never-auto-applied rule; a credit is never placed 
 
 ---
 
-## §5 — Refunds and credits — **[S94, split]**
+## §5 — Refunds and credits — **[S96, split]**
 
 - A refund can happen **at any time.**
 - **Owner/Admin only**; an **Admin-initiated refund needs Owner approval.**
 - Deposit refunds (job does not proceed) run through this path; the deposit's refundable status is
   set in 7D §3.
 
-**[S94] Credit on account and money returned are different things, and FrameFocus distinguishes them
+**[S96] Credit on account and money returned are different things, and FrameFocus distinguishes them
 the way QuickBooks does:**
 
 | Situation                                                                            | FrameFocus            | QuickBooks        |
@@ -159,7 +159,7 @@ the money-out-ties-to-a-document rule; they are simply not the same document.
 
 - AR aging is tracked per client (**30 / 60 / 90**). _(§7.11 says "30/60-day"; 90 is carried from the
   prior spec text and retained.)_
-- **[S94] Retainage does not age.** An invoice's receivable is the amount **net of retainage withheld**
+- **[S96] Retainage does not age.** An invoice's receivable is the amount **net of retainage withheld**
   (7D §5): a $10,000 invoice with $1,000 retained ages **$9,000**. The withheld $1,000 is shown
   separately as **"retainage held"** on the job — visible, but **outside the 30/60/90 buckets**,
   because it is not yet owed. Ageing the full face amount would show money as overdue that the client
@@ -171,19 +171,19 @@ the money-out-ties-to-a-document rule; they are simply not the same document.
 - When a reminder fires, Owner/Admin are notified (event named in §7; delivery is the notification
   system's job).
 
-**[S94] A reissued invoice ages from its OWN date.** 7D §10 corrects an unpaid invoice by voiding it
+**[S96] A reissued invoice ages from its OWN date.** 7D §10 corrects an unpaid invoice by voiding it
 and issuing a linked successor; the successor **starts a fresh aging clock** rather than inheriting the
 voided invoice's date. Rationale: the original was wrong, so the corrected invoice is a new and
 legitimate demand — the client cannot be late on a bill that was withdrawn.
 
-> **[S94 — consequence, recorded deliberately]** This means **void-and-reissue resets aging.** A client
+> **[S96 — consequence, recorded deliberately]** This means **void-and-reissue resets aging.** A client
 > 70 days overdue appears current the moment a correction is issued, and repeated reissues could mask a
 > collections problem. Accepted with eyes open; **surface the link to the voided original on the aging
 > view** so the history stays visible even though the clock restarts.
 
 ---
 
-## §6a — The cost-to-date vs revenue pairing — **[S94, NEW — was absent]**
+## §6a — The cost-to-date vs revenue pairing — **[S96, NEW — was absent]**
 
 Architecture §7.2 lists _"the cost-to-date-vs-revenue pairing"_ in 7E's scope and §7.11 calls it
 **"why 7E exists"**: _"On payment: show COST-TO-DATE against REVENUE-TO-DATE per job. 'Collected $60k,
@@ -191,14 +191,14 @@ spent $47k, +$13k so far.' The number never before visible."_ The spec did not c
 
 - **When:** surfaced **as a payment lands** — that moment is the point of the feature.
 - **What:** collected-to-date against spent-to-date for the job, with the running difference.
-- **[S94] One definition, two surfaces.** The pairing is defined **once, in a shared module**; **7E
+- **[S96] One definition, two surfaces.** The pairing is defined **once, in a shared module**; **7E
   surfaces it at the payment moment** and **7H reports it** (7H §7H.3). Neither re-implements it.
   This follows the platform's established discipline — 7H _"consumes the rollup, never re-derives"_;
   money-rep's shared `rateInForce` is _"THE definitions"_; 7C's derivation helpers live in
   `payables-shared.ts`.
 - **Inputs:** **collected** (7E) and **spent** (7A/7C `getJobCostRollup()` — approved-only, cash
   basis, **NET of retainage** per the S91 gross/net correction).
-- **[S94] "Revenue-to-date" here means COLLECTED**, per §7.11's own example — not billed, and not
+- **[S96] "Revenue-to-date" here means COLLECTED**, per §7.11's own example — not billed, and not
   earned. 7D's override figures (derived / written-off / held-back, 7D §8) must **not** leak into it.
 
 ---
@@ -209,7 +209,7 @@ spent $47k, +$13k so far.' The number never before visible."_ The spec did not c
 
 - Payment received — flags **partial** or **over**
 - Payment applied
-- Credit created (from overpayment) **[S94]** or from a negative CO (§3a)
+- Credit created (from overpayment) **[S96]** or from a negative CO (§3a)
 - Refund issued
 - AR reminder sent
 - Retainage release invoice pending approval
@@ -218,7 +218,7 @@ Recipients: Owner/Admin (per event). Channel/wording/on-off: owned by the notifi
 
 ---
 
-## §8 — Roles & approval — **[S94, CORRECTED]**
+## §8 — Roles & approval — **[S96, CORRECTED]**
 
 - **Record a payment: Owner/Admin only. A PM cannot record a payment received.**
 - **Issue a refund:** Owner/Admin only; **Admin needs Owner approval.**
@@ -226,7 +226,7 @@ Recipients: Owner/Admin (per event). Channel/wording/on-off: owned by the notifi
   a payment has reached QuickBooks** (§8a).
 - Owner/Admin are notified when money is collected.
 
-> **[S94 — what was wrong and why.]** The prior text read _"Record a payment: PM, Owner, Admin. A
+> **[S96 — what was wrong and why.]** The prior text read _"Record a payment: PM, Owner, Admin. A
 > PM-recorded payment needs Owner/Admin approval,"_ repeated at acceptance #3. Architecture **§7.6**
 > says the opposite — _"A PM can create invoices and enter bills, but **cannot record payments
 > received**… **Only owner/admin record payments received**"_ — and the **§7.11 trace** says it again,
@@ -248,13 +248,13 @@ Recipients: Owner/Admin (per event). Channel/wording/on-off: owned by the notifi
 | Partially paid, payment **already in QuickBooks** | **No** — correct via credit or refund here                                     |
 | Fully paid                                        | **No** — correct via credit or refund here                                     |
 
-**[S94]** The middle row is narrow in practice: electronic payments originate in QB and manual ones
+**[S96]** The middle row is narrow in practice: electronic payments originate in QB and manual ones
 sync on entry, so the window survives mainly while QB is disconnected and the payment sits queued
 (7G G3). A **received payment is never voided** — only invoices are.
 
 ---
 
-## §9 — Acceptance trace — **[S94, NEW]**
+## §9 — Acceptance trace — **[S96, NEW]**
 
 > **Why this section exists.** §2a requires the approved trace to sit in the spec _"verbatim as the
 > acceptance example"_; this spec carried acceptance **criteria** (§10) but no **trace**. Per §2a
@@ -353,29 +353,29 @@ acceptance case because 7E is where the money actually lands.
 1. An electronic payment via the pay link processes through QuickBooks and accepts partial payment.
 2. A manual check/cash payment can be split across multiple invoices; one invoice can take multiple
    payments over time.
-3. **[S94, CORRECTED]** **A PM cannot record a payment received at all** — money-in is Owner/Admin
+3. **[S96, CORRECTED]** **A PM cannot record a payment received at all** — money-in is Owner/Admin
    only. _(The prior criterion, "a PM-recorded payment cannot post until Owner/Admin approve,"
    contradicted architecture §7.6 and the §7.11 trace; see §8.)_
 4. Underpayment leaves the invoice open/partial; overpayment creates a client credit that applies
    only on user action.
-5. **[S94, CORRECTED]** Every invoice — paid electronically or not — pushes to QB and is tagged to the
+5. **[S96, CORRECTED]** Every invoice — paid electronically or not — pushes to QB and is tagged to the
    job's **sub-customer**. _(The prior wording said "a job-named **Project**"; the QBO Projects
    feature is explicitly **not** used — §2, `7G-spec.md` §7G.2 #2. Drafting error, same class as the
    §4-vs-#6 error S92 caught.)_
 6. Retainage release fires on completion + **client** sign-off, generates a **draft** release invoice,
    and holds for Owner/Admin approval before sending.
-7. **[S94]** A refund is Owner/Admin-only (Admin needs Owner approval); **a credit on account records
+7. **[S96]** A refund is Owner/Admin-only (Admin needs Owner approval); **a credit on account records
    as a CreditMemo and money actually returned records as a RefundReceipt** — they are not the same
    document.
 8. AR aging tracks 30/60/90; per-client reminders send on user-set timing/wording and notify
    Owner/Admin.
-9. **[S94]** An invoice's receivable is **net of retainage**; withheld retainage is visible but does
+9. **[S96]** An invoice's receivable is **net of retainage**; withheld retainage is visible but does
    **not** appear in any aging bucket.
-10. **[S94]** A signed negative CO produces a credit that reduces what the client owes and lands on the
+10. **[S96]** A signed negative CO produces a credit that reduces what the client owes and lands on the
     final payment, lowers contract value by derivation, and exports to QB as a CreditMemo.
-11. **[S94]** The cost-to-date vs revenue pairing surfaces when a payment lands, using the **shared**
+11. **[S96]** The cost-to-date vs revenue pairing surfaces when a payment lands, using the **shared**
     definition 7H also consumes — not a second implementation.
-12. **[S94]** An invoice whose payment has reached QuickBooks cannot be voided; a **received payment is
+12. **[S96]** An invoice whose payment has reached QuickBooks cannot be voided; a **received payment is
     never voided.**
 13. No payment exists that is not applied to an invoice (or recorded as a credit memo / refund receipt
     for money out).
@@ -397,7 +397,7 @@ the 7E payment path. _(An [S91] footnote records this; the diagram itself is sti
 never been designed. 7E only **names** its events (§7). The engine that delivers them (in-app vs.
 email, per-event on/off, recipients, wording) is its own build, not part of 7E.
 
-**A.3 — [S94] §7.2's "trace TODO" note is stale, or the specs ran ahead.** §7.2 still reads _"7D and
+**A.3 — [S96] §7.2's "trace TODO" note is stale, or the specs ran ahead.** §7.2 still reads _"7D and
 7E are partially narrated and marked TODO (§7.10) — their full traces are the next interview target."_
 Both specs were subsequently written and headed WORKFLOW APPROVED, yet **four items the traces already
 contained never reached them** — cost-plus and allowance true-up (7D), negative-CO credits and the
@@ -412,7 +412,7 @@ service files, and routes. Do **not** assert from context — read.
 
 1. **7D invoice tables** — the payment record links to invoices; needs their shape and **status model
    including `voided`**, the optional supersedes link, and **retainage withheld vs. receivable**
-   (7D §5, §9). **[S94] Now supplied by 7D** — read it there rather than re-deciding.
+   (7D §5, §9). **[S96] Now supplied by 7D** — read it there rather than re-deciding.
 2. **QuickBooks connector (7G)** — spec exists (`7G-spec.md`); the mechanism is resolved
    (sub-customer, §7G.2 #2). The electronic-payment path and the every-invoice push still depend on
    the 7G **build** — the electronic half stays a stub until then. **This is the gating dependency.**
@@ -422,7 +422,7 @@ service files, and routes. Do **not** assert from context — read.
    estimate-reminder pattern §6 claims to mirror actually exists.**
 5. **Client / contact model** (Modules 1/2) — where the account credit balance and aging attach.
 6. **Notification event surface** — once the notification system is designed, wire §7 events to it.
-7. **[S94] 7A/7C job-cost rollup** — `getJobCostRollup()` for §6a's "spent" side (approved-only, cash
+7. **[S96] 7A/7C job-cost rollup** — `getJobCostRollup()` for §6a's "spent" side (approved-only, cash
    basis, NET of retainage per the S91 gross/net correction). **7E consumes it; it must not
    re-derive.** _(7C is BUILT [S91] but per `context91` §10 has **never been click-tested**, and
    `20260729010000` is rebuild-test only.)_
@@ -443,14 +443,14 @@ service files, and routes. Do **not** assert from context — read.
 
 ## §O — Open / external (not interview-closable, not CC-closable)
 
-- **Pre-Module 9 external-surface gate** governs the client-facing pay surface. **[S94 narrowing]**
+- **Pre-Module 9 external-surface gate** governs the client-facing pay surface. **[S96 narrowing]**
   Model A **sidesteps it** — the client pays on **QuickBooks' hosted page** and FrameFocus shows only
   a redirect notice (`7G-spec.md` §7G.6), so the gate no longer blocks electronic pay. It still
   governs any other client-facing surface.
 - **Notification system** (§A.2) must be designed before §7 events can actually deliver.
 - **[S92] Retainage-release trigger actor RESOLVED — the _client's_ sign-off.** §4 was correct;
   acceptance #6's "owner sign-off" was a drafting error, now fixed. Rationale recorded at §4.
-- **[S94] Open, listed at their sections:** negative-CO application target (§3a) · reissued-invoice
+- **[S96] Open, listed at their sections:** negative-CO application target (§3a) · reissued-invoice
   aging clock (§6) · payment immutability (§2).
 
 ---
@@ -458,12 +458,13 @@ service files, and routes. Do **not** assert from context — read.
 ## §P — Provenance
 
 - §§1–4, 7, and acceptance 1–2, 4, 6, 8: interviewed S89–S92, confirmed by Josh.
-- §§3a, 5, 6a, 8, 8a, and the `[S94]` acceptance criteria: **Josh's rulings this session**,
+- §§3a, 5, 6a, 8, 8a, and the `[S96]` acceptance criteria: **Josh's rulings this session**,
   reconciling the spec against architecture §7.2/§7.6/§7.11 and the 7D/7F/7G rulings.
 - §8's correction restores architecture §7.6 and the §7.11 trace, which recorded the founder's own
   correction (_"Founder, corrected #9"_).
 - §9 traces: values marked _(real)_ are founder-sourced from §7.11/§7.8.6; the rest are **illustrative
   and awaiting Josh's correction per §2a step 3.**
-- Items tagged `[inferred]` are Claude's inference and **must be confirmed**.
+- The `[inferred]` provenance tag class was **removed [S97]** — declared in the legend but never
+  applied to any claim in this file. It remains live in `7f1-spec.md` and `7g1-spec.md`.
 - FrameFocus schema: **not** verified against the live repo — deferred to CC by design (§S).
-- **Session number `[S94]` is assumed** from the sequence. Confirm and adjust if it differs.
+- **Session-numbering correction [S97]:** this file previously tagged its rulings `[S94]`. Per `context96.md` the spec work is S96's (S94's commits are 113c stage 1). All former `[S94]` tags now read `[S96]`, matching `7d1-spec.md`'s correction.

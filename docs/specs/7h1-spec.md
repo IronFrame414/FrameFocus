@@ -1,7 +1,7 @@
 # 7H — Job Profitability — Plan
 
-> **Status:** Interview-backed plan (S92, extended and reconciled **[S94]**). Decisions in §7H.2 are
-> Josh's calls **except where tagged** `[inherited]` or `[inferred]`. **7H owns no data and asserts no
+> **Status:** Interview-backed plan (S92, extended and reconciled **[S96]**). Decisions in §7H.2 are
+> Josh's calls **except where tagged** `[inherited]`. **7H owns no data and asserts no
 > schema** — it is a read-only rollup of 7A–7E + the M5 budget. The data-wiring layer is left as
 > `§S — TODO for Claude Code`.
 >
@@ -10,14 +10,13 @@
 > the approved-trace requirement; §7H.10 supplies worked examples anyway, because §2a requires _"a
 > worked example per variant"_ for any calculated output and 7H now has three.
 >
-> **[S94] — what changed.** Four rulings. The **headline formula did not work for cost-plus or T&M**
+> **[S96] — what changed.** Four rulings. The **headline formula did not work for cost-plus or T&M**
 > jobs and is rebuilt (#1); **per-category margin was deferred against a blocker that no longer
 > exists** and now ships (#3); **retainage gets its own row** because the category rows did not sum to
 > the job total (§7H.3); and **FINANCIAL-RLS-FLOOR is batched into this build** (#10).
 >
-> **Provenance tags:** `[S94]` = Josh's ruling this session · `[this session]` = Josh's call at S92 ·
-> `[inherited]` = carried from an existing doc/decision · `[inferred]` = Claude's inference —
-> **confirm before treating as fixed.**
+> **Provenance tags:** `[S96]` = Josh's ruling this session · `[this session]` = Josh's call at S92 ·
+> `[inherited]` = carried from an existing doc/decision.
 
 ---
 
@@ -31,7 +30,7 @@ definitions owned by 7C (`payables-shared.ts`) — and 7H reads it from the 7A r
 (`getJobCostRollup().payables`), never re-deriving. `state` is a settlement marker; money math never
 reads it.]** It writes nothing and enforces nothing — it surfaces numbers other modules own.
 
-**[S94]** That never-re-derive discipline now also governs **earned revenue** (owned by 7D §6/§7) and
+**[S96]** That never-re-derive discipline now also governs **earned revenue** (owned by 7D §6/§7) and
 **the cost pairing** (defined once, shared with 7E §6a). 7H consumes both; it implements neither.
 
 It answers, per job: **what did this cost, what will it earn, are we on budget, and what did we make.**
@@ -40,7 +39,7 @@ It answers, per job: **what did this cost, what will it earn, are we on budget, 
 
 ## §7H.2 — Decisions
 
-1. **[S94 — REPLACES "profit = Contract − actual cost"] Profit is EARNED − actual while the job runs,
+1. **[S96 — REPLACES "profit = Contract − actual cost"] Profit is EARNED − actual while the job runs,
    BILLED − actual once it completes.** Mid-job the headline is labeled **"so far"**; at completion it
    becomes final.
 
@@ -60,23 +59,23 @@ It answers, per job: **what did this cost, what will it earn, are we on budget, 
 
    **7H consumes 7D's earned-revenue derivation. It must not re-implement it.**
 
-   > **[S94] The completion switch can move the number visibly.** If $1,000 was written off (7D §8),
+   > **[S96] The completion switch can move the number visibly.** If $1,000 was written off (7D §8),
    > profit **drops** by $1,000 the moment the job is marked complete — earned counted it, billed does
    > not. That is correct and is precisely where a write-off surfaces, but it will read as a bug.
    > **The report must explain the change**, not switch bases silently.
 
 2. **Report structure.** `[this session]` A per-job **cost table** (categories × budget/committed/
-   actual/remaining, **[S94]** plus sell and margin, plus a retainage row) under a **job headline**
+   actual/remaining, **[S96]** plus sell and margin, plus a retainage row) under a **job headline**
    (earned-or-billed, actual cost, profit, cash pairing). Full layout in §7H.3.
 
-3. **[S94 — REVERSES the prior deferral] Per-category margin ships in v1.** The prior text deferred it
+3. **[S96 — REVERSES the prior deferral] Per-category margin ships in v1.** The prior text deferred it
    because _"per-category profit needs a sell figure on the budget side, which the budget doesn't
    store (M7-architecture debt #7)."_ **money-representation.md answered debt #7 — by derivation, not
    by adding columns:** **P1** keeps `budgeted_amount` as cost, **P2** makes sell _"DERIVED… computed
    from cost + instrument pricing context at read time."_ Per-category margin has been computable
    since S93. **The "blocked" claim is deleted, not deferred.**
 
-   > **[S94 — the main implementation risk] Sell derivation is PER INSTRUMENT, not per category.**
+   > **[S96 — the main implementation risk] Sell derivation is PER INSTRUMENT, not per category.**
    > **P4** puts contract type on the instrument and **a project may hold fixed-price, cost-plus and
    > T&M instruments simultaneously**; **P6** has signed COs writing their own budget lines, and the
    > budget screen already groups by instrument. So a single "material" row can span instruments
@@ -84,9 +83,10 @@ It answers, per job: **what did this cost, what will it earn, are we on budget, 
    > category** — never computed as one blanket cost × markup. Getting this wrong produces numbers
    > that look plausible and are wrong, the worst failure mode a profitability report has.
    >
-   > **[S94] T&M labor margin needs HOURS, not cost.** T&M labor sell is **hours × `tm_labor_hourly`**
+   > **[S96] T&M labor margin needs HOURS, not cost.** T&M labor sell is **hours × `tm_labor_hourly`**
    > — not derived from cost at all. So that row needs **Module 6 hours** and inherits 7D §7's
-   > billable-hours definition (approved hours, rounded up to the quarter hour). **This adds M6 to
+   > billable-hours definition (approved hours summed per person per day, rounded UP to the
+   > HALF hour). **This adds M6 to
    > 7H's dependency set**, which §7H.7 previously did not list.
 
 4. **Portfolio roll-up in v1.** `[this session]` Besides the per-job report, a company-wide screen
@@ -109,7 +109,7 @@ It answers, per job: **what did this cost, what will it earn, are we on budget, 
    so an outside accountant can be handed the numbers while the view-only role stays deferred. Reuses
    existing PDF tooling (`@react-pdf/renderer` / `pdf-lib`).
 
-10. **[S94] FINANCIAL-RLS-FLOOR is batched into 7H's build.** The financial floor is currently enforced
+10. **[S96] FINANCIAL-RLS-FLOOR is batched into 7H's build.** The financial floor is currently enforced
     **in the UI only** — `can_view_project()` has no role floor, so a gated user can still read the
     figures via a direct API/query (`CLAUDE.md`; ui-01 §10–11). 7H is the platform's most margin-dense
     screen, so the migration ships **with** it rather than remaining a floating pending item.
@@ -127,22 +127,22 @@ It answers, per job: **what did this cost, what will it earn, are we on budget, 
 
 **Job headline (top):**
 
-- **Earned** — **[S94]** contract value for fixed-price instruments; 7D's earned-revenue derivation
+- **Earned** — **[S96]** contract value for fixed-price instruments; 7D's earned-revenue derivation
   for cost-plus and T&M (#1). On a mixed-instrument project, the sum across instruments.
-- **Billed** — **[S94]** the **billed** amount from 7D, never the derived one (7D §8). Same rule 7G
+- **Billed** — **[S96]** the **billed** amount from 7D, never the derived one (7D §8). Same rule 7G
   follows.
 - **Actual cost** — approved, cash basis, NET of retainage, from the 7A rollup
   (`getJobCostRollup()` = receipts + net bill payments).
-- **[S94] Backlog** — **Earned − Billed**: work earned but not yet invoiced, including any shortfall
+- **[S96] Backlog** — **Earned − Billed**: work earned but not yet invoiced, including any shortfall
   held back under 7D §8. Answers _"have I billed everything I've earned?"_ On a fixed-price job this
   is contract-minus-billed; on cost-plus and T&M it is the live unbilled position.
-- **Profit** — **[S94]** **Earned − Actual** while active, labeled **"so far"**; **Billed − Actual**
+- **Profit** — **[S96]** **Earned − Actual** while active, labeled **"so far"**; **Billed − Actual**
   once complete, labeled final. The switch is explained in-report (#1).
-- **Cash pairing** — "collected $X, spent $Y" — **[S94]** the **shared** derivation 7E §6a also
+- **Cash pairing** — "collected $X, spent $Y" — **[S96]** the **shared** derivation 7E §6a also
   surfaces at payment time. One definition, two surfaces; 7H does not re-derive it.
 
 **Cost table (below):** one row per category — **labor / material / subcontractor / other** —
-**[S94]** plus a **Retainage held** row, plus a total. Columns:
+**[S96]** plus a **Retainage held** row, plus a total. Columns:
 
 - **Budget** — the M5 (5E) forecast cost for that category.
 - **Committed** — derived remaining on the ledger's payable rows [S91: PO commitments, sub
@@ -151,17 +151,17 @@ It answers, per job: **what did this cost, what will it earn, are we on budget, 
 - **Actual** — approved cash cost to date (7A).
 - **Remaining** — Budget − Actual − Committed. The honesty check: flags (e.g. red) when a category
   runs over.
-- **[S94] Sell** — derived at read from cost + instrument pricing context (P2), **per instrument then
+- **[S96] Sell** — derived at read from cost + instrument pricing context (P2), **per instrument then
   aggregated** (#3).
-- **[S94] Margin** — Sell − Actual for that category.
+- **[S96] Margin** — Sell − Actual for that category.
 
-**[S94] The Retainage held row exists because the categories did not add up.** money-rep §4.5:
+**[S96] The Retainage held row exists because the categories did not add up.** money-rep §4.5:
 retainage accrual rows are **line-less in v1** — _"per-line totals exclude retainage held/released;
 job-level payables numbers carry it."_ Without its own row, the four categories silently fail to
 reconcile to the job total by exactly the retained amount. No new data is required —
 `getJobCostRollup().payables` already surfaces `retainageHeld`.
 
-> **[S94 — label these two unambiguously; they point opposite ways.]**
+> **[S96 — label these two unambiguously; they point opposite ways.]**
 > **Sub-held retainage** (7C) is **cost withheld** — money you have not yet paid out — and is the row
 > in this cost table. **Client-held retainage** (7D §5 / 7E §4) is **revenue withheld** — money you
 > have not yet been paid — and belongs in the headline / cash pairing, **never** in the cost table.
@@ -173,7 +173,7 @@ reconcile to the job total by exactly the retained amount. No new data is requir
 
 One screen, Owner/Admin only:
 
-- A row per job: job name, **[S94]** earned-or-billed, actual cost, **profit**, and its state.
+- A row per job: job name, **[S96]** earned-or-billed, actual cost, **profit**, and its state.
 - **Split into two sections — Active and Completed — each subtotaled separately.** Active-job profit is
   "so far" and overstates until the job is done; completed-job profit is final. Keeping them apart
   stops the company figure from blending an overstated number with a final one.
@@ -181,7 +181,7 @@ One screen, Owner/Admin only:
 - Same definitions and approved-only rule as the per-job report; it is the per-job numbers gathered,
   not a new calculation.
 
-> **[S94]** #3 makes each row more expensive to compute (per-instrument derivation, and M6 hours for
+> **[S96]** #3 makes each row more expensive to compute (per-instrument derivation, and M6 hours for
 > T&M labor). The compute-on-read vs. materialized-aggregate question in §7H.8 therefore matters more
 > than it did.
 
@@ -189,18 +189,18 @@ One screen, Owner/Admin only:
 
 ## §7H.5 — Definitions & the in-progress honesty problem
 
-- **Profit** — **[S94]** Earned − approved actual cost while active; Billed − actual at completion
+- **Profit** — **[S96]** Earned − approved actual cost while active; Billed − actual at completion
   (#1). Clean at completion; mid-job it overstates, because work is booked ahead of all its cost.
   The report therefore:
   - **labels the profit "so far"** until job completion (job status read from 5A/projects),
   - always shows **Committed** and **Remaining** beside it, so an open commitment or an over-budget
     category is visible rather than hidden, and
-  - **[S94] explains the earned→billed switch** at completion rather than moving the number silently.
+  - **[S96] explains the earned→billed switch** at completion rather than moving the number silently.
 - **Committed vs. actual** — a PO issued or a sub quote signed is committed money before any bill
   arrives; ignoring it makes "remaining" look rosier than it is. Both are shown.
-- **Cash pairing** — collected − spent, the realized view (**[S94]** shared with 7E §6a). Distinct
+- **Cash pairing** — collected − spent, the realized view (**[S96]** shared with 7E §6a). Distinct
   from the earned/booked view. Both appear; the headline is the profit figure (#1).
-- **[S94] Earned ≠ billed ≠ collected.** Three different numbers, deliberately: earned is what the
+- **[S96] Earned ≠ billed ≠ collected.** Three different numbers, deliberately: earned is what the
   work has entitled you to, billed is what you actually charged (after any override, 7D §8), collected
   is what has landed. The gaps between them are where write-offs and unbilled backlog live.
 
@@ -212,7 +212,7 @@ Owner/Admin only, everywhere 7H appears (per-job tab and company-wide screen). P
 Confirm the exact role gate against the live role hierarchy at build. The view-only financial role is
 **not** in v1 (`TECH_DEBT`, deferred at architecture time).
 
-**[S94]** Enforcement is UI-gated today; **#10 batches FINANCIAL-RLS-FLOOR into this build** so the
+**[S96]** Enforcement is UI-gated today; **#10 batches FINANCIAL-RLS-FLOOR into this build** so the
 floor is enforced at the database, not just the interface.
 
 ---
@@ -229,21 +229,21 @@ rebuild-test only.)_ Wiring is §S.
   written by 7C flows; derivation helpers live in `payables-shared.ts`; 7H consumes the rollup, never
   re-derives.]
 - **7B** — contract value (original + Σ signed CO deltas, **derived at read**, bidirectional).
-  **[S94]** Used as "earned" for **fixed-price instruments only** (#1).
-- **7D** — **[S94]** **billed** amounts (never derived); **the earned-revenue derivation** for
+  **[S96]** Used as "earned" for **fixed-price instruments only** (#1).
+- **7D** — **[S96]** **billed** amounts (never derived); **the earned-revenue derivation** for
   cost-plus and T&M; the write-off / hold-back dispositions (7D §8).
-- **7E** — collected amounts + **[S94]** the shared cash-pairing derivation (7E §6a).
+- **7E** — collected amounts + **[S96]** the shared cash-pairing derivation (7E §6a).
 - **5E (M5 budget)** — the forecast cost baseline, per category.
-- **5A / projects** — job status (active vs. complete) for the "so far" vs. final label — **[S94]** now
+- **5A / projects** — job status (active vs. complete) for the "so far" vs. final label — **[S96]** now
   load-bearing, since it drives #1's basis switch.
-- **[S94] Module 6 — time entries.** New. Required for T&M labor margin (#3), and inheriting 7D §7's
+- **[S96] Module 6 — time entries.** New. Required for T&M labor margin (#3), and inheriting 7D §7's
   billable-hours rule. **UNVERIFIED and unmerged.**
 
 ---
 
 ## §7H.8 — Open / verify items
 
-- ~~**M7-architecture debt #7 blocks per-category profit.**~~ **[S94 — CLOSED.** money-rep **P2**
+- ~~**M7-architecture debt #7 blocks per-category profit.**~~ **[S96 — CLOSED.** money-rep **P2**
   resolved debt #7 by deriving sell at read. Per-category margin ships (#3). **Amend
   `module7-architecture.md` §7.1 to mark debt #7 resolved-by-derivation**, so it stops being cited as
   a live blocker.]
@@ -254,12 +254,12 @@ rebuild-test only.)_ Wiring is §S.
 - **Cash-pairing source** — confirm the shared derivation and its "collected" basis against 7E §6a.
 - **Portfolio performance** — compute-on-read vs. materialized aggregate; CC's call, and weightier now
   (§7H.4).
-- **[S94] Earned-revenue derivation must exist and be consumable from 7D** before #1 can be built.
-- **[S94] `getJobCostRollup().payables.retainageHeld`** — confirm it is per-job and matches what the
+- **[S96] Earned-revenue derivation must exist and be consumable from 7D** before #1 can be built.
+- **[S96] `getJobCostRollup().payables.retainageHeld`** — confirm it is per-job and matches what the
   §7H.3 row should show.
-- **[S94] FINANCIAL-RLS-FLOOR scope** — enumerate every table and figure the floor must cover before
+- **[S96] FINANCIAL-RLS-FLOOR scope** — enumerate every table and figure the floor must cover before
   scoping it in (#10).
-- **[S94 — RESOLVED] Still-billable backlog is a headline figure.** 7D §8 splits a shortfall into
+- **[S96 — RESOLVED] Still-billable backlog is a headline figure.** 7D §8 splits a shortfall into
   **written-off** and **held-back**. #1 handles the write-off side (it surfaces as the earned→billed
   drop at completion). The **held-back backlog** — cost incurred and earned but not yet billed — now
   sits in the headline beside Earned and Billed, answering _"have I billed everything I've earned?"_,
@@ -275,12 +275,12 @@ Recorded so it is not built by accident:
   as something `projected_value` must not feed; no such report exists yet and none is specced here.
 - **No per-category profit on a fixed-price job before its estimate markups are readable** — the sell
   derivation needs the instrument's pricing context (#3).
-- **No writes, anywhere.** 7H surfaces numbers other modules own. **[S94]** Its only build-time
+- **No writes, anywhere.** 7H surfaces numbers other modules own. **[S96]** Its only build-time
   artifact is #10's policy migration, which enforces access rather than creating data.
 
 ---
 
-## §7H.10 — Worked examples — **[S94, NEW]**
+## §7H.10 — Worked examples — **[S96, NEW]**
 
 > §2a requires _"a worked example per variant"_ for any calculated output. 7H's profit figure now has
 > three bases and a switch. **PROPOSED**; the cash-pairing values are **real** (§7.11). Per §2a step 3,
@@ -346,7 +346,7 @@ markup:
 
 And the "labor" row on CO-1042-02 is not cost-based at all:
    labor sell = billable hours × $85  — needs MODULE 6 HOURS, not the cost
-   rollup, and inherits 7D §7's quarter-hour round-up.  (#3, §7H.7)
+   rollup, and inherits 7D §7's half-hour round-up (per person per day).  (#3, §7H.7)
 ```
 
 ### E — Retainage reconciliation _(illustrative)_
@@ -375,19 +375,19 @@ _what is read and derived_, not table or column names.
 
 - **Read** (by concept): per-job/per-category approved-actual + committed cost + **retainage held**
   (7A/7C); category budget (5E); contract value (7B); **billed amounts and the earned-revenue
-  derivation** (7D); collected + the shared pairing (7E); job status (5A); **[S94]** time entries (M6,
+  derivation** (7D); collected + the shared pairing (7E); job status (5A); **[S96]** time entries (M6,
   for T&M labor margin).
-- **Derive:** Remaining = Budget − Actual − Committed. **[S94]** Profit = **Earned − Actual** (active)
-  → **Billed − Actual** (complete). **[S94]** Per-category Sell and Margin — **per instrument, then
+- **Derive:** Remaining = Budget − Actual − Committed. **[S96]** Profit = **Earned − Actual** (active)
+  → **Billed − Actual** (complete). **[S96]** Per-category Sell and Margin — **per instrument, then
   aggregated** (#3). Cash pairing = Collected − Spent — **consumed from the shared definition, not
   re-derived** (7E §6a).
 - **Approved-only:** exclude non-approved 7A rows from every figure (P5).
-- **[S94]** Consume, never re-implement: 7D's earned-revenue derivation, 7C's committed/actual
+- **[S96]** Consume, never re-implement: 7D's earned-revenue derivation, 7C's committed/actual
   definitions, 7E's pairing.
 - CC decides whether the **portfolio roll-up** computes on read or needs a materialized/cached
   aggregate — do not assume; measure against the live rollup, now heavier per #3.
 - **Export** (per-job + portfolio → PDF) reuses existing PDF tooling; no new storage.
-- **[S94] Build artifact:** the **FINANCIAL-RLS-FLOOR** migration (#10) — enumerate its full
+- **[S96] Build artifact:** the **FINANCIAL-RLS-FLOOR** migration (#10) — enumerate its full
   platform-wide scope before writing it.
 
 ---
@@ -395,14 +395,15 @@ _what is read and derived_, not table or column names.
 ## §7H.11 — Provenance
 
 - Decisions §7H.2 #2, #4–#9: interviewed and confirmed by Josh at S92.
-- **#1, #3, #10 and §7H.3's retainage row: Josh's rulings [S94]**, reconciling 7H against
+- **#1, #3, #10 and §7H.3's retainage row: Josh's rulings [S96]**, reconciling 7H against
   `money-representation.md` (P1/P2/P4/P6/P9/P11, §4.5) and the 7D/7E rulings this session.
 - Report structure §7H.3–§7H.4: Claude-proposed, Josh-approved (PM-exclusion and the company-wide
   roll-up are Josh's explicit calls).
 - §7H.10: **PROPOSED**; trace A's pairing values are founder-sourced (§7.11), the rest illustrative and
   awaiting Josh's correction per §2a step 3.
-- Items tagged `[inferred]` are Claude's inference and **must be confirmed**.
+- The `[inferred]` provenance tag class was **removed [S97]** — declared in the legend but never
+  applied to any claim in this file. It remains live in `7f1-spec.md` and `7g1-spec.md`.
 - Upstream schemas and the FrameFocus data layer: **not** verified against the live repo — deferred to
   CC by design (§S). [S91: §7H.7's statuses and the committed/actual definitions were reconciled
   against shipped 7A/7B/7C code; the reads themselves remain unwired.]
-- **Session number `[S94]` is assumed** from the sequence. Confirm and adjust if it differs.
+- **Session-numbering correction [S97]:** this file previously tagged its rulings `[S94]`. Per `context96.md` the spec work is S96's (S94's commits are 113c stage 1). All former `[S94]` tags now read `[S96]`, matching `7d1-spec.md`'s correction.

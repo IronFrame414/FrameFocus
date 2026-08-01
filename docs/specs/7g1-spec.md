@@ -1,6 +1,6 @@
 # 7G — QuickBooks Connector — Integration Plan
 
-> **Status:** Research-backed plan (S92, extended and reconciled **[S94]**). Decisions in §7G.2 are
+> **Status:** Research-backed plan (S92, extended and reconciled **[S96]**). Decisions in §7G.2 are
 > Josh's calls **except where tagged** `[inherited]` or `[inferred]`.
 > QB API facts come from Intuit developer research and are marked **verify-in-sandbox** where they
 > carry build risk. **No FrameFocus schema is asserted here** — the schema layer is left as
@@ -9,13 +9,13 @@
 > **Nature of 7G:** an integration, not an interview section. This is a plan, not a workflow trace —
 > architecture §7.2 classes it _"No"_ for the approved-trace requirement.
 >
-> **[S94] — what changed.** Four rulings (§7G.2 #6–#9) and three consequences of the 7D/7E rulings.
+> **[S96] — what changed.** Four rulings (§7G.2 #6–#9) and three consequences of the 7D/7E rulings.
 > The **void-with-a-payment** case 7G already flagged is now decided (#6); jobs get a **naming
 > convention** (#7); **disconnected operation queues rather than blocks** (#8), which makes the sync
 > queue a named build item; and void/reissue pairs are **annotated in the QB memo** (#9). The sync map
 > gains the **negative-CO credit document** and is corrected to export the **billed** invoice amount.
 >
-> **Provenance tags:** `[S94]` = Josh's ruling this session · `[this session]` = Josh's call at S92 ·
+> **Provenance tags:** `[S96]` = Josh's ruling this session · `[this session]` = Josh's call at S92 ·
 > `[inherited]` = carried from an existing doc · `[inferred]` = Claude's inference — **confirm before
 > treating as fixed.**
 
@@ -69,7 +69,7 @@ Model A).
    **There is no separate batch "session" approval before export.** ("Only approved sessions export"
    is read as: only records that have passed their own approval sync — not a batch object.)
 
-6. **[S94] Void with a payment attached — BLOCK, don't unlink.** 7E permits voiding an invoice that
+6. **[S96] Void with a payment attached — BLOCK, don't unlink.** 7E permits voiding an invoice that
    carries a _partial_ payment. QuickBooks generally refuses to void an invoice with a linked Payment,
    wanting the payment removed first. **FrameFocus blocks the void once the payment has reached QB**
    and directs the user to credit or refund through 7E instead — rather than unlinking the QB Payment
@@ -83,7 +83,7 @@ Model A).
    > options that preserved a wider window. **CC: sandbox-confirm that QB actually refuses** — if it
    > permits the void, this can be revisited toward the wider rule.
 
-7. **[S94] Job naming in QuickBooks — job number + name.** e.g. `1042 — Kitchen Remodel`. Uniqueness
+7. **[S96] Job naming in QuickBooks — job number + name.** e.g. `1042 — Kitchen Remodel`. Uniqueness
    comes from a number already assigned, it stays readable in QB reports, and it cannot collide with a
    vendor or employee. Satisfies §7G.6's constraint that `DisplayName` be unique across
    Customers/Vendors/Employees and contain no `:`, tab or newline.
@@ -94,12 +94,12 @@ Model A).
    > anything. Also confirm the separator survives QB's constraints and the composed name stays inside
    > QB's length limit.
 
-8. **[S94] While disconnected: queue everything, sync on reconnect, warn visibly.** A revoked token, a
+8. **[S96] While disconnected: queue everything, sync on reconnect, warn visibly.** A revoked token, a
    failed refresh, or an Owner disconnecting inside QB must not stop the user working. Records queue
    in order and replay when the Owner reconnects; a **persistent banner** surfaces the disconnection.
    See §7G.7 — this makes the sync queue a first-class build item.
 
-9. **[S94] Annotate void/reissue pairs in the QB memo field.** The voided invoice reads _"replaced by
+9. **[S96] Annotate void/reissue pairs in the QB memo field.** The voided invoice reads _"replaced by
    INV-####"_; the successor reads _"replaces INV-####"_. Uses a field QB already has, so anyone
    reconciling inside QuickBooks can follow the thread without opening FrameFocus.
    **The void reason is deliberately NOT carried into QB** — 7D §9 makes a reason required, but it
@@ -171,7 +171,7 @@ thing docs can't close is the **live-only residual** noted in §7G.6.
 - **Invoice** — `CustomerRef` = job sub-customer; `Line[]` of `SalesItemLineDetail` with `ItemRef`.
 - **Payment** — records money against one or more invoices (`LinkedTxn`). Supports one payment split
   across multiple invoices and one invoice taking multiple payments — matches §7E natively.
-- **CreditMemo / RefundReceipt** — **[S94]** two distinct objects for two distinct things: a
+- **CreditMemo / RefundReceipt** — **[S96]** two distinct objects for two distinct things: a
   **CreditMemo** is a credit on the client's account; a **RefundReceipt** is money actually sent back.
   7E §5 now distinguishes them, so 7G maps them separately.
 - **Vendor / Bill / BillPayment** — sub bills and sub payments. **Owned by 7C**, listed here only so
@@ -194,7 +194,7 @@ thing docs can't close is the **live-only residual** noted in §7G.6.
 
 ## §7G.4 — Sync map (FrameFocus ⇄ QuickBooks)
 
-Direction is FF → QB unless noted. **[S94]** marks this session's changes.
+Direction is FF → QB unless noted. **[S96]** marks this session's changes.
 
 **[S92 — governing principle, revenue side: QB receives INVOICES ONLY.** The invoice is the
 device incoming money is tied to. Neither the original contract nor a signed change order ever
@@ -206,15 +206,15 @@ BillPayment still export — real money out, needed for expense accounting and 1
 - Client → QB **Customer** _([S92] created lazily at first invoice export, not eagerly at
   client creation — nothing reaches QB until an invoice needs it)_
 - Job → QB **sub-customer** under the client _([S92] created lazily at first invoice export.
-  **[S94]** named per #7: job number + name)_
+  **[S96]** named per #7: job number + name)_
 - Sub / vendor (with EIN) → QB **Vendor** _(7C — live source: the `subcontractors` table, which carries `ein` [S91])_
 - Client invoice → QB **Invoice** (CustomerRef = job sub-customer; single income Item) _(7D)_
-  **[S94] Export the BILLED amount, never the derived one.** 7D §8 splits a derived invoice into a
+  **[S96] Export the BILLED amount, never the derived one.** 7D §8 splits a derived invoice into a
   **derived** figure and a **billed** figure (the recorded override). QuickBooks must receive what the
   client was actually charged, or QB income disagrees with the invoice in the client's hands.
   **7D's disposition figures are QB-neutral** — written-off and held-back amounts were never billed,
   so nothing exports for them. Stated so it is not re-litigated at build.
-- **[S94] Negative-CO credit document → QB CreditMemo** _(7D §4a issues it; 7E §3a applies it)_
+- **[S96] Negative-CO credit document → QB CreditMemo** _(7D §4a issues it; 7E §3a applies it)_
   > **This does NOT contradict "a signed CO exports nothing."** The CO itself still exports nothing;
   > the **credit document that bills it** exports, because **billed value goes to QB** — and a credit
   > is billed value with a minus sign. Read carelessly, the S92 rule and 7D §4a combine into "negative
@@ -222,8 +222,8 @@ BillPayment still export — real money out, needed for expense accounting and 1
   > deductive CO ever signed. Written out explicitly for that reason.
 - Client payment, **electronic** → **INBOUND** from QB via webhook (Model A) _(7E)_
 - Client payment, **manual** (check/cash) → QB **Payment** with `LinkedTxn` → Invoice and
-  `ProcessPayment: false` _(7E — **[S94]** recorded by Owner/Admin only, per 7E §8)_
-- **[S94] Credit on account → QB CreditMemo; money returned → QB RefundReceipt** — two objects, per
+  `ProcessPayment: false` _(7E — **[S96]** recorded by Owner/Admin only, per 7E §8)_
+- **[S96] Credit on account → QB CreditMemo; money returned → QB RefundReceipt** — two objects, per
   7E §5. Origin split: negative-CO credits originate in **7D**; overpayment credits and refunds in
   **7E**.
 - Sub bill / commitment → QB **Bill**; sub payment → QB **BillPayment** _(7C — [S91] live sources are
@@ -234,15 +234,16 @@ BillPayment still export — real money out, needed for expense accounting and 1
   `20260704215000:70`; `contract-value.ts:17-20`), and contract value is DERIVED at read — there is
   no FF-side write to mirror. RESOLVED [S92]: a signed CO exports NOTHING.]**
 - Approved timesheet → QB **Time / Payroll** entry _(M6 / payroll)_
-  > **[S94] Do not conflate with 7D §7's billable hours.** Payroll hours and **billable** hours are
-  > different populations off the same M6 data — 7D bills approved hours **rounded up to the quarter
-  > hour**; payroll exports actual logged time. One rounding rule must never leak into the other.
-- **[S94] 7F lien releases export nothing.** 7F is entirely internal to FrameFocus — no QB surface.
+  > **[S96] Do not conflate with 7D §7's billable hours.** Payroll hours and **billable** hours are
+  > different populations off the same M6 data — 7D bills approved hours **summed per person per
+  > day and rounded UP to the HALF hour**; payroll exports actual logged time. One rounding
+  > rule must never leak into the other.
+- **[S96] 7F lien releases export nothing.** 7F is entirely internal to FrameFocus — no QB surface.
   Recorded so it is not looked for.
 
 **Lifecycle, not just create.** The map above is the create / first-push. Records also change: edits
 propagate as **sparse updates**; a **void** propagates as a POST to the invoice with `operation=void`,
-which zeroes it in QB and backs the income out. **[S94]** A void carries the #9 memo annotation; a
+which zeroes it in QB and backs the income out. **[S96]** A void carries the #9 memo annotation; a
 **successor invoice is an ordinary create** (7D §10), so no un-void or replace path is needed — and
 because a **terminal void is valid** (7D §10), the connector must not assume a successor follows.
 Per #6, a void is **blocked** where QB holds a payment.
@@ -265,7 +266,7 @@ credit/refund bookkeeping, reminders, retainage-release invoice generation, the 
 ## §7G.6 — Verify-in-sandbox & open dependencies
 
 - **RESOLVED [S92] — a signed CO exports nothing.** CO money reaches QB when invoiced via 7D.
-  **[S94] But its negative counterpart's credit document DOES export** — see §7G.4.
+  **[S96] But its negative counterpart's credit document DOES export** — see §7G.4.
 - **RESOLVED (docs) — pay-link on accounting scope.** Enabling the invoice pay-link is an
   accounting-scope Invoice operation (the `AllowOnline*Payment` flags); no Charges API / payment scope
   needed for Model A. **Live-only residual:** confirm the link renders for a real QB-Payments-enabled
@@ -275,7 +276,7 @@ credit/refund bookkeeping, reminders, retainage-release invoice generation, the 
   = that job sub-customer posts its income to the job. QBO's `IsProject` flag is **read-only and
   ignored on create**, so the Projects feature genuinely _cannot_ be created via API — confirming #2.
 
-**Verification queue, ordered by consequence [S94]:**
+**Verification queue, ordered by consequence [S96]:**
 
 1. **The metered-read cap — per company or per app?** See §7G.3. The only open item that can
    invalidate a decision already made rather than refine one.
@@ -301,7 +302,7 @@ credit/refund bookkeeping, reminders, retainage-release invoice generation, the 
 
 ---
 
-## §7G.7 — The sync queue — **[S94, NEW — the largest build item in 7G]**
+## §7G.7 — The sync queue — **[S96, NEW — the largest build item in 7G]**
 
 #8 rules that work continues while QuickBooks is unreachable. That makes the queue first-class rather
 than incidental. It must:
@@ -318,12 +319,12 @@ than incidental. It must:
 5. **Surface state.** A **persistent banner** while disconnected (#8), and per-record **sync status**
    (§S) so a stalled record is findable.
 
-**[S94] The queue REPLAYS every operation — it does not collapse them.** If an invoice is sent while QB
+**[S96] The queue REPLAYS every operation — it does not collapse them.** If an invoice is sent while QB
 is down and then voided before reconnect, the queue pushes **create, then void** rather than collapsing
 to nothing. Ruling: _"queue data until connection is re-established"_ — the data is preserved, not
 optimized away. QuickBooks is the book of record, and a void it never saw is a gap in the books.
 
-**[S94] A record that fails to sync warns the user and stays queued.** This extends #8 beyond the
+**[S96] A record that fails to sync warns the user and stays queued.** This extends #8 beyond the
 disconnected case to any single-record failure while the connection is healthy — a validation
 rejection, a duplicate `DisplayName`, a stale token mid-batch. Behaviour is the same in both:
 **warn the user, hold the data, retry when the path clears.** Nothing is ever dropped, and nothing
@@ -344,26 +345,26 @@ This section states only _what must be storable_, not how.
 
 - **Per company:** `realmId`; encrypted OAuth refresh token + access token/expiry (**rotating —
   overwrite on every refresh**); a **QB-Payments-enabled** flag; the **income-Item mapping** (default
-  "Construction Income", remappable); **[S94]** the connection state (**connected / needs-reauth**)
+  "Construction Income", remappable); **[S96]** the connection state (**connected / needs-reauth**)
   driving #8's banner.
 - **Per client:** the QB **Customer** id.
-- **Per job:** the QB **sub-customer** id. **[S94]** plus whatever field #7's naming convention reads
+- **Per job:** the QB **sub-customer** id. **[S96]** plus whatever field #7's naming convention reads
   (see the blocking verification — a project/job number may not exist yet).
-- **Per invoice:** the QB **Invoice** id; a **sync status** + last-synced timestamp; **[S94]** the
+- **Per invoice:** the QB **Invoice** id; a **sync status** + last-synced timestamp; **[S96]** the
   **memo text** for void/reissue pairs (#9).
 - **Per payment:** the QB **Payment** id — whether pushed (manual) or received via webhook
   (electronic) — linked to the FrameFocus invoice.
-- **Per credit / refund:** **[S94]** which QB object it maps to — **CreditMemo** (credit on account,
+- **Per credit / refund:** **[S96]** which QB object it maps to — **CreditMemo** (credit on account,
   incl. negative-CO credits) or **RefundReceipt** (money returned) — per 7E §5.
 - **Webhook handling:** an event log / idempotency key store to dedupe QB events.
-- **[S94] The sync queue itself:** durable, per-`realmId`, dependency-ordered, with retry/backoff
+- **[S96] The sync queue itself:** durable, per-`realmId`, dependency-ordered, with retry/backoff
   state and per-record status (§7G.7).
 
 CC also confirms, against the live schema:
 
 - That the "Construction Income" default Item and its remap target exist / can be created per company.
 - That the company's QB Payments connection is live, so the pay-link actually renders.
-- **[S94]** That 7D's invoice exposes the **billed** amount distinctly from the derived one, and
+- **[S96]** That 7D's invoice exposes the **billed** amount distinctly from the derived one, and
   **retainage withheld** separately from the invoice face.
 
 ---
@@ -372,8 +373,8 @@ CC also confirms, against the live schema:
 
 - QB API behavior §7G.3: Intuit developer documentation + research at S92. **Not yet exercised in a
   sandbox against a real FrameFocus flow**, and not independently re-verified since.
-- Decisions §7G.2 #1–#5: confirmed by Josh at S92. **#6–#9: Josh's rulings [S94].**
-- §7G.4's `[S94]` rows and §7G.7: consequences of the 7D/7E rulings this session.
+- Decisions §7G.2 #1–#5: confirmed by Josh at S92. **#6–#9: Josh's rulings [S96].**
+- §7G.4's `[S96]` rows and §7G.7: consequences of the 7D/7E rulings this session.
 - Items tagged `[inferred]` are Claude's inference and **must be confirmed**.
 - FrameFocus schema: **not** verified against the live repo — deferred to CC by design (§S).
-- **Session number `[S94]` is assumed** from the sequence. Confirm and adjust if it differs.
+- **Session-numbering correction [S97]:** this file previously tagged its rulings `[S94]`. Per `context96.md` the spec work is S96's (S94's commits are 113c stage 1). All former `[S94]` tags now read `[S96]`, matching `7d1-spec.md`'s correction.

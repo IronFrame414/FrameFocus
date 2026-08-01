@@ -1,6 +1,6 @@
 # 7F — Lien Releases & Waivers — Plan
 
-> **Status:** Interview-backed plan (S92, extended and reconciled **[S94]**). Decisions in §7F.2 are
+> **Status:** Interview-backed plan (S92, extended and reconciled **[S96]**). Decisions in §7F.2 are
 > Josh's calls **except where tagged** `[inherited]` or `[inferred]`. **No FrameFocus schema is
 > asserted here** — the schema layer is left as `§S — TODO for Claude Code`, per the M7 method.
 >
@@ -9,13 +9,13 @@
 > tracked. Architecture §7.2 classes 7F _"No"_ for the approved-trace requirement; §7F.12 supplies a
 > worked lifecycle anyway, since the overlay model benefits from one.
 >
-> **[S94] — what changed.** Four rulings: the collection gate is **advisory, not enforcing** (#11) —
+> **[S96] — what changed.** Four rulings: the collection gate is **advisory, not enforcing** (#11) —
 > it contradicted 7C's shipped posture and architecture P2; templates are **unlimited and tagged**
 > rather than a fixed two (#4), which also resolves §7F.10's progress-vs-final item outright; the
 > client release amount is **what is actually payable now**, not the invoice face (#10); and an
 > invoice void now **voids the linked release and prompts a new one** rather than flagging it (§7F.9).
 >
-> **Provenance tags:** `[S94]` = Josh's ruling this session · `[this session]` = Josh's call at S92 ·
+> **Provenance tags:** `[S96]` = Josh's ruling this session · `[this session]` = Josh's call at S92 ·
 > `[inherited]` = carried from an existing doc/decision · `[inferred]` = Claude's inference —
 > **confirm before treating as fixed.**
 
@@ -45,7 +45,7 @@ direction-agnostic and reused when the sub side lands.
 3. **Company supplies all wording.** `[this session]` (aligns with architecture's "counsel-routed, not
    hand-authored") The platform holds **no default legal text**. The company's uploaded PDF _is_ the
    legal document; FrameFocus only positions values on it.
-4. **[S94 — REPLACES "two templates"] Unlimited templates, each tagged by type.** A company builds as
+4. **[S96 — REPLACES "two templates"] Unlimited templates, each tagged by type.** A company builds as
    many named templates as its jurisdictions require. Each carries two tags: **conditional or
    unconditional**, and **progress or final**.
    _Why this changed:_ the prior model fixed the design at exactly two documents, while §7F.10 told a
@@ -71,7 +71,7 @@ direction-agnostic and reused when the sub side lands.
 9. **Notary is per-release, platform-hands-off.** `[this session]` A per-release toggle; the platform
    never performs or brokers notarization — it only emails the PDF for the company to print / notarize
    / upload.
-10. **[S94 — REPLACES "$ to match the invoice"] Amount = what is actually payable now.**
+10. **[S96 — REPLACES "$ to match the invoice"] Amount = what is actually payable now.**
     A client release carries the invoice's **billed** amount **minus retainage withheld** — not the
     invoice face. A $10,000 invoice withholding $1,000 produces a release for **$9,000**; the retained
     $1,000 stays **unwaived** until it is released and paid.
@@ -83,7 +83,7 @@ direction-agnostic and reused when the sub side lands.
 *[S91 rationale update retained: the original reason for manual sub amounts ("sub payment side
 isn't wired") is gone — 7C shipped`expense_payments`. Auto-matching the sub release `$` to the
     payment being released is now possible, but it is a design change and was **not** made here.]\*
-11. **[S94 — REPLACES the collection gate] The conditional-release requirement is ADVISORY.**
+11. **[S96 — REPLACES the collection gate] The conditional-release requirement is ADVISORY.**
     A company may switch on "warn me if no conditional release has been sent," and FrameFocus then
     **warns and proceeds**. It never blocks sending an invoice and never blocks recording a payment.
     _Why this changed:_ the prior wording let a company _require_ a release _"to collect"_ without
@@ -98,7 +98,7 @@ isn't wired") is gone — 7C shipped`expense_payments`. Auto-matching the sub re
     PDF is stored on the record; each release links to its **invoice** (conditional) or the
     **job/payment** (unconditional).
 13. **Roles.** `[inferred]` Inherit the invoicing model — Owner/Admin generate + send; PM per the 7D
-    rule. **[S94]** **Voiding a release requires a reason and is Owner/Admin only**, matching 7D §9's
+    rule. **[S96]** **Voiding a release requires a reason and is Owner/Admin only**, matching 7D §9's
     invoice-void gate and the platform's corrective-action convention. Confirm against the live role
     model.
 
@@ -108,7 +108,7 @@ isn't wired") is gone — 7C shipped`expense_payments`. Auto-matching the sub re
 
 In Company Settings, per template:
 
-1. **Name it and tag it** — **[S94]** conditional/unconditional × progress/final (#4).
+1. **Name it and tag it** — **[S96]** conditional/unconditional × progress/final (#4).
 2. **Import** the company's PDF form.
 3. **Place boxes** on the PDF pages. Three box kinds:
    - **Value box** — mapped to one entry in the value catalog (§7F.4); filled by the system at
@@ -172,7 +172,7 @@ company-standard or entered per release. A **custom** box covers anything not li
   (#6). The receipt handed over once funds are truly in hand. No cleared-state tracking; the user
   decides when.
 
-**[S94] The unconditional amount is money ACTUALLY RECEIVED to date.** 7E accepts partial payment, so a
+**[S96] The unconditional amount is money ACTUALLY RECEIVED to date.** 7E accepts partial payment, so a
 $9,000 receivable may have only $4,000 against it — the unconditional release then carries **$4,000**,
 not $9,000 and not the invoice face. An unconditional release attests to funds in hand; waiving rights
 over money not yet received is the failure this rule exists to prevent. Together with #10 this gives
@@ -191,7 +191,7 @@ one principle across both release types: **a release never covers more than the 
   the client. No external surface.
 - **Notary path:** render with signature/notary area blank → the company **downloads/prints** it →
   notarizes in person → **uploads** the notarized copy → stored + emailed to client.
-  **[inferred, S94]** Retain **both** files — the generated blank and the uploaded notarized copy. The
+  **[inferred, S96]** Retain **both** files — the generated blank and the uploaded notarized copy. The
   pair is the audit trail, and only the upload is legally operative. §S names _"the stored final PDF"_
   in the singular; confirm the intent is both.
 - Either way the release lands in the job's Lien Releases list and the PDF is stored on the record.
@@ -226,7 +226,7 @@ Not built in v1. Recorded so it isn't re-lost:
 - Sub-release **`$` is entered manually** (#10).
 - The document machinery in §7F.3 is direction-agnostic and reused as-is; only the triggers, external
   delivery, and sub-payment linkage are the new work.
-- **[S94]** When the sub side lands it must **preserve 7C's shipped posture** — the lien-release gate
+- **[S96]** When the sub side lands it must **preserve 7C's shipped posture** — the lien-release gate
   there is advisory and _"clear for payment"_ is a notification, not a gate. #11 now makes both
   directions consistent.
 
@@ -246,7 +246,7 @@ Not built in v1. Recorded so it isn't re-lost:
   as a "missing" dependency. (See S94-d for the one place a prompt could be offered without adding
   state.)
 - **Architecture §7.11 (7F bidirectional): confirmed.** v1 builds the client-outbound direction only.
-- **[S94 — REPLACES "flagged for review"] Invoice void → linked release is VOIDED and a new one
+- **[S96 — REPLACES "flagged for review"] Invoice void → linked release is VOIDED and a new one
   prompted.** When an invoice carrying a conditional release is voided (7D §9):
   - If the invoice is **reissued as a successor**, the prompt produces a release against the successor.
   - If the invoice is **voided outright with no successor** — a terminal void is valid (7D §10) —
@@ -267,13 +267,13 @@ Not built in v1. Recorded so it isn't re-lost:
 - **Contractor signature** — confirm it exists and is reusable in Company Settings (#8).
 - **Roles** — confirm the invoicing-inherited model against the live role hierarchy (#13); align the
   release void with 7D §9's Owner/Admin + required reason.
-- ~~**Progress vs. final** — v1 models only conditional/unconditional…~~ **[S94 — CLOSED by #4.**
+- ~~**Progress vs. final** — v1 models only conditional/unconditional…~~ **[S96 — CLOSED by #4.**
   Unlimited templates tagged conditional/unconditional × progress/final serve the four-form statutory
   states directly. No TECH_DEBT item is needed.]
 - **County / legal description** — the §7F.4 verification item; highest build risk in 7F.
 - **Overlay box-placement UI** — the one net-new front-end lift; build to the frontend-design
   conventions. Everything else reuses existing PDF + email infrastructure.
-- **[S94] Open, listed at their sections:** template selection (S94-a) · jurisdiction tagging (S94-b) ·
+- **[S96] Open, listed at their sections:** template selection (S94-a) · jurisdiction tagging (S94-b) ·
   unconditional amount on partial payment (S94-c) · electronic cleared-prompt (S94-d) · client
   notification on void (S94-e) · retaining both notary files (§7F.6).
 
@@ -290,7 +290,7 @@ withheld, and the void model. Nothing in the 7-series waits on 7F — it is a le
 
 ---
 
-## §7F.12 — Worked lifecycle — **[S94, NEW]**
+## §7F.12 — Worked lifecycle — **[S96, NEW]**
 
 > Architecture §7.2 does not require an approved trace for 7F (_"No — a document lifecycle"_), but the
 > overlay model and #10's amount rule benefit from one. **PROPOSED**; values track 7D §15-A. Per §2a
@@ -321,7 +321,7 @@ THE ADVISORY WARNING
 UNCONDITIONAL, AFTER FUNDS CLEAR
   User judges the check cleared and clicks generate from the job's financials. (#6)
   Amount = money ACTUALLY RECEIVED to date — $10,000 if only that has landed
-  against the $16,200, NOT the receivable. (§7F.5 [S94])
+  against the $16,200, NOT the receivable. (§7F.5 [S96])
   Template auto-selects UNCONDITIONAL + PROGRESS.
 
 VOID PATH
@@ -346,7 +346,7 @@ FINAL PAYMENT
 property, party) — confirms real field names, then builds. This section states only _what must be
 storable_.
 
-- **Per company (Company Settings):** **[S94]** an **unlimited set of templates**, each with a name,
+- **Per company (Company Settings):** **[S96]** an **unlimited set of templates**, each with a name,
   its **type tags** (conditional/unconditional, progress/final), **[inferred]** an optional
   jurisdiction, the uploaded PDF, and the set of placed boxes (each box: page, position, size, and its
   mapped value key **or** custom label). The **advisory warn toggle** (#11 — _not_ a blocking gate).
@@ -366,11 +366,11 @@ storable_.
 ## §7F.13 — Provenance
 
 - Workflow §7F.2–§7F.7 (unmarked items): interviewed and confirmed by Josh at S92.
-- Items tagged **`[S94]`** — #4, #10, #11, #13's void gate, §7F.9's void behavior: **Josh's rulings
+- Items tagged **`[S96]`** — #4, #10, #11, #13's void gate, §7F.9's void behavior: **Josh's rulings
   this session**, reconciling 7F against 7C's shipped advisory posture, architecture P2,
   `money-representation.md`, and the 7D void/billed-amount rulings.
 - Value catalog §7F.4: Claude-proposed, Josh-directed-comprehensive, Josh-approved.
 - §7F.12: **PROPOSED**, awaiting Josh's correction per §2a step 3.
 - Items tagged `[inferred]` are Claude's inference and **must be confirmed**.
 - FrameFocus schema: **not** verified against the live repo — deferred to CC by design (§S).
-- **Session number `[S94]` is assumed** from the sequence. Confirm and adjust if it differs.
+- **Session-numbering correction [S97]:** this file previously tagged its rulings `[S94]`. Per `context96.md` the spec work is S96's (S94's commits are 113c stage 1). All former `[S94]` tags now read `[S96]`, matching `7d1-spec.md`'s correction.
