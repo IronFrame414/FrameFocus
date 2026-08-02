@@ -143,21 +143,13 @@ export async function voidPayment(paymentId: string, reason: string): Promise<Re
   const supabase = createClient();
   const now = new Date().toISOString(); // an INSTANT — correctly UTC
 
-  const { data: existing } = await supabase
-    .from('client_payments')
-    .select('note')
-    .eq('id', paymentId)
-    .maybeSingle();
-
+  // The reason goes in `deletion_reason` (20260804010000), NOT in `note`:
+  // `note` is part of the frozen record and the immutability trigger rejects
+  // any change to it — correctly, and mirroring 7C. deletion_reason is
+  // metadata about the removal, so it is deliberately not frozen.
   const { error } = await supabase
     .from('client_payments')
-    .update({
-      is_deleted: true,
-      deleted_at: now,
-      // The note is NOT a money column, so the immutability trigger allows the
-      // correction reason to be appended as the audit of why it was removed.
-      note: [existing?.note, `[removed] ${reason.trim()}`].filter(Boolean).join(' · '),
-    })
+    .update({ is_deleted: true, deleted_at: now, deletion_reason: reason.trim() })
     .eq('id', paymentId);
   if (error) return { success: false, error: error.message };
 
