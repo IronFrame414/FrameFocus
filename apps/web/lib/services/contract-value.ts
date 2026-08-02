@@ -1,11 +1,22 @@
 import { createClient } from '@/lib/supabase-server';
 
-// 7B — Contract Value (docs/specs/7B-spec.md §2). projects.contract_value is
-// NEVER mutated: it holds the original set at conversion. The revised total is
+// 7B — Contract Value (docs/specs/7B-spec.md §2). The original contract value
+// is NEVER mutated: it holds the figure set at conversion. The revised total is
 // DERIVED here and only here — original + Σ(client-signed CO net_delta),
 // bidirectional (a negative CO lowers it). Voided/draft/sent COs contribute
 // nothing; 'signed' is reachable only through the client token flow
 // (co-signing-service.ts). No trigger, no stored revised column, no view.
+//
+// RULING 2 [S97, 2026-08-02] — WHERE THE ORIGINAL NOW LIVES. It moved from
+// projects.contract_value to project_financials.contract_value, a table whose
+// RLS is floored at Owner/Admin. Postgres RLS is row-level and has no column
+// equivalent, so a column that only Owner/Admin may read has to be its own row.
+//
+// The consequence every caller must handle: for a PM, Foreman or Crew member
+// these functions now return `original: null` — not zero, and not an error. RLS
+// filters the row out, which is the intended outcome. `revised` is null with
+// it. Anything that PRICES off these figures must refuse to price when they are
+// null rather than treating null as 0 (see 7D's percentage draw).
 
 /**
  * The ONE filter that defines "contributes to contract value" (7B §2.2, P3).
@@ -20,15 +31,22 @@ export const CONTRACT_CONTRIBUTING_CO_FILTER = {
 } as const;
 
 export interface RevisedContract {
-  original: number | null; // projects.contract_value, never mutated
+  /** project_financials.contract_value — never mutated. NULL for a project
+   *  with no value set AND for any caller below Owner/Admin (RLS). */
+  original: number | null;
   signedDelta: number; // Σ net_delta of contributing COs (signed values, ±)
   revised: number | null; // original + signedDelta; null when original is null
 }
 
 export interface PortfolioRevisedContract {
-  originalSum: number; // Σ contract_value over active projects
+  /** Σ contract_value over active projects the caller can READ. Below
+   *  Owner/Admin that is zero rows, so the sum is 0 — see visibleCount. */
+  originalSum: number;
   signedDeltaSum: number; // Σ net_delta of contributing COs on those projects
   revisedSum: number; // originalSum + signedDeltaSum
+  /** How many projects actually contributed a value. Zero below Owner/Admin,
+   *  which lets a caller tell "no contracts" apart from "not permitted". */
+  visibleCount: number;
 }
 
 function toRevised(original: number | null, signedDelta: number): RevisedContract {
@@ -43,8 +61,14 @@ function toRevised(original: number | null, signedDelta: number): RevisedContrac
 export async function getRevisedContract(projectId: string): Promise<RevisedContract> {
   const supabase = await createClient();
 
-  const [{ data: project }, { data: cos }] = await Promise.all([
-    supabase.from('projects').select('contract_value').eq('id', projectId).single(),
+  const [{ data: financials }, { data: cos }] = await Promise.all([
+    // maybeSingle, not single: below Owner/Admin RLS returns NO row, and that
+    // is a legitimate answer rather than an error.
+    supabase
+      .from('project_financials')
+      .select('contract_value')
+      .eq('project_id', projectId)
+      .maybeSingle(),
     supabase
       .from('change_orders')
       .select('net_delta')
@@ -53,7 +77,7 @@ export async function getRevisedContract(projectId: string): Promise<RevisedCont
   ]);
 
   const signedDelta = (cos ?? []).reduce((sum, co) => sum + (co.net_delta ?? 0), 0);
-  return toRevised(project?.contract_value ?? null, signedDelta);
+  return toRevised(financials?.contract_value ?? null, signedDelta);
 }
 
 /**
@@ -66,8 +90,11 @@ export async function getRevisedContractMap(
   if (projectIds.length === 0) return {};
   const supabase = await createClient();
 
-  const [{ data: projects }, { data: cos }] = await Promise.all([
-    supabase.from('projects').select('id, contract_value').in('id', projectIds),
+  const [{ data: financials }, { data: cos }] = await Promise.all([
+    supabase
+      .from('project_financials')
+      .select('project_id, contract_value')
+      .in('project_id', projectIds),
     supabase
       .from('change_orders')
       .select('project_id, net_delta')
@@ -80,9 +107,15 @@ export async function getRevisedContractMap(
     deltas[co.project_id] = (deltas[co.project_id] ?? 0) + (co.net_delta ?? 0);
   }
 
+  // Key off the REQUESTED ids, not the rows returned: below Owner/Admin there
+  // are no rows, and a caller asking about a project it can see must still get
+  // an entry (with a null original) rather than a missing key.
+  const byProject: Record<string, number | null> = {};
+  for (const f of financials ?? []) byProject[f.project_id] = f.contract_value;
+
   const map: Record<string, RevisedContract> = {};
-  for (const p of projects ?? []) {
-    map[p.id] = toRevised(p.contract_value ?? null, deltas[p.id] ?? 0);
+  for (const id of projectIds) {
+    map[id] = toRevised(byProject[id] ?? null, deltas[id] ?? 0);
   }
   return map;
 }
@@ -96,11 +129,20 @@ export async function getPortfolioRevisedContract(): Promise<PortfolioRevisedCon
 
   const { data: active } = await supabase
     .from('projects')
-    .select('id, contract_value')
+    .select('id')
     .eq('status', 'active')
     .eq('is_deleted', false);
 
   const activeIds = (active ?? []).map((p) => p.id);
+
+  // RLS on project_financials does the gating: Owner/Admin get rows, everyone
+  // else gets none, so the sum is 0 and visibleCount is 0.
+  const { data: financials } = activeIds.length
+    ? await supabase
+        .from('project_financials')
+        .select('contract_value')
+        .in('project_id', activeIds)
+    : { data: [] as { contract_value: number | null }[] };
 
   const { data: cos } = activeIds.length
     ? await supabase
@@ -110,8 +152,13 @@ export async function getPortfolioRevisedContract(): Promise<PortfolioRevisedCon
         .match(CONTRACT_CONTRIBUTING_CO_FILTER)
     : { data: [] as { net_delta: number }[] };
 
-  const originalSum = (active ?? []).reduce((sum, p) => sum + (p.contract_value ?? 0), 0);
+  const originalSum = (financials ?? []).reduce((sum, f) => sum + (f.contract_value ?? 0), 0);
   const signedDeltaSum = (cos ?? []).reduce((sum, co) => sum + (co.net_delta ?? 0), 0);
 
-  return { originalSum, signedDeltaSum, revisedSum: originalSum + signedDeltaSum };
+  return {
+    originalSum,
+    signedDeltaSum,
+    revisedSum: originalSum + signedDeltaSum,
+    visibleCount: (financials ?? []).length,
+  };
 }

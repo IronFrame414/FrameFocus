@@ -98,6 +98,17 @@ export async function updateProject(
     return { success: false, error: 'Status changes must go through transitionProjectStatus().' };
   }
 
+  // RULING 2 [S97]: the contract value lives in project_financials (Owner/Admin
+  // RLS), not on this row. This refusal exists because `updates` is an untyped
+  // bag — without it a future caller could quietly write the retired column
+  // while the real figure sat elsewhere, and nothing would complain.
+  if ('contract_value' in updates) {
+    return {
+      success: false,
+      error: 'The contract value is not set here — it lives in project_financials (Owner/Admin).',
+    };
+  }
+
   // BEFORE UPDATE trigger `projects_set_updated_by` handles updated_by.
   // updated_at is handled by the existing updated_at trigger.
   const { error } = await supabase.from('projects').update(updates).eq('id', id);

@@ -547,7 +547,8 @@ function DrawPanel({
     <div style={{ ...cardStyle, padding: '12px 16px' }}>
       <span style={microLabelStyle}>Add a draw</span>
       <div style={{ fontSize: '12px', color: color.faint, margin: '4px 0 8px' }}>
-        Percentages apply to the ORIGINAL contract value {money(originalContractValue)} — a signed
+        Percentages apply to the ORIGINAL contract value
+        {originalContractValue !== null ? ` ${money(originalContractValue)}` : ''} — a signed
         change order never re-prices a draw (§2 rule a). The FINAL draw bills the remainder
         {remaining !== null ? ` (${money(remaining)})` : ''}, not a fresh percentage (rule b).
       </div>
@@ -585,6 +586,22 @@ function DrawPanel({
           disabled={busy || !label.trim() || originalContractValue === null}
           style={secondaryButtonStyle}
           onClick={async () => {
+            // RULING 2 [S97]: originalContractValue is null both when the job
+            // genuinely has none AND when the caller is below Owner/Admin (the
+            // figure now lives in project_financials, Owner/Admin RLS). It used
+            // to be `?? 0`, which would price a percentage draw at ZERO — a
+            // silent, wrong bill. Refuse loudly instead.
+            if (originalContractValue === null) {
+              await run(
+                async () => ({
+                  success: false,
+                  error:
+                    'This invoice cannot price a draw: the contract value is not available to you. ' +
+                    'Ask an Owner or Admin to add the draw, or bill a fixed amount instead.',
+                }),
+              );
+              return;
+            }
             const ok = await run(
               () =>
                 addDrawLine(
@@ -595,7 +612,7 @@ function DrawPanel({
                     fixedAmount: amount ? Number(amount) : null,
                     isFinal,
                   },
-                  originalContractValue ?? 0,
+                  originalContractValue,
                   alreadyBilled
                 ).then(async (r) => {
                   if (!r.success) return r;
@@ -616,8 +633,9 @@ function DrawPanel({
       </div>
       {originalContractValue === null && (
         <p style={{ fontSize: '12px', color: color.warningDeep, margin: '6px 0 0' }}>
-          This project has no contract value set, so a percentage draw cannot be priced. Enter a
-          fixed amount as a manual line instead.
+          The contract value is not available here, so a percentage draw cannot be priced — either
+          this project has none set, or it is an Owner/Admin figure on this job. Enter a fixed
+          amount as a manual line instead.
         </p>
       )}
     </div>

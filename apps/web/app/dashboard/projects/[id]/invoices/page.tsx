@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
+import { getRevisedContract } from '@/lib/services/contract-value';
 import { getProject } from '@/lib/services/projects';
 import {
   getAvailableCredits,
@@ -111,7 +112,13 @@ export default async function InvoicesPage({ params }: { params: { id: string } 
   const billedToDate = round2(live.reduce((sum, i) => sum + Number(i.billed_total ?? 0), 0));
   const retainageHeld = round2(live.reduce((sum, i) => sum + Number(i.retainage_withheld ?? 0), 0));
   const receivable = round2(live.reduce((sum, i) => sum + Number(i.amount_receivable ?? 0), 0));
-  const contractValue = project.contract_value === null ? null : Number(project.contract_value);
+  // RULING 2 [S97]: the contract value moved to project_financials (Owner/Admin
+  // RLS), so it is no longer on the project row. getRevisedContract is 7B's one
+  // legal reader; `original` is null both when the job has no value and when the
+  // caller may not see it — which is why the tile below checks for null as well
+  // as the role.
+  const { original } = await getRevisedContract(params.id);
+  const contractValue = original === null ? null : Number(original);
   // §12a (S97) — the PM carve-out covers amounts ON an invoice, not the job's
   // contract value (CLAUDE.md Financial Visibility Floor keeps that Owner/Admin).
   const canSeeContractValue = profile.role === 'owner' || profile.role === 'admin';

@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
 import { getInvoiceDeliveries } from '@/lib/services/invoice-delivery';
+import { getRevisedContract } from '@/lib/services/contract-value';
 import { getProject } from '@/lib/services/projects';
 import { getChangeOrders } from '@/lib/services/change-orders';
 import { getCompanyTimeSettings } from '@/lib/services/company';
@@ -115,6 +116,12 @@ export default async function InvoiceDetailPage({
       (billedSoFar ?? []).reduce((sum, i) => sum + Number(i.billed_total ?? 0), 0) * 100
     ) / 100;
 
+  // RULING 2 [S97]: the contract value moved to project_financials (Owner/Admin
+  // RLS). Null here means EITHER the job has none OR the caller is below
+  // Owner/Admin — DrawPanel refuses to price a percentage draw in both cases
+  // rather than falling back to zero.
+  const { original: originalContractValue } = await getRevisedContract(params.id);
+
   // §13 — delivery history + the send control. Read here (server) and handed
   // down; the panel itself renders only for Owner/Admin, and the route enforces
   // that independently.
@@ -146,7 +153,7 @@ export default async function InvoiceDetailPage({
       pickableCosts={pickableCosts}
       pickableHours={pickableHours}
       availableCredits={credits}
-      originalContractValue={project.contract_value ?? null}
+      originalContractValue={originalContractValue}
       alreadyBilled={alreadyBilled}
       projectRetainagePercent={project.retainage_percent ?? null}
       timeZone={timezone}
