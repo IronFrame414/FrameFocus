@@ -59,6 +59,9 @@ let subContractId: string;
  *  HERE, never at Josh's real contracts — 5f previously wrote retainage 99 onto
  *  two live rows and, because it compared a value to itself, called it a PASS. */
 let qaSubContractId: string;
+/** A budget line on the QA project — without one, assertion 8b iterates over
+ *  nothing and reports a vacuous PASS (the 5f failure mode). */
+let qaBudgetItemId: string;
 let invoiceId: string;
 
 beforeAll(async () => {
@@ -109,6 +112,17 @@ beforeAll(async () => {
     .select('id').single();
   if (qaSubErr) throw new Error(`qa sub-contract: ${qaSubErr.message}`);
   qaSubContractId = qaSub!.id;
+
+  const { data: qaBudget, error: qaBudgetErr } = await admin
+    .from('project_budget_items')
+    .insert({
+      company_id: companyId, project_id: qaProjectId,
+      description: 'S97ROLES QA budget line', budgeted_amount: 12345.67,
+      actual_amount: 100, committed_amount: 200,
+    })
+    .select('id').single();
+  if (qaBudgetErr) throw new Error(`qa budget line: ${qaBudgetErr.message}`);
+  qaBudgetItemId = qaBudget!.id;
 }, 180_000);
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -689,41 +703,79 @@ describe('8. Budget & Cost data per role', () => {
     }
   });
 
-  it('8b. OPEN GAP — budgeted_amount has NO role floor at the DB', async () => {
-    // §7.1 gives a PM 5 columns and a Foreman 3, both WITHOUT the budgeted
-    // figure — but project_budget_items_select_visible is
-    // `company_id = get_my_company_id() AND can_view_project(project_id)`, with
-    // no role test. So the column gate is UI-only, exactly as contract_value
-    // was before RULING 2.
+  it('8b. budgeted_amount must NOT be readable below Owner/Admin', async () => {
+    // FAILS LOUDLY TODAY, by design. project_budget_items_select_visible is
+    // `company_id = get_my_company_id() AND can_view_project(project_id)` with
+    // NO role test, so §7.1's column gate is UI-only — exactly as
+    // contract_value was before RULING 2.
     //
-    // This assertion states the CURRENT truth rather than the intent, and is
-    // written to flip when a floor lands. Not fixed here: the clean fix is
-    // another schema split (actual cost must stay visible to Foreman and Crew
-    // per CLAUDE.md, so a table-wide role floor would over-reach), which needs
-    // a ruling of its own.
+    // Flips to PASS when PROPOSED_20260816000000_budget_amounts.sql lands and
+    // the code moves. It asserts what a role can READ, not where it is stored,
+    // so it will flip at the DROP — the same timing RULING 2's 7b/7c had, and
+    // the same correction: it does not flip when the code moves.
+    // Non-vacuity first: without a line to read, this loop iterates over
+    // nothing and reports success forever (the 5f failure mode).
+    const { data: seed } = await admin
+      .from('project_budget_items').select('id').eq('project_id', qaProjectId);
+    expect((seed ?? []).length, 'no budget line to test against — the proof would be vacuous')
+      .toBeGreaterThan(0);
+
     const leaked: string[] = [];
-    for (const role of ['project_manager', 'foreman'] as const) {
+    for (const role of ['project_manager', 'foreman', 'crew_member'] as const) {
       const { data } = await session[role]
         .from('project_budget_items')
-        .select('budgeted_amount')
+        .select('id, budgeted_amount')
         .eq('project_id', qaProjectId)
-        .limit(5);
-      if ((data ?? []).some((r) => r.budgeted_amount !== null)) {
-        leaked.push(role);
+        .limit(10);
+      for (const row of data ?? []) {
+        if (row.budgeted_amount !== undefined && row.budgeted_amount !== null) {
+          leaked.push(`${role} read budgeted_amount = ${row.budgeted_amount}`);
+        }
       }
     }
-    // Documented gap, asserted as it stands today.
-    expect(Array.isArray(leaked)).toBe(true);
-    console.log(
-      `[8b] budgeted_amount readable below Owner/Admin by: ${leaked.length ? leaked.join(', ') : 'none on this fixture'} — see the S97 report, FINANCIAL-RLS-FLOOR follow-up`
-    );
+    expect(
+      leaked,
+      'BUDGETED_AMOUNT FLOOR NOT YET APPLIED — the §7.1 column gate is cosmetic ' +
+        'until budgeted_amount moves to project_budget_amounts (Owner/Admin RLS). ' +
+        'See the call-site plan before applying.'
+    ).toEqual([]);
   });
 
-  it('8c. Crew cannot reach the budget screen data at all', async () => {
-    // The page redirects crew; this is the DB half of that gate.
-    const { data } = await session.crew_member
-      .from('project_budget_items').select('id').eq('project_id', qaProjectId);
-    expect(data ?? [], 'crew read budget lines').toHaveLength(0);
+  it('8b-ii. ACTUAL COST must stay readable to Foreman and Crew — before AND after', async () => {
+    // The ruling's other half, and the reason a plain role floor on
+    // project_budget_items is not an option: actual_amount lives on the SAME
+    // ROW. This asserts the property the split must preserve, so if anyone
+    // "fixes" 8b by flooring the parent table, THIS fails and says why.
+    for (const role of ['foreman', 'crew_member'] as const) {
+      const { data, error } = await session[role]
+        .from('project_budget_items')
+        .select('id, actual_amount, committed_amount')
+        .eq('project_id', qaProjectId);
+      expect(error, `${role} lost access to the budget lines entirely`).toBeNull();
+      expect(
+        (data ?? []).length,
+        `${role} can no longer read ACTUAL COST — the floor over-reached (CLAUDE.md)`
+      ).toBeGreaterThan(0);
+      expect((data ?? [])[0].actual_amount).not.toBeUndefined();
+    }
+  });
+
+  it('8c. Crew DO reach budget lines at the DB — and that is correct', async () => {
+    // CORRECTED [S97]: this previously asserted crew read ZERO rows. That was
+    // MY expectation and it was wrong about the intended rule — CLAUDE.md puts
+    // ACTUAL COST in the "visible to all roles" list, and crew reach the rows
+    // through can_view_project like anyone else assigned.
+    //
+    // The screen is what excludes crew (budget/page.tsx redirects any role
+    // outside owner/admin/pm/foreman), and budgetColumnsFor('crew_member')
+    // returns 0 columns — asserted exhaustively in budget-columns.test.ts.
+    // What must be hidden from crew is the BUDGETED figure, which is 8b's job.
+    const { data, error } = await session.crew_member
+      .from('project_budget_items')
+      .select('id, actual_amount')
+      .eq('project_id', qaProjectId);
+    expect(error).toBeNull();
+    expect((data ?? []).length, 'crew lost access to actual cost').toBeGreaterThan(0);
   });
 });
 
@@ -731,6 +783,9 @@ describe('8. Budget & Cost data per role', () => {
 // harness creates a row; every other write attempt is either aimed at a
 // nonexistent id or restored inline.
 afterAll(async () => {
+  if (qaBudgetItemId) {
+    await admin.from('project_budget_items').delete().eq('id', qaBudgetItemId);
+  }
   if (!qaSubContractId) return;
   const { error } = await admin
     .from('subcontractor_contracts').delete().eq('id', qaSubContractId);
