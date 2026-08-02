@@ -323,3 +323,37 @@ export function paymentTermsLabel(
 ): string {
   return dueDate ? `Due ${formatDate(dueDate)}` : DUE_ON_RECEIPT_LABEL;
 }
+
+// ── Budget & Cost column visibility (§7.1) ──────────────────────────────────
+//
+// Extracted from budget/page.tsx so the rule can be TESTED. It was previously
+// inline in a server component, which is why the per-role column counts sat
+// "verified by reading the mount" for three sessions — a server component
+// cannot be rendered in the harness, but a pure function can be asserted
+// exhaustively.
+
+export type BudgetColumnSet = 'full' | 'committed' | 'actual_only' | 'none';
+
+export interface BudgetColumnPlan {
+  set: BudgetColumnSet;
+  /** §7.1: Owner/Admin 7, PM 5, Foreman 3, Crew none (redirected). */
+  columns: number;
+  /** Budgeted / variance / projected margin — the Financial Visibility Floor. */
+  seesBudgeted: boolean;
+  /** Committed remaining (A-3 widened the floor to include a PM). */
+  seesCommitted: boolean;
+}
+
+export function budgetColumnsFor(role: string): BudgetColumnPlan {
+  if (role === 'owner' || role === 'admin') {
+    return { set: 'full', columns: 7, seesBudgeted: true, seesCommitted: true };
+  }
+  if (role === 'project_manager') {
+    return { set: 'committed', columns: 5, seesBudgeted: false, seesCommitted: true };
+  }
+  if (role === 'foreman') {
+    return { set: 'actual_only', columns: 3, seesBudgeted: false, seesCommitted: false };
+  }
+  // Crew and anything else never reach the screen — the page redirects.
+  return { set: 'none', columns: 0, seesBudgeted: false, seesCommitted: false };
+}

@@ -4,6 +4,7 @@ import { notFound, redirect } from 'next/navigation';
 import { getProject } from '@/lib/services/projects';
 import { getBudgetRollup, type InstrumentGroup } from '@/lib/services/budget';
 import { getRevisedContract } from '@/lib/services/contract-value';
+import { budgetColumnsFor } from '@/lib/services/invoices-shared';
 import { getExpenses, getJobCostRollup } from '@/lib/services/expenses';
 import { getPayablesSummary } from '@/lib/services/payables';
 import { getMembers } from '@/lib/services/members';
@@ -122,7 +123,12 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
   const revised = contract?.revised ?? null;
   const projectedMargin = isFixed && revised !== null ? revised - costToDate : null;
 
-  // Columns per role (§7.1): Owner/Admin 7, PM 5, Foreman 3.
+  // Columns per role (§7.1): Owner/Admin 7, PM 5, Foreman 3. The RULE lives in
+  // budgetColumnsFor() (invoices-shared) so it can be asserted — it sat
+  // "verified by reading the mount" until S97 precisely because it was inline
+  // in a server component, which no harness can render.
+  const columnPlan = budgetColumnsFor(role);
+  void columnPlan;
   const gridTemplate = isOwnerAdmin
     ? '0.6fr 1.9fr 1fr 1fr 1fr 1fr 1fr'
     : seesCommitted

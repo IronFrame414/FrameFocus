@@ -188,10 +188,10 @@ rather than the repo filename. `supabase db push` would have tried to re-apply `
 | --- | --- |
 | **Electronic payments / pay link** | §2 makes 7G mandatory; 7G not built + Pre-M9 gate (C2) |
 | **QuickBooks export of any kind** | 7G. The `qb_*` columns exist and stay inert |
-| **Per-client reminder config (§6)** | §S.6 confirms **no notification surface exists** and RESEND is gated. Config that cannot fire is worse than none — the schedule/wording columns were deliberately not added |
-| **Reminder sending (§6)** | Same — no delivery mechanism |
-| **§7's seven notification events** | Named in the spec, delivered by nothing (§S.12 D4) |
-| **Sub-retainage pass-through default (§S.8)** | Confirmed absent (`subcontractor_contracts.retainage_percent` has no default), but that is **7C's shipped table** and out of 7E's lane. Left for Josh to authorise |
+| ~~**Per-client reminder config (§6)**~~ | **BUILT [S97, 2026-08-02].** RESEND is live and 7D §13 proved the path, so the reason for deferring is gone. `client_reminder_settings` — an override row per client, Owner/Admin RLS, absent = inherit the company defaults, `[]` = opted out. With a control, because config without one is the bug this closed elsewhere |
+| ~~**Reminder sending (§6)**~~ | **BUILT.** `/api/cron/invoice-reminders`, daily, following the shipped estimate-reminder cron — same sender, same `reminder_count` step machinery, one step per run. **Overdue counts from the DUE date.** A failed send logs `failed` with its reason and does **not** advance the counter, so it retries tomorrow rather than being silently consumed |
+| **§7's other notification events** | Still not built, deliberately. Only **"AR reminder sent"** rides the email mechanism. Payment received/applied, credit created, refund issued, retainage release pending and sub-retainage due are **internal Owner/Admin notifications**, not client email — §6 itself says delivery is "the notification system's job", and that system does not exist. Building it here would mean inventing an in-app notification system, which is out of 7E's lane |
+| ~~**Sub-retainage pass-through default (§S.8)**~~ | **BUILT [S97, authorised].** A BEFORE INSERT trigger inherits the rate from `projects.retainage_percent` — there is **no company-level retainage setting** (`companies` has no such column, verified) and none was invented. INSERT-only, fires only when the caller said nothing at all, and an explicit "no retainage" is never overridden. PROVISIONAL: the shape is `percent_across`, mirroring 7D's per-invoice withholding |
 | **Sub-retainage release** | 7C owns it and already ships it, Owner-only. §4.2 only corrects 7E's description of *when it becomes due* |
 | **A standalone credit document** | Ruled away — a negative CO is a 7D credit line (7D §4a). 7E's only negative-CO role is the refund case, and that is built |
 
@@ -326,47 +326,36 @@ It is committed (7D's was thrown away) so this is repeatable rather than a one-o
 
 ---
 
-## 5. TRIMMED manual script — what still needs eyes and hands
+## 5. MANUAL SCRIPT — only what genuinely needs Josh's eyes [rewritten S97]
 
-**Every figure, guard and role gate above is already proven** (§4a). What is left is layout,
-wording, and the two judgement calls where §6a and the release flow are inventions with no lived
-workflow to check against. Roughly **8 minutes**, down from 15.
+Every figure, guard, role gate and refusal message in 7E is proven — 34 live
+assertions on the payments harness alone, plus reminders, terms and isolation.
+What is left is **judgement**, and it overlaps 7D's script deliberately: run
+7D §4b and these three, **about 4 minutes**.
 
-**Setup.** rebuild-test, signed in as **Owner**, on a project with a **sent** invoice that has
-retainage withheld. The automated run left no data behind, so you are starting from empty.
+**Setup.** rebuild-test, Owner, on a project with a **sent** invoice carrying
+retainage.
 
-1. **Nav placement.** Open a project. *Expect:* a **Payments** tab after Invoices. **Judgement
-   call: does the empty state read like a deliberate sentence or a blank table?**
-2. **The aging view — the most important read.** *Expect:* four buckets, a **Total outstanding**,
-   and **Retainage held** below a dashed rule with the sentence explaining it sits outside the
-   buckets. The arithmetic is proven; what is not is legibility. **Judgement call: is it
-   unmistakable that retainage is not overdue?** That is the rule the real $1M job turns on.
-   *Terms [S97]:* buckets now count from the **due date**. An invoice with terms shows as current
-   until its due date passes; a due-on-receipt one ages from issue exactly as before. **Judgement
-   call: on the aging list, is it clear WHICH date a row is being measured from?** That is the one
-   thing the ruling makes ambiguous on screen, and the arithmetic behind it is proven.
-3. **The pairing strip.** *Expect:* Collected / Spent / Ahead by. **Judgement call: is this "the
-   number you have never been able to see", or does it need more?** §6a is invented by design and
-   has no lived workflow to check against — your read is the only correction available.
-4. **Auto-allocate.** With two open invoices, enter a figure covering both and click
-   **Auto-allocate oldest first**. The split arithmetic is proven; **judgement call: does
-   oldest-first do what you'd do by hand?**
-5. **The overpayment warning.** Enter more than is owed, allocate only what is owed. *Expect:*
-   the surplus called out as *"…will sit as a credit on account"* **before** you commit.
-   **Judgement call: is that warning clear enough to stop a mis-keyed amount?**
-6. **The release panel.** With retainage held, *expect* the panel to explain the trigger is the
-   client's final walkthrough and to take a sign-off date. The generated draft is proven correct
-   to the cent. **Judgement call: two invoices (final draw + release) instead of your current
-   one — still OK?**
-7. **Removal wording.** Remove a payment. The mechanics are proven end-to-end — including that
-   the invoice reverts to `sent`, is offered again and can take the corrected payment (§7a, now
-   fixed). **Judgement call: is "remove and re-enter" clear enough as the correction path, in the
-   words on screen?**
-8. **PM and Foreman, visually.** The gates are proven at the RLS and RPC layer for both roles
-   (#23–#30). What is unproven is the *screen*: as a PM, **expect the read-only note and no
-   record/remove/refund controls**; as a Foreman, **expect no Payments tab** and a redirect if you
-   navigate to it directly. This is UI mounting, not permission — the permission itself is done.
----
+1. **Retainage outside the buckets.** *Expect:* four buckets, a **Total
+   outstanding**, and **Retainage held** below a dashed rule with the sentence
+   explaining it sits outside. **Is it unmistakable that retainage is not
+   overdue?** That is the rule the real $1,000,000 job turns on — $100,000 sat
+   withheld for nine months, and aging it would have shown six figures "overdue"
+   on money the client was entitled to hold.
+2. **Which date am I being measured from?** Buckets now count from the **due
+   date** (terms ruled S97). An invoice with terms shows current until its due
+   date passes; a due-on-receipt one ages from issue. The arithmetic is proven
+   both ways. **On screen, is it clear which date a row is counting from?** That
+   is the one genuine ambiguity the ruling introduces, and only your eye settles it.
+3. **The correction path, in words.** Remove a payment. The mechanics are
+   proven — the invoice reverts to `sent`, is offered again, and takes the
+   corrected payment. **Is "remove and re-enter" clear enough as the correction
+   path, or does the screen need to say it?**
+
+Everything else that used to be on this list — auto-allocate, the overpayment
+warning, the release panel, the refund approval path, the PM and Foreman gates —
+is now asserted live and does not need your hands.
+
 
 ## 6. What I want Josh to rule on
 

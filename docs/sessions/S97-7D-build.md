@@ -1,5 +1,71 @@
 # S97 — Module 7D1 (Client Invoicing) build report
 
+## ▶ START HERE — 7D & 7E state, for someone returning cold [S97, 2026-08-02]
+
+**Everything below is on `rebuild-test` (`nmyphyhmfttxkdoposvf`) ONLY. Production has
+not been touched at any point.** The owed production migration batch is **nineteen
+migrations, `20260804000000` → `20260815000000`, and it is UNAPPLIED**. Apply it in
+timestamp order — `20260812000000` (the `projects.contract_value` drop) must come after
+everything that reads the old column, and `20260806000000`/`20260813000000` replace
+shipped trigger functions, so an out-of-order run breaks project updates.
+
+**Branch:** `feature/113c-award-commitment-spec` throughout. Nothing was merged to `main`.
+
+### What is built and proven
+
+| | State |
+| --- | --- |
+| **7D invoicing** | Shipped. Derivation, draws, credits, retainage, void/reissue, PDF + print/download, **email delivery with the PDF attached** (§13), **payment terms** (user-set due date, default due-on-receipt). |
+| **7E payments** | Shipped. Manual payment intake, many-to-many applications, credits, refunds with Owner approval, retainage release, the §6a pairing, **AR aging from the DUE date**, and **§6 payment reminders** (per-client schedule + daily cron). |
+| **Financial floor** | `FINANCIAL-RLS-FLOOR` complete across four migrations: projects, subcontract, client contract, PO, CO + its lines, invoice approval, and company pricing defaults. `projects.contract_value` **moved** to `project_financials` (Owner/Admin RLS) and the old column **dropped**. |
+| **Test estate** | **213 unit tests** and **146 live assertions** across 10 harnesses on rebuild-test, plus the repo's **first PDF render test**. Six persistent test identities across **two companies**; cross-company isolation proven both ways. |
+
+### What is NOT built — and why
+
+- **QuickBooks export, the pay link, electronic payment** — all 7G, not built. The
+  `qb_*` columns exist and stay inert. 7E's acceptance #1 and #5 are unbuildable until
+  then; the invoice email deliberately carries **no pay link** rather than a dead one.
+- **§7's other notification events** (payment received/applied, credit created, refund
+  issued, retainage release pending, sub-retainage due) — these are *internal* Owner/Admin
+  notifications, not client email. There is no in-app notification system, and building
+  one is out of 7E's lane. Only "AR reminder sent" rides the email mechanism.
+- **A client-facing surface of any kind** — Pre-M9 gate.
+
+### The one open defect
+
+**`project_budget_items.budgeted_amount` has no role floor at the DB.** §7.1 gives a PM
+5 columns and a Foreman 3, both *without* the budgeted figure, but the RLS policy is
+company + `can_view_project` with no role test — so the column gate is UI-only, exactly
+as `contract_value` was before RULING 2. **Not fixed**, because the clean fix is another
+schema split: actual cost must stay visible to Foreman and Crew (CLAUDE.md), so a
+table-wide role floor would over-reach. Needs a ruling. Asserted as it stands in
+`s97ct-roles.live.ts` 8b.
+
+### Decisions still marked PROVISIONAL
+
+| | Decision | Reverse by |
+| --- | --- | --- |
+| 7E P-2 | An invoice auto-marks `paid` on settlement | **CONFIRMED by Josh** — no longer provisional; the revert half shipped with it |
+| 7E P-1 | Aging day zero | **CONFIRMED** — now the due date |
+| 7C | Sub-retainage default **shape** = `percent_across` | Change the literal, or `DROP TRIGGER subcontractor_contracts_retainage_passthrough` |
+| 7E P-3 | A PM may READ payments | Drop `project_manager` from the two SELECT policies |
+| 7E P-4 | An application never exceeds an invoice's remaining | Relax the guard, add an override flag |
+| 7E P-5 | The retainage-release trigger is a *recorded* sign-off | Wire to a real client action once a portal exists |
+| 7E P-6 | The credit balance is derived, not stored | Would need a stored column + reconciliation; not recommended |
+
+### Still owed to Josh
+
+1. **The production batch** — nineteen migrations, untouched, order-sensitive.
+2. **A ruling on the `budgeted_amount` floor** above.
+3. **§2's QuickBooks `[VERIFY — CC]`** — needs a sandbox connection; still open.
+4. **The From line**: client email sends as `Bishop Contracting <bishop-contracting@rafterworks.com>`.
+   Confirm that reads right before anything real goes out.
+5. **Two sub-contract retainage values** (`66c77776`, `1416be75`) were overwritten by a
+   faulty test and restored to `10.00` — a reconstruction, since confirmed correct by Josh.
+
+---
+
+
 > **Written:** 2026-08-01, after a Codespace restart interrupted the session before this
 > file was created. **Reconstructed from git and from the committed code**, not from
 > memory — every claim below was re-read out of the working tree or the commit history.
@@ -626,90 +692,65 @@ touched.
 
 ---
 
-## 4b. TRIMMED manual script — what still needs eyes and hands
+## 4b. MANUAL SCRIPT — only what genuinely needs Josh's eyes [rewritten S97]
 
-**Everything numeric is already proven** (§4a). What is left is layout, whether a screen or
-a printed invoice reads right to a client, and things needing a second identity or a real
-clock. Roughly 20 minutes. The full original script is kept below as §5 for reference — you do not need
-to walk it.
+Everything numeric, every role gate, every refusal message and the template's
+ability to render are proven by 213 unit tests and 146 live assertions. What is
+left is **judgement**: whether a thing reads right to a client, and the two
+places where a second identity or a real clock is the only honest check.
+**Roughly 12 minutes.**
 
-**Setup.** rebuild-test, signed in as **Owner**, on a project with a cost-plus or T&M
-instrument that has rates set. The automated run left no data behind, so you are starting
-from an empty invoice list.
+**Setup.** rebuild-test, signed in as **Owner** (`josh+test50@worthprop.com`,
+password in STATE.md). A project with a cost-plus or T&M instrument that has
+rates set. Test data is otherwise empty — the harnesses leave nothing behind.
 
-1. **Nav placement.** Open a project. *Expect:* an **Invoices** tab between Change Orders
-   and Punch List. Open it — the empty state should read like a deliberate sentence, not a
-   blank table.
-1a. **Payment terms.** On a draft, find **Payment terms** beside Retainage %.
-   Leave it empty — *expect* the caption to say due on receipt is the default,
-   not a blank box. Set a date, Apply, then clear it and Apply again. **Judgement
-   call: is "clear the field to go back to due on receipt" obvious enough, or
-   does it need an explicit option?** After sending, *expect* the field to refuse
-   an edit (it is frozen with the rest of the money).
-2. **Draft identity.** New Invoice → title → Create draft. *Expect:* the header reads
-   **"Draft invoice"** with **"· numbered when sent"** beside the status, and the list row
-   says **Draft** — not a blank cell. **Judgement call: does "numbered when sent" read as
-   reassuring or as broken?** That wording is mine and is worth your eye.
-3. **Cost picker.** *Expect:* an **Age** column on every row, and the Miscellaneous cost
-   visibly present but **not tickable**, with the reason shown. **Judgement call: is the
-   blocked row obviously "you need to do something" rather than "this is broken"?**
-4. **Layout A.** Tick two costs in different categories → **Derive invoice from
-   selection** → read the **Client sees (full detail)** preview. *Expect:* each row at its
-   actual cost, then Subtotal, Markup, TOTAL. **The most important read of the whole pass:
-   would you send this to a client as-is?** Check the cost column shows *unburdened* cost.
-5. **Split-day warning.** On a T&M instrument, tick only *part* of one person's day.
-   *Expect:* a warning that the day is being split — and that it **warns, not blocks**
-   (you can still derive). Tick the rest of that day: the warning should disappear.
-6. **Labor placement.** Derive with hours. *Expect:* the labor line sits **outside** the
-   Subtotal/Markup block, and TOTAL sums both. Purely visual — the arithmetic is proven.
-7. **Presentation levels.** Switch **Full detail → By section → Lump sum**. *Expect:*
-   by-section rolls up to Labor / Materials / Subcontractors / Other; lump sum shows one
-   figure. **Judgement call: is lump sum too bare to send?**
-8. **Retainage input.** On a T&M or deposit invoice, look at **Retainage %**. *Expect:*
-   disabled, showing "n/a", with the reason underneath. (The rule itself is proven — this
-   is only whether the disabled state is legible.)
-9. **Draft PDF preview.** On a draft with lines, click **Preview PDF (draft)**. *Expect:* a
-   new tab with a diagonal **DRAFT** watermark, "**DRAFT — not yet numbered. Not a bill.**"
-   under the title, and "Draft — not yet numbered" where the number goes. **Judgement call:
-   if this landed in a client's inbox by accident, is it unmistakably not a bill?** Then
-   open the project's **Files** tab — *expect:* **no** invoice PDF saved, because drafts
-   are preview-only.
-10. **Sent PDF — the real read.** Send an invoice, then click **Print**. *Expect:* your
-    letterhead (logo, address, licence, accent bar) identical to a change-order PDF, the
-    invoice number, and the layout at whatever presentation level the invoice is set to.
-    **This is the most important visual check in the pass: would you send this to a client
-    as it stands?** Specifically confirm — costs at actual cost, **Subtotal (cost)** and
-    **Markup** covering non-labor only, the **labor line outside** that block, discounts
-    and credits shown in full as negatives, and **Retainage withheld → Amount due** where
-    retainage applies. *Expect:* a **Terms** line under the invoice date — *"Due on receipt"* by
-    default, or *"Due <date>"* if you set one (§4e, ruled S97). **Judgement call:
-    does "Due on receipt" read right as the default on a real bill, or would you
-    rather it said nothing when there are no terms?**
-11. **Download + Files.** Click **Download PDF** — *expect:* a save dialog, filename
-    `invoice-INV-000N.pdf`. Then the project's **Files** tab — *expect:* the PDF saved
-    under category **Invoices**. Click **Print** again and re-check Files — *expect:*
-    still **one** invoice PDF, not two; the regenerate replaces rather than accumulates.
-12. **Presentation levels on paper.** Switch the invoice to **By section**, print, then
-    **Lump sum**, print. *Expect:* the sectional rollup and the single figure respectively,
-    with adjustments still itemised in both. **Judgement call: is lump sum too bare to
-    send?**
-13. **Evening send — do this after 8pm local, or skip.** Send any invoice after ~8pm and
-   read the **Issued** column. *Expect:* **today's** date, not tomorrow's. This is the one
-   defect class that only appears late in the day; the rule is unit-tested, but a real
-   after-hours send is the honest check.
-14. **Foreman or Crew.** Sign in as one and open the same project. *Expect:* **no Invoices
-    tab**, and navigating directly to `/dashboard/projects/<id>/invoices` bounces you to
-    the project overview.
-15. **PM.** Sign in as a PM assigned to the job. *Expect:* you can open, create, generate and
-    read **every amount on the invoice**, and you see **Submit for approval** instead of
-    Mark sent. *Expect:* the **"Original contract" tile is absent** from the invoice list,
-    while Billed to date / Retainage held / Receivable remain. Sign back in as Owner and
-    the tile returns — that difference is the whole of the §12a carve-out, and it is worth
-    confirming with your own eyes since it is a permissions boundary.
+1. **The client-facing PDF — the most important read of the pass.** Send an
+   invoice, click **Print**. *Expect:* your letterhead, the invoice number, a
+   **Terms** line, costs at unburdened actual cost, **Subtotal (cost)** and
+   **Markup** covering non-labor only, the labor line **outside** that block,
+   and **Retainage withheld → Amount due** where retainage applies.
+   **Would you send this to a client as it stands?** Nothing else in this list
+   matters as much.
+2. **The draft watermark.** On a draft, **Preview PDF (draft)**. *Expect:* a
+   diagonal DRAFT watermark and "not yet numbered. Not a bill."
+   **If this landed in a client's inbox by accident, is it unmistakably not a
+   bill?**
+3. **Payment terms wording.** On a draft, leave **Payment terms** empty.
+   *Expect:* the caption to say due-on-receipt is the default. **Is "clear the
+   field to go back to due on receipt" obvious, or does it need an explicit
+   option?**
+4. **The email a client receives.** Email a sent invoice to yourself
+   (`Email to client` on the Payments/invoice screen). *Expect:* it arrives from
+   **`Bishop Contracting <bishop-contracting@rafterworks.com>`**, with the PDF
+   attached, an amount due, a Terms line and **no pay link**.
+   **Does that From line read right to a client?** That is the one thing here
+   that cannot be judged from code, and nothing real should go out until you have.
+5. **A reminder's wording.** On the Payments screen, set **Payment reminders**
+   to `1` day and re-read the caption. **Is the tone of the default reminder
+   right for your clients?** The cadence and the selection are proven; the words
+   are yours.
+6. **The §6a pairing strip.** *Expect:* Collected / Spent / Ahead by.
+   **Is this "the number you have never been able to see", or does it need
+   more?** §6a is invented by design and has no lived workflow to check against.
+7. **The aging view.** *Expect:* four buckets, a **Total outstanding**, and
+   **Retainage held** below a dashed rule. **Is it unmistakable that retainage
+   is not overdue?** — the rule the real $1M job turns on. And now that buckets
+   count from the **due date**: **is it clear which date a row is measured
+   from?**
+8. **Two invoices instead of one.** Trigger a retainage release. *Expect:* a
+   draft release invoice for exactly the held amount. **Two invoices (final draw
+   + release) instead of your current one — still OK?**
+9. **A second identity.** Sign in as the **Foreman**
+   (`josh+qa-foreman@worthprop.com`) and open a project. *Expect:* **no Invoices
+   tab**, and a redirect if you navigate straight to it. The gate is proven at
+   the DB; this is the only way to see the *screen*.
+10. **After 8pm, or skip.** Send an invoice late in the evening and read the
+    **Issued** column. *Expect:* **today's** date. The rule is unit-tested; a
+    real after-hours send is the honest check.
 
-Anything that fails here is a UI defect, not a math one — the figures are all confirmed.
+Anything that fails here is a wording or layout judgement, not a arithmetic one —
+the figures are confirmed.
 
----
 
 ## 5. Click-test script (full reference — §4b is the trimmed version to actually run)
 
