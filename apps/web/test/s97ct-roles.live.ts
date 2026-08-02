@@ -28,7 +28,7 @@
  * RUN:      cd apps/web && npx vitest run --config test/live.vitest.config.ts s97ct-roles
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { admin, assertRebuildTest, sessionFor } from './live-session';
 
 const EMAILS = {
@@ -55,6 +55,10 @@ let richProjectId: string;
 let qaProjectId: string;
 let rateId: string;
 let subContractId: string;
+/** A QA sub-contract created for this run. Item 4: the write probes below aim
+ *  HERE, never at Josh's real contracts — 5f previously wrote retainage 99 onto
+ *  two live rows and, because it compared a value to itself, called it a PASS. */
+let qaSubContractId: string;
 let invoiceId: string;
 
 beforeAll(async () => {
@@ -89,6 +93,22 @@ beforeAll(async () => {
   const { data: invoice } = await admin
     .from('invoices').select('id').eq('project_id', richProjectId).limit(1).single();
   invoiceId = invoice!.id;
+
+  // A throwaway sub-contract on the QA fixture project — the only sub-contract
+  // this harness is allowed to write to.
+  const { data: subMember } = await admin
+    .from('company_members').select('id')
+    .eq('company_id', companyId).eq('member_type', 'subcontractor').limit(1).single();
+  const { data: qaSub, error: qaSubErr } = await admin
+    .from('subcontractor_contracts')
+    .insert({
+      company_id: companyId, project_id: qaProjectId, member_id: subMember!.id,
+      scope_of_work: 'S97ROLES QA sub-contract', contract_value: 5000,
+      retainage_shape: 'percent_across', retainage_percent: 10, status: 'draft',
+    })
+    .select('id').single();
+  if (qaSubErr) throw new Error(`qa sub-contract: ${qaSubErr.message}`);
+  qaSubContractId = qaSub!.id;
 }, 180_000);
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -384,34 +404,61 @@ describe('5. Sub-contract schedules', () => {
     }
   });
 
-  it('5f. DB WRITE — a PM cannot bypass the RPC by editing the contract directly', async () => {
-    // KNOWN OPEN DEFECT [S97]: this currently FAILS —
-    // subcontractor_contracts_update_authorized admits an assigned PM with no
-    // column restriction, exactly as projects did before the column-scope
-    // trigger. FINANCIAL-RLS-FLOOR part 2 is owed for this table.
-    //
-    // The earlier version of this test compared before-vs-after ONLY, so once a
-    // previous run had already written 99 it compared 99 to 99 and reported a
-    // false PASS — and it left the value behind on real contracts. It now
-    // RESTORES before asserting, and asserts the refusal itself rather than the
-    // value, so it can neither corrupt data nor pass vacuously.
+  it('5f. DB WRITE — a PM cannot rewrite a sub-contract\'s financial terms', async () => {
+    // FINANCIAL-RLS-FLOOR part 2 (20260808000000). Aimed at the QA fixture, not
+    // Josh's data, and it asserts the REFUSAL rather than comparing a value to
+    // itself — the failure mode that made this test report PASS for three runs
+    // while it was quietly rewriting live retainage.
     const { data: before } = await admin
       .from('subcontractor_contracts')
-      .select('retainage_percent').eq('id', subContractId).single();
-    const probe = Number(before!.retainage_percent) === 99 ? 98 : 99;
+      .select('contract_value, retainage_percent').eq('id', qaSubContractId).single();
 
     const { error } = await session.project_manager
       .from('subcontractor_contracts')
-      .update({ retainage_percent: probe })
-      .eq('id', subContractId)
+      .update({ contract_value: 777777, retainage_percent: 99 })
+      .eq('id', qaSubContractId)
       .select('id');
+
+    // Restore FIRST, and verify the restore landed — a failing assertion must
+    // never leave a corrupted fixture behind (item 4).
+    await admin
+      .from('subcontractor_contracts')
+      .update({
+        contract_value: before!.contract_value,
+        retainage_percent: before!.retainage_percent,
+      })
+      .eq('id', qaSubContractId);
+    const { data: restored } = await admin
+      .from('subcontractor_contracts')
+      .select('contract_value, retainage_percent').eq('id', qaSubContractId).single();
+    expect(Number(restored!.contract_value), 'restore failed').toBe(Number(before!.contract_value));
+    expect(Number(restored!.retainage_percent), 'restore failed').toBe(Number(before!.retainage_percent));
+
+    expect(error, 'a PM rewrote a sub-contract\'s financial terms').not.toBeNull();
+    expect(error!.message).toContain('The financial terms of a subcontract are Owner/Admin only.');
+  });
+
+  it('5g. DB WRITE — a PM CAN still edit a sub-contract\'s ordinary fields', async () => {
+    // Column scope, not a wall: the same shape asserted for projects in 7f.
+    const { data: before } = await admin
+      .from('subcontractor_contracts')
+      .select('scope_of_work').eq('id', qaSubContractId).single();
+    const marker = `S97ROLES scope ${before?.scope_of_work === 'A' ? 'B' : 'A'}`;
+
+    const { error } = await session.project_manager
+      .from('subcontractor_contracts')
+      .update({ scope_of_work: marker })
+      .eq('id', qaSubContractId);
+    expect(error, 'the trigger over-reached and blocked an ordinary field').toBeNull();
+
+    const { data: after } = await admin
+      .from('subcontractor_contracts')
+      .select('scope_of_work').eq('id', qaSubContractId).single();
+    expect(after!.scope_of_work).toBe(marker);
 
     await admin
       .from('subcontractor_contracts')
-      .update({ retainage_percent: before!.retainage_percent })
-      .eq('id', subContractId);
-
-    expect(error, 'a PM rewrote a sub-contract retainage directly').not.toBeNull();
+      .update({ scope_of_work: before!.scope_of_work }).eq('id', qaSubContractId);
   });
 });
 
@@ -586,3 +633,13 @@ describe('7. §12a carve-out — invoice amounts yes, contract value no', () => 
       .toBe(Number(before!.contract_value));
   });
 });
+
+// The QA sub-contract is created per run and removed here. Nothing else in this
+// harness creates a row; every other write attempt is either aimed at a
+// nonexistent id or restored inline.
+afterAll(async () => {
+  if (!qaSubContractId) return;
+  const { error } = await admin
+    .from('subcontractor_contracts').delete().eq('id', qaSubContractId);
+  console.log(`\n[S97ROLES TEARDOWN] QA sub-contract removed; error: ${error?.message ?? 'NONE'}`);
+}, 120_000);
