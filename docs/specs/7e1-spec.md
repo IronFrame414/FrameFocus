@@ -559,10 +559,15 @@ the project rate**, editable per contract. Also correct any doc text implying su
 
 ---
 
-## §S — Schema layer — TODO for Claude Code (BLOCKS "complete")
+## §S — Schema layer — **READ FROM THE LIVE REPO [S97]** (was: TODO)
 
-Not build-ready until CC reads these live and fills table names, columns, FKs, RLS, triggers,
-service files, and routes. Do **not** assert from context — read.
+**Filled 2026-08-02 by CC**, the same way 7D's §S was filled: every table, column, FK, RLS policy,
+trigger, service file and route below was **read out of the live repo or queried against
+rebuild-test**, not asserted from context. The eight items originally listed are kept verbatim as
+the ASK; **§S.1–§S.11 below answer them**, and **§S.12 records the conflicts and the decisions that
+need Josh**.
+
+### The original ask (kept for provenance)
 
 1. **7D invoice tables** — the payment record links to invoices; needs their shape and **status model
    including `voided`**, the optional supersedes link, and **retainage withheld vs. receivable**
@@ -605,6 +610,203 @@ service files, and routes. Do **not** assert from context — read.
 - **Per invoice (aging):** **[S97]** the link to a voided predecessor, so a reset clock still shows its
   history (§6, acceptance #14).
 - **Shared:** the **pairing derivation** (§6a), defined once and consumed by both 7E and 7H.
+
+---
+
+### §S.1 — 7D invoice tables (item 1) — **SHIPPED, read as built**
+
+`20260802000000_7d_invoicing.sql` + `20260803000000_7d_invoice_number_at_send.sql`, both applied to
+rebuild-test. `public.invoices` columns, in order, as they exist:
+
+```
+id, company_id, created_at, updated_at, created_by, updated_by, is_deleted, deleted_at,
+project_id, invoice_number, author_member_id, title, status, invoice_type, is_final,
+presentation_level, issue_date, due_date, retainage_percent, retainage_withheld,
+derived_total, billed_total, amount_receivable, approved_by, approved_at, sent_at,
+voided_at, voided_by, void_reason, supersedes_invoice_id, notes
+```
+
+- **Status model:** `CHECK (status IN ('draft','pending_approval','sent','paid','voided'))`.
+  **7D never sets `'paid'` — that value exists for 7E to set.** This is the hand-off point.
+- **Receivable vs retainage (what 7E's aging must consume):** `billed_total` is what the client was
+  charged; `retainage_withheld` is held back; **`amount_receivable = billed_total −
+  retainage_withheld`** and is the ONLY figure that ages (7D §5, computed in
+  `computeInvoiceTotals`, `packages/shared/utils/invoice-derivation.ts`). 7E must age
+  `amount_receivable`, never `billed_total`.
+- **`supersedes_invoice_id`** — nullable self-FK, the void→reissue link §6/acceptance #14 needs to
+  surface on the aging view. Indexed partially (`WHERE supersedes_invoice_id IS NOT NULL`).
+- **Immutability already enforced in the DB:** `invoices_immutability` (BEFORE UPDATE) freezes
+  `derived_total`, `billed_total`, `amount_receivable`, `retainage_withheld`, `retainage_percent`,
+  `invoice_number`, `invoice_type`, `project_id`, `issue_date` once status is sent/paid/voided, and
+  a voided invoice can never change status again. **Consequence for 7E: 7E cannot write any money
+  column on an invoice.** Marking an invoice paid is a `status` change only — permitted, because
+  `status` is not in the frozen set. Verified by reading the trigger body.
+- **`invoice_lines`** carries the negative credit lines (`credit_negative_co`, `credit_deposit`,
+  `credit_allowance`, `discount`), sign-checked by
+  `invoice_lines_credit_sign_check (billed_amount <= 0)`. 7E reads these; it never writes them.
+- **RLS:** Owner/Admin/PM, riding `can_view_project(project_id)`. No DELETE policy on `invoices`.
+
+> **`due_date` EXISTS on the column list but NOTHING WRITES IT.** 7D shipped with no due-date
+> control anywhere (`S97-7D-build.md` §6 item 3, unruled). Every invoice therefore carries
+> `due_date = NULL`. **This is the single biggest live-schema fact for 7E**, because §6's aging has
+> no due date to age from. See §S.12 C1.
+
+### §S.2 — 7C `expense_payments` (the money-out precedent §2 says to mirror) — **SHIPPED**
+
+`20260729010000_7c_accounts_payable.sql`. This is the posture 7E's payment table must copy.
+
+```sql
+CREATE TABLE public.expense_payments (
+  id, company_id DEFAULT get_my_company_id(), created_at, updated_at,
+  created_by DEFAULT auth.uid(), updated_by DEFAULT auth.uid(),
+  is_deleted DEFAULT false, deleted_at,
+  expense_id uuid NOT NULL, paid_date date NOT NULL,
+  amount numeric(12,2) NOT NULL, retainage_withheld numeric(12,2) NOT NULL DEFAULT 0,
+  method text, note text, over_stage boolean NOT NULL DEFAULT false,
+  CHECK (amount > 0), CHECK (retainage_withheld >= 0), CHECK (retainage_withheld <= amount)
+);
+```
+
+- **The immutability mechanism to copy**, `enforce_expense_payments_column_scope()` (BEFORE UPDATE):
+  every money/identity column compared with `IS DISTINCT FROM`, raising
+  **`'A recorded payment is immutable — soft-delete and re-enter to correct it.'`** It opens with
+  `IF auth.uid() IS NULL THEN RETURN NEW; END IF;` so service-role/system paths are not blocked.
+  **The only legal UPDATE is the soft-delete correction path.** This is exactly what §2's
+  "QuickBooks semantics" ruling resolves to, and exactly what this build's brief requires
+  ("immutable once recorded — enforce it in triggers, not just app code").
+- **Derivation, not storage:** `payables-shared.ts` (109 lines, no supabase import) exports
+  `grossPaid`, `committedRemaining`, `netCashOut`, `isPayableRow`, `countsTowardCommitted`.
+  Remaining-owed is derived everywhere; nothing caches a balance. 7E follows this.
+- **The RPC precedent:** `record_expense_payment(...)` does the over-payment check
+  (`RAISE EXCEPTION 'OVER_STAGE: …'` unless an override flag is passed) and hard-gates the
+  Owner-only arms (`IF v_expense.is_retainage AND get_my_role() <> 'owner' THEN RAISE`).
+- **RLS:** `expense_payments_select_scoped` — Owner/Admin/PM/Foreman via the parent expense's
+  project. **7E's money-IN table must be narrower: Owner/Admin only (§8).**
+
+### §S.3 — Module 5 project / contract value (item 3) — **EXISTS**
+
+`public.projects` carries `contract_value numeric`, `retainage_percent numeric`, `status`
+(`CHECK (status IN ('active','on_hold','complete','archived','cancelled'))`), `actual_end_date`,
+`contact_id NOT NULL`, `source_estimate_id`. Contract value is **never written by 7D or 7E** — 7B
+derives the revised figure at read (`contract-value.ts`). `status = 'complete'` is the completion
+marker §4.1 keys off; `actual_end_date` is the date §4.2's "completion + 30 days" counts from.
+
+### §S.4 — Company reminder settings (item 4) — **EXISTS, at company scope only**
+
+`companies.default_reminder_schedule` (jsonb), `default_reminder_email_subject`,
+`default_reminder_email_body` — confirmed present by query. The per-document override
+`estimates.reminder_schedule` also exists. **The per-CLIENT scope §6 requires does not exist.**
+
+### §S.5 — Client / contact model (item 5) — **NO home for credit or reminders**
+
+`public.contacts` full column list, queried live:
+
+```
+id, company_id, contact_type, status, first_name, last_name, company_name, email, phone,
+mobile, source, notes, tags, created_by, updated_by, created_at, updated_at, is_deleted, deleted_at
+```
+
+**There is no credit-balance column and no reminder column.** Both are net-new. Note the credit
+balance should be **derived, not stored**, to match 7C's discipline and 7D's derived-credit posture
+(7D derives negative-CO availability and deposit balance rather than storing them) — see §S.11.
+
+### §S.6 — Notification surface (item 6) — **DOES NOT EXIST**
+
+No notification tables, no event bus. `incident-notify.ts` is a bespoke 6C emailer, not a general
+surface. §7's events cannot be delivered; they can only be named. **7E emits nothing in v1.**
+
+### §S.7 — `getJobCostRollup()` for §6a (item 7) — **EXISTS, consume verbatim**
+
+`apps/web/lib/services/expenses.ts:177`. Returns `JobCostRollup { labor: { available, totalHours,
+totalCost, byMember[] }, expenses: {...} }`. The two-branch rule, quoted from the code comment at
+`:180–185`: *"Receipts (7A, non-payable rows) contribute their full approved amount. Payable rows
+(7C bills/stages/retainage) contribute their NET payments — never `amount`, never `state`."* The
+labor side sets `available: false` when rate snapshots are RLS-hidden (Owner/Admin floor). **7E
+consumes this and must not re-derive it**, exactly as §6a requires.
+
+### §S.8 — Sub-contract retainage pass-through default (item 8) — **CONFIRMED ABSENT**
+
+Queried live: `subcontractor_contracts.retainage_percent` has **`column_default = NULL`**. §S #8's
+claim is correct — the rate must be typed on the project and again on every sub contract. **This is
+a 7C table, not a 7E one.** See §S.12 D3.
+
+### §S.9 — Helpers and conventions available
+
+`get_my_company_id()`, `get_my_role()`, `get_my_member_id()`, `can_view_project()` all exist and are
+the predicates 7D/7C already use. `update_updated_at()` is the shared trigger function. Per-tenant
+column defaults, the `{table}_updated_at` + `set_{table}_updated_by` trigger pair, soft-delete and
+the append-only-log exception are all per CLAUDE.md.
+
+### §S.10 — Service-file and route pattern to follow
+
+7C: `payables.ts` (server reads, 233), `payables-client.ts` (client writes, 704),
+`payables-shared.ts` (pure + types, no supabase, 109) + `payables-shared.test.ts` (250).
+7D shipped the same triple — `invoices.ts` / `invoices-client.ts` / `invoices-shared.ts` — where the
+**shared file exists specifically to guard the client-bundle boundary** (a value import from the
+server file pulls `next/headers` into the client bundle; `tsc` does not catch it). **7E follows the
+triple.** No API route is needed for payments; 7D's only route is the PDF one.
+
+### §S.11 — What 7E must create (net-new)
+
+Derived from the "what must be storable" list above, against what exists:
+
+| Concept | Verdict |
+| --- | --- |
+| Payment record (date, amount, method, note) | **NEW table** — mirror `expense_payments`' posture, Owner/Admin RLS |
+| Payment → invoice **applications** | **NEW table** — genuine many-to-many (§2, acceptance #2) |
+| Remaining owed per invoice | **DERIVED**, never stored (§2, 7C precedent) |
+| Client credit balance | **DERIVED** from overpayment rows less applications — no stored balance |
+| Refund (money returned) vs credit (on account) | **NEW** — distinct record types (§5, acceptance #8) |
+| Retainage held per job | **DERIVED** — Σ `invoices.retainage_withheld` on live invoices |
+| Aging buckets | **DERIVED** at read from `amount_receivable` less applied payments |
+| Per-client reminder schedule/wording | **NEW columns on `contacts`** (§S.5) |
+| Invoice → voided predecessor | **EXISTS** — `invoices.supersedes_invoice_id` |
+| §6a pairing | **NEW shared module**, consuming `getJobCostRollup()` |
+| QB Payment id / push state | **NEW columns**, inert until 7G |
+
+### §S.12 — CONFLICTS and DECISIONS
+
+**C1 — `invoices.due_date` is never written, so §6's aging has no due date.** The column exists;
+7D shipped no control for it and Josh has not ruled payment terms (7D open item #3). §6 specifies
+30/60/90 buckets but never says what day zero is. **PROVISIONAL (this build):** age from
+**`issue_date`**, which is always populated and is set at send in the company timezone. Reversal is
+a one-line change in the shared aging helper once terms are ruled, plus a backfill decision for
+invoices already sent. **This is the top decision Josh owes 7E.**
+
+**C2 — the electronic-payment path CANNOT be built.** §2 makes 7G *mandatory* for it and §A.1 calls
+7G a hard upstream dependency; 7G is not built, and the pay link is Pre-M9 gated. **Acceptance #1
+is unbuildable in this run** and acceptance #5 (every invoice pushes to QB) with it. 7E v1 is
+**manual payment intake only**. QB id/push columns ship inert so 7G has somewhere to write.
+
+**C3 — §4.1's trigger is a CLIENT action with no client-facing surface.** Retainage release fires on
+"job completion + the client's final walkthrough sign-off". There is no client portal (Pre-M9) and
+no sign-off object anywhere in the schema. **PROVISIONAL:** an Owner/Admin **records** that the
+walkthrough happened; that recorded event is the trigger. This preserves the ruling that the
+client's sign-off is the trigger while keeping the actor inside the app.
+
+**C4 — §5's "Admin-initiated refund needs Owner approval" needs an approval state**, which no
+existing money-out object has (7C's Owner-only arms are hard gates, not approval workflows). Needs
+a two-state field on the refund record.
+
+**C5 — §2's `[VERIFY — CC]` on QuickBooks payment semantics is NOT closable here.** It asks for
+sandbox confirmation of QB's edit/delete behaviour. No QB connection exists. The spec's own fallback
+— implement as 7C shipped money-out — is what this build follows; the verification stays open.
+
+**D1 — the reissued-invoice aging clock.** §6 rules the successor ages from its own date. With C1's
+provisional (age from `issue_date`) this falls out for free: a reissue is created fresh and gets its
+own `issue_date` at send. **No extra mechanism needed** — recorded so nobody builds one.
+
+**D2 — where the per-client credit balance lives.** Recommended **derived**, not stored, consistent
+with 7D deriving deposit balances and negative-CO availability rather than storing them. Flagged
+because §S's "what must be storable" phrasing could be read as requiring a column.
+
+**D3 — the sub-retainage pass-through default (§S.8) is 7C's table.** Adding a default to
+`subcontractor_contracts.retainage_percent` is a one-line migration, but it changes a **shipped 7C**
+surface. **NOT done in this build** — out of 7E's lane, and this build's brief forbids touching
+shipped code. Left for Josh to authorise as its own change.
+
+**D4 — no notification delivery (§S.6).** §7's seven events are named in the spec and will be
+emitted by nothing. Recorded so the gap is not mistaken for an oversight.
 
 ---
 
