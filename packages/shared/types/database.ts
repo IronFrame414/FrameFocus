@@ -4060,7 +4060,6 @@ export type Database = {
           company_id: string
           contact_address_id: string | null
           contact_id: string
-          contract_value: number | null
           cover_letter: string | null
           created_at: string | null
           created_by: string | null
@@ -4090,7 +4089,6 @@ export type Database = {
           company_id?: string
           contact_address_id?: string | null
           contact_id: string
-          contract_value?: number | null
           cover_letter?: string | null
           created_at?: string | null
           created_by?: string | null
@@ -4120,7 +4118,6 @@ export type Database = {
           company_id?: string
           contact_address_id?: string | null
           contact_id?: string
-          contract_value?: number | null
           cover_letter?: string | null
           created_at?: string | null
           created_by?: string | null

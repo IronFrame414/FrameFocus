@@ -284,13 +284,19 @@ beforeAll(async () => {
       name: `${MARKER} — Payments harness`,
       contact_id: contactId,
       project_type: 'fixed_price',
-      contract_value: 100000,
       retainage_percent: 10,
     })
     .select('id')
     .single();
   if (prErr) throw new Error(`project: ${prErr.message}`);
   projectId = project.id;
+
+  // RULING 2 step 4: the contract value lives in project_financials now. The
+  // Owner session can write it; RLS on the new table is Owner/Admin.
+  const { error: pfErr } = await ownerClient
+    .from('project_financials')
+    .insert({ project_id: projectId, contract_value: 100000 });
+  if (pfErr) throw new Error(`project financials: ${pfErr.message}`);
 
   // The PM must be ASSIGNED to read the job at all (can_view_project).
   const { error: aErr } = await ownerClient
