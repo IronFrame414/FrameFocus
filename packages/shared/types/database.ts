@@ -3950,7 +3950,6 @@ export type Database = {
       project_budget_items: {
         Row: {
           actual_amount: number | null
-          budgeted_amount: number
           committed_amount: number | null
           company_id: string
           cost_code: string | null
@@ -3971,7 +3970,6 @@ export type Database = {
         }
         Insert: {
           actual_amount?: number | null
-          budgeted_amount?: number
           committed_amount?: number | null
           company_id?: string
           cost_code?: string | null
@@ -3992,7 +3990,6 @@ export type Database = {
         }
         Update: {
           actual_amount?: number | null
-          budgeted_amount?: number
           committed_amount?: number | null
           company_id?: string
           cost_code?: string | null
