@@ -35,8 +35,10 @@ export default async function ChangeOrderPage({
   }
 
   const canManage = ['owner', 'admin', 'project_manager'].includes(profile.role);
-  // §7.3 S-5: CO instrument rates are Owner/Admin only; PM sees read-only.
-  const canEditRates = ['owner', 'admin'].includes(profile.role);
+  // §7.3 S-5 as amended by RULING A [S97, 2026-08-02]: CO instrument rates are
+  // Owner/Admin only and a PM sees NO rate values — the section is not mounted
+  // below Owner/Admin rather than rendered read-only.
+  const canSeeRates = ['owner', 'admin'].includes(profile.role);
 
   // Company name (printed-name prefill) + whether a saved signature image is on
   // file (gates the 'saved_image' send mode). contractor_signature_path is a new
@@ -78,7 +80,7 @@ export default async function ChangeOrderPage({
       changeOrder={changeOrder}
       subcontractors={subcontractors.map((s) => ({ id: s.id, name: s.company_name }))}
       canManage={canManage}
-      canEditRates={canEditRates}
+      canSeeRates={canSeeRates}
       sourceEstimateId={project?.source_estimate_id ?? null}
       pendingSigningToken={pendingSession?.token ?? null}
       companyName={companyName}

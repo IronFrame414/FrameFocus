@@ -211,9 +211,14 @@ describe('3. Project Overview rate summary', () => {
 //    Gate: changes/[coId]/page.tsx:39  canEditRates = ['owner','admin']
 // ════════════════════════════════════════════════════════════════════════════
 describe('4. CO builder rate fields', () => {
-  it('4a. RENDER — the CO rate section hides its entry controls unless canEditRates', async () => {
+  it('4a. RENDER — RULING A: the CO rate section has NO read-only mode left to leak through', async () => {
     // co-rate-section.tsx is a CLIENT component, so the real gate can be
     // executed here rather than read.
+    //
+    // RULING A [S97]: the old `canEditRates` prop and its "read-only" branch
+    // are GONE — the section is mounted only for Owner/Admin (4a-ii), so there
+    // is no half-state that could render a rate value to a PM. Passing the dead
+    // prop must not resurrect one.
     vi.doMock('next/navigation', () => ({ useRouter: () => ({ refresh: () => {} }) }));
     const { renderToStaticMarkup } = await import('react-dom/server');
     const React = await import('react');
@@ -228,16 +233,54 @@ describe('4. CO builder rate fields', () => {
       sourceEstimateId: null,
     };
 
-    const editable = renderToStaticMarkup(
-      React.createElement(CoRateSection, { ...props, canEditRates: true } as never)
-    );
-    const readOnly = renderToStaticMarkup(
+    const rendered = renderToStaticMarkup(React.createElement(CoRateSection, props as never));
+    const withDeadProp = renderToStaticMarkup(
       React.createElement(CoRateSection, { ...props, canEditRates: false } as never)
     );
 
-    // The editable render must offer something the read-only one does not.
-    expect(editable.length).toBeGreaterThan(readOnly.length);
-    expect(readOnly).not.toMatch(/<input|<button/i);
+    // Identical: the prop is dead, and the component always offers entry
+    // controls because it only ever renders for a role allowed to set rates.
+    expect(withDeadProp).toBe(rendered);
+    expect(rendered).not.toMatch(/read-only/i);
+    expect(rendered).toMatch(/<button/i);
+  });
+
+  it('4a-ii. RENDER — RULING A: the CO builder does not mount the rate section below Owner/Admin', async () => {
+    // The mount gate itself, executed. This is the assertion that proves a PM
+    // gets NO rate panel rather than an empty or read-only one.
+    const { renderToStaticMarkup } = await import('react-dom/server');
+    const React = await import('react');
+    const { CoBuilder } = await import(
+      '@/app/dashboard/projects/[id]/changes/[coId]/co-builder'
+    );
+
+    const co = {
+      id: NOWHERE, project_id: NOWHERE, co_type: 'cost_plus', status: 'draft',
+      co_number: 'CO-001', title: 'role check', line_items: [], net_delta: 0,
+      is_deleted: false,
+    };
+    const base = {
+      projectId: NOWHERE,
+      changeOrder: co,
+      subcontractors: [],
+      canManage: true,
+      sourceEstimateId: null,
+      pendingSigningToken: null,
+      companyName: 'role check',
+      hasSavedSignature: false,
+    };
+
+    const withRates = renderToStaticMarkup(
+      React.createElement(CoBuilder, { ...base, canSeeRates: true } as never)
+    );
+    const withoutRates = renderToStaticMarkup(
+      React.createElement(CoBuilder, { ...base, canSeeRates: false } as never)
+    );
+
+    expect(withRates).toMatch(/Contract rates/);
+    expect(withoutRates, 'a PM was shown the CO rate panel').not.toMatch(/Contract rates/);
+    // and no empty husk in its place
+    expect(withoutRates).not.toMatch(/not set|read-only/i);
   });
 
   it('4b. DB WRITE — a PM cannot write a CO rate', async () => {
@@ -342,20 +385,33 @@ describe('5. Sub-contract schedules', () => {
   });
 
   it('5f. DB WRITE — a PM cannot bypass the RPC by editing the contract directly', async () => {
+    // KNOWN OPEN DEFECT [S97]: this currently FAILS —
+    // subcontractor_contracts_update_authorized admits an assigned PM with no
+    // column restriction, exactly as projects did before the column-scope
+    // trigger. FINANCIAL-RLS-FLOOR part 2 is owed for this table.
+    //
+    // The earlier version of this test compared before-vs-after ONLY, so once a
+    // previous run had already written 99 it compared 99 to 99 and reported a
+    // false PASS — and it left the value behind on real contracts. It now
+    // RESTORES before asserting, and asserts the refusal itself rather than the
+    // value, so it can neither corrupt data nor pass vacuously.
     const { data: before } = await admin
       .from('subcontractor_contracts')
-      .select('retainage_percent, contract_value').eq('id', subContractId).single();
+      .select('retainage_percent').eq('id', subContractId).single();
+    const probe = Number(before!.retainage_percent) === 99 ? 98 : 99;
 
-    await session.project_manager
+    const { error } = await session.project_manager
       .from('subcontractor_contracts')
-      .update({ retainage_percent: 99 })
+      .update({ retainage_percent: probe })
+      .eq('id', subContractId)
+      .select('id');
+
+    await admin
+      .from('subcontractor_contracts')
+      .update({ retainage_percent: before!.retainage_percent })
       .eq('id', subContractId);
 
-    const { data: after } = await admin
-      .from('subcontractor_contracts')
-      .select('retainage_percent, contract_value').eq('id', subContractId).single();
-    expect(after!.retainage_percent, 'a PM rewrote a sub-contract retainage directly')
-      .toBe(before!.retainage_percent);
+    expect(error, 'a PM rewrote a sub-contract retainage directly').not.toBeNull();
   });
 });
 
@@ -456,6 +512,59 @@ describe('7. §12a carve-out — invoice amounts yes, contract value no', () => 
       if (data?.contract_value != null) leaked.push(`${role} read ${data.contract_value}`);
     }
     expect(leaked).toEqual([]);
+  });
+
+  it('7e. DB WRITE — the column-scope trigger names the class of column it froze', async () => {
+    // FINANCIAL-RLS-FLOOR (20260806000000). Distinct from 7d, which only checks
+    // the value: this asserts the REFUSAL is explicit rather than an RLS silent
+    // no-op, so a caller learns why. Owner/Admin are unaffected (7f).
+    const { data: before } = await admin
+      .from('projects').select('contract_value').eq('id', qaProjectId).single();
+
+    const { error } = await session.project_manager
+      .from('projects').update({ contract_value: 888888 }).eq('id', qaProjectId).select('id');
+
+    // Restore BEFORE asserting: until the migration is applied this write
+    // SUCCEEDS, and a failing assertion must not leave the fixture corrupted.
+    await admin
+      .from('projects').update({ contract_value: before!.contract_value }).eq('id', qaProjectId);
+
+    expect(error, 'the projects column-scope trigger did not fire').not.toBeNull();
+    expect(error!.message).toContain('The financial terms of a project are Owner/Admin only.');
+  });
+
+  it('7f. DB WRITE — a PM can still edit ORDINARY project fields (column scope, not a wall)', async () => {
+    const { data: before } = await admin
+      .from('projects').select('internal_notes').eq('id', qaProjectId).single();
+    const marker = `role check ${before?.internal_notes === 'a' ? 'b' : 'a'}`;
+
+    const { error } = await session.project_manager
+      .from('projects').update({ internal_notes: marker }).eq('id', qaProjectId);
+    expect(error, 'the trigger over-reached and blocked an ordinary field').toBeNull();
+
+    const { data: after } = await admin
+      .from('projects').select('internal_notes').eq('id', qaProjectId).single();
+    expect(after!.internal_notes).toBe(marker);
+
+    await admin
+      .from('projects').update({ internal_notes: before?.internal_notes ?? null }).eq('id', qaProjectId);
+  });
+
+  it('7g. DB WRITE — Owner and Admin CAN still set the contract value', async () => {
+    const { data: before } = await admin
+      .from('projects').select('contract_value').eq('id', qaProjectId).single();
+
+    for (const role of ['owner', 'admin'] as const) {
+      const { error } = await session[role]
+        .from('projects').update({ contract_value: 50001 }).eq('id', qaProjectId);
+      expect(error, `${role} was blocked from setting the contract value`).toBeNull();
+    }
+
+    await admin
+      .from('projects').update({ contract_value: before!.contract_value }).eq('id', qaProjectId);
+    const { data: restored } = await admin
+      .from('projects').select('contract_value').eq('id', qaProjectId).single();
+    expect(Number(restored!.contract_value)).toBe(Number(before!.contract_value));
   });
 
   it('7d. DB WRITE — a PM cannot change the contract value', async () => {

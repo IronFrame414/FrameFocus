@@ -9,8 +9,9 @@
 // effective-date rules are the project renegotiate control's (floor =
 // latest live rate + 1 day, no floor for a first rate, NO future cap — P5
 // as amended 2026-07-31), reused via RenegotiateRate rather than restated.
-// Roles per §7.3/S-5: Owner/Admin set rates; PM sees them read-only while
-// still building CO lines. A draft CO reprices after every rate write
+// Roles per §7.3/S-5 as AMENDED by RULING A [S97, 2026-08-02]: Owner/Admin set
+// rates and a PM sees NO rate values at all — this section is not mounted below
+// Owner/Admin. A PM still builds CO lines. A draft CO reprices after every rate write
 // (RenegotiateRate chains recalculateChangeOrderTotals via
 // recomputeDraftCoId); onSaved refetches local state so the banner and
 // values never sit stale (#114 posture). co_type itself is chosen at CO
@@ -59,11 +60,14 @@ function fmtRate(rate: number, percent: boolean): string {
     : rate.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 }
 
+// RULING A [S97, 2026-08-02]: a PM sees NO rate values anywhere — a cost-plus
+// markup IS margin. The old `canEditRates` prop and its "read-only" branch are
+// GONE rather than disabled: this component is now mounted only for Owner and
+// Admin (co-builder.tsx), so a PM gets no rate panel at all instead of an empty
+// or read-only one. §7.3 S-5 amended — see docs/specs/7d1-spec.md §S-5.
 interface CoRateSectionProps {
   changeOrderId: string;
   coType: 'cost_plus' | 'time_and_materials';
-  /** Owner/Admin only (§7.3 S-5); PM renders read-only. */
-  canEditRates: boolean;
   /** Draft COs reprice after a rate write; sent/signed COs do not. */
   isDraft: boolean;
   /** projects.source_estimate_id — a first rate of each type prefills from
@@ -77,7 +81,6 @@ interface CoRateSectionProps {
 export function CoRateSection({
   changeOrderId,
   coType,
-  canEditRates,
   isDraft,
   sourceEstimateId,
 }: CoRateSectionProps) {
@@ -160,20 +163,16 @@ export function CoRateSection({
             >
               {current != null ? fmtRate(current, field.percent) : 'not set'}
             </span>
-            {canEditRates ? (
-              <RenegotiateRate
-                changeOrderId={changeOrderId}
-                rateType={field.rateType}
-                label={field.label}
-                percent={field.percent}
-                floor={floor}
-                defaultRate={prefill}
-                recomputeDraftCoId={isDraft ? changeOrderId : undefined}
-                onSaved={() => void refetch()}
-              />
-            ) : (
-              <span style={{ fontSize: '0.75rem', color: color.faint }}>read-only</span>
-            )}
+            <RenegotiateRate
+              changeOrderId={changeOrderId}
+              rateType={field.rateType}
+              label={field.label}
+              percent={field.percent}
+              floor={floor}
+              defaultRate={prefill}
+              recomputeDraftCoId={isDraft ? changeOrderId : undefined}
+              onSaved={() => void refetch()}
+            />
             {prefill != null && (
               <span style={{ fontSize: '0.6875rem', color: color.faint }}>
                 estimate rate {fmtRate(prefill, field.percent)} prefills

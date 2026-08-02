@@ -3,23 +3,12 @@ import {
   computeDepositCreditLine,
   computeDrawAmount,
   computeInvoiceTotals,
-  deriveCostLine,
-  deriveLaborLines,
-  groupSelectedHours,
   type DrawInput,
   type InvoiceLineAmount,
   type PresentationLevel,
-  type RatedDayGroup,
-  type SelectedCost,
   type SelectedSegment,
 } from '@framefocus/shared/utils/invoice-derivation';
-import {
-  canVoidInvoice,
-  companyToday,
-  laborRateType,
-  nonLaborRateType,
-  rateRowInForce,
-} from '@/lib/services/invoices-shared';
+import { canVoidInvoice, companyToday } from '@/lib/services/invoices-shared';
 import type {
   ContractType,
   InstrumentRef,
@@ -52,16 +41,9 @@ export type {
 type Result = { success: boolean; error?: string };
 type CreateResult = { success: boolean; id?: string; error?: string };
 
-/** A rate a derived invoice needs but does not have. §6.1/§7: a rateless
- *  instrument must NEVER price at 0% — that would silently sell at cost. */
-export class MissingRateError extends Error {
-  constructor(readonly rateType: string, readonly onDate: string) {
-    super(
-      `No ${rateType.replace(/_/g, ' ')} in force on ${onDate} — set the rate on the instrument before billing.`
-    );
-    this.name = 'MissingRateError';
-  }
-}
+// MissingRateError moved to invoice-derivation-server.ts with the pricing it
+// belongs to (RULING B). The message still reaches the caller — it names a rate
+// TYPE and a date, never a rate VALUE.
 
 // ── Creation ────────────────────────────────────────────────────────────────
 
@@ -107,14 +89,6 @@ export interface DeriveInvoiceInput {
   invoiceId: string;
   instrument: InstrumentRef;
   contractType: ContractType;
-  /** Rate rows for the instrument (loadInstrumentRates on the server). */
-  rateRows: Array<{
-    id: string;
-    rate_type: string;
-    rate: number;
-    effective_from: string;
-    superseded_at: string | null;
-  }>;
   selectedCosts: Array<{
     allocationId: string;
     description: string;
@@ -129,135 +103,37 @@ export interface DeriveInvoiceInput {
 }
 
 /**
- * Prices the user's SELECTED costs and hours (§6.2 / §7.2 D2), writes the
- * lines and their claims, and stores both the derived and the billed totals
- * (§8). Replaces any existing derived lines so a draft can be re-derived —
- * §8: "Drafts re-derive; overrides and discounts survive."
+ * §6/§7 — derive and persist. RULING B [S97, 2026-08-02]: the pricing now runs
+ * SERVER SIDE, behind /api/invoices/[id]/derive.
  *
- * Every non-labor row prices at ITS OWN category's rate in force on ITS OWN
- * incurred date; labor at the flat rate in force on the worked date (§6.1).
+ * Rate rows used to be loaded into the CALLER's session and passed in here —
+ * which meant a PM's browser received the markup percentages, the exact figure
+ * RULING A's Owner/Admin floor exists to protect. They no longer leave the
+ * server: the route reads them with the service role, prices with the same
+ * shared helpers, writes the lines, and returns a success flag only.
+ *
+ * The math and the rate selection are unchanged and unduplicated — see
+ * invoice-derivation-server.ts. Totals are recalculated here afterwards, on the
+ * caller's own session: an invoice AMOUNT is not a rate, and §12a lets a PM see
+ * the amounts on an invoice they can reach.
  */
 export async function deriveAndSaveInvoice(input: DeriveInvoiceInput): Promise<Result> {
-  const supabase = createClient();
+  const response = await fetch(`/api/invoices/${input.invoiceId}/derive`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      instrument: input.instrument,
+      contractType: input.contractType,
+      selectedCosts: input.selectedCosts,
+      selectedHours: input.selectedHours,
+    }),
+  });
 
-  // 1. Price the costs. A missing rate for a category actually in use is a
-  //    hard stop — never price at 0% (§6.1).
-  const costLines: ReturnType<typeof deriveCostLine>[] = [];
-  for (const cost of input.selectedCosts) {
-    const rateType = nonLaborRateType(input.contractType, cost.category);
-    const row = rateRowInForce(input.rateRows, rateType, cost.expenseDate);
-    if (!row) return { success: false, error: new MissingRateError(rateType, cost.expenseDate).message };
-
-    const selected: SelectedCost = {
-      allocationId: cost.allocationId,
-      description: cost.description,
-      category: cost.category,
-      cost: cost.amount,
-      incurredDate: cost.expenseDate,
-      markupPercent: row.rate,
-      rateRowId: row.id,
-    };
-    costLines.push(deriveCostLine(selected));
-  }
-
-  // 2. Group hours per person per day, round each group UP to the half hour
-  //    (§7.2), then attach the labor rate in force on that worked date.
-  const groups = groupSelectedHours(input.selectedHours);
-  const rated: RatedDayGroup[] = [];
-  for (const group of groups) {
-    const rateType = laborRateType(input.contractType);
-    const row = rateRowInForce(input.rateRows, rateType, group.workDate);
-    if (!row) return { success: false, error: new MissingRateError(rateType, group.workDate).message };
-    rated.push({ group, hourlyRate: row.rate, rateRowId: row.id });
-  }
-  const laborLines = deriveLaborLines(rated);
-
-  // 3. Clear previous derived lines + claims (re-derive a draft). Discount and
-  //    credit lines are NOT touched — they survive a re-derivation (§8).
-  const { data: existing } = await supabase
-    .from('invoice_lines')
-    .select('id, line_type')
-    .eq('invoice_id', input.invoiceId);
-  const derivedIds = (existing ?? [])
-    .filter((l) => l.line_type === 'derived_cost' || l.line_type === 'derived_labor')
-    .map((l) => l.id);
-  if (derivedIds.length > 0) {
-    // Claims cascade from the line, returning those costs/hours to the picker.
-    const { error: delError } = await supabase.from('invoice_lines').delete().in('id', derivedIds);
-    if (delError) return { success: false, error: delError.message };
-  }
-
-  // 4. Write the derived lines, then their claims (the billed markers).
-  let sortOrder = 0;
-  for (const line of costLines) {
-    const { data: created, error } = await supabase
-      .from('invoice_lines')
-      .insert({
-        invoice_id: input.invoiceId,
-        line_type: 'derived_cost',
-        description: line.description,
-        category: line.category,
-        cost_basis: line.costBasis,
-        derived_amount: line.amount,
-        billed_amount: line.amount,
-        instrument_rate_id: line.rateRowId,
-        source_estimate_id: input.instrument.estimate_id ?? null,
-        source_change_order_id: input.instrument.change_order_id ?? null,
-        sort_order: sortOrder++,
-      })
-      .select('id')
-      .single();
-    if (error) return { success: false, error: error.message };
-
-    const { error: claimError } = await supabase.from('invoice_cost_claims').insert({
-      invoice_id: input.invoiceId,
-      invoice_line_id: created.id,
-      expense_allocation_id: line.allocationId,
-      claimed_amount: line.costBasis,
-      expense_date: input.selectedCosts.find((c) => c.allocationId === line.allocationId)!.expenseDate,
-      cost_category: line.category,
-    });
-    if (claimError) return { success: false, error: claimError.message };
-  }
-
-  for (const line of laborLines) {
-    const { data: created, error } = await supabase
-      .from('invoice_lines')
-      .insert({
-        invoice_id: input.invoiceId,
-        line_type: 'derived_labor',
-        description: line.description,
-        category: 'labor',
-        quantity: line.quantity,
-        unit_rate: line.unitRate,
-        derived_amount: line.amount,
-        billed_amount: line.amount,
-        instrument_rate_id: line.rateRowId,
-        source_estimate_id: input.instrument.estimate_id ?? null,
-        source_change_order_id: input.instrument.change_order_id ?? null,
-        sort_order: sortOrder++,
-      })
-      .select('id')
-      .single();
-    if (error) return { success: false, error: error.message };
-
-    const claims = line.groups.flatMap((group) =>
-      group.segmentIds.map((segmentId) => {
-        const seg = input.selectedHours.find((s) => s.segmentId === segmentId)!;
-        return {
-          invoice_id: input.invoiceId,
-          invoice_line_id: created.id,
-          time_segment_id: segmentId,
-          member_id: group.memberId,
-          work_date: group.workDate,
-          raw_hours: seg.rawHours,
-        };
-      })
-    );
-    if (claims.length > 0) {
-      const { error: claimError } = await supabase.from('invoice_hour_claims').insert(claims);
-      if (claimError) return { success: false, error: claimError.message };
-    }
+  const payload = (await response.json().catch(() => null)) as
+    | { success?: boolean; error?: string }
+    | null;
+  if (!response.ok || !payload?.success) {
+    return { success: false, error: payload?.error ?? 'Could not derive this invoice.' };
   }
 
   return recalculateInvoiceTotals(input.invoiceId, {

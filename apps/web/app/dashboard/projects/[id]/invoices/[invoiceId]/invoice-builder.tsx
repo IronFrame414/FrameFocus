@@ -53,14 +53,6 @@ import {
   secondaryButtonStyle,
 } from '@/lib/theme';
 
-interface RateRow {
-  id: string;
-  rate_type: string;
-  rate: number;
-  effective_from: string;
-  superseded_at: string | null;
-}
-
 interface InvoiceBuilderProps {
   projectId: string;
   invoice: InvoiceWithLines;
@@ -70,7 +62,6 @@ interface InvoiceBuilderProps {
   instrument: InstrumentRef | null;
   instrumentLabel: string;
   changeOrderOptions: Array<{ id: string; label: string; coType: ContractType }>;
-  rateRows: RateRow[];
   pickableCosts: PickableCost[];
   pickableHours: PickableHour[];
   availableCredits: AvailableCredit[];
@@ -196,7 +187,6 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
           invoiceId: invoice.id,
           instrument,
           contractType,
-          rateRows: props.rateRows,
           selectedCosts: pickableCosts
             .filter((c) => selectedCosts.has(c.allocationId) && !c.blockedReason)
             .map((c) => ({

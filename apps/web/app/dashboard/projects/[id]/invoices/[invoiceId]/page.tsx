@@ -10,7 +10,6 @@ import {
   companyToday,
   getPickableCosts,
   getPickableHours,
-  loadInstrumentRates,
   type ContractType,
   type InstrumentRef,
 } from '@/lib/services/invoices';
@@ -87,8 +86,11 @@ export default async function InvoiceDetailPage({
   const today = companyToday(timezone);
   const derived = contractType === 'cost_plus' || contractType === 'time_and_materials';
 
-  const [rateRows, pickableCosts, pickableHours, credits] = await Promise.all([
-    instrument ? loadInstrumentRates(instrument) : Promise.resolve([]),
+  // RULING A/B [S97]: rate rows are NOT loaded here any more. They used to be
+  // fetched under the CALLER's session and handed to invoice-builder props,
+  // which put markup percentages in a PM's browser. Pricing now happens in
+  // /api/invoices/[id]/derive with the service role and returns no rates.
+  const [pickableCosts, pickableHours, credits] = await Promise.all([
     instrument && derived
       ? getPickableCosts(params.id, instrument, today)
       : Promise.resolve([]),
@@ -130,7 +132,6 @@ export default async function InvoiceDetailPage({
         label: `${co.co_number}${co.title ? ` — ${co.title}` : ''}`,
         coType: co.co_type as ContractType,
       }))}
-      rateRows={rateRows}
       pickableCosts={pickableCosts}
       pickableHours={pickableHours}
       availableCredits={credits}

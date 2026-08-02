@@ -1,0 +1,235 @@
+import 'server-only';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import {
+  deriveCostLine,
+  deriveLaborLines,
+  groupSelectedHours,
+  type RatedDayGroup,
+  type SelectedCost,
+  type SelectedSegment,
+} from '@framefocus/shared/utils/invoice-derivation';
+import {
+  laborRateType,
+  nonLaborRateType,
+  rateRowInForce,
+} from '@/lib/services/invoices-shared';
+import type { ContractType, InstrumentRef, RateRow } from '@/lib/services/invoices-shared';
+
+// Module 7D1 — PRIVILEGED server-side derivation (RULING B, S97 2026-08-02).
+//
+// WHY THIS EXISTS. RULING A puts an Owner/Admin floor on instrument_rates
+// reads. Derivation needs those rates; a PM must keep full invoicing (7D §12a).
+// Both hold only if the pricing happens somewhere the rates ARE readable and
+// the rate values never travel back to the caller. That is this module: it runs
+// with the SERVICE ROLE, reads the rates itself, and returns lines and totals.
+//
+// NOTHING HERE RETURNS A RATE. Not the rows, not a rate value, not a unit_rate
+// a caller could read back off the response. The derived lines are persisted to
+// invoice_lines (where the Owner/Admin-gated surfaces read them as before) and
+// the caller gets only a success flag. `instrument_rate_id` is written to the
+// line for the §10 supersede trace, exactly as the previous path did.
+//
+// THE PRIVILEGE IS THE POINT AND THE DANGER. The service role bypasses RLS
+// entirely — the same trap as record_client_payment (S97 isolation proof #12):
+// a SECURITY DEFINER-equivalent path is protected ONLY by the checks it makes
+// itself. The caller-facing route does company + role + project scoping before
+// this function is ever reached; do not call it from anywhere that skips them.
+//
+// THE MATH IS NOT RESTATED. deriveCostLine / groupSelectedHours /
+// deriveLaborLines come from packages/shared, and rate selection is
+// invoices-shared's rateRowInForce — the same functions the previous
+// caller-side path used, so the figures are identical by construction rather
+// than by coincidence. §15-B and §15-C are asserted against this path in the
+// live harness.
+
+export class MissingRateError extends Error {
+  constructor(readonly rateType: string, readonly onDate: string) {
+    super(
+      `No ${rateType.replace(/_/g, ' ')} in force on ${onDate} — set the rate on the instrument before billing.`
+    );
+    this.name = 'MissingRateError';
+  }
+}
+
+export interface DeriveServerInput {
+  invoiceId: string;
+  instrument: InstrumentRef;
+  contractType: ContractType;
+  selectedCosts: Array<{
+    allocationId: string;
+    description: string;
+    category: 'material' | 'subcontractor' | 'other';
+    amount: number;
+    expenseDate: string;
+  }>;
+  selectedHours: SelectedSegment[];
+}
+
+/**
+ * Rate rows for the instrument, read with the PRIVILEGED client so the
+ * Owner/Admin floor does not apply. These rows never leave this module.
+ */
+async function loadRatesPrivileged(
+  admin: SupabaseClient,
+  instrument: InstrumentRef
+): Promise<RateRow[]> {
+  let query = admin
+    .from('instrument_rates')
+    .select('id, rate_type, rate, effective_from, superseded_at');
+  query = instrument.estimate_id
+    ? query.eq('estimate_id', instrument.estimate_id)
+    : query.eq('change_order_id', instrument.change_order_id as string);
+  const { data } = await query;
+  return (data ?? []) as RateRow[];
+}
+
+/**
+ * Prices the caller's SELECTED costs and hours and persists the derived lines
+ * and their claims. Byte-for-byte the previous deriveAndSaveInvoice body, with
+ * two changes: the rate rows are loaded here instead of being passed in, and
+ * the writes go through the privileged client.
+ *
+ * Returns nothing about rates. The caller re-reads the invoice for totals.
+ */
+export async function deriveInvoiceLines(
+  admin: SupabaseClient,
+  input: DeriveServerInput
+): Promise<{ success: boolean; error?: string }> {
+  const rateRows = await loadRatesPrivileged(admin, input.instrument);
+
+  // 1. Price the costs. A missing rate for a category actually in use is a
+  //    hard stop — never price at 0% (§6.1).
+  const costLines: ReturnType<typeof deriveCostLine>[] = [];
+  for (const cost of input.selectedCosts) {
+    const rateType = nonLaborRateType(input.contractType, cost.category);
+    const row = rateRowInForce(rateRows, rateType, cost.expenseDate);
+    if (!row) return { success: false, error: new MissingRateError(rateType, cost.expenseDate).message };
+
+    const selected: SelectedCost = {
+      allocationId: cost.allocationId,
+      description: cost.description,
+      category: cost.category,
+      cost: cost.amount,
+      incurredDate: cost.expenseDate,
+      markupPercent: row.rate,
+      rateRowId: row.id,
+    };
+    costLines.push(deriveCostLine(selected));
+  }
+
+  // 2. Group hours per person per day, round each group UP to the half hour
+  //    (§7.2), then attach the labor rate in force on that worked date.
+  const groups = groupSelectedHours(input.selectedHours);
+  const rated: RatedDayGroup[] = [];
+  for (const group of groups) {
+    const rateType = laborRateType(input.contractType);
+    const row = rateRowInForce(rateRows, rateType, group.workDate);
+    if (!row) return { success: false, error: new MissingRateError(rateType, group.workDate).message };
+    rated.push({ group, hourlyRate: row.rate, rateRowId: row.id });
+  }
+  const laborLines = deriveLaborLines(rated);
+
+  // 3. Clear previous derived lines + claims (re-derive a draft). Discount and
+  //    credit lines are NOT touched — they survive a re-derivation (§8).
+  const { data: existing } = await admin
+    .from('invoice_lines')
+    .select('id, line_type')
+    .eq('invoice_id', input.invoiceId);
+  const derivedIds = (existing ?? [])
+    .filter((l) => l.line_type === 'derived_cost' || l.line_type === 'derived_labor')
+    .map((l) => l.id);
+  if (derivedIds.length > 0) {
+    // Claims cascade from the line, returning those costs/hours to the picker.
+    const { error: delError } = await admin.from('invoice_lines').delete().in('id', derivedIds);
+    if (delError) return { success: false, error: delError.message };
+  }
+
+  // 4. Write the derived lines, then their claims (the billed markers).
+  //    company_id has no usable default under the service role
+  //    (get_my_company_id() is NULL), so it is set explicitly from the invoice.
+  const { data: invoiceRow } = await admin
+    .from('invoices')
+    .select('company_id')
+    .eq('id', input.invoiceId)
+    .single();
+  const companyId = invoiceRow?.company_id as string | undefined;
+  if (!companyId) return { success: false, error: 'Invoice not found' };
+
+  let sortOrder = 0;
+  for (const line of costLines) {
+    const { data: created, error } = await admin
+      .from('invoice_lines')
+      .insert({
+        company_id: companyId,
+        invoice_id: input.invoiceId,
+        line_type: 'derived_cost',
+        description: line.description,
+        category: line.category,
+        cost_basis: line.costBasis,
+        derived_amount: line.amount,
+        billed_amount: line.amount,
+        instrument_rate_id: line.rateRowId,
+        source_estimate_id: input.instrument.estimate_id ?? null,
+        source_change_order_id: input.instrument.change_order_id ?? null,
+        sort_order: sortOrder++,
+      })
+      .select('id')
+      .single();
+    if (error) return { success: false, error: error.message };
+
+    const { error: claimError } = await admin.from('invoice_cost_claims').insert({
+      company_id: companyId,
+      invoice_id: input.invoiceId,
+      invoice_line_id: created.id,
+      expense_allocation_id: line.allocationId,
+      claimed_amount: line.costBasis,
+      expense_date: input.selectedCosts.find((c) => c.allocationId === line.allocationId)!.expenseDate,
+      cost_category: line.category,
+    });
+    if (claimError) return { success: false, error: claimError.message };
+  }
+
+  for (const line of laborLines) {
+    const { data: created, error } = await admin
+      .from('invoice_lines')
+      .insert({
+        company_id: companyId,
+        invoice_id: input.invoiceId,
+        line_type: 'derived_labor',
+        description: line.description,
+        category: 'labor',
+        quantity: line.quantity,
+        unit_rate: line.unitRate,
+        derived_amount: line.amount,
+        billed_amount: line.amount,
+        instrument_rate_id: line.rateRowId,
+        source_estimate_id: input.instrument.estimate_id ?? null,
+        source_change_order_id: input.instrument.change_order_id ?? null,
+        sort_order: sortOrder++,
+      })
+      .select('id')
+      .single();
+    if (error) return { success: false, error: error.message };
+
+    const claims = line.groups.flatMap((group) =>
+      group.segmentIds.map((segmentId) => {
+        const seg = input.selectedHours.find((s) => s.segmentId === segmentId)!;
+        return {
+          company_id: companyId,
+          invoice_id: input.invoiceId,
+          invoice_line_id: created.id,
+          time_segment_id: segmentId,
+          member_id: group.memberId,
+          work_date: group.workDate,
+          raw_hours: seg.rawHours,
+        };
+      })
+    );
+    if (claims.length > 0) {
+      const { error: claimError } = await admin.from('invoice_hour_claims').insert(claims);
+      if (claimError) return { success: false, error: claimError.message };
+    }
+  }
+
+  return { success: true };
+}

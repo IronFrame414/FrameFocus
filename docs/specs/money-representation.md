@@ -983,8 +983,32 @@ live-contract terms; they are edited and read where the live job lives:
 **S-5: CO builder (edit)** — CO settings expose `co_type` (already in the
 schema) with the same three types and the same per-type rate fields as S-3,
 writing `instrument_rates` rows against `change_order_id`. **Owner/Admin
-only** (same authority as S-3 settings; PM keeps building CO lines but sees
-type/rate read-only). No mixing within one CO (P4).
+only** (same authority as S-3 settings). No mixing within one CO (P4).
+
+> **AMENDMENT — RULING A [Josh, S97, 2026-08-02].** This section previously read
+> *"PM keeps building CO lines but sees type/rate read-only."* **That is
+> withdrawn: a PM sees NO rate values anywhere.** A cost-plus markup **is
+> margin**, which is precisely what the Financial Visibility Floor exists to
+> protect — showing it read-only leaked the number the floor is for.
+>
+> **What changed:** the CO rate section is no longer mounted below Owner/Admin
+> (`co-builder.tsx`, gated on `canSeeRates`). It is **not** rendered read-only
+> and **not** rendered empty — a PM gets no rate panel at all. The
+> `canEditRates` prop and its "read-only" branch were removed rather than
+> disabled, so there is no half-state left to leak. **A PM still builds CO
+> lines**, which is unchanged.
+>
+> **Backing:** the UI gate alone was never a gate —
+> `instrument_rates_select_company` carried no role floor, and a PM, Foreman and
+> Crew each read rate rows straight from the API (demonstrated live, d395c01,
+> `s97ct-roles.live.ts` 1b/3b). Migration `20260806000000_financial_rls_floor.sql`
+> adds the Owner/Admin read floor.
+>
+> **Known collision, unresolved:** `loadInstrumentRates()` runs under the
+> caller's session on the invoice detail page, which admits a PM. With the floor
+> applied a PM can no longer derive a **cost-plus or T&M** invoice (fixed-price
+> is unaffected), which cuts against 7D §12a. The follow-up is a SECURITY
+> DEFINER derivation RPC that prices server-side without returning rate rows.
 
 **S-6: Conversion prompt (edit of the convert flow)** — the convert screen
 (launched from estimate detail; `apps/web/lib/services/projects-client.ts`
@@ -1032,4 +1056,13 @@ estimate, so a plain UPDATE would silently match zero rows.
 
 (All budgeted-figure gating above is UI-only until `FINANCIAL-RLS-FLOOR` —
 §5.4.)
+
+> **STATUS [S97, 2026-08-02].** `FINANCIAL-RLS-FLOOR` is **written, not applied**
+> (`20260806000000_financial_rls_floor.sql`, awaiting Josh's review). When applied
+> it closes the S-4/S-5 **rate** rows above at the DB layer (Owner/Admin read
+> floor on `instrument_rates`) and the project **financial-terms write** hole
+> (column-scope trigger on `projects`). It does **not** close the
+> `projects.contract_value` **read** exposure — PM, Foreman and Crew can still
+> read the column, because Postgres RLS is row-level and every column-level
+> mechanism is either unusable here or a schema move. That half stays open.
 

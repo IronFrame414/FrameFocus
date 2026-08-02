@@ -292,19 +292,13 @@ export async function getPickableHours(
   return out;
 }
 
-// ── Rate resolution (§6.1 / §7 — consumes rateInForce, never restates it) ────
-
-export async function loadInstrumentRates(instrument: InstrumentRef): Promise<RateRow[]> {
-  const supabase = await createClient();
-  let query = supabase
-    .from('instrument_rates')
-    .select('id, rate_type, rate, effective_from, superseded_at');
-  query = instrument.estimate_id
-    ? query.eq('estimate_id', instrument.estimate_id)
-    : query.eq('change_order_id', instrument.change_order_id as string);
-  const { data } = await query;
-  return data ?? [];
-}
+// ── Rate resolution ─────────────────────────────────────────────────────────
+//
+// REMOVED [RULING B, S97 2026-08-02]: loadInstrumentRates() read rate rows under
+// the CALLER's session and handed them to the invoice builder, which put markup
+// percentages in a PM's browser — the exact exposure RULING A's Owner/Admin
+// floor closes. Rate resolution now lives in invoice-derivation-server.ts,
+// runs with the service role, and returns no rates to any caller.
 
 // ── §10 — invoices affected by a superseded rate (DERIVED, never stored) ─────
 
