@@ -3899,6 +3899,54 @@ export type Database = {
           },
         ]
       }
+      project_budget_amounts: {
+        Row: {
+          budget_item_id: string
+          budgeted_amount: number
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          budget_item_id: string
+          budgeted_amount?: number
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          budget_item_id?: string
+          budgeted_amount?: number
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_budget_amounts_budget_item_id_fkey"
+            columns: ["budget_item_id"]
+            isOneToOne: true
+            referencedRelation: "project_budget_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_budget_amounts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_budget_items: {
         Row: {
           actual_amount: number | null
