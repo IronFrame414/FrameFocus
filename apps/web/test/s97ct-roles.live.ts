@@ -543,11 +543,14 @@ describe('7. §12a carve-out — invoice amounts yes, contract value no', () => 
     const { data } = await session.project_manager
       .from('projects').select('id, contract_value').eq('id', richProjectId).maybeSingle();
 
-    // The tile is hidden in the UI. If the figure is still readable, the
-    // carve-out is cosmetic.
+    // RULING 2 [S97]: this MUST fail until the project_financials schema move
+    // is applied (PROPOSED_20260811000000_project_financials.sql.txt). It is the
+    // last open item in FINANCIAL-RLS-FLOOR, and it is meant to be loud.
     expect(
       data?.contract_value ?? null,
-      `PM read contract_value = ${data?.contract_value} — the §12a tile gate is UI-only`
+      `RULING 2 NOT YET APPLIED — a PM read contract_value = ${data?.contract_value}. ` +
+        'The §12a tile gate is cosmetic until projects.contract_value moves to ' +
+        'project_financials (Owner/Admin RLS). See the call-site plan before applying.'
     ).toBeNull();
   });
 
@@ -558,7 +561,11 @@ describe('7. §12a carve-out — invoice amounts yes, contract value no', () => 
         .from('projects').select('id, contract_value').eq('id', qaProjectId).maybeSingle();
       if (data?.contract_value != null) leaked.push(`${role} read ${data.contract_value}`);
     }
-    expect(leaked).toEqual([]);
+    expect(
+      leaked,
+      'RULING 2 NOT YET APPLIED — contract_value is readable below Owner/Admin. ' +
+        'Flips to PASS when project_financials lands.'
+    ).toEqual([]);
   });
 
   it('7e. DB WRITE — the column-scope trigger names the class of column it froze', async () => {
