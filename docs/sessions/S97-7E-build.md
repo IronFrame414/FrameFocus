@@ -10,9 +10,14 @@
 >
 > **CLICK-TEST AUTOMATED 2026-08-02 [S97]:** §5's script was executed end-to-end against real
 > rows on rebuild-test through the real service functions, under genuine Owner / **Admin** /
-> PM / **Foreman** sessions — **29/30 PASS, 1 FAIL**. The failure is a **real defect in the
-> correction path**, not a bad expectation: see **§7a**. Figures and per-assertion verdicts in
-> **§4a**; §5 is now the trimmed eyes-only script.
+> PM / **Foreman** sessions. First run **29/30 PASS, 1 FAIL** — a real defect in the correction
+> path, not a bad expectation.
+>
+> **P-2 CONFIRMED and the FAIL CLOSED 2026-08-02 (Josh, S97).** Auto-marking an invoice `paid`
+> on settlement **stays**; the missing *revert* half shipped as migration `20260805000000`.
+> Harness extended to **34 assertions — 34 PASS, 0 FAIL**, covering `voidPayment`,
+> `unapplyPayment` (never previously exercised) and the voided-invoice guard. Details in
+> **§7a**; per-assertion verdicts in **§4a**; §5 is the trimmed eyes-only script.
 
 ---
 
@@ -25,12 +30,17 @@
 | `npm run build` | **PASS**, uncached, no dev server running; `/dashboard/projects/[id]/payments` registered |
 | Migrations | `20260804000000`, `20260804010000` applied to rebuild-test and verified with `information_schema` / `pg_get_functiondef` |
 | Live RPC guards | **6/6 PASS** against real rows under a genuine Owner session — superseded by §4a |
-| **Automated click-test** | **29/30 PASS, 1 FAIL** — 30 assertions through the shipped services under 4 real role sessions (§4a). The FAIL is §7a |
+| **Automated click-test** | **34/34 PASS, 0 FAIL** — 34 assertions through the shipped services under 4 real role sessions (§4a). The one original FAIL is closed by `20260805000000` (§7a) |
 
 **Re-verified 2026-08-02 after a Codespace restart, uncached:** `type-check` 5/5 (`--force`,
 28.6s), `test -w @framefocus/web` 10 files / 174 tests, `build` cold after `rm -rf .next`
 (2m14s) with `/dashboard/projects/[id]/payments` at 6.59 kB. Migrations `20260804000000` and
 `20260804010000` confirmed applied, local and remote in sync, no desync rows.
+
+**Re-verified again after the P-2 revert fix (`20260805000000`), uncached, no dev server:**
+`type-check` 5/5 (`--force`, 51.4s) · `test -w @framefocus/web` 10 files / **174 tests** ·
+`build` cold after `rm -rf .next` (**2m39s**), payments route **6.59 kB / 170 kB** · live
+harness **34/34** · `database.ts` regenerated (the new `revert_invoice_settlement` RPC).
 
 **Test data:** all 7E fixtures deleted; `client_payments`, `client_payment_applications`,
 `client_refunds`, `retainage_releases` all read **0 rows**. Two invoices on a project named
@@ -99,7 +109,10 @@ the aging is derived entirely at read — plus a decision about invoices already
 **P-2 — An invoice auto-marks `paid`** when applications settle its receivable. 7D leaves `'paid'`
 in the CHECK for 7E to set and `status` is not in its immutability trigger's frozen set, so this is
 legal.
-*Reverse:* drop the status arm from `record_client_payment` / `apply_client_credit`.
+**✅ CONFIRMED BY JOSH [S97, 2026-08-02] — no longer provisional.** Auto-marking stays. The
+missing *revert* half shipped with it (`20260805000000`): withdrawing an application puts a
+settled invoice back to `sent`. See §7a. *(Kept here for the record; there is nothing left to
+reverse.)*
 
 **P-3 — A PM may READ payments, not write them.** §8 restricts *recording* only; 7D §12a already
 shows a PM invoice amounts, and a PM who cannot see whether their invoice was paid cannot do the
@@ -187,8 +200,12 @@ The only thing stubbed is the Supabase client **factory** (`@/lib/supabase-brows
 run in node. The client handed back is a real `supabase-js` client on the **anon key** carrying
 a real user JWT, so RLS applies exactly as it does in the app.
 
-**30 assertions, 29 PASS, 1 FAIL.** No app code was changed — the FAIL is recorded in §7a and
-left unfixed, pending Josh's call.
+**First run: 30 assertions, 29 PASS, 1 FAIL.** No app code was changed and the failing
+expectation was not adjusted — the FAIL was recorded in §7a and left for Josh.
+
+**After P-2 was confirmed and the revert half shipped: 34 assertions, 34 PASS, 0 FAIL.** The
+four added assertions (13, 13a–13d) are the regression net for exactly that defect, and #13b
+covers `unapplyPayment()`, which no test had ever exercised.
 
 **Identities.** rebuild-test had only Owner, PM and Crew — **no Admin and no Foreman**, which is
 `GATED.md` Gate 2 (#103) and is exactly why the refund-approval and Foreman gates had never been
@@ -213,7 +230,11 @@ highest-value fixture on rebuild-test.
 | 10 | Settled invoice takes no more | **PASS** | Refused — 0.00 remaining |
 | 11 | §2 removal requires a reason | **PASS** | Blank rejected: *"A reason is required to remove a recorded payment."* |
 | 12 | §2 removal stores `deletion_reason`, reopens the invoice | **PASS** | `is_deleted` true, `deleted_at` set, `deletion_reason` stored, **`note` still NULL** (the S97 defect stays fixed), applications soft-deleted, invoice owes **500** again, credit balance **0** |
-| 13 | §2 the reopened invoice is offered again | **FAIL** | **See §7a.** `status` stays `paid`, derived remaining **500**, but `getOpenInvoices` → **not offered** |
+| 13 | §2 the reopened invoice is offered again | **PASS** *(was the FAIL)* | Status reverts `paid` → **`sent`**, and `getOpenInvoices` offers it with remaining **500**. Before `20260805000000`: status stayed `paid` and it was **not offered** — §7a |
+| 13a | §2 the corrected payment can be re-entered | **PASS** | $500 re-recorded → invoice settles to `paid` again, remaining **0**. The correction loop closes |
+| 13b | P-2 **`unapplyPayment`** reverts identically | **PASS** | Unapply → status back to **`sent`**, invoice owes **500**, the money returns to credit (**500**), invoice offered again. *This path had never been exercised by any test* |
+| 13c | P-2 partial withdrawal + re-settle | **PASS** | Credit re-applied → `paid`; whole payment then removed → **`sent`**, owes **500**, and the withdrawn payment takes its own credit with it (**0**) |
+| 13d | §9 a **voided** invoice is never revived | **PASS** | Settled invoice voided, then its payment withdrawn → status stays **`voided`** |
 | 14 | §2 a recorded payment is immutable | **PASS** | *"A recorded payment is immutable — soft-delete and re-enter to correct it."* |
 | 15 | §2 no payment on a DRAFT invoice | **PASS** | *"Only a sent invoice can take a payment — a draft has not been issued and a voided one billed nothing."* |
 | 16 | §4.1 sign-off generates the release invoice | **PASS** | Held **1800** → a **`draft`**, `invoice_number` **NULL** (numbered only at send), billed **1800**, withholds **0** itself, receivable **1800**, `is_final` true |
@@ -313,9 +334,10 @@ retainage withheld. The automated run left no data behind, so you are starting f
    client's final walkthrough and to take a sign-off date. The generated draft is proven correct
    to the cent. **Judgement call: two invoices (final draw + release) instead of your current
    one — still OK?**
-7. **Removal wording.** Remove a payment. The mechanics are proven. **Judgement call: is "remove
-   and re-enter" clear enough as the correction path?** — and note **§7a**, which says that path
-   is currently broken in the picker, so read this with that in mind.
+7. **Removal wording.** Remove a payment. The mechanics are proven end-to-end — including that
+   the invoice reverts to `sent`, is offered again and can take the corrected payment (§7a, now
+   fixed). **Judgement call: is "remove and re-enter" clear enough as the correction path, in the
+   words on screen?**
 8. **PM and Foreman, visually.** The gates are proven at the RLS and RPC layer for both roles
    (#23–#30). What is unproven is the *screen*: as a PM, **expect the read-only note and no
    record/remove/refund controls**; as a Foreman, **expect no Payments tab** and a redirect if you
@@ -324,15 +346,13 @@ retainage withheld. The automated run left no data behind, so you are starting f
 
 ## 6. What I want Josh to rule on
 
-0. **§7a — the broken correction path.** Now the top item, ahead of due dates: removing a payment
-   reopens the debt but the invoice vanishes from the record-payment picker, so the corrected
-   payment cannot be entered. Two candidate fixes below; both are small, and the choice is bound
-   up with item 2. **This is a live defect, not a decision that can wait.**
-1. **Payment terms / due dates.** Aging currently runs from the issue date because
-   nothing writes a due date. Do invoices carry terms (Net 15/30, due on receipt)? Per-invoice, a
-   company default, or both? Everything else in 7E is settled; this one changes what "overdue" means.
-2. **Is auto-marking an invoice `paid` right (P-2)**, or should settlement stay a deliberate action?
-   **§7a raises the stakes on this one** — the stale `paid` status is what breaks the correction path.
+1. **Payment terms / due dates** — **now the top open item.** Aging currently runs from the issue
+   date because nothing writes a due date. Do invoices carry terms (Net 15/30, due on receipt)?
+   Per-invoice, a company default, or both? Everything else in 7E is settled; this one changes
+   what "overdue" means.
+2. ~~**Is auto-marking an invoice `paid` right (P-2)?**~~ **DECIDED [S97, 2026-08-02] — it stays.**
+   The revert half shipped with the confirmation (`20260805000000`, §7a), which is what made the
+   auto-mark safe rather than a one-way door.
 3. **Should a PM see payments at all (P-3)?** I allowed read because the alternative makes their
    invoice view half-blind, but money-in is deliberately a different shape and you may want it
    tighter.
@@ -345,9 +365,17 @@ retainage withheld. The automated run left no data behind, so you are starting f
 
 ---
 
-## 7a. DEFECT FOUND AND LEFT UNFIXED — the correction path is broken [S97, 2026-08-02]
+## 7a. DEFECT FOUND, AND NOW FIXED — the correction path [S97, 2026-08-02]
 
-**Assertion #13 failed.** It is not fixed, and no expectation was adjusted to make it pass.
+> **STATUS: CLOSED.** Found by assertion #13 (FAIL), reported unfixed, then **ruled on by Josh —
+> P-2 CONFIRMED, auto-marking stays** — and closed by migration **`20260805000000`**. The harness
+> now covers it with five assertions (13, 13a–13d), **all PASS**. What follows is the original
+> finding, then what shipped.
+
+### The finding
+
+**Assertion #13 failed.** It was not fixed at the time, and no expectation was adjusted to make
+it pass.
 
 **What happens.** Record a payment that settles an invoice, then remove it — the documented and
 **only** correction path (§2, P-2, and §5 item 7). The debt correctly comes back: derived
@@ -386,23 +414,56 @@ offers no way to record being paid it.
 application from a settled invoice leaves `status = 'paid'` by the identical route. Treat it as
 carrying the same defect until proven otherwise.
 
-**Two candidate fixes — Josh's call, deliberately not applied:**
-
-- **(a) Widen the read.** `getOpenInvoices` filters `.in('status', ['sent','paid'])` and leans on
-  its existing `remaining > 0` filter. One line, matches what the RPC already accepts and what
-  `ageReceivables` already does. Leaves the stale `paid` status visible on screen.
-- **(b) Revert the status.** Set `status` back to `'sent'` when a settling application is
-  soft-deleted (in `voidPayment` / `unapplyPayment`, or a trigger). Keeps `status` honest, but
-  adds a second writer to a 7D-owned column and needs the same care 7D's immutability trigger
-  took.
-
-(a) is smaller and safer; (b) is more correct. They are not exclusive. **If P-2 is reversed
-(ruling item 2), the whole class disappears** — which is the real reason these two are linked.
-
 **Why nothing caught this before.** Same lesson as §7, one layer up: `tsc`, the 25 pure-derivation
 tests and the build were all green, and so were the six original live RPC guards — because none of
 them ran the *sequence* record → settle → remove → re-record. Only driving the real service
 functions in order surfaced it.
+
+### What shipped — `20260805000000_7e_settlement_revert.sql`
+
+Both candidate fixes were proposed; **Josh confirmed P-2, so both were built** — the revert is the
+real fix, the read-widening is defence in depth.
+
+**1. `revert_invoice_settlement(invoice_id)`** — the decision in one place. Recomputes the
+invoice's remaining from its **live** applications, exactly as `remainingOnInvoice()` does at read
+(derived, never stored — 7C's discipline), and if anything is still owed while the invoice sits
+`paid`, puts it back to `sent`. Same `0.004` tolerance the settlement arm uses, so a cent of float
+noise can never flip an invoice back and forth. `SECURITY DEFINER`, because it fires inside an
+ordinary user's UPDATE and the status write must not be filtered by RLS.
+
+**2. `client_payment_applications_revert_settlement`** — AFTER UPDATE on
+`client_payment_applications`, `WHEN (OLD.is_deleted IS DISTINCT FROM true AND NEW.is_deleted IS
+true)`. **This is the signal**, and it is why the fix is at the trigger layer rather than in a
+service function: it fires for `unapplyPayment()` (one application), for `voidPayment()` (all of a
+payment's applications), and for any caller yet to be written. The transition guard means
+re-writing `deleted_at` on an already-dead row is a no-op, not a second recompute.
+
+**3. `client_payments_retire_applications`** — AFTER UPDATE on `client_payments`, same transition
+guard: soft-deleting a payment retires its live applications, which cascades into trigger 2.
+`voidPayment()` already did this in a second statement, but it **did not have to** — a caller that
+soft-deleted only the payment row would have left live applications behind, and the invoice's
+remaining, the client's credit balance and the aging would all still have counted withdrawn money.
+This makes the correction atomic in the database so no caller can half-do it. `voidPayment()`'s
+second write is now belt and braces and is commented as such.
+
+**4. `getOpenInvoices()` widened to `.in('status', ['sent','paid'])`** — my call on point 3, and
+the answer is **yes, do it**. It costs nothing, it matches what the write side already accepts
+(`record_client_payment` takes `sent` **or** `paid`) and what `ageReceivables()` already ages, and
+the existing `remaining > 0` filter is what actually decides. After the trigger fix a `paid` row
+with money remaining should not exist — but if one ever does, it belongs **in** this list rather
+than stranded off it. Filtering on status alone is precisely what turned a stale flag into a dead
+end on real money; leaning on the derived figure instead means the same class of bug cannot strand
+an invoice again.
+
+**A voided invoice is never revived — guarded twice.** `revert_invoice_settlement` only ever acts
+on `status = 'paid'`, and independently 7D's own `enforce_invoice_immutability()` raises *"A voided
+invoice is frozen forever (7D spec 9)"* on any status change out of `voided`. Asserted live (#13d).
+
+**Manual recording is untouched and permanent** (Josh's note for the record: QuickBooks becomes the
+payment processor and will confirm payments once 7G lands, but clients pay by check). Nothing here
+assumes an electronic path — these are database triggers on the manual tables, and **7G will get
+the same revert behaviour for free** precisely because the fix lives at this layer rather than in a
+UI or a single service call.
 
 ---
 
@@ -432,6 +493,7 @@ does.
 ```
 supabase/migrations/20260804000000_7e_payments.sql
 supabase/migrations/20260804010000_7e_payment_deletion_reason.sql
+supabase/migrations/20260805000000_7e_settlement_revert.sql   P-2's revert half (§7a)
 apps/web/lib/services/payments-shared.ts
 apps/web/lib/services/payments-shared.test.ts        (25 tests)
 apps/web/lib/services/payments.ts
@@ -449,5 +511,6 @@ apps/web/app/dashboard/projects/[id]/project-header.tsx   Payments tab
 packages/shared/types/database.ts                    regenerated
 ```
 
-**Owed next:** the production migration batch now also carries `20260804000000` and
-`20260804010000` — and note C6, the history repair, without which the batch would have failed.
+**Owed next:** the production migration batch now also carries `20260804000000`,
+`20260804010000` and `20260805000000` — and note C6, the history repair, without which the batch
+would have failed.

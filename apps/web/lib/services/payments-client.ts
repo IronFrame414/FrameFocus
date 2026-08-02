@@ -153,6 +153,11 @@ export async function voidPayment(paymentId: string, reason: string): Promise<Re
     .eq('id', paymentId);
   if (error) return { success: false, error: error.message };
 
+  // The `client_payments_retire_applications` trigger (20260805000000) has
+  // ALREADY retired these in the same statement above, and reverting each
+  // settled invoice from `paid` back to `sent` with it. This second write is
+  // now belt and braces — it matches the same rows and is a no-op — kept so the
+  // correction reads whole here rather than only in the migration.
   const { error: appError } = await supabase
     .from('client_payment_applications')
     .update({ is_deleted: true, deleted_at: now })
@@ -164,8 +169,14 @@ export async function voidPayment(paymentId: string, reason: string): Promise<Re
   return { success: true };
 }
 
-/** §3 — unapply a single application without removing the payment; the money
- *  returns to the client's credit balance. */
+/**
+ * §3 — unapply a single application without removing the payment; the money
+ * returns to the client's credit balance.
+ *
+ * P-2's revert half is the DB's job, not this function's: the
+ * `client_payment_applications_revert_settlement` trigger (20260805000000)
+ * puts the invoice back to `sent` if this leaves anything owed on it.
+ */
 export async function unapplyPayment(applicationId: string): Promise<Result> {
   const supabase = createClient();
   const { error } = await supabase

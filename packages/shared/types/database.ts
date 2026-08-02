@@ -5998,6 +5998,10 @@ export type Database = {
         }
         Returns: Json
       }
+      revert_invoice_settlement: {
+        Args: { p_invoice_id: string }
+        Returns: undefined
+      }
       revise_sub_contract_schedule: {
         Args: {
           p_contract_value?: number

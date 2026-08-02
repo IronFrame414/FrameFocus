@@ -41,6 +41,7 @@ import {
   createRefund,
   recordPayment,
   recordSignOffAndGenerateRelease,
+  unapplyPayment,
   voidPayment,
 } from '@/lib/services/payments-client';
 import {
@@ -495,18 +496,85 @@ describe('S97CT-7E — 7E1 payments, live', () => {
 
   it('13. §2 — the reopened invoice is offered again, so remove-and-re-enter actually works', async () => {
     as(ownerClient);
-    const row = await invoiceRow(inv.E);
+    // P-2's revert half (20260805000000): the settled invoice goes back to
+    // `sent` the moment its last live application is withdrawn.
+    expect((await invoiceRow(inv.E)).status).toBe('sent');
     const open = await getOpenInvoices(projectId);
-    console.log(
-      '[13 diagnostic] invoice E after its only payment was removed:',
-      JSON.stringify({
-        status: row.status,
-        amount_receivable: row.amount_receivable,
-        derivedRemaining: await getInvoiceRemaining(inv.E),
-        offeredByGetOpenInvoices: open.some((o) => o.id === inv.E),
-      })
-    );
     expect(open.map((o) => o.id)).toContain(inv.E);
+    expect(open.find((o) => o.id === inv.E)!.remaining).toBe(500);
+  });
+
+  it('13a. §2 — and the corrected payment can actually be re-entered', async () => {
+    as(ownerClient);
+    const r = await recordPayment({
+      contactId,
+      amount: 500,
+      applications: [{ invoiceId: inv.E, amount: 500 }],
+      note: `${MARKER} re-entered after correction`,
+    });
+    expect(r.success).toBe(true);
+    pay.P5 = r.id!;
+    // and it settles again, so the whole loop closes
+    expect((await invoiceRow(inv.E)).status).toBe('paid');
+    expect(await getInvoiceRemaining(inv.E)).toBe(0);
+  });
+
+  it('13b. P-2 — UNAPPLYING an application reverts the invoice the same way', async () => {
+    as(ownerClient);
+    const { data: app } = await admin
+      .from('client_payment_applications')
+      .select('id')
+      .eq('payment_id', pay.P5)
+      .eq('is_deleted', false)
+      .single();
+
+    const r = await unapplyPayment(app!.id);
+    expect(r.success).toBe(true);
+
+    // status reverted, the debt is back, and the money returned to credit
+    expect((await invoiceRow(inv.E)).status).toBe('sent');
+    expect(await getInvoiceRemaining(inv.E)).toBe(500);
+    expect(await getClientCreditBalance(contactId)).toBe(500);
+    expect((await getOpenInvoices(projectId)).map((o) => o.id)).toContain(inv.E);
+  });
+
+  it('13c. P-2 — a PARTIAL withdrawal reverts too, and re-settling still works', async () => {
+    as(ownerClient);
+    // put the credit back on the invoice, settling it again
+    expect((await applyCredit(pay.P5, inv.E, 500)).success).toBe(true);
+    expect((await invoiceRow(inv.E)).status).toBe('paid');
+
+    // now remove the whole payment: both its applications go, invoice reopens
+    const r = await voidPayment(pay.P5, `${MARKER} — second correction`);
+    expect(r.success).toBe(true);
+    expect((await invoiceRow(inv.E)).status).toBe('sent');
+    expect(await getInvoiceRemaining(inv.E)).toBe(500);
+    // the withdrawn payment takes its own credit with it
+    expect(await getClientCreditBalance(contactId)).toBe(0);
+  });
+
+  it('13d. §9 — a VOIDED invoice is never revived by the revert path', async () => {
+    as(ownerClient);
+    // settle a fresh invoice, then void it, then withdraw the payment
+    const r = await recordPayment({
+      contactId,
+      amount: 2200,
+      applications: [{ invoiceId: inv.D, amount: 2200 }],
+    });
+    expect(r.success).toBe(true);
+    expect((await invoiceRow(inv.D)).status).toBe('paid');
+
+    // void it directly — 7D's own path needs a reason and a member
+    const { error: voidErr } = await ownerClient
+      .from('invoices')
+      .update({ status: 'voided', void_reason: `${MARKER} void`, voided_at: new Date().toISOString() })
+      .eq('id', inv.D);
+    expect(voidErr).toBeNull();
+    expect((await invoiceRow(inv.D)).status).toBe('voided');
+
+    // withdrawing the payment must NOT resurrect it
+    expect((await voidPayment(r.id!, `${MARKER} — after void`)).success).toBe(true);
+    expect((await invoiceRow(inv.D)).status).toBe('voided');
   });
 
   // ── immutability ──────────────────────────────────────────────────────────

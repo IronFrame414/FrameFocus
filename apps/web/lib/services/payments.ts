@@ -331,8 +331,21 @@ export async function getInvoiceRemaining(invoiceId: string): Promise<number> {
   return remainingOnInvoice(invoice.amount_receivable, apps ?? []);
 }
 
-/** The open, payable invoices for a project — what the record-payment form
- *  offers. Only SENT invoices with something remaining. */
+/**
+ * The open, payable invoices for a project — what the record-payment form
+ * offers. An issued invoice with something still remaining.
+ *
+ * BELT AND BRACES [S97, P-2 confirmed]: this accepts `paid` as well as `sent`,
+ * and leans on the `remaining > 0` filter below to decide what is actually
+ * open. Migration 20260805000000 reverts a settled invoice to `sent` the moment
+ * an application is withdrawn, so a `paid` row with money remaining should not
+ * exist — but if one ever does, it belongs in this list rather than stranded
+ * off it. Filtering on status alone is what made the correction path a dead end
+ * (the S97 click-test FAIL): the invoice owed money and could not be paid.
+ *
+ * This also matches what the write side already accepts — record_client_payment
+ * takes `sent` OR `paid` — and what ageReceivables() already ages.
+ */
 export async function getOpenInvoices(projectId: string): Promise<
   Array<{ id: string; invoiceNumber: string | null; issueDate: string; remaining: number }>
 > {
@@ -342,7 +355,7 @@ export async function getOpenInvoices(projectId: string): Promise<
     .select('id, invoice_number, issue_date, status, amount_receivable')
     .eq('project_id', projectId)
     .eq('is_deleted', false)
-    .eq('status', 'sent')
+    .in('status', ['sent', 'paid'])
     .order('issue_date', { ascending: true });
 
   if (!invoices || invoices.length === 0) return [];
