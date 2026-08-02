@@ -63,6 +63,8 @@ export {
   DEFAULT_CO_SUBJECT,
   DEFAULT_CO_REMINDER_BODY,
   DEFAULT_CO_REMINDER_SUBJECT,
+  DEFAULT_INVOICE_BODY,
+  DEFAULT_INVOICE_SUBJECT,
 } from '@/lib/proposal/proposal-defaults';
 
 export type EmailType =
@@ -79,7 +81,10 @@ export type EmailType =
   // 6D §7 — delivery check-in notification (email_types row seeded in S78).
   | 'material_delivery'
   // 6C §4 — incident hierarchy notification (email_types row seeded in S78).
-  | 'safety_incident';
+  | 'safety_incident'
+  // 7D1 §13 — a sent invoice delivered to the client, PDF attached
+  // (email_types row seeded in 20260807000000).
+  | 'invoice';
 
 export interface LogEmailInput {
   company_id: string;
@@ -88,6 +93,8 @@ export interface LogEmailInput {
   // Signed-artifact spec §4.3 — CO email FKs (nullable; set only for CO emails).
   change_order_id?: string | null;
   co_signing_session_id?: string | null;
+  /** 7D1 §13 — the invoice this email delivered (20260807000000). */
+  invoice_id?: string | null;
   resend_message_id: string | null;
   email_type: EmailType;
   recipient_email: string;
@@ -115,6 +122,7 @@ export async function logEmail(
       // against the un-regenerated database.ts until the migration is applied.
       change_order_id: input.change_order_id ?? null,
       co_signing_session_id: input.co_signing_session_id ?? null,
+      invoice_id: input.invoice_id ?? null,
       resend_message_id: input.resend_message_id,
       email_type: input.email_type,
       recipient_email: input.recipient_email,

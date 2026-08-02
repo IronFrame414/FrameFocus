@@ -515,5 +515,6 @@ packages/shared/types/database.ts                    regenerated
 ```
 
 **Owed next:** the production migration batch now also carries `20260804000000`,
-`20260804010000` and `20260805000000` — and note C6, the history repair, without which the batch
+`20260804010000`, `20260805000000`, `20260806000000` (FINANCIAL-RLS-FLOOR) and
+`20260807000000` (invoice email) — and note C6, the history repair, without which the batch
 would have failed.

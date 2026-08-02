@@ -49,6 +49,22 @@ Please review and sign by {{expiration_date}}.
 
 — {{company_name}}`;
 
+// 7D1 §13 — invoice delivery. NO payment link: payment is QuickBooks-hosted and
+// 7G is not built, so the mail says how to pay in words rather than offering a
+// button that goes nowhere.
+export const DEFAULT_INVOICE_SUBJECT =
+  'Invoice {{invoice_number}} from {{company_name}}';
+
+export const DEFAULT_INVOICE_BODY = `Hi {{contact_name}},
+
+Invoice {{invoice_number}} for {{project_name}} is attached, dated {{issue_date}}.
+
+Amount due: {{amount_due}}
+
+Please get in touch if you have any questions about this invoice.
+
+— {{company_name}}`;
+
 export const DEFAULT_CO_REMINDER_SUBJECT =
   'Reminder: change order {{co_number}} from {{company_name}}';
 

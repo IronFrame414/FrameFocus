@@ -1637,6 +1637,7 @@ export type Database = {
           email_type: string
           estimate_id: string | null
           id: string
+          invoice_id: string | null
           metadata: Json | null
           opened_at: string | null
           recipient_email: string
@@ -1658,6 +1659,7 @@ export type Database = {
           email_type: string
           estimate_id?: string | null
           id?: string
+          invoice_id?: string | null
           metadata?: Json | null
           opened_at?: string | null
           recipient_email: string
@@ -1679,6 +1681,7 @@ export type Database = {
           email_type?: string
           estimate_id?: string | null
           id?: string
+          invoice_id?: string | null
           metadata?: Json | null
           opened_at?: string | null
           recipient_email?: string
@@ -1724,6 +1727,13 @@ export type Database = {
             columns: ["estimate_id"]
             isOneToOne: false
             referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "email_logs_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
             referencedColumns: ["id"]
           },
           {

@@ -1,5 +1,6 @@
 import { notFound, redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
+import { getInvoiceDeliveries } from '@/lib/services/invoice-delivery';
 import { getProject } from '@/lib/services/projects';
 import { getChangeOrders } from '@/lib/services/change-orders';
 import { getCompanyTimeSettings } from '@/lib/services/company';
@@ -114,8 +115,18 @@ export default async function InvoiceDetailPage({
       (billedSoFar ?? []).reduce((sum, i) => sum + Number(i.billed_total ?? 0), 0) * 100
     ) / 100;
 
+  // §13 — delivery history + the send control. Read here (server) and handed
+  // down; the panel itself renders only for Owner/Admin, and the route enforces
+  // that independently.
+  const deliveries = await getInvoiceDeliveries(params.invoiceId);
+  const { data: projectContact } = project.contact_id
+    ? await supabase.from('contacts').select('email').eq('id', project.contact_id).maybeSingle()
+    : { data: null };
+
   return (
     <InvoiceBuilder
+      deliveries={deliveries}
+      recipientEmail={projectContact?.email ?? null}
       projectId={params.id}
       invoice={invoice}
       role={profile.role}

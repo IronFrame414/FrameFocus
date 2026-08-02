@@ -356,6 +356,10 @@ already gated it to Owner/Admin/PM.
 
 ## 4c. Delivery — what exists now, what is still blocked [S97, 2026-08-02]
 
+> **SUPERSEDED IN PART [S97, 2026-08-02] — the EMAIL path is now built too. See §4d.**
+> What follows described the non-email path when email was still owed; the print/download
+> half is unchanged and still accurate.
+
 **§13 has two paths. The non-email one is now built.** Nothing in it leaves the company,
 so it is not behind the Pre-M9 gate and does not need the RESEND secret.
 
@@ -428,6 +432,63 @@ correct.
 
 The practical effect: Josh can now produce a real invoice document and hand it over by
 print or file. He cannot yet have FrameFocus email it or take payment through it.
+
+---
+
+## 4d. §13 EMAIL DELIVERY — BUILT [S97, 2026-08-02]
+
+Supersedes every "no email delivery" note below: §13's email half is built.
+`RESEND_API_KEY` is set and the domain is verified, so this is live, not gated.
+
+**THE FROM LINE JOSH ASKED ABOUT.** The verified Resend domain is
+**`rafterworks.com`**, and `buildSenderAddress()` composes
+`"<Company Name> <slug@rafterworks.com>"`. For the test company that is:
+
+> **`Bishop Contracting <bishop-contracting@rafterworks.com>`**
+
+A client sees the company's name, but a **rafterworks.com** address — not
+FrameFocus, and not a bishopcontracting.com address. Nothing has been emailed to
+a real client; confirm that From line reads right before anything real goes out.
+
+**What was built** — following the change-order send route, not a new sender:
+
+- `POST /api/invoices/[id]/send` — **Owner/Admin only** (narrower than the CO
+  route, which admits a PM, because this puts a bill in front of a client).
+  **Sent/paid invoices only**: a draft has no number and is watermarked "not a
+  bill", and mailing one is exactly the mistake that watermark prevents.
+- The PDF is produced by the shipped `storeInvoicePdf`, so the artifact is the
+  same one Print/Download give — **and storing it files the invoice under the
+  project either way**, email or no email. Print/download are untouched.
+- Subject/body: `DEFAULT_INVOICE_SUBJECT` / `DEFAULT_INVOICE_BODY` in the
+  existing template style, carrying invoice number, project, issue date and
+  amount due.
+- **NO PAY LINK.** Payment is QuickBooks-hosted and 7G is not built, so the mail
+  offers no button at all rather than a dead one. `InvoiceEmail` is deliberately
+  the CO template minus the CTA; add the button when 7G lands.
+
+**Delivery history reuses the shipped model, not a parallel one.** Sends log to
+`email_logs` with a new `invoice_id` FK (`20260807000000`, mirroring the CO
+column, `ON DELETE SET NULL`) and the new `invoice` email type. The **Resend
+webhook already advances each row** sent → delivered → opened → bounced /
+complained / failed by `resend_message_id` — so a bounce surfaces on the invoice
+with nothing further built.
+
+**A failed send cannot look like success.** The route returns **502** with the
+reason and logs the attempt `failed`; the panel renders failures in red with an
+explicit `FAILED` / `BOUNCED` label and a line saying the invoice is still filed
+and to try again. The only green line is a real success.
+
+**Verified** — `s97ct-invoice-email.live.ts`, **6/6**: the `invoice` email type
+exists (without it every send would fail at the log insert), a success reads
+back as history, an outright failure carries its reason, a later bounce flips a
+`sent` row and stays visible, and all three failure statuses classify as
+failures while none of the three success statuses do.
+
+**NOT verified, and stated rather than claimed:** the POST route is an HTTP
+endpoint and needs a running Next server, which these node harnesses do not
+start. Its Owner/Admin gate and its 502-on-failure path are verified by reading,
+not by exercising. **Nothing was emailed** — a send is simulated by seeding an
+`email_logs` row, so no message left the company.
 
 ---
 

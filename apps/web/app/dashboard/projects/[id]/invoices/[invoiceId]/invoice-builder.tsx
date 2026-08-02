@@ -28,6 +28,8 @@ import {
   voidInvoice,
 } from '@/lib/services/invoices-client';
 import { findSplitDays } from '@/lib/services/invoices-shared';
+import type { InvoiceDelivery } from '@/lib/services/invoice-delivery-shared';
+import { InvoiceDeliveryPanel } from './invoice-delivery-panel';
 import type {
   AvailableCredit,
   ContractType,
@@ -57,6 +59,8 @@ interface InvoiceBuilderProps {
   projectId: string;
   invoice: InvoiceWithLines;
   role: string;
+  deliveries: InvoiceDelivery[];
+  recipientEmail: string | null;
   memberId: string | null;
   contractType: ContractType;
   instrument: InstrumentRef | null;
@@ -103,6 +107,8 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
     projectId,
     invoice,
     role,
+    deliveries,
+    recipientEmail,
     memberId,
     contractType,
     instrument,
@@ -252,6 +258,19 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
           projectId={projectId}
         />
       </div>
+
+      {/* §13 — email delivery. Owner/Admin only; the route enforces it too.
+          Sent/paid invoices only — a draft is watermarked "not a bill". */}
+      {(invoice.status === 'sent' || invoice.status === 'paid') && (
+        <div style={{ ...cardStyle, padding: '10px 14px' }}>
+          <InvoiceDeliveryPanel
+            invoiceId={invoice.id}
+            canSend={role === 'owner' || role === 'admin'}
+            recipientEmail={recipientEmail}
+            deliveries={deliveries}
+          />
+        </div>
+      )}
 
       {error && (
         <div style={{ ...cardStyle, padding: '10px 14px', backgroundColor: '#fef2f2', color: '#991b1b', fontSize: '13px' }}>
