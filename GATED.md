@@ -27,8 +27,12 @@ branding, and delivery must be settled first.
   warning (S95), not an observed signature. Detail: `docs/specs/113c-spec.md` §7 and
   §10.6. Stages 1–5 are internal-only and shipped (through migration
   `20260731050000`) — but stage 5's RPC body is SUPERSEDED by the S95 second ruling
-  set (rulings 8–12 below): replacement migration `20260731060000` is written,
-  **UNAPPLIED**.
+  set (rulings 8–12 below): replacement migration `20260731060000` is written.
+  **CORRECTED [S97, 2026-08-02]:** this said "UNAPPLIED". It **is applied to
+  rebuild-test** — present in both the local and remote migration lists, and the live
+  `revise_sub_contract_schedule` body carries the S95 rulings (verified by exercising it
+  in `s97ct-roles.live.ts` item 5). It remains **unapplied to production**, where it sits
+  in the owed migration batch.
 - **Project material record.** Client-visible, semi-structured list + open notes +
   photos, logged as work proceeds. PARKED, interview-first — do not build without an
   interview. Detail: `docs/sessions/context93.md` §8 (restated context94 §9).
@@ -67,7 +71,8 @@ against any project other than rebuild-test.
 ### Cross-company isolation — now PROVEN, not asserted
 
 `apps/web/test/s97ct-isolation.live.ts` — **14 assertions, 14 PASS**, under real sessions
-minted with `generateLink` + `verifyOtp`, both directions, across `projects`, `invoices`,
+(password grant, falling back to a magic link — see `test/live-session.ts`), both
+directions, across `projects`, `invoices`,
 `invoice_lines`, `client_payments`, `client_payment_applications`, `expenses`,
 `member_pay_rates`, `instrument_rates` and `contacts`:
 
@@ -92,15 +97,48 @@ cd apps/web && npx vitest run --config test/live.vitest.config.ts
 `test/*.live.ts` hit rebuild-test and are excluded from the CI suite by the `.live.ts`
 suffix. Copy the session pattern in `s97ct-isolation.live.ts` for any new role check.
 
-### Still owed (was blocked here, now merely undone)
+### Role checks — RUN [S97, 2026-08-02]
 
-These are no longer *blocked* — the identities exist — but they have not been re-run yet:
+`apps/web/test/s97ct-roles.live.ts` — **26 assertions, 21 PASS, 5 FAIL**, under real
+sessions for all five roles. The five failures are **real defects**, recorded below and
+left unfixed pending a ruling; nothing was adjusted to make them pass.
 
-- Click-testing the merged Budget & Cost screen as PM, foreman, crew (context93 §12.5).
-- The S95 role-gated surfaces (rate section Owner/Admin-only, supersede/Correct-rates
-  Owner-only, CO rate fields PM-read-only, picker amount-hiding) — still verified by
-  reading the mount in code, not by exercising the gate. **7E is the exception:** its role
-  gates are exercised live for Owner, Admin, PM and Foreman (`s97ct-7e-clicktest.live.ts`).
+**Now genuinely verified (was code-reading only):**
+
+| # | Surface | Verified |
+| --- | --- | --- |
+| 2 | Correct-rates / `supersede_instrument_rate` | **PASS** — Owner only. Admin, PM, Foreman and Crew are all refused *"Superseding a rate is Owner only."*; the Owner passes the guard and is stopped only by the target, so the refusals are a role gate rather than a wall. Admin also cannot reach the same effect by writing `superseded_at` directly. |
+| 4 | CO builder rate fields | **PASS** — the real `CoRateSection` client component was RENDERED for both prop values: `canEditRates: false` emits no `<input>` or `<button>`. A PM cannot write a CO rate; Owner and Admin can. |
+| 5 | Sub-contract schedules | **PASS** — `revise_sub_contract_schedule` refuses PM, Foreman and Crew; Owner/Admin pass its guard. `setup_payment_schedule` **admits a PM** and refuses Foreman/Crew, so "PM setup-only" is a real distinction and not an accident. A PM also cannot rewrite the contract's retainage directly. |
+| 6 | Invoices tab | **PASS** — the real `ProjectHeader` was RENDERED for all five roles: Foreman and Crew get no Invoices tab, the other three do. Both also read **zero** invoices and cannot create one. |
+| 7 (part) | §12a — a PM sees invoice amounts | **PASS** — a PM reads `billed_total` / `amount_receivable` / `retainage_withheld` on an invoice they can reach. |
+
+**Failures — open defects:**
+
+| # | Surface | Defect |
+| --- | --- | --- |
+| 1, 3 | Rate section + Overview rate summary | **FAIL — the gate is UI-only.** `instrument_rates_select_company` is `company_id = get_my_company_id()` with **no role floor**, so PM, Foreman and Crew each read rate rows straight from the API. The UI hides the section; the data is not protected. *(Writes ARE gated — `instrument_rates_insert_authorized` is Owner/Admin, and no gated role could insert.)* |
+| 7 | §12a "Original contract" tile | **FAIL — read.** A PM read `contract_value = 12365`; Foreman and Crew read `50000`. The tile's absence is cosmetic. |
+| 7 | §12a contract value | **FAIL — WRITE.** A **PM rewrote `contract_value` to 999999** on an assigned project. `projects_update_authorized` admits a PM with no column restriction. The most serious of the five: the Financial Visibility Floor treats contract value as Owner/Admin, and a PM can not only read it but change it. *(The harness restored the value; it writes only to its own QA fixture, never to real project data.)* |
+
+All five are the **`FINANCIAL-RLS-FLOOR`** follow-up CLAUDE.md already names as owed
+(ui-01 §10 — "the DB-level floor is NOT yet in place"). What is new is that they are
+**demonstrated rather than predicted**, and that the floor is not only a read gap: item 7's
+write is beyond what "UI-only read floor" describes.
+
+### Still owed
+
+- **`FINANCIAL-RLS-FLOOR` migration** — a role floor on `instrument_rates` SELECT, and a
+  column- or policy-level restriction so a PM can neither read nor write
+  `projects.contract_value`. Now backed by five live failures rather than a code reading.
+- Click-testing the merged Budget & Cost **screen** as PM, foreman, crew (context93 §12.5).
+  Its rate section's data layer is covered above; the per-role column counts (§7.1:
+  Owner/Admin 7, PM 5, Foreman 3) are still unexercised.
+- The picker amount-hiding gate (S95) — not covered by this harness.
+- **Render gates inside `page.tsx` server components remain code-read-only** (items 1, 2, 3
+  and 7's tile). They cannot be executed outside a Next runtime — only client components
+  can be rendered in the harness. Their data and write halves are covered above, which is
+  the half that actually enforces anything.
 
 ---
 

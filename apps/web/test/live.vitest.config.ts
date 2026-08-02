@@ -37,6 +37,12 @@ function loadEnvLocal(): void {
 loadEnvLocal();
 
 export default defineConfig({
+  // The app's tsconfig sets jsx: "preserve" (Next compiles it), so the runner
+  // would otherwise hand raw JSX to the parser and fail. The role harness
+  // renders real client components to static markup to execute their gates, so
+  // JSX has to compile here. Vitest 4 transforms through oxc — the `esbuild.jsx`
+  // option is silently ignored, which cost a while to work out.
+  oxc: { jsx: { runtime: 'automatic' } },
   resolve: {
     tsconfigPaths: true,
     alias: {

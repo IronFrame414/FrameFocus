@@ -268,8 +268,11 @@ solely so cross-company isolation can be *proved* rather than asserted from code
 > Committed deliberately, and only defensible because of what it protects: a disposable test
 > database with no real customer data, in a private repo. **Never reuse it anywhere else, never
 > create these identities on production, and rotate it if rebuild-test ever holds anything real.**
-> Automated runs do not need it — the harnesses mint sessions with `generateLink` + `verifyOtp`
-> via the service role.
+> Re-running the seed **resets this password on all six**, including Josh's originals.
+> The harnesses sign in with it too (`test/live-session.ts`), falling back to a service-role
+> magic link — password first because Supabase rate-limits OTP generation hard enough to break
+> a few harness runs in a row, and because signing in the way a human would keeps this entry
+> honest: if the password rots, the harnesses fail.
 
 **Isolation fixtures.** Both companies carry one row in every table the proof covers — contact,
 project, sent invoice, client payment + application, expense, member pay rate — all named
@@ -282,9 +285,18 @@ runs in *both* directions and A had no payments of its own to hide.
 cd apps/web && npx vitest run --config test/live.vitest.config.ts
 ```
 
-`apps/web/test/*.live.ts` are live harnesses against rebuild-test. They are **excluded from the
-CI suite** by the `.live.ts` suffix. See `s97ct-isolation.live.ts` for the identity/session
-pattern to copy.
+`apps/web/test/*.live.ts` are live harnesses against rebuild-test, **excluded from the CI suite**
+by the `.live.ts` suffix. Current coverage — **74 assertions**:
+
+| Harness | Covers | Tally |
+| --- | --- | --- |
+| `s97ct-7e-clicktest.live.ts` | 7E payments, all four money paths + role gates | 34/34 |
+| `s97ct-isolation.live.ts` | cross-company isolation, both directions | 14/14 |
+| `s97ct-roles.live.ts` | the S95/7D role-gated surfaces | 21/26 — **5 open defects**, see GATED.md → Gate 2 |
+
+Session helper: `test/live-session.ts` (`sessionFor`, `admin`, `assertRebuildTest`) — copy that
+pattern for any new role check. The runner compiles JSX via `oxc`, so a harness can render a real
+client component to static markup and execute its gate rather than read it.
 
 ### Other test data
 

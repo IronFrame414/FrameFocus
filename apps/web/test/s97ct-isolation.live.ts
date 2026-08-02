@@ -20,18 +20,9 @@
  * refused, and each is verified afterwards to have changed nothing. It creates
  * no fixtures and deletes nothing — the seeded rows are persistent on purpose.
  */
-import { createClient as createSupabaseClient, type SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { beforeAll, describe, expect, it } from 'vitest';
-
-const REQUIRED_PROJECT_REF = 'nmyphyhmfttxkdoposvf';
-
-const URL_ = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY!;
-
-const admin = createSupabaseClient(URL_, SERVICE, {
-  auth: { autoRefreshToken: false, persistSession: false },
-});
+import { admin, assertRebuildTest, sessionFor } from './live-session';
 
 const A_OWNER = 'josh+test50@worthprop.com';
 const A_ADMIN = 'josh+qa-admin@worthprop.com';
@@ -40,20 +31,6 @@ const B_OWNER = 'josh+qa-b-owner@worthprop.com';
 
 const COMPANY_A_NAME = 'Bishop Contracting';
 const COMPANY_B_SLUG = 'ridgeline-test-co-2';
-
-async function sessionFor(email: string): Promise<SupabaseClient> {
-  const { data, error } = await admin.auth.admin.generateLink({ type: 'magiclink', email });
-  if (error) throw new Error(`generateLink(${email}): ${error.message}`);
-  const client = createSupabaseClient(URL_, ANON, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-  const { error: vErr } = await client.auth.verifyOtp({
-    token_hash: data.properties!.hashed_token,
-    type: 'email',
-  });
-  if (vErr) throw new Error(`verifyOtp(${email}): ${vErr.message}`);
-  return client;
-}
 
 let aOwner: SupabaseClient;
 let aAdmin: SupabaseClient;
@@ -85,9 +62,7 @@ async function firstIdFor(table: string, companyId: string): Promise<string | un
 }
 
 beforeAll(async () => {
-  if (!URL_.includes(REQUIRED_PROJECT_REF)) {
-    throw new Error(`REFUSING TO RUN: linked project is not ${REQUIRED_PROJECT_REF}. URL=${URL_}`);
-  }
+  assertRebuildTest();
 
   const { data: a } = await admin.from('companies').select('id').eq('name', COMPANY_A_NAME).single();
   const { data: b } = await admin.from('companies').select('id').eq('slug', COMPANY_B_SLUG).maybeSingle();

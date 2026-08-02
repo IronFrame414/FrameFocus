@@ -76,7 +76,15 @@ const must = (label, error) => {
 async function ensureIdentity({ email, role, first, last }, companyId) {
   const { data: existing } = await db.from('profiles').select('id, user_id, role').eq('email', email).maybeSingle();
   if (existing) {
-    note(`identity ${email}`, 'exists', `role=${existing.role}`);
+    // Set the shared password even on identities that predate it (Josh's
+    // originals), so STATE.md's documented credential is true for ALL of them
+    // and the harnesses can use the password grant rather than magic links —
+    // Supabase rate-limits OTP generation hard enough to break repeated runs.
+    const { error } = await db.auth.admin.updateUserById(existing.user_id, {
+      password: TEST_PASSWORD,
+    });
+    must(`password(${email})`, error);
+    note(`identity ${email}`, 'exists', `role=${existing.role}, password set`);
     return existing;
   }
 
@@ -297,11 +305,34 @@ async function seedIsolationFixtures(company, tag, ownerMemberId) {
       hourly_rate: 77, effective_date: '2026-01-01',
     }
   );
+
+  return projectId;
 }
 
 const aOwnerProfile = (await db.from('profiles').select('id').eq('email', COMPANY_A_IDENTITIES[0].email).single()).data;
-await seedIsolationFixtures(companyA, 'A', await memberIdFor(aOwnerProfile.id));
+const aProjectId = await seedIsolationFixtures(companyA, 'A', await memberIdFor(aOwnerProfile.id));
 await seedIsolationFixtures(companyB, 'B', bOwnerMemberId);
+
+// ── Role-check assignments ──────────────────────────────────────────────────
+//
+// PM, foreman and crew are ASSIGNED to company A's fixture project so the role
+// harness has a project every role can legitimately reach. That matters: it
+// makes a refusal attributable to the ROLE rather than to a missing assignment,
+// which is a weaker and less interesting proof.
+//
+// Owner and Admin need no assignment — can_view_project() lets them see every
+// project in the company.
+console.log('\nRole-check assignments on company A fixture project:');
+for (const { email, role } of COMPANY_A_IDENTITIES) {
+  if (role === 'owner' || role === 'admin') continue;
+  const { data: profile } = await db.from('profiles').select('id').eq('email', email).single();
+  const memberId = await memberIdFor(profile.id);
+  await ensureRow(
+    `assignment ${role}`, 'project_assignments',
+    { project_id: aProjectId, member_id: memberId },
+    { company_id: companyA.id, project_id: aProjectId, member_id: memberId, role_on_project: role }
+  );
+}
 
 // ── summary ─────────────────────────────────────────────────────────────────
 const created = log.filter((l) => l.status === 'CREATED').length;
