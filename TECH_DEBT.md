@@ -1,6 +1,6 @@
 # TECH_DEBT.md — FrameFocus
 
-> **Last updated:** July 31, 2026 — S95 (#111 closed RESOLVED-MOOT, migration 20260731010000; #113 NON-ISSUE REVERSED: award no longer overwrites an estimator-entered sub cost — fill-only-when-empty, migration 20260731040000 authored; #112 unchanged)
+> **Last updated:** August 2, 2026 — S97 (#117 RAISED: `change_orders.net_delta` has no DB role floor — DEFERRED-BY-RULING, cross-referenced from CLAUDE.md's Financial Visibility Floor; #116 CO/renegotiate arm closed)
 > **Purpose:** Tracks all known tech debt — open and closed. Lives in the repo, not in project knowledge. Read on demand when working on items, planning a polish session, or auditing.
 
 ---
@@ -57,6 +57,16 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   - **Recorded dates / display.** `projects-client.ts:163,165` (`actual_end_date` — a project could be stamped complete a day late), `dashboard.ts:36`, `projects/[id]/page.tsx:96`, `estimates/[id]/bidding-tab.tsx:384` (bid received-at default), `expenses/bills-tab.tsx:76`.
 
   Fix shape: thread the timezone from the server page where the tree is shallow (the 7D pattern), or call `todayForCompany()` / `todayInZone()` from `instrument-rates-client` where the callers are deep inside a client tree (the FIX 5/6 pattern — one memoized `companies.timezone` read rather than threading through ~8 M4/M5 files). Neither should fall back to UTC; fall back to the column default `America/New_York`, mirroring `getCompanyTimeSettings`. The five rate-in-force display sites are the natural next batch — they all ask the same question ("what is in force today?") and all already sit next to a rates import, so `todayForCompany()` is a drop-in. Observed Session 97.
+
+- **#117** `change_orders.net_delta` has no DB-level role floor — the last figure in the Financial Visibility Floor that is **UI-gated only**. DEFERRED-BY-RULING (Josh, S97). The other three families were closed by moving the column to a 1:1 Owner/Admin side table: contract value → `project_financials` (`20260811000000`, old column dropped `20260812000000`), budgeted amount → `project_budget_amounts` (`20260816000000`, old column dropped `20260817000000`), and `instrument_rates` got a SELECT floor (`20260806000000` §1). `net_delta` was deliberately left on the parent row.
+
+  **Josh's ruling (S97), in substance:** a PM **must** be able to write a change order, and **may** see the value of the COs they write. What he does **not** want is a PM seeing other amounts charged to clients. The DB floor is deferred because the same split that worked for the other three does not work here: `net_delta` sits on the row a PM must be able to INSERT and UPDATE, so splitting it would either **remove CO authoring from PM** or produce **a table a PM can write but not read** — a shape that is worse than the gap it closes.
+
+  **The residual, precisely.** Today `change_orders_select_visible` is `company_id = get_my_company_id() AND can_view_project(project_id)` — no role floor and **no author scoping**. So a PM can read `net_delta` on **ANY change order they can see, not only ones they authored**: every CO on every project they are assigned to, including COs written by the Owner. **The ruling is satisfied by intent but not by enforcement.** The UI gate (ui-01 §11) is the only thing standing between a PM and other people's CO dollar figures, and a direct API/query walks around it.
+
+  **The decision owed before anyone builds this:** what "COs they write" actually means — **authored-by** scope (`created_by = auth.uid()`, narrow, matches the words of the ruling) or **assigned-project** scope (what the policy accidentally implements today, wider). These are materially different floors and the answer changes the fix. Do not pick one at implementation time by inference; ask.
+
+  Note there is no `change_order_amounts` split table — nothing has been half-built toward either answer. Cross-ref: CLAUDE.md → **Financial Visibility Floor** → "Current enforcement status" (that table cites this item, and the two must be updated together). Related: #115 (same posture — a capture/authoring model Josh wants revisited rather than patched). Raised Session 97.
 
 ### Code Quality
 

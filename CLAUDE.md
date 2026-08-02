@@ -1,6 +1,6 @@
 # CLAUDE.md — FrameFocus Development Guide
 
-> **Last updated:** July 20, 2026 (Session 86 — Spec completeness rule added to Platform Modules)
+> **Last updated:** August 2, 2026 (Session 97 — Financial Visibility Floor enforcement status corrected: contract value, budgeted amount and instrument rates are DB-enforced; `change_orders.net_delta` is UI-only by ruling, filed as TECH_DEBT #117)
 > **Purpose:** This file is the single source of truth for all development conversations. Read this before every session.
 
 ---
@@ -394,13 +394,24 @@ Each subscribing company is an isolated tenant. Within that company, there are 6
 
 ### Financial Visibility Floor (authoritative — added 2026-07-20)
 
-**Only Owner and Admin may see contract/budget/sell/CO dollar figures. Project Manager, Foreman, and Crew see ACTUAL COST ONLY.**
+**Only Owner and Admin may see contract/budget/sell/CO dollar figures. Project Manager, Foreman, and Crew see ACTUAL AND COMMITTED COST ONLY.**
 
-- **Gated from PM/foreman/crew:** contract value (`projects.contract_value`), original/revised contract, budgeted and sell/price amounts (`project_budget_items.budgeted_amount` and any future sell column), committed amounts, variance, projected margin, and **change-order dollar amounts** (`change_orders.net_delta` and any `$` sum derived from it).
-- **Visible to all roles:** actual cost (`project_budget_items.actual_amount`, once Module 7A populates it), and non-dollar facts — CO counts/statuses, project status, dates, punch counts, schedule.
+- **Gated from PM/foreman/crew:** contract value (`project_financials.contract_value`), original/revised contract, budgeted and sell/price amounts (`project_budget_amounts.budgeted_amount` and any future sell column), labor/burden rates (`instrument_rates`), variance, projected margin, and **change-order dollar amounts** (`change_orders.net_delta` and any `$` sum derived from it). Both money columns moved to 1:1 side tables to get this enforced — see the status table below; the old `projects.contract_value` and `project_budget_items.budgeted_amount` no longer exist.
+- **Visible to all roles:** actual and committed cost (`project_budget_items.actual_amount` and `committed_amount`), and non-dollar facts — CO counts/statuses, project status, dates, punch counts, schedule. **This is deliberate, not an oversight:** the budgeted figure was split off onto `project_budget_amounts` precisely so actual and committed could stay on a row Foreman and Crew can still read. A role floor on `project_budget_items` itself would over-reach — `s97ct-roles.live.ts` **8b-ii** and `s97ct-budget-floor.live.ts` **7-foreman/7-crew_member** exist to fail loudly if anyone adds one.
 - **Named carve-out [S97, 2026-08-01]:** a **PM may see the amounts ON an invoice they can reach** (7D client invoicing) — derived lines, draws, discounts, credits, invoice totals and retainage. This does NOT extend to contract value, budget/sell amounts, or CO dollar figures, which remain Owner/Admin on every surface including 7D's own. Ruling and rationale: [`docs/specs/7d1-spec.md`](docs/specs/7d1-spec.md) §12a.
 - **Why:** this narrows the previous blanket "PM views job finances" grant (PM row above) to actual cost, and extends the same floor to foreman/crew. Foreman/crew are "Limited/Minimal" web roles; they had no business reason to see contract/margin figures, but nothing enforced it.
-- **Current enforcement status:** the UI-refresh specs (ui-01 §11, applied across ui-02–ui-06) gate these figures **at the UI layer**. The **DB-level floor is NOT yet in place** — `can_view_project()` has no role floor, so a gated user can still read the figures via a direct API/query. The RLS floor is the named `FINANCIAL-RLS-FLOOR` migration follow-up (ui-01 §10), to batch with the pending production migrations. Until it lands, treat the floor as UI-only and defense-in-depth-incomplete.
+- **Current enforcement status [corrected 2026-08-02, S97]:** the UI-refresh specs (ui-01 §11, applied across ui-02–ui-06) gate these figures at the UI layer, and **three of the four figure families are now DB-enforced as well**. The previous text here — "the DB-level floor is NOT yet in place" — is superseded. Verify against the cited migrations rather than trusting this prose:
+
+| Figure | Where it lives now | Enforcement |
+| ------ | ------------------ | ----------- |
+| Contract value | `project_financials.contract_value` (1:1 off `projects`) | **DB-enforced, Owner/Admin.** Table + `project_financials_{select,insert,update}_owner_admin`: `20260811000000_project_financials.sql`. Writer retargeted: `20260811010000_convert_estimate_project_financials.sql`. Old column dropped: `20260812000000_drop_projects_contract_value.sql`. |
+| Budgeted amount | `project_budget_amounts.budgeted_amount` (1:1 off `project_budget_items`) | **DB-enforced, Owner/Admin.** Table + `project_budget_amounts_{select,insert,update}_owner_admin` + backfill: `20260816000000_budget_amounts.sql`. Transitional sync trigger: `20260816010000_budget_amounts_sync.sql`. Old column dropped, sync trigger removed, all four SQL writers retargeted in one transaction: `20260817000000_drop_budgeted_amount.sql`. |
+| Labor/burden rates | `instrument_rates` | **DB-enforced, Owner/Admin SELECT floor.** `20260806000000_financial_rls_floor.sql` §1 replaces `instrument_rates_select_company` with `instrument_rates_select_owner_admin`. |
+| Change-order dollar amounts | `change_orders.net_delta` — still on the parent row, not split | **UI-ONLY, and deliberately so.** `change_orders_select_visible` is `company_id = get_my_company_id() AND can_view_project(project_id)` — no role floor, no author scoping. This is a ruling, not an oversight: a PM must be able to author COs and see the value of the ones they write. Rationale, residual risk and the open scoping question: **[TECH_DEBT.md #117](TECH_DEBT.md)**. |
+
+  Both split tables carry SELECT/INSERT/UPDATE for Owner/Admin and **no DELETE policy at all**, so DELETE is denied to every role. `can_view_project()` still has no role floor of its own — the gating comes from the side tables, which is why the columns were moved rather than the helper changed.
+
+  **Do not "finish" this by flooring `change_orders`** without reading #117 first — the obvious fix breaks CO authoring for PMs.
 
 ### The Admin Role Principle (authoritative)
 
