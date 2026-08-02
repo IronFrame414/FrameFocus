@@ -4005,6 +4005,54 @@ export type Database = {
           },
         ]
       }
+      project_financials: {
+        Row: {
+          company_id: string
+          contract_value: number | null
+          created_at: string | null
+          created_by: string | null
+          id: string
+          project_id: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          contract_value?: number | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          project_id: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          contract_value?: number | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          project_id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_financials_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_financials_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: true
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       projects: {
         Row: {
           actual_end_date: string | null
