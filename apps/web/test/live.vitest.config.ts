@@ -2,11 +2,18 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
-// S97CT-7E live click-test runner. Deliberately SEPARATE from vitest.config.ts:
-// this hits a real database and must never join the committed suite or CI. The
-// `.live.ts` suffix also keeps it outside that config's include glob.
+// Runner for the LIVE harnesses — every `test/*.live.ts`. Deliberately SEPARATE
+// from vitest.config.ts: these hit a real database and must never join the
+// committed suite or CI. The `.live.ts` suffix also keeps them outside that
+// config's include glob.
 //
-//   cd apps/web && npx vitest run --config test/s97ct-7e.vitest.config.ts
+//   cd apps/web && npx vitest run --config test/live.vitest.config.ts
+//
+// One file only:
+//   … --config test/live.vitest.config.ts s97ct-isolation
+//
+// Both harnesses need the persistent test identities:
+//   node scripts/seed-test-identities.mjs
 //
 // .env.local is read directly rather than via dotenv — dotenv is only present
 // transitively here, and a committed harness should not depend on hoisting.
@@ -37,7 +44,7 @@ export default defineConfig({
     },
   },
   test: {
-    include: ['test/s97ct-7e-clicktest.live.ts'],
+    include: ['test/*.live.ts'],
     environment: 'node',
     testTimeout: 120_000,
     hookTimeout: 240_000,

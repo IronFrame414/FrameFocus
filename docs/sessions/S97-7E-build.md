@@ -207,12 +207,15 @@ expectation was not adjusted — the FAIL was recorded in §7a and left for Josh
 four added assertions (13, 13a–13d) are the regression net for exactly that defect, and #13b
 covers `unapplyPayment()`, which no test had ever exercised.
 
-**Identities.** rebuild-test had only Owner, PM and Crew — **no Admin and no Foreman**, which is
+**Identities.** rebuild-test had only Owner, PM and Crew — **no Admin and no Foreman**, which was
 `GATED.md` Gate 2 (#103) and is exactly why the refund-approval and Foreman gates had never been
-exercised. The harness **mints an Admin and a Foreman** (auth user + profile; `profiles_create_member`
-auto-creates the `company_members` row), uses them, and deletes them. Standing them up costs
-about 20 lines — **Gate 2 can be closed permanently whenever Josh wants**, and it is the single
-highest-value fixture on rebuild-test.
+exercised. This harness mints an Admin and a Foreman for its own run, uses them, and deletes them.
+
+> **Superseded [S97, 2026-08-02] — Gate 2 is now CLOSED.** Those identities are **persistent**:
+> `node scripts/seed-test-identities.mjs` seeds all five roles in company A plus a second company
+> (#104), and `s97ct-isolation.live.ts` proves cross-company isolation in both directions
+> (14/14). This harness still mints its own throwaway pair so it stays self-contained, but role
+> checks no longer need it. See GATED.md → Gate 2 and STATE.md → Test Data.
 
 ### Results — every assertion
 
@@ -294,12 +297,12 @@ invoice can ever be renumbered. Production was never touched.
 > list, so the failure mode that bit 7D cannot recur silently here.
 
 **The harness itself** is `apps/web/test/s97ct-7e-clicktest.live.ts` with its own runner config
-`apps/web/test/s97ct-7e.vitest.config.ts`. The `.live.ts` suffix does **not** match the
+`apps/web/test/live.vitest.config.ts`. The `.live.ts` suffix does **not** match the
 `**/*.{test,spec}.{ts,tsx}` include in `vitest.config.ts`, so **CI never runs it** and the
 committed 174-test suite is unaffected. Run it deliberately:
 
 ```
-cd apps/web && npx vitest run --config test/s97ct-7e.vitest.config.ts
+cd apps/web && npx vitest run --config test/live.vitest.config.ts
 ```
 
 It is committed (7D's was thrown away) so this is repeatable rather than a one-off claim.
@@ -501,7 +504,7 @@ apps/web/lib/services/payments-client.ts
 apps/web/app/dashboard/projects/[id]/payments/page.tsx
 apps/web/app/dashboard/projects/[id]/payments/payments-view.tsx
 apps/web/test/s97ct-7e-clicktest.live.ts       (30-assertion live click-test, §4a)
-apps/web/test/s97ct-7e.vitest.config.ts        (its runner — NOT in the CI suite)
+apps/web/test/live.vitest.config.ts        (its runner — NOT in the CI suite)
 ```
 
 **Modified**

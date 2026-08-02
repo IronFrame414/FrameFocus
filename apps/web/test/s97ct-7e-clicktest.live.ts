@@ -121,6 +121,8 @@ const pay: Record<string, string> = {};
 let refundAdminId: string;
 let releaseInvoiceId: string | undefined;
 let seqBefore: number;
+/** Company A's invoice count BEFORE this run — the teardown's rewind guard. */
+let invoicesBefore: number;
 
 /** Create a sent invoice with one fixed line, through 7D's own services. */
 async function sentInvoice(
@@ -183,6 +185,15 @@ beforeAll(async () => {
     .eq('id', companyId)
     .single();
   seqBefore = company!.invoice_number_sequence;
+
+  // Baseline rather than a magic number: rebuild-test now also carries the
+  // persistent isolation fixtures (scripts/seed-test-identities.mjs), so the
+  // count is no longer "Josh's 2".
+  const { count } = await admin
+    .from('invoices')
+    .select('id', { count: 'exact', head: true })
+    .eq('company_id', companyId);
+  invoicesBefore = count ?? 0;
 
   const { data: ownerMember } = await admin
     .from('company_members')
@@ -899,16 +910,21 @@ afterAll(async () => {
 
   // 5. Rewind the invoice number sequence — safe ONLY because every invoice this
   //    run numbered is gone, so no live invoice can ever be renumbered.
+  // Scoped to THIS company: numbering is per-company, and rebuild-test now also
+  // carries company B's fixtures (scripts/seed-test-identities.mjs, #104).
   const { count: invoicesLeft } = await admin
     .from('invoices')
-    .select('id', { count: 'exact', head: true });
-  if (invoicesLeft === 2 && seqBefore != null) {
+    .select('id', { count: 'exact', head: true })
+    .eq('company_id', companyId);
+  if (invoicesLeft === invoicesBefore && seqBefore != null) {
     check(
       'sequence-rewind',
       (await admin.from('companies').update({ invoice_number_sequence: seqBefore }).eq('id', companyId)).error
     );
   } else {
-    errors.push(`sequence NOT rewound: ${invoicesLeft} invoices remain (expected Josh's 2)`);
+    errors.push(
+      `sequence NOT rewound: ${invoicesLeft} invoices remain, expected the pre-run ${invoicesBefore}`
+    );
   }
 
   // 6. Verify — nothing may fail silently the way 7D's teardown did.
@@ -916,15 +932,18 @@ afterAll(async () => {
   const tally = async (label: string, q: PromiseLike<{ count: number | null }>) => {
     counts[label] = (await q).count;
   };
-  await tally('client_payments', admin.from('client_payments').select('id', { count: 'exact', head: true }));
-  await tally('client_payment_applications', admin.from('client_payment_applications').select('id', { count: 'exact', head: true }));
-  await tally('client_refunds', admin.from('client_refunds').select('id', { count: 'exact', head: true }));
-  await tally('retainage_releases', admin.from('retainage_releases').select('id', { count: 'exact', head: true }));
-  await tally('invoices', admin.from('invoices').select('id', { count: 'exact', head: true }));
-  await tally('invoice_lines', admin.from('invoice_lines').select('id', { count: 'exact', head: true }));
-  await tally('projects', admin.from('projects').select('id', { count: 'exact', head: true }));
-  await tally('contacts', admin.from('contacts').select('id', { count: 'exact', head: true }));
-  await tally('profiles', admin.from('profiles').select('id', { count: 'exact', head: true }));
+  // Company-scoped: company B's persistent fixtures must not read as leftovers.
+  const own = (table: string) =>
+    admin.from(table).select('id', { count: 'exact', head: true }).eq('company_id', companyId);
+  await tally('client_payments', own('client_payments'));
+  await tally('client_payment_applications', own('client_payment_applications'));
+  await tally('client_refunds', own('client_refunds'));
+  await tally('retainage_releases', own('retainage_releases'));
+  await tally('invoices', own('invoices'));
+  await tally('invoice_lines', own('invoice_lines'));
+  await tally('projects', own('projects'));
+  await tally('contacts', own('contacts'));
+  await tally('profiles', own('profiles'));
 
   const { data: seqNow } = await admin
     .from('companies')

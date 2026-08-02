@@ -231,12 +231,73 @@ Vercel env vars must match `.env.local` exactly.
 
 ## Test Data
 
+### Persistent test identities — rebuild-test only [S97, 2026-08-02]
+
+These close **GATED.md Gate 2** (#103 foreman identity, #104 second test company). They live
+**only on rebuild-test** (`nmyphyhmfttxkdoposvf`) and must **never** be created on production.
+
+Seeded and re-seeded by:
+
+```bash
+node scripts/seed-test-identities.mjs
+```
+
+That script is **idempotent** (re-running touches nothing that already exists) and **refuses to
+run** against any project other than rebuild-test.
+
+**Company A — Bishop Contracting** (`03bb903f-1084-4ab4-afb8-03192cb58d30`) — every role the
+platform gates on:
+
+| Role              | Email                            | Display name  |
+| ----------------- | -------------------------------- | ------------- |
+| `owner`           | josh+test50@worthprop.com        | Josh Bishop   |
+| `admin`           | **josh+qa-admin@worthprop.com**  | QA Admin A    |
+| `project_manager` | josh+pm@worthprop.com            | Pat Manager   |
+| `foreman`         | **josh+qa-foreman@worthprop.com**| QA Foreman A  |
+| `crew_member`     | josh+crew@worthprop.com          | Casey Crew    |
+
+**Company B — Ridgeline Builders (TEST CO 2)** (`f079a1f4-12db-4bc8-ae95-2d647d688260`) — exists
+solely so cross-company isolation can be *proved* rather than asserted from code:
+
+| Role    | Email                            | Display name |
+| ------- | -------------------------------- | ------------ |
+| `owner` | **josh+qa-b-owner@worthprop.com**| QA Owner B   |
+
+**Password (all six): `FrameFocusTest!2026`**
+
+> Committed deliberately, and only defensible because of what it protects: a disposable test
+> database with no real customer data, in a private repo. **Never reuse it anywhere else, never
+> create these identities on production, and rotate it if rebuild-test ever holds anything real.**
+> Automated runs do not need it — the harnesses mint sessions with `generateLink` + `verifyOtp`
+> via the service role.
+
+**Isolation fixtures.** Both companies carry one row in every table the proof covers — contact,
+project, sent invoice, client payment + application, expense, member pay rate — all named
+`QA A — …` / `QA B — …` so they are obvious in the UI. Company A's set exists because the proof
+runs in *both* directions and A had no payments of its own to hide.
+
+**Using them in a test** — role and cross-company checks are a test run, not a manual login:
+
+```bash
+cd apps/web && npx vitest run --config test/live.vitest.config.ts
+```
+
+`apps/web/test/*.live.ts` are live harnesses against rebuild-test. They are **excluded from the
+CI suite** by the `.live.ts` suffix. See `s97ct-isolation.live.ts` for the identity/session
+pattern to copy.
+
+### Other test data
+
 - **Josh Bishop** (jsbishop14@gmail.com) — Owner of Bishop Contracting. Predates Migration 007, may need manual subscription row insert. `ai_tagging_enabled = true` as of Session 31 (left on for Session 32 upload-wiring testing).
-- **josh+test40@worthprop.com** — Admin of Bishop Contracting. Use for Admin role testing.
+- **josh+test40@worthprop.com** — Admin of Bishop Contracting. **[UNVERIFIED S97]** — no profile with this address exists on rebuild-test; the live Admin identity is `josh+qa-admin@worthprop.com` above.
 - Bishop Contracting cost catalog test items (`2x6 Joist`, `Romex 12/2`, `Drywall Sheet`; soft-deleted `2x4 Stud`) — intentionally kept (Session 48).
 - Various orphaned test accounts from Session 7 debugging. Optional cleanup.
 
-Clear all test data:
+Clear all test data — **this destroys the persistent test identities and company B above.**
+Re-run `node scripts/seed-test-identities.mjs` afterwards to rebuild them. Note the delete order:
+three FKs reference `invoices` with no `ON DELETE` action (`invoice_lines.source_deposit_invoice_id`,
+`client_payment_applications.invoice_id`, `retainage_releases.release_invoice_id`), so 7E rows must
+go before invoices.
 
 ```sql
 DELETE FROM subcontractors;

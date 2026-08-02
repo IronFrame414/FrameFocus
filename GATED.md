@@ -42,23 +42,65 @@ branding, and delivery must be settled first.
 
 ---
 
-## Gate 2 — Test identities (blocks all role verification)
+## ~~Gate 2 — Test identities~~ — **CLOSED [S97, 2026-08-02]**
 
-**Blocked behind it**
+**#103 (foreman test identity) and #104 (second test company) are both done.** Nothing
+is blocked behind this gate any more.
 
-- Click-testing the merged Budget & Cost screen as PM, foreman, crew — only Owner has
-  ever been exercised (context93 §12.5, still owed).
-- Verification of every role-gated surface built since (S95: rate section
-  Owner/Admin-only, supersede/Correct-rates Owner-only, CO rate fields PM-read-only,
-  picker amount-hiding). All verified by reading the mount/gate in code, not by
-  logging in.
-- **Cross-company isolation proof — none exists** (context94 §9): every role gate and
-  RLS policy is asserted from code reading, not demonstrated.
+### What now exists
 
-**What unblocks it**
+**Six persistent identities across two companies on rebuild-test** — every role the
+platform gates on, plus a genuinely separate tenant:
 
-- **#103** foreman test identity
-- **#104** second test company
+- **Company A — Bishop Contracting:** `owner`, **`admin`** (new), `project_manager`,
+  **`foreman`** (new, #103), `crew_member`.
+- **Company B — Ridgeline Builders (TEST CO 2)** (new, #104): `owner`. Carries its own
+  contact, project, sent invoice, client payment + application, expense and pay rate, so
+  isolation can be tested against real rows rather than an empty tenant. Company A carries
+  a matching fixture set for the same reason — the proof runs in **both** directions.
+
+Full table of emails, ids and the shared password: **STATE.md → Test Data**.
+
+Created by `node scripts/seed-test-identities.mjs` — idempotent, and it **refuses to run**
+against any project other than rebuild-test.
+
+### Cross-company isolation — now PROVEN, not asserted
+
+`apps/web/test/s97ct-isolation.live.ts` — **14 assertions, 14 PASS**, under real sessions
+minted with `generateLink` + `verifyOtp`, both directions, across `projects`, `invoices`,
+`invoice_lines`, `client_payments`, `client_payment_applications`, `expenses`,
+`member_pay_rates`, `instrument_rates` and `contacts`:
+
+- neither company's owner can read a single row of the other's, by id or by listing;
+- every row an owner *can* list belongs to their own company;
+- an unprivileged role (foreman) and a fully-privileged one (admin) leak nothing either;
+- cross-company **writes** are refused — UPDATE, INSERT claiming the other `company_id`,
+  and soft-delete — each verified afterwards to have changed nothing;
+- the 7E `record_client_payment` RPC, which is `SECURITY DEFINER` and so **not** protected
+  by RLS, refuses an invoice belonging to another company via its own check;
+- and the proof is guarded against being vacuous: each owner is asserted to read their own
+  fixture back before the "sees nothing of the other" assertions run.
+
+### How to use it
+
+Role and isolation checks are a test run, not a manual login:
+
+```bash
+cd apps/web && npx vitest run --config test/live.vitest.config.ts
+```
+
+`test/*.live.ts` hit rebuild-test and are excluded from the CI suite by the `.live.ts`
+suffix. Copy the session pattern in `s97ct-isolation.live.ts` for any new role check.
+
+### Still owed (was blocked here, now merely undone)
+
+These are no longer *blocked* — the identities exist — but they have not been re-run yet:
+
+- Click-testing the merged Budget & Cost screen as PM, foreman, crew (context93 §12.5).
+- The S95 role-gated surfaces (rate section Owner/Admin-only, supersede/Correct-rates
+  Owner-only, CO rate fields PM-read-only, picker amount-hiding) — still verified by
+  reading the mount in code, not by exercising the gate. **7E is the exception:** its role
+  gates are exercised live for Owner, Admin, PM and Foreman (`s97ct-7e-clicktest.live.ts`).
 
 ---
 
