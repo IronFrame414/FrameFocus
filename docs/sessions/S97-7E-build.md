@@ -99,12 +99,29 @@ the actual boundary.
 Josh has ruled none of these. Each was taken as the safest reversible option and is marked
 PROVISIONAL in the migration header or the code.
 
-**P-1 — Aging runs from `issue_date`.** `invoices.due_date` exists but **nothing writes it**: 7D
-shipped no control and payment terms are unruled (7D open item #3). §6 specifies 30/60/90 but never
-names day zero, so the only populated date is used.
-*Reverse:* one line in `agingBucketFor` to take a `dueDate` and prefer it. **No schema change** —
-the aging is derived entirely at read — plus a decision about invoices already sent.
-**This is the top decision 7E owes.**
+**P-1 — Aging runs from `issue_date`.**
+**✅ CONFIRMED AND SUPERSEDED BY A RULING [Josh, S97, 2026-08-02] — no longer provisional.**
+**Payment terms are set by the user per invoice, defaulting to DUE ON RECEIPT, and aging now runs
+from the DUE DATE.** This closes 7D open item #3 and 7E's P-1 together — they were the same
+question.
+
+**How "due on receipt" is represented: `due_date IS NULL`.** Not `issue_date`, not a separate term
+label. The ambiguity is killed deliberately, for three reasons:
+1. **Nothing shifted.** Every invoice written before the ruling carries a NULL due date, so it ages
+   from its issue date exactly as it did the day before. No backfill, no silent re-bucketing of live
+   receivables.
+2. **"Due on receipt" is a TERM, not a date.** Storing `issue_date` would make it a date that merely
+   happens to match — and a reissue takes a fresh issue date, which would move a term the user never
+   touched.
+3. It prints as **"Due on receipt"**, which is what a contractor actually writes on a bill.
+NULL therefore means due-on-receipt, never "not yet decided" — the default *is* due on receipt, so
+there is no third state.
+
+*Built as predicted:* `agingBucketFor(issueDate, today, dueDate?)` prefers the due date and falls
+back to the issue date. **No schema change** — the column already existed and the aging is derived
+at read. The one DB change is that `due_date` joined the invoice immutability trigger's frozen set
+(`20260813000000`), beside `issue_date`: it decides when a client is late, so moving it after the
+bill has gone out would silently rewrite whether they are overdue.
 
 **P-2 — An invoice auto-marks `paid`** when applications settle its receivable. 7D leaves `'paid'`
 in the CHECK for 7E to set and `status` is not in its immutability trigger's frozen set, so this is
@@ -324,6 +341,10 @@ retainage withheld. The automated run left no data behind, so you are starting f
    and **Retainage held** below a dashed rule with the sentence explaining it sits outside the
    buckets. The arithmetic is proven; what is not is legibility. **Judgement call: is it
    unmistakable that retainage is not overdue?** That is the rule the real $1M job turns on.
+   *Terms [S97]:* buckets now count from the **due date**. An invoice with terms shows as current
+   until its due date passes; a due-on-receipt one ages from issue exactly as before. **Judgement
+   call: on the aging list, is it clear WHICH date a row is being measured from?** That is the one
+   thing the ruling makes ambiguous on screen, and the arithmetic behind it is proven.
 3. **The pairing strip.** *Expect:* Collected / Spent / Ahead by. **Judgement call: is this "the
    number you have never been able to see", or does it need more?** §6a is invented by design and
    has no lived workflow to check against — your read is the only correction available.
@@ -349,10 +370,10 @@ retainage withheld. The automated run left no data behind, so you are starting f
 
 ## 6. What I want Josh to rule on
 
-1. **Payment terms / due dates** — **now the top open item.** Aging currently runs from the issue
-   date because nothing writes a due date. Do invoices carry terms (Net 15/30, due on receipt)?
-   Per-invoice, a company default, or both? Everything else in 7E is settled; this one changes
-   what "overdue" means.
+1. ~~**Payment terms / due dates.**~~ **RULED [S97, 2026-08-02] — per-invoice, user-set, default
+   DUE ON RECEIPT.** Aging runs from the due date; due-on-receipt is `due_date IS NULL` and ages
+   from issue exactly as before. See P-1 above. 7D grew the control, the PDF grew a Terms line and
+   the client email grew a matching one.
 2. ~~**Is auto-marking an invoice `paid` right (P-2)?**~~ **DECIDED [S97, 2026-08-02] — it stays.**
    The revert half shipped with the confirmation (`20260805000000`, §7a), which is what made the
    auto-mark safe rather than a one-way door.

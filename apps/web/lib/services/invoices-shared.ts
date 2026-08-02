@@ -306,3 +306,20 @@ export function daysBetween(from: string, to: string): number {
   const ms = new Date(`${to}T00:00:00Z`).getTime() - new Date(`${from}T00:00:00Z`).getTime();
   return Math.max(0, Math.round(ms / 86_400_000));
 }
+
+// ── Payment terms (7D open item #3, RULED Josh S97 2026-08-02) ──────────────
+//
+// The due date is set by the user per invoice; the default is DUE ON RECEIPT,
+// represented as `due_date IS NULL` (never issue_date — see agingBucketFor in
+// payments-shared.ts for why). Defined ONCE here so the PDF, the invoice screen
+// and the client email cannot describe the same invoice differently.
+
+export const DUE_ON_RECEIPT_LABEL = 'Due on receipt';
+
+/** The terms line a client reads. `dueDate` NULL = due on receipt. */
+export function paymentTermsLabel(
+  dueDate: string | null | undefined,
+  formatDate: (iso: string) => string
+): string {
+  return dueDate ? `Due ${formatDate(dueDate)}` : DUE_ON_RECEIPT_LABEL;
+}

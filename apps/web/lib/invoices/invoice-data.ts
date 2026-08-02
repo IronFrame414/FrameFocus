@@ -41,6 +41,8 @@ export interface InvoicePdfData {
     title: string | null;
     status: string;
     issueDate: string;
+    /** NULL = due on receipt (7D terms, ruled S97). */
+    dueDate: string | null;
     isDeposit: boolean;
     presentationLevel: PresentationLevel;
     /** §5 — withheld, shown separately and OUTSIDE the receivable. */
@@ -141,6 +143,7 @@ export async function getInvoicePdfData(
       title: invoice.title,
       status: invoice.status,
       issueDate: invoice.issue_date,
+      dueDate: invoice.due_date ?? null,
       isDeposit: invoice.invoice_type === 'deposit',
       presentationLevel: level,
       retainagePercent: invoice.retainage_percent === null ? null : Number(invoice.retainage_percent),

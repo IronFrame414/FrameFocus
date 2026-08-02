@@ -1,3 +1,4 @@
+import { DUE_ON_RECEIPT_LABEL, paymentTermsLabel } from '@/lib/services/invoices-shared';
 import { describe, it, expect } from 'vitest';
 import {
   ageReceivables,
@@ -290,5 +291,93 @@ describe('§6a — the pairing, and what must NOT leak into it', () => {
 
   it('a negative difference reads as a loss, not an error', () => {
     expect(jobPairing(10000, 12500).difference).toBe(-2500);
+  });
+});
+
+describe('§6 payment terms — aging runs from the DUE date (P-1 CONFIRMED, S97)', () => {
+  const base = {
+    id: 'i1',
+    invoice_number: 'INV-0001',
+    status: 'sent',
+    is_deleted: false,
+    amount_receivable: 1000,
+    retainage_withheld: 0,
+    supersedes_invoice_id: null,
+    applications: [],
+  };
+
+  it('due on receipt (NULL due date) ages from the ISSUE date — unchanged behaviour', () => {
+    // The regression guard for every invoice written before the ruling: they
+    // all carry NULL, so none of them may shift a bucket.
+    expect(agingBucketFor('2026-06-01', '2026-06-15')).toBe('current');
+    expect(agingBucketFor('2026-06-01', '2026-07-05', null)).toBe('d31_60');
+    expect(agingBucketFor('2026-06-01', '2026-07-05')).toBe(
+      agingBucketFor('2026-06-01', '2026-07-05', null)
+    );
+  });
+
+  it('a due date PUSHES the clock: issued 1 Jun, due 1 Jul, read 5 Jul = 4 days late', () => {
+    // Without terms this invoice would be 34 days old and in 31-60. With Net 30
+    // it is 4 days past due and current. That difference IS the ruling.
+    expect(agingBucketFor('2026-06-01', '2026-07-05')).toBe('d31_60');
+    expect(agingBucketFor('2026-06-01', '2026-07-05', '2026-07-01')).toBe('current');
+  });
+
+  it('the 30/60/90 boundaries hold, measured from the due date', () => {
+    const due = '2026-06-01';
+    expect(agingBucketFor('2026-01-01', '2026-07-01', due)).toBe('current'); // 30
+    expect(agingBucketFor('2026-01-01', '2026-07-02', due)).toBe('d31_60'); // 31
+    expect(agingBucketFor('2026-01-01', '2026-07-31', due)).toBe('d31_60'); // 60
+    expect(agingBucketFor('2026-01-01', '2026-08-01', due)).toBe('d61_90'); // 61
+    expect(agingBucketFor('2026-01-01', '2026-08-30', due)).toBe('d61_90'); // 90
+    expect(agingBucketFor('2026-01-01', '2026-08-31', due)).toBe('d90_plus'); // 91
+  });
+
+  it('a future due date is NOT overdue', () => {
+    expect(agingBucketFor('2026-06-01', '2026-06-20', '2026-12-31')).toBe('current');
+  });
+
+  it('retainage still sits outside every bucket when terms are set', () => {
+    const summary = ageReceivables(
+      [
+        { ...base, issue_date: '2026-01-01', due_date: '2026-06-01', amount_receivable: 16200, retainage_withheld: 1800 },
+      ],
+      '2026-08-31'
+    );
+    expect(summary.buckets.d90_plus).toBe(16200);
+    expect(summary.totalOutstanding).toBe(16200);
+    expect(summary.retainageHeld).toBe(1800);
+    // the withheld figure is in NO bucket
+    const bucketSum =
+      summary.buckets.current + summary.buckets.d31_60 + summary.buckets.d61_90 + summary.buckets.d90_plus;
+    expect(bucketSum).toBe(16200);
+  });
+
+  it('the aged row reports its due date and days past DUE, not days since issue', () => {
+    const summary = ageReceivables(
+      [{ ...base, issue_date: '2026-06-01', due_date: '2026-07-01' }],
+      '2026-07-11'
+    );
+    expect(summary.invoices[0].dueDate).toBe('2026-07-01');
+    expect(summary.invoices[0].ageDays).toBe(10);
+  });
+
+  it('a due-on-receipt row reports a null due date and ages from issue', () => {
+    const summary = ageReceivables([{ ...base, issue_date: '2026-06-01' }], '2026-07-11');
+    expect(summary.invoices[0].dueDate).toBeNull();
+    expect(summary.invoices[0].ageDays).toBe(40);
+  });
+});
+
+describe('7D payment terms — how they READ', () => {
+  const fmt = (iso: string) => iso;
+
+  it('a null due date prints "Due on receipt", never a blank', () => {
+    expect(paymentTermsLabel(null, fmt)).toBe(DUE_ON_RECEIPT_LABEL);
+    expect(paymentTermsLabel(undefined, fmt)).toBe('Due on receipt');
+  });
+
+  it('a set due date prints the date', () => {
+    expect(paymentTermsLabel('2026-07-01', fmt)).toBe('Due 2026-07-01');
   });
 });

@@ -492,6 +492,56 @@ not by exercising. **Nothing was emailed** — a send is simulated by seeding an
 
 ---
 
+## 4e. PAYMENT TERMS — RULED AND BUILT [S97, 2026-08-02]
+
+**Closes 7D open item #3** (and 7E's P-1 with it — they were one question).
+**Josh's ruling: the due date is set by the user per invoice, defaulting to DUE ON
+RECEIPT.**
+
+`invoices.due_date` existed and `updateInvoiceSettings` already accepted it, but
+**nothing set it** — the "a setting with no control is a bug" pattern. It has a
+control now.
+
+**Representation, stated so it cannot drift:** `due_date IS NULL` **means due on
+receipt.** Not `issue_date`, not a separate label. Because (1) every existing
+invoice already carries NULL, so nothing shifted and no backfill was needed;
+(2) "due on receipt" is a TERM, not a date — storing `issue_date` would let a
+reissue move a term the user never touched; and (3) it prints as *"Due on
+receipt"*, which is what a contractor writes. NULL never means "undecided" — the
+default IS due on receipt.
+
+**What was built**
+
+- **The control** — a date field beside Retainage % on the invoice settings row.
+  Empty = due on receipt, and the caption says so rather than leaving a blank box
+  to guess at. Draft-only in effect, because…
+- **…the due date is FROZEN ON SEND.** It joined
+  `enforce_invoice_immutability`'s frozen set (`20260813000000`), beside
+  `issue_date`. **That is the choice, and the reason:** everything deciding what
+  the client owes or when is already frozen at send, and the due date is the date
+  they are measured against — moving it afterwards silently rewrites whether they
+  are late. Corrected the way every other sent money term is: void and reissue.
+- **The PDF prints it.** A `Terms:` line under the invoice date — *"Due on
+  receipt"* or *"Due July 1, 2026"*, never blank. **This closes the omission
+  flagged in a066adc**, which was correct at the time precisely because there was
+  no due date to print.
+- **The email says the same thing.** `DEFAULT_INVOICE_BODY` gained a `Terms:`
+  line fed by `paymentTermsLabel()` — the *same helper the PDF uses*, so the mail
+  and its attachment cannot describe one invoice's terms two ways.
+
+**Verified — 9 new unit traces (183 total) and 7 live assertions:**
+
+| | Asserted |
+| --- | --- |
+| Nothing shifted | A NULL due date ages from the issue date, and `agingBucketFor(issue, today)` equals `agingBucketFor(issue, today, null)` — the regression guard for every pre-ruling invoice |
+| Terms move the clock | Live: same issue date, same amount, same read day — the Net-30 invoice is **current** (4 days past due) while the due-on-receipt one is **31–60** (34 days since issue) |
+| Boundaries hold | 30/60/90 exact, measured from the due date; a future due date is not overdue |
+| Retainage | Still outside every bucket with terms set |
+| Frozen | An **Owner** cannot move the due date on a sent invoice, nor add one to a bill that went out due-on-receipt |
+| PDF | Carries the due date for both invoices; the terms line reads correctly for both and is never blank |
+
+---
+
 ## 4a. Automated click-test run [S97, 2026-08-01]
 
 The script in §5 was executed against **rebuild-test** (`nmyphyhmfttxkdoposvf`, verified
@@ -590,6 +640,12 @@ from an empty invoice list.
 1. **Nav placement.** Open a project. *Expect:* an **Invoices** tab between Change Orders
    and Punch List. Open it — the empty state should read like a deliberate sentence, not a
    blank table.
+1a. **Payment terms.** On a draft, find **Payment terms** beside Retainage %.
+   Leave it empty — *expect* the caption to say due on receipt is the default,
+   not a blank box. Set a date, Apply, then clear it and Apply again. **Judgement
+   call: is "clear the field to go back to due on receipt" obvious enough, or
+   does it need an explicit option?** After sending, *expect* the field to refuse
+   an edit (it is frozen with the rest of the money).
 2. **Draft identity.** New Invoice → title → Create draft. *Expect:* the header reads
    **"Draft invoice"** with **"· numbered when sent"** beside the status, and the list row
    says **Draft** — not a blank cell. **Judgement call: does "numbered when sent" read as
@@ -625,8 +681,10 @@ from an empty invoice list.
     as it stands?** Specifically confirm — costs at actual cost, **Subtotal (cost)** and
     **Markup** covering non-labor only, the **labor line outside** that block, discounts
     and credits shown in full as negatives, and **Retainage withheld → Amount due** where
-    retainage applies. *Expect:* **no due date anywhere** — payment terms are unruled
-    (§6 item 3), so the field is deliberately absent. Tell me if its absence looks wrong.
+    retainage applies. *Expect:* a **Terms** line under the invoice date — *"Due on receipt"* by
+    default, or *"Due <date>"* if you set one (§4e, ruled S97). **Judgement call:
+    does "Due on receipt" read right as the default on a real bill, or would you
+    rather it said nothing when there are no terms?**
 11. **Download + Files.** Click **Download PDF** — *expect:* a save dialog, filename
     `invoice-INV-000N.pdf`. Then the project's **Files** tab — *expect:* the PDF saved
     under category **Invoices**. Click **Print** again and re-check Files — *expect:*

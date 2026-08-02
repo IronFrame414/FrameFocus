@@ -27,7 +27,7 @@ import {
   updateInvoiceSettings,
   voidInvoice,
 } from '@/lib/services/invoices-client';
-import { findSplitDays } from '@/lib/services/invoices-shared';
+import { DUE_ON_RECEIPT_LABEL, findSplitDays } from '@/lib/services/invoices-shared';
 import type { InvoiceDelivery } from '@/lib/services/invoice-delivery-shared';
 import { InvoiceDeliveryPanel } from './invoice-delivery-panel';
 import type {
@@ -994,6 +994,10 @@ function SettingsPanel({
   const [retainage, setRetainage] = useState(
     invoice.retainage_percent === null ? '' : String(invoice.retainage_percent)
   );
+  // 7D open item #3, RULED S97: the user sets the due date; the default is DUE
+  // ON RECEIPT, stored as NULL. An empty field therefore MEANS due on receipt —
+  // it is not an unset state, and the caption below says so.
+  const [dueDate, setDueDate] = useState(invoice.due_date ?? '');
 
   return (
     <div style={{ ...cardStyle, padding: '12px 16px', display: 'flex', gap: '18px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
@@ -1020,6 +1024,42 @@ function SettingsPanel({
             <option value="by_section">By section</option>
             <option value="lump_sum">Lump sum</option>
           </select>
+        </div>
+      </div>
+
+      <div>
+        <span style={microLabelStyle}>Payment terms</span>
+        <div style={{ marginTop: '4px', display: 'flex', gap: '6px' }}>
+          <input
+            type="date"
+            value={dueDate}
+            onChange={(e) => setDueDate(e.target.value)}
+            disabled={busy}
+            style={{ ...inputStyle, width: '150px' }}
+          />
+          <button
+            type="button"
+            disabled={busy}
+            style={secondaryButtonStyle}
+            onClick={() =>
+              run(
+                () =>
+                  updateInvoiceSettings(
+                    invoice.id,
+                    { due_date: dueDate === '' ? null : dueDate },
+                    contractType
+                  ),
+                dueDate === '' ? 'Terms set to due on receipt.' : 'Due date updated.'
+              )
+            }
+          >
+            Apply
+          </button>
+        </div>
+        <div style={{ fontSize: '11px', color: color.faint, marginTop: '2px' }}>
+          {dueDate === ''
+            ? `${DUE_ON_RECEIPT_LABEL} — leave empty for the default. Frozen once sent.`
+            : 'Clear the field to go back to due on receipt. Frozen once sent.'}
         </div>
       </div>
 

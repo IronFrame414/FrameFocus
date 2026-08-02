@@ -149,15 +149,32 @@ export const AGING_BUCKET_LABEL: Record<AgingBucket, string> = {
 /**
  * §6 — which 30/60/90 bucket an invoice falls in.
  *
- * PROVISIONAL [P-1]: the clock starts at the invoice's **issue date**.
- * `invoices.due_date` exists but NOTHING writes it — 7D shipped no control for
- * it and payment terms are unruled (7D open item #3). §6 specifies the buckets
- * but never names day zero, so the only populated date is used.
- * REVERSAL: take a `dueDate` argument and prefer it when present; one line
- * here, no schema change, because the aging is derived entirely at read.
+ * P-1 CONFIRMED [Josh, S97 2026-08-02]: the clock starts at the invoice's DUE
+ * DATE. Terms are set by the user per invoice (7D open item #3, also ruled),
+ * and the default is DUE ON RECEIPT.
+ *
+ * HOW "DUE ON RECEIPT" IS REPRESENTED: `due_date IS NULL`. Not issue_date, and
+ * not a separate term label. Three reasons, and this is the whole ambiguity
+ * killed:
+ *   1. Every invoice written before this ruling has a NULL due_date, so they
+ *      age from the issue date exactly as they did yesterday — nothing shifts
+ *      silently and no backfill is needed.
+ *   2. "Due on receipt" is a TERM, not a date. Storing issue_date would make it
+ *      a date that merely happens to match, and a reissue (which takes a fresh
+ *      issue date) would move a term the user never touched.
+ *   3. It prints as "Due on receipt", which is what a contractor actually
+ *      writes on a bill.
+ * NULL therefore means due-on-receipt, never "not yet decided" — the default IS
+ * due on receipt, so there is no third state.
  */
-export function agingBucketFor(issueDate: string, today: string): AgingBucket {
-  const age = daysBetween(issueDate, today);
+export function agingBucketFor(
+  issueDate: string,
+  today: string,
+  dueDate?: string | null
+): AgingBucket {
+  // Prefer the due date; fall back to the issue date, which IS the due date
+  // when the terms are due-on-receipt.
+  const age = daysBetween(dueDate ?? issueDate, today);
   if (age <= 30) return 'current';
   if (age <= 60) return 'd31_60';
   if (age <= 90) return 'd61_90';
@@ -170,6 +187,8 @@ export interface AgeableInvoice {
   status: string;
   is_deleted?: boolean | null;
   issue_date: string;
+  /** NULL = due on receipt (see agingBucketFor). */
+  due_date?: string | null;
   amount_receivable: number | string;
   retainage_withheld: number | string;
   /** 7D §10 — the void→reissue link, surfaced so the history stays visible
@@ -182,6 +201,9 @@ export interface AgedInvoice {
   id: string;
   invoiceNumber: string | null;
   issueDate: string;
+  /** NULL = due on receipt. */
+  dueDate: string | null;
+  /** Days past the DUE date (past the issue date when due on receipt). */
   ageDays: number;
   bucket: AgingBucket;
   remaining: number;
@@ -199,7 +221,7 @@ export interface AgingSummary {
 }
 
 /**
- * §6 — age a set of invoices.
+ * §6 — age a set of invoices, from each one's DUE date (P-1 confirmed).
  *
  * Only SENT invoices with something remaining age. A draft was never a demand;
  * a voided invoice was withdrawn (and 7D §10's successor starts a fresh clock
@@ -225,13 +247,14 @@ export function ageReceivables(invoices: AgeableInvoice[], today: string): Aging
     const remaining = remainingOnInvoice(inv.amount_receivable, inv.applications);
     if (remaining <= 0) continue;
 
-    const bucket = agingBucketFor(inv.issue_date, today);
+    const bucket = agingBucketFor(inv.issue_date, today, inv.due_date);
     buckets[bucket] = round2(buckets[bucket] + remaining);
     aged.push({
       id: inv.id,
       invoiceNumber: inv.invoice_number,
       issueDate: inv.issue_date,
-      ageDays: daysBetween(inv.issue_date, today),
+      dueDate: inv.due_date ?? null,
+      ageDays: daysBetween(inv.due_date ?? inv.issue_date, today),
       bucket,
       remaining,
       supersedesInvoiceId: inv.supersedes_invoice_id,

@@ -13,6 +13,7 @@ import {
   sendEmail,
 } from '@/lib/services/email-service';
 import { InvoiceEmail } from '@/lib/email/templates/invoice-email';
+import { paymentTermsLabel } from '@/lib/services/invoices-shared';
 
 // 7D1 §13 — email a SENT invoice to the client with its PDF attached.
 //
@@ -81,7 +82,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   // RLS-scoped — a cross-tenant or unreachable id 404s here.
   const { data: invoice } = await supabase
     .from('invoices')
-    .select('id, status, invoice_number, issue_date, amount_receivable, company_id, project_id, is_deleted')
+    .select('id, status, invoice_number, issue_date, due_date, amount_receivable, company_id, project_id, is_deleted')
     .eq('id', params.id)
     .eq('is_deleted', false)
     .maybeSingle();
@@ -156,6 +157,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     project_name: project?.name ?? '',
     issue_date: fmtDate(invoice.issue_date),
     amount_due: amountDue,
+    // Same helper the PDF uses, so the mail and the attachment can never
+    // describe the same invoice's terms differently.
+    payment_terms: paymentTermsLabel(invoice.due_date, fmtDate),
   };
   const subject = replaceTemplateVariables(body.subject ?? DEFAULT_INVOICE_SUBJECT, variables);
   const bodyText = replaceTemplateVariables(body.body ?? DEFAULT_INVOICE_BODY, variables);

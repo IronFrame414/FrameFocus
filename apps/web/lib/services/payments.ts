@@ -180,7 +180,7 @@ async function ageableInvoicesFor(
   let query = supabase
     .from('invoices')
     .select(
-      'id, invoice_number, status, is_deleted, issue_date, amount_receivable, retainage_withheld, supersedes_invoice_id, project_id'
+      'id, invoice_number, status, is_deleted, issue_date, due_date, amount_receivable, retainage_withheld, supersedes_invoice_id, project_id'
     )
     .eq('is_deleted', false);
 
@@ -208,6 +208,7 @@ async function ageableInvoicesFor(
     status: i.status,
     is_deleted: i.is_deleted,
     issue_date: i.issue_date,
+    due_date: i.due_date,
     amount_receivable: i.amount_receivable,
     retainage_withheld: i.retainage_withheld,
     supersedes_invoice_id: i.supersedes_invoice_id,

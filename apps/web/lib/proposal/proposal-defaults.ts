@@ -60,6 +60,7 @@ export const DEFAULT_INVOICE_BODY = `Hi {{contact_name}},
 Invoice {{invoice_number}} for {{project_name}} is attached, dated {{issue_date}}.
 
 Amount due: {{amount_due}}
+Terms: {{payment_terms}}
 
 Please get in touch if you have any questions about this invoice.
 

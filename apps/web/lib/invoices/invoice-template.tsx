@@ -25,6 +25,8 @@ function fmtMoney(value: number): string {
   })}`;
 }
 
+import { paymentTermsLabel } from '@/lib/services/invoices-shared';
+
 function fmtDate(iso: string | null, tz: string): string {
   if (!iso) return '—';
   // A date-only column: anchor at midday UTC so the tz shift cannot roll it.
@@ -172,6 +174,13 @@ export function InvoiceDocument({ data }: { data: InvoicePdfData }) {
             <Text style={styles.infoLabel}>Invoice</Text>
             <Text>{invoice.number ?? 'Draft — not yet numbered'}</Text>
             <Text>Date: {fmtDate(invoice.issueDate, company.timezone)}</Text>
+            {/* 7D open item #3, RULED S97 — the terms a client is measured
+                against. Its ABSENCE was flagged in a066adc; that is closed.
+                NULL due date prints "Due on receipt", never a blank line. */}
+            <Text>
+              Terms:{' '}
+              {paymentTermsLabel(invoice.dueDate, (iso) => fmtDate(iso, company.timezone))}
+            </Text>
           </View>
           <View style={styles.infoBlock}>
             <Text style={styles.infoLabel}>Billed To</Text>
