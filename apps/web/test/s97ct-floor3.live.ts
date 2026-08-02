@@ -28,6 +28,8 @@ let sentLineRowId: string;
 let clientContractId: string;
 let poId: string;
 let invoiceId: string;
+let subcontractorId: string;
+let catalogItemId: string;
 
 const must = (label: string, error: { message: string } | null) => {
   if (error) throw new Error(`${label}: ${error.message}`);
@@ -146,6 +148,30 @@ beforeAll(async () => {
     .select('id').single();
   must('invoice', invErr);
   invoiceId = inv!.id;
+
+  // ── Tier 2 fixtures: company-wide pricing defaults ────────────────────────
+  const { data: sub, error: subErr } = await admin
+    .from('subcontractors')
+    .insert({
+      company_id: companyId, sub_type: 'subcontractor', company_name: `${MARKER} Sub Co`,
+      contact_first_name: 'QA', contact_last_name: 'Sub',
+      default_hourly_rate: 85, default_markup_percent: 15, notes: `${MARKER}`,
+    })
+    .select('id').single();
+  must('subcontractor', subErr);
+  subcontractorId = sub!.id;
+
+  const { data: cat, error: catErr } = await admin
+    .from('cost_catalog')
+    .insert({
+      // cost_catalog_category_check has its own vocabulary — 'material' is not
+      // in it; the catalog categories are trade-shaped (lumber, drywall, …).
+      company_id: companyId, name: `${MARKER} item`, category: 'other',
+      unit_of_measure: 'each', unit_cost: 12.5, notes: `${MARKER}`,
+    })
+    .select('id').single();
+  must('catalog item', catErr);
+  catalogItemId = cat!.id;
 }, 240_000);
 
 describe('FLOOR3 — 1. change_orders: a SENT change order cannot be re-priced', () => {
@@ -354,6 +380,107 @@ describe('FLOOR3 — 6. invoices: a PM cannot approve their own invoice', () => 
   });
 });
 
+describe('FLOOR3 — 7. TIER 2: company-wide pricing defaults are Owner/Admin', () => {
+  it('7a. a PM cannot change a subcontractor\'s default rate or markup', async () => {
+    const { data: before } = await admin
+      .from('subcontractors')
+      .select('default_hourly_rate, default_markup_percent').eq('id', subcontractorId).single();
+
+    const { error } = await pm
+      .from('subcontractors')
+      .update({ default_hourly_rate: 999, default_markup_percent: 99 })
+      .eq('id', subcontractorId)
+      .select('id');
+
+    await admin
+      .from('subcontractors')
+      .update({
+        default_hourly_rate: before!.default_hourly_rate,
+        default_markup_percent: before!.default_markup_percent,
+      })
+      .eq('id', subcontractorId);
+    const { data: restored } = await admin
+      .from('subcontractors')
+      .select('default_hourly_rate, default_markup_percent').eq('id', subcontractorId).single();
+    expect(Number(restored!.default_hourly_rate), 'restore failed')
+      .toBe(Number(before!.default_hourly_rate));
+    expect(Number(restored!.default_markup_percent), 'restore failed')
+      .toBe(Number(before!.default_markup_percent));
+
+    expect(error, 'a PM rewrote subcontractor pricing defaults').not.toBeNull();
+    expect(error!.message).toContain('Subcontractor pricing defaults are Owner/Admin only.');
+  });
+
+  it('7b-t2. a PM CAN still edit the rest of the subcontractor record (not a wall)', async () => {
+    const { data: before } = await admin
+      .from('subcontractors').select('notes, phone').eq('id', subcontractorId).single();
+
+    const { error } = await pm
+      .from('subcontractors')
+      .update({ notes: `${MARKER} edited`, phone: '555-0100' })
+      .eq('id', subcontractorId);
+    expect(error, 'the trigger over-reached and blocked an ordinary field').toBeNull();
+
+    const { data: after } = await admin
+      .from('subcontractors').select('notes').eq('id', subcontractorId).single();
+    expect(after!.notes).toBe(`${MARKER} edited`);
+
+    await admin
+      .from('subcontractors')
+      .update({ notes: before!.notes, phone: before!.phone }).eq('id', subcontractorId);
+  });
+
+  it('7c-t2. a PM cannot change a catalog item\'s unit cost', async () => {
+    const { data: before } = await admin
+      .from('cost_catalog').select('unit_cost').eq('id', catalogItemId).single();
+
+    const { error } = await pm
+      .from('cost_catalog').update({ unit_cost: 9999 }).eq('id', catalogItemId).select('id');
+
+    await admin
+      .from('cost_catalog').update({ unit_cost: before!.unit_cost }).eq('id', catalogItemId);
+    const { data: restored } = await admin
+      .from('cost_catalog').select('unit_cost').eq('id', catalogItemId).single();
+    expect(Number(restored!.unit_cost), 'restore failed').toBe(Number(before!.unit_cost));
+
+    expect(error, 'a PM rewrote catalog pricing').not.toBeNull();
+    expect(error!.message).toContain('Catalog pricing is Owner/Admin only.');
+  });
+
+  it('7d-t2. a PM CAN still edit the rest of a catalog item (not a wall)', async () => {
+    const { data: before } = await admin
+      .from('cost_catalog').select('notes').eq('id', catalogItemId).single();
+
+    const { error } = await pm
+      .from('cost_catalog').update({ notes: `${MARKER} edited` }).eq('id', catalogItemId);
+    expect(error, 'the trigger over-reached and blocked an ordinary field').toBeNull();
+
+    const { data: after } = await admin
+      .from('cost_catalog').select('notes').eq('id', catalogItemId).single();
+    expect(after!.notes).toBe(`${MARKER} edited`);
+
+    await admin.from('cost_catalog').update({ notes: before!.notes }).eq('id', catalogItemId);
+  });
+
+  it('7e-t2. an Owner CAN still set both (the gate is a role gate)', async () => {
+    const { data: before } = await admin
+      .from('subcontractors').select('default_hourly_rate').eq('id', subcontractorId).single();
+
+    const { error: subError } = await owner
+      .from('subcontractors').update({ default_hourly_rate: 90 }).eq('id', subcontractorId);
+    expect(subError, 'an Owner was blocked from setting a sub default rate').toBeNull();
+
+    const { error: catError } = await owner
+      .from('cost_catalog').update({ unit_cost: 13.75 }).eq('id', catalogItemId);
+    expect(catError, 'an Owner was blocked from setting a catalog price').toBeNull();
+
+    await admin
+      .from('subcontractors')
+      .update({ default_hourly_rate: before!.default_hourly_rate }).eq('id', subcontractorId);
+    await admin.from('cost_catalog').update({ unit_cost: 12.5 }).eq('id', catalogItemId);
+  });
+});
+
 afterAll(async () => {
   const errors: string[] = [];
   const check = (label: string, error: { message: string } | null) => {
@@ -381,6 +508,13 @@ afterAll(async () => {
     check('co line rows', (await admin.from('change_order_line_rows').delete().eq('line_item_id', sentLineItemId)).error);
     check('co line items', (await admin.from('change_order_line_items').delete().eq('change_order_id', coId)).error);
     check('change order', (await admin.from('change_orders').delete().eq('id', coId)).error);
+  }
+
+  if (subcontractorId) {
+    check('subcontractor', (await admin.from('subcontractors').delete().eq('id', subcontractorId)).error);
+  }
+  if (catalogItemId) {
+    check('catalog item', (await admin.from('cost_catalog').delete().eq('id', catalogItemId)).error);
   }
 
   const { count } = await admin
