@@ -107,28 +107,37 @@ beforeAll(async () => {
       .from('project_budget_items')
       .insert({
         company_id: companyId, project_id: projectId,
-        description: desc, budgeted_amount: budgeted,
+        description: desc,
         actual_amount: actual, committed_amount: 0,
       })
       .select('id').single();
     must(`budget line ${desc}`, error);
     itemIds.push(data!.id);
+
+    // RULING [S97]: the budgeted figure lives in project_budget_amounts.
+    must(`budget amount ${desc}`, (await admin.from('project_budget_amounts').upsert({
+      company_id: companyId, budget_item_id: data!.id, budgeted_amount: budgeted,
+    }, { onConflict: 'budget_item_id' })).error);
     expectedTotal += budgeted;
   }
 }, 240_000);
 
-describe('S97CT-BUDGET — the sync trigger keeps both homes in step', () => {
-  it('1. every line created after stage 1 has its amounts row, with the same figure', async () => {
-    const { data } = await admin
-      .from('project_budget_items')
-      .select('id, budgeted_amount, project_budget_amounts(budgeted_amount)')
-      .in('id', itemIds);
+describe('S97CT-BUDGET — the column is retired and the figures survived', () => {
+  it('1. project_budget_items.budgeted_amount is GONE, and every line still has its figure', async () => {
+    // Before the drop this compared the two homes row by row. That comparison
+    // is impossible now by design, so it asserts the END STATE instead: the old
+    // column errors, and the new table carries a real number for every line.
+    const { error: goneError } = await admin
+      .from('project_budget_items').select('id, budgeted_amount').limit(1);
+    expect(goneError, 'project_budget_items.budgeted_amount still exists').not.toBeNull();
+    expect(goneError!.message).toMatch(/budgeted_amount/);
 
-    expect((data ?? []).length).toBe(3);
+    const { data } = await admin
+      .from('project_budget_amounts').select('budget_item_id, budgeted_amount').in('budget_item_id', itemIds);
+    expect((data ?? []).length, 'the fixture lines lost their amounts').toBe(3);
     for (const row of data ?? []) {
-      const embed = row.project_budget_amounts as unknown as { budgeted_amount: number }[] | { budgeted_amount: number } | null;
-      const moved = Array.isArray(embed) ? embed[0]?.budgeted_amount : embed?.budgeted_amount;
-      expect(Number(moved), `line ${row.id} did not sync`).toBe(Number(row.budgeted_amount));
+      expect(Number.isNaN(Number(row.budgeted_amount)), `${row.budget_item_id} holds a non-number`)
+        .toBe(false);
     }
   });
 });

@@ -187,11 +187,16 @@ beforeAll(async () => {
     .from('project_budget_items')
     .insert({
       company_id: companyId, project_id: projectId,
-      description: `${MARKER} budget line`, budgeted_amount: 100000,
+      description: `${MARKER} budget line`,
     })
     .select('id').single();
   must('budget item', bErr);
   budgetItemId = budget!.id;
+
+  // RULING [S97]: the budgeted figure lives in project_budget_amounts now.
+  must('budget amount', (await admin.from('project_budget_amounts').upsert({
+    company_id: companyId, budget_item_id: budgetItemId, budgeted_amount: 100000,
+  }, { onConflict: 'budget_item_id' })).error);
 
   // §15-B — cost-plus instrument at 20% material and 20% subcontractor.
   coCostPlusId = await changeOrder('15-B cost-plus', 'cost_plus');

@@ -117,12 +117,18 @@ beforeAll(async () => {
     .from('project_budget_items')
     .insert({
       company_id: companyId, project_id: qaProjectId,
-      description: 'S97ROLES QA budget line', budgeted_amount: 12345.67,
+      description: 'S97ROLES QA budget line',
       actual_amount: 100, committed_amount: 200,
     })
     .select('id').single();
   if (qaBudgetErr) throw new Error(`qa budget line: ${qaBudgetErr.message}`);
   qaBudgetItemId = qaBudget!.id;
+
+  // RULING [S97]: the budgeted figure lives in project_budget_amounts now.
+  const { error: qaAmountErr } = await admin.from('project_budget_amounts').upsert({
+    company_id: companyId, budget_item_id: qaBudgetItemId, budgeted_amount: 12345.67,
+  }, { onConflict: 'budget_item_id' });
+  if (qaAmountErr) throw new Error(`qa budget amount: ${qaAmountErr.message}`);
 }, 180_000);
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -703,42 +709,36 @@ describe('8. Budget & Cost data per role', () => {
     }
   });
 
-  it('8b. budgeted_amount must NOT be readable below Owner/Admin', async () => {
-    // FAILS LOUDLY TODAY, by design. project_budget_items_select_visible is
-    // `company_id = get_my_company_id() AND can_view_project(project_id)` with
-    // NO role test, so §7.1's column gate is UI-only — exactly as
-    // contract_value was before RULING 2.
-    //
-    // Flips to PASS when PROPOSED_20260816000000_budget_amounts.sql lands and
-    // the code moves. It asserts what a role can READ, not where it is stored,
-    // so it will flip at the DROP — the same timing RULING 2's 7b/7c had, and
-    // the same correction: it does not flip when the code moves.
-    // Non-vacuity first: without a line to read, this loop iterates over
-    // nothing and reports success forever (the 5f failure mode).
-    const { data: seed } = await admin
-      .from('project_budget_items').select('id').eq('project_id', qaProjectId);
-    expect((seed ?? []).length, 'no budget line to test against — the proof would be vacuous')
-      .toBeGreaterThan(0);
+  it('8b. budgeted_amount is GONE from the line, and unreachable in its new home', async () => {
+    // Two halves, both required — moving a figure somewhere still readable
+    // would not be a fix:
+    //   (a) the retired column no longer exists, so selecting it ERRORS;
+    //   (b) the figure is genuinely unreachable for a gated role in
+    //       project_budget_amounts.
+    const { error: goneError } = await session.project_manager
+      .from('project_budget_items')
+      .select('id, budgeted_amount')
+      .eq('project_id', qaProjectId);
+    expect(goneError, 'project_budget_items.budgeted_amount still exists — the drop did not run')
+      .not.toBeNull();
+    expect(goneError!.message).toMatch(/budgeted_amount/);
 
     const leaked: string[] = [];
     for (const role of ['project_manager', 'foreman', 'crew_member'] as const) {
       const { data } = await session[role]
-        .from('project_budget_items')
-        .select('id, budgeted_amount')
-        .eq('project_id', qaProjectId)
-        .limit(10);
-      for (const row of data ?? []) {
-        if (row.budgeted_amount !== undefined && row.budgeted_amount !== null) {
-          leaked.push(`${role} read budgeted_amount = ${row.budgeted_amount}`);
-        }
-      }
+        .from('project_budget_amounts').select('budgeted_amount').limit(10);
+      for (const row of data ?? []) leaked.push(`${role} read ${row.budgeted_amount}`);
     }
-    expect(
-      leaked,
-      'BUDGETED_AMOUNT FLOOR NOT YET APPLIED — the §7.1 column gate is cosmetic ' +
-        'until budgeted_amount moves to project_budget_amounts (Owner/Admin RLS). ' +
-        'See the call-site plan before applying.'
-    ).toEqual([]);
+    expect(leaked, 'the budgeted figure is readable below Owner/Admin').toEqual([]);
+  });
+
+  it('8b-i. an Owner CAN still read it — the gate is a role gate, not a wall', async () => {
+    const { data } = await session.owner
+      .from('project_budget_amounts')
+      .select('budgeted_amount')
+      .eq('budget_item_id', qaBudgetItemId)
+      .maybeSingle();
+    expect(Number(data?.budgeted_amount), 'an Owner lost the budgeted figure').toBe(12345.67);
   });
 
   it('8b-ii. ACTUAL COST must stay readable to Foreman and Crew — before AND after', async () => {

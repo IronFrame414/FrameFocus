@@ -320,8 +320,14 @@ export async function reassignExpenseProject(
 /**
  * Ad-hoc budget line from the review popup (Q4b — required for T&M /
  * no-estimate projects, which start with zero lines). Owner/Admin
- * (project_budget_items_insert_admin). budgeted_amount starts at 0;
+ * (project_budget_items_insert_admin). The budget starts at 0;
  * actual_amount is trigger-maintained only.
+ *
+ * RULING [S97]: the budgeted figure lives in project_budget_amounts
+ * (Owner/Admin RLS), so it is written there rather than onto the line. UPSERT
+ * rather than insert because the transitional sync trigger (20260816010000)
+ * may already have created the row from the line's column default — this works
+ * both before and after that trigger and the column are dropped.
  */
 export async function createAdHocBudgetLine(
   projectId: string,
@@ -341,11 +347,24 @@ export async function createAdHocBudgetLine(
       description: input.description.trim(),
       row_type: input.row_type ?? null,
       cost_code: input.cost_code ?? null,
-      budgeted_amount: 0,
     })
-    .select('id')
+    .select('id, company_id')
     .single();
   if (error) return { success: false, error: error.message };
+
+  const { error: amountError } = await supabase
+    .from('project_budget_amounts')
+    .upsert(
+      { company_id: data.company_id, budget_item_id: data.id, budgeted_amount: 0 },
+      { onConflict: 'budget_item_id' }
+    );
+  if (amountError) {
+    // The line exists but carries no budget row — an Owner would see a dash
+    // where a real zero belongs. Report it rather than returning a quiet
+    // success.
+    return { success: false, error: `Budget line created, but its amount was not set: ${amountError.message}` };
+  }
+
   return { success: true, id: data.id };
 }
 
