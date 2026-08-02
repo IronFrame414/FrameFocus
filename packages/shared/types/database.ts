@@ -692,6 +692,63 @@ export type Database = {
           },
         ]
       }
+      client_reminder_settings: {
+        Row: {
+          body: string | null
+          company_id: string
+          contact_id: string
+          created_at: string | null
+          created_by: string | null
+          enabled: boolean
+          id: string
+          schedule: Json | null
+          subject: string | null
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          body?: string | null
+          company_id?: string
+          contact_id: string
+          created_at?: string | null
+          created_by?: string | null
+          enabled?: boolean
+          id?: string
+          schedule?: Json | null
+          subject?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          body?: string | null
+          company_id?: string
+          contact_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          enabled?: boolean
+          id?: string
+          schedule?: Json | null
+          subject?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_reminder_settings_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_reminder_settings_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: true
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       co_signing_sessions: {
         Row: {
           change_order_id: string
@@ -3386,9 +3443,11 @@ export type Database = {
           is_deleted: boolean | null
           is_final: boolean
           issue_date: string
+          last_reminder_sent_at: string | null
           notes: string | null
           presentation_level: string
           project_id: string
+          reminder_count: number
           retainage_percent: number | null
           retainage_withheld: number
           sent_at: string | null
@@ -3419,9 +3478,11 @@ export type Database = {
           is_deleted?: boolean | null
           is_final?: boolean
           issue_date?: string
+          last_reminder_sent_at?: string | null
           notes?: string | null
           presentation_level?: string
           project_id: string
+          reminder_count?: number
           retainage_percent?: number | null
           retainage_withheld?: number
           sent_at?: string | null
@@ -3452,9 +3513,11 @@ export type Database = {
           is_deleted?: boolean | null
           is_final?: boolean
           issue_date?: string
+          last_reminder_sent_at?: string | null
           notes?: string | null
           presentation_level?: string
           project_id?: string
+          reminder_count?: number
           retainage_percent?: number | null
           retainage_withheld?: number
           sent_at?: string | null

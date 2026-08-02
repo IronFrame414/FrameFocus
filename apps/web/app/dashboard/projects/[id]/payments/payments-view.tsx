@@ -12,6 +12,8 @@
 // months, and aging it would have shown six figures "overdue" on money the
 // client was contractually entitled to hold.
 
+import type { ResolvedReminderSettings } from '@/lib/services/reminders-shared';
+import { ReminderSettings } from './reminder-settings';
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -70,6 +72,7 @@ interface Props {
   projectId: string;
   contactId: string;
   role: string;
+  reminderSettings: ResolvedReminderSettings;
   memberId: string | null;
   today: string;
   aging: AgingSummary;
@@ -115,6 +118,7 @@ export function PaymentsView(props: Props) {
     projectId,
     contactId,
     role,
+    reminderSettings,
     memberId,
     today,
     aging,
@@ -268,6 +272,16 @@ export function PaymentsView(props: Props) {
           not yet ruled, so no due date exists to age from (7D open item #3).
         </p>
       </div>
+
+      {/* §6 — per-client reminder configuration. Owner/Admin only; RLS on
+          client_reminder_settings is the real boundary. */}
+      <ReminderSettings
+        contactId={contactId}
+        canEdit={canRecord}
+        inherited={reminderSettings.inherited}
+        enabled={reminderSettings.enabled}
+        schedule={reminderSettings.schedule}
+      />
 
       {canRecord && openInvoices.length > 0 && (
         <RecordPaymentPanel

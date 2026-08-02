@@ -14,6 +14,7 @@ import {
   getRetainageRelease,
 } from '@/lib/services/payments';
 import { PaymentsView } from './payments-view';
+import { getReminderSettings } from '@/lib/services/reminders';
 
 // Module 7E1 — the project's money-received screen (docs/specs/7e1-spec.md
 // §2, §3, §4.1, §5, §6, §6a).
@@ -62,8 +63,14 @@ export default async function PaymentsPage({ params }: { params: { id: string } 
   // Refunds are Owner/Admin only at the RLS layer, so a PM simply gets none.
   const refunds = project.contact_id ? await getClientRefunds(project.contact_id) : [];
 
+  // §6 — the per-client reminder configuration. RLS returns the inherited
+  // company defaults below Owner/Admin, so this is safe to read for anyone who
+  // can reach the page; the CONTROL is Owner/Admin only.
+  const reminderSettings = await getReminderSettings(project.contact_id);
+
   return (
     <PaymentsView
+      reminderSettings={reminderSettings}
       projectId={params.id}
       contactId={project.contact_id}
       role={profile.role}

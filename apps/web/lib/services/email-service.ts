@@ -65,6 +65,8 @@ export {
   DEFAULT_CO_REMINDER_SUBJECT,
   DEFAULT_INVOICE_BODY,
   DEFAULT_INVOICE_SUBJECT,
+  DEFAULT_INVOICE_REMINDER_BODY,
+  DEFAULT_INVOICE_REMINDER_SUBJECT,
 } from '@/lib/proposal/proposal-defaults';
 
 export type EmailType =
@@ -84,7 +86,11 @@ export type EmailType =
   | 'safety_incident'
   // 7D1 §13 — a sent invoice delivered to the client, PDF attached
   // (email_types row seeded in 20260807000000).
-  | 'invoice';
+  | 'invoice'
+  // 7E §6 — an AR reminder on an overdue invoice (email_types row seeded in
+  // 20260815000000). The ONLY §7 event that rides this mechanism — see the
+  // reminder cron's header.
+  | 'invoice_reminder';
 
 export interface LogEmailInput {
   company_id: string;

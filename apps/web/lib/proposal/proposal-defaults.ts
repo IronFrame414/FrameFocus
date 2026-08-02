@@ -66,6 +66,24 @@ Please get in touch if you have any questions about this invoice.
 
 — {{company_name}}`;
 
+// 7E §6 — payment reminders. Wording is per-client overridable; this is the
+// last-resort fallback when neither the client nor the company has set any.
+// NO pay link (7G not built) — it says how to reach you, not where to click.
+export const DEFAULT_INVOICE_REMINDER_SUBJECT =
+  'Reminder: invoice {{invoice_number}} from {{company_name}}';
+
+export const DEFAULT_INVOICE_REMINDER_BODY = `Hi {{contact_name}},
+
+A quick reminder that invoice {{invoice_number}} for {{project_name}} is still open.
+
+Amount outstanding: {{amount_due}}
+Terms: {{payment_terms}}
+Due: {{due_date}}
+
+If you have already sent payment, thank you — please ignore this note. If there is a question about this invoice, just reply and we will sort it out.
+
+— {{company_name}}`;
+
 export const DEFAULT_CO_REMINDER_SUBJECT =
   'Reminder: change order {{co_number}} from {{company_name}}';
 
