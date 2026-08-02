@@ -229,6 +229,24 @@ Vercel env vars must match `.env.local` exactly.
 
 ---
 
+## Email behaviour
+
+- **Sending domain:** `rafterworks.com` (verified in Resend). Every tenant sends as
+  `"<Company Name> <slug@rafterworks.com>"` — one verified domain, dynamic local part.
+- **Reply-To [S97 ruling, platform-wide]:** every client-facing send sets Reply-To to the
+  sending company's own address so client replies reach the company, not the platform.
+  Resolution order: **`companies.email` → the OWNER's profile email → no header at all.**
+  Set in `sendEmail()` from a `replyToCompanyId`, so any sender added later inherits it.
+- **⚠ SETUP OWED:** `companies.email` is **empty for every company**, so the owner-email
+  fallback is what runs today. Fill it in per company before real client mail goes out.
+- **Client-facing senders (7, all carry Reply-To):** proposal send, proposal resend,
+  change-order send, invoice send, and the estimate / CO / invoice reminder crons.
+- **Internal senders (5, deliberately excluded):** manager notifications from
+  `signing-service`, `co-signing-service` (signed / declined), `incident-notify`, and the
+  delivery check-in. They already go to the company; a reply-to back at it adds nothing.
+
+---
+
 ## Test Data
 
 ### Persistent test identities — rebuild-test only [S97, 2026-08-02]

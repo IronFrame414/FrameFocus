@@ -173,6 +173,9 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   try {
     const sent = await sendEmail({
       from: sender,
+      // +REPLY-TO [S97]: a client's reply reaches the COMPANY, not the
+      // platform domain. Resolved in sendEmail so senders inherit it.
+      replyToCompanyId: invoice.company_id,
       to: recipientEmail,
       subject,
       react: InvoiceEmail({

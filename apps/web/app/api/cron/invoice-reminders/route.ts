@@ -200,6 +200,9 @@ export async function GET(request: NextRequest) {
         try {
           const result = await sendEmail({
             from: sender,
+            // +REPLY-TO [S97]: a client's reply reaches the COMPANY, not the
+            // platform domain. Resolved in sendEmail so senders inherit it.
+            replyToCompanyId: company.id,
             to: contact.email,
             subject,
             react: InvoiceEmail({

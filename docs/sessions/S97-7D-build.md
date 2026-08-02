@@ -516,6 +516,23 @@ A client sees the company's name, but a **rafterworks.com** address — not
 FrameFocus, and not a bishopcontracting.com address. Nothing has been emailed to
 a real client; confirm that From line reads right before anything real goes out.
 
+> **+REPLY-TO [Josh, S97 — platform-wide ruling].** Every client-facing send now
+> carries **Reply-To = the sending company's own address**, so a client hitting
+> Reply reaches the company and not the platform domain. The From line is
+> unchanged; only Reply-To was added.
+>
+> **Source of truth:** `companies.email` — the column already existed, so none
+> was invented. **It is empty on every company on rebuild-test**, so the branch
+> that actually runs today is the fallback: **the OWNER's profile email**
+> (`josh+test50@worthprop.com` for Bishop). If a company has neither, the header
+> is **omitted entirely** — a missing reply address never fails a send and never
+> invents one. **Filling in `companies.email` per company is a real setup step
+> Josh owes** before this goes live, or clients will be replying to his personal
+> owner address.
+>
+> Resolved inside `sendEmail()` from a `replyToCompanyId`, **not at each call
+> site**, so a sender added later inherits it rather than having to remember.
+
 **What was built** — following the change-order send route, not a new sender:
 
 - `POST /api/invoices/[id]/send` — **Owner/Admin only** (narrower than the CO
