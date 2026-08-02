@@ -412,8 +412,17 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                 {instrument.groups.map((group) =>
                   group.items.map((item) => {
                     const cost = lineCost(item.actual_amount, item.committed_remaining);
-                    const variance = cost !== 0 ? (item.budgeted_amount ?? 0) - cost : null;
-                    const credit = (item.budgeted_amount ?? 0) < 0; // negative CO rows (D-2)
+                    // RULING [S97]: budgeted_amount is NULL when the reader is
+                    // not permitted. `?? 0` here produced a variance of MINUS
+                    // THE COST — a plausible, wrong, confident number on a
+                    // screen that is meant to show nothing. Null propagates.
+                    const variance =
+                      item.budgeted_amount !== null && cost !== 0
+                        ? item.budgeted_amount - cost
+                        : null;
+                    // Likewise: an absent figure must not classify the row as
+                    // non-credit. Unknown is unknown (D-2 negative CO rows).
+                    const credit = item.budgeted_amount !== null && item.budgeted_amount < 0;
                     return (
                       <div
                         key={item.id}
@@ -449,7 +458,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                             style={{ ...moneyCell, color: credit ? color.danger : moneyCell.color }}
                             title={`Gross committed: ${money(item.committed_amount ?? 0)}`}
                           >
-                            {money(item.budgeted_amount ?? 0)}
+                            {item.budgeted_amount === null ? '—' : money(item.budgeted_amount)}
                           </span>
                         )}
                         {seesCommitted && (
@@ -524,7 +533,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                   </span>
                   {isOwnerAdmin && (
                     <span style={{ ...moneyCell, fontWeight: 600, color: color.body }}>
-                      {money(instrument.budgeted)}
+                      {instrument.budgeted === null ? '—' : money(instrument.budgeted)}
                     </span>
                   )}
                   {seesCommitted && (
@@ -542,7 +551,8 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                   )}
                   {isOwnerAdmin && (
                     <span style={dashCell}>
-                      {lineCost(instrument.actual, instrument.committedRemaining)
+                      {instrument.budgeted !== null &&
+                      lineCost(instrument.actual, instrument.committedRemaining)
                         ? money(
                             instrument.budgeted -
                               lineCost(instrument.actual, instrument.committedRemaining)
@@ -571,7 +581,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
             </span>
             {isOwnerAdmin && (
               <span style={{ ...moneyCell, fontSize: '14px', fontWeight: 700 }}>
-                {money(rollup.totalBudgeted)}
+                {rollup.totalBudgeted === null ? '—' : money(rollup.totalBudgeted)}
               </span>
             )}
             {seesCommitted && (
@@ -589,7 +599,9 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
             )}
             {isOwnerAdmin && (
               <span style={{ ...dashCell, fontSize: '14px', fontWeight: 700 }}>
-                {rollup.costToDate ? money(rollup.totalBudgeted - rollup.costToDate) : '—'}
+                {rollup.totalBudgeted !== null && rollup.costToDate
+                  ? money(rollup.totalBudgeted - rollup.costToDate)
+                  : '—'}
               </span>
             )}
           </div>

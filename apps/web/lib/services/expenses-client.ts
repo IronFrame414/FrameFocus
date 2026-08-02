@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase-browser';
+import { readBudgeted } from '@/lib/services/budget-shared';
 import type { Database } from '@framefocus/shared/types/database';
 import { uploadFile } from '@/lib/services/files-client';
 import type { Expense, ExpenseCategory, ExpenseListItem, ExpenseStatus } from '@/lib/services/expenses';
@@ -408,7 +409,10 @@ export async function listProjectBudgetLines(projectId: string): Promise<BudgetL
   const { data, error } = await supabase
     .from('project_budget_items')
     .select(
-      'id, description, cost_code, row_type, budgeted_amount, actual_amount, source_change_order_id, source_line_item_id, is_miscellaneous, source_change_order:change_orders!project_budget_items_source_change_order_id_fkey(co_number, title)'
+      // RULING [S97]: budgeted_amount comes from project_budget_amounts now.
+      // actual_amount stays on THIS row and keeps working for every role —
+      // that is the property the split exists to preserve.
+      'id, description, cost_code, row_type, actual_amount, source_change_order_id, source_line_item_id, is_miscellaneous, project_budget_amounts(budgeted_amount), source_change_order:change_orders!project_budget_items_source_change_order_id_fkey(co_number, title)'
     )
     .eq('project_id', projectId)
     .eq('is_deleted', false)
@@ -417,12 +421,19 @@ export async function listProjectBudgetLines(projectId: string): Promise<BudgetL
   if (error) return [];
   // The to-one CO embed comes back as an object at runtime, but the
   // generated types infer an array — normalize either shape.
-  return (data ?? []).map((row) => ({
-    ...row,
-    source_change_order: Array.isArray(row.source_change_order)
-      ? (row.source_change_order[0] ?? null)
-      : row.source_change_order,
-  })) as BudgetLineOption[];
+  return (data ?? []).map((row) => {
+    const { project_budget_amounts, ...rest } = row as typeof row & {
+      project_budget_amounts?: unknown;
+    };
+    return {
+      ...rest,
+      // NULL below Owner/Admin — the embed is simply absent. Never 0.
+      budgeted_amount: readBudgeted(project_budget_amounts as never),
+      source_change_order: Array.isArray(row.source_change_order)
+        ? (row.source_change_order[0] ?? null)
+        : row.source_change_order,
+    };
+  }) as unknown as BudgetLineOption[];
 }
 
 /** Prompt-skip check (§5.1): an expense already born from this segment means

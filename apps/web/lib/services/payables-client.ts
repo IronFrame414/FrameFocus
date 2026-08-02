@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase-browser';
+import { readBudgeted } from '@/lib/services/budget-shared';
 import type { Database } from '@framefocus/shared/types/database';
 import { uploadFile } from '@/lib/services/files-client';
 import type { ExpenseCategory } from '@/lib/services/expenses';
@@ -151,7 +152,9 @@ export async function deriveAwardBudgetLines(
 
   const { data: budgetLines } = await supabase
     .from('project_budget_items')
-    .select('id, budgeted_amount, source_line_row_id, description')
+    // RULING [S97]: budgeted_amount moved to project_budget_amounts
+    // (Owner/Admin RLS). The embed is absent below Owner/Admin — null, never 0.
+    .select('id, source_line_row_id, description, project_budget_amounts(budgeted_amount)')
     .eq('project_id', projectId)
     .eq('is_deleted', false)
     .in('source_line_row_id', subRows.map((r) => r.id));
@@ -163,7 +166,7 @@ export async function deriveAwardBudgetLines(
     const subRow = bl.source_line_row_id ? rowById.get(bl.source_line_row_id) : undefined;
     return {
       budget_item_id: bl.id,
-      budgeted_amount: bl.budgeted_amount,
+      budgeted_amount: readBudgeted(bl.project_budget_amounts),
       bid_amount: (subRow && bidByLineItem.get(subRow.line_item_id)) ?? 0,
       line_name: bl.description,
     };
