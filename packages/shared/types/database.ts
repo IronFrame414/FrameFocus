@@ -454,6 +454,241 @@ export type Database = {
           },
         ]
       }
+      client_payment_applications: {
+        Row: {
+          amount: number
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          invoice_id: string
+          is_deleted: boolean | null
+          payment_id: string
+        }
+        Insert: {
+          amount: number
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          invoice_id: string
+          is_deleted?: boolean | null
+          payment_id: string
+        }
+        Update: {
+          amount?: number
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          invoice_id?: string
+          is_deleted?: boolean | null
+          payment_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_payment_applications_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_payment_applications_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_payment_applications_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "client_payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_payments: {
+        Row: {
+          amount: number
+          company_id: string
+          contact_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          is_deleted: boolean | null
+          method: string | null
+          note: string | null
+          payment_date: string
+          qb_payment_id: string | null
+          qb_push_status: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          amount: number
+          company_id?: string
+          contact_id: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          method?: string | null
+          note?: string | null
+          payment_date: string
+          qb_payment_id?: string | null
+          qb_push_status?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          amount?: number
+          company_id?: string
+          contact_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          method?: string | null
+          note?: string | null
+          payment_date?: string
+          qb_payment_id?: string | null
+          qb_push_status?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_payments_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_payments_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_refunds: {
+        Row: {
+          amount: number
+          approved_at: string | null
+          approved_by: string | null
+          company_id: string
+          contact_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          is_deleted: boolean | null
+          method: string | null
+          project_id: string | null
+          qb_push_status: string
+          qb_refund_id: string | null
+          reason: string | null
+          refund_date: string
+          source: string
+          source_payment_id: string | null
+          status: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          amount: number
+          approved_at?: string | null
+          approved_by?: string | null
+          company_id?: string
+          contact_id: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          method?: string | null
+          project_id?: string | null
+          qb_push_status?: string
+          qb_refund_id?: string | null
+          reason?: string | null
+          refund_date: string
+          source: string
+          source_payment_id?: string | null
+          status?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          amount?: number
+          approved_at?: string | null
+          approved_by?: string | null
+          company_id?: string
+          contact_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          method?: string | null
+          project_id?: string | null
+          qb_push_status?: string
+          qb_refund_id?: string | null
+          reason?: string | null
+          refund_date?: string
+          source?: string
+          source_payment_id?: string | null
+          status?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_refunds_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_refunds_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_refunds_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_refunds_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_refunds_source_payment_id_fkey"
+            columns: ["source_payment_id"]
+            isOneToOne: false
+            referencedRelation: "client_payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       co_signing_sessions: {
         Row: {
           change_order_id: string
@@ -4229,6 +4464,80 @@ export type Database = {
           },
         ]
       }
+      retainage_releases: {
+        Row: {
+          amount: number
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          lien_release_warned: boolean
+          project_id: string
+          recorded_by: string
+          release_invoice_id: string | null
+          signed_off_on: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          amount: number
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          lien_release_warned?: boolean
+          project_id: string
+          recorded_by: string
+          release_invoice_id?: string | null
+          signed_off_on: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          amount?: number
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          lien_release_warned?: boolean
+          project_id?: string
+          recorded_by?: string
+          release_invoice_id?: string | null
+          signed_off_on?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "retainage_releases_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "retainage_releases_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: true
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "retainage_releases_recorded_by_fkey"
+            columns: ["recorded_by"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "retainage_releases_release_invoice_id_fkey"
+            columns: ["release_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       safety_incident_injuries: {
         Row: {
           company_id: string
@@ -5510,6 +5819,10 @@ export type Database = {
         Args: { p_change_order_id: string }
         Returns: number
       }
+      apply_client_credit: {
+        Args: { p_amount: number; p_invoice_id: string; p_payment_id: string }
+        Returns: string
+      }
       approve_expense: {
         Args: { p_allocations?: Json; p_expense_id: string }
         Returns: undefined
@@ -5660,6 +5973,17 @@ export type Database = {
         Returns: undefined
       }
       recompute_po_status: { Args: { p_po_id: string }; Returns: undefined }
+      record_client_payment: {
+        Args: {
+          p_amount: number
+          p_applications?: Json
+          p_contact_id: string
+          p_method?: string
+          p_note?: string
+          p_payment_date?: string
+        }
+        Returns: string
+      }
       record_expense_payment: {
         Args: {
           p_amount: number
