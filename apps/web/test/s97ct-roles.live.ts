@@ -539,105 +539,136 @@ describe('7. §12a carve-out — invoice amounts yes, contract value no', () => 
     expect(data!.billed_total).not.toBeNull();
   });
 
-  it('7b. DB READ — a PM must NOT be able to read contract_value (the tile IS the carve-out)', async () => {
-    const { data } = await session.project_manager
+  it('7b. DB READ — projects.contract_value is GONE, and a PM cannot reach it in its new home', async () => {
+    // RULING 2, step 4. Two halves, both required:
+    //   (a) the retired column no longer exists — a select on it ERRORS, which
+    //       is the loud failure a dropped column should produce;
+    //   (b) the figure is genuinely unreachable in project_financials, not just
+    //       moved somewhere a PM can still read.
+    const { error: goneError } = await session.project_manager
       .from('projects').select('id, contract_value').eq('id', richProjectId).maybeSingle();
+    expect(goneError, 'projects.contract_value still exists — the drop did not run').not.toBeNull();
+    expect(goneError!.message).toMatch(/contract_value/);
 
-    // RULING 2 [S97]: this MUST fail until the project_financials schema move
-    // is applied (PROPOSED_20260811000000_project_financials.sql.txt). It is the
-    // last open item in FINANCIAL-RLS-FLOOR, and it is meant to be loud.
-    expect(
-      data?.contract_value ?? null,
-      `RULING 2 NOT YET APPLIED — a PM read contract_value = ${data?.contract_value}. ` +
-        'The §12a tile gate is cosmetic until projects.contract_value moves to ' +
-        'project_financials (Owner/Admin RLS). See the call-site plan before applying.'
-    ).toBeNull();
+    const { data } = await session.project_manager
+      .from('project_financials').select('contract_value').eq('project_id', richProjectId);
+    expect(data ?? [], 'a PM read the contract value from project_financials').toHaveLength(0);
   });
 
-  it('7c. DB READ — Foreman and Crew must not read contract_value either', async () => {
+  it('7c. DB READ — Foreman and Crew cannot reach it either', async () => {
     const leaked: string[] = [];
     for (const role of ['foreman', 'crew_member'] as const) {
       const { data } = await session[role]
-        .from('projects').select('id, contract_value').eq('id', qaProjectId).maybeSingle();
-      if (data?.contract_value != null) leaked.push(`${role} read ${data.contract_value}`);
+        .from('project_financials').select('project_id, contract_value');
+      for (const row of data ?? []) leaked.push(`${role} read ${row.contract_value}`);
     }
-    expect(
-      leaked,
-      'RULING 2 NOT YET APPLIED — contract_value is readable below Owner/Admin. ' +
-        'Flips to PASS when project_financials lands.'
-    ).toEqual([]);
+    expect(leaked, 'the contract value is readable below Owner/Admin').toEqual([]);
   });
 
-  it('7e. DB WRITE — the column-scope trigger names the class of column it froze', async () => {
-    // FINANCIAL-RLS-FLOOR (20260806000000). Distinct from 7d, which only checks
-    // the value: this asserts the REFUSAL is explicit rather than an RLS silent
-    // no-op, so a caller learns why. Owner/Admin are unaffected (7f).
+  it('7d. DB WRITE — a PM cannot change the contract value (now via project_financials RLS)', async () => {
+    // The proof MOVED with the column rather than being deleted. Protection is
+    // now RLS on project_financials, which refuses at row level on every path,
+    // where the old trigger only covered UPDATEs on projects (Josh's ruling).
     const { data: before } = await admin
-      .from('projects').select('contract_value').eq('id', qaProjectId).single();
+      .from('project_financials').select('contract_value').eq('project_id', qaProjectId).maybeSingle();
+
+    const { error: updateError } = await session.project_manager
+      .from('project_financials').update({ contract_value: 999999 }).eq('project_id', qaProjectId).select('id');
+    const { error: insertError } = await session.project_manager
+      .from('project_financials')
+      .insert({ company_id: companyId, project_id: qaProjectId, contract_value: 999999 })
+      .select('id');
+
+    const { data: after } = await admin
+      .from('project_financials').select('contract_value').eq('project_id', qaProjectId).maybeSingle();
+    if (Number(after?.contract_value) !== Number(before?.contract_value)) {
+      await admin
+        .from('project_financials')
+        .update({ contract_value: before?.contract_value ?? null }).eq('project_id', qaProjectId);
+    }
+
+    // RLS refuses an UPDATE silently (zero rows) and an INSERT loudly; either
+    // way the value must be untouched — that is what is actually asserted.
+    expect(Number(after?.contract_value ?? 0), 'a PM rewrote the contract value')
+      .toBe(Number(before?.contract_value ?? 0));
+    expect(insertError ?? updateError, 'neither write path was refused').not.toBeNull();
+  });
+
+  it('7e. DB WRITE — the projects column-scope trigger still guards what it kept', async () => {
+    // enforce_projects_column_scope no longer mentions contract_value (it moved
+    // to RLS), but it still freezes retainage_percent, tax_rate and
+    // source_estimate_id. This proves the trigger SURVIVED the drop and still
+    // raises with its message — the regression test for the failure mode that
+    // blocked step 4 (a trigger referencing a dropped column errors on EVERY
+    // project update).
+    const { data: before } = await admin
+      .from('projects').select('retainage_percent').eq('id', qaProjectId).single();
 
     const { error } = await session.project_manager
-      .from('projects').update({ contract_value: 888888 }).eq('id', qaProjectId).select('id');
+      .from('projects').update({ retainage_percent: 88 }).eq('id', qaProjectId).select('id');
 
-    // Restore BEFORE asserting: until the migration is applied this write
-    // SUCCEEDS, and a failing assertion must not leave the fixture corrupted.
     await admin
-      .from('projects').update({ contract_value: before!.contract_value }).eq('id', qaProjectId);
+      .from('projects').update({ retainage_percent: before!.retainage_percent }).eq('id', qaProjectId);
+    const { data: restored } = await admin
+      .from('projects').select('retainage_percent').eq('id', qaProjectId).single();
+    expect(Number(restored!.retainage_percent), 'restore failed')
+      .toBe(Number(before!.retainage_percent));
 
     expect(error, 'the projects column-scope trigger did not fire').not.toBeNull();
     expect(error!.message).toContain('The financial terms of a project are Owner/Admin only.');
   });
 
-  it('7f. DB WRITE — a PM can still edit ORDINARY project fields (column scope, not a wall)', async () => {
+  it('7f. DB WRITE — an ORDINARY project update still works for Owner, Admin AND PM', async () => {
+    // THE REGRESSION TEST FOR THE STEP-4 BLOCKER. If enforce_projects_column_
+    // scope still referenced the dropped column, plpgsql would raise
+    // `record "new" has no field "contract_value"` on EVERY project update —
+    // renaming a job, a date change, a status transition — for every role.
+    // This exercises all three roles on ordinary fields to prove it does not.
     const { data: before } = await admin
-      .from('projects').select('internal_notes').eq('id', qaProjectId).single();
-    const marker = `role check ${before?.internal_notes === 'a' ? 'b' : 'a'}`;
+      .from('projects').select('name, internal_notes, target_end_date').eq('id', qaProjectId).single();
 
-    const { error } = await session.project_manager
-      .from('projects').update({ internal_notes: marker }).eq('id', qaProjectId);
-    expect(error, 'the trigger over-reached and blocked an ordinary field').toBeNull();
-
-    const { data: after } = await admin
-      .from('projects').select('internal_notes').eq('id', qaProjectId).single();
-    expect(after!.internal_notes).toBe(marker);
+    for (const role of ['owner', 'admin', 'project_manager'] as const) {
+      const { error } = await session[role]
+        .from('projects')
+        .update({
+          name: `QA A — isolation fixture`,
+          internal_notes: `ordinary update by ${role}`,
+          target_end_date: '2027-01-31',
+        })
+        .eq('id', qaProjectId);
+      expect(error, `an ordinary project update broke for ${role}: ${error?.message}`).toBeNull();
+    }
 
     await admin
-      .from('projects').update({ internal_notes: before?.internal_notes ?? null }).eq('id', qaProjectId);
+      .from('projects')
+      .update({
+        name: before!.name,
+        internal_notes: before!.internal_notes,
+        target_end_date: before!.target_end_date,
+      })
+      .eq('id', qaProjectId);
+    const { data: restored } = await admin
+      .from('projects').select('name, target_end_date').eq('id', qaProjectId).single();
+    expect(restored!.name, 'restore failed').toBe(before!.name);
+    expect(restored!.target_end_date, 'restore failed').toBe(before!.target_end_date);
   });
 
   it('7g. DB WRITE — Owner and Admin CAN still set the contract value', async () => {
     const { data: before } = await admin
-      .from('projects').select('contract_value').eq('id', qaProjectId).single();
+      .from('project_financials').select('contract_value').eq('project_id', qaProjectId).maybeSingle();
 
     for (const role of ['owner', 'admin'] as const) {
       const { error } = await session[role]
-        .from('projects').update({ contract_value: 50001 }).eq('id', qaProjectId);
+        .from('project_financials').update({ contract_value: 50001 }).eq('project_id', qaProjectId);
       expect(error, `${role} was blocked from setting the contract value`).toBeNull();
     }
 
     await admin
-      .from('projects').update({ contract_value: before!.contract_value }).eq('id', qaProjectId);
+      .from('project_financials')
+      .update({ contract_value: before?.contract_value ?? null }).eq('project_id', qaProjectId);
     const { data: restored } = await admin
-      .from('projects').select('contract_value').eq('id', qaProjectId).single();
-    expect(Number(restored!.contract_value)).toBe(Number(before!.contract_value));
-  });
-
-  it('7d. DB WRITE — a PM cannot change the contract value', async () => {
-    // Aimed at the QA fixture, never Josh's project, and restored either way.
-    const { data: before } = await admin
-      .from('projects').select('contract_value').eq('id', qaProjectId).single();
-
-    await session.project_manager
-      .from('projects').update({ contract_value: 999999 }).eq('id', qaProjectId);
-
-    const { data: after } = await admin
-      .from('projects').select('contract_value').eq('id', qaProjectId).single();
-
-    if (Number(after!.contract_value) !== Number(before!.contract_value)) {
-      await admin
-        .from('projects').update({ contract_value: before!.contract_value }).eq('id', qaProjectId);
-    }
-    expect(Number(after!.contract_value), 'a PM rewrote the contract value')
-      .toBe(Number(before!.contract_value));
+      .from('project_financials').select('contract_value').eq('project_id', qaProjectId).maybeSingle();
+    expect(Number(restored?.contract_value ?? 0)).toBe(Number(before?.contract_value ?? 0));
   });
 });
 

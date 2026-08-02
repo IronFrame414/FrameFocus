@@ -157,12 +157,17 @@ beforeAll(async () => {
     .from('projects')
     .insert({
       company_id: companyId, name: `${MARKER} — derivation traces`, contact_id: contactId,
-      project_type: 'cost_plus', contract_value: 100000,
+      project_type: 'cost_plus',
       project_number: `PRJ-${String(seq).padStart(3, '0')}`, project_internal_seq: internal,
     })
     .select('id').single();
   must('project', pErr);
   projectId = project!.id;
+
+  // RULING 2 step 4: the contract value lives in project_financials now.
+  must('project financials', (await admin.from('project_financials').insert({
+    company_id: companyId, project_id: projectId, contract_value: 100000,
+  })).error);
   must('counters', (await admin.from('companies').update({
     estimate_number_sequence: seq, project_internal_sequence: internal,
   }).eq('id', companyId)).error);

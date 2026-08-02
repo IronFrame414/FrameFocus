@@ -38,13 +38,15 @@ beforeAll(async () => {
   companyId = company!.id;
 
   // The PM-assigned project with a contract value — the same one 7b probes.
-  const { data: project } = await admin
-    .from('projects')
-    .select('id, contract_value')
-    .eq('id', 'a0a85240-333d-4177-bdf4-6df55fb069a6')
+  // RULING 2 step 4: read the figure from its NEW home; projects.contract_value
+  // no longer exists.
+  projectId = 'a0a85240-333d-4177-bdf4-6df55fb069a6';
+  const { data: financials } = await admin
+    .from('project_financials')
+    .select('contract_value')
+    .eq('project_id', projectId)
     .single();
-  projectId = project!.id;
-  expectedOriginal = Number(project!.contract_value);
+  expectedOriginal = Number(financials!.contract_value);
 
   for (const [role, email] of [
     ['owner', 'josh+test50@worthprop.com'],
@@ -57,27 +59,24 @@ beforeAll(async () => {
   }
 }, 180_000);
 
-describe('S97CT-CV — the backfill preserved every figure', () => {
-  it('1. project_financials holds exactly what projects.contract_value holds', async () => {
-    // Two plain reads and a comparison — an embedded select would depend on
-    // PostgREST's to-one/to-many shape, which is not what is under test here.
-    const { data: projects } = await admin
-      .from('projects').select('id, contract_value').not('contract_value', 'is', null);
+describe('S97CT-CV — the column is retired and the figures survived', () => {
+  it('1. projects.contract_value no longer exists, and project_financials carries the values', async () => {
+    // Before the drop this compared the two columns row by row. That comparison
+    // is impossible now by design — so it asserts the END STATE instead: the old
+    // column is gone (a select on it errors) and the new table is populated.
+    const { error: goneError } = await admin
+      .from('projects').select('id, contract_value').limit(1);
+    expect(goneError, 'projects.contract_value still exists').not.toBeNull();
+    expect(goneError!.message).toMatch(/contract_value/);
+
     const { data: financials } = await admin
       .from('project_financials').select('project_id, contract_value');
-
-    const moved = new Map(
-      (financials ?? []).map((f) => [f.project_id, Number(f.contract_value)])
-    );
-
-    for (const row of projects ?? []) {
-      expect(moved.has(row.id), `project ${row.id} has no project_financials row`).toBe(true);
-      expect(moved.get(row.id), `project ${row.id} moved a different figure`)
-        .toBe(Number(row.contract_value));
-    }
-    expect((projects ?? []).length, 'no projects carry a contract value — proof would be vacuous')
+    expect((financials ?? []).length, 'project_financials is empty — the backfill is gone')
       .toBeGreaterThan(0);
-    expect(moved.size).toBe((projects ?? []).length);
+    for (const row of financials ?? []) {
+      expect(Number.isNaN(Number(row.contract_value)), `${row.project_id} holds a non-number`)
+        .toBe(false);
+    }
   });
 });
 
