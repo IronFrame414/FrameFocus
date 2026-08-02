@@ -5997,6 +5997,13 @@ export type Database = {
         Args: { p_member_id: string; p_week_end: string; p_week_start: string }
         Returns: number
       }
+      budget_line_policy_digest: {
+        Args: never
+        Returns: {
+          policy_cmd: string
+          policy_name: string
+        }[]
+      }
       can_approve_member: {
         Args: { p_target_member_id: string }
         Returns: boolean
