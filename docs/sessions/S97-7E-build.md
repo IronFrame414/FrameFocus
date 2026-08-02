@@ -7,6 +7,12 @@
 > the conflict is recorded rather than resolved silently.
 > **Database:** rebuild-test (`nmyphyhmfttxkdoposvf`) — verified before every write. Production
 > untouched.
+>
+> **CLICK-TEST AUTOMATED 2026-08-02 [S97]:** §5's script was executed end-to-end against real
+> rows on rebuild-test through the real service functions, under genuine Owner / **Admin** /
+> PM / **Foreman** sessions — **29/30 PASS, 1 FAIL**. The failure is a **real defect in the
+> correction path**, not a bad expectation: see **§7a**. Figures and per-assertion verdicts in
+> **§4a**; §5 is now the trimmed eyes-only script.
 
 ---
 
@@ -18,7 +24,13 @@
 | `npm run test -w @framefocus/web` | **PASS** — 10 files, **174 tests** (149 pre-existing + **25 new 7E trace tests**) |
 | `npm run build` | **PASS**, uncached, no dev server running; `/dashboard/projects/[id]/payments` registered |
 | Migrations | `20260804000000`, `20260804010000` applied to rebuild-test and verified with `information_schema` / `pg_get_functiondef` |
-| Live RPC guards | **6/6 PASS** against real rows under a genuine Owner session — figures in §5 |
+| Live RPC guards | **6/6 PASS** against real rows under a genuine Owner session — superseded by §4a |
+| **Automated click-test** | **29/30 PASS, 1 FAIL** — 30 assertions through the shipped services under 4 real role sessions (§4a). The FAIL is §7a |
+
+**Re-verified 2026-08-02 after a Codespace restart, uncached:** `type-check` 5/5 (`--force`,
+28.6s), `test -w @framefocus/web` 10 files / 174 tests, `build` cold after `rm -rf .next`
+(2m14s) with `/dashboard/projects/[id]/payments` at 6.59 kB. Migrations `20260804000000` and
+`20260804010000` confirmed applied, local and remote in sync, no desync rows.
 
 **Test data:** all 7E fixtures deleted; `client_payments`, `client_payment_applications`,
 `client_refunds`, `retainage_releases` all read **0 rows**. Two invoices on a project named
@@ -155,73 +167,172 @@ rather than the repo filename. `supabase db push` would have tried to re-apply `
 
 ---
 
-## 5. Click-test — verified programmatically vs needs Josh
+## 4a. Automated click-test run [S97, 2026-08-02]
 
-### Verified programmatically — do not re-test by hand
+§5's script was executed against **rebuild-test** (`nmyphyhmfttxkdoposvf`, gated on the linked
+project ref before a single row was written — the harness refuses to start otherwise).
+Everything checkable without a browser was driven through the **real shipped service
+functions** — `recordPayment`, `applyCredit`, `voidPayment`, `createRefund`, `approveRefund`,
+`recordSignOffAndGenerateRelease`, `getClientPayments`, `getProjectPayments`,
+`getClientCreditBalance`, `getInvoiceRemaining`, `getOpenInvoices`, `getProjectAging`,
+`getProjectRetainageHeld`, `getRetainageRelease`, plus 7D's `createInvoice`, `addFixedLine`,
+`recalculateInvoiceTotals` and `markInvoiceSent` to build the invoices being paid — against
+**real rows**, under **four genuine sessions** minted with `generateLink` + `verifyOtp`
+(**Owner, Admin, PM, Foreman**). RLS, the `get_my_company_id()` / `auth.uid()` column defaults,
+the invoice numbering trigger and every immutability trigger were live. Not a mock, and not
+hand-written SQL standing in for the service layer.
 
-**25 pure-derivation tests** (`payments-shared.test.ts`) proving the §9 traces compute the spec's
-exact figures:
+The only thing stubbed is the Supabase client **factory** (`@/lib/supabase-browser`,
+`@/lib/supabase-server`), which wraps `next/headers` and the browser cookie store and cannot
+run in node. The client handed back is a real `supabase-js` client on the **anon key** carrying
+a real user JWT, so RLS applies exactly as it does in the app.
 
-| Trace | Asserted |
-| --- | --- |
-| §9-A | $18,000 billed / $1,800 retained → receivable **$16,200**; a $10,000 check leaves **$6,200**; the $1,800 appears in **no bucket** and not in the outstanding total; pairing 10,000 − 7,400 = **+2,600** |
-| §9-B | one $25,000 check, **two** applications ($6,200 + $18,800), both invoices satisfied; and the mirror — one invoice taking several payments |
-| §9-C | $6,200 invoice paid $6,500 → **$300 credit**, never auto-applied; final $4,000 paid $4,300 → $300 with nowhere to go → refund; Admin refunds need Owner approval |
-| §9-E | the **real $1,000,000 job**: nine draws at 10% → **$99,999.99** held, and after **nine months** none of it entered a bucket |
-| §6 | buckets at exactly 30/60/90; **acceptance #14** — a reissue ages from its own date (current, not 70 days overdue) **and** surfaces the link to the voided original; drafts never age |
-| §6a | collected = Σ applications on the job; an unapplied surplus is **not** collected |
+**30 assertions, 29 PASS, 1 FAIL.** No app code was changed — the FAIL is recorded in §7a and
+left unfixed, pending Josh's call.
 
-**6 live RPC-guard tests** against real rows under a genuine Owner session, with the actual messages:
+**Identities.** rebuild-test had only Owner, PM and Crew — **no Admin and no Foreman**, which is
+`GATED.md` Gate 2 (#103) and is exactly why the refund-approval and Foreman gates had never been
+exercised. The harness **mints an Admin and a Foreman** (auth user + profile; `profiles_create_member`
+auto-creates the `company_members` row), uses them, and deletes them. Standing them up costs
+about 20 lines — **Gate 2 can be closed permanently whenever Josh wants**, and it is the single
+highest-value fixture on rebuild-test.
 
-| Guard | Result |
-| --- | --- |
-| Partial payment leaves the invoice `sent` | **PASS** |
-| Over-application refused | **PASS** — *"9000.00 exceeds the 6200.00 remaining… The surplus stays on the payment as a credit."* |
-| One payment → two invoices, both settle to `paid` | **PASS** |
-| $1,300 against a $1,000 invoice leaves **$300** unapplied as credit; applying it to a settled invoice refused | **PASS** |
-| A recorded payment cannot be edited | **PASS** — *"A recorded payment is immutable — soft-delete and re-enter to correct it."* |
-| A payment cannot land on a **draft** invoice | **PASS** |
+### Results — every assertion
 
-### Needs Josh's eyes and hands
+| # | Assertion | Verdict | Actual |
+| --- | --- | --- | --- |
+| 1 | §9-A totals | **PASS** | $18,000 line at 10% → billed **18000**, withheld **1800**, receivable **16200**, status `sent`, numbered at send |
+| 2 | §6 — retainage sits in NO bucket | **PASS** | Held **1800**; bucket sum **24200** = total outstanding **24200** (16200+4000+1000+2500+500). The 1800 is in neither |
+| 3 | §9-A partial payment | **PASS** | $10,000 → invoice stays **`sent`**, remaining **6200** |
+| 4 | P-4 over-application refused | **PASS** | *"9000.00 exceeds the 6200.00 remaining… The surplus stays on the payment as a credit."* Payment count unchanged (RPC rolled back), remaining still **6200** |
+| 5 | §9-B one check, two invoices | **PASS** | $10,200 → **2** applications (6200 + 4000); **both** invoices `paid`, both remaining **0** |
+| 6 | §9-C overpayment → credit | **PASS** | $1,300 against a $1,000 invoice → invoice `paid`, **$300** credit available, client credit balance **300** |
+| 7 | §3 credit never auto-applies | **PASS** | The other invoice still owes **2500** |
+| 8 | §3 credit applied later | **PASS** | Applied 300 → invoice remaining **2200**, credit balance **0** |
+| 9 | §3 spent credit cannot re-apply | **PASS** | *"Only 0.00 remains as credit on this payment."* |
+| 10 | Settled invoice takes no more | **PASS** | Refused — 0.00 remaining |
+| 11 | §2 removal requires a reason | **PASS** | Blank rejected: *"A reason is required to remove a recorded payment."* |
+| 12 | §2 removal stores `deletion_reason`, reopens the invoice | **PASS** | `is_deleted` true, `deleted_at` set, `deletion_reason` stored, **`note` still NULL** (the S97 defect stays fixed), applications soft-deleted, invoice owes **500** again, credit balance **0** |
+| 13 | §2 the reopened invoice is offered again | **FAIL** | **See §7a.** `status` stays `paid`, derived remaining **500**, but `getOpenInvoices` → **not offered** |
+| 14 | §2 a recorded payment is immutable | **PASS** | *"A recorded payment is immutable — soft-delete and re-enter to correct it."* |
+| 15 | §2 no payment on a DRAFT invoice | **PASS** | *"Only a sent invoice can take a payment — a draft has not been issued and a voided one billed nothing."* |
+| 16 | §4.1 sign-off generates the release invoice | **PASS** | Held **1800** → a **`draft`**, `invoice_number` **NULL** (numbered only at send), billed **1800**, withholds **0** itself, receivable **1800**, `is_final` true |
+| 17 | §4.1 the release is recorded | **PASS** | `signed_off_on` 2026-08-02, amount **1800**, `release_invoice_id` → the draft, `lien_release_warned` true |
+| 18 | §4.1 one release per job | **PASS** | *"A retainage release has already been recorded for this job."* |
+| 19 | §5 **Admin** refund waits for Owner | **PASS** | Under a real Admin session: `pending_approval`, `approved_by` NULL, `approved_at` NULL |
+| 20 | §5 Admin cannot approve their own | **PASS** | *"Only the Owner can approve a refund."* — and the row is **still** `pending_approval` afterwards |
+| 21 | §5 Owner approves | **PASS** | `approved`, `approved_by` = Owner's member id, `approved_at` stamped |
+| 22 | §5 Owner-initiated is approved on creation | **PASS** | `approved` immediately, `approved_by` set |
+| 23 | P-3 a **PM** can READ payments | **PASS** | `getProjectPayments` returns the job's payments under a real PM session |
+| 24 | §8 a PM cannot RECORD | **PASS** | *"Only an Owner or Admin can record a payment received."* (raised by the RPC, not the UI) |
+| 25 | §3 a PM cannot apply a credit | **PASS** | *"Only an Owner or Admin can apply a client credit."* |
+| 26 | §5 refunds invisible to a PM; cannot issue | **PASS** | Direct select returns **0 rows** (RLS); *"Only an Owner or Admin can issue a refund."* |
+| 27 | §8 a PM cannot remove a payment | **PASS** | RLS matches zero rows; re-read as service role, the payment is **untouched** (`is_deleted` false, `deletion_reason` NULL) |
+| 28 | §8 a **Foreman** sees no payments | **PASS** | **0 rows** |
+| 29 | §8 a Foreman sees no applications, no releases | **PASS** | **0 rows** and **0 rows** |
+| 30 | §8 a Foreman cannot record | **PASS** | *"Only an Owner or Admin can record a payment received."* |
 
-Roughly 15 minutes, on rebuild-test as Owner, on a project with a **sent** invoice that has
-retainage withheld.
+> One assertion (#15) failed on the first run against my own literal — the RPC raises the
+> message lowercase and `friendlyPaymentError()` rewrites it capitalised for the UI. The
+> **behaviour** was right; the harness string was wrong, and was made case-insensitive. That is a
+> harness typo, not an expectation tuned to the code. #13 was **not** touched.
 
-1. **Nav.** Open a project → expect a **Payments** tab after Invoices.
-2. **The aging view.** Expect four buckets, a **Total outstanding**, and **Retainage held** below a
-   dashed rule with the sentence explaining it sits outside the buckets. **Judgement call: is it
+### Test data and teardown
+
+Fixtures carried an `S97CT7E` marker: 1 contact, 1 project (fixed-price, 10% retainage,
+$100,000 contract), 1 PM project assignment, **6 invoices** (five sent + one deliberate draft),
+their lines, and the Admin + Foreman identities. **All of it is deleted.** rebuild-test reads
+0 payments / 0 applications / 0 refunds / 0 retainage releases / **0 `S97CT7E` rows**, and back
+to its starting **2 invoices, 1 invoice line, 7 projects, 4 contacts, 3 profiles, 3 auth users,
+6 company members, 0 orphan assignments**. Josh's own two 7D click-test invoices (`INV-0001` and
+the untitled draft) were never touched. `invoice_number_sequence` was rewound to its pre-run
+value of **1** — guarded so it only rewinds when exactly Josh's 2 invoices remain, so no live
+invoice can ever be renumbered. Production was never touched.
+
+> **The FK teardown trap — and a correction to 7D's note.** 7D's harness accumulated five runs'
+> fixtures (95 invoices) because it never checked its delete errors. Chasing the same trap here
+> turned up something more precise, and **7E has made it worse**:
+>
+> - **The real trap is DELETE ORDER, not the triggers.** `invoices_immutability` fires on
+>   **UPDATE only** and never blocks a delete. `invoice_lines_parent_open` *does* fire on DELETE,
+>   but it early-returns when the parent invoice is already gone — with the explicit comment
+>   *"blocking here would make an invoice undeletable"*. So deleting the **invoice** and letting
+>   `invoice_lines_invoice_id_fkey ON DELETE CASCADE` take the lines **just works**. What fails is
+>   deleting the **lines first**, while the sent parent is still there. My first pass stood both
+>   triggers down through a temporary SECURITY DEFINER function; that was **unnecessary**, and it
+>   has been removed — the function is dropped and all seven triggers on `invoices` /
+>   `invoice_lines` verified back at `tgenabled = 'O'`. The committed harness touches no trigger
+>   and needs no elevated privilege.
+> - **Three FKs reference `invoices` with no `ON DELETE` action**, and each blocks the delete until
+>   its own rows go first — `invoice_lines.source_deposit_invoice_id` (7D, the one that bit 7D),
+>   and **two that 7E added**: `client_payment_applications.invoice_id` and
+>   `retainage_releases.release_invoice_id`. **Anyone writing a data-reset script must now delete
+>   7E rows before invoices**, which was not true before this module.
+>
+> **Every delete's error is checked**, and the run prints a full count dump plus an explicit error
+> list, so the failure mode that bit 7D cannot recur silently here.
+
+**The harness itself** is `apps/web/test/s97ct-7e-clicktest.live.ts` with its own runner config
+`apps/web/test/s97ct-7e.vitest.config.ts`. The `.live.ts` suffix does **not** match the
+`**/*.{test,spec}.{ts,tsx}` include in `vitest.config.ts`, so **CI never runs it** and the
+committed 174-test suite is unaffected. Run it deliberately:
+
+```
+cd apps/web && npx vitest run --config test/s97ct-7e.vitest.config.ts
+```
+
+It is committed (7D's was thrown away) so this is repeatable rather than a one-off claim.
+
+---
+
+## 5. TRIMMED manual script — what still needs eyes and hands
+
+**Every figure, guard and role gate above is already proven** (§4a). What is left is layout,
+wording, and the two judgement calls where §6a and the release flow are inventions with no lived
+workflow to check against. Roughly **8 minutes**, down from 15.
+
+**Setup.** rebuild-test, signed in as **Owner**, on a project with a **sent** invoice that has
+retainage withheld. The automated run left no data behind, so you are starting from empty.
+
+1. **Nav placement.** Open a project. *Expect:* a **Payments** tab after Invoices. **Judgement
+   call: does the empty state read like a deliberate sentence or a blank table?**
+2. **The aging view — the most important read.** *Expect:* four buckets, a **Total outstanding**,
+   and **Retainage held** below a dashed rule with the sentence explaining it sits outside the
+   buckets. The arithmetic is proven; what is not is legibility. **Judgement call: is it
    unmistakable that retainage is not overdue?** That is the rule the real $1M job turns on.
-3. **The pairing.** Expect *Collected / Spent / Ahead by*. **Judgement call: is this "the number you
-   have never been able to see", or does it need more?** §6a is invented by design and has no lived
-   workflow to check against — your read is the only correction available.
-4. **Record a payment, partial.** Enter less than the invoice's remaining, apply it, Record. Expect
-   the invoice to stay open and the aging to drop by that amount.
-5. **One check, two invoices.** With two open invoices, enter a figure covering both and click
-   **Auto-allocate oldest first**. Expect both filled oldest-first, and both marked paid after
-   recording. **Judgement call: does auto-allocate do what you'd do by hand?**
-6. **Overpay.** Enter more than is owed and allocate only what is owed. Expect the surplus called
-   out as *"…will sit as a credit on account"* before you commit, then a **Credit on account** block.
-   Apply it to another invoice. Expect it never to move on its own.
-7. **Remove a payment.** Expect a required reason, and the invoice to reopen and re-age afterwards.
-   **Judgement call: is "remove and re-enter" clear enough as the correction path?**
-8. **Retainage release.** With retainage held, expect the release panel to explain the trigger is the
-   client's final walkthrough, take a sign-off date, and generate a **draft** invoice for exactly the
-   held amount that still needs approval to send. Open it from Invoices and confirm the figure.
-   **Judgement call: two invoices (final draw + release) instead of your current one — still OK?**
-9. **Refund.** Issue one. As Owner it should be approved immediately; **sign in as Admin** and expect
-   it to wait for Owner approval.
-10. **PM check.** As a PM on the job: expect to **see** the aging, payments and pairing, and to have
-    **no** record/remove/refund controls, with the read-only note. As Foreman: expect **no Payments
-    tab** and a redirect if you navigate to it directly.
-
+3. **The pairing strip.** *Expect:* Collected / Spent / Ahead by. **Judgement call: is this "the
+   number you have never been able to see", or does it need more?** §6a is invented by design and
+   has no lived workflow to check against — your read is the only correction available.
+4. **Auto-allocate.** With two open invoices, enter a figure covering both and click
+   **Auto-allocate oldest first**. The split arithmetic is proven; **judgement call: does
+   oldest-first do what you'd do by hand?**
+5. **The overpayment warning.** Enter more than is owed, allocate only what is owed. *Expect:*
+   the surplus called out as *"…will sit as a credit on account"* **before** you commit.
+   **Judgement call: is that warning clear enough to stop a mis-keyed amount?**
+6. **The release panel.** With retainage held, *expect* the panel to explain the trigger is the
+   client's final walkthrough and to take a sign-off date. The generated draft is proven correct
+   to the cent. **Judgement call: two invoices (final draw + release) instead of your current
+   one — still OK?**
+7. **Removal wording.** Remove a payment. The mechanics are proven. **Judgement call: is "remove
+   and re-enter" clear enough as the correction path?** — and note **§7a**, which says that path
+   is currently broken in the picker, so read this with that in mind.
+8. **PM and Foreman, visually.** The gates are proven at the RLS and RPC layer for both roles
+   (#23–#30). What is unproven is the *screen*: as a PM, **expect the read-only note and no
+   record/remove/refund controls**; as a Foreman, **expect no Payments tab** and a redirect if you
+   navigate to it directly. This is UI mounting, not permission — the permission itself is done.
 ---
 
 ## 6. What I want Josh to rule on
 
-1. **Payment terms / due dates** — the top one. Aging currently runs from the issue date because
+0. **§7a — the broken correction path.** Now the top item, ahead of due dates: removing a payment
+   reopens the debt but the invoice vanishes from the record-payment picker, so the corrected
+   payment cannot be entered. Two candidate fixes below; both are small, and the choice is bound
+   up with item 2. **This is a live defect, not a decision that can wait.**
+1. **Payment terms / due dates.** Aging currently runs from the issue date because
    nothing writes a due date. Do invoices carry terms (Net 15/30, due on receipt)? Per-invoice, a
    company default, or both? Everything else in 7E is settled; this one changes what "overdue" means.
 2. **Is auto-marking an invoice `paid` right (P-2)**, or should settlement stay a deliberate action?
+   **§7a raises the stakes on this one** — the stale `paid` status is what breaks the correction path.
 3. **Should a PM see payments at all (P-3)?** I allowed read because the alternative makes their
    invoice view half-blind, but money-in is deliberately a different shape and you may want it
    tighter.
@@ -231,6 +342,67 @@ retainage withheld.
    default, so the rate is typed twice). One-line migration, but it touches shipped 7C — authorise it
    as its own change and I'll do it.
 6. **§2's QuickBooks `[VERIFY — CC]`** stays open until there's a sandbox connection.
+
+---
+
+## 7a. DEFECT FOUND AND LEFT UNFIXED — the correction path is broken [S97, 2026-08-02]
+
+**Assertion #13 failed.** It is not fixed, and no expectation was adjusted to make it pass.
+
+**What happens.** Record a payment that settles an invoice, then remove it — the documented and
+**only** correction path (§2, P-2, and §5 item 7). The debt correctly comes back: derived
+remaining returns to the full amount and the invoice re-ages. But the invoice is **no longer
+offered for payment**, so the corrected payment cannot be entered.
+
+Measured on a real $500 invoice, immediately after its only payment was removed:
+
+```
+status:                   "paid"      ← stale; nothing reverts it
+amount_receivable:        500
+derivedRemaining:         500         ← correct, the money is owed again
+offeredByGetOpenInvoices: false       ← the bug
+```
+
+**Root cause.** `record_client_payment` sets `status = 'paid'` when applications settle the
+receivable (P-2), and **nothing sets it back** when the settling application is soft-deleted —
+`voidPayment()` only soft-deletes rows. Everything else in 7E is derived and self-corrects;
+`status` is the one stored field, and it goes stale. `getOpenInvoices()` then filters
+`.eq('status', 'sent')` (`payments.ts:345`), so the reopened invoice is filtered out — even
+though `record_client_payment` itself happily accepts `'sent'` **or** `'paid'`.
+
+**Blast radius — worse than it first looks.** `getOpenInvoices` feeds the whole Payments page
+(`payments/page.tsx:57`), and in the UI:
+
+- the **record-payment panel is hidden entirely** when the list is empty
+  (`payments-view.tsx:272` — `canRecord && openInvoices.length > 0`), so on a job whose only
+  invoice was just corrected, the panel **disappears**;
+- the **credit-apply panel** early-returns on the same empty list (`payments-view.tsx:619`), so a
+  credit on account cannot be placed on that invoice either.
+
+The aging view still shows the money as outstanding — so the screen says you are owed $500 and
+offers no way to record being paid it.
+
+**`unapplyPayment()` has the same shape** and was **not** exercised by the harness: unapplying an
+application from a settled invoice leaves `status = 'paid'` by the identical route. Treat it as
+carrying the same defect until proven otherwise.
+
+**Two candidate fixes — Josh's call, deliberately not applied:**
+
+- **(a) Widen the read.** `getOpenInvoices` filters `.in('status', ['sent','paid'])` and leans on
+  its existing `remaining > 0` filter. One line, matches what the RPC already accepts and what
+  `ageReceivables` already does. Leaves the stale `paid` status visible on screen.
+- **(b) Revert the status.** Set `status` back to `'sent'` when a settling application is
+  soft-deleted (in `voidPayment` / `unapplyPayment`, or a trigger). Keeps `status` honest, but
+  adds a second writer to a 7D-owned column and needs the same care 7D's immutability trigger
+  took.
+
+(a) is smaller and safer; (b) is more correct. They are not exclusive. **If P-2 is reversed
+(ruling item 2), the whole class disappears** — which is the real reason these two are linked.
+
+**Why nothing caught this before.** Same lesson as §7, one layer up: `tsc`, the 25 pure-derivation
+tests and the build were all green, and so were the six original live RPC guards — because none of
+them ran the *sequence* record → settle → remove → re-record. Only driving the real service
+functions in order surfaced it.
 
 ---
 
@@ -266,6 +438,8 @@ apps/web/lib/services/payments.ts
 apps/web/lib/services/payments-client.ts
 apps/web/app/dashboard/projects/[id]/payments/page.tsx
 apps/web/app/dashboard/projects/[id]/payments/payments-view.tsx
+apps/web/test/s97ct-7e-clicktest.live.ts       (30-assertion live click-test, §4a)
+apps/web/test/s97ct-7e.vitest.config.ts        (its runner — NOT in the CI suite)
 ```
 
 **Modified**
