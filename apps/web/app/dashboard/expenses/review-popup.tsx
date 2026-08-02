@@ -403,7 +403,13 @@ export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: Re
                     </span>
                   )}
                   <div style={{ fontSize: '11px', color: color.muted }}>
-                    budget {fmtMoney(l.budgeted_amount)} · actual {fmtMoney(l.actual_amount)}
+                    {/* RULING [S97]: budgeted_amount is NULL when the reader is
+                        not permitted. fmtMoney() coerces null to $0.00 — a SIXTH
+                        `?? 0`, hidden inside the formatter — so the null case is
+                        handled here rather than passed to it. Actual cost is
+                        visible to every role and needs no guard. */}
+                    budget {l.budgeted_amount === null ? '—' : fmtMoney(l.budgeted_amount)} ·
+                    actual {fmtMoney(l.actual_amount)}
                   </div>
                 </div>
                 <input
