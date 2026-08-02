@@ -210,7 +210,7 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
           retainagePercent: retainageAllowed ? invoice.retainage_percent : null,
           isDeposit: invoice.invoice_type === 'deposit',
         }),
-      'Invoice derived from the selected costs and hours.'
+      'Invoice generated from the selected costs and hours.'
     );
     setSelectedCosts(new Set());
     setSelectedHours(new Set());
@@ -456,7 +456,7 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
       {isDraft && isDerived && (
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
           <button type="button" onClick={derive} disabled={busy} style={primaryButtonStyle}>
-            {busy ? 'Deriving…' : 'Derive invoice from selection'}
+            {busy ? 'Generating…' : 'Generate invoice'}
           </button>
           <span style={{ fontSize: '12px', color: color.faint }}>
             {selectedCosts.size} costs ({money(selectedCostTotal)}) · {totalBillableHours} billable
@@ -655,7 +655,11 @@ function LinesPanel({
               <th style={thStyle}>Line</th>
               <th style={thStyle}>Category</th>
               <th style={{ ...thStyle, textAlign: 'right' }}>Cost</th>
-              <th style={{ ...thStyle, textAlign: 'right' }}>Derived</th>
+              {/* §8's `derived_amount` — what the system computed, before any
+                  override or discount. Labelled "Calculated" on screen so it
+                  pairs with the "Generate invoice" action; the column, the
+                  spec and the services all still say derived. */}
+              <th style={{ ...thStyle, textAlign: 'right' }}>Calculated</th>
               <th style={{ ...thStyle, textAlign: 'right' }}>Billed</th>
               {isDraft && <th style={{ ...thStyle, width: '40px' }}></th>}
             </tr>
@@ -765,7 +769,7 @@ function LinesPanel({
 
       {/* Totals — §5/§8 */}
       <div style={{ padding: '12px 16px', borderTop: `1px solid ${color.cardBorder}`, backgroundColor: color.tableHeadBg }}>
-        <TotalRow label="Derived total" value={Number(invoice.derived_total)} muted />
+        <TotalRow label="Calculated total" value={Number(invoice.derived_total)} muted />
         <TotalRow label="Billed total" value={Number(invoice.billed_total)} />
         {Number(invoice.retainage_withheld) > 0 && (
           <TotalRow
@@ -1082,8 +1086,27 @@ function LifecycleActions({
   const isSent = invoice.status === 'sent' || invoice.status === 'paid';
   const isVoided = invoice.status === 'voided';
 
+  // §13 — the non-email delivery path, which the Pre-M9 gate does NOT block
+  // because nothing leaves the company. Print opens the PDF inline; Download
+  // forces a save. A draft gets a clearly watermarked PREVIEW that is not
+  // stored; a sent invoice's PDF is saved to the project (files.invoice_id).
+  // No email and no pay link here — RESEND and 7G respectively.
+  const pdfHref = `/api/invoices/${invoice.id}/pdf`;
+  const pdfLinkStyle: React.CSSProperties = {
+    ...secondaryButtonStyle,
+    textDecoration: 'none',
+    display: 'inline-block',
+  };
+
   return (
     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+      <a href={pdfHref} target="_blank" rel="noopener noreferrer" style={pdfLinkStyle}>
+        {isDraft || isPending ? 'Preview PDF (draft)' : 'Print'}
+      </a>
+      <a href={`${pdfHref}?download=1`} style={pdfLinkStyle}>
+        Download PDF
+      </a>
+
       {/* §12 — a PM submits; Owner/Admin approve and send. */}
       {isDraft && !canApprove && (
         <button type="button" disabled={busy} style={secondaryButtonStyle} onClick={() => run(() => submitForApproval(invoice.id), 'Submitted for approval.')}>

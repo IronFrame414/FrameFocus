@@ -12,8 +12,13 @@
 >
 > **CLICK-TEST AUTOMATED 2026-08-01:** §5's script was executed end-to-end against real
 > rows on rebuild-test through the real service functions — **18/18 PASS**, figures in
-> **§4a**. **Run §4b, not §5** — §4b is the ~15-minute trimmed script containing only what
+> **§4a**. **Run §4b, not §5** — §4b is the ~20-minute trimmed script containing only what
 > genuinely needs eyes and hands.
+>
+> **DELIVERY (partial) 2026-08-02:** the **invoice PDF, print and download** is built —
+> §13's non-email path, which neither the Pre-M9 gate nor the RESEND secret blocks. See
+> **§4c**. Email delivery and the pay link remain unbuilt (RESEND / 7G). The primary
+> action is now labelled **Generate invoice**.
 >
 > **Branch:** `feature/113c-award-commitment-spec` (7D was built on the 113c branch; it
 > was never merged to `main`).
@@ -339,13 +344,90 @@ already gated it to Owner/Admin/PM.
 | **QuickBooks export (7G)** | Out of 7D's scope. 7D stores what 7G will export, and stores it correctly: **7G exports `billed_total`, never `derived_total`.** |
 | **Client pay link** | Behind the **Pre-M9 external-surface gate** (GATED.md Gate 1) — nothing goes in front of someone outside the company until identity, branding and delivery are settled. |
 | **Email delivery of invoices** | Same gate, plus the **RESEND secret** is not reliably present (the Codespace override slip has recurred, per GATED.md's unblock list). `markInvoiceSent()` marks the invoice sent and freezes it — it sends no email. |
-| **Invoice PDF generation** | `files.invoice_id` exists and the §11 presentation data is complete and PDF-ready, but no generator was written. Client-facing artifact ⇒ same Pre-M9 gate. |
+| ~~**Invoice PDF generation**~~ | **BUILT [S97] — see §4c.** §13's print/download path is not gated: nothing leaves the company, so neither the Pre-M9 gate nor the RESEND secret blocks it. |
 | **Payments / aging (7E)** | 7E's module. 7D defines `paid` in the status CHECK because 7D owns the status model, but **7D never sets it**. `canVoidInvoice` already implements the paid/partially-paid arms; the builder passes `hasPayment: false` because no payment can exist yet, with a code comment saying 7E must pass the real state. |
 | **Automatic draw schedules** | §1 v1 boundary — every invoice is user-triggered; no draw fires on its own. The user types each draw. |
 | **Structured selection-overage marker** | P-3. |
 | **Tasks → line-item chain** | Ruled **withdrawn** by Josh (S97 D2). Billable hours are user-selected. |
 | **DB-level Financial Visibility Floor** | Platform-wide follow-up (`FINANCIAL-RLS-FLOOR`), not 7D's. 7D's own RLS *is* role-gated. |
 | **Production migration** | 7D is applied to rebuild-test only; the prod batch is owed (see §0). |
+
+---
+
+## 4c. Delivery — what exists now, what is still blocked [S97, 2026-08-02]
+
+**§13 has two paths. The non-email one is now built.** Nothing in it leaves the company,
+so it is not behind the Pre-M9 gate and does not need the RESEND secret.
+
+### Built — invoice PDF, print and download
+
+| Piece | File |
+| --- | --- |
+| Data assembly | `apps/web/lib/invoices/invoice-data.ts` |
+| Document | `apps/web/lib/invoices/invoice-template.tsx` |
+| Render + store | `apps/web/lib/services/invoice-pdf-service.ts` |
+| Route | `apps/web/app/api/invoices/[id]/pdf/route.ts` (GET) |
+| UI | **Print** / **Download PDF** on the invoice builder |
+
+**Pattern followed — no new mechanism invented.** Render follows **`co-pdf-service.ts`**
+(a `generate*` that returns `{ buffer, data }` off a `*-data.ts` assembly + a react-pdf
+template), and storage follows **`delivery-pdf-service.ts`** (upload to `project-files`,
+insert the `files` row, then hard-remove the stale artifact so there is exactly one current
+PDF per invoice). Reads use the caller's RLS client; the admin client does the storage
+write and the stale-artifact cleanup, because the `files` DELETE policy is Owner/Admin-only
+and a PM regenerating a PDF could not purge the old blob under RLS — the same reasoning
+`delivery-pdf-service` documents. **Branding is co-template's block verbatim** (logo,
+company address/phone/email/licence, brand-colour accent bar, page footer) — no new
+branding was built.
+
+**Behaviour**
+- Renders at the invoice's chosen **presentation level** (§11). Layout A puts each
+  non-labor row at its **actual, unburdened** cost, then **Subtotal (cost)**, **Markup**,
+  with the **labor line outside that block** as "N hrs @ $R/hr" (R3), then TOTAL.
+- **Discounts and every credit show in full as negative lines at all three levels** —
+  never netted away.
+- **Retainage** shows as its own withheld line with the percentage, and the block resolves
+  to **Amount due** (§5). With no retainage the withheld/amount-due rows are omitted
+  entirely rather than printed as zero.
+- **Sent/paid/voided** → rendered, **stored against the project** (`files.invoice_id`,
+  category `'invoices'`), and streamed. Re-requesting replaces the stored copy.
+- **Draft/pending** → a **watermarked preview**, streamed but deliberately **not stored**:
+  a watermarked draft sitting in the project's Files list beside real invoices is the exact
+  confusion the watermark exists to prevent. It carries a diagonal DRAFT watermark, a
+  "**DRAFT — not yet numbered. Not a bill.**" notice, and "Draft — not yet numbered" in the
+  invoice field.
+- `?download=1` forces a save dialog; otherwise it opens inline for printing.
+- Roles: Owner/Admin/PM, the same set the `invoices` RLS policies allow.
+
+**NO DUE DATE — deliberate.** Josh has not ruled payment terms, so the field is **omitted
+entirely** rather than printed blank or invented. This is still open item #3 in §6: do
+invoices carry terms (Net 15/30, due on receipt), and is that per-invoice, a company
+default, or both? Until that is ruled, the PDF simply has no due-date line.
+
+**Verification.** Rendered standalone against the real template for all six shapes —
+full detail / by section / lump sum / draft / no-retainage / empty deposit — all produced
+valid PDFs, and I read the full-detail and draft outputs to confirm the layout rather than
+trusting a byte count. Layout A ordering, the retainage block and the watermark are all
+correct.
+
+> **Gap worth knowing:** there is **no permanent render test**. The repo's vitest cannot
+> transform `.tsx` (tsconfig sets `jsx: "preserve"` for Next, and Vitest 4 ignores the
+> `esbuild` override), so a test importing the template fails to parse. I tried the config
+> route, reverted it rather than leave a broken edit in shared config, and verified via a
+> temporary `tsx` runner instead. **Consequence: a future change to the template can break
+> PDF rendering with type-check, tests and build all still green.** Same exposure already
+> applies to `co-template.tsx`, `proposal-template.tsx` and the 6B/6C/6D templates — none
+> has a render test either. Worth a follow-up.
+
+### Still NOT built — and why
+
+- **Email delivery** — needs the **RESEND secret**, which GATED.md lists as an unblock
+  condition for the Pre-M9 gate. Not attempted.
+- **Pay link** — **7G**, QuickBooks-hosted (§13). Not attempted.
+- **Anything client-facing beyond the PDF** — Pre-M9 gate. Untouched.
+
+The practical effect: Josh can now produce a real invoice document and hand it over by
+print or file. He cannot yet have FrameFocus email it or take payment through it.
 
 ---
 
@@ -435,9 +517,9 @@ touched.
 
 ## 4b. TRIMMED manual script — what still needs eyes and hands
 
-**Everything numeric is already proven** (§4a). What is left is layout, whether a screen
-reads right to a client, and things needing a second identity or a real clock. Roughly
-15 minutes. The full original script is kept below as §5 for reference — you do not need
+**Everything numeric is already proven** (§4a). What is left is layout, whether a screen or
+a printed invoice reads right to a client, and things needing a second identity or a real
+clock. Roughly 20 minutes. The full original script is kept below as §5 for reference — you do not need
 to walk it.
 
 **Setup.** rebuild-test, signed in as **Owner**, on a project with a cost-plus or T&M
@@ -469,14 +551,37 @@ from an empty invoice list.
 8. **Retainage input.** On a T&M or deposit invoice, look at **Retainage %**. *Expect:*
    disabled, showing "n/a", with the reason underneath. (The rule itself is proven — this
    is only whether the disabled state is legible.)
-9. **Evening send — do this after 8pm local, or skip.** Send any invoice after ~8pm and
+9. **Draft PDF preview.** On a draft with lines, click **Preview PDF (draft)**. *Expect:* a
+   new tab with a diagonal **DRAFT** watermark, "**DRAFT — not yet numbered. Not a bill.**"
+   under the title, and "Draft — not yet numbered" where the number goes. **Judgement call:
+   if this landed in a client's inbox by accident, is it unmistakably not a bill?** Then
+   open the project's **Files** tab — *expect:* **no** invoice PDF saved, because drafts
+   are preview-only.
+10. **Sent PDF — the real read.** Send an invoice, then click **Print**. *Expect:* your
+    letterhead (logo, address, licence, accent bar) identical to a change-order PDF, the
+    invoice number, and the layout at whatever presentation level the invoice is set to.
+    **This is the most important visual check in the pass: would you send this to a client
+    as it stands?** Specifically confirm — costs at actual cost, **Subtotal (cost)** and
+    **Markup** covering non-labor only, the **labor line outside** that block, discounts
+    and credits shown in full as negatives, and **Retainage withheld → Amount due** where
+    retainage applies. *Expect:* **no due date anywhere** — payment terms are unruled
+    (§6 item 3), so the field is deliberately absent. Tell me if its absence looks wrong.
+11. **Download + Files.** Click **Download PDF** — *expect:* a save dialog, filename
+    `invoice-INV-000N.pdf`. Then the project's **Files** tab — *expect:* the PDF saved
+    under category **Invoices**. Click **Print** again and re-check Files — *expect:*
+    still **one** invoice PDF, not two; the regenerate replaces rather than accumulates.
+12. **Presentation levels on paper.** Switch the invoice to **By section**, print, then
+    **Lump sum**, print. *Expect:* the sectional rollup and the single figure respectively,
+    with adjustments still itemised in both. **Judgement call: is lump sum too bare to
+    send?**
+13. **Evening send — do this after 8pm local, or skip.** Send any invoice after ~8pm and
    read the **Issued** column. *Expect:* **today's** date, not tomorrow's. This is the one
    defect class that only appears late in the day; the rule is unit-tested, but a real
    after-hours send is the honest check.
-10. **Foreman or Crew.** Sign in as one and open the same project. *Expect:* **no Invoices
+14. **Foreman or Crew.** Sign in as one and open the same project. *Expect:* **no Invoices
     tab**, and navigating directly to `/dashboard/projects/<id>/invoices` bounces you to
     the project overview.
-11. **PM.** Sign in as a PM assigned to the job. *Expect:* you can open, create, derive and
+15. **PM.** Sign in as a PM assigned to the job. *Expect:* you can open, create, generate and
     read **every amount on the invoice**, and you see **Submit for approval** instead of
     Mark sent. *Expect:* the **"Original contract" tile is absent** from the invoice list,
     while Billed to date / Retainage held / Receivable remain. Sign back in as Owner and
@@ -520,7 +625,7 @@ with segments on the project.
    sitting only in the Miscellaneous bucket appears **greyed and un-tickable** with the
    reason "Not tied to a contract line…" — **P-1, confirm you agree**.
 4. Tick two costs in **different categories** (e.g. one material, one subcontractor).
-5. Click **Derive invoice from selection**.
+5. Click **Generate invoice**.
    *Expect:* a line per cost. Each priced at **its own category's rate**, in force on
    **its own incurred date** — the two lines should show different markups if your rates
    differ. Verify against §15-B's trace: subs $3,275.00 → $3,930.00, materials $1,583.68
@@ -577,11 +682,11 @@ with segments on the project.
 18. In **Adjustments**, type a description and a positive amount → **Add discount**.
     *Expect:* the line appears **negative** and client-visible, labelled with the note "A
     discount is forgiveness — never rebilled."
-    *Expect:* **Derived total** stays at the pre-discount figure while **Billed total**
+    *Expect:* **Calculated total** stays at the pre-discount figure while **Billed total**
     drops. Both figures survive — that is §8, and 7G/7H will report **billed**.
     *Expect (P-7):* the **retainage withheld does not change** — it is computed on
     positive work only.
-19. Click **Derive invoice from selection** again.
+19. Click **Generate invoice** again.
     *Expect:* derived lines are rebuilt but **the discount survives** ("drafts re-derive;
     overrides and discounts survive").
 
