@@ -90,6 +90,39 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 - **#100** Photo markup is invisible outside the markup editor. markup_data (JSONB on files, baseline :1386) renders only as an SVG overlay in markup-editor.tsx; the file grid, daily-log/incident/delivery photo strips, all three PDF services, and downloads all show the raw original. A user who marks up a photo sees no evidence of it anywhere afterward. Intent (Josh, S90): markup should persist as a non-destructive LAYER over the original — original bytes never overwritten, markup viewable wherever the photo is viewed. Fix shape: render the SVG overlay in every photo surface (grid, strips, viewer), and composite to flat JPEG/PNG only where the image must leave the app. Cross-ref #53 (flattened export for email/PDF — the leaving-the-app half of the same problem) and #55 (in-app fullscreen viewer, the natural host for layered display). Discovered Session 90 during markup testing.
 - **#101** Job/task switching is unreachable outside /dashboard/timeclock, and the dashboard shell has no mobile handling. ClockModal's modes are 'clock-in' | 'clock-out' only; the switch modal lives solely in timeclock-client.tsx, so a crew member on any other page must navigate to the timeclock page to switch jobs — and the 7A material-run expense prompt on the switch path only fires there. Compounding it, dashboard-shell.tsx has zero responsive handling: no media queries, no drawer, a shrink-0 236px sidebar that never collapses (~140px of usable content on a 375px phone), and a non-sticky header, so the global clock button scrolls out of view. Intent (Josh, S90): the clock control should be locked to the top on mobile, and switching should be reachable from it. Fix shape: add a 'switch' mode to ClockModal so the global button can switch, and make the header sticky + the shell responsive. Field crew on phones are the primary audience for 6A/7A capture. Cross-ref #30 (mobile app is a placeholder — this is the web shell that exists today). Discovered Session 90.
 
+  **[S97, 2026-08-03] THE PWA RULING CONFIRMS THE DIRECTION BUT NOT THE SHAPE.** Josh ruled mobile
+  is a PWA on this same web app (CLAUDE.md → Technology Stack), so this item is no longer competing
+  with a React Native app that might have made it moot — the web shell IS the mobile experience.
+  **What is still OPEN, and is Josh's next decision: REPAIR the existing dashboard shell (collapse
+  the sidebar to a drawer, sticky header — what this item assumed at S90) versus a SEPARATE ROUTE
+  TREE for phones.** Repair is cheaper and keeps one system; a separate tree lets field screens be
+  designed for touch instead of adapted. Do not start either until it is ruled.
+
+  **Audit measurements [S97, 2026-08-03] — the arithmetic behind "no mobile handling":**
+  `dashboard-shell.tsx:119` is `<aside className="flex w-[236px] shrink-0 …">` with `<main
+  className="… px-[30px]">`. Content width is therefore **390 − 236 − 60 = 94px** on an iPhone
+  14/15 and **375 − 236 − 60 = 79px** on an SE/mini. (This item's original "~140px on a 375px
+  phone" counted the sidebar but not the main padding — both figures are right; **79px** is what
+  content actually gets.) The header at `dashboard-shell.tsx:175` is `h-[54px] shrink-0` with **no
+  `sticky top-0`**, confirming the scroll-away clock button.
+
+  **AND THE CONSTRAINT THAT SIZES THE FIX: the screens are inline-styled, and inline styles cannot
+  carry a media query.** Counted S97: **1,917 `style={{` usages against 771 `className=`** across
+  `apps/web/app`; **zero** `@media` rules in source; and **exactly one** responsive Tailwind variant
+  in the whole codebase (`md:grid-cols-3` in `billing/plans/plan-selection.tsx:93` — a page crew
+  never see). Tailwind is configured and the shell uses it, but the screens do not. So "make the
+  shell responsive" is cheap; **making the SCREENS responsive is a styling-system decision**
+  (migrate to Tailwind, or container queries, or a JS breakpoint hook — the last reintroducing the
+  second-system risk). That choice is part of the repair-vs-separate-tree decision above, not
+  separable from it.
+
+  Also measured: **18 files contain `<table>`**; recurring fixed grids include
+  `'2fr 1fr 1fr 1fr 2fr auto'` (6 columns) and `'1fr 320px'` (a hard 320px rail);
+  `components/time/clock-modal.tsx:309` is **`width: '460px'` with no `maxWidth`**, so the most-used
+  field action's modal is **wider than the viewport** on every phone; and **no image input anywhere
+  sets `capture`** (`accept="image/*"` only, in five field forms), so field photo capture opens the
+  file chooser rather than the camera.
+
 ### Track for Module 4 (Estimating)
 
 - **#18** Add `converted_at` timestamp to contacts — for lead-to-client conversion tracking
@@ -116,7 +149,35 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
 - **#27** Invite emails not automated — Owner copies invite link manually. Resend integration deferred.
 - **#29** No shared UI components — `apps/web/components/` and `packages/ui/` empty. shadcn/ui not yet installed.
-- **#30** Mobile app is a placeholder. Phase 2 work.
+- **#118** **The offline seam in `clockIn` is DESIGNED BUT UNWIRED — an asset for whoever builds the
+  queue, and a trap for anyone who assumes it is live.** [Discovered S97, 2026-08-03, mobile
+  readiness audit.] `apps/web/lib/services/time-tracking-client.ts:71-77` already accepts
+  `clock_in?: string` (*"device timestamp; defaults to now()"*) and `session_client_id?` /
+  `segment_client_id?` (*"client-generated UUID (offline-ready)"* — its own comment). The client id
+  is written to the row's primary key, which would make a replayed write idempotent by PK collision.
+  **Nothing calls any of the three**, and **no `client_id`, device or idempotency column exists
+  anywhere in the live schema** (checked against `information_schema` at S97). GPS capture
+  (`components/time/clock-modal.tsx:81-85`) is a device sensor and works with no signal, so a queued
+  clock-in could carry a real fix and a real time.
+  **Why it matters:** a lost clock event is lost payroll, and re-clocking after signal returns
+  records the LATER time — the device timestamp exists precisely to prevent that. **Why it is a
+  trap:** the comment says "offline-ready", which reads as shipped. It is not. Whoever builds the
+  offline queue should treat this as a head start on ONE action and confirm that **no other field
+  action has an equivalent** — clock in/out, photo upload, daily log, receipt capture and delivery
+  check-in all currently fail with an on-screen error and no queue, no retry, no persistence (no
+  IndexedDB, no `localStorage` of pending writes, no `navigator.onLine` anywhere in the tree).
+  Cross-ref #101 (the shell) and #30 (the PWA ruling that makes offline a web problem rather than an
+  Expo SQLite one).
+
+- **#30** Mobile app is a placeholder. Phase 2 work. — **SUPERSEDED IN DIRECTION [S97, 2026-08-03].**
+  Josh ruled the mobile experience is a **PWA — the existing Next.js web app installed to the home
+  screen — NOT React Native** (reasons: no app store at this time; and iOS requires a home-screen
+  install for Web Push regardless, so the PWA is also the precondition for notifications on iPhone).
+  `apps/mobile/` is therefore **PARKED, not deleted** — see `apps/mobile/README.md`, which records
+  what deletion would involve (workspace glob, the devcontainer's port 8081, four remaining Expo
+  references in CLAUDE.md, the "web + mobile" wording on `packages/shared`). **Deletion is Josh's
+  call.** This item stays OPEN until he makes it; it is no longer "Phase 2 work" on the RN app,
+  because there is no RN app to build. Ruling recorded in CLAUDE.md → Technology Stack.
 - **#31** No tests. Test infrastructure not set up.
 - **#32** `profiles` table uses `user_id` column — all queries use `.eq('user_id', user.id)`
 - **#33** Promote-to-admin UI not built

@@ -30,14 +30,14 @@ Two MCP servers are standard for this repo:
 | Layer           | Technology                                                         | Notes                                                           |
 | --------------- | ------------------------------------------------------------------ | --------------------------------------------------------------- |
 | Web Frontend    | Next.js 14 + React + TypeScript + Tailwind CSS + shadcn/ui         | Office users (estimators, PMs, owners)                          |
-| Mobile Frontend | React Native + Expo                                                | Field crew (techs, foremen)                                     |
+| Mobile Frontend | **PWA (the Next.js web app, installed to the home screen)**         | Field crew (techs, foremen) — **RULED [S97, 2026-08-03]**       |
 | Shared Logic    | TypeScript packages in monorepo                                    | Types, validation, business logic shared across web + mobile    |
 | Backend / DB    | Supabase (PostgreSQL + Auth + Storage + Realtime + Edge Functions) | Multi-tenant with RLS                                           |
 | AI              | OpenAI API (GPT-4o vision + text) + Supabase pgvector              | Estimating, photo auto-tagging, reporting, summaries, marketing |
 | Payments        | Stripe Billing + Stripe Connect                                    | Subscriptions + contractor-to-client payments                   |
 | Accounting      | QuickBooks Online API (OAuth 2.0)                                  | Sync only — FrameFocus runs operations, QB runs the books       |
 | Web Hosting     | Vercel                                                             | Auto-deploy from main branch                                    |
-| Mobile Builds   | Expo EAS                                                           | Cloud iOS/Android builds + OTA updates                          |
+| ~~Mobile Builds~~ | ~~Expo EAS~~ — **SUPERSEDED [S97]**                              | No app-store build pipeline. See the PWA ruling below.          |
 | CI/CD           | GitHub Actions                                                     | Lint, test, build verification                                  |
 | Monorepo        | Turborepo                                                          | Multi-package management                                        |
 | Email           | Resend                                                             | Transactional emails                                            |
@@ -45,6 +45,32 @@ Two MCP servers are standard for this repo:
 | Doc Generation  | React-PDF or Puppeteer                                             | PDF estimates, invoices, reports                                |
 
 **Language:** TypeScript everywhere — web, mobile, backend, shared.
+
+### MOBILE IS A PWA, NOT REACT NATIVE — **RULED [Josh, S97, 2026-08-03]**
+
+_Superseded rows, quoted rather than silently rewritten:_
+_`| Mobile Frontend | React Native + Expo | Field crew (techs, foremen) |`_
+_`| Mobile Builds   | Expo EAS            | Cloud iOS/Android builds + OTA updates |`_
+
+**The mobile experience is the existing Next.js web app, delivered as a PWA and installed to the
+home screen.** There is no React Native app and no app-store presence.
+
+**Josh's reasons, as given:**
+
+1. **He does not want to deal with the app store at this time.** No review cycles, no store listings,
+   no separate release train.
+2. **iOS requires a home-screen install for Web Push anyway** (Safari 16.4+ delivers push only to an
+   installed PWA). So the PWA path is not merely an alternative to React Native — it is the
+   **precondition for notifications on iPhone**, which is the next project after the mobile UI.
+
+**What this changes:** `apps/mobile/` (Expo skeleton) is **PARKED, not deleted** — see
+`apps/mobile/README.md`. The "React Native (Mobile — Expo)" conventions section below is superseded
+and retained only as a record of the abandoned direction. Anything a spec previously deferred to
+"the mobile app" now belongs to the web app's responsive/offline work.
+
+**What is NOT decided by this ruling:** whether the mobile UI is a **repair of the existing
+dashboard shell** or a **separate route tree for phones**. TECH_DEBT #101 assumed repair. That is
+Josh's next decision and is recorded as OPEN in #101.
 
 ---
 
@@ -70,7 +96,7 @@ framefocus/
 │   │   │   ├── supabase-browser.ts  # Client-side Supabase
 │   │   │   └── supabase-server.ts   # Server-side Supabase
 │   │   └── public/           # Static assets
-│   └── mobile/               # Expo / React Native app (placeholder)
+│   └── mobile/               # PARKED [S97] — Expo skeleton, superseded by the PWA ruling
 ├── packages/
 │   ├── shared/               # Shared across web + mobile
 │   │   ├── types/            # TypeScript type definitions (roles.ts)
@@ -339,12 +365,19 @@ Server and client Supabase clients must be in separate files to avoid Next.js bu
 - File naming: `kebab-case.tsx` for components, `kebab-case.ts` for utilities
 - Colocate component-specific files: `components/estimate-builder/estimate-builder.tsx`
 
-### React Native (Mobile — Expo)
+### ~~React Native (Mobile — Expo)~~ — **SUPERSEDED [S97, 2026-08-03]**
 
-- Expo Router for navigation
-- Expo SDK managed workflow (no bare workflow)
-- NativeWind (Tailwind for React Native) for styling consistency with web
-- Offline-first for field operations using Expo SQLite with sync queue
+**Mobile is a PWA** (see the ruling under Technology Stack). Nothing below is in force; it is kept
+as a record of the direction that was abandoned, so a future reader does not reconstruct it by
+accident.
+
+- ~~Expo Router for navigation~~
+- ~~Expo SDK managed workflow (no bare workflow)~~
+- ~~NativeWind (Tailwind for React Native) for styling consistency with web~~
+- ~~Offline-first for field operations using Expo SQLite with sync queue~~ — **the requirement
+  survives, the mechanism does not.** Offline field capture is now a web problem (service worker +
+  a browser-side queue), not an Expo SQLite one. See TECH_DEBT #118 for the one seam that already
+  exists in the web code.
 
 ### API / Data Layer
 

@@ -204,6 +204,48 @@ spec without an approved trace.
 
 ---
 
+## Gate 4 — NOTIFICATIONS are gated behind the PWA install — **[S97, 2026-08-03]**
+
+**What is blocked:** the notification system (Web Push to field crew).
+
+**Behind what:** a **manifest, icons and a service worker** — i.e. the PWA install itself.
+
+**Why this is a hard dependency and not a preference.** On iOS, Safari delivers Web Push **only to
+a PWA the user has installed to the home screen** (16.4+). There is no browser-tab push on iPhone
+and no app-store alternative, because Josh ruled mobile is a PWA and not React Native (CLAUDE.md →
+Technology Stack → *"MOBILE IS A PWA, NOT REACT NATIVE"*). **Push is also delivered TO the service
+worker and nowhere else** — on every platform, not just iOS. So manifest + icons + service worker
+are **prerequisites of the notification project, not a parallel track**, and no amount of
+notification-side work can proceed past design without them.
+
+**What unblocks it:** ship the PWA install (manifest, the icon set incl. maskable + apple-touch, a
+registered service worker), then the push work can begin.
+
+**Recorded so the sequencing is not rediscovered.** The temptation is to scope notifications as
+their own project running alongside the mobile UI. On iOS that ordering cannot work.
+
+**Inventory as of S97 — none of this exists.** Verified by audit, not assumed:
+
+| Needed | Status |
+| ------ | ------ |
+| `manifest.json` / `manifest.ts` | **absent** — no file anywhere |
+| Service worker | **absent** — no `sw.js`, no `next-pwa` / `workbox` / `serwist` dependency |
+| Icons (192/512, maskable, apple-touch) | **absent** — `apps/web/public/` contains **only `fonts/`** |
+| `viewport` export in `app/layout.tsx` | **absent** — Next 14's default is injected, so nothing is broken, but there is no control over `viewport-fit=cover` (safe area) |
+| `theme-color`, `apple-mobile-web-app-*` | **absent** — `metadata` carries `title` + `description` only |
+| Offline fallback page | **absent** |
+| `web-push` / VAPID keys | **absent** |
+| `pushManager` / `Notification.requestPermission` / SW registration | **absent** — zero occurrences in the tree |
+| Push subscription table (endpoint + `p256dh` + `auth`, per member) | **absent** — no such table in any migration |
+
+**Precedent to mirror when it is built, NOT infrastructure to reuse:** the existing notification-
+shaped code is **email only** — `logEmail` into `email_logs` with `sent`/`failed`/`bounced` and a
+Resend webhook advancing status, plus the Owner/Admin retry banner on safety incidents
+(`api/safety-incidents/[id]/notify`). A push send path would need its own log or a deliberate
+extension of that one, and 410-Gone endpoint pruning has no equivalent anywhere.
+
+---
+
 ## Open defects logged S95 (not gated, just not yet fixed)
 
 - **Overview "Cost to Date" / "Projected Margin" render "—".** NOT a mystery —
