@@ -1,6 +1,6 @@
 # CLAUDE.md — FrameFocus Development Guide
 
-> **Last updated:** July 20, 2026 (Session 86 — Spec completeness rule added to Platform Modules)
+> **Last updated:** August 2, 2026 (Session 97 — Financial Visibility Floor enforcement status corrected: contract value, budgeted amount and instrument rates are DB-enforced; `change_orders.net_delta` is UI-only by ruling, filed as TECH_DEBT #117)
 > **Purpose:** This file is the single source of truth for all development conversations. Read this before every session.
 
 ---
@@ -30,14 +30,14 @@ Two MCP servers are standard for this repo:
 | Layer           | Technology                                                         | Notes                                                           |
 | --------------- | ------------------------------------------------------------------ | --------------------------------------------------------------- |
 | Web Frontend    | Next.js 14 + React + TypeScript + Tailwind CSS + shadcn/ui         | Office users (estimators, PMs, owners)                          |
-| Mobile Frontend | React Native + Expo                                                | Field crew (techs, foremen)                                     |
+| Mobile Frontend | **PWA (the Next.js web app, installed to the home screen)**         | Field crew (techs, foremen) — **RULED [S97, 2026-08-03]**       |
 | Shared Logic    | TypeScript packages in monorepo                                    | Types, validation, business logic shared across web + mobile    |
 | Backend / DB    | Supabase (PostgreSQL + Auth + Storage + Realtime + Edge Functions) | Multi-tenant with RLS                                           |
 | AI              | OpenAI API (GPT-4o vision + text) + Supabase pgvector              | Estimating, photo auto-tagging, reporting, summaries, marketing |
 | Payments        | Stripe Billing + Stripe Connect                                    | Subscriptions + contractor-to-client payments                   |
 | Accounting      | QuickBooks Online API (OAuth 2.0)                                  | Sync only — FrameFocus runs operations, QB runs the books       |
 | Web Hosting     | Vercel                                                             | Auto-deploy from main branch                                    |
-| Mobile Builds   | Expo EAS                                                           | Cloud iOS/Android builds + OTA updates                          |
+| ~~Mobile Builds~~ | ~~Expo EAS~~ — **SUPERSEDED [S97]**                              | No app-store build pipeline. See the PWA ruling below.          |
 | CI/CD           | GitHub Actions                                                     | Lint, test, build verification                                  |
 | Monorepo        | Turborepo                                                          | Multi-package management                                        |
 | Email           | Resend                                                             | Transactional emails                                            |
@@ -45,6 +45,32 @@ Two MCP servers are standard for this repo:
 | Doc Generation  | React-PDF or Puppeteer                                             | PDF estimates, invoices, reports                                |
 
 **Language:** TypeScript everywhere — web, mobile, backend, shared.
+
+### MOBILE IS A PWA, NOT REACT NATIVE — **RULED [Josh, S97, 2026-08-03]**
+
+_Superseded rows, quoted rather than silently rewritten:_
+_`| Mobile Frontend | React Native + Expo | Field crew (techs, foremen) |`_
+_`| Mobile Builds   | Expo EAS            | Cloud iOS/Android builds + OTA updates |`_
+
+**The mobile experience is the existing Next.js web app, delivered as a PWA and installed to the
+home screen.** There is no React Native app and no app-store presence.
+
+**Josh's reasons, as given:**
+
+1. **He does not want to deal with the app store at this time.** No review cycles, no store listings,
+   no separate release train.
+2. **iOS requires a home-screen install for Web Push anyway** (Safari 16.4+ delivers push only to an
+   installed PWA). So the PWA path is not merely an alternative to React Native — it is the
+   **precondition for notifications on iPhone**, which is the next project after the mobile UI.
+
+**What this changes:** `apps/mobile/` (Expo skeleton) is **PARKED, not deleted** — see
+`apps/mobile/README.md`. The "React Native (Mobile — Expo)" conventions section below is superseded
+and retained only as a record of the abandoned direction. Anything a spec previously deferred to
+"the mobile app" now belongs to the web app's responsive/offline work.
+
+**What is NOT decided by this ruling:** whether the mobile UI is a **repair of the existing
+dashboard shell** or a **separate route tree for phones**. TECH_DEBT #101 assumed repair. That is
+Josh's next decision and is recorded as OPEN in #101.
 
 ---
 
@@ -70,7 +96,7 @@ framefocus/
 │   │   │   ├── supabase-browser.ts  # Client-side Supabase
 │   │   │   └── supabase-server.ts   # Server-side Supabase
 │   │   └── public/           # Static assets
-│   └── mobile/               # Expo / React Native app (placeholder)
+│   └── mobile/               # PARKED [S97] — Expo skeleton, superseded by the PWA ruling
 ├── packages/
 │   ├── shared/               # Shared across web + mobile
 │   │   ├── types/            # TypeScript type definitions (roles.ts)
@@ -339,12 +365,19 @@ Server and client Supabase clients must be in separate files to avoid Next.js bu
 - File naming: `kebab-case.tsx` for components, `kebab-case.ts` for utilities
 - Colocate component-specific files: `components/estimate-builder/estimate-builder.tsx`
 
-### React Native (Mobile — Expo)
+### ~~React Native (Mobile — Expo)~~ — **SUPERSEDED [S97, 2026-08-03]**
 
-- Expo Router for navigation
-- Expo SDK managed workflow (no bare workflow)
-- NativeWind (Tailwind for React Native) for styling consistency with web
-- Offline-first for field operations using Expo SQLite with sync queue
+**Mobile is a PWA** (see the ruling under Technology Stack). Nothing below is in force; it is kept
+as a record of the direction that was abandoned, so a future reader does not reconstruct it by
+accident.
+
+- ~~Expo Router for navigation~~
+- ~~Expo SDK managed workflow (no bare workflow)~~
+- ~~NativeWind (Tailwind for React Native) for styling consistency with web~~
+- ~~Offline-first for field operations using Expo SQLite with sync queue~~ — **the requirement
+  survives, the mechanism does not.** Offline field capture is now a web problem (service worker +
+  a browser-side queue), not an Expo SQLite one. See TECH_DEBT #118 for the one seam that already
+  exists in the web code.
 
 ### API / Data Layer
 
@@ -394,12 +427,24 @@ Each subscribing company is an isolated tenant. Within that company, there are 6
 
 ### Financial Visibility Floor (authoritative — added 2026-07-20)
 
-**Only Owner and Admin may see contract/budget/sell/CO dollar figures. Project Manager, Foreman, and Crew see ACTUAL COST ONLY.**
+**Only Owner and Admin may see contract/budget/sell/CO dollar figures. Project Manager, Foreman, and Crew see ACTUAL AND COMMITTED COST ONLY.**
 
-- **Gated from PM/foreman/crew:** contract value (`projects.contract_value`), original/revised contract, budgeted and sell/price amounts (`project_budget_items.budgeted_amount` and any future sell column), committed amounts, variance, projected margin, and **change-order dollar amounts** (`change_orders.net_delta` and any `$` sum derived from it).
-- **Visible to all roles:** actual cost (`project_budget_items.actual_amount`, once Module 7A populates it), and non-dollar facts — CO counts/statuses, project status, dates, punch counts, schedule.
+- **Gated from PM/foreman/crew:** contract value (`project_financials.contract_value`), original/revised contract, budgeted and sell/price amounts (`project_budget_amounts.budgeted_amount` and any future sell column), labor/burden rates (`instrument_rates`), variance, projected margin, and **change-order dollar amounts** (`change_orders.net_delta` and any `$` sum derived from it). Both money columns moved to 1:1 side tables to get this enforced — see the status table below; the old `projects.contract_value` and `project_budget_items.budgeted_amount` no longer exist.
+- **Visible to all roles:** actual and committed cost (`project_budget_items.actual_amount` and `committed_amount`), and non-dollar facts — CO counts/statuses, project status, dates, punch counts, schedule. **This is deliberate, not an oversight:** the budgeted figure was split off onto `project_budget_amounts` precisely so actual and committed could stay on a row Foreman and Crew can still read. A role floor on `project_budget_items` itself would over-reach — `s97ct-roles.live.ts` **8b-ii** and `s97ct-budget-floor.live.ts` **7-foreman/7-crew_member** exist to fail loudly if anyone adds one.
+- **Named carve-out [S97, 2026-08-01]:** a **PM may see the amounts ON an invoice they can reach** (7D client invoicing) — derived lines, draws, discounts, credits, invoice totals and retainage. This does NOT extend to contract value, budget/sell amounts, or CO dollar figures, which remain Owner/Admin on every surface including 7D's own. Ruling and rationale: [`docs/specs/7d1-spec.md`](docs/specs/7d1-spec.md) §12a.
 - **Why:** this narrows the previous blanket "PM views job finances" grant (PM row above) to actual cost, and extends the same floor to foreman/crew. Foreman/crew are "Limited/Minimal" web roles; they had no business reason to see contract/margin figures, but nothing enforced it.
-- **Current enforcement status:** the UI-refresh specs (ui-01 §11, applied across ui-02–ui-06) gate these figures **at the UI layer**. The **DB-level floor is NOT yet in place** — `can_view_project()` has no role floor, so a gated user can still read the figures via a direct API/query. The RLS floor is the named `FINANCIAL-RLS-FLOOR` migration follow-up (ui-01 §10), to batch with the pending production migrations. Until it lands, treat the floor as UI-only and defense-in-depth-incomplete.
+- **Current enforcement status [corrected 2026-08-02, S97]:** the UI-refresh specs (ui-01 §11, applied across ui-02–ui-06) gate these figures at the UI layer, and **three of the four figure families are now DB-enforced as well**. The previous text here — "the DB-level floor is NOT yet in place" — is superseded. Verify against the cited migrations rather than trusting this prose:
+
+| Figure | Where it lives now | Enforcement |
+| ------ | ------------------ | ----------- |
+| Contract value | `project_financials.contract_value` (1:1 off `projects`) | **DB-enforced, Owner/Admin.** Table + `project_financials_{select,insert,update}_owner_admin`: `20260811000000_project_financials.sql`. Writer retargeted: `20260811010000_convert_estimate_project_financials.sql`. Old column dropped: `20260812000000_drop_projects_contract_value.sql`. |
+| Budgeted amount | `project_budget_amounts.budgeted_amount` (1:1 off `project_budget_items`) | **DB-enforced, Owner/Admin.** Table + `project_budget_amounts_{select,insert,update}_owner_admin` + backfill: `20260816000000_budget_amounts.sql`. Transitional sync trigger: `20260816010000_budget_amounts_sync.sql`. Old column dropped, sync trigger removed, all four SQL writers retargeted in one transaction: `20260817000000_drop_budgeted_amount.sql`. |
+| Labor/burden rates | `instrument_rates` | **DB-enforced, Owner/Admin SELECT floor.** `20260806000000_financial_rls_floor.sql` §1 replaces `instrument_rates_select_company` with `instrument_rates_select_owner_admin`. |
+| Change-order dollar amounts | `change_orders.net_delta` — still on the parent row, not split | **UI-ONLY, and deliberately so.** `change_orders_select_visible` is `company_id = get_my_company_id() AND can_view_project(project_id)` — no role floor, no author scoping. This is a ruling, not an oversight: a PM must be able to author COs and see the value of the ones they write. Rationale, residual risk and the open scoping question: **[TECH_DEBT.md #117](TECH_DEBT.md)**. |
+
+  Both split tables carry SELECT/INSERT/UPDATE for Owner/Admin and **no DELETE policy at all**, so DELETE is denied to every role. `can_view_project()` still has no role floor of its own — the gating comes from the side tables, which is why the columns were moved rather than the helper changed.
+
+  **Do not "finish" this by flooring `change_orders`** without reading #117 first — the obvious fix breaks CO authoring for PMs.
 
 ### The Admin Role Principle (authoritative)
 
@@ -496,6 +541,7 @@ When generating code, migrations, or instructions for Josh:
 - `docs/roadmap/FrameFocus_Platform_Roadmap.xlsx` — planning spreadsheet
 - `docs/sessions/contextN.md` — one per session; read the most recent at session start
 - `STATE.md` — live repo state; tech debt in `TECH_DEBT.md`
+- `GATED.md` — register of gated/blocked work: what is blocked, behind what, and what unblocks it (Pre-M9 gate, test identities, 7D–7H readiness, deferred-by-decision, standing rulings)
 
 ```
 

@@ -3,7 +3,10 @@ import { createClient } from '@/lib/supabase-server';
 import { notFound, redirect } from 'next/navigation';
 import { getProject } from '@/lib/services/projects';
 import { getBudgetRollup, type InstrumentGroup } from '@/lib/services/budget';
-import { getRevisedContract } from '@/lib/services/contract-value';
+import { getProjectIncome } from '@/lib/services/project-income';
+import { getDepositCredits } from '@/lib/services/deposit-credit';
+import { getChangeOrderBilling, getContractBilling, getRevisedContract } from '@/lib/services/contract-value';
+import { budgetColumnsFor } from '@/lib/services/invoices-shared';
 import { getExpenses, getJobCostRollup } from '@/lib/services/expenses';
 import { getPayablesSummary } from '@/lib/services/payables';
 import { getMembers } from '@/lib/services/members';
@@ -13,6 +16,7 @@ import {
   fmtMoney,
 } from '@/components/expenses/expense-ui';
 import { ApplyCoBudgetButton } from './apply-co-budget-button';
+import { RateSection } from './rate-section';
 import { cardStyle, color, font, h2Style, microLabelStyle, primaryButtonStyle } from '@/lib/theme';
 
 /**
@@ -107,6 +111,43 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
     getExpenses({ project_id: params.id }),
     seesPayables ? getPayablesSummary(params.id) : Promise.resolve(null),
   ]);
+
+  // §2 [S97] — standalone invoice lines as INCOME. Owner/Admin only: this is a
+  // SELL figure ABOUT THE JOB, so it sits with contract value and budget under
+  // the Financial Visibility Floor. §12a's carve-out lets a PM see amounts ON
+  // an invoice they can reach; it does not extend to a job-level roll-up.
+  const income = isOwnerAdmin ? await getProjectIncome(params.id) : null;
+
+  // §3 / acceptance #4 [S97] — what is left to invoice on the ORIGINAL
+  // contract, with a sent deposit already deducted. Fully DERIVED (see
+  // getContractBilling): void or refund the deposit and this figure returns on
+  // its own, because nothing was ever copied. Fixed-price only — a cost-plus or
+  // T&M deposit is §3a's credit balance and is deliberately not shown here.
+  const contractBilling = isOwnerAdmin && isFixed ? await getContractBilling(params.id) : null;
+
+  // §3a [S97] — the DEPOSIT CREDIT BALANCE, so a cost-plus/T&M job reads as
+  // consistently as a fixed-price one: fixed-price shows what is left to bill,
+  // a derived instrument shows the undrawn credit that will settle its
+  // invoices. Same derivation the invoice builder uses (loadDepositCredits) —
+  // there is one definition of what a deposit credit is worth.
+  //
+  // NOT gated on project_type: §3a's balance belongs to the JOB, and a
+  // fixed-price project may carry a cost-plus CO (P4). The derivation itself
+  // excludes any deposit billed against the ORIGINATING ESTIMATE, because that
+  // one is §3's mechanism and already reduces remaining-to-bill — so the two
+  // tiles can never describe the same money.
+  // §4 [S97] — what is left to bill on the CHANGE ORDERS. The screen showed
+  // what the COs are worth and what remains on the contract, and omitted the
+  // figure connecting them. Only FIXED-PRICE POSITIVE COs have a remaining;
+  // derived COs are billed as incurred and negative COs are credits, so
+  // neither gets a number. NOT gated on the project's own type — a fixed-price
+  // job can carry a cost-plus CO and vice versa (P4).
+  const coBilling = isOwnerAdmin ? await getChangeOrderBilling(params.id) : null;
+
+  const depositCredits = isOwnerAdmin ? await getDepositCredits(params.id) : [];
+  const undrawnDeposit = Math.round(
+    depositCredits.reduce((sum, d) => sum + d.remaining, 0) * 100
+  ) / 100;
   const members = isOwnerAdmin ? await getMembers() : [];
   const memberNames: Record<string, string> = Object.fromEntries(
     members.map((m) => [m.id, m.display_name])
@@ -121,7 +162,12 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
   const revised = contract?.revised ?? null;
   const projectedMargin = isFixed && revised !== null ? revised - costToDate : null;
 
-  // Columns per role (§7.1): Owner/Admin 7, PM 5, Foreman 3.
+  // Columns per role (§7.1): Owner/Admin 7, PM 5, Foreman 3. The RULE lives in
+  // budgetColumnsFor() (invoices-shared) so it can be asserted — it sat
+  // "verified by reading the mount" until S97 precisely because it was inline
+  // in a server component, which no harness can render.
+  const columnPlan = budgetColumnsFor(role);
+  void columnPlan;
   const gridTemplate = isOwnerAdmin
     ? '0.6fr 1.9fr 1fr 1fr 1fr 1fr 1fr'
     : seesCommitted
@@ -161,6 +207,70 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                   value: revised !== null ? money(revised) : '—',
                   valueColor: '#fff',
                   inverted: true,
+                },
+              ]
+            : []),
+          ...(contractBilling && contractBilling.remainingToBill !== null
+            ? [
+                {
+                  // [S97] SCOPED. It read as the JOB's remaining while showing
+                  // only the ORIGINAL CONTRACT's — on a job with $298,897.26 of
+                  // signed COs that understated by exactly the CO book.
+                  label: 'Remaining on original contract',
+                  value: money(contractBilling.remainingToBill),
+                  valueColor:
+                    contractBilling.remainingToBill < 0 ? color.warningDeep : color.navy,
+                  caption:
+                    contractBilling.depositRefunded > 0
+                      ? `original less ${money(contractBilling.issuedAgainstContract)} billed, plus ${money(contractBilling.depositRefunded)} refunded`
+                      : contractBilling.issuedAgainstContract > 0
+                        ? `original less ${money(contractBilling.issuedAgainstContract)} already invoiced`
+                        : 'nothing invoiced against the contract yet',
+                },
+              ]
+            : []),
+          // §4 [S97] — the CO figure that was missing beside "Remaining on
+          // original contract". The VALUE covers fixed-price positive COs only,
+          // and the caption names every kind NOT in it, so the reader never has
+          // to guess the scope. An em-dash rather than $0 when there is nothing
+          // countable but COs exist — a zero would read as "all billed".
+          ...(coBilling && coBilling.orders.length > 0
+            ? [
+                {
+                  label: 'Remaining on change orders',
+                  value: coBilling.fixedCount > 0 ? money(coBilling.fixedRemaining) : '—',
+                  valueColor:
+                    coBilling.fixedCount === 0
+                      ? color.faint
+                      : coBilling.fixedRemaining < 0
+                        ? color.warningDeep
+                        : color.navy,
+                  caption: [
+                    coBilling.fixedCount > 0
+                      ? `${coBilling.fixedCount} fixed-price CO${coBilling.fixedCount === 1 ? '' : 's'}`
+                      : 'no fixed-price COs',
+                    coBilling.asIncurredCount > 0
+                      ? `${coBilling.asIncurredCount} billed as incurred (no fixed amount)`
+                      : null,
+                    coBilling.creditCount > 0
+                      ? `${coBilling.creditCount} credit CO${coBilling.creditCount === 1 ? '' : 's'} excluded`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · '),
+                },
+              ]
+            : []),
+          ...(undrawnDeposit > 0
+            ? [
+                {
+                  label: 'Deposit credit (undrawn)',
+                  value: money(undrawnDeposit),
+                  valueColor: color.navy,
+                  caption:
+                    depositCredits.length === 1
+                      ? 'held on the job; applied to invoices until exhausted (§3a)'
+                      : `${depositCredits.filter((d) => d.remaining > 0).length} deposits, applied to invoices until exhausted (§3a)`,
                 },
               ]
             : []),
@@ -286,6 +396,12 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
         )}
       </div>
 
+      {/* §7.1 S-4 (amended 2026-07-31) — contract rates + history, with
+          renegotiate (Owner/Admin) and supersede (Owner only, §7.3).
+          Owner/Admin ONLY (Financial Visibility Floor): inside this gate the
+          component never renders or fetches for PM/Foreman. */}
+      {isOwnerAdmin && <RateSection project={project} canSupersede={role === 'owner'} />}
+
       {isOwnerAdmin && (
         <p style={{ fontSize: '13px', color: color.muted, margin: '0 0 6px' }}>
           Cost baseline from each instrument (pre-markup; tax included on taxed rows) — the budget
@@ -399,8 +515,17 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                 {instrument.groups.map((group) =>
                   group.items.map((item) => {
                     const cost = lineCost(item.actual_amount, item.committed_remaining);
-                    const variance = cost !== 0 ? (item.budgeted_amount ?? 0) - cost : null;
-                    const credit = (item.budgeted_amount ?? 0) < 0; // negative CO rows (D-2)
+                    // RULING [S97]: budgeted_amount is NULL when the reader is
+                    // not permitted. `?? 0` here produced a variance of MINUS
+                    // THE COST — a plausible, wrong, confident number on a
+                    // screen that is meant to show nothing. Null propagates.
+                    const variance =
+                      item.budgeted_amount !== null && cost !== 0
+                        ? item.budgeted_amount - cost
+                        : null;
+                    // Likewise: an absent figure must not classify the row as
+                    // non-credit. Unknown is unknown (D-2 negative CO rows).
+                    const credit = item.budgeted_amount !== null && item.budgeted_amount < 0;
                     return (
                       <div
                         key={item.id}
@@ -436,13 +561,24 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                             style={{ ...moneyCell, color: credit ? color.danger : moneyCell.color }}
                             title={`Gross committed: ${money(item.committed_amount ?? 0)}`}
                           >
-                            {money(item.budgeted_amount ?? 0)}
+                            {item.budgeted_amount === null ? '—' : money(item.budgeted_amount)}
                           </span>
                         )}
                         {seesCommitted && (
+                          // 113c §5: italic = not locked in — a contributing
+                          // sub-contract is formal-and-unsigned. Signing
+                          // flips it firm. Display only; the money counts
+                          // identically either way.
                           <span
-                            style={item.committed_remaining ? moneyCell : dashCell}
-                            title={`Gross committed ${money(item.committed_amount ?? 0)} − paid = remaining`}
+                            style={{
+                              ...(item.committed_remaining ? moneyCell : dashCell),
+                              fontStyle: item.committed_awaiting_signature ? 'italic' : 'normal',
+                            }}
+                            title={
+                              item.committed_awaiting_signature
+                                ? `Wait on contract signature — committed counts but is not locked in until the sub signs. Gross committed ${money(item.committed_amount ?? 0)} − paid = remaining`
+                                : `Gross committed ${money(item.committed_amount ?? 0)} − paid = remaining`
+                            }
                           >
                             {moneyOrDash(item.committed_remaining)}
                           </span>
@@ -500,7 +636,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                   </span>
                   {isOwnerAdmin && (
                     <span style={{ ...moneyCell, fontWeight: 600, color: color.body }}>
-                      {money(instrument.budgeted)}
+                      {instrument.budgeted === null ? '—' : money(instrument.budgeted)}
                     </span>
                   )}
                   {seesCommitted && (
@@ -518,7 +654,8 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                   )}
                   {isOwnerAdmin && (
                     <span style={dashCell}>
-                      {lineCost(instrument.actual, instrument.committedRemaining)
+                      {instrument.budgeted !== null &&
+                      lineCost(instrument.actual, instrument.committedRemaining)
                         ? money(
                             instrument.budgeted -
                               lineCost(instrument.actual, instrument.committedRemaining)
@@ -547,7 +684,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
             </span>
             {isOwnerAdmin && (
               <span style={{ ...moneyCell, fontSize: '14px', fontWeight: 700 }}>
-                {money(rollup.totalBudgeted)}
+                {rollup.totalBudgeted === null ? '—' : money(rollup.totalBudgeted)}
               </span>
             )}
             {seesCommitted && (
@@ -565,9 +702,138 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
             )}
             {isOwnerAdmin && (
               <span style={{ ...dashCell, fontSize: '14px', fontWeight: 700 }}>
-                {rollup.costToDate ? money(rollup.totalBudgeted - rollup.costToDate) : '—'}
+                {rollup.totalBudgeted !== null && rollup.costToDate
+                  ? money(rollup.totalBudgeted - rollup.costToDate)
+                  : '—'}
               </span>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* §2 [S97] — STANDALONE INVOICE INCOME, its OWN INDEPENDENT SECTION.
+          Josh's ruling: manual invoice items are NEW INCOME LINES, presented
+          the way CO lines are.
+
+          IT IS A SEPARATE CARD, NOT A ROW IN THE BUDGET TABLE, and that is
+          deliberate: the table above is COST (Budget / Committed / Actual /
+          Cost to date / Variance). Income is a different quantity — a
+          standalone line has no cost, no commitment and no variance — so
+          putting it in those columns would state figures that do not exist.
+          The section grammar is the same as an instrument section (labelled
+          header with a pill, grouped rows, a subtotal), which is what "the way
+          CO lines are" means.
+
+          DERIVED FROM NON-VOIDED INVOICES. Voiding removes these with no
+          cleanup step — see project-income.ts for why storing them could not
+          have been undone. */}
+      {income && income.groups.length > 0 && (
+        <div style={{ ...cardStyle, marginBottom: '18px', overflow: 'hidden' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              padding: '10px 20px',
+              backgroundColor: color.tableHeadBg,
+              borderBottom: `1px solid ${color.rowDivider}`,
+            }}
+          >
+            <span style={{ fontFamily: font.sans, fontSize: '13px', fontWeight: 700, color: color.navy }}>
+              Standalone invoice income
+            </span>
+            <span
+              style={{
+                fontSize: '10px',
+                fontWeight: 700,
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                color: color.navy,
+                backgroundColor: color.cardBg,
+                border: `1px solid ${color.cardBorder}`,
+                borderRadius: '999px',
+                padding: '1px 8px',
+              }}
+            >
+              Income
+            </span>
+            <span style={{ fontSize: '11px', color: color.faint }}>
+              billed directly on an invoice, with nothing upstream to inherit from (§2)
+            </span>
+          </div>
+
+          {income.groups.map((group) => (
+            <div key={group.category}>
+              <div
+                style={{
+                  padding: '6px 20px',
+                  backgroundColor: color.cardBg,
+                  borderBottom: `1px solid ${color.rowDivider}`,
+                }}
+              >
+                <span style={microLabelStyle}>{group.label}</span>
+              </div>
+              {group.lines.map((line) => (
+                <div
+                  key={line.invoiceLineId}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '2.4fr 1.2fr 1fr',
+                    gap: '12px',
+                    alignItems: 'center',
+                    padding: '8px 20px',
+                    borderBottom: `1px solid ${color.rowDivider}`,
+                  }}
+                >
+                  <span style={{ fontSize: '13px', color: color.body }}>{line.description}</span>
+                  <span style={{ fontSize: '12px', color: color.faint }}>
+                    {line.invoiceNumber ?? 'Draft'}
+                    {line.invoiceStatus === 'draft' || line.invoiceStatus === 'pending_approval'
+                      ? ' · not yet sent'
+                      : ''}
+                  </span>
+                  <span style={moneyCell}>{money(line.amount)}</span>
+                </div>
+              ))}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '2.4fr 1.2fr 1fr',
+                  gap: '12px',
+                  alignItems: 'center',
+                  padding: '8px 20px',
+                  borderBottom: `1px solid ${color.rowDivider}`,
+                }}
+              >
+                <span style={{ gridColumn: '1 / span 2', fontSize: '13px', fontWeight: 600, color: color.body }}>
+                  {group.label} subtotal
+                </span>
+                <span style={{ ...moneyCell, fontWeight: 600 }}>{money(group.amount)}</span>
+              </div>
+            </div>
+          ))}
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '2.4fr 1.2fr 1fr',
+              gap: '12px',
+              alignItems: 'center',
+              padding: '14px 20px',
+              backgroundColor: color.tableHeadBg,
+            }}
+          >
+            <span style={{ gridColumn: '1 / span 2', fontFamily: font.sans, fontSize: '14px', fontWeight: 700, color: color.navy }}>
+              Total standalone income
+              {income.draftTotal > 0 && (
+                <span style={{ fontSize: '11px', fontWeight: 400, color: color.faint, marginLeft: '8px' }}>
+                  incl. {money(income.draftTotal)} not yet sent
+                </span>
+              )}
+            </span>
+            <span style={{ ...moneyCell, fontSize: '14px', fontWeight: 700 }}>
+              {money(income.total)}
+            </span>
           </div>
         </div>
       )}

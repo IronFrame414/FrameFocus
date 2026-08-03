@@ -301,6 +301,7 @@ export function BillsTab({
             paidToDate: grossPaid(paying.payments),
             is_retainage: paying.is_retainage,
           }}
+          subContractId={paying.sub_contract_id}
           onClose={() => setPaying(null)}
           onDone={() => {
             setPaying(null);

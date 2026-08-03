@@ -25,6 +25,7 @@ export function SettingsForm({ company }: SettingsFormProps) {
     state: company.state || '',
     zip: company.zip || '',
     phone: company.phone || '',
+    email: company.email || '',
     website: company.website || '',
     trade_type: company.trade_type || '',
     license_number: company.license_number || '',
@@ -77,6 +78,7 @@ export function SettingsForm({ company }: SettingsFormProps) {
       state: form.state || null,
       zip: form.zip.trim() || null,
       phone: form.phone.trim() || null,
+      email: form.email.trim() || null,
       website: form.website.trim() || null,
       trade_type: form.trade_type || null,
       license_number: form.license_number.trim() || null,
@@ -95,8 +97,11 @@ export function SettingsForm({ company }: SettingsFormProps) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
-      setMessage({ type: 'error', text: 'Please select an image file (PNG, JPG, etc.).' });
+    // PNG/JPEG only [S97] — the company-logos bucket enforces the same
+    // allowlist server-side, so accepting anything wider here only produces a
+    // confusing storage error instead of a clear one. No SVG this pass.
+    if (file.type !== 'image/png' && file.type !== 'image/jpeg') {
+      setMessage({ type: 'error', text: 'Please select a PNG or JPEG image.' });
       return;
     }
     if (file.size > 2 * 1024 * 1024) {
@@ -292,7 +297,7 @@ export function SettingsForm({ company }: SettingsFormProps) {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept="image/png,image/jpeg"
               onChange={handleLogoUpload}
               style={{ display: 'none' }}
             />
@@ -311,7 +316,7 @@ export function SettingsForm({ company }: SettingsFormProps) {
               {uploading ? 'Uploading...' : 'Upload Logo'}
             </button>
             <p style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.25rem' }}>
-              PNG or JPG, max 2 MB
+              PNG or JPG, max 2 MB. Prints on your invoice, change-order and estimate PDFs.
             </p>
           </div>
         </div>
@@ -474,6 +479,26 @@ export function SettingsForm({ company }: SettingsFormProps) {
       {/* Contact info */}
       <div style={sectionStyle}>
         <div style={sectionTitleStyle}>Contact Information</div>
+        <div style={{ marginBottom: '1rem' }}>
+          {/* [S97] The company email. Two shipped behaviors already read this
+              column and it had no control anywhere, so it was always empty —
+              which is why client replies were landing in the owner's personal
+              inbox instead of the company's. */}
+          <label style={labelStyle}>Company Email</label>
+          <input
+            name="email"
+            type="email"
+            value={form.email}
+            onChange={handleChange}
+            style={inputStyle}
+            placeholder="office@yourcompany.com"
+          />
+          <p style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '0.25rem' }}>
+            Where clients reach you. Replies to estimates, change orders and invoices you send go
+            here, and it prints on your PDF letterhead. Leave it blank and replies fall back to the
+            owner&rsquo;s personal address.
+          </p>
+        </div>
         <div style={gridTwoCol}>
           <div>
             <label style={labelStyle}>Phone</label>

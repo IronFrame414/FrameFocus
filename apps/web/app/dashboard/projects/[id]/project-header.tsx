@@ -30,6 +30,22 @@ const TABS: { slug: string; label: string; roles?: string[] }[] = [
     roles: ['owner', 'admin', 'project_manager', 'foreman'],
   },
   { slug: 'changes', label: 'Change Orders' },
+  // 7D — client invoicing. Owner/Admin/PM only (§12): a PM creates invoices
+  // but cannot send without Owner/Admin approval. Foreman/Crew never see
+  // client billing; the invoices RLS policies enforce the same set.
+  {
+    slug: 'invoices',
+    label: 'Invoices',
+    roles: ['owner', 'admin', 'project_manager'],
+  },
+  // 7E — money received. Recording a payment is Owner/Admin ONLY (§8); a PM
+  // reads it (P-3) because a PM who cannot see whether their invoice was paid
+  // cannot do the job. Foreman/Crew never see client money.
+  {
+    slug: 'payments',
+    label: 'Payments',
+    roles: ['owner', 'admin', 'project_manager'],
+  },
   { slug: 'punch', label: 'Punch List' },
   { slug: 'deliveries', label: 'Deliveries' },
   { slug: 'files', label: 'Files' },

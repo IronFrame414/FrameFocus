@@ -28,6 +28,14 @@ export type CompanyData = Pick<
   | 'state'
   | 'zip'
   | 'phone'
+  // [S97] The company's own email address. It already drove two shipped
+  // behaviors with NO CONTROL ANYWHERE to set it: resolveCompanyReplyTo() uses
+  // it as the FIRST choice of Reply-To on every client-facing send, and the
+  // invoice/CO PDF letterhead prints it. With no control it was always NULL, so
+  // every client reply fell through to the OWNER's personal address. The column
+  // has existed since the company_settings migration; only the input was
+  // missing. ("A setting with no control is a bug" — the M4 lesson.)
+  | 'email'
   | 'website'
   | 'trade_type'
   | 'license_number'
@@ -53,7 +61,7 @@ export async function getCompany(): Promise<CompanyData | null> {
   const { data: company } = await supabase
     .from('companies')
     .select(
-      'id, name, address_line1, address_line2, city, state, zip, phone, website, trade_type, license_number, logo_url'
+      'id, name, address_line1, address_line2, city, state, zip, phone, email, website, trade_type, license_number, logo_url'
     )
     .eq('id', profile.company_id)
     .single();

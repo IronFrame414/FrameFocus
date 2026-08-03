@@ -14,6 +14,14 @@ export interface DashboardKpis {
   activeProjectCount: number;
   pastTargetCount: number; // active projects past target_end_date
   contractValue: number; // portfolio revised contract (7B: contract-value.ts), active projects
+  /** [S97] The two halves of the figure above, kept APART. contractValue mixes
+   *  a binding obligation (fixed-price) with a non-binding projection
+   *  (cost-plus/T&M), which P11 forbids from billing math — a headline summing
+   *  them is neither quantity. Surfaces show these two, not the total. */
+  contractValueFixed: number;
+  contractValueFixedCount: number;
+  contractValueProjected: number;
+  contractValueProjectedCount: number;
   awaitingCount: number; // COs status='sent'
   awaitingSum: number; // Σ net_delta of those (Owner/Admin display only)
   openPunchCount: number; // open + in_progress punch items on active projects
@@ -83,6 +91,10 @@ export async function getDashboardData(): Promise<DashboardData> {
     activeProjectCount: active.length,
     pastTargetCount: active.filter((p) => p.target_end_date && p.target_end_date < today).length,
     contractValue: portfolio.revisedSum,
+    contractValueFixed: portfolio.fixedRevisedSum,
+    contractValueFixedCount: portfolio.fixedCount,
+    contractValueProjected: portfolio.projectedRevisedSum,
+    contractValueProjectedCount: portfolio.projectedCount,
     awaitingCount: (sentCos ?? []).length,
     awaitingSum: (sentCos ?? []).reduce((sum, co) => sum + (co.net_delta ?? 0), 0),
     openPunchCount: punchCount ?? 0,

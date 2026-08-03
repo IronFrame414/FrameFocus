@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   DiscountType,
   EstimateCategory,
@@ -27,6 +27,13 @@ import {
   updateEstimateLineRow,
   updateEstimateSubcategory,
 } from '@/lib/services/estimate-items-client';
+import {
+  addInstrumentRate,
+  listInstrumentRatesClient,
+  rateInForce,
+  type InstrumentRate,
+  type InstrumentRateType,
+} from '@/lib/services/instrument-rates-client';
 import type { CostCatalogItem } from '@/lib/services/cost-catalog-client';
 import { materialUnitsOfMeasure } from '@framefocus/shared/validation/estimate-items';
 import { InlineNumber, InlineText } from '../inline-edit';
@@ -76,6 +83,30 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
   useEffect(() => {
     getCompanyDefaultLaborRate().then(setDefaultLaborRate);
   }, []);
+
+  // S97 corrected ruling: companies.default_labor_rate is the default CHARGE
+  // rate. On a NON-FIXED instrument a new labor row's rate defaults from the
+  // instrument's labor rate in force (the Details-page rate) instead; the
+  // row stays a single editable number and qty × row rate drives the line
+  // total — the estimate is a projection (7D invoicing bills approved hours
+  // at the rate in force, 7d1 §7). Fixed-price keeps the company default.
+  const contractType = estimate.contract_type;
+  const nonFixed = contractType === 'cost_plus' || contractType === 'time_and_materials';
+  const laborRateType: InstrumentRateType =
+    contractType === 'cost_plus' ? 'cost_plus_labor_hourly' : 'tm_labor_hourly';
+  const today = new Date().toISOString().slice(0, 10);
+  const [instRates, setInstRates] = useState<InstrumentRate[]>([]);
+
+  const refetchInstRates = useCallback(async () => {
+    if (!nonFixed) return;
+    setInstRates(await listInstrumentRatesClient({ estimate_id: estimate.id }));
+  }, [estimate.id, nonFixed]);
+
+  useEffect(() => {
+    void refetchInstRates();
+  }, [refetchInstRates]);
+
+  const laborRateInForce = nonFixed ? rateInForce(instRates, laborRateType, today) : null;
 
   const mode = estimate.pricing_mode;
   const modeNoun = mode === 'markup' ? 'markup' : 'margin';
@@ -157,6 +188,31 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
   }
 
   async function addRow(lineItemId: string, rowType: RowType) {
+    // S97 corrected ruling: a new labor row's rate defaults from the
+    // instrument's labor rate in force on non-fixed instruments, from the
+    // company default charge rate on fixed-price. With no instrument labor
+    // rate at all, prompt for one (it lands as the contract's labor rate,
+    // effective today, exactly as the Details page writes it).
+    let laborRowRate = nonFixed ? laborRateInForce : defaultLaborRate;
+    if (rowType === 'labor' && nonFixed && laborRateInForce == null) {
+      const entered = window.prompt(
+        'No labor rate in force for this contract. Enter the labor rate ($/man-hour) — it becomes the contract labor rate (effective today) and can be renegotiated on the Details page:'
+      );
+      if (entered === null) return; // cancelled — no row without a rate
+      const parsed = Number(entered.trim());
+      if (entered.trim() === '' || Number.isNaN(parsed) || parsed < 0) {
+        setError('Enter a labor rate of zero or more.');
+        return;
+      }
+      const saved = await addInstrumentRate({ estimate_id: estimate.id }, laborRateType, parsed);
+      if (!saved.success) {
+        setError(saved.error || 'Could not save the labor rate');
+        return;
+      }
+      await refetchInstRates();
+      laborRowRate = parsed;
+    }
+
     const lineRows = rows.filter((r) => r.line_item_id === lineItemId);
     const sortOrder =
       lineRows.length > 0 ? Math.max(...lineRows.map((r) => r.sort_order)) + 1 : 0;
@@ -171,7 +227,7 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
 
     const input =
       rowType === 'labor'
-        ? { ...base, apply_tax: false, rate: defaultLaborRate ?? 0, quantity: 1, labor_unit: 'hours' as LaborUnit }
+        ? { ...base, apply_tax: false, rate: laborRowRate ?? 0, quantity: 1, labor_unit: 'hours' as LaborUnit }
         : rowType === 'material'
           ? { ...base, apply_tax: true, unit_of_measure: 'each' as MaterialUnitOfMeasure, unit_cost: 0, quantity: 1 }
           : { ...base, apply_tax: false, amount: 0 };

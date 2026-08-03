@@ -4,14 +4,18 @@ import type {
   InstrumentRateType,
   InstrumentRef,
 } from '@/lib/services/instrument-rates-shared';
-import { rateInForce } from '@/lib/services/instrument-rates-shared';
+import { rateInForce, todayInZone } from '@/lib/services/instrument-rates-shared';
 export type {
   InstrumentRate,
   InstrumentRateType,
   InstrumentRef,
   RateInForceInput,
 } from '@/lib/services/instrument-rates-shared';
-export { rateInForce } from '@/lib/services/instrument-rates-shared';
+export {
+  latestLiveEffectiveFrom,
+  rateInForce,
+  todayInZone,
+} from '@/lib/services/instrument-rates-shared';
 
 // Money representation §4.2/§6 — client writes for instrument rates.
 // Types and the pure rateInForce live in instrument-rates-shared.ts (no
@@ -19,13 +23,63 @@ export { rateInForce } from '@/lib/services/instrument-rates-shared';
 // instrument-rates.ts here: it pulls supabase-server → next/headers into
 // the client bundle and breaks the build (type-only imports are fine).
 // INSERT is Owner/Admin (RLS instrument_rates_insert_authorized); the DB
-// backdating guard is the authority (no future dates, ever; first rate per
-// type may backdate to the signing date; later rates on/after the latest
-// existing rate) — this file just surfaces its errors.
+// backdating guard is the authority (first rate per type takes ANY date —
+// past or future; later rates on/after the latest existing non-superseded
+// rate; no today-cap since P5 as amended 2026-07-31 / migration
+// 20260731010000 — a future rate is dormant until its date) — this file
+// just surfaces its errors.
 // Supersede is Owner-ONLY, through the SECURITY DEFINER RPC (never a
 // direct UPDATE — the table has no UPDATE policy).
 
 type MutationResult = { success: boolean; error?: string };
+
+/**
+ * The caller's company timezone, for the two places this module needs a
+ * CALENDAR DATE (rate-in-force "today" and the effective_from default) [S97].
+ *
+ * WHY THIS READS IT RATHER THAN TAKING IT AS A PARAMETER. 7D threads the
+ * timezone down from its server page, and that was right there: one page, one
+ * settings read, one component tree. Here the callers are
+ * contract-section / items-tab / renegotiate-rate (via co-rate-section),
+ * mounted several levels inside two CLIENT trees whose server pages do not
+ * read company settings at all. Threading would have meant editing ~8 files
+ * across M4 and M5 — including files explicitly out of scope for this fix —
+ * to carry a value this module can read for itself in one query. Reading it
+ * here also makes the correct behavior unmissable: no caller can forget to
+ * pass a timezone, so no call site can silently fall back to UTC.
+ *
+ * Memoized per page load — this is a save-path read, not a render-path one.
+ * RLS scopes `companies` to the caller's own row (getTimeTrackingSettings
+ * relies on the same property server-side). The fallback mirrors
+ * getCompanyTimeSettings' fallback — the column default, NEVER UTC.
+ */
+let timeZonePromise: Promise<string> | null = null;
+
+function companyTimeZone(): Promise<string> {
+  if (!timeZonePromise) {
+    // Wrapped in an async IIFE: the supabase builder is a PromiseLike, so it
+    // has no .catch of its own.
+    timeZonePromise = (async () => {
+      try {
+        const { data } = await createClient().from('companies').select('timezone').maybeSingle();
+        return data?.timezone || 'America/New_York';
+      } catch {
+        return 'America/New_York';
+      }
+    })();
+  }
+  return timeZonePromise;
+}
+
+/**
+ * TODAY as a company-timezone calendar date, for client date controls that
+ * default an `effective_from` [S97]. Same in-module approach as the two
+ * defaults below — the caller does not supply a timezone, so no control can
+ * pre-fill a UTC date by omission. `now` is injectable for tests.
+ */
+export async function todayForCompany(now?: Date): Promise<string> {
+  return todayInZone(await companyTimeZone(), now);
+}
 
 /** Client-side history read (rate panels fetch at interaction time). */
 export async function listInstrumentRatesClient(ref: InstrumentRef): Promise<InstrumentRate[]> {
@@ -49,14 +103,17 @@ export async function getRateInForceToday(
   rateType: InstrumentRateType
 ): Promise<number | null> {
   const rates = await listInstrumentRatesClient(ref);
-  return rateInForce(rates, rateType, new Date().toISOString().slice(0, 10));
+  // Company-tz calendar date, never the UTC one [S97] — see todayInZone.
+  return rateInForce(rates, rateType, todayInZone(await companyTimeZone()));
 }
 
 /** New rate row (initial negotiation or renegotiation). Owner/Admin.
- *  effective_from defaults to today. The DB backdating guard is the
- *  authority: no rate may be future-dated; the first rate of a type may be
- *  backdated (signing date); later rates must land between the latest
- *  existing rate and today. */
+ *  effective_from defaults to the COMPANY-timezone today [S97] — never the
+ *  UTC one, which would date an evening entry tomorrow. The DB backdating guard is the
+ *  authority: the first rate of a type takes any date (signing date, or a
+ *  not-yet-started deal); later rates land on/after the latest existing
+ *  non-superseded rate. No upper bound — a future-dated rate is not in
+ *  force until its date arrives (P5 as amended 2026-07-31). */
 export async function addInstrumentRate(
   ref: InstrumentRef,
   rateType: InstrumentRateType,
@@ -71,14 +128,14 @@ export async function addInstrumentRate(
     change_order_id: ref.change_order_id ?? null,
     rate_type: rateType,
     rate,
-    effective_from: effectiveFrom ?? new Date().toISOString().slice(0, 10),
+    // Company-tz calendar date [S97]. A UTC default dated an evening-entered
+    // rate TOMORROW, which — now that future-dating is permitted — saves
+    // quietly as a dormant rate that does not price today's work.
+    effective_from: effectiveFrom ?? todayInZone(await companyTimeZone()),
   });
   if (error) {
     if (error.message.includes('before the latest existing rate')) {
       return { success: false, error: 'The effective date cannot be before the latest existing rate of this type — history before the previous rate is immutable.' };
-    }
-    if (error.message.includes('in the future')) {
-      return { success: false, error: 'A rate cannot be dated in the future.' };
     }
     return { success: false, error: error.message };
   }

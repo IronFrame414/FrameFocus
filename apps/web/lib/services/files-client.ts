@@ -147,6 +147,82 @@ export async function uploadFile(
   return { success: true, id: data.id };
 }
 
+/** 113c-spec §6 (#113b) — a sub's bid PDF uploaded at BID ENTRY, before any
+ *  project exists: files.project_id stays NULL (nullable by schema; the
+ *  Module 5 FK only constrains non-NULL values) and the storage path keys
+ *  the estimate — `{company_id}/estimate-bids/{estimate_id}/{uuid}-{name}`.
+ *  Storage RLS only checks the first path segment (company_id), so the
+ *  path convention holds. The file rides to the draft sub-contract's
+ *  signed_doc_file_id at conversion (spec §3). Not HEIC-converted — bid
+ *  documents are PDFs, not photos. */
+export async function uploadEstimateBidDocument(
+  file: File,
+  estimateId: string
+): Promise<UploadResult> {
+  if (file.size > MAX_FILE_SIZE_BYTES) {
+    return {
+      success: false,
+      error: `File too large. Max size is ${MAX_FILE_SIZE_BYTES / 1024 / 1024} MB.`,
+    };
+  }
+
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: 'Not authenticated' };
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('company_id')
+    .eq('user_id', user.id)
+    .eq('is_deleted', false)
+    .single();
+  if (!profile) return { success: false, error: 'Profile not found' };
+
+  const uniqueId = crypto.randomUUID();
+  const safeFilename = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const storagePath = `${profile.company_id}/estimate-bids/${estimateId}/${uniqueId}-${safeFilename}`;
+
+  const { error: uploadError } = await supabase.storage.from(BUCKET).upload(storagePath, file, {
+    contentType: inferMimeType(file),
+    upsert: false,
+  });
+  if (uploadError) return { success: false, error: `Upload failed: ${uploadError.message}` };
+
+  const { data, error: insertError } = await supabase
+    .from('files')
+    .insert({
+      project_id: null,
+      category: 'contracts',
+      file_name: file.name,
+      file_path: storagePath,
+      file_size: file.size,
+      mime_type: inferMimeType(file),
+      tags: [],
+    })
+    .select('id')
+    .single();
+  if (insertError) {
+    await supabase.storage.from(BUCKET).remove([storagePath]);
+    return { success: false, error: `Database insert failed: ${insertError.message}` };
+  }
+  return { success: true, id: data.id };
+}
+
+/** Client-side signed URL for viewing a file (e.g. an attached bid PDF).
+ *  Storage RLS scopes reads by the company_id path segment. */
+export async function getFileSignedUrlClient(
+  fileId: string,
+  expiresIn = 300
+): Promise<string | null> {
+  const supabase = createClient();
+  const { data: row } = await supabase.from('files').select('file_path').eq('id', fileId).single();
+  if (!row?.file_path) return null;
+  const { data } = await supabase.storage.from(BUCKET).createSignedUrl(row.file_path, expiresIn);
+  return data?.signedUrl ?? null;
+}
+
 export async function updateFile(
   id: string,
   updates: {

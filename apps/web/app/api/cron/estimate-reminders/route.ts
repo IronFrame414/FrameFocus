@@ -164,6 +164,9 @@ export async function GET(request: NextRequest) {
 
     const { messageId, error: sendError } = await sendEmail({
       from: sender,
+      // +REPLY-TO [S97]: a client's reply reaches the COMPANY, not the
+      // platform domain. Resolved in sendEmail so senders inherit it.
+      replyToCompanyId: company.id,
       to: session.recipient_email,
       subject,
       react: ReminderEmail({

@@ -16,7 +16,16 @@ import type { Database } from '@framefocus/shared/types/database';
 type InstrumentRateRow = Database['public']['Tables']['instrument_rates']['Row'];
 
 export type InstrumentRateType =
+  /** LEGACY pre-A-9 single markup — read-only: existing rows still read and
+   *  render in history, but nothing writes it and pricing never consumes it
+   *  (the A-9 expansion copied live rows into the three category markups). */
   | 'cost_plus_percent'
+  // A-9: a cost-plus instrument carries four independent effective-dated
+  // rates — flat labor $/man-hour + material/sub/other markup %.
+  | 'cost_plus_labor_hourly'
+  | 'cost_plus_material_percent'
+  | 'cost_plus_subcontractor_percent'
+  | 'cost_plus_other_percent'
   | 'tm_labor_hourly'
   | 'tm_nonlabor_percent';
 
@@ -38,8 +47,53 @@ export interface RateInForceInput {
   superseded_at: string | null;
 }
 
+/** Latest live (non-superseded) effective_from for a type, or null when the
+ *  next rate would be the instrument's first of that type (free date — P5).
+ *  The renegotiation date floor derives from this (floor + 1 day in the UI;
+ *  the DB trigger is the authority). */
+export function latestLiveEffectiveFrom(
+  rates: RateInForceInput[],
+  rateType: InstrumentRateType
+): string | null {
+  let latest: string | null = null;
+  for (const r of rates) {
+    if (r.rate_type !== rateType || r.superseded_at !== null) continue;
+    if (!latest || r.effective_from > latest) latest = r.effective_from;
+  }
+  return latest;
+}
+
 /** Pure rate-in-force selection — shared by server and client callers.
  *  Superseded rows never win (their correction is the point, §5.5). */
+/**
+ * TODAY as a company-timezone calendar date (YYYY-MM-DD) [S97].
+ *
+ * `effective_from` is a calendar DATE, so the "today" that defaults it — and
+ * the "today" that asks what is in force NOW — must be a company-tz date.
+ * Deriving it from toISOString() is UTC: after ~20:00 EDT that is TOMORROW,
+ * so a rate entered in the evening defaults to tomorrow and saves as a
+ * DORMANT future rate that does not price today's work. Before future-dating
+ * was permitted (P5 as amended 2026-07-31, migration 20260731010000) the
+ * backdating guard rejected that outright; now it is accepted silently, which
+ * is what makes this urgent rather than cosmetic.
+ *
+ * `now` is injectable so the boundary is testable without touching the clock.
+ *
+ * Deliberately restated here rather than imported from 7D's invoices-shared
+ * `companyToday`: instrument rates are UPSTREAM of invoicing and must not
+ * depend on it. Same precedent as co-rate-section restating RATE_FIELDS —
+ * six lines is a smaller cost than a backwards module dependency. The two
+ * are pinned to the same rule by test.
+ */
+export function todayInZone(timeZone: string, now: Date = new Date()): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(now);
+}
+
 export function rateInForce(
   rates: RateInForceInput[],
   rateType: InstrumentRateType,

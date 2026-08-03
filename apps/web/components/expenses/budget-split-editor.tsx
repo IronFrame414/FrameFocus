@@ -86,13 +86,40 @@ export async function resolveSplit(
   };
 }
 
-function groupLabel(line: BudgetLineOption, coNumbers: Map<string, string>): string {
+/** Instrument-group label for a budget line — shared with the S-2
+ *  single-select picker (budget-line-select.tsx). S95 fix: each CO is its
+ *  OWN group, labeled from the embedded CO identity — never one lumped
+ *  "Change order" bucket. */
+export function groupLabel(line: BudgetLineOption): string {
   if (line.source_change_order_id) {
-    return coNumbers.get(line.source_change_order_id) ?? 'Change order';
+    const co = line.source_change_order;
+    return co ? `${co.co_number}${co.title ? ` — ${co.title}` : ''}` : 'Change order';
   }
   if (line.is_miscellaneous) return 'Ad-hoc & Miscellaneous';
   if (line.source_line_item_id) return 'Original Contract';
   return 'Ad-hoc & Miscellaneous';
+}
+
+/** Option text for a budget line — one definition for the split editor and
+ *  the S-2 single-select. Original-contract lines keep the shipped
+ *  "cost_code — description" shape; CO-born lines (cost_code is NULL,
+ *  apply_change_order_budget) restore the missing half from row_type:
+ *  "description — Cost type". Budgeted figures are Owner/Admin only. */
+export function budgetLineOptionLabel(line: BudgetLineOption, showBudgeted: boolean): string {
+  const desc = line.description ?? 'Budget line';
+  const typeLabel = line.row_type
+    ? line.row_type.charAt(0).toUpperCase() + line.row_type.slice(1)
+    : null;
+  const base = line.cost_code
+    ? `${line.cost_code} — ${desc}`
+    : typeLabel && !line.is_miscellaneous
+      ? `${desc} — ${typeLabel}`
+      : desc;
+  const budgeted =
+    showBudgeted && line.budgeted_amount != null && !line.is_miscellaneous
+      ? ` ($${line.budgeted_amount.toFixed(2)} budgeted)`
+      : '';
+  return base + budgeted;
 }
 
 export function BudgetSplitEditor({
@@ -172,11 +199,11 @@ export function BudgetSplitEditor({
   }
   const hasMiscLine = (lines ?? []).some((l) => l.is_miscellaneous);
 
-  // Group options by instrument (Original Contract / per-CO / ad-hoc+misc).
+  // Group options by instrument (Original Contract / one group PER CO /
+  // ad-hoc+misc) — CO labels come embedded on the option rows (S95 fix).
   const groups = new Map<string, BudgetLineOption[]>();
-  const coNumbers = new Map<string, string>(); // filled lazily from ids — label falls back to "Change order"
   for (const l of lines ?? []) {
-    const label = groupLabel(l, coNumbers);
+    const label = groupLabel(l);
     const list = groups.get(label) ?? [];
     list.push(l);
     groups.set(label, list);
@@ -211,11 +238,7 @@ export function BudgetSplitEditor({
               <optgroup key={label} label={label}>
                 {groupLines.map((l) => (
                   <option key={l.id} value={l.is_miscellaneous ? MISC_SENTINEL : l.id}>
-                    {l.cost_code ? `${l.cost_code} — ` : ''}
-                    {l.description ?? 'Budget line'}
-                    {showBudgeted && l.budgeted_amount != null && !l.is_miscellaneous
-                      ? ` ($${l.budgeted_amount.toFixed(2)} budgeted)`
-                      : ''}
+                    {budgetLineOptionLabel(l, showBudgeted)}
                   </option>
                 ))}
               </optgroup>

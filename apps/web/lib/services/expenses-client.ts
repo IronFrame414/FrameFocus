@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase-browser';
+import { readBudgeted } from '@/lib/services/budget-shared';
 import type { Database } from '@framefocus/shared/types/database';
 import { uploadFile } from '@/lib/services/files-client';
 import type { Expense, ExpenseCategory, ExpenseListItem, ExpenseStatus } from '@/lib/services/expenses';
@@ -319,8 +320,14 @@ export async function reassignExpenseProject(
 /**
  * Ad-hoc budget line from the review popup (Q4b — required for T&M /
  * no-estimate projects, which start with zero lines). Owner/Admin
- * (project_budget_items_insert_admin). budgeted_amount starts at 0;
+ * (project_budget_items_insert_admin). The budget starts at 0;
  * actual_amount is trigger-maintained only.
+ *
+ * RULING [S97]: the budgeted figure lives in project_budget_amounts
+ * (Owner/Admin RLS), so it is written there rather than onto the line. UPSERT
+ * rather than insert because the transitional sync trigger (20260816010000)
+ * may already have created the row from the line's column default — this works
+ * both before and after that trigger and the column are dropped.
  */
 export async function createAdHocBudgetLine(
   projectId: string,
@@ -340,11 +347,24 @@ export async function createAdHocBudgetLine(
       description: input.description.trim(),
       row_type: input.row_type ?? null,
       cost_code: input.cost_code ?? null,
-      budgeted_amount: 0,
     })
-    .select('id')
+    .select('id, company_id')
     .single();
   if (error) return { success: false, error: error.message };
+
+  const { error: amountError } = await supabase
+    .from('project_budget_amounts')
+    .upsert(
+      { company_id: data.company_id, budget_item_id: data.id, budgeted_amount: 0 },
+      { onConflict: 'budget_item_id' }
+    );
+  if (amountError) {
+    // The line exists but carries no budget row — an Owner would see a dash
+    // where a real zero belongs. Report it rather than returning a quiet
+    // success.
+    return { success: false, error: `Budget line created, but its amount was not set: ${amountError.message}` };
+  }
+
   return { success: true, id: data.id };
 }
 
@@ -388,14 +408,19 @@ export interface BudgetLineOption {
   id: string;
   description: string | null;
   cost_code: string | null;
+  /** CO-born lines carry no cost_code — row_type restores the "cost type"
+   *  half of the option label (S95 picker fix). */
+  row_type: string | null;
   budgeted_amount: number | null;
   actual_amount: number | null;
   /** Instrument provenance for picker grouping (money representation §4.3):
-   *  a CO id → that CO's group; else estimate provenance → Original
+   *  a CO id → that CO's OWN group; else estimate provenance → Original
    *  Contract; else ad-hoc/miscellaneous. */
   source_change_order_id: string | null;
   source_line_item_id: string | null;
   is_miscellaneous: boolean;
+  /** Embedded CO identity for the per-CO group header (S95 picker fix). */
+  source_change_order: { co_number: string; title: string | null } | null;
 }
 
 export async function listProjectBudgetLines(projectId: string): Promise<BudgetLineOption[]> {
@@ -403,14 +428,31 @@ export async function listProjectBudgetLines(projectId: string): Promise<BudgetL
   const { data, error } = await supabase
     .from('project_budget_items')
     .select(
-      'id, description, cost_code, budgeted_amount, actual_amount, source_change_order_id, source_line_item_id, is_miscellaneous'
+      // RULING [S97]: budgeted_amount comes from project_budget_amounts now.
+      // actual_amount stays on THIS row and keeps working for every role —
+      // that is the property the split exists to preserve.
+      'id, description, cost_code, row_type, actual_amount, source_change_order_id, source_line_item_id, is_miscellaneous, project_budget_amounts(budgeted_amount), source_change_order:change_orders!project_budget_items_source_change_order_id_fkey(co_number, title)'
     )
     .eq('project_id', projectId)
     .eq('is_deleted', false)
     .order('cost_code', { ascending: true, nullsFirst: false })
     .order('created_at', { ascending: true });
   if (error) return [];
-  return (data ?? []) as BudgetLineOption[];
+  // The to-one CO embed comes back as an object at runtime, but the
+  // generated types infer an array — normalize either shape.
+  return (data ?? []).map((row) => {
+    const { project_budget_amounts, ...rest } = row as typeof row & {
+      project_budget_amounts?: unknown;
+    };
+    return {
+      ...rest,
+      // NULL below Owner/Admin — the embed is simply absent. Never 0.
+      budgeted_amount: readBudgeted(project_budget_amounts as never),
+      source_change_order: Array.isArray(row.source_change_order)
+        ? (row.source_change_order[0] ?? null)
+        : row.source_change_order,
+    };
+  }) as unknown as BudgetLineOption[];
 }
 
 /** Prompt-skip check (§5.1): an expense already born from this segment means

@@ -1,5 +1,6 @@
 import 'server-only';
 import { Resend } from 'resend';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
 
@@ -8,6 +9,18 @@ import type { Database } from '@framefocus/shared/types/database';
 // rafterworks.com (verified in Resend); each tenant sends as
 // "<Company Name> <slug@rafterworks.com>" (single verified domain,
 // dynamic local part).
+//
+// +REPLY-TO [Josh, S97 — platform-wide]: every CLIENT-FACING send carries
+// Reply-To = the sending company's own address, so a client's reply reaches the
+// company rather than rafterworks.com. The From line is unchanged. Pass
+// `replyToCompanyId` and sendEmail() resolves it — see resolveCompanyReplyTo
+// for the order (companies.email -> owner's email -> no header).
+//
+// INTERNAL mail is deliberately EXCLUDED: manager notifications
+// (signing-service, co-signing-service's signed/declined notices,
+// incident-notify, the delivery check-in) already go TO the company, so a
+// reply-to pointing back at it adds nothing. They simply omit
+// replyToCompanyId.
 
 export const SENDING_DOMAIN = 'rafterworks.com';
 
@@ -63,6 +76,10 @@ export {
   DEFAULT_CO_SUBJECT,
   DEFAULT_CO_REMINDER_BODY,
   DEFAULT_CO_REMINDER_SUBJECT,
+  DEFAULT_INVOICE_BODY,
+  DEFAULT_INVOICE_SUBJECT,
+  DEFAULT_INVOICE_REMINDER_BODY,
+  DEFAULT_INVOICE_REMINDER_SUBJECT,
 } from '@/lib/proposal/proposal-defaults';
 
 export type EmailType =
@@ -79,7 +96,14 @@ export type EmailType =
   // 6D §7 — delivery check-in notification (email_types row seeded in S78).
   | 'material_delivery'
   // 6C §4 — incident hierarchy notification (email_types row seeded in S78).
-  | 'safety_incident';
+  | 'safety_incident'
+  // 7D1 §13 — a sent invoice delivered to the client, PDF attached
+  // (email_types row seeded in 20260807000000).
+  | 'invoice'
+  // 7E §6 — an AR reminder on an overdue invoice (email_types row seeded in
+  // 20260815000000). The ONLY §7 event that rides this mechanism — see the
+  // reminder cron's header.
+  | 'invoice_reminder';
 
 export interface LogEmailInput {
   company_id: string;
@@ -88,6 +112,8 @@ export interface LogEmailInput {
   // Signed-artifact spec §4.3 — CO email FKs (nullable; set only for CO emails).
   change_order_id?: string | null;
   co_signing_session_id?: string | null;
+  /** 7D1 §13 — the invoice this email delivered (20260807000000). */
+  invoice_id?: string | null;
   resend_message_id: string | null;
   email_type: EmailType;
   recipient_email: string;
@@ -115,6 +141,7 @@ export async function logEmail(
       // against the un-regenerated database.ts until the migration is applied.
       change_order_id: input.change_order_id ?? null,
       co_signing_session_id: input.co_signing_session_id ?? null,
+      invoice_id: input.invoice_id ?? null,
       resend_message_id: input.resend_message_id,
       email_type: input.email_type,
       recipient_email: input.recipient_email,
@@ -139,6 +166,66 @@ export interface SendEmailParams {
   subject: string;
   react: React.ReactElement;
   attachments?: Array<{ filename: string; content: Buffer }>;
+  /** Explicit Reply-To. Normally leave unset and pass replyToCompanyId. */
+  replyTo?: string | null;
+  /** +REPLY-TO [Josh, S97 — platform-wide]: a client's reply must reach the
+   *  COMPANY, not the platform domain. Pass the sending company's id and this
+   *  wrapper resolves and sets Reply-To itself, so a sender added later
+   *  INHERITS the behaviour instead of having to remember it.
+   *
+   *  Omit for INTERNAL mail (manager notifications) — see the resolver. */
+  replyToCompanyId?: string | null;
+}
+
+/**
+ * +REPLY-TO — the company's contact address.
+ *
+ * SOURCE OF TRUTH, in order:
+ *   1. companies.email — the column EXISTS and is the intended home.
+ *   2. the OWNER's profile email — used when the company has not filled it in.
+ *   3. NULL — no Reply-To header at all. The send still goes; a missing reply
+ *      address must never fail a send or make one up.
+ *
+ * THE CACHE IS NOW TIME-LIMITED [S97]. It was "resolved once per process", set
+ * on the assumption that companies.email could not change — true only because
+ * nothing could SET it. Now that Company Settings has a Company Email control,
+ * an unbounded cache means Josh fills the field in, sends a test, and still
+ * sees the owner's address: the new control would look broken when it is not.
+ * A short TTL keeps the read off the hot path without outliving an edit in any
+ * way a person would notice.
+ */
+const REPLY_TO_TTL_MS = 60_000;
+const replyToCache = new Map<string, { value: string | null; expires: number }>();
+
+export async function resolveCompanyReplyTo(companyId: string): Promise<string | null> {
+  const cached = replyToCache.get(companyId);
+  if (cached && cached.expires > Date.now()) return cached.value;
+
+  const admin = getSupabaseAdmin() as SupabaseClient<Database>;
+
+  const { data: company } = await admin
+    .from('companies')
+    .select('email')
+    .eq('id', companyId)
+    .maybeSingle();
+
+  let resolved: string | null =
+    company?.email && company.email.trim() !== '' ? company.email.trim() : null;
+
+  if (!resolved) {
+    const { data: owner } = await admin
+      .from('profiles')
+      .select('email')
+      .eq('company_id', companyId)
+      .eq('role', 'owner')
+      .eq('is_deleted', false)
+      .limit(1)
+      .maybeSingle();
+    resolved = owner?.email && owner.email.trim() !== '' ? owner.email.trim() : null;
+  }
+
+  replyToCache.set(companyId, { value: resolved, expires: Date.now() + REPLY_TO_TTL_MS });
+  return resolved;
 }
 
 /**
@@ -149,12 +236,27 @@ export async function sendEmail(
   params: SendEmailParams
 ): Promise<{ messageId: string | null; error: string | null }> {
   const resend = getResend();
+
+  // Resolved HERE rather than at each call site, so a sender added later
+  // inherits it. A failure to resolve is never a failure to send.
+  let replyTo = params.replyTo ?? null;
+  if (!replyTo && params.replyToCompanyId) {
+    try {
+      replyTo = await resolveCompanyReplyTo(params.replyToCompanyId);
+    } catch (err) {
+      console.error('reply-to resolution failed; sending without it', err);
+      replyTo = null;
+    }
+  }
+
   const { data, error } = await resend.emails.send({
     from: params.from,
     to: [params.to],
     subject: params.subject,
     react: params.react,
     attachments: params.attachments,
+    // Omitted entirely when null — never an empty header, never the recipient.
+    ...(replyTo ? { replyTo } : {}),
   });
 
   if (error) return { messageId: null, error: error.message };

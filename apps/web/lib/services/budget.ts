@@ -11,20 +11,33 @@ type BudgetItemRow = Database['public']['Tables']['project_budget_items']['Row']
 
 export type BudgetRowType = 'labor' | 'material' | 'subcontractor' | 'other';
 
-export type BudgetItem = Omit<BudgetItemRow, 'row_type'> & {
+export type BudgetItem = Omit<BudgetItemRow, 'row_type' | 'budgeted_amount'> & {
   row_type: BudgetRowType | null;
+  /** RULING [S97]: read from project_budget_amounts (Owner/Admin RLS).
+   *  NULL = the reader is not permitted — NEVER a zero. A zero budget is a
+   *  real and different value (create_budget_line_at_capture inserts one). */
+  budgeted_amount: number | null;
   /** Derived at read (money representation §4.5): Σ per-expense
    *  committed_remaining × allocation share over the line's
    *  commitment-origin expenses. The STORED committed_amount is GROSS (the
    *  promise, never mutated) — display shows remaining, never gross. */
   committed_remaining: number;
+  /** 113c-spec §5 (display only, S95): true when any of the line's
+   *  committed contributions comes from a sub-contract with
+   *  requires_formal_contract = true AND status <> 'signed' — the merged
+   *  screen renders that committed italic + "wait on contract signature".
+   *  Signing flips it off; no money-model involvement. */
+  committed_awaiting_signature: boolean;
 };
 
 /** One cost-code group with its items and subtotals (5E §3). */
 export interface BudgetGroup {
   cost_code: string; // 'Uncategorized' for NULL cost codes
   items: BudgetItem[];
-  budgeted: number;
+  /** NULL = the reader is not permitted to see the budgeted figure (RULING:
+   *  budgeted_amount moved to project_budget_amounts, Owner/Admin RLS). NEVER
+   *  0 for that case — a zero budget is a real, different value. */
+  budgeted: number | null;
   committedRemaining: number;
   actual: number;
 }
@@ -37,14 +50,18 @@ export interface InstrumentGroup {
   /** Set for kind='change_order'. */
   changeOrder: { id: string; co_number: string; title: string } | null;
   groups: BudgetGroup[];
-  budgeted: number;
+  /** NULL = the reader is not permitted to see the budgeted figure (RULING:
+   *  budgeted_amount moved to project_budget_amounts, Owner/Admin RLS). NEVER
+   *  0 for that case — a zero budget is a real, different value. */
+  budgeted: number | null;
   committedRemaining: number;
   actual: number;
 }
 
 export interface BudgetRollup {
   instruments: InstrumentGroup[];
-  totalBudgeted: number;
+  /** NULL = not permitted to see budgeted figures. Never 0 for that case. */
+  totalBudgeted: number | null;
   totalCommittedRemaining: number;
   totalActual: number;
   /** actual + remaining committed (§4.5). NOTE: per-line totals EXCLUDE
@@ -64,11 +81,16 @@ function groupByCostCode(items: BudgetItem[]): BudgetGroup[] {
     const code = item.cost_code ?? UNCATEGORIZED;
     let group = byCode.get(code);
     if (!group) {
-      group = { cost_code: code, items: [], budgeted: 0, committedRemaining: 0, actual: 0 };
+      group = { cost_code: code, items: [], budgeted: null, committedRemaining: 0, actual: 0 };
       byCode.set(code, group);
     }
     group.items.push(item);
-    group.budgeted += item.budgeted_amount ?? 0;
+    // NULL-PROPAGATING, deliberately. `?? 0` here would turn "not permitted"
+    // into a group total of $0.00 — a plausible, wrong number on screen. A
+    // group is budgeted-visible only if its lines are.
+    if (item.budgeted_amount !== null && item.budgeted_amount !== undefined) {
+      group.budgeted = (group.budgeted ?? 0) + item.budgeted_amount;
+    }
     group.committedRemaining += item.committed_remaining;
     group.actual += item.actual_amount ?? 0;
   }
@@ -98,7 +120,10 @@ export async function getBudgetRollup(projectId: string): Promise<BudgetRollup> 
   const [{ data: itemRows }, { data: cos }] = await Promise.all([
     supabase
       .from('project_budget_items')
-      .select('*')
+      // RULING [S97]: budgeted_amount moved to project_budget_amounts
+      // (Owner/Admin RLS). The embed returns NO row below Owner/Admin, which
+      // is how "not permitted" reaches the code as null rather than as a zero.
+      .select('*, project_budget_amounts(budgeted_amount)')
       .eq('project_id', projectId)
       .eq('is_deleted', false)
       .order('cost_code', { ascending: true, nullsFirst: false })
@@ -124,6 +149,21 @@ export async function getBudgetRollup(projectId: string): Promise<BudgetRollup> 
 
   const expenses = expenseRows ?? [];
   const expenseIds = expenses.map((e) => e.id);
+
+  // 113c §5 — which sub-contracts are formal-and-unsigned. Their committed
+  // contributions flag the line as awaiting the sub's signature.
+  const subContractIds = [...new Set(expenses.map((e) => e.sub_contract_id).filter(Boolean))] as string[];
+  const { data: contractRows } = subContractIds.length
+    ? await supabase
+        .from('subcontractor_contracts')
+        .select('id, requires_formal_contract, status')
+        .in('id', subContractIds)
+    : { data: [] as { id: string; requires_formal_contract: boolean; status: string }[] };
+  const awaitingContracts = new Set(
+    (contractRows ?? [])
+      .filter((c) => c.requires_formal_contract && c.status !== 'signed')
+      .map((c) => c.id)
+  );
 
   const { data: allocRows } = expenseIds.length
     ? await supabase
@@ -154,6 +194,7 @@ export async function getBudgetRollup(projectId: string): Promise<BudgetRollup> 
 
   const expenseById = new Map(expenses.map((e) => [e.id, e]));
   const remainingByItem = new Map<string, number>();
+  const awaitingByItem = new Set<string>();
   for (const a of allocRows ?? []) {
     const e = expenseById.get(a.expense_id);
     if (!e) continue;
@@ -176,13 +217,30 @@ export async function getBudgetRollup(projectId: string): Promise<BudgetRollup> 
       a.budget_item_id,
       (remainingByItem.get(a.budget_item_id) ?? 0) + lineRemaining
     );
+    if (e.sub_contract_id && awaitingContracts.has(e.sub_contract_id)) {
+      awaitingByItem.add(a.budget_item_id); // 113c §5 italic flag
+    }
   }
 
-  const items: BudgetItem[] = ((itemRows ?? []) as BudgetItemRow[]).map((row) => ({
-    ...row,
-    row_type: row.row_type as BudgetRowType | null,
-    committed_remaining: remainingByItem.get(row.id) ?? 0,
-  }));
+  const items: BudgetItem[] = ((itemRows ?? []) as unknown as Array<
+    BudgetItemRow & { project_budget_amounts?: { budgeted_amount: number }[] | { budgeted_amount: number } | null }
+  >).map((row) => {
+    // The embed is absent below Owner/Admin (RLS), which is exactly how "not
+    // permitted" arrives as null. PostgREST returns a to-one embed as an
+    // object or a one-element array depending on how it infers the relation,
+    // so both shapes are handled rather than assumed.
+    const embed = row.project_budget_amounts;
+    const budgeted = Array.isArray(embed)
+      ? embed[0]?.budgeted_amount ?? null
+      : embed?.budgeted_amount ?? null;
+    return {
+      ...row,
+      budgeted_amount: budgeted === null ? null : Number(budgeted),
+      row_type: row.row_type as BudgetRowType | null,
+      committed_remaining: remainingByItem.get(row.id) ?? 0,
+      committed_awaiting_signature: awaitingByItem.has(row.id),
+    };
+  });
 
   // --- Instrument grouping ---------------------------------------------------
   const coById = new Map((cos ?? []).map((co) => [co.id, co]));
@@ -208,7 +266,11 @@ export async function getBudgetRollup(projectId: string): Promise<BudgetRollup> 
     kind,
     changeOrder,
     groups: groupByCostCode(groupItems),
-    budgeted: groupItems.reduce((s, i) => s + (i.budgeted_amount ?? 0), 0),
+    // Same rule as the group sum: absent means not permitted, so the
+    // instrument total is ABSENT rather than zero.
+    budgeted: groupItems.some((i) => i.budgeted_amount !== null && i.budgeted_amount !== undefined)
+      ? groupItems.reduce((s, i) => s + (i.budgeted_amount ?? 0), 0)
+      : null,
     committedRemaining: groupItems.reduce((s, i) => s + i.committed_remaining, 0),
     actual: groupItems.reduce((s, i) => s + (i.actual_amount ?? 0), 0),
   });
@@ -242,7 +304,9 @@ export async function getBudgetRollup(projectId: string): Promise<BudgetRollup> 
     .filter((co) => !(byCo.get(co.id)?.length ?? 0))
     .map((co) => ({ id: co.id, co_number: co.co_number, title: co.title }));
 
-  const totalBudgeted = instruments.reduce((s, g) => s + g.budgeted, 0);
+  const totalBudgeted = instruments.some((g) => g.budgeted !== null)
+    ? instruments.reduce((s, g) => s + (g.budgeted ?? 0), 0)
+    : null;
   const totalCommittedRemaining = instruments.reduce((s, g) => s + g.committedRemaining, 0);
   const totalActual = instruments.reduce((s, g) => s + g.actual, 0);
 

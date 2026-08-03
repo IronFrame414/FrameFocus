@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase-browser';
+import { readBudgeted } from '@/lib/services/budget-shared';
 import type { Database } from '@framefocus/shared/types/database';
 import { uploadFile } from '@/lib/services/files-client';
 import type { ExpenseCategory } from '@/lib/services/expenses';
@@ -84,6 +85,94 @@ export type SetupScheduleResult = {
   error?: string;
 };
 
+/** S95 ruling — formal-contract payment warning: a payment against a stage
+ *  whose sub-contract has requires_formal_contract = true and is NOT yet
+ *  signed warns at the moment of payment (advisory two-step confirm, never
+ *  a block — the italic Committed indicator stays the passive signal).
+ *  Returns null when no warning applies. */
+export async function getFormalContractWarning(
+  subContractId: string
+): Promise<{ subName: string } | null> {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from('subcontractor_contracts')
+    .select('requires_formal_contract, status, member:company_members(display_name)')
+    .eq('id', subContractId)
+    .single();
+  if (!data || !data.requires_formal_contract || data.status === 'signed') return null;
+  const member = Array.isArray(data.member) ? data.member[0] : data.member;
+  return { subName: member?.display_name ?? 'this subcontractor' };
+}
+
+/** 113c-spec §3.3/§4 [S95] — the award budget-line tie, RE-DERIVED at
+ *  confirm (deliberately not stored): the contract's member won bid(s) on
+ *  the source estimate; each winning line's subcontractor row is the
+ *  source_line_row_id of exactly one budget line. One candidate → the
+ *  schedule editor prefills it; several (one sub won several lines — the
+ *  drafts are indistinguishable by member alone) → no prefill, the
+ *  required S-2 picker disambiguates. budgeted_amount rides along for the
+ *  Ruling-B plan-vs-contract variance display (award no longer overwrites
+ *  an estimator-entered cost, so the two legitimately differ). */
+export interface AwardBudgetLine {
+  budget_item_id: string;
+  budgeted_amount: number | null;
+  bid_amount: number;
+  line_name: string | null;
+}
+
+export async function deriveAwardBudgetLines(
+  projectId: string,
+  memberId: string
+): Promise<AwardBudgetLine[]> {
+  const supabase = createClient();
+
+  const { data: project } = await supabase
+    .from('projects')
+    .select('source_estimate_id')
+    .eq('id', projectId)
+    .single();
+  if (!project?.source_estimate_id) return [];
+
+  const { data: bids } = await supabase
+    .from('estimate_sub_bids')
+    .select('line_item_id, bid_amount, subcontractor:subcontractors!inner(member_id)')
+    .eq('estimate_id', project.source_estimate_id)
+    .eq('is_winner', true)
+    .eq('is_deleted', false)
+    .eq('subcontractor.member_id', memberId);
+  if (!bids?.length) return [];
+
+  const lineItemIds = bids.map((b) => b.line_item_id);
+  const { data: subRows } = await supabase
+    .from('estimate_line_rows')
+    .select('id, line_item_id, name')
+    .in('line_item_id', lineItemIds)
+    .eq('row_type', 'subcontractor');
+  if (!subRows?.length) return [];
+
+  const { data: budgetLines } = await supabase
+    .from('project_budget_items')
+    // RULING [S97]: budgeted_amount moved to project_budget_amounts
+    // (Owner/Admin RLS). The embed is absent below Owner/Admin — null, never 0.
+    .select('id, source_line_row_id, description, project_budget_amounts(budgeted_amount)')
+    .eq('project_id', projectId)
+    .eq('is_deleted', false)
+    .in('source_line_row_id', subRows.map((r) => r.id));
+  if (!budgetLines?.length) return [];
+
+  const bidByLineItem = new Map(bids.map((b) => [b.line_item_id, b.bid_amount]));
+  const rowById = new Map(subRows.map((r) => [r.id, r]));
+  return budgetLines.map((bl) => {
+    const subRow = bl.source_line_row_id ? rowById.get(bl.source_line_row_id) : undefined;
+    return {
+      budget_item_id: bl.id,
+      budgeted_amount: readBudgeted(bl.project_budget_amounts),
+      bid_amount: (subRow && bidByLineItem.get(subRow.line_item_id)) ?? 0,
+      line_name: bl.description,
+    };
+  });
+}
+
 export async function setupPaymentSchedule(
   subContractId: string,
   stages: ScheduleStageInput[],
@@ -136,6 +225,77 @@ export async function setupPaymentSchedule(
     stageTotal: result.stage_total,
     warning: result.warning ?? undefined,
     stageIds: (stageRows ?? []).map((r) => r.id),
+  };
+}
+
+export interface ReviseStageInput extends ScheduleStageInput {
+  /** PARTIAL REVISE payload contract (migration 20260731060000): present =
+   *  in-place edit of a PARTIALLY-PAID stage (the RPC floors its amount at
+   *  gross paid; the row stays approved); absent = replacement stage that
+   *  lands pending. An omitted partially-paid stage is left untouched. */
+  id?: string | null;
+}
+
+/** 113c-spec §5 as amended (PARTIAL REVISE — S95 second ruling set) —
+ *  revise_sub_contract_schedule, migration 20260731060000 (applied to
+ *  rebuild-test; supersedes the 20260731050000 body). Owner/Admin only (the
+ *  RPC checks). Open on ANY draft/sent contract — the formal-contract gate
+ *  is dropped; signed/void contracts and closed-out stages are frozen.
+ *  Unpaid stages are torn down and replaced (land pending → re-approve);
+ *  entries WITH id edit a partially-paid stage in place. Retainage params
+ *  are the NEW full state (undefined shape = no retainage); contractValue
+ *  null = keep. Σ-vs-value mismatch comes back as an advisory warning,
+ *  never an error (P2). */
+export async function reviseSubContractSchedule(
+  subContractId: string,
+  stages: ReviseStageInput[],
+  retainage?: RetainageInput,
+  contractValue?: number | null
+): Promise<SetupScheduleResult> {
+  if (stages.length === 0) return { success: false, error: 'At least one stage is required.' };
+  for (const s of stages) {
+    if (!s.label.trim()) return { success: false, error: 'Every stage needs a label.' };
+    if (!(s.amount > 0)) return { success: false, error: 'Every stage needs a positive amount.' };
+  }
+  if (retainage?.shape === 'percent_across' && !(Number(retainage.percent) >= 0)) {
+    return { success: false, error: 'Percent-across retainage needs a percent.' };
+  }
+
+  const supabase = createClient();
+  // revise_sub_contract_schedule is applied (20260731060000) but database.ts
+  // has not been regenerated since — cast until the next db:types run (the
+  // co-builder contractor_signed_at precedent).
+  const rpc = supabase.rpc.bind(supabase) as (
+    fn: string,
+    args?: Record<string, unknown>
+  ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+  const { data, error } = await rpc('revise_sub_contract_schedule', {
+    p_sub_contract_id: subContractId,
+    p_stages: stages.map((s) => ({
+      ...(s.id ? { id: s.id } : {}),
+      label: s.label.trim(),
+      amount: s.amount,
+      budget_item_id: s.budget_item_id ?? null,
+    })),
+    p_retainage_shape: retainage?.shape,
+    p_retainage_percent: retainage?.shape === 'percent_across' ? retainage.percent : undefined,
+    p_contract_value: contractValue ?? undefined,
+  });
+  if (error) {
+    if (error.message.includes('is signed')) {
+      return { success: false, error: 'The contract is signed — its schedule is frozen. Corrections go through void and re-enter.' };
+    }
+    // Per-stage refusals (gross-paid floor, closed-out, unpaid-with-id) come
+    // back with the stage named — already user-readable, pass through.
+    return { success: false, error: error.message };
+  }
+
+  const result = data as { stage_count: number; stage_total: number; warning: string | null };
+  return {
+    success: true,
+    stageCount: result.stage_count,
+    stageTotal: result.stage_total,
+    warning: result.warning ?? undefined,
   };
 }
 

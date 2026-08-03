@@ -20,6 +20,7 @@ import {
   type CoRowType,
   type UpdateCoLineRowInput,
 } from '@/lib/services/change-orders-client';
+import { CoRateSection } from './co-rate-section';
 
 // 5D — estimate-style CO builder (D-1). Typed rows carry SIGNED values:
 // enter a negative rate / unit cost / amount for a credit and put the
@@ -129,6 +130,14 @@ interface CoBuilderProps {
   changeOrder: ChangeOrderWithChildren;
   subcontractors: Array<{ id: string; name: string }>;
   canManage: boolean;
+  /** Owner/Admin only. RULING A [S97]: a PM sees NO rate values anywhere, so
+   *  the rate section is not mounted at all below Owner/Admin — it is not
+   *  rendered read-only and not rendered empty. §7.3 S-5 amended. */
+  canSeeRates: boolean;
+  /** projects.source_estimate_id — the CO rate section prefills first rates
+   *  from the source estimate's rates in force (S97 ruling). Null for a
+   *  no-estimate project: no prefill. */
+  sourceEstimateId: string | null;
   pendingSigningToken: string | null;
   companyName: string;
   hasSavedSignature: boolean;
@@ -139,6 +148,8 @@ export function CoBuilder({
   changeOrder: co,
   subcontractors,
   canManage,
+  canSeeRates,
+  sourceEstimateId,
   pendingSigningToken,
   companyName,
   hasSavedSignature,
@@ -367,6 +378,17 @@ export function CoBuilder({
             )}
           </div>
         </div>
+
+        {/* §7.1 S-5 — non-fixed COs carry their own instrument rate(s); a
+            rateless CO cannot price (the recompute refuses 0% margin). */}
+        {canSeeRates && (co.co_type === 'cost_plus' || co.co_type === 'time_and_materials') && (
+          <CoRateSection
+            changeOrderId={co.id}
+            coType={co.co_type}
+            isDraft={co.status === 'draft'}
+            sourceEstimateId={sourceEstimateId}
+          />
+        )}
 
         {sendOpen && co.status === 'draft' && (
           <div

@@ -1,11 +1,14 @@
 'use client';
 
-// Money representation §7.1 S-3 — estimate settings: contract type, the
-// per-type negotiated rate(s), and the P11 projected value. Type/rate/
-// projection are Owner/Admin only (§7.3); PM sees them read-only. Setting a
-// rate appends an instrument_rates row effective today — the DB backdating
-// guard is the authority (§5.5); the S-4 panel (not yet built) is where
-// history and supersede will live.
+// Money representation §7.1 S-3 (as amended 2026-07-31) — estimate
+// settings: contract type, the per-type negotiated rate AMOUNT (date-free
+// by ruling — the initial row lands effective today as a placeholder;
+// conversion restamps it to the contract start, §5.1 item 4, not yet
+// built), and the P11 projected value. Type/rate/projection are Owner/Admin
+// only (§7.3); PM sees them read-only. The DB backdating guard is the
+// authority (§5.5 — future-dating permitted since 20260731010000, but this
+// screen never sends a date). Rate history, renegotiation, and supersede
+// live on the PROJECT rate section (S-4), not here.
 
 import { useCallback, useEffect, useState } from 'react';
 import {
@@ -32,11 +35,19 @@ interface ContractSectionProps {
   reload: () => Promise<void>;
 }
 
+// A-9: cost-plus carries four independent rates — set each on its own; they
+// are commonly all equal, but never auto-filled or linked. The legacy
+// cost_plus_percent is read-only history and is not offered for entry.
 const RATE_FIELDS: Record<
   Exclude<ContractType, 'fixed_price'>,
   { rateType: InstrumentRateType; label: string; percent: boolean }[]
 > = {
-  cost_plus: [{ rateType: 'cost_plus_percent', label: 'Markup rate %', percent: true }],
+  cost_plus: [
+    { rateType: 'cost_plus_labor_hourly', label: 'Labor rate $/man-hour', percent: false },
+    { rateType: 'cost_plus_material_percent', label: 'Material markup %', percent: true },
+    { rateType: 'cost_plus_subcontractor_percent', label: 'Subcontractor markup %', percent: true },
+    { rateType: 'cost_plus_other_percent', label: 'Other markup %', percent: true },
+  ],
   time_and_materials: [
     { rateType: 'tm_labor_hourly', label: 'Labor rate $/man-hour', percent: false },
     { rateType: 'tm_nonlabor_percent', label: 'Non-labor markup %', percent: true },
@@ -66,10 +77,13 @@ export function ContractSection({ estimate, canEditSettings, reload }: ContractS
 
   const today = new Date().toISOString().slice(0, 10);
 
-  // Rateless guard surface: rate types the contract type requires but which
-  // have nothing in force (never set, or the only rate was superseded).
-  // Recompute refuses to price a rateless instrument — it would otherwise
-  // persist zero-margin totals — so say why totals are frozen.
+  // Rateless surface: rate types the contract type carries but which have
+  // nothing in force (never set, or the only rate was superseded). A missing
+  // MARKUP rate blocks the recompute for rows of its category (A-9
+  // usage-based — 0% would silently price at cost). The LABOR rate never
+  // blocks estimate pricing (S97: labor bills at the row's own rate) — it
+  // defaults new labor rows and drives 7D invoicing, so its absence still
+  // deserves the banner.
   const missingRates =
     contractType === 'fixed_price'
       ? []
@@ -181,8 +195,9 @@ export function ContractSection({ estimate, canEditSettings, reload }: ContractS
                 fontSize: '0.8125rem',
               }}
             >
-              No rate in force ({missingRates.map((f) => f.label).join(', ')}) — totals cannot
-              recalculate until {missingRates.length === 1 ? 'a rate is' : 'rates are'} set.
+              No rate in force ({missingRates.map((f) => f.label).join(', ')}) — set{' '}
+              {missingRates.length === 1 ? 'it' : 'them'} here; missing markup rates block totals
+              from recalculating.
             </div>
           )}
           {RATE_FIELDS[contractType].map((field) => (

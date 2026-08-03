@@ -6,9 +6,14 @@
 // hitting one sees its message). Over-stage is a two-phase confirm (Q5):
 // first call without override; on the RPC's OVER_STAGE refusal, show the
 // confirm and re-call with the override set. Flag, never block (§7.9).
+// S95 ruling: paying a stage whose sub-contract is formal-and-unsigned
+// (requires_formal_contract, status <> 'signed') warns HERE, at the moment
+// of payment — inline banner + explicit confirm before the RPC runs.
+// Advisory only; same role gate as the payment itself. The 7F "contract
+// isn't signed" surface is separate — this is only the formal flag.
 
-import { useState } from 'react';
-import { recordPayment } from '@/lib/services/payables-client';
+import { useEffect, useState } from 'react';
+import { getFormalContractWarning, recordPayment } from '@/lib/services/payables-client';
 import { fmtMoney } from '@/components/expenses/expense-ui';
 import { overlayStyle, fieldLabelStyle, inputStyle } from '@/components/time/clock-modal';
 import { cardStyle, color, h2Style, primaryButtonStyle, secondaryButtonStyle } from '@/lib/theme';
@@ -25,11 +30,14 @@ interface PaymentModalProps {
     paidToDate: number;
     is_retainage: boolean;
   };
+  /** The stage's parent sub-contract, when there is one — drives the S95
+   *  formal-and-unsigned payment warning. */
+  subContractId?: string | null;
   onClose: () => void;
   onDone: () => void;
 }
 
-export function PaymentModal({ expense, onClose, onDone }: PaymentModalProps) {
+export function PaymentModal({ expense, subContractId, onClose, onDone }: PaymentModalProps) {
   const remaining = Math.max(expense.amount - expense.paidToDate, 0);
 
   const [date, setDate] = useState(new Date().toLocaleDateString('en-CA'));
@@ -37,15 +45,37 @@ export function PaymentModal({ expense, onClose, onDone }: PaymentModalProps) {
   const [method, setMethod] = useState('');
   const [note, setNote] = useState('');
   const [overStageConfirm, setOverStageConfirm] = useState(false);
+  const [formalWarn, setFormalWarn] = useState<{ subName: string } | null>(null);
+  const [formalConfirm, setFormalConfirm] = useState(false);
+  const [formalAck, setFormalAck] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSubmit(override: boolean) {
+  useEffect(() => {
+    if (!subContractId) return;
+    let cancelled = false;
+    void getFormalContractWarning(subContractId).then((warn) => {
+      if (!cancelled) setFormalWarn(warn);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [subContractId]);
+
+  async function handleSubmit(override: boolean, ackFormal = false) {
     const parsed = Number(amount);
     if (Number.isNaN(parsed) || parsed <= 0) {
       setError('Amount must be greater than zero.');
       return;
     }
+    // S95: formal-and-unsigned → explicit confirm BEFORE the RPC. Advisory,
+    // never a block — acknowledged once per modal.
+    if (formalWarn && !formalAck && !ackFormal) {
+      setFormalConfirm(true);
+      return;
+    }
+    if (ackFormal) setFormalAck(true);
+    setFormalConfirm(false);
     setBusy(true);
     setError(null);
     const res = await recordPayment(expense.id, {
@@ -82,6 +112,23 @@ export function PaymentModal({ expense, onClose, onDone }: PaymentModalProps) {
           {expense.stage_label && ` · ${expense.stage_label}`} · {fmtMoney(expense.paidToDate)} paid
           of {fmtMoney(expense.amount)} · {fmtMoney(remaining)} remaining
         </p>
+
+        {formalWarn && (
+          <div
+            style={{
+              padding: '8px 12px',
+              borderRadius: '8px',
+              marginBottom: '12px',
+              backgroundColor: '#fffbeb',
+              border: '1px solid #fde68a',
+              color: color.warningDeep,
+              fontSize: '12px',
+            }}
+          >
+            This contract with {formalWarn.subName} requires a formal contract and it is not
+            signed yet — this payment sends money out before the contract is in place.
+          </div>
+        )}
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
           <div>
@@ -122,7 +169,26 @@ export function PaymentModal({ expense, onClose, onDone }: PaymentModalProps) {
 
         {error && <p style={{ color: color.danger, fontSize: '13px', margin: '0 0 12px' }}>{error}</p>}
 
-        {overStageConfirm ? (
+        {formalConfirm ? (
+          <div>
+            <p style={{ fontSize: '13px', color: color.warningDeep, margin: '0 0 12px' }}>
+              The formal contract with {formalWarn?.subName} is not signed — you are about to
+              send money out before the contract is in place. Record the payment anyway?
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button style={secondaryButtonStyle} disabled={busy} onClick={() => setFormalConfirm(false)}>
+                Back
+              </button>
+              <button
+                style={{ ...primaryButtonStyle, backgroundColor: color.warning, opacity: busy ? 0.6 : 1 }}
+                disabled={busy}
+                onClick={() => void handleSubmit(false, true)}
+              >
+                {busy ? 'Saving…' : 'Pay before signature'}
+              </button>
+            </div>
+          </div>
+        ) : overStageConfirm ? (
           <div>
             <p style={{ fontSize: '13px', color: color.warningDeep, margin: '0 0 12px' }}>
               This payment exceeds the remaining balance on this{' '}
