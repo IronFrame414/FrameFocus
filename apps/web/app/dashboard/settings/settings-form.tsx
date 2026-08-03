@@ -25,6 +25,7 @@ export function SettingsForm({ company }: SettingsFormProps) {
     state: company.state || '',
     zip: company.zip || '',
     phone: company.phone || '',
+    email: company.email || '',
     website: company.website || '',
     trade_type: company.trade_type || '',
     license_number: company.license_number || '',
@@ -77,6 +78,7 @@ export function SettingsForm({ company }: SettingsFormProps) {
       state: form.state || null,
       zip: form.zip.trim() || null,
       phone: form.phone.trim() || null,
+      email: form.email.trim() || null,
       website: form.website.trim() || null,
       trade_type: form.trade_type || null,
       license_number: form.license_number.trim() || null,
@@ -474,6 +476,26 @@ export function SettingsForm({ company }: SettingsFormProps) {
       {/* Contact info */}
       <div style={sectionStyle}>
         <div style={sectionTitleStyle}>Contact Information</div>
+        <div style={{ marginBottom: '1rem' }}>
+          {/* [S97] The company email. Two shipped behaviors already read this
+              column and it had no control anywhere, so it was always empty —
+              which is why client replies were landing in the owner's personal
+              inbox instead of the company's. */}
+          <label style={labelStyle}>Company Email</label>
+          <input
+            name="email"
+            type="email"
+            value={form.email}
+            onChange={handleChange}
+            style={inputStyle}
+            placeholder="office@yourcompany.com"
+          />
+          <p style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '0.25rem' }}>
+            Where clients reach you. Replies to estimates, change orders and invoices you send go
+            here, and it prints on your PDF letterhead. Leave it blank and replies fall back to the
+            owner&rsquo;s personal address.
+          </p>
+        </div>
         <div style={gridTwoCol}>
           <div>
             <label style={labelStyle}>Phone</label>

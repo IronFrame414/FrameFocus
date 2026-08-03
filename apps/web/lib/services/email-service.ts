@@ -178,21 +178,28 @@ export interface SendEmailParams {
 }
 
 /**
- * +REPLY-TO — the company's contact address, resolved once per process.
+ * +REPLY-TO — the company's contact address.
  *
  * SOURCE OF TRUTH, in order:
  *   1. companies.email — the column EXISTS and is the intended home.
  *   2. the OWNER's profile email — used when the company has not filled it in.
- *      On rebuild-test that is every company today, so this is the branch that
- *      actually runs. No company column was invented.
  *   3. NULL — no Reply-To header at all. The send still goes; a missing reply
  *      address must never fail a send or make one up.
+ *
+ * THE CACHE IS NOW TIME-LIMITED [S97]. It was "resolved once per process", set
+ * on the assumption that companies.email could not change — true only because
+ * nothing could SET it. Now that Company Settings has a Company Email control,
+ * an unbounded cache means Josh fills the field in, sends a test, and still
+ * sees the owner's address: the new control would look broken when it is not.
+ * A short TTL keeps the read off the hot path without outliving an edit in any
+ * way a person would notice.
  */
-const replyToCache = new Map<string, string | null>();
+const REPLY_TO_TTL_MS = 60_000;
+const replyToCache = new Map<string, { value: string | null; expires: number }>();
 
 export async function resolveCompanyReplyTo(companyId: string): Promise<string | null> {
   const cached = replyToCache.get(companyId);
-  if (cached !== undefined) return cached;
+  if (cached && cached.expires > Date.now()) return cached.value;
 
   const admin = getSupabaseAdmin() as SupabaseClient<Database>;
 
@@ -217,7 +224,7 @@ export async function resolveCompanyReplyTo(companyId: string): Promise<string |
     resolved = owner?.email && owner.email.trim() !== '' ? owner.email.trim() : null;
   }
 
-  replyToCache.set(companyId, resolved);
+  replyToCache.set(companyId, { value: resolved, expires: Date.now() + REPLY_TO_TTL_MS });
   return resolved;
 }
 
