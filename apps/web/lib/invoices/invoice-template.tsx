@@ -1,3 +1,4 @@
+import React from 'react';
 import { Document, Image, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
 import type { InvoicePdfData } from './invoice-data';
 
@@ -197,53 +198,67 @@ export function InvoiceDocument({ data }: { data: InvoicePdfData }) {
         </View>
 
         {/* 3. The work, at the chosen presentation level (§11). */}
-        {level === 'full_detail' && (
-          <>
-            {presented.nonLaborLines.length > 0 && (
-              <>
-                <Text style={styles.sectionTitle}>Costs</Text>
-                <View style={styles.tableHead}>
-                  <Text style={[styles.colDesc, styles.headText]}>Description</Text>
-                  <Text style={[styles.colAmt, styles.headText]}>Cost</Text>
-                  <Text style={[styles.colAmt, styles.headText]}>Amount</Text>
-                </View>
-                {presented.nonLaborLines.map((l, i) => (
-                  <View key={i} style={styles.row} wrap={false}>
-                    <Text style={styles.colDesc}>{l.description}</Text>
-                    <Text style={[styles.colAmt, styles.muted]}>
-                      {l.costBasis === null ? '—' : fmtMoney(l.costBasis)}
-                    </Text>
-                    <Text style={styles.colAmt}>{fmtMoney(l.amount)}</Text>
-                  </View>
-                ))}
-                {/* Layout A: Subtotal and Markup cover NON-LABOR ONLY. */}
-                <View style={styles.totalsBlock}>
-                  <View style={styles.totalsRow}>
-                    <Text style={styles.muted}>Subtotal (cost)</Text>
-                    <Text>{fmtMoney(presented.nonLaborSubtotal)}</Text>
-                  </View>
-                  <View style={styles.totalsRow}>
-                    <Text style={styles.muted}>Markup</Text>
-                    <Text>{fmtMoney(presented.nonLaborMarkup)}</Text>
-                  </View>
-                </View>
-              </>
-            )}
+        {/* §11 layout A, PER INSTRUMENT [S97 ruling]. Two instruments with
+            different markup rates cannot honestly share one markup line — a
+            single "Markup $X" over a 20% CO and a 12% contract states a rate
+            that applied to neither. So each instrument gets its own subtotal
+            and markup, with labor outside the block within its group (R3).
 
-            {/* The labor line sits OUTSIDE the subtotal/markup block (R3). */}
-            {presented.laborLines.length > 0 && (
-              <>
-                <Text style={styles.sectionTitle}>Labor</Text>
-                {presented.laborLines.map((l, i) => (
-                  <View key={i} style={styles.row} wrap={false}>
-                    <Text style={styles.colDesc}>{l.description}</Text>
-                    <Text style={styles.colAmt}>{fmtMoney(l.amount)}</Text>
+            A SINGLE-INSTRUMENT invoice renders with NO group heading, exactly
+            as it did before this change — the multi-instrument case is the only
+            one whose appearance moves. */}
+        {level === 'full_detail' &&
+          presented.groups.map((group, gi) => (
+            <React.Fragment key={group.key || gi}>
+              {presented.groups.length > 1 && group.label !== '' && (
+                <Text style={styles.sectionTitle}>{group.label}</Text>
+              )}
+
+              {group.nonLaborLines.length > 0 && (
+                <>
+                  <Text style={styles.sectionTitle}>Costs</Text>
+                  <View style={styles.tableHead}>
+                    <Text style={[styles.colDesc, styles.headText]}>Description</Text>
+                    <Text style={[styles.colAmt, styles.headText]}>Cost</Text>
+                    <Text style={[styles.colAmt, styles.headText]}>Amount</Text>
                   </View>
-                ))}
-              </>
-            )}
-          </>
-        )}
+                  {group.nonLaborLines.map((l, i) => (
+                    <View key={i} style={styles.row} wrap={false}>
+                      <Text style={styles.colDesc}>{l.description}</Text>
+                      <Text style={[styles.colAmt, styles.muted]}>
+                        {l.costBasis === null ? '—' : fmtMoney(l.costBasis)}
+                      </Text>
+                      <Text style={styles.colAmt}>{fmtMoney(l.amount)}</Text>
+                    </View>
+                  ))}
+                  {/* Layout A: Subtotal and Markup cover NON-LABOR ONLY. */}
+                  <View style={styles.totalsBlock}>
+                    <View style={styles.totalsRow}>
+                      <Text style={styles.muted}>Subtotal (cost)</Text>
+                      <Text>{fmtMoney(group.nonLaborSubtotal)}</Text>
+                    </View>
+                    <View style={styles.totalsRow}>
+                      <Text style={styles.muted}>Markup</Text>
+                      <Text>{fmtMoney(group.nonLaborMarkup)}</Text>
+                    </View>
+                  </View>
+                </>
+              )}
+
+              {/* The labor line sits OUTSIDE the subtotal/markup block (R3). */}
+              {group.laborLines.length > 0 && (
+                <>
+                  <Text style={styles.sectionTitle}>Labor</Text>
+                  {group.laborLines.map((l, i) => (
+                    <View key={i} style={styles.row} wrap={false}>
+                      <Text style={styles.colDesc}>{l.description}</Text>
+                      <Text style={styles.colAmt}>{fmtMoney(l.amount)}</Text>
+                    </View>
+                  ))}
+                </>
+              )}
+            </React.Fragment>
+          ))}
 
         {level === 'by_section' && (
           <>

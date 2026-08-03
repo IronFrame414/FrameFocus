@@ -1011,30 +1011,39 @@ function LinesPanel({
         <div style={{ padding: '12px 16px', borderTop: `1px solid ${color.cardBorder}`, fontSize: '13px' }}>
           <span style={microLabelStyle}>Client sees (full detail — layout A)</span>
           <div style={{ marginTop: '6px', fontFamily: font.mono, fontSize: '12px' }}>
-            {presented.laborLines.map((l, i) => (
-              <div key={`labor-${i}`} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>{l.description}</span>
-                <span>{money(l.amount)}</span>
+            {/* §11 [S97] — one block PER INSTRUMENT, matching the PDF exactly.
+                A single-instrument invoice shows no heading, as before. */}
+            {presented.groups.map((group, gi) => (
+              <div key={group.key || gi} style={{ marginBottom: gi < presented.groups.length - 1 ? '8px' : 0 }}>
+                {presented.groups.length > 1 && group.label !== '' && (
+                  <div style={{ fontWeight: 700, marginTop: gi > 0 ? '6px' : 0 }}>{group.label}</div>
+                )}
+                {group.laborLines.map((l, i) => (
+                  <div key={`labor-${i}`} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>{l.description}</span>
+                    <span>{money(l.amount)}</span>
+                  </div>
+                ))}
+                {group.nonLaborLines.map((l, i) => (
+                  <div key={`nl-${i}`} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>{l.description}</span>
+                    <span>{money(l.costBasis ?? l.amount)}</span>
+                  </div>
+                ))}
+                {group.nonLaborLines.length > 0 && (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: `1px solid ${color.rowDivider}`, marginTop: '4px', paddingTop: '4px' }}>
+                      <span>Subtotal (non-labor)</span>
+                      <span>{money(group.nonLaborSubtotal)}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                      <span>Markup</span>
+                      <span>{money(group.nonLaborMarkup)}</span>
+                    </div>
+                  </>
+                )}
               </div>
             ))}
-            {presented.nonLaborLines.map((l, i) => (
-              <div key={`nl-${i}`} style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span>{l.description}</span>
-                <span>{money(l.costBasis ?? l.amount)}</span>
-              </div>
-            ))}
-            {presented.nonLaborLines.length > 0 && (
-              <>
-                <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: `1px solid ${color.rowDivider}`, marginTop: '4px', paddingTop: '4px' }}>
-                  <span>Subtotal (non-labor)</span>
-                  <span>{money(presented.nonLaborSubtotal)}</span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span>Markup</span>
-                  <span>{money(presented.nonLaborMarkup)}</span>
-                </div>
-              </>
-            )}
             {presented.adjustmentLines.map((l, i) => (
               <div key={`adj-${i}`} style={{ display: 'flex', justifyContent: 'space-between', color: color.warningDeep }}>
                 <span>{l.description}</span>
@@ -1049,6 +1058,8 @@ function LinesPanel({
           <p style={{ fontSize: '11px', color: color.faint, margin: '6px 0 0' }}>
             Cost shown to the client is actual and UNBURDENED (§6.4). Labor bills as hours × rate
             outside the subtotal/markup block (§11).
+            {presented.groups.length > 1 &&
+              ' Each instrument gets its own subtotal and markup — two markup rates cannot honestly share one line.'}
           </p>
         </div>
       )}

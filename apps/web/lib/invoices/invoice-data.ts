@@ -7,6 +7,7 @@ import {
   type PresentationLine,
   type PresentedInvoice,
 } from '@framefocus/shared/utils/invoice-derivation';
+import { lineInstrumentKey } from '@/lib/services/invoices-shared';
 import type { InvoiceLineType } from '@/lib/services/invoices-shared';
 
 // 7D §11/§13 — data assembly for the invoice PDF. Mirrors co-data.ts: pull the
@@ -109,6 +110,27 @@ export async function getInvoicePdfData(
     }
   }
 
+  // §11 [S97] — an invoice may span instruments (§2), and full detail groups by
+  // instrument, so each line needs its instrument's NAME. Change orders are
+  // read once here; the originating estimate is always "Original Contract".
+  const coIds = [
+    ...new Set(
+      (linesRes.data ?? [])
+        .map((l) => l.source_change_order_id)
+        .filter((id): id is string => Boolean(id))
+    ),
+  ];
+  const coLabels = new Map<string, string>();
+  if (coIds.length > 0) {
+    const { data: cos } = await supabase
+      .from('change_orders')
+      .select('id, co_number, title')
+      .in('id', coIds);
+    for (const co of cos ?? []) {
+      coLabels.set(co.id, `${co.co_number}${co.title ? ` — ${co.title}` : ''}`);
+    }
+  }
+
   // §11 — the client sees BILLED amounts, never the calculated figure (§8:
   // 7G exports and 7H report billed). cost_basis is the row's actual,
   // UNBURDENED cost (§6.4 — burden never reaches a client bill).
@@ -118,6 +140,12 @@ export async function getInvoicePdfData(
     costBasis: l.cost_basis === null ? null : Number(l.cost_basis),
     amount: Number(l.billed_amount),
     lineType: l.line_type as InvoiceLineType,
+    instrumentKey: lineInstrumentKey(l),
+    instrumentLabel: l.source_change_order_id
+      ? coLabels.get(l.source_change_order_id) ?? 'Change order'
+      : l.source_estimate_id
+        ? 'Original Contract'
+        : '',
   }));
 
   const level = invoice.presentation_level as PresentationLevel;
