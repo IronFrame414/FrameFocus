@@ -951,13 +951,26 @@ OUTPUT  The next invoice nets $5,000 lower; QB sees the smaller invoice,
    by edited fixed amount — where each percentage draw prices off the **ORIGINAL contract value**
    (a signed CO never re-prices the draws) and the **final draw bills the remainder**, never a
    fresh percentage (§2, trace G).
-2. A single invoice can pull from the estimate **and** ≥2 COs at once.
+2. A single invoice can pull from the estimate **and** ≥2 COs at once. — **BUILT AND PROVEN
+   [S97, 2026-08-03].** Was FALSE from the original build (missed, never flagged): the pin was
+   always per LINE with a per-ROW XOR, but `DeriveServerInput` took a singular instrument, the
+   derive cleared every derived line before writing, and the instrument switch was a page
+   navigation that discarded the selection. Now: derive takes one selection PER INSTRUMENT, the
+   switch is tabs over one held selection, and hours default to the ORIGINAL CONTRACT and are
+   reassignable per person-day. Proof: `apps/web/test/s97ct-multi-instrument.live.ts` — one
+   invoice, three instruments, three contract types. **Zero migration.**
 3. A standalone invoice built in estimate/CO format posts its amounts **and categories** into
    project finances.
 4. A deposit invoice is a fixed-amount invoice; it credits to budget (or is credited once a budget
    is set) and can be refunded in full or part.
-5. Retainage defaults from the project setting, is editable per invoice, and is **never** applied to
-   a deposit or T&M invoice. The invoice's receivable is the amount **net of retainage**; the
+5. **[amended S97, 2026-08-03 — retainage is PER LINE]** Retainage defaults from the project
+   setting, is editable per invoice, and is **never** applied to a deposit or to **T&M money**.
+   _Superseded phrasing: "never applied to a deposit or T&M **invoice**"_ — which was expressible
+   as one invoice-level boolean only while an invoice carried one instrument. With #2 real, a
+   fixed-price draw and a T&M change order share invoices, so the retainage BASE is now the sum of
+   positive billed amounts on **retainage-eligible lines only**, decided per line from that line's
+   instrument. The deposit half stays invoice-level. Retainage defaults from the project setting,
+   is editable per invoice, and is The invoice's receivable is the amount **net of retainage**; the
    withheld amount shows separately and does not age.
 6. A signed CO prompts bill-now vs. next-invoice.
 7. A material-selection overage auto-generates a **draft** difference invoice and prompts bill-now vs.
@@ -1000,8 +1013,13 @@ OUTPUT  The next invoice nets $5,000 lower; QB sees the smaller invoice,
 18. **[S97]** An invoice can be delivered by email or printed (skip email); both save it to the
     project. The emailed invoice carries a **pay link + PDF where QuickBooks Payments is
     connected**, and **PDF only, with no payment button, where it is not** (7G §7G.2 #3).
-19. **[S97, extended]** All three presentation levels are selectable per invoice, and **full detail
-    renders as layout A** — actual cost per line, then a separate subtotal and markup line covering
+19. **[S97, extended; grouped by instrument S97 2026-08-03]** All three presentation levels are
+    selectable per invoice. **Full detail groups BY INSTRUMENT**, each group carrying its own
+    subtotal and markup line — two instruments with different markup rates cannot honestly share
+    one markup line. A single-instrument invoice renders exactly as before, with no group heading.
+    **By section stays CATEGORY-only** across the invoice (a section total exposes no cost and no
+    markup, so it cannot misstate a rate) and **lump sum is unaffected**. Within each group, full
+    detail renders as layout A — actual cost per line, then a separate subtotal and markup line covering
     **non-labor only**, with **unburdened** cost. Crew labor renders as its **own hours @ rate line
     OUTSIDE** the subtotal/markup block (cost-plus/T&M) and as a **single total, no markup shown**,
     on fixed-price (§11).
