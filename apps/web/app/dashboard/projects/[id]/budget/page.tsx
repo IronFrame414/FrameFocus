@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase-server';
 import { notFound, redirect } from 'next/navigation';
 import { getProject } from '@/lib/services/projects';
 import { getBudgetRollup, type InstrumentGroup } from '@/lib/services/budget';
+import { getProjectIncome } from '@/lib/services/project-income';
 import { getRevisedContract } from '@/lib/services/contract-value';
 import { budgetColumnsFor } from '@/lib/services/invoices-shared';
 import { getExpenses, getJobCostRollup } from '@/lib/services/expenses';
@@ -109,6 +110,12 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
     getExpenses({ project_id: params.id }),
     seesPayables ? getPayablesSummary(params.id) : Promise.resolve(null),
   ]);
+
+  // §2 [S97] — standalone invoice lines as INCOME. Owner/Admin only: this is a
+  // SELL figure ABOUT THE JOB, so it sits with contract value and budget under
+  // the Financial Visibility Floor. §12a's carve-out lets a PM see amounts ON
+  // an invoice they can reach; it does not extend to a job-level roll-up.
+  const income = isOwnerAdmin ? await getProjectIncome(params.id) : null;
   const members = isOwnerAdmin ? await getMembers() : [];
   const memberNames: Record<string, string> = Object.fromEntries(
     members.map((m) => [m.id, m.display_name])
@@ -604,6 +611,133 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                   : '—'}
               </span>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* §2 [S97] — STANDALONE INVOICE INCOME, its OWN INDEPENDENT SECTION.
+          Josh's ruling: manual invoice items are NEW INCOME LINES, presented
+          the way CO lines are.
+
+          IT IS A SEPARATE CARD, NOT A ROW IN THE BUDGET TABLE, and that is
+          deliberate: the table above is COST (Budget / Committed / Actual /
+          Cost to date / Variance). Income is a different quantity — a
+          standalone line has no cost, no commitment and no variance — so
+          putting it in those columns would state figures that do not exist.
+          The section grammar is the same as an instrument section (labelled
+          header with a pill, grouped rows, a subtotal), which is what "the way
+          CO lines are" means.
+
+          DERIVED FROM NON-VOIDED INVOICES. Voiding removes these with no
+          cleanup step — see project-income.ts for why storing them could not
+          have been undone. */}
+      {income && income.groups.length > 0 && (
+        <div style={{ ...cardStyle, marginBottom: '18px', overflow: 'hidden' }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px',
+              padding: '10px 20px',
+              backgroundColor: color.tableHeadBg,
+              borderBottom: `1px solid ${color.rowDivider}`,
+            }}
+          >
+            <span style={{ fontFamily: font.sans, fontSize: '13px', fontWeight: 700, color: color.navy }}>
+              Standalone invoice income
+            </span>
+            <span
+              style={{
+                fontSize: '10px',
+                fontWeight: 700,
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                color: color.navy,
+                backgroundColor: color.cardBg,
+                border: `1px solid ${color.cardBorder}`,
+                borderRadius: '999px',
+                padding: '1px 8px',
+              }}
+            >
+              Income
+            </span>
+            <span style={{ fontSize: '11px', color: color.faint }}>
+              billed directly on an invoice, with nothing upstream to inherit from (§2)
+            </span>
+          </div>
+
+          {income.groups.map((group) => (
+            <div key={group.category}>
+              <div
+                style={{
+                  padding: '6px 20px',
+                  backgroundColor: color.cardBg,
+                  borderBottom: `1px solid ${color.rowDivider}`,
+                }}
+              >
+                <span style={microLabelStyle}>{group.label}</span>
+              </div>
+              {group.lines.map((line) => (
+                <div
+                  key={line.invoiceLineId}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '2.4fr 1.2fr 1fr',
+                    gap: '12px',
+                    alignItems: 'center',
+                    padding: '8px 20px',
+                    borderBottom: `1px solid ${color.rowDivider}`,
+                  }}
+                >
+                  <span style={{ fontSize: '13px', color: color.body }}>{line.description}</span>
+                  <span style={{ fontSize: '12px', color: color.faint }}>
+                    {line.invoiceNumber ?? 'Draft'}
+                    {line.invoiceStatus === 'draft' || line.invoiceStatus === 'pending_approval'
+                      ? ' · not yet sent'
+                      : ''}
+                  </span>
+                  <span style={moneyCell}>{money(line.amount)}</span>
+                </div>
+              ))}
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '2.4fr 1.2fr 1fr',
+                  gap: '12px',
+                  alignItems: 'center',
+                  padding: '8px 20px',
+                  borderBottom: `1px solid ${color.rowDivider}`,
+                }}
+              >
+                <span style={{ gridColumn: '1 / span 2', fontSize: '13px', fontWeight: 600, color: color.body }}>
+                  {group.label} subtotal
+                </span>
+                <span style={{ ...moneyCell, fontWeight: 600 }}>{money(group.amount)}</span>
+              </div>
+            </div>
+          ))}
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '2.4fr 1.2fr 1fr',
+              gap: '12px',
+              alignItems: 'center',
+              padding: '14px 20px',
+              backgroundColor: color.tableHeadBg,
+            }}
+          >
+            <span style={{ gridColumn: '1 / span 2', fontFamily: font.sans, fontSize: '14px', fontWeight: 700, color: color.navy }}>
+              Total standalone income
+              {income.draftTotal > 0 && (
+                <span style={{ fontSize: '11px', fontWeight: 400, color: color.faint, marginLeft: '8px' }}>
+                  incl. {money(income.draftTotal)} not yet sent
+                </span>
+              )}
+            </span>
+            <span style={{ ...moneyCell, fontSize: '14px', fontWeight: 700 }}>
+              {money(income.total)}
+            </span>
           </div>
         </div>
       )}
