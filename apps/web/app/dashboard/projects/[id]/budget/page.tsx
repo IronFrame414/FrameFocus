@@ -205,7 +205,10 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
           ...(contractBilling && contractBilling.remainingToBill !== null
             ? [
                 {
-                  label: 'Remaining to bill',
+                  // [S97] SCOPED. It read as the JOB's remaining while showing
+                  // only the ORIGINAL CONTRACT's — on a job with $298,897.26 of
+                  // signed COs that understated by exactly the CO book.
+                  label: 'Remaining on original contract',
                   value: money(contractBilling.remainingToBill),
                   valueColor:
                     contractBilling.remainingToBill < 0 ? color.warningDeep : color.navy,

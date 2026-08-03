@@ -202,7 +202,17 @@ export default async function InvoicesPage({ params }: { params: { id: string } 
               amount on an invoice being created, so it stays Owner/Admin.
               A PM sees the billed/retainage/receivable figures beside it. */}
           {contractValue !== null && canSeeContractValue && (
-            <Figure label="Original contract" value={contractValue} muted />
+            <Figure
+              // [S97] P11 — on a non-fixed project this is the user-entered
+              // PROJECTION, not a contract. Same branch as Budget & Cost.
+              label={
+                project.project_type === 'fixed_price'
+                  ? 'Original contract'
+                  : 'Projected value (non-binding)'
+              }
+              value={contractValue}
+              muted
+            />
           )}
         </div>
       )}

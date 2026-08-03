@@ -47,6 +47,26 @@ export interface PortfolioRevisedContract {
   /** How many projects actually contributed a value. Zero below Owner/Admin,
    *  which lets a caller tell "no contracts" apart from "not permitted". */
   visibleCount: number;
+
+  // ── THE SPLIT [S97, 2026-08-03] ────────────────────────────────────────────
+  //
+  // revisedSum above mixes two incompatible quantities and always did: on a
+  // FIXED-PRICE project contract_value is a BINDING obligation, and on a
+  // cost-plus/T&M one it is the USER-ENTERED PROJECTION that P11 forbids from
+  // billing math. Adding them produced a headline that is neither — the same
+  // category error as calling a projection "Revised Contract", one level up.
+  //
+  // Both figures are kept: revisedSum stays for any caller that genuinely wants
+  // the gross, and the two halves below let a surface show them apart. The
+  // dashboard KPI shows them apart.
+
+  /** Revised contract across active FIXED-PRICE projects — binding. */
+  fixedRevisedSum: number;
+  fixedCount: number;
+  /** Revised PROJECTION across active cost-plus / T&M projects — non-binding,
+   *  and never to be summed with the figure above in a single headline. */
+  projectedRevisedSum: number;
+  projectedCount: number;
 }
 
 function toRevised(original: number | null, signedDelta: number): RevisedContract {
@@ -319,36 +339,67 @@ export async function getPortfolioRevisedContract(): Promise<PortfolioRevisedCon
 
   const { data: active } = await supabase
     .from('projects')
-    .select('id')
+    .select('id, project_type')
     .eq('status', 'active')
     .eq('is_deleted', false);
 
   const activeIds = (active ?? []).map((p) => p.id);
+  const isFixedById = new Map(
+    (active ?? []).map((p) => [p.id, p.project_type === 'fixed_price'])
+  );
 
   // RLS on project_financials does the gating: Owner/Admin get rows, everyone
   // else gets none, so the sum is 0 and visibleCount is 0.
   const { data: financials } = activeIds.length
     ? await supabase
         .from('project_financials')
-        .select('contract_value')
+        .select('project_id, contract_value')
         .in('project_id', activeIds)
-    : { data: [] as { contract_value: number | null }[] };
+    : { data: [] as { project_id: string; contract_value: number | null }[] };
 
   const { data: cos } = activeIds.length
     ? await supabase
         .from('change_orders')
-        .select('net_delta')
+        .select('project_id, net_delta')
         .in('project_id', activeIds)
         .match(CONTRACT_CONTRIBUTING_CO_FILTER)
-    : { data: [] as { net_delta: number }[] };
+    : { data: [] as { project_id: string; net_delta: number }[] };
 
-  const originalSum = (financials ?? []).reduce((sum, f) => sum + (f.contract_value ?? 0), 0);
-  const signedDeltaSum = (cos ?? []).reduce((sum, co) => sum + (co.net_delta ?? 0), 0);
+  let originalSum = 0;
+  let fixedRevisedSum = 0;
+  let projectedRevisedSum = 0;
+  let fixedCount = 0;
+  let projectedCount = 0;
+  for (const f of financials ?? []) {
+    const value = f.contract_value ?? 0;
+    originalSum += value;
+    if (isFixedById.get(f.project_id)) {
+      fixedRevisedSum += value;
+      fixedCount += 1;
+    } else {
+      projectedRevisedSum += value;
+      projectedCount += 1;
+    }
+  }
+
+  let signedDeltaSum = 0;
+  for (const co of cos ?? []) {
+    const delta = co.net_delta ?? 0;
+    signedDeltaSum += delta;
+    // A CO's delta belongs to whichever side its PROJECT is on, so each half
+    // stays internally consistent rather than mixing at the delta level.
+    if (isFixedById.get(co.project_id)) fixedRevisedSum += delta;
+    else projectedRevisedSum += delta;
+  }
 
   return {
     originalSum,
     signedDeltaSum,
     revisedSum: originalSum + signedDeltaSum,
     visibleCount: (financials ?? []).length,
+    fixedRevisedSum: Math.round(fixedRevisedSum * 100) / 100,
+    fixedCount,
+    projectedRevisedSum: Math.round(projectedRevisedSum * 100) / 100,
+    projectedCount,
   };
 }

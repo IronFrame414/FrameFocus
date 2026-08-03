@@ -93,6 +93,14 @@ export default async function ProjectOverviewPage({ params }: { params: { id: st
   // 7B: revised contract from the single legal derivation (contract-value.ts).
   const revisedContract = contract.revised;
 
+  // [S97] P11 — on a NON-FIXED project this base is estimates.projected_value,
+  // a user-entered projection that must never read as a binding contract.
+  // Budget & Cost already branches like this; it is the reference
+  // implementation and these surfaces now match it.
+  const isFixed = project.project_type === 'fixed_price';
+  const contractLabel = isFixed ? 'Revised Contract' : 'Projected Value, revised';
+  const originalLabel = isFixed ? 'Original contract' : 'Projected value (non-binding)';
+
   const today = new Date().toISOString().slice(0, 10);
   const daysToTarget = project.target_end_date
     ? Math.round(
@@ -106,7 +114,7 @@ export default async function ProjectOverviewPage({ params }: { params: { id: st
     ...(canSeeFinancials
       ? [
           {
-            label: 'Revised Contract',
+            label: contractLabel,
             value: revisedContract !== null ? money(revisedContract) : '—',
             valueColor: revisedContract !== null ? color.navy : color.faint,
           },
@@ -515,9 +523,11 @@ export default async function ProjectOverviewPage({ params }: { params: { id: st
             </div>
             {canSeeFinancials && (
               <div style={detailRow}>
-                <span style={detailKey}>Contract Value</span>
+                <span style={detailKey}>{isFixed ? 'Contract Value' : 'Projected Value'}</span>
                 {/* 7B: Revised is the headline figure; Original captions it
-                    only when signed COs have moved the total (§4). */}
+                    only when signed COs have moved the total (§4).
+                    [S97] On a non-fixed project both figures are the
+                    NON-BINDING projection (P11), and say so. */}
                 <span style={{ fontFamily: font.mono, fontWeight: 600, textAlign: 'right' }}>
                   {money(contract.revised)}
                   {contract.signedDelta !== 0 && (
@@ -530,7 +540,7 @@ export default async function ProjectOverviewPage({ params }: { params: { id: st
                         color: color.faint,
                       }}
                     >
-                      Original: {money(contract.original)}
+                      {originalLabel}: {money(contract.original)}
                     </span>
                   )}
                 </span>

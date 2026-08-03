@@ -202,7 +202,11 @@ export function ProjectsList({
             <span style={microLabelStyle}>Type</span>
             <span style={microLabelStyle}>Status</span>
             {canSeeFinancials && (
-              <span style={{ ...microLabelStyle, textAlign: 'right' }}>Contract</span>
+              // [S97] "Contract / projected" — one header over rows of BOTH
+              // kinds, so it cannot claim either. The per-row qualifier below
+              // is what disambiguates each figure (P11: a cost-plus/T&M value
+              // is a non-binding projection, never a contract).
+              <span style={{ ...microLabelStyle, textAlign: 'right' }}>Contract / projected</span>
             )}
           </div>
 
@@ -252,6 +256,21 @@ export function ProjectsList({
                   }}
                 >
                   {money(revisedContracts[p.id] ?? null)}
+                  {/* [S97] PER-ROW QUALIFIER. A projected row is marked; a
+                      contract row is not, so the unmarked case stays clean. */}
+                  {p.project_type !== 'fixed_price' && (revisedContracts[p.id] ?? null) !== null && (
+                    <span
+                      style={{
+                        display: 'block',
+                        fontFamily: font.sans,
+                        fontSize: '10px',
+                        fontWeight: 400,
+                        color: color.faint,
+                      }}
+                    >
+                      projected
+                    </span>
+                  )}
                 </span>
               )}
             </div>

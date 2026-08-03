@@ -64,12 +64,28 @@ export default async function DashboardPage() {
       captionColor: kpis.pastTargetCount === 0 ? color.success : color.warning,
       captionWeight: 600,
     },
-    ...(canSeeFinancials
+    // [S97] SPLIT, not captioned. One "Contract Value" card summed a BINDING
+    // obligation (fixed-price) with a NON-BINDING projection (cost-plus/T&M) —
+    // P11 forbids the second from billing math, and a headline that adds them
+    // is neither figure. Each half is now its own card, and a card with nothing
+    // behind it does not render at all rather than showing a misleading zero.
+    ...(canSeeFinancials && kpis.contractValueFixedCount > 0
       ? [
           {
             label: 'Contract Value',
-            value: compactMoney(kpis.contractValue),
-            caption: 'across active jobs',
+            value: compactMoney(kpis.contractValueFixed),
+            caption: `${kpis.contractValueFixedCount} fixed-price job${kpis.contractValueFixedCount === 1 ? '' : 's'}`,
+            captionColor: color.muted,
+            captionWeight: 400,
+          },
+        ]
+      : []),
+    ...(canSeeFinancials && kpis.contractValueProjectedCount > 0
+      ? [
+          {
+            label: 'Projected Value',
+            value: compactMoney(kpis.contractValueProjected),
+            caption: `${kpis.contractValueProjectedCount} cost-plus / T&M · non-binding`,
             captionColor: color.muted,
             captionWeight: 400,
           },
