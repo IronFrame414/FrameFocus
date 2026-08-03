@@ -244,6 +244,92 @@ export async function addDrawLine(
   return addFixedLine({ invoiceId, description: draw.label, amount, sourceEstimateId });
 }
 
+// ── §2 — bill the estimate's LINE ITEMS (S97 ruling) ────────────────────────
+
+export interface EstimateLineSelection {
+  lineItemId: string;
+  description: string;
+  category: 'labor' | 'material' | 'subcontractor' | 'other';
+  /** The portion of this line's REMAINING that this invoice bills. */
+  amount: number;
+}
+
+/**
+ * §2 — write the selected estimate line items onto the invoice, plus (once)
+ * the whole-estimate discount they are net of.
+ *
+ * EVERY LINE CARRIES THE CONTRACT INSTRUMENT. That single fact makes four
+ * other things correct with no extra code:
+ *   - remaining-to-bill (§3) already sums contract-instrument lines
+ *   - the FINAL draw's remainder (rule b) already consumes the same sum
+ *   - the per-line retainage split (§5) classifies it by the contract's type
+ *   - the DB contract ceiling counts it, so draws and line items share ONE
+ *     remaining and cannot jointly over-bill
+ *
+ * The lines are written one at a time rather than in a batch: the ceiling
+ * trigger is per row, and a partial write that stops at the offending line is
+ * more useful than a whole batch rejected with one message.
+ */
+export async function billEstimateLines(input: {
+  invoiceId: string;
+  sourceEstimateId: string;
+  selections: EstimateLineSelection[];
+  /** §8 — the whole-estimate discount to bring across, if not already applied.
+   *  Positive; written NEGATIVE. */
+  discount?: number;
+  discountLabel?: string;
+}): Promise<Result> {
+  const supabase = createClient();
+  if (input.selections.length === 0 && !input.discount) {
+    return { success: false, error: 'Nothing is selected to bill.' };
+  }
+
+  const { data: last } = await supabase
+    .from('invoice_lines')
+    .select('sort_order')
+    .eq('invoice_id', input.invoiceId)
+    .order('sort_order', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  let sortOrder = (last?.sort_order ?? -1) + 1;
+
+  for (const sel of input.selections) {
+    if (!(sel.amount > 0)) continue;
+    const { error } = await supabase.from('invoice_lines').insert({
+      invoice_id: input.invoiceId,
+      line_type: 'fixed',
+      description: sel.description,
+      category: sel.category,
+      billed_amount: sel.amount,
+      derived_amount: sel.amount,
+      source_estimate_id: input.sourceEstimateId,
+      source_estimate_line_item_id: sel.lineItemId,
+      sort_order: sortOrder++,
+    });
+    if (error) return { success: false, error: error.message };
+  }
+
+  // The discount goes on LAST, so the ceiling sees the positive lines first and
+  // a genuine over-bill is reported against the line that caused it rather than
+  // being masked by a credit that happened to be inserted earlier.
+  if (input.discount && input.discount > 0) {
+    const { error } = await supabase.from('invoice_lines').insert({
+      invoice_id: input.invoiceId,
+      line_type: 'discount',
+      description: input.discountLabel ?? 'Contract discount',
+      billed_amount: -input.discount,
+      derived_amount: -input.discount,
+      // Attributed to the CONTRACT so the ceiling nets it: Σ line items is the
+      // estimate SUBTOTAL, which exceeds grand_total by exactly this.
+      source_estimate_id: input.sourceEstimateId,
+      sort_order: sortOrder++,
+    });
+    if (error) return { success: false, error: error.message };
+  }
+
+  return { success: true };
+}
+
 // ── §8 discount + §3a/§4a/§4b credit lines (all negative) ───────────────────
 
 export async function addDiscountLine(

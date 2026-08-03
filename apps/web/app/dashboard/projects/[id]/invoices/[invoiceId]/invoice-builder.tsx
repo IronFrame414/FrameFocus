@@ -15,6 +15,7 @@ import {
   addDiscountLine,
   addDrawLine,
   addFixedLine,
+  billEstimateLines,
   addNegativeCoCredit,
   applyDepositCredit,
   approveInvoice,
@@ -34,6 +35,7 @@ import {
   lineInstrumentKey,
 } from '@/lib/services/invoices-shared';
 import type { InvoiceDelivery } from '@/lib/services/invoice-delivery-shared';
+import type { EstimateLineBilling } from '@/lib/services/estimate-line-billing';
 import { InvoiceDeliveryPanel } from './invoice-delivery-panel';
 import type {
   AvailableCredit,
@@ -77,6 +79,8 @@ interface InvoiceBuilderProps {
    *  ORIGINAL CONTRACT. */
   defaultInstrumentKey: string | null;
   sourceEstimateId: string | null;
+  /** §2 [S97] — the contract's estimate line items, with per-line remaining. */
+  estimateLines: EstimateLineBilling;
   /** Keyed by instrument key; only DERIVED instruments have an entry. */
   pickableCostsByInstrument: Record<string, PickableCost[]>;
   pickableHours: PickableHour[];
@@ -126,6 +130,7 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
     instrumentTypes,
     defaultInstrumentKey,
     sourceEstimateId,
+    estimateLines,
     pickableCostsByInstrument,
     pickableHours,
     availableCredits,
@@ -512,6 +517,20 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
         </div>
       )}
 
+      {/* §2 [S97] — the CONTRACT'S ESTIMATE LINE ITEMS. Josh's ruling: bring
+          them ALL across, ALL SELECTED BY DEFAULT; the user deselects what this
+          invoice should not carry. Fixed-price contract only. */}
+      {isDraft && pickerOpen && drawsAvailable && estimateLines.lines.length > 0 && (
+        <EstimateLinePanel
+          invoiceId={invoice.id}
+          sourceEstimateId={estimateLines.estimateId as string}
+          billing={estimateLines}
+          instrumentTypes={instrumentTypes}
+          busy={busy}
+          run={run}
+        />
+      )}
+
       {/* §2 — fixed-price draws, against the ORIGINATING CONTRACT. Shown
           whenever that contract is fixed-price, even if a derived CO also sits
           on this invoice: a mixed invoice can carry a contract draw AND a CO's
@@ -839,6 +858,184 @@ function pillStyle(active: boolean): React.CSSProperties {
     color: active ? '#fff' : color.body,
     backgroundColor: active ? color.primary : 'transparent',
   };
+}
+
+// ── §2 — the contract's ESTIMATE LINE ITEMS [S97] ───────────────────────────
+
+function EstimateLinePanel({
+  invoiceId,
+  sourceEstimateId,
+  billing,
+  instrumentTypes,
+  busy,
+  run,
+}: {
+  invoiceId: string;
+  sourceEstimateId: string;
+  billing: EstimateLineBilling;
+  instrumentTypes: InstrumentTypes;
+  busy: boolean;
+  run: (fn: () => Promise<{ success: boolean; error?: string }>, msg?: string) => Promise<boolean>;
+}) {
+  // ALL SELECTED BY DEFAULT — the ruling. The user DESELECTS.
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set(billing.lines.map((l) => l.lineItemId))
+  );
+  const [percent, setPercent] = useState('');
+
+  const pct = (() => {
+    if (percent.trim() === '') return 100;
+    const n = Number(percent);
+    return Number.isFinite(n) && n > 0 && n <= 100 ? n : 100;
+  })();
+
+  // §6.2a's rule, reused rather than restated: the LAST claim on a line bills
+  // the EXACT REMAINDER, so partials sum to the whole with nothing stranded.
+  const amountFor = (remaining: number) => partialClaimAmount(remaining, pct);
+
+  const chosen = billing.lines.filter((l) => selected.has(l.lineItemId));
+  const total = chosen.reduce((s, l) => s + amountFor(l.remaining), 0);
+  // The whole-estimate discount goes across ONCE, with the first billing, so
+  // the invoice closes at the contract value rather than the subtotal.
+  const discount = billing.undiscounted > 0 && pct >= 100 && selected.size === billing.lines.length
+    ? billing.undiscounted
+    : 0;
+
+  return (
+    <div style={{ ...cardStyle, overflow: 'hidden' }}>
+      <div style={{ padding: '12px 16px', borderBottom: `1px solid ${color.cardBorder}` }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+          <div>
+            <span style={microLabelStyle}>Contract line items</span>
+            <span style={{ fontSize: '11px', color: color.faint, marginLeft: '8px' }}>
+              all selected — untick what this invoice should not carry (§2)
+            </span>
+          </div>
+          <label style={{ fontSize: '12px', color: color.body, display: 'inline-flex', gap: '6px', alignItems: 'center', whiteSpace: 'nowrap' }}>
+            Bill
+            <input
+              value={percent}
+              onChange={(e) => setPercent(e.target.value)}
+              placeholder="100"
+              inputMode="decimal"
+              disabled={busy}
+              style={{ ...inputStyle, width: '64px', textAlign: 'right' }}
+            />
+            % of each line
+          </label>
+        </div>
+        {pct < 100 && (
+          <p style={{ fontSize: '11px', color: color.faint, margin: '6px 0 0' }}>
+            Each ticked line bills {pct}% of what is still unbilled on it; the rest stays available
+            for a later invoice.
+          </p>
+        )}
+      </div>
+
+      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <thead>
+          <tr>
+            <th style={{ ...thStyle, width: '34px' }}>
+              <input
+                type="checkbox"
+                disabled={busy}
+                checked={selected.size === billing.lines.length}
+                onChange={(e) =>
+                  setSelected(
+                    e.target.checked ? new Set(billing.lines.map((l) => l.lineItemId)) : new Set()
+                  )
+                }
+              />
+            </th>
+            <th style={thStyle}>Line item</th>
+            <th style={thStyle}>Section</th>
+            <th style={{ ...thStyle, textAlign: 'right' }}>Unbilled</th>
+            <th style={{ ...thStyle, textAlign: 'right' }}>This invoice</th>
+          </tr>
+        </thead>
+        <tbody>
+          {billing.lines.map((l) => (
+            <tr key={l.lineItemId}>
+              <td style={tdStyle}>
+                <input
+                  type="checkbox"
+                  disabled={busy}
+                  checked={selected.has(l.lineItemId)}
+                  onChange={(e) => {
+                    const next = new Set(selected);
+                    if (e.target.checked) next.add(l.lineItemId);
+                    else next.delete(l.lineItemId);
+                    setSelected(next);
+                  }}
+                />
+              </td>
+              <td style={tdStyle}>
+                {l.name}
+                {l.costCode && (
+                  <div style={{ fontSize: '11px', color: color.faint }}>{l.costCode}</div>
+                )}
+              </td>
+              <td style={{ ...tdStyle, color: color.mutedAlt }}>{l.category}</td>
+              <td style={{ ...tdStyle, textAlign: 'right', fontFamily: font.mono }}>
+                {money(l.remaining)}
+                {l.billed > 0 && (
+                  <div style={{ fontSize: '11px', color: color.faint }}>
+                    of {money(l.sell)} — {money(l.billed)} already billed
+                  </div>
+                )}
+              </td>
+              <td style={{ ...tdStyle, textAlign: 'right', fontFamily: font.mono, color: selected.has(l.lineItemId) ? color.body : color.faint }}>
+                {selected.has(l.lineItemId) ? money(amountFor(l.remaining)) : '—'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <div style={{ padding: '10px 16px', borderTop: `1px solid ${color.cardBorder}`, display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <button
+          type="button"
+          disabled={busy || chosen.length === 0}
+          style={primaryButtonStyle}
+          onClick={() =>
+            run(
+              () =>
+                billEstimateLines({
+                  invoiceId,
+                  sourceEstimateId,
+                  selections: chosen.map((l) => ({
+                    lineItemId: l.lineItemId,
+                    description: l.name,
+                    category: l.category,
+                    amount: amountFor(l.remaining),
+                  })),
+                  discount,
+                  discountLabel: 'Contract discount',
+                }).then(async (r) =>
+                  r.success ? recalculateInvoiceTotals(invoiceId, { instrumentTypes }) : r
+                ),
+              `${chosen.length} line ${chosen.length === 1 ? 'item' : 'items'} billed.`
+            )
+          }
+        >
+          Bill selected lines
+        </button>
+        <span style={{ fontSize: '12px', color: color.faint }}>
+          {chosen.length} of {billing.lines.length} selected · {money(total)}
+          {discount > 0 && ` less ${money(discount)} contract discount`}
+        </span>
+      </div>
+
+      {billing.undiscounted > 0 && discount === 0 && (
+        <div style={{ padding: '10px 16px', backgroundColor: '#fffbeb', color: color.warningDeep, fontSize: '12px' }}>
+          This estimate carries a {money(billing.undiscounted)} whole-contract discount. The line
+          prices above are the pre-discount subtotal, so billing all of them at 100% is what brings
+          the discount across and lands exactly on the contract value. Billing a subset now leaves
+          the discount to be applied later — add it as a discount line (§8) when you do.
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ── §2 / trace G — draws ────────────────────────────────────────────────────

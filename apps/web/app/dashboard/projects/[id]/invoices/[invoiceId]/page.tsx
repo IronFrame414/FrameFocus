@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
 import { getInvoiceDeliveries } from '@/lib/services/invoice-delivery';
 import { getContractBilling } from '@/lib/services/contract-value';
+import { getEstimateLineBilling } from '@/lib/services/estimate-line-billing';
 import { getProject } from '@/lib/services/projects';
 import { getChangeOrders } from '@/lib/services/change-orders';
 import { getCompanyTimeSettings } from '@/lib/services/company';
@@ -151,6 +152,14 @@ export default async function InvoiceDetailPage({
   // — DrawPanel refuses to price a percentage draw in both cases rather than
   // falling back to zero.
   const contractBilling = await getContractBilling(params.id, params.invoiceId);
+
+  // §2 [S97] — the estimate's LINE ITEMS, with what is left to bill on each.
+  // Fixed-price contract only: a derived instrument bills from incurred cost
+  // and worked hours (§6/§7), not from the estimate's agreed prices.
+  const estimateLines =
+    !isDerivedContract(projectType) && project.source_estimate_id
+      ? await getEstimateLineBilling(params.id)
+      : { estimateId: project.source_estimate_id ?? null, lines: [], undiscounted: 0 };
   const alreadyBilled =
     Math.round(
       (contractBilling.issuedAgainstContract + contractBilling.draftAgainstContract) * 100
@@ -179,6 +188,7 @@ export default async function InvoiceDetailPage({
        *  CO per person-day (Josh's ruling, S97). */
       defaultInstrumentKey={instruments[0]?.key ?? null}
       sourceEstimateId={project.source_estimate_id ?? null}
+      estimateLines={estimateLines}
       pickableCostsByInstrument={pickableCostsByInstrument}
       pickableHours={pickableHours}
       availableCredits={credits}
