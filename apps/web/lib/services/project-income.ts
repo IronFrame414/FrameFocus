@@ -1,3 +1,4 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase-server';
 import type { RowCategory } from '@framefocus/shared/utils/invoice-derivation';
 
@@ -98,10 +99,15 @@ const ORDER: Array<RowCategory | 'uncategorized'> = [
  *
  * A VOIDED invoice contributes nothing, and neither does a soft-deleted one.
  * That is the removal the ruling asks for, and it costs one predicate.
+ *
+ * Takes the CLIENT so the live harness can exercise this exact function rather
+ * than a hand-copied version of its query — the deriveInvoiceLines precedent.
+ * Production passes the RLS-scoped server client; the harness passes admin.
  */
-export async function getProjectIncome(projectId: string): Promise<ProjectIncome> {
-  const supabase = await createClient();
-
+export async function loadProjectIncome(
+  supabase: SupabaseClient,
+  projectId: string
+): Promise<ProjectIncome> {
   const { data: invoices } = await supabase
     .from('invoices')
     .select('id, invoice_number, title, status, issue_date')
@@ -165,4 +171,10 @@ export async function getProjectIncome(projectId: string): Promise<ProjectIncome
   });
 
   return { groups, total, draftTotal };
+}
+
+/** Server wrapper — RLS-scoped, used by the project financial page. */
+export async function getProjectIncome(projectId: string): Promise<ProjectIncome> {
+  const supabase = await createClient();
+  return loadProjectIncome(supabase as unknown as SupabaseClient, projectId);
 }
