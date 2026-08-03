@@ -115,7 +115,54 @@ enhancement alongside the AIA work, **not a v1 change**.]**
 
 An invoice is created by one of:
 
-- **Convert an estimate** into an invoice.
+- **Convert an estimate** into an invoice. — **BUILT [S97, 2026-08-03 — RULED by Josh].** _Was
+  FALSE: what existed was only the DRAW (a percentage of the contract total, one lump line), so a
+  fixed-price invoice could never carry the estimate's items and §11's full-detail and by-section
+  levels had nothing to render. Acceptance #1 tests only the draw half, which is why a complete
+  test pass left the gap invisible — a **narrower failure mode than #2's outright miss or #3's
+  lost-in-transit**: nothing was dropped, the check itself was too small._
+  - **Converting brings ALL the estimate's line items across, ALL SELECTED BY DEFAULT.** The user
+    DESELECTS what this invoice should not carry.
+  - **Grain is `estimate_line_items`** — the client-facing unit carrying the agreed sell price
+    (`total_price_override` wins over `total_price`). `estimate_line_rows` underneath supplies the
+    §11 **category** only: one row type throughout → that type; mixed or none → `other`.
+  - **Per-line remaining is DERIVED**, `sell − Σ billed on live invoice_lines`, via
+    `invoice_lines.source_estimate_line_item_id`. No claim table, no stored balance; void
+    self-corrects with no cleanup. Partial billing reuses §6.2a's `partialClaimAmount`, so the
+    **last claim bills the exact remainder** and partials sum to the whole.
+  - **Presentation is per invoice** (§11) and now has real content on fixed-price.
+  - Implementation `apps/web/lib/services/estimate-line-billing.ts`; proof
+    `apps/web/test/s97ct-estimate-lines.live.ts`.
+
+  #### THE CONTRACT CEILING — draws and line items share ONE remaining
+
+  A percentage **draw** claims no particular line, so no per-line ceiling can see it: a 30% draw
+  plus 80% of the line items is a **110% invoice in which every individual figure is legal**. The
+  ceiling therefore lives at the CONTRACT and is enforced in the DB
+  (`enforce_contract_billing_ceiling`, migration `20260821000000`):
+
+  ```
+  Σ signed billed_amount over contract-instrument lines on LIVE invoices
+    ≤ project_financials.contract_value
+  ```
+
+  - **SIGNED**, so a contract-attributed discount nets off.
+  - **DRAFTS COUNT** — otherwise two drafts could each bill the whole contract and both become
+    sendable.
+  - **FIXED-PRICE ONLY.** On cost-plus/T&M, `contract_value` holds the user-entered **projection**,
+    and **P11 forbids that figure from billing math** — enforcing a ceiling from it would *be* the
+    violation P11 names.
+  - **Lock before read:** the `project_financials` row is taken `FOR UPDATE` before the sibling sum,
+    the same pattern as `invoice_cost_claims_within_allocation` and `allocate_invoice_number`.
+  - Voiding frees the headroom again, with no cleanup.
+
+  #### The whole-estimate discount
+
+  Per `estimate-totals.ts`, `Σ line total_price = SUBTOTAL` while a fixed-price contract value is
+  `grand_total = subtotal − whole-estimate discount`. Billing every line without it would exceed
+  the contract by exactly that discount. **Conversion therefore brings the discount across as an
+  ordinary §8 discount line attributed to the contract**, so the ceiling nets it and the total
+  closes exactly on the contract value.
 - **Convert one or more change orders** into an invoice.
 - **Convert several sources at once** — an invoice may pull from the estimate and multiple COs
   together.
@@ -179,7 +226,10 @@ An invoice is created by one of:
 
 **Detail format on the invoice:** mirrors the source's format (the user-chosen estimate/CO
 presentation format). Standalone invoices use that same format. See §11 for the per-invoice
-detail-level choice.
+detail-level choice. **[S97, 2026-08-03] NOW TRUE ON FIXED-PRICE.** This was unreachable while the
+only fixed-price line source was a draw — one lump line, whatever the estimate's format. With the
+estimate's line items billable, each carrying its name and its §11 category, full detail and
+by-section both render the estimate's own structure.
 
 ---
 
@@ -1090,7 +1140,10 @@ OUTPUT  The next invoice nets $5,000 lower; QB sees the smaller invoice,
 
 ## §16 — Acceptance criteria (workflow — PROVEN)
 
-1. **[S97, extends the original]** An estimate can be converted to an invoice by percentage **and**
+1. **[S97, extends the original; SCOPE WIDENED S97 2026-08-03]** _This criterion tests only the
+   DRAW half of §2's "convert an estimate", which is why estimate-line billing could be missing
+   while #1 passed. It now also requires that the estimate's LINE ITEMS can be billed — see §2._
+   An estimate can be converted to an invoice by percentage **and**
    by edited fixed amount — where each percentage draw prices off the **ORIGINAL contract value**
    (a signed CO never re-prices the draws) and the **final draw bills the remainder**, never a
    fresh percentage (§2, trace G).
@@ -1180,7 +1233,12 @@ OUTPUT  The next invoice nets $5,000 lower; QB sees the smaller invoice,
 18. **[S97]** An invoice can be delivered by email or printed (skip email); both save it to the
     project. The emailed invoice carries a **pay link + PDF where QuickBooks Payments is
     connected**, and **PDF only, with no payment button, where it is not** (7G §7G.2 #3).
-19. **[S97, extended; grouped by instrument S97 2026-08-03]** All three presentation levels are
+19. **[S97, extended; grouped by instrument, and made REACHABLE on fixed-price, S97 2026-08-03]**
+    _Previously VACUOUS for fixed-price: all three levels were selectable, but a draw is one
+    uncategorised line, so full detail and by-section had nothing to render. Estimate-line billing
+    gives them content — a fixed-price line carries a name and a §11 category but NO cost basis, so
+    it renders as a CHARGE outside the subtotal/markup block, which is exactly right: the client
+    agreed a **price**, not a cost, and no markup is shown._ All three presentation levels are
     selectable per invoice. **Full detail groups BY INSTRUMENT**, each group carrying its own
     subtotal and markup line — two instruments with different markup rates cannot honestly share
     one markup line. A single-instrument invoice renders exactly as before, with no group heading.
