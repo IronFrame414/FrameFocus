@@ -131,6 +131,17 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
   const [selectedHours, setSelectedHours] = useState<Set<string>>(new Set());
 
   const isDraft = invoice.status === 'draft' || invoice.status === 'pending_approval';
+
+  // GENERATE FLOW [S97, Josh — option 1]: same page, no new route. On generate
+  // the picker COLLAPSES and the invoice plus its actions become the focus.
+  // Default state follows the invoice: an invoice that already carries derived
+  // lines opens collapsed on load, so returning to it lands on the document
+  // rather than on the selection that produced it. Reopening is one click and
+  // re-deriving is non-destructive to discount/credit lines (§8).
+  const derivedLineCount = invoice.lines.filter(
+    (l) => l.line_type === 'derived_cost' || l.line_type === 'derived_labor'
+  ).length;
+  const [pickerOpen, setPickerOpen] = useState(() => derivedLineCount === 0);
   const isDerived = contractType === 'cost_plus' || contractType === 'time_and_materials';
   const canApprove = role === 'owner' || role === 'admin';
 
@@ -187,7 +198,7 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
       setError('This project has no originating estimate, so there is no instrument to bill against.');
       return;
     }
-    await run(
+    const ok = await run(
       () =>
         deriveAndSaveInvoice({
           invoiceId: invoice.id,
@@ -208,8 +219,15 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
         }),
       'Invoice generated from the selected costs and hours.'
     );
+    // ONLY on success. A failed derive (a MissingRateError names the rate type
+    // and date that need fixing) must leave the selection intact and the picker
+    // OPEN — collapsing it, or clearing the ticks, would hide the very rows the
+    // error is about and force the user to re-tick everything.
+    if (!ok) return;
     setSelectedCosts(new Set());
     setSelectedHours(new Set());
+    // Option 1: the picker gets out of the way and the invoice takes focus.
+    setPickerOpen(false);
   }
 
   // ── §11 — live presentation preview from the saved lines ──────────────────
@@ -283,8 +301,34 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
         </div>
       )}
 
+      {/* COLLAPSED PICKER [S97] — what the invoice was generated from, and the
+          one control that brings the selection back. Shown only once something
+          has been derived, so a fresh draft still opens straight into picking. */}
+      {isDraft && isDerived && !pickerOpen && (
+        <div
+          style={{
+            ...cardStyle,
+            padding: '10px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            flexWrap: 'wrap',
+          }}
+        >
+          <span style={{ fontSize: '12px', color: color.faint }}>
+            Generated from <strong style={{ color: color.body }}>{instrumentLabel}</strong> —{' '}
+            {derivedLineCount === 1 ? '1 derived line' : `${derivedLineCount} derived lines`}.
+            Anything you left unticked is still unbilled and comes back next time (§6.2).
+          </span>
+          <button type="button" style={secondaryButtonStyle} onClick={() => setPickerOpen(true)}>
+            Change what&rsquo;s billed
+          </button>
+        </div>
+      )}
+
       {/* Instrument switch — P4: one invoice derives from ONE instrument */}
-      {isDraft && changeOrderOptions.length > 0 && (
+      {isDraft && pickerOpen && changeOrderOptions.length > 0 && (
         <div style={{ ...cardStyle, padding: '12px 16px' }}>
           <span style={microLabelStyle}>Bill against</span>
           <div style={{ marginTop: '6px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
@@ -317,7 +361,7 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
       )}
 
       {/* §6.2 — COST picker */}
-      {isDraft && isDerived && (
+      {isDraft && isDerived && pickerOpen && (
         <div style={{ ...cardStyle, overflow: 'hidden' }}>
           <div style={{ padding: '12px 16px', borderBottom: `1px solid ${color.cardBorder}` }}>
             <span style={microLabelStyle}>Unbilled approved costs</span>
@@ -383,7 +427,7 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
       )}
 
       {/* §7.2 — HOURS picker */}
-      {isDraft && isDerived && (
+      {isDraft && isDerived && pickerOpen && (
         <div style={{ ...cardStyle, overflow: 'hidden' }}>
           <div style={{ padding: '12px 16px', borderBottom: `1px solid ${color.cardBorder}` }}>
             <span style={microLabelStyle}>Unbilled approved hours</span>
@@ -462,14 +506,26 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
         </div>
       )}
 
-      {isDraft && isDerived && (
+      {isDraft && isDerived && pickerOpen && (
         <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
           <button type="button" onClick={derive} disabled={busy} style={primaryButtonStyle}>
-            {busy ? 'Generating…' : 'Generate invoice'}
+            {busy ? 'Generating…' : derivedLineCount > 0 ? 'Regenerate invoice' : 'Generate invoice'}
           </button>
+          {derivedLineCount > 0 && (
+            <button
+              type="button"
+              style={secondaryButtonStyle}
+              disabled={busy}
+              onClick={() => setPickerOpen(false)}
+            >
+              Cancel
+            </button>
+          )}
           <span style={{ fontSize: '12px', color: color.faint }}>
             {selectedCosts.size} costs ({money(selectedCostTotal)}) · {totalBillableHours} billable
             hours
+            {derivedLineCount > 0 &&
+              ' — regenerating replaces the derived lines; discounts and credits survive (§8)'}
           </span>
         </div>
       )}
