@@ -1088,3 +1088,174 @@ NEW  supabase/migrations/20260803000000_7d_invoice_number_at_send.sql   (numberi
 **Owed next:** production migration batch (M6's nine + `20260731060000` + A-9 + 7D +
 `20260803000000`, in order) → branch merge → then the still-open rulings in §6, in the
 order listed.
+
+---
+
+# S97 CONTINUATION — Parts A / B / C (2026-08-03)
+
+Josh's run: diagnose the one-instrument defect, build the workflow/settings pass,
+report on percentage billing. Recorded here so none of it depends on a chat log.
+
+## A — DEFECT: an invoice cannot bill the ORIGINAL CONTRACT and a CO together
+
+**Against §2 and acceptance #2, both of which require it.** DIAGNOSED, NOT FIXED
+(Josh's instruction). Full diagnosis in the session response; the load-bearing facts:
+
+* **The schema is innocent.** There is no instrument column on `invoices`. The pin is
+  per LINE — `invoice_lines.source_estimate_id` / `source_change_order_id` — and
+  `invoice_lines_one_instrument_check` is a PER-ROW XOR, which two lines with different
+  instruments already satisfy. The column comment at `20260802000000:311` even states
+  the intent: *"one invoice may pull from the estimate AND several COs."*
+* **Three service/UI locks, no DB lock.** (1) `DeriveServerInput` carries a singular
+  `instrument` + `contractType`; (2) `invoice-derivation-server.ts:134-145` clears EVERY
+  derived line before writing, so two derive calls cannot accumulate — this is the hard
+  one; (3) the instrument switch is an `<a href="?instrument=…">` page navigation, so
+  switching discards the `useState` selection.
+* **Rate resolution is ALREADY per line** (`rateRowInForce` per cost date and per labor
+  day-group). Only the rate LOAD is single-instrument. A cost-plus contract and a T&M CO
+  would each price at their own instrument's rate the moment the derive loop iterates.
+* **Migration size: ZERO.** Every change is TypeScript.
+* **The one money bug in the fix:** `retainageEligible` takes ONE `contractType` for the
+  whole invoice, so a fixed-price draw plus a T&M CO would withhold retainage on the T&M
+  money, violating §5 / acceptance #5. Retainage must become per-line before #2 ships.
+  **#2 and #5 must ship together.**
+* **The one genuine design question:** hours have NO instrument.
+  `getPickableHours(projectId, today, tz)` is project-wide; an hour reaches an instrument
+  only by which tab was active when it was ticked.
+* Unaffected: PDF, claims tables, 7E, and `reissueInvoice` (already copies per-line
+  source ids).
+* **Acceptance #2 was never claimed and never listed as a gap in this report — it was
+  missed, not deferred.**
+
+## B — BUILT AND PUSHED
+
+| # | Commit | What |
+|---|--------|------|
+| B1 | generate flow | Option 1: on generate the picker collapses, the invoice takes focus. Same page, no new route. Also gated the selection-clear on SUCCESS — a failed derive used to wipe the ticks it was complaining about. |
+| B2 | send | One action: pre-flight → issue (number allocated by trigger, atomic with the status flip) → PDF → email. Every ordinary failure is pre-flight, so it cannot consume a number. No rollback past allocation, by ruling. |
+| B3 | company email | `companies.email` already drove Reply-To and the PDF letterhead with **no control anywhere**, so it was always NULL and replies fell to the owner's personal address. Added to Company Settings. Reply-To cache TTL'd (was per-process forever, which would have made the new control look broken). |
+| B4 | company logo | **The `company-logos` bucket did not exist.** Lost in the TECH_DEBT #79 squash (bucket rows are data, not schema). Recreated public, PNG/JPEG only, 2 MB, Owner/Admin write. The PDF header needed nothing — `invoice-template.tsx:147` already renders the logo. |
+
+**B2's final ordering, stated for the record:**
+
+```
+1 PRE-FLIGHT  auth 401 → role 403 → RLS-reachable 404 → status 409
+              → approved-if-pending 409 → has lines 422 → company 500
+              → recipient 422
+2 ISSUE       UPDATE draft/pending → sent.  invoices_assign_number stamps the
+              number INSIDE this UPDATE.  Scoped .in(open statuses) so a racing
+              send matches zero rows.
+3 PDF         render + file under the project
+4 EMAIL       Resend, PDF attached
+```
+
+"Allocate number" and "mark sent" are **not two steps** — the BEFORE trigger makes them
+one, which is why this ordering cannot be got half-right.
+
+## C — PERCENTAGE BILLING (reported, NOT built)
+
+Josh's model: a percentage across unbilled approved costs; the user ticks which lines go
+on this invoice; each ticked line bills that percentage of ITS cost; the remainder stays
+available for a later invoice. Per-line dollar edits on top. §8 discount stays separate.
+
+### The index
+
+`invoice_cost_claims_one_per_allocation` is `UNIQUE (expense_allocation_id)` — one live
+claim per allocation, i.e. **a cost is claimed WHOLLY or not at all**. That index is the
+entire enforcement of "billed once".
+
+**It must be dropped** and replaced with a plain (non-unique) index. The invariant it
+carried changes shape and can no longer be an index:
+
+```
+was:  at most ONE claim row per allocation
+now:  SUM(claimed_amount) over an allocation NEVER EXCEEDS expense_allocations.amount
+```
+
+A sum-constraint is a trigger, not an index. **BEFORE INSERT on `invoice_cost_claims`,
+SECURITY DEFINER, taking `SELECT … FOR UPDATE` on the `expense_allocations` row first** —
+without the row lock two concurrent claims each see the old sum and both pass, and the
+cost is over-billed. This is the `allocate_invoice_number()` lock pattern exactly.
+
+### "Remaining unbilled" is DERIVED
+
+```sql
+remaining(a) = a.amount
+             - COALESCE((SELECT SUM(c.claimed_amount)
+                         FROM invoice_cost_claims c
+                         WHERE c.expense_allocation_id = a.id), 0)
+```
+
+**Nothing is stored.** No `billed_amount` column on `expense_allocations`, no `is_billed`
+flag. A stored figure would need its own sync trigger and would drift — and the derived
+form gets void-restore for free: claims already CASCADE from the invoice, so voiding
+returns the remainder with no compensating write. That is the same property the
+all-or-nothing model has today, kept rather than reinvented.
+
+`getPickableCosts` changes from a `Set` membership test to a `Map` of sums: drop the row
+only when `remaining <= 0` (cent epsilon), and show remaining / original / already-billed
+rather than one amount — §6.2's "nothing silently disappears" applies harder once a row
+can be half-gone.
+
+### Consequences to rule on before building
+
+1. **Rounding.** Percentage × cost, rounded per line. The parts must never exceed the
+   whole, so the LAST claim on an allocation bills the exact REMAINDER, not a fresh
+   percentage. This is not a new rule — it is §2 trace G rule (b), already ruled and
+   already implemented for draws in `computeDrawAmount`. Reuse it.
+2. **Markup across partial claims.** Both halves price off the incurred date, which does
+   not move, so normally both get the same rate. If the rate is SUPERSEDED between the
+   two invoices, the second half prices at the new rate while the first keeps its old one
+   via `instrument_rate_id`. That is correct under §15 (superseding never reprices a sent
+   invoice) and should be stated, not discovered.
+3. **HOURS STAY ALL-OR-NOTHING.** `invoice_hour_claims_one_per_segment` should NOT be
+   touched. §7.2 rounds UP per person per day; billing half a day now and half later
+   rounds both halves up and over-bills the client — the exact P-4 hazard the picker
+   already warns about. The percentage applies to COSTS only. The spec treats the two
+   pickers symmetrically, so this needs saying out loud.
+4. **A per-line dollar edit is not a claim reduction.** `setLineBilledAmount` moves
+   `billed_amount`; the claim keeps its `claimed_amount`. Claim 50% of a $1,000 cost then
+   edit the billed figure down, and the remaining unbilled is still $500. That is correct
+   under §8 and acceptance #11 ("a discounted amount is never rebilled") and is unchanged
+   by partial claims — but it becomes much easier to misread, so the screen must show
+   CLAIMED and BILLED as distinct figures.
+5. **§6.2 and acceptance #11 need amending:** "a billed cost never reappears" becomes
+   "a FULLY billed cost never reappears; a PARTIALLY billed one reappears with its
+   remainder."
+
+### Migration size
+
+Small: drop one unique index, add one plain index, add one over-claim trigger. **No new
+columns and no new tables** — `claimed_amount` already exists and already means what it
+needs to mean; it was simply always the whole allocation.
+
+### Does Part A change this design?
+
+**The model, no. The ORDER, yes.**
+
+The partial-claim mechanism is per-allocation and is indifferent to how many instruments
+an invoice spans. But Part A determines WHERE THE PERCENTAGE INPUT LIVES. Josh's own 7I
+example — *"draw #2 of the contract plus 50% of CO-106-02"* — is a single invoice
+carrying a DIFFERENT percentage per instrument. So the percentage belongs to the
+instrument tab and travels in the derive payload per instrument, not as one invoice-level
+number.
+
+**Build Part A first.** Doing so makes the percentage one more field on a per-instrument
+object that already exists. Doing Part C first builds a global percentage that Part A
+then has to unwind.
+
+## PENDING SPEC AMENDMENT — owned by 7I, NOT built
+
+**Josh rules [S97, 2026-08-03]:** the client **PAYMENT SCHEDULE moves to 7I**, and **7D
+consumes it to AUTO-GENERATE invoices** — for the original contract and for COs — where a
+single invoice may COMBINE them (e.g. draw #2 of the contract plus 50% of CO-106-02),
+with manual line additions on top.
+
+**This REVERSES §1's locked v1 boundary:** *"the user triggers every invoice; no
+draw-schedule object."* §1 as committed is therefore superseded on this point and must
+not be treated as authority once 7I lands.
+
+Not built in this run. Recorded so it is not lost. Note the dependency chain it creates:
+auto-generating an invoice that combines a contract draw with a percentage of a CO
+requires **both** Part A (multi-instrument invoices) **and** Part C (partial claims) to
+be in place first. It cannot be scheduled ahead of them.
