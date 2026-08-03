@@ -121,22 +121,45 @@ export async function updateEstimatingSettings(
   return { success: true };
 }
 
+/**
+ * The company logo, into the PUBLIC company-logos bucket (migration
+ * 20260818000000 — the bucket was lost in the TECH_DEBT #79 squash and every
+ * upload had been failing with "Bucket not found"; see that migration).
+ *
+ * PNG/JPEG only [S97, Josh — no SVG this pass]. The extension is derived from
+ * the MIME TYPE, not from the filename: the bucket enforces an
+ * allowed_mime_types allowlist, so a "logo.jpeg" holding a PNG (or a file named
+ * with no extension at all) must not decide the stored path. Deriving it one
+ * way also means there are at most TWO possible object keys per company, and
+ * the other one is removed below — otherwise switching PNG -> JPG would leave
+ * an orphan blob behind and logo_url would point at whichever was written last.
+ */
 export async function uploadCompanyLogo(
   companyId: string,
   file: File
 ): Promise<{ success: boolean; url?: string; error?: string }> {
   const supabase = createClient();
 
-  const fileExt = file.name.split('.').pop()?.toLowerCase() || 'png';
-  const filePath = `${companyId}/logo.${fileExt}`;
+  const mime = file.type === 'image/jpeg' ? 'image/jpeg' : 'image/png';
+  if (file.type !== 'image/png' && file.type !== 'image/jpeg') {
+    return { success: false, error: 'A logo must be a PNG or a JPEG.' };
+  }
+  const ext = mime === 'image/jpeg' ? 'jpg' : 'png';
+  const filePath = `${companyId}/logo.${ext}`;
 
   const { error: uploadError } = await supabase.storage
     .from('company-logos')
-    .upload(filePath, file, { upsert: true });
+    .upload(filePath, file, { upsert: true, contentType: mime });
 
   if (uploadError) {
     return { success: false, error: uploadError.message };
   }
+
+  // Drop the other-format object so exactly one logo blob exists per company.
+  // Best-effort: a failure here leaves a harmless orphan and must not fail an
+  // upload that already succeeded.
+  const stalePath = `${companyId}/logo.${ext === 'png' ? 'jpg' : 'png'}`;
+  await supabase.storage.from('company-logos').remove([stalePath]);
 
   const {
     data: { publicUrl },

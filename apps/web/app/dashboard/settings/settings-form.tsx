@@ -97,8 +97,11 @@ export function SettingsForm({ company }: SettingsFormProps) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith('image/')) {
-      setMessage({ type: 'error', text: 'Please select an image file (PNG, JPG, etc.).' });
+    // PNG/JPEG only [S97] — the company-logos bucket enforces the same
+    // allowlist server-side, so accepting anything wider here only produces a
+    // confusing storage error instead of a clear one. No SVG this pass.
+    if (file.type !== 'image/png' && file.type !== 'image/jpeg') {
+      setMessage({ type: 'error', text: 'Please select a PNG or JPEG image.' });
       return;
     }
     if (file.size > 2 * 1024 * 1024) {
@@ -294,7 +297,7 @@ export function SettingsForm({ company }: SettingsFormProps) {
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
+              accept="image/png,image/jpeg"
               onChange={handleLogoUpload}
               style={{ display: 'none' }}
             />
@@ -313,7 +316,7 @@ export function SettingsForm({ company }: SettingsFormProps) {
               {uploading ? 'Uploading...' : 'Upload Logo'}
             </button>
             <p style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.25rem' }}>
-              PNG or JPG, max 2 MB
+              PNG or JPG, max 2 MB. Prints on your invoice, change-order and estimate PDFs.
             </p>
           </div>
         </div>
