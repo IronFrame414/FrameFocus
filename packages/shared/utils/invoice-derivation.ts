@@ -504,7 +504,12 @@ export interface PresentedGroup {
   key: string;
   label: string;
   laborLines: PresentationLine[];
+  /** Rows with a real COST BASIS — the only rows the subtotal/markup block
+   *  describes. */
   nonLaborLines: PresentationLine[];
+  /** Rows with NO cost basis (a manual line, a draw): a CHARGE, not a cost.
+   *  Rendered outside the subtotal/markup block, like labor (R3). */
+  chargeLines: PresentationLine[];
   nonLaborSubtotal: number;
   nonLaborMarkup: number;
   /** This instrument's work only — adjustments are invoice-level. */
@@ -515,8 +520,13 @@ export interface PresentedInvoice {
   level: PresentationLevel;
   /** Labor lines — OUTSIDE the subtotal/markup block on cost-plus and T&M. */
   laborLines: PresentationLine[];
-  /** Non-labor rows shown at ACTUAL, UNBURDENED cost (§6.4, §11 layout A). */
+  /** Non-labor rows WITH a cost basis, shown at ACTUAL, UNBURDENED cost
+   *  (§6.4, §11 layout A). */
   nonLaborLines: PresentationLine[];
+  /** [S97] Rows with NO cost basis — a manual/standalone line or a draw. A
+   *  CHARGE, never a cost, so it stays out of "Subtotal (cost)" and out of the
+   *  markup arithmetic. */
+  chargeLines: PresentationLine[];
   /** Credit and discount lines, always shown in full — never netted away.
    *  INVOICE-level: a discount is not an instrument's work, so it is never
    *  pushed into a per-instrument group. */
@@ -528,7 +538,8 @@ export interface PresentedInvoice {
   total: number;
   /** By-section rollup — labor / materials / subs / other. Deliberately
    *  CATEGORY-only and NOT split by instrument: a section total exposes no
-   *  cost and no markup, so nothing about it can misstate a rate. */
+   *  cost and no markup, so nothing about it can misstate a rate.
+   *  [S97] Σ sections + Σ adjustmentLines === total, always. */
   sections: Array<{ label: string; amount: number }>;
   /** §11 full detail [S97]. One entry per instrument, in line order. A
    *  single-instrument invoice yields exactly one group. */
@@ -557,21 +568,49 @@ export function presentInvoice(
   const adjustmentLines = lines.filter((l) =>
     ['discount', 'credit_negative_co', 'credit_allowance', 'credit_deposit'].includes(l.lineType)
   );
-  const nonLaborLines = lines.filter(
-    (l) => !laborLines.includes(l) && !adjustmentLines.includes(l)
-  );
+  const work = lines.filter((l) => !laborLines.includes(l) && !adjustmentLines.includes(l));
+
+  // §11 [S97] — A COST BASIS IS WHAT MAKES A ROW A "COST" ROW.
+  //
+  // `nonLaborSubtotal` is labelled "Subtotal (cost)" to the client, and it used
+  // to be Σ (costBasis ?? amount) over EVERY non-labor row — so a manual line,
+  // which has no cost at all, had its CHARGE counted as a cost. The client read
+  // a cost figure containing something nobody ever paid.
+  //
+  // Rows with a real cost basis keep the layout-A block (cost → subtotal →
+  // markup). Rows without one are CHARGES, and sit OUTSIDE that block for the
+  // same reason labor does (R3): the block is an arithmetic claim, and a row
+  // with no cost cannot honestly take part in it.
+  const nonLaborLines = work.filter((l) => l.costBasis !== null);
+  const chargeLines = work.filter((l) => l.costBasis === null);
 
   const nonLaborSubtotal = roundMoney(
-    nonLaborLines.reduce((sum, l) => sum + (l.costBasis ?? l.amount), 0)
+    nonLaborLines.reduce((sum, l) => sum + (l.costBasis as number), 0)
   );
   const nonLaborSell = roundMoney(nonLaborLines.reduce((sum, l) => sum + l.amount, 0));
   const nonLaborMarkup = roundMoney(nonLaborSell - nonLaborSubtotal);
   const total = roundMoney(lines.reduce((sum, l) => sum + l.amount, 0));
 
+  // §11 [S97] — THE SECTIONS MUST RECONCILE.
+  //
+  // This skipped every null-category line (`if (!l.category) continue`), so a
+  // manual line simply VANISHED and a by-section invoice's sections did not sum
+  // to what the client was charged. Two changes make the identity hold:
+  //
+  //   1. ADJUSTMENTS ARE EXCLUDED. A discount or credit is rendered in its own
+  //      block at every level, so counting it in a section too would double it.
+  //   2. A WORK LINE WITHOUT A CATEGORY FALLS TO 'other' rather than being
+  //      dropped. 'other' is already one of §11's four sections and is exactly
+  //      the right home for a charge that is not labor, material or sub — a
+  //      fixed-price DRAW is the honest example: it spans the whole contract
+  //      and has no single category. A manual line now carries a real category
+  //      and lands in its own section.
+  //
+  // The invariant, asserted in the tests: Σ sections + Σ adjustments === total.
   const sectionTotals = new Map<RowCategory, number>();
-  for (const l of lines) {
-    if (!l.category) continue;
-    sectionTotals.set(l.category, roundMoney((sectionTotals.get(l.category) ?? 0) + l.amount));
+  for (const l of laborLines.concat(work)) {
+    const bucket: RowCategory = l.category ?? 'other';
+    sectionTotals.set(bucket, roundMoney((sectionTotals.get(bucket) ?? 0) + l.amount));
   }
   const sections = (['labor', 'material', 'subcontractor', 'other'] as RowCategory[])
     .filter((c) => sectionTotals.has(c))
@@ -582,7 +621,9 @@ export function presentInvoice(
   // groups come out in the order the instruments were billed.
   const groupOrder: string[] = [];
   const grouped = new Map<string, { label: string; lines: PresentationLine[] }>();
-  for (const l of laborLines.concat(nonLaborLines)) {
+  // `work` (not nonLaborLines) — a CHARGE row belongs to its instrument's group
+  // just like a cost row does; it simply renders outside the cost block.
+  for (const l of laborLines.concat(work)) {
     const key = l.instrumentKey ?? '';
     if (!grouped.has(key)) {
       grouped.set(key, { label: l.instrumentLabel ?? '', lines: [] });
@@ -593,16 +634,16 @@ export function presentInvoice(
   const groups: PresentedGroup[] = groupOrder.map((key) => {
     const { label, lines: own } = grouped.get(key)!;
     const gLabor = own.filter((l) => l.lineType === 'derived_labor');
-    const gNonLabor = own.filter((l) => l.lineType !== 'derived_labor');
-    const gSubtotal = roundMoney(
-      gNonLabor.reduce((sum, l) => sum + (l.costBasis ?? l.amount), 0)
-    );
+    const gNonLabor = own.filter((l) => l.lineType !== 'derived_labor' && l.costBasis !== null);
+    const gCharge = own.filter((l) => l.lineType !== 'derived_labor' && l.costBasis === null);
+    const gSubtotal = roundMoney(gNonLabor.reduce((sum, l) => sum + (l.costBasis as number), 0));
     const gSell = roundMoney(gNonLabor.reduce((sum, l) => sum + l.amount, 0));
     return {
       key,
       label,
       laborLines: gLabor,
       nonLaborLines: gNonLabor,
+      chargeLines: gCharge,
       nonLaborSubtotal: gSubtotal,
       nonLaborMarkup: roundMoney(gSell - gSubtotal),
       total: roundMoney(own.reduce((sum, l) => sum + l.amount, 0)),
@@ -614,6 +655,7 @@ export function presentInvoice(
     laborLines,
     nonLaborLines,
     adjustmentLines,
+    chargeLines,
     nonLaborSubtotal,
     nonLaborMarkup,
     total,

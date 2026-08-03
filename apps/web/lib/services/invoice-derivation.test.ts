@@ -680,3 +680,94 @@ describe('§8 as amended — a dollar edit is a CLAIM REDUCTION, not a discount'
     expect(totals.billedTotal).toBe(1000);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// §11 RECONCILIATION [S97] — the by-section bug the missing category caused,
+// and the cost-vs-charge split it exposed in full detail.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('§11 — sections RECONCILE with the total the client is charged', () => {
+  const mixed: PresentationLine[] = [
+    { description: 'Lumber', category: 'material', costBasis: 1000, amount: 1200, lineType: 'derived_cost' },
+    { description: '8 hrs @ $95/hr', category: 'labor', costBasis: null, amount: 760, lineType: 'derived_labor' },
+    // A MANUAL line — now carries a category, and has NO cost basis.
+    { description: 'Permit expediting', category: 'other', costBasis: null, amount: 450, lineType: 'fixed' },
+    // A DRAW — legitimately has no category: it spans the whole contract.
+    { description: 'Draw #2', category: null, costBasis: null, amount: 5000, lineType: 'fixed' },
+    { description: 'Goodwill discount', category: null, costBasis: null, amount: -100, lineType: 'discount' },
+  ];
+
+  it('Σ sections + Σ adjustments === total — the identity that was broken', () => {
+    const p = presentInvoice(mixed, 'by_section');
+    const sections = sum(p.sections.map((s) => s.amount));
+    const adjustments = sum(p.adjustmentLines.map((l) => l.amount));
+    expect(sum([sections, adjustments])).toBe(p.total);
+    expect(p.total).toBe(7310); // 1200 + 760 + 450 + 5000 - 100
+  });
+
+  it('a manual line lands in ITS category, not nowhere', () => {
+    const p = presentInvoice(mixed, 'by_section');
+    // 450 manual (other) + 5000 draw (no category -> other) = 5450
+    expect(p.sections.find((s) => s.label === 'Other')?.amount).toBe(5450);
+    expect(p.sections.find((s) => s.label === 'Materials')?.amount).toBe(1200);
+    expect(p.sections.find((s) => s.label === 'Labor')?.amount).toBe(760);
+  });
+
+  it('the OLD behavior dropped 5,450.00 from the sections', () => {
+    // Model the PRE-FIX world properly: the manual line carried NO category
+    // (the form never asked), and the old rule skipped every null-category
+    // line. Both the manual line and the draw therefore vanished.
+    const preFix = mixed.map((l) =>
+      l.description === 'Permit expediting' ? { ...l, category: null } : l
+    );
+    const oldSections = preFix
+      .filter((l) => l.category)
+      .reduce((s, l) => s + l.amount, 0);
+    expect(oldSections).toBe(1960); // materials + labor only
+    // 450 manual + 5000 draw = 5450 of the client's charge, shown nowhere.
+    const p = presentInvoice(mixed, 'by_section');
+    expect(sum(p.sections.map((s) => s.amount)) - oldSections).toBe(5450);
+  });
+
+  it('a discount is counted ONCE — in adjustments, never in a section', () => {
+    const p = presentInvoice(mixed, 'by_section');
+    expect(p.adjustmentLines).toHaveLength(1);
+    expect(sum(p.sections.map((s) => s.amount))).toBe(7410); // work only, no discount
+  });
+});
+
+describe('§11 — "Subtotal (cost)" contains COSTS only', () => {
+  const lines: PresentationLine[] = [
+    { description: 'Lumber', category: 'material', costBasis: 1000, amount: 1200, lineType: 'derived_cost' },
+    { description: 'Permit expediting', category: 'other', costBasis: null, amount: 450, lineType: 'fixed' },
+  ];
+
+  it('a manual line is a CHARGE — out of the subtotal and out of the markup', () => {
+    const p = presentInvoice(lines, 'full_detail');
+    // Was Σ(costBasis ?? amount) = 1450, i.e. a 450 charge counted as cost.
+    expect(p.nonLaborSubtotal).toBe(1000);
+    expect(p.nonLaborMarkup).toBe(200); // the real 20%, not 200 diluted
+    expect(p.chargeLines).toHaveLength(1);
+    expect(p.nonLaborLines).toHaveLength(1);
+  });
+
+  it('the total still includes it — it is charged, just not costed', () => {
+    const p = presentInvoice(lines, 'full_detail');
+    expect(p.total).toBe(1650);
+    expect(sum([p.nonLaborSubtotal, p.nonLaborMarkup, ...p.chargeLines.map((l) => l.amount)])).toBe(
+      p.total
+    );
+  });
+
+  it('groups split the same way, per instrument', () => {
+    const p = presentInvoice(
+      lines.map((l) => ({ ...l, instrumentKey: 'est:E1', instrumentLabel: 'Original Contract' })),
+      'full_detail'
+    );
+    expect(p.groups).toHaveLength(1);
+    expect(p.groups[0].nonLaborSubtotal).toBe(1000);
+    expect(p.groups[0].nonLaborMarkup).toBe(200);
+    expect(p.groups[0].chargeLines).toHaveLength(1);
+    expect(p.groups[0].total).toBe(1650);
+  });
+});

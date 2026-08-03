@@ -993,6 +993,16 @@ function LinesPanel({
 }) {
   const [manualLabel, setManualLabel] = useState('');
   const [manualAmount, setManualAmount] = useState('');
+  // §11 — the category was never captured, which is what made a manual line
+  // vanish from the by-section presentation. It is also §2's "categories post
+  // into project finances" half. Defaults to 'other', never null.
+  const [manualCategory, setManualCategory] =
+    useState<'labor' | 'material' | 'subcontractor' | 'other'>('other');
+  // §2 [S97] — STANDALONE vs a lump-sum billing OF an instrument. Two different
+  // things were conflated here: only the STANDALONE kind is new income that
+  // posts to project finances, and only an instrument-attributed line is
+  // retainage-classified to its own contract (§5, Part A).
+  const [manualInstrument, setManualInstrument] = useState<string>('standalone');
 
   return (
     <div style={{ ...cardStyle, overflow: 'hidden' }}>
@@ -1092,6 +1102,13 @@ function LinesPanel({
                     <span>{money(l.costBasis ?? l.amount)}</span>
                   </div>
                 ))}
+                {/* [S97] no cost basis = a CHARGE, outside the cost block. */}
+                {group.chargeLines.map((l, i) => (
+                  <div key={`ch-${i}`} style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <span>{l.description}</span>
+                    <span>{money(l.amount)}</span>
+                  </div>
+                ))}
                 {group.nonLaborLines.length > 0 && (
                   <>
                     <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: `1px solid ${color.rowDivider}`, marginTop: '4px', paddingTop: '4px' }}>
@@ -1152,31 +1169,68 @@ function LinesPanel({
       </div>
 
       {isDraft && (
-        <div style={{ padding: '10px 16px', borderTop: `1px solid ${color.cardBorder}`, display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          <input value={manualLabel} onChange={(e) => setManualLabel(e.target.value)} placeholder="Manual line" style={inputStyle} />
-          <input value={manualAmount} onChange={(e) => setManualAmount(e.target.value)} placeholder="$" inputMode="decimal" style={{ ...inputStyle, width: '110px' }} />
-          <button
-            type="button"
-            disabled={busy || !manualLabel.trim() || !manualAmount}
-            style={secondaryButtonStyle}
-            onClick={async () => {
-              const ok = await run(
-                () =>
-                  addFixedLine({
-                    invoiceId: invoice.id,
-                    description: manualLabel.trim(),
-                    amount: Number(manualAmount),
-                  }).then(async (r) => (r.success ? recalculateInvoiceTotals(invoice.id, { instrumentTypes }) : r)),
-                'Line added.'
-              );
-              if (ok) {
-                setManualLabel('');
-                setManualAmount('');
-              }
-            }}
-          >
-            Add line
-          </button>
+        <div style={{ padding: '10px 16px', borderTop: `1px solid ${color.cardBorder}` }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+            <input value={manualLabel} onChange={(e) => setManualLabel(e.target.value)} placeholder="Manual line" style={inputStyle} />
+            <select
+              value={manualCategory}
+              onChange={(e) => setManualCategory(e.target.value as typeof manualCategory)}
+              disabled={busy}
+              style={{ ...inputStyle, width: '140px' }}
+            >
+              <option value="labor">Labor</option>
+              <option value="material">Material</option>
+              <option value="subcontractor">Subcontractor</option>
+              <option value="other">Other</option>
+            </select>
+            <select
+              value={manualInstrument}
+              onChange={(e) => setManualInstrument(e.target.value)}
+              disabled={busy}
+              style={{ ...inputStyle, width: '190px' }}
+            >
+              <option value="standalone">Standalone (new income)</option>
+              {instruments.map((i) => (
+                <option key={i.key} value={i.key}>
+                  Billing of {i.label}
+                </option>
+              ))}
+            </select>
+            <input value={manualAmount} onChange={(e) => setManualAmount(e.target.value)} placeholder="$" inputMode="decimal" style={{ ...inputStyle, width: '110px' }} />
+            <button
+              type="button"
+              disabled={busy || !manualLabel.trim() || !manualAmount}
+              style={secondaryButtonStyle}
+              onClick={async () => {
+                const chosen = instruments.find((i) => i.key === manualInstrument) ?? null;
+                const ok = await run(
+                  () =>
+                    addFixedLine({
+                      invoiceId: invoice.id,
+                      description: manualLabel.trim(),
+                      amount: Number(manualAmount),
+                      category: manualCategory,
+                      sourceEstimateId: chosen?.ref.estimate_id ?? null,
+                      sourceChangeOrderId: chosen?.ref.change_order_id ?? null,
+                    }).then(async (r) => (r.success ? recalculateInvoiceTotals(invoice.id, { instrumentTypes }) : r)),
+                  'Line added.'
+                );
+                if (ok) {
+                  setManualLabel('');
+                  setManualAmount('');
+                  setManualCategory('other');
+                  setManualInstrument('standalone');
+                }
+              }}
+            >
+              Add line
+            </button>
+          </div>
+          <p style={{ fontSize: '11px', color: color.faint, margin: '6px 0 0' }}>
+            {manualInstrument === 'standalone'
+              ? 'Standalone: nothing upstream to inherit from, so this posts to the project’s finances as NEW INCOME (§2). It disappears from there if this invoice is voided.'
+              : 'A billing OF that instrument — not new income, and retained against that instrument’s own contract type (§5).'}
+          </p>
         </div>
       )}
     </div>

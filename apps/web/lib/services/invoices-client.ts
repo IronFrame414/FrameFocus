@@ -163,21 +163,56 @@ export interface AddFixedLineInput {
   invoiceId: string;
   description: string;
   amount: number;
+  /**
+   * §11 / §2 [S97] — labor / material / subcontractor / other. THE SAME
+   * vocabulary as invoice_lines.category and project_budget_items.row_type.
+   *
+   * It was not captured at all, which is why a manual line VANISHED from the
+   * by-section presentation: presentInvoice skips null-category lines when
+   * building section totals, so the sections did not sum to what the client was
+   * charged. A standalone line's category is also the half of §2's "amounts AND
+   * categories post into project finances" that had nowhere to come from.
+   */
+  category?: 'labor' | 'material' | 'subcontractor' | 'other' | null;
   sourceEstimateId?: string | null;
   sourceChangeOrderId?: string | null;
 }
 
+/**
+ * A fixed line — a lump-sum billing, a draw, or a STANDALONE income line.
+ *
+ * THE INSTRUMENT DECIDES WHICH IT IS [S97]. Both source ids NULL means
+ * STANDALONE (§2: "built directly… exists nowhere upstream to inherit from"),
+ * and standalone lines are what post to project finances as income. A line
+ * carrying an instrument is a lump-sum billing OF that instrument — it is not
+ * new income, and it must carry the instrument or Part A's per-line retainage
+ * split classifies it by fallback instead of by its own contract.
+ */
 export async function addFixedLine(input: AddFixedLineInput): Promise<Result> {
   const supabase = createClient();
+
+  // sort_order was hardcoded 0, so every manual line tied with the FIRST
+  // derived line — and since §11 groups by first appearance, the group order
+  // was decided by whatever the database happened to return first. Append.
+  const { data: last } = await supabase
+    .from('invoice_lines')
+    .select('sort_order')
+    .eq('invoice_id', input.invoiceId)
+    .order('sort_order', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const sortOrder = (last?.sort_order ?? -1) + 1;
+
   const { error } = await supabase.from('invoice_lines').insert({
     invoice_id: input.invoiceId,
     line_type: 'fixed',
     description: input.description,
+    category: input.category ?? null,
     billed_amount: input.amount,
     derived_amount: input.amount,
     source_estimate_id: input.sourceEstimateId ?? null,
     source_change_order_id: input.sourceChangeOrderId ?? null,
-    sort_order: 0,
+    sort_order: sortOrder,
   });
   if (error) return { success: false, error: error.message };
   return { success: true };

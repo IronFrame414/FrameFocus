@@ -257,6 +257,24 @@ export function InvoiceDocument({ data }: { data: InvoicePdfData }) {
                   ))}
                 </>
               )}
+
+              {/* [S97] Rows with NO cost basis — a manual/standalone line or a
+                  fixed-price draw. A CHARGE, not a cost, so it sits outside the
+                  subtotal/markup block for the same reason labor does. Putting
+                  it inside made "Subtotal (cost)" include money nobody paid. */}
+              {group.chargeLines.length > 0 && (
+                <>
+                  {group.nonLaborLines.length > 0 && (
+                    <Text style={styles.sectionTitle}>Other charges</Text>
+                  )}
+                  {group.chargeLines.map((l, i) => (
+                    <View key={i} style={styles.row} wrap={false}>
+                      <Text style={styles.colDesc}>{l.description}</Text>
+                      <Text style={styles.colAmt}>{fmtMoney(l.amount)}</Text>
+                    </View>
+                  ))}
+                </>
+              )}
             </React.Fragment>
           ))}
 
@@ -284,9 +302,12 @@ export function InvoiceDocument({ data }: { data: InvoicePdfData }) {
                 {invoice.title || (project ? `${project.name} — work performed` : 'Work performed')}
               </Text>
               <Text style={styles.colAmt}>
+                {/* [S97] chargeLines joined the split, so lump sum must add
+                    them or a manual line would silently vanish from the one
+                    number the client sees. */}
                 {fmtMoney(
                   presented.laborLines
-                    .concat(presented.nonLaborLines)
+                    .concat(presented.nonLaborLines, presented.chargeLines)
                     .reduce((sum, l) => sum + l.amount, 0)
                 )}
               </Text>
