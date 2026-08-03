@@ -776,7 +776,7 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
                   You are splitting {splitDays.length === 1 ? 'a person-day' : 'person-days'} across
                   invoices. Rounding applies per person per day, so billing the parts separately can
                   total more than the whole day would. Bill a day in one piece unless you mean to.
-                  (A day can never be split across INSTRUMENTS — "Bills to" is set per person-day
+                  (A day can never be split across INSTRUMENTS — &quot;Bills to&quot; is set per person-day
                   for exactly this reason.)
                 </div>
               )}
