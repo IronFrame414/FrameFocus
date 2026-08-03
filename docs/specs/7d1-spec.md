@@ -262,6 +262,10 @@ by-section both render the estimate's own structure.
     its own terms (§4, P4) and carries its own remaining — the same reasoning that keeps a
     percentage draw priced off the original (trace G rule (a)).
   - **PERCENTAGE DRAWS ARE UNAFFECTED, deliberately** — see §2 below.
+  - **[S97, 2026-08-03] THIS IS THE CONTRACT'S REMAINING, NOT THE JOB'S.** A change order carries
+    its own remaining, and two of the three kinds have none at all — see **§4c**. The two scopes
+    **must not be summed** into a single "remaining on the job". The screen label says so:
+    **"Remaining on original contract"**.
   - Proof: `apps/web/test/s97ct-remaining-to-bill.live.ts`.
 - **[S97, superseded by the ruling above] Earlier reading — kept for the reasoning, which still
   holds for why nothing is STORED:**
@@ -329,6 +333,59 @@ derived instrument:
 - A signed CO **raises contract value via 7B's derivation at read** (`contract-value.ts`,
   bidirectional). **7D never writes contract value.**
 
+### §4c — REMAINING ON A CHANGE ORDER — **[S97, 2026-08-03 — RULED by Josh; BUILT]**
+
+Budget & Cost showed what the COs are **worth** ("Signed COs") and what was left on the
+**contract**, and omitted the figure connecting them: how much of the CO book has been billed. That
+omission is what let the contract's own remaining read as the whole job's.
+
+> **THERE IS NO SINGLE "REMAINING INCLUDING COs" FIGURE, AND THERE CANNOT BE.** Only **one** of the
+> three kinds of change order has a remaining at all. A future reader must not collapse the three
+> into one number — the two that carry no figure carry none *by construction*, not for want of
+> effort.
+
+| Kind | Remaining | Rule |
+| ---- | --------- | ---- |
+| **Fixed-price, positive** | `net_delta − billed against it` | Well defined. **DERIVED**, keyed on `invoice_lines.source_change_order_id`, the same shape as the contract's own remaining (§3). |
+| **Cost-plus / T&M** | **NULL — undefined BY CONSTRUCTION** | There is no fixed amount to remain against; that is precisely why derived billing (§6/§7) and §3a's credit balance exist. **Printing a number here would be INVENTING one.** Reported as `null`, **never `0`** — a zero would read as "fully billed". Captioned **"billed as incurred (no fixed amount)"**. Billing against it **is still tracked** (`billed` is real); there is simply nothing to remain against. |
+| **Negative (§4a)** | **NULL — EXCLUDED entirely** | Its money is a **credit to GIVE**, not scope to bill, and it **must never enter a remaining-to-bill sum**. On the harness fixture, folding it in read **15,000 instead of 20,000** — understating what is still owed by the size of the credit. |
+
+**CLASSIFICATION ORDER IS LOAD-BEARING.** Negative is tested **BEFORE** type:
+
+```
+if (netDelta < 0)              -> 'credit'
+else if (coType !== fixed)     -> 'as_incurred'
+else                           -> 'fixed_remaining'
+```
+
+Reverse those first two and a **negative cost-plus CO** is captioned "billed as incurred", hiding
+that it is **money owed BACK**. The order is commented in the source for the same reason.
+
+**Further rules this records:**
+
+- **The tile is NOT gated on the project's own type.** A fixed-price job may carry a cost-plus CO
+  and vice versa (**P4** — type and rates live on the *instrument*, never the job), so the split is
+  decided per CO.
+- **An EM-DASH, not `$0`, when nothing is countable.** `$0` reads as "all billed"; an em-dash reads
+  as "no figure exists", which is the truth when every CO on the job is derived or negative.
+- **The value states its own scope.** It covers fixed-price positive COs only, and the caption names
+  every kind it excludes — _"1 fixed-price CO · 1 billed as incurred (no fixed amount) · 1 credit CO
+  excluded"_ — so the reader never has to guess what the number counts.
+- **DERIVED, never stored**, like everything else in this module: ISSUED (sent/paid) invoices only —
+  a draft has billed nothing — and voided invoices excluded, so **voiding returns the remaining with
+  no cleanup step**.
+
+**THE CONTRACT'S REMAINING AND THE COs' REMAINING ARE SEPARATE SCOPES AND MUST NOT BE SUMMED** into
+a single "remaining on the job". A CO bills separately on its own terms (§4, P4) and carries its own
+remaining; two of the three kinds have none to contribute. **The label fixes shipped alongside this
+for exactly that reason** — _"Remaining to bill"_ is now **"Remaining on original contract"**,
+because it always was the contract's figure and never the job's.
+
+**No migration.** The derivation is `getChangeOrderBilling()` in
+`apps/web/lib/services/contract-value.ts`, beside `getContractBilling()`; proof is
+`apps/web/test/s97ct-co-remaining.live.ts`, which runs a project carrying **all three kinds at
+once**. Verify against those rather than trusting this prose.
+
 ### §4a — Negative change orders (client removes scope) — **[S96, REVERSED S97]**
 
 **[S97 — Josh's ruling, from a real case, REVERSES this section and §A.5.]** The real case: mid-job,
@@ -355,6 +412,10 @@ it simply reduced what she still owed. The superseded [S96] design, quoted:
   sends a check.
 - **Contract value falls via 7B derivation** (bidirectional, `contract-value.ts`); 7D writes
   nothing. _(Unchanged.)_
+- **[S97, 2026-08-03] A negative CO is EXCLUDED from every remaining-to-bill figure** (§4c). Its
+  money is a credit to GIVE, not scope to bill; adding it to a remaining sum understates what the
+  client still owes by the size of the credit. It has no "remaining" of its own and never
+  contributes to another instrument's.
 
 Worked case: trace **H** (§15) — which also closes the prior _"[OPEN — JOSH] §4a has no worked
 example… needs one real deductive CO."_
@@ -905,7 +966,9 @@ NOT grant a PM:
   That tile is **Owner/Admin only.**
 - `project_budget_items.budgeted_amount` / any sell column, committed amounts, variance, or
   projected margin (7A/7B surfaces).
-- `change_orders.net_delta` or any dollar sum derived from it (7B surfaces).
+- `change_orders.net_delta` or any dollar sum derived from it (7B surfaces) — **[S97, 2026-08-03]
+  which explicitly includes §4c's "Remaining on change orders" figure and every per-CO remaining
+  behind it. It is `net_delta` minus billing, so it is Owner/Admin like the rest.**
 
 The line the ruling draws: **an amount ON the invoice** (a derived cost or labor line, a draw, a
 discount, a credit, the invoice's own totals and retainage) is visible to a PM who can reach that
@@ -1336,6 +1399,10 @@ Services/routes: `change-orders.ts` (server reads), `change-orders-client.ts`
 (`recalculateChangeOrderTotals` — **[A9]** prices per A-9/S97), `co-signing-service.ts`,
 `co-pdf-service.ts`; `/api/change-orders/[id]/send|void`, `/api/sign-co/[token]/complete|decline`,
 `/api/cron/co-reminders`; UI `/dashboard/projects/[id]/changes[/coId]`.
+**[S97, 2026-08-03] `contract-value.ts` now also carries `getContractBilling()` (§3's
+remaining-to-bill) and `getChangeOrderBilling()` (§4c's per-CO remaining). Both are DERIVATIONS on
+top of the same rows — no column, no table, no migration — so 7D still writes no contract figure of
+any kind (§4).**
 7B: `contract-value.ts` derives revised = `projects.contract_value` + Σ `net_delta` over
 `CONTRACT_CONTRIBUTING_CO_FILTER = { status:'signed', is_deleted:false }` — 7D must reuse that
 exported filter, never restate it. The §4a **available-until-placed credit state is NEW 7D
