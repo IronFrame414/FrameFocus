@@ -166,6 +166,16 @@ An invoice is created by one of:
 > - **(b) The FINAL draw is the REMAINDER** — whatever is unbilled — **NOT a fresh percentage.**
 >   Multiplying and rounding each draw independently sums to $14,413.77, two cents over the
 >   contract; the remainder rule makes the draws sum exactly.
+>
+> **[S97, 2026-08-03] DOES A DEPOSIT REDUCE THE BASE A PERCENTAGE DRAW PRICES OFF? NO — and the
+> answer is in Josh's own schedule.** That schedule *is* `deposit 10% · permit 30% · rough-in 25% ·
+> cabinets 25% · substantial completion 10%` — **the deposit IS one of the draws, and the five sum
+> to 100%.** If the deposit also reduced the base, every later draw would price off $12,972.38
+> instead of $14,413.75 and the schedule would undershoot the contract by roughly $1,441. So the
+> base stays the **ORIGINAL contract value, immovable** — exactly what rule (a) already says, now
+> for a second reason. A deposit reduces **remaining-to-bill** (§3) and, through it, what the
+> **FINAL** draw bills under rule (b); it never re-prices a percentage. `computeDrawAmount` needed
+> no change.
 
 **Detail format on the invoice:** mirrors the source's format (the user-chosen estimate/CO
 presentation format). Standalone invoices use that same format. See §11 for the per-invoice
@@ -184,8 +194,27 @@ detail-level choice.
   first invoice.
 - **Refundable** in full or part if the project does not proceed (refund mechanics are 7E; the
   deposit's refundable status is set here).
-- **[S97, 2026-08-03 — READING, NOT A BUILD] Does §2's derived income mechanism resolve
-  "credits to budget"? Only half of it, so the clause stays open.**
+- **[S97, 2026-08-03 — RULED by Josh; BUILT] A DEPOSIT REDUCES REMAINING TO BILL.** On a
+  **fixed-price** job a deposit is money against the contract: a $5,000 deposit on a $50,000
+  contract leaves **$45,000** to invoice. **Void or refund it and the figure returns to $50,000**
+  with no cleanup step.
+  - **Derived at the 7B contract-value layer** (`getContractBilling`, `contract-value.ts`), and
+    **nothing is stored** — no write to `project_budget_amounts.budgeted_amount`, none to
+    `project_financials`, no flag. That is what makes void and refund self-correcting: nothing was
+    copied, so nothing has to be undone. **7D still never writes contract value (§4);** this only
+    READS and derives, exactly like the revised-contract derivation beside it.
+  - Counts **ISSUED** (sent/paid) invoices only, and only lines carrying the **originating
+    estimate** as their instrument. Refunds net out when `source = 'deposit'` and `status =
+    'issued'`, scoped through the payment's application to a still-issued invoice so a deposit that
+    was **both voided and refunded** is subtracted once, not twice. Net billing is clamped at zero,
+    so remaining can never exceed the contract; over-billing stays representable as a negative.
+  - Measured against the **ORIGINAL**, not the revised, contract: a signed CO bills separately on
+    its own terms (§4, P4) and carries its own remaining — the same reasoning that keeps a
+    percentage draw priced off the original (trace G rule (a)).
+  - **PERCENTAGE DRAWS ARE UNAFFECTED, deliberately** — see §2 below.
+  - Proof: `apps/web/test/s97ct-remaining-to-bill.live.ts`.
+- **[S97, superseded by the ruling above] Earlier reading — kept for the reasoning, which still
+  holds for why nothing is STORED:**
   - The **visibility** half it does resolve: a deposit invoice's line, if standalone, appears in
     the income section and disappears on void or reissue, with no extra code.
   - The **crediting** half it does not. *"Credited against the budgeted amount"* is a claim about
@@ -1062,12 +1091,18 @@ OUTPUT  The next invoice nets $5,000 lower; QB sees the smaller invoice,
    migration's omissions list, the build report or any acceptance status, so it was **identified
    and then lost in transit** rather than deferred. Now posts as a DERIVED income section (see §2);
    proof `apps/web/test/s97ct-standalone-income.live.ts`.
-4. A deposit invoice is a fixed-amount invoice; it credits to budget (or is credited once a budget
-   is set) and can be refunded in full or part. — **PARTIALLY TRUE [S97, 2026-08-03].** The deposit
-   *type* exists, §3a's credit-balance mechanism is built for derived instruments, refunds are 7E,
-   and a deposit whose line is standalone now appears in the §2 income section and is removed on
-   void like any other. **§3's "credited against the budgeted amount" clause is still NOT built**,
-   and is deliberately not resolved by the income mechanism — see the reading recorded below.
+4. **[amended S97, 2026-08-03 — RULED by Josh]** A deposit invoice is a fixed-amount invoice; it
+   **reduces what remains to bill on the contract** (or is held as a job credit balance on a
+   derived instrument) and can be refunded in full or part. — **TRUE.** _Superseded phrasing:
+   "it **credits to budget** (or is credited once a budget is set)"_ — which assumed the deposit
+   moved a **stored budgeted figure**. It does not, and must not: a deposit can be voided and
+   refunded, so a written credit would have to be un-written. Both halves are now built and
+   derived, and the two paths are **separate by construction**:
+   - **fixed-price** → §3's remaining-to-bill derivation (`getContractBilling`)
+   - **cost-plus / T&M** → §3a's credit balance drawn down by `credit_deposit` lines
+   They cannot double-count: the contract derivation sums only lines carrying the originating
+   estimate, and a derived-instrument deposit is billed on a CO. Proofs:
+   `s97ct-remaining-to-bill.live.ts` (both directions) and `s97ct-standalone-income.live.ts`.
 5. **[amended S97, 2026-08-03 — retainage is PER LINE]** Retainage defaults from the project
    setting, is editable per invoice, and is **never** applied to a deposit or to **T&M money**.
    _Superseded phrasing: "never applied to a deposit or T&M **invoice**"_ — which was expressible
