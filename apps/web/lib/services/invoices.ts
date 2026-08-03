@@ -1,4 +1,6 @@
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase-server';
+import { loadDepositCredits } from '@/lib/services/deposit-credit';
 import type {
   AvailableCredit,
   ContractType,
@@ -416,14 +418,6 @@ export async function getAvailableCredits(projectId: string): Promise<AvailableC
     .eq('is_deleted', false)
     .lt('net_delta', 0);
 
-  const { data: depositInvoices } = await supabase
-    .from('invoices')
-    .select('id, invoice_number, billed_total')
-    .eq('project_id', projectId)
-    .eq('invoice_type', 'deposit')
-    .eq('is_deleted', false)
-    .in('status', ['sent', 'paid']);
-
   const { data: placedLines } = await supabase
     .from('invoice_lines')
     .select('line_type, source_change_order_id, source_deposit_invoice_id, billed_amount, invoice_id')
@@ -457,18 +451,19 @@ export async function getAvailableCredits(projectId: string): Promise<AvailableC
     });
   }
 
-  for (const dep of depositInvoices ?? []) {
-    const applied = live
-      .filter((l) => l.line_type === 'credit_deposit' && l.source_deposit_invoice_id === dep.id)
-      .reduce((sum, l) => sum + Math.abs(Number(l.billed_amount)), 0);
-    const remaining = Math.round((Number(dep.billed_total) - applied) * 100) / 100;
-    if (remaining <= 0) continue;
+  // §3a — THE DEPOSIT BALANCE IS NOT DERIVED HERE ANY MORE [S97]. It was
+  // inline, and the project financial page needs the same figure; two
+  // implementations of one money figure is how they drift. loadDepositCredits
+  // (deposit-credit.ts) is now the single definition, and it also carries the
+  // §3-vs-§3a split and the refund netting this copy never had.
+  for (const dep of await loadDepositCredits(supabase as unknown as SupabaseClient, projectId)) {
+    if (dep.remaining <= 0) continue;
     out.push({
       kind: 'deposit',
-      amount: remaining,
+      amount: dep.remaining,
       // Deposits only become credits once sent/paid, so they are always numbered.
-      label: `Deposit ${dep.invoice_number ?? ''}`.trim(),
-      depositInvoiceId: dep.id,
+      label: `Deposit ${dep.invoiceNumber ?? ''}`.trim(),
+      depositInvoiceId: dep.depositInvoiceId,
     });
   }
 

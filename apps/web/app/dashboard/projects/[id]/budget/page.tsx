@@ -4,6 +4,7 @@ import { notFound, redirect } from 'next/navigation';
 import { getProject } from '@/lib/services/projects';
 import { getBudgetRollup, type InstrumentGroup } from '@/lib/services/budget';
 import { getProjectIncome } from '@/lib/services/project-income';
+import { getDepositCredits } from '@/lib/services/deposit-credit';
 import { getContractBilling, getRevisedContract } from '@/lib/services/contract-value';
 import { budgetColumnsFor } from '@/lib/services/invoices-shared';
 import { getExpenses, getJobCostRollup } from '@/lib/services/expenses';
@@ -123,6 +124,22 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
   // its own, because nothing was ever copied. Fixed-price only — a cost-plus or
   // T&M deposit is §3a's credit balance and is deliberately not shown here.
   const contractBilling = isOwnerAdmin && isFixed ? await getContractBilling(params.id) : null;
+
+  // §3a [S97] — the DEPOSIT CREDIT BALANCE, so a cost-plus/T&M job reads as
+  // consistently as a fixed-price one: fixed-price shows what is left to bill,
+  // a derived instrument shows the undrawn credit that will settle its
+  // invoices. Same derivation the invoice builder uses (loadDepositCredits) —
+  // there is one definition of what a deposit credit is worth.
+  //
+  // NOT gated on project_type: §3a's balance belongs to the JOB, and a
+  // fixed-price project may carry a cost-plus CO (P4). The derivation itself
+  // excludes any deposit billed against the ORIGINATING ESTIMATE, because that
+  // one is §3's mechanism and already reduces remaining-to-bill — so the two
+  // tiles can never describe the same money.
+  const depositCredits = isOwnerAdmin ? await getDepositCredits(params.id) : [];
+  const undrawnDeposit = Math.round(
+    depositCredits.reduce((sum, d) => sum + d.remaining, 0) * 100
+  ) / 100;
   const members = isOwnerAdmin ? await getMembers() : [];
   const memberNames: Record<string, string> = Object.fromEntries(
     members.map((m) => [m.id, m.display_name])
@@ -198,6 +215,19 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                       : contractBilling.issuedAgainstContract > 0
                         ? `original less ${money(contractBilling.issuedAgainstContract)} already invoiced`
                         : 'nothing invoiced against the contract yet',
+                },
+              ]
+            : []),
+          ...(undrawnDeposit > 0
+            ? [
+                {
+                  label: 'Deposit credit (undrawn)',
+                  value: money(undrawnDeposit),
+                  valueColor: color.navy,
+                  caption:
+                    depositCredits.length === 1
+                      ? 'held on the job; applied to invoices until exhausted (§3a)'
+                      : `${depositCredits.filter((d) => d.remaining > 0).length} deposits, applied to invoices until exhausted (§3a)`,
                 },
               ]
             : []),
