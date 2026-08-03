@@ -51,8 +51,9 @@ export class MissingRateError extends Error {
   }
 }
 
-export interface DeriveServerInput {
-  invoiceId: string;
+/** One instrument's contribution to an invoice (§2 — an invoice may pull from
+ *  the estimate AND several COs at once). */
+export interface DeriveSelection {
   instrument: InstrumentRef;
   contractType: ContractType;
   selectedCosts: Array<{
@@ -63,6 +64,21 @@ export interface DeriveServerInput {
     expenseDate: string;
   }>;
   selectedHours: SelectedSegment[];
+}
+
+export interface DeriveServerInput {
+  invoiceId: string;
+  /**
+   * §2 / acceptance #2 [S97] — ONE ENTRY PER INSTRUMENT. This was a singular
+   * `instrument` + `contractType`, which is what made acceptance #2 ("a single
+   * invoice can pull from the estimate AND ≥2 COs at once") structurally
+   * impossible rather than merely unexposed.
+   *
+   * Each selection carries its OWN contract type, so each prices through its
+   * own rate types — a cost-plus contract and a T&M change order on one invoice
+   * each bill at their own instrument's rate in force on their own dates.
+   */
+  selections: DeriveSelection[];
 }
 
 /**
@@ -91,19 +107,31 @@ async function loadRatesPrivileged(
  *
  * Returns nothing about rates. The caller re-reads the invoice for totals.
  */
-export async function deriveInvoiceLines(
-  admin: SupabaseClient,
-  input: DeriveServerInput
-): Promise<{ success: boolean; error?: string }> {
-  const rateRows = await loadRatesPrivileged(admin, input.instrument);
+/** Everything one selection produced, priced but not yet written. */
+interface PricedSelection {
+  selection: DeriveSelection;
+  costLines: ReturnType<typeof deriveCostLine>[];
+  laborLines: ReturnType<typeof deriveLaborLines>;
+}
 
-  // 1. Price the costs. A missing rate for a category actually in use is a
-  //    hard stop — never price at 0% (§6.1).
+/**
+ * PRICE one instrument's selection. Reads that instrument's OWN rate rows, so
+ * every line prices through its own instrument's rates — the whole point of
+ * §2 being real. Writes nothing.
+ */
+async function priceSelection(
+  admin: SupabaseClient,
+  selection: DeriveSelection
+): Promise<{ priced?: PricedSelection; error?: string }> {
+  const rateRows = await loadRatesPrivileged(admin, selection.instrument);
+
+  // Costs. A missing rate for a category actually in use is a hard stop —
+  // never price at 0% (§6.1).
   const costLines: ReturnType<typeof deriveCostLine>[] = [];
-  for (const cost of input.selectedCosts) {
-    const rateType = nonLaborRateType(input.contractType, cost.category);
+  for (const cost of selection.selectedCosts) {
+    const rateType = nonLaborRateType(selection.contractType, cost.category);
     const row = rateRowInForce(rateRows, rateType, cost.expenseDate);
-    if (!row) return { success: false, error: new MissingRateError(rateType, cost.expenseDate).message };
+    if (!row) return { error: new MissingRateError(rateType, cost.expenseDate).message };
 
     const selected: SelectedCost = {
       allocationId: cost.allocationId,
@@ -117,20 +145,42 @@ export async function deriveInvoiceLines(
     costLines.push(deriveCostLine(selected));
   }
 
-  // 2. Group hours per person per day, round each group UP to the half hour
-  //    (§7.2), then attach the labor rate in force on that worked date.
-  const groups = groupSelectedHours(input.selectedHours);
+  // Hours: group per person per day, round each group UP to the half hour
+  // (§7.2), then attach the labor rate in force on that worked date.
+  const groups = groupSelectedHours(selection.selectedHours);
   const rated: RatedDayGroup[] = [];
   for (const group of groups) {
-    const rateType = laborRateType(input.contractType);
+    const rateType = laborRateType(selection.contractType);
     const row = rateRowInForce(rateRows, rateType, group.workDate);
-    if (!row) return { success: false, error: new MissingRateError(rateType, group.workDate).message };
+    if (!row) return { error: new MissingRateError(rateType, group.workDate).message };
     rated.push({ group, hourlyRate: row.rate, rateRowId: row.id });
   }
-  const laborLines = deriveLaborLines(rated);
 
-  // 3. Clear previous derived lines + claims (re-derive a draft). Discount and
-  //    credit lines are NOT touched — they survive a re-derivation (§8).
+  return { priced: { selection, costLines, laborLines: deriveLaborLines(rated) } };
+}
+
+export async function deriveInvoiceLines(
+  admin: SupabaseClient,
+  input: DeriveServerInput
+): Promise<{ success: boolean; error?: string }> {
+  // 1. PRICE EVERY SELECTION FIRST, writing nothing.
+  //
+  //    This ordering is load-bearing and was preserved deliberately from the
+  //    single-instrument version: pricing can HARD STOP on a MissingRateError,
+  //    and the clear in step 2 is destructive. Pricing first means a rateless
+  //    instrument leaves the invoice exactly as it was instead of wiping the
+  //    lines it already had. With several selections it matters more, not less
+  //    — one bad instrument must not destroy three good ones' work.
+  const priced: PricedSelection[] = [];
+  for (const selection of input.selections) {
+    const result = await priceSelection(admin, selection);
+    if (result.error) return { success: false, error: result.error };
+    priced.push(result.priced as PricedSelection);
+  }
+
+  // 2. Clear previous derived lines + claims (re-derive a draft), across the
+  //    WHOLE invoice — then rewrite from the full submission. Discount and
+  //    credit lines are NOT touched: they survive a re-derivation (§8).
   const { data: existing } = await admin
     .from('invoice_lines')
     .select('id, line_type')
@@ -144,7 +194,7 @@ export async function deriveInvoiceLines(
     if (delError) return { success: false, error: delError.message };
   }
 
-  // 4. Write the derived lines, then their claims (the billed markers).
+  // 3. Write the derived lines, then their claims (the billed markers).
   //    company_id has no usable default under the service role
   //    (get_my_company_id() is NULL), so it is set explicitly from the invoice.
   const { data: invoiceRow } = await admin
@@ -155,79 +205,89 @@ export async function deriveInvoiceLines(
   const companyId = invoiceRow?.company_id as string | undefined;
   if (!companyId) return { success: false, error: 'Invoice not found' };
 
+  // sort_order runs CONTINUOUSLY across selections, so an invoice's lines stay
+  // grouped by instrument in submission order — which is the order §11's
+  // per-instrument presentation renders them in.
   let sortOrder = 0;
-  for (const line of costLines) {
-    const { data: created, error } = await admin
-      .from('invoice_lines')
-      .insert({
-        company_id: companyId,
-        invoice_id: input.invoiceId,
-        line_type: 'derived_cost',
-        description: line.description,
-        category: line.category,
-        cost_basis: line.costBasis,
-        derived_amount: line.amount,
-        billed_amount: line.amount,
-        instrument_rate_id: line.rateRowId,
-        source_estimate_id: input.instrument.estimate_id ?? null,
-        source_change_order_id: input.instrument.change_order_id ?? null,
-        sort_order: sortOrder++,
-      })
-      .select('id')
-      .single();
-    if (error) return { success: false, error: error.message };
 
-    const { error: claimError } = await admin.from('invoice_cost_claims').insert({
-      company_id: companyId,
-      invoice_id: input.invoiceId,
-      invoice_line_id: created.id,
-      expense_allocation_id: line.allocationId,
-      claimed_amount: line.costBasis,
-      expense_date: input.selectedCosts.find((c) => c.allocationId === line.allocationId)!.expenseDate,
-      cost_category: line.category,
-    });
-    if (claimError) return { success: false, error: claimError.message };
-  }
+  for (const { selection, costLines, laborLines } of priced) {
+    const sourceEstimateId = selection.instrument.estimate_id ?? null;
+    const sourceChangeOrderId = selection.instrument.change_order_id ?? null;
 
-  for (const line of laborLines) {
-    const { data: created, error } = await admin
-      .from('invoice_lines')
-      .insert({
-        company_id: companyId,
-        invoice_id: input.invoiceId,
-        line_type: 'derived_labor',
-        description: line.description,
-        category: 'labor',
-        quantity: line.quantity,
-        unit_rate: line.unitRate,
-        derived_amount: line.amount,
-        billed_amount: line.amount,
-        instrument_rate_id: line.rateRowId,
-        source_estimate_id: input.instrument.estimate_id ?? null,
-        source_change_order_id: input.instrument.change_order_id ?? null,
-        sort_order: sortOrder++,
-      })
-      .select('id')
-      .single();
-    if (error) return { success: false, error: error.message };
-
-    const claims = line.groups.flatMap((group) =>
-      group.segmentIds.map((segmentId) => {
-        const seg = input.selectedHours.find((s) => s.segmentId === segmentId)!;
-        return {
+    for (const line of costLines) {
+      const { data: created, error } = await admin
+        .from('invoice_lines')
+        .insert({
           company_id: companyId,
           invoice_id: input.invoiceId,
-          invoice_line_id: created.id,
-          time_segment_id: segmentId,
-          member_id: group.memberId,
-          work_date: group.workDate,
-          raw_hours: seg.rawHours,
-        };
-      })
-    );
-    if (claims.length > 0) {
-      const { error: claimError } = await admin.from('invoice_hour_claims').insert(claims);
+          line_type: 'derived_cost',
+          description: line.description,
+          category: line.category,
+          cost_basis: line.costBasis,
+          derived_amount: line.amount,
+          billed_amount: line.amount,
+          instrument_rate_id: line.rateRowId,
+          source_estimate_id: sourceEstimateId,
+          source_change_order_id: sourceChangeOrderId,
+          sort_order: sortOrder++,
+        })
+        .select('id')
+        .single();
+      if (error) return { success: false, error: error.message };
+
+      const { error: claimError } = await admin.from('invoice_cost_claims').insert({
+        company_id: companyId,
+        invoice_id: input.invoiceId,
+        invoice_line_id: created.id,
+        expense_allocation_id: line.allocationId,
+        claimed_amount: line.costBasis,
+        expense_date: selection.selectedCosts.find((c) => c.allocationId === line.allocationId)!
+          .expenseDate,
+        cost_category: line.category,
+      });
       if (claimError) return { success: false, error: claimError.message };
+    }
+
+    for (const line of laborLines) {
+      const { data: created, error } = await admin
+        .from('invoice_lines')
+        .insert({
+          company_id: companyId,
+          invoice_id: input.invoiceId,
+          line_type: 'derived_labor',
+          description: line.description,
+          category: 'labor',
+          quantity: line.quantity,
+          unit_rate: line.unitRate,
+          derived_amount: line.amount,
+          billed_amount: line.amount,
+          instrument_rate_id: line.rateRowId,
+          source_estimate_id: sourceEstimateId,
+          source_change_order_id: sourceChangeOrderId,
+          sort_order: sortOrder++,
+        })
+        .select('id')
+        .single();
+      if (error) return { success: false, error: error.message };
+
+      const claims = line.groups.flatMap((group) =>
+        group.segmentIds.map((segmentId) => {
+          const seg = selection.selectedHours.find((s) => s.segmentId === segmentId)!;
+          return {
+            company_id: companyId,
+            invoice_id: input.invoiceId,
+            invoice_line_id: created.id,
+            time_segment_id: segmentId,
+            member_id: group.memberId,
+            work_date: group.workDate,
+            raw_hours: seg.rawHours,
+          };
+        })
+      );
+      if (claims.length > 0) {
+        const { error: claimError } = await admin.from('invoice_hour_claims').insert(claims);
+        if (claimError) return { success: false, error: claimError.message };
+      }
     }
   }
 

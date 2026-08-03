@@ -28,7 +28,7 @@ import type { ContractType, InstrumentRef } from '@/lib/services/invoices-shared
 // company comparison, so a cross-tenant or unassigned id 404s here rather than
 // being priced.
 
-interface DeriveBody {
+interface DeriveSelectionBody {
   instrument?: InstrumentRef;
   contractType?: ContractType;
   selectedCosts?: Array<{
@@ -46,6 +46,11 @@ interface DeriveBody {
     taskId?: string | null;
   }>;
 }
+
+/** §2 [S97] — `selections` is the shape. The bare single-instrument fields are
+ *  still accepted so a browser tab left open across the deploy gets its invoice
+ *  derived instead of a confusing 400. */
+type DeriveBody = DeriveSelectionBody & { selections?: DeriveSelectionBody[] };
 
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   const supabase = await createClient();
@@ -74,8 +79,30 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   } catch {
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 });
   }
-  if (!body.instrument || !body.contractType) {
-    return NextResponse.json({ error: 'An instrument and contract type are required.' }, { status: 400 });
+  const rawSelections: DeriveSelectionBody[] =
+    body.selections && Array.isArray(body.selections) ? body.selections : [body];
+  if (rawSelections.length === 0) {
+    return NextResponse.json({ error: 'Nothing was selected to bill.' }, { status: 400 });
+  }
+  for (const s of rawSelections) {
+    if (!s.instrument || !s.contractType) {
+      return NextResponse.json(
+        { error: 'Every selection needs an instrument and a contract type.' },
+        { status: 400 }
+      );
+    }
+  }
+  // §2 — one entry PER INSTRUMENT. A repeated instrument would derive twice
+  // against the same rates and double-claim its costs, so it is rejected rather
+  // than silently merged.
+  const keys = rawSelections.map((s) =>
+    s.instrument?.change_order_id ? `co:${s.instrument.change_order_id}` : `est:${s.instrument?.estimate_id}`
+  );
+  if (new Set(keys).size !== keys.length) {
+    return NextResponse.json(
+      { error: 'The same instrument appears twice in this request.' },
+      { status: 400 }
+    );
   }
 
   // RLS-scoped: company + can_view_project + the invoices role floor all apply.
@@ -97,10 +124,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   const admin = getSupabaseAdmin() as SupabaseClient;
   const result = await deriveInvoiceLines(admin, {
     invoiceId: params.id,
-    instrument: body.instrument,
-    contractType: body.contractType,
-    selectedCosts: body.selectedCosts ?? [],
-    selectedHours: body.selectedHours ?? [],
+    selections: rawSelections.map((s) => ({
+      instrument: s.instrument as InstrumentRef,
+      contractType: s.contractType as ContractType,
+      selectedCosts: s.selectedCosts ?? [],
+      selectedHours: s.selectedHours ?? [],
+    })),
   });
 
   if (!result.success) {

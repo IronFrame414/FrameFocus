@@ -230,6 +230,19 @@ export interface InvoiceLineAmount {
   derivedAmount?: number | null;
   /** What the client is actually charged. 7G exports and 7H reports THIS. */
   billedAmount: number;
+  /**
+   * §5 PER LINE [S97] — may THIS line's money be retained against?
+   *
+   * Retainage used to be decided once for the whole invoice off one contract
+   * type. That was only safe while an invoice could carry exactly one
+   * instrument. Now that §2/acceptance #2 is real, a fixed-price contract draw
+   * and a T&M change order can share an invoice — and §5 says retainage is
+   * NEVER applied to T&M money. Deciding once would withhold against the T&M
+   * portion and look like it was working.
+   *
+   * Undefined means eligible, so every pre-existing caller keeps its behavior.
+   */
+  retainageEligible?: boolean;
 }
 
 export interface InvoiceTotals {
@@ -241,20 +254,40 @@ export interface InvoiceTotals {
   retainageWithheld: number;
   /** §5 — what the client owes NOW; the only figure that ages in 7E. */
   amountReceivable: number;
+  /**
+   * §5 [S97] — the positive billed work retainage was actually computed on,
+   * i.e. EXCLUDING every line whose instrument is ineligible. Returned so the
+   * split is inspectable: on a mixed invoice this is strictly less than the
+   * positive billed total, and that difference is the T&M money §5 protects.
+   */
+  retainageBase: number;
 }
 
 export interface RetainagePolicy {
   /** Project default, editable per invoice (§5). */
   percent: number | null | undefined;
-  /** §5 — NEVER on a deposit or a T&M invoice. */
+  /**
+   * INVOICE-LEVEL veto (§5): a DEPOSIT invoice withholds nothing at all,
+   * whatever its lines say. The T&M half of §5 moved to the LINE — see
+   * InvoiceLineAmount.retainageEligible — because it is a property of the
+   * instrument, and one invoice can now carry several.
+   */
   eligible: boolean;
 }
 
 /**
- * §5/§8 — invoice totals. Retainage is computed on the POSITIVE billed work
- * only: withholding a percentage of a credit line would hand the client back
- * less than the credit is worth. Trace A: $18,000 at 10% → $1,800 withheld,
- * $16,200 receivable.
+ * §5/§8 — invoice totals.
+ *
+ * Retainage is computed on the POSITIVE, RETAINAGE-ELIGIBLE billed work only:
+ *
+ *   - POSITIVE, because withholding a percentage of a credit line would hand
+ *     the client back less than the credit is worth.
+ *   - ELIGIBLE, because §5 forbids retainage on T&M money and an invoice may
+ *     now mix instruments (§2 / acceptance #2). A fixed-price draw beside a
+ *     T&M change order withholds against the draw and NOT against the T&M.
+ *
+ * Trace A (single fixed-price instrument): $18,000 at 10% → $1,800 withheld,
+ * $16,200 receivable — unchanged, because every line is eligible there.
  */
 export function computeInvoiceTotals(
   lines: InvoiceLineAmount[],
@@ -265,18 +298,23 @@ export function computeInvoiceTotals(
   );
   const billedTotal = roundMoney(lines.reduce((sum, l) => sum + l.billedAmount, 0));
 
-  const positiveWork = roundMoney(
-    lines.reduce((sum, l) => (l.billedAmount > 0 ? sum + l.billedAmount : sum), 0)
+  const retainageBase = roundMoney(
+    lines.reduce(
+      (sum, l) =>
+        l.billedAmount > 0 && l.retainageEligible !== false ? sum + l.billedAmount : sum,
+      0
+    )
   );
 
   const pct = retainage.eligible ? retainage.percent ?? 0 : 0;
-  const retainageWithheld = roundMoney(positiveWork * (pct / 100));
+  const retainageWithheld = roundMoney(retainageBase * (pct / 100));
 
   return {
     derivedTotal,
     billedTotal,
     retainageWithheld,
     amountReceivable: roundMoney(billedTotal - retainageWithheld),
+    retainageBase,
   };
 }
 
@@ -375,6 +413,31 @@ export interface PresentationLine {
   costBasis: number | null;
   amount: number;
   lineType: InvoiceLineType;
+  /** §11 [S97] — which instrument this line bills against, and what to call it.
+   *  Omitted collapses to a single unnamed group, i.e. exactly the pre-S97
+   *  single-instrument layout. */
+  instrumentKey?: string;
+  instrumentLabel?: string;
+}
+
+/**
+ * §11 layout A, PER INSTRUMENT [S97 ruling].
+ *
+ * Two instruments with different markup rates cannot honestly share one markup
+ * line — a single "Markup $X" over a 20% CO and a 12% contract states a rate
+ * that applied to neither. So full detail groups by instrument, each group
+ * carrying its own subtotal and markup, and labor stays outside the block
+ * within its group (the R3 ruling, unchanged).
+ */
+export interface PresentedGroup {
+  key: string;
+  label: string;
+  laborLines: PresentationLine[];
+  nonLaborLines: PresentationLine[];
+  nonLaborSubtotal: number;
+  nonLaborMarkup: number;
+  /** This instrument's work only — adjustments are invoice-level. */
+  total: number;
 }
 
 export interface PresentedInvoice {
@@ -383,15 +446,22 @@ export interface PresentedInvoice {
   laborLines: PresentationLine[];
   /** Non-labor rows shown at ACTUAL, UNBURDENED cost (§6.4, §11 layout A). */
   nonLaborLines: PresentationLine[];
-  /** Credit and discount lines, always shown in full — never netted away. */
+  /** Credit and discount lines, always shown in full — never netted away.
+   *  INVOICE-level: a discount is not an instrument's work, so it is never
+   *  pushed into a per-instrument group. */
   adjustmentLines: PresentationLine[];
-  /** Non-labor cost subtotal (layout A). */
+  /** Non-labor cost subtotal (layout A), whole invoice. */
   nonLaborSubtotal: number;
-  /** Markup on non-labor only (layout A). */
+  /** Markup on non-labor only (layout A), whole invoice. */
   nonLaborMarkup: number;
   total: number;
-  /** By-section rollup — labor / materials / subs / other. */
+  /** By-section rollup — labor / materials / subs / other. Deliberately
+   *  CATEGORY-only and NOT split by instrument: a section total exposes no
+   *  cost and no markup, so nothing about it can misstate a rate. */
   sections: Array<{ label: string; amount: number }>;
+  /** §11 full detail [S97]. One entry per instrument, in line order. A
+   *  single-instrument invoice yields exactly one group. */
+  groups: PresentedGroup[];
 }
 
 const SECTION_LABEL: Record<RowCategory, string> = {
@@ -436,6 +506,38 @@ export function presentInvoice(
     .filter((c) => sectionTotals.has(c))
     .map((c) => ({ label: SECTION_LABEL[c], amount: sectionTotals.get(c) as number }));
 
+  // Per-instrument grouping for full detail. Order is FIRST APPEARANCE, which
+  // is sort_order, which derivation writes continuously per selection — so the
+  // groups come out in the order the instruments were billed.
+  const groupOrder: string[] = [];
+  const grouped = new Map<string, { label: string; lines: PresentationLine[] }>();
+  for (const l of laborLines.concat(nonLaborLines)) {
+    const key = l.instrumentKey ?? '';
+    if (!grouped.has(key)) {
+      grouped.set(key, { label: l.instrumentLabel ?? '', lines: [] });
+      groupOrder.push(key);
+    }
+    grouped.get(key)!.lines.push(l);
+  }
+  const groups: PresentedGroup[] = groupOrder.map((key) => {
+    const { label, lines: own } = grouped.get(key)!;
+    const gLabor = own.filter((l) => l.lineType === 'derived_labor');
+    const gNonLabor = own.filter((l) => l.lineType !== 'derived_labor');
+    const gSubtotal = roundMoney(
+      gNonLabor.reduce((sum, l) => sum + (l.costBasis ?? l.amount), 0)
+    );
+    const gSell = roundMoney(gNonLabor.reduce((sum, l) => sum + l.amount, 0));
+    return {
+      key,
+      label,
+      laborLines: gLabor,
+      nonLaborLines: gNonLabor,
+      nonLaborSubtotal: gSubtotal,
+      nonLaborMarkup: roundMoney(gSell - gSubtotal),
+      total: roundMoney(own.reduce((sum, l) => sum + l.amount, 0)),
+    };
+  });
+
   return {
     level,
     laborLines,
@@ -445,5 +547,6 @@ export function presentInvoice(
     nonLaborMarkup,
     total,
     sections,
+    groups,
   };
 }

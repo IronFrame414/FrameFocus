@@ -250,7 +250,8 @@ describe('S97CT-DERIV — §15-B cost-plus, priced by the privileged path', () =
   it('1. derives to the cent: subs 3275.00 → 3930.00, materials 1583.68 → 1900.42', async () => {
     const result = await deriveInvoiceLines(admin, {
       invoiceId: invoiceBId,
-      instrument: { estimate_id: undefined, change_order_id: coCostPlusId },
+      selections: [{
+      instrument: { change_order_id: coCostPlusId },
       contractType: 'cost_plus',
       selectedCosts: [
         { allocationId: alloc.a1, description: 'subcontractor #1', category: 'subcontractor', amount: 1200.0, expenseDate: '2026-05-28' },
@@ -260,6 +261,7 @@ describe('S97CT-DERIV — §15-B cost-plus, priced by the privileged path', () =
         { allocationId: alloc.a5, description: 'plumbing fixtures', category: 'material', amount: 625.2, expenseDate: '2026-05-19' },
       ],
       selectedHours: [],
+      }],
     });
     expect(result.error).toBeUndefined();
     expect(result.success).toBe(true);
@@ -287,7 +289,8 @@ describe('S97CT-DERIV — §15-C T&M, priced by the privileged path', () => {
   it('3. derives to the cent: 42 h × $100 = 4200.00, materials 210.24 + 201.84, total 4612.08', async () => {
     const result = await deriveInvoiceLines(admin, {
       invoiceId: invoiceCId,
-      instrument: { estimate_id: undefined, change_order_id: coTmId },
+      selections: [{
+      instrument: { change_order_id: coTmId },
       contractType: 'time_and_materials',
       selectedCosts: [
         { allocationId: alloc.c1, description: 'material', category: 'material', amount: 175.2, expenseDate: '2026-06-01' },
@@ -296,6 +299,7 @@ describe('S97CT-DERIV — §15-C T&M, priced by the privileged path', () => {
       selectedHours: [
         { segmentId, memberId: ownerMemberId, workDate: '2026-06-02', rawHours: 42 },
       ],
+      }],
     });
     expect(result.error).toBeUndefined();
     expect(result.success).toBe(true);

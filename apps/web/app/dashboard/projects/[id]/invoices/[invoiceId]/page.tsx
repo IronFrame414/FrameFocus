@@ -12,25 +12,34 @@ import {
   companyToday,
   getPickableCosts,
   getPickableHours,
+  isDerivedContract,
   type ContractType,
-  type InstrumentRef,
+  type InstrumentOption,
+  type InstrumentTypes,
+  type PickableCost,
 } from '@/lib/services/invoices';
 import { InvoiceBuilder } from './invoice-builder';
 
-// Module 7D1 — invoice detail. The server resolves the instrument, its rates,
-// and the two pickers; the client component does the ticking and the writes.
+// Module 7D1 — invoice detail. The server resolves EVERY instrument this job
+// can bill, their contract types and their cost pickers; the client component
+// does the ticking and the writes.
 //
-// INSTRUMENT SCOPE (P4 — type and rates live on the instrument, never the job):
-// a derived invoice bills ONE instrument. The default is the project's
-// originating estimate-contract; a non-fixed CO can be billed instead by
-// picking it in the builder.
+// INSTRUMENT SCOPE [S97 — §2 / acceptance #2 made real]. P4 says contract type
+// and rates live on the INSTRUMENT rather than the job. It never said one
+// instrument per invoice — §2 has always required "an invoice may pull from the
+// estimate and multiple COs together", and the schema has always allowed it
+// (the pin is per LINE and its XOR check is per row). What did not exist was
+// the path: this page resolved a single instrument from a `?instrument=` query
+// param, so switching reloaded the page and discarded the selection.
+//
+// Now: every signed instrument is offered at once, each keeps its OWN contract
+// type and prices through its OWN rates, and the builder holds one selection
+// across all of them.
 
 export default async function InvoiceDetailPage({
   params,
-  searchParams,
 }: {
   params: { id: string; invoiceId: string };
-  searchParams: { instrument?: string };
 }) {
   const supabase = await createClient();
   const {
@@ -57,26 +66,39 @@ export default async function InvoiceDetailPage({
   if (!project || !invoice || invoice.project_id !== params.id) notFound();
 
   const changeOrders = await getChangeOrders(params.id);
-  const nonFixedCos = changeOrders.filter(
-    (co) => co.co_type !== 'fixed_price' && co.status === 'signed'
-  );
+  const signedCos = changeOrders.filter((co) => co.status === 'signed');
 
-  // Which instrument this invoice derives from. ?instrument=co:<id> bills a
-  // change order; otherwise the originating estimate-contract.
-  const coParam = searchParams.instrument?.startsWith('co:')
-    ? searchParams.instrument.slice(3)
-    : null;
-  const selectedCo = coParam ? nonFixedCos.find((co) => co.id === coParam) ?? null : null;
+  // EVERY instrument this invoice may bill (§2). The originating estimate
+  // first — it is the default and the fallback everywhere — then each SIGNED
+  // change order, whatever its type. A fixed-price CO is included on purpose:
+  // it cannot be derived, but it can carry a fixed line, and it must be
+  // classifiable for the per-line retainage split (§5).
+  const projectType = (project.project_type ?? 'fixed_price') as ContractType;
+  const instruments: InstrumentOption[] = [];
+  if (project.source_estimate_id) {
+    instruments.push({
+      key: `est:${project.source_estimate_id}`,
+      label: 'Original Contract',
+      ref: { estimate_id: project.source_estimate_id },
+      contractType: projectType,
+    });
+  }
+  for (const co of signedCos) {
+    instruments.push({
+      key: `co:${co.id}`,
+      label: `${co.co_number}${co.title ? ` — ${co.title}` : ''}`,
+      ref: { change_order_id: co.id },
+      contractType: co.co_type as ContractType,
+    });
+  }
 
-  const instrument: InstrumentRef | null = selectedCo
-    ? { change_order_id: selectedCo.id }
-    : project.source_estimate_id
-      ? { estimate_id: project.source_estimate_id }
-      : null;
-
-  const contractType: ContractType = (selectedCo?.co_type ??
-    project.project_type ??
-    'fixed_price') as ContractType;
+  // §5 — the map the per-line retainage split reads. `fallback` is the
+  // originating contract's type, which is what an un-attributed line (a manual
+  // line, a discount) belongs to.
+  const instrumentTypes: InstrumentTypes = {
+    byKey: Object.fromEntries(instruments.map((i) => [i.key, i.contractType])),
+    fallback: projectType,
+  };
 
   // Company-tz "today" and the timezone every calendar date on this screen is
   // derived in — read once here and threaded down (daily-logs/new/page.tsx
@@ -86,19 +108,28 @@ export default async function InvoiceDetailPage({
   // sends; see companyDay / companyToday in invoices-shared.ts [S97].
   const { timezone } = await getCompanyTimeSettings();
   const today = companyToday(timezone);
-  const derived = contractType === 'cost_plus' || contractType === 'time_and_materials';
+
+  // Only a DERIVED instrument (cost-plus / T&M) has a cost or hour picker — a
+  // fixed-price one bills by draw (§2).
+  const derivedInstruments = instruments.filter((i) => isDerivedContract(i.contractType));
+  const anyDerived = derivedInstruments.length > 0;
 
   // RULING A/B [S97]: rate rows are NOT loaded here any more. They used to be
   // fetched under the CALLER's session and handed to invoice-builder props,
   // which put markup percentages in a PM's browser. Pricing now happens in
   // /api/invoices/[id]/derive with the service role and returns no rates.
-  const [pickableCosts, pickableHours, credits] = await Promise.all([
-    instrument && derived
-      ? getPickableCosts(params.id, instrument, today)
-      : Promise.resolve([]),
-    derived ? getPickableHours(params.id, today, timezone) : Promise.resolve([]),
+  //
+  // getPickableCosts is already per-instrument (attribution is transitive
+  // through project_budget_items), so it is simply called once per derived
+  // instrument rather than once for the one that happened to be selected.
+  const [costLists, pickableHours, credits] = await Promise.all([
+    Promise.all(derivedInstruments.map((i) => getPickableCosts(params.id, i.ref, today))),
+    anyDerived ? getPickableHours(params.id, today, timezone) : Promise.resolve([]),
     getAvailableCredits(params.id),
   ]);
+  const pickableCostsByInstrument: Record<string, PickableCost[]> = Object.fromEntries(
+    derivedInstruments.map((i, n) => [i.key, costLists[n]])
+  );
 
   // §2 (trace G) — a percentage draw prices off the ORIGINAL contract value.
   // projects.contract_value is never mutated (7B derives the revised figure),
@@ -138,19 +169,13 @@ export default async function InvoiceDetailPage({
       invoice={invoice}
       role={profile.role}
       memberId={member?.id ?? null}
-      contractType={contractType}
-      instrument={instrument}
-      instrumentLabel={
-        selectedCo
-          ? `${selectedCo.co_number}${selectedCo.title ? ` — ${selectedCo.title}` : ''}`
-          : 'Original Contract'
-      }
-      changeOrderOptions={nonFixedCos.map((co) => ({
-        id: co.id,
-        label: `${co.co_number}${co.title ? ` — ${co.title}` : ''}`,
-        coType: co.co_type as ContractType,
-      }))}
-      pickableCosts={pickableCosts}
+      instruments={instruments}
+      instrumentTypes={instrumentTypes}
+      /** §2 — hours DEFAULT to the original contract and are reassignable to a
+       *  CO per person-day (Josh's ruling, S97). */
+      defaultInstrumentKey={instruments[0]?.key ?? null}
+      sourceEstimateId={project.source_estimate_id ?? null}
+      pickableCostsByInstrument={pickableCostsByInstrument}
       pickableHours={pickableHours}
       availableCredits={credits}
       originalContractValue={originalContractValue}

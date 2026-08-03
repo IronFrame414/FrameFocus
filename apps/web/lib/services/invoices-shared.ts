@@ -51,6 +51,94 @@ export type InstrumentRef =
   | { estimate_id: string; change_order_id?: undefined }
   | { change_order_id: string; estimate_id?: undefined };
 
+// ── Instrument identity on a line (§2 / acceptance #2) [S97] ────────────────
+//
+// An invoice may pull from the estimate AND several change orders at once. The
+// pin was ALWAYS per line (invoice_lines.source_estimate_id /
+// source_change_order_id, with a PER-ROW XOR check) — nothing about the schema
+// ever said one instrument per invoice. These helpers give that pin a single
+// string identity so tabs, contract-type lookup, retainage eligibility and §11
+// grouping all key off the SAME value and cannot disagree.
+
+/** The key for a line's instrument. 'none' = a standalone/manual line. */
+export function lineInstrumentKey(line: {
+  source_estimate_id?: string | null;
+  source_change_order_id?: string | null;
+}): string {
+  if (line.source_change_order_id) return `co:${line.source_change_order_id}`;
+  if (line.source_estimate_id) return `est:${line.source_estimate_id}`;
+  return 'none';
+}
+
+/** The same key, from the ref the pickers and derivation pass around. */
+export function instrumentKey(ref: InstrumentRef): string {
+  return ref.change_order_id ? `co:${ref.change_order_id}` : `est:${ref.estimate_id}`;
+}
+
+/**
+ * Which contract type governs each instrument on an invoice, plus the type a
+ * line carrying NO instrument falls back to.
+ *
+ * The fallback is the ORIGINATING ESTIMATE's type, because that is what an
+ * un-attributed line belongs to in every case that reaches it: a manual `fixed`
+ * line and a `discount` line. (A percentage DRAW now carries the estimate
+ * explicitly — see addDrawLine — precisely so it is never classified by
+ * fallback.)
+ */
+export interface InstrumentTypes {
+  byKey: Record<string, ContractType>;
+  fallback: ContractType;
+}
+
+/** One instrument an invoice may bill against — a tab in the builder. */
+export interface InstrumentOption {
+  key: string;
+  label: string;
+  ref: InstrumentRef;
+  contractType: ContractType;
+}
+
+export function contractTypeForLine(
+  line: { source_estimate_id?: string | null; source_change_order_id?: string | null },
+  types: InstrumentTypes
+): ContractType {
+  return types.byKey[lineInstrumentKey(line)] ?? types.fallback;
+}
+
+/**
+ * §5 — may this line's money be retained against?
+ *
+ * T&M never can. This is the LINE-level half of §5; the deposit half is
+ * invoice-level and lives in RetainagePolicy.eligible. Both must hold.
+ */
+export function lineRetainageEligible(
+  line: { source_estimate_id?: string | null; source_change_order_id?: string | null },
+  types: InstrumentTypes
+): boolean {
+  return contractTypeForLine(line, types) !== 'time_and_materials';
+}
+
+/** A derived instrument bills from incurred cost and worked hours (§6/§7); a
+ *  fixed-price one bills by draw (§2) and has no cost or hour picker. */
+export function isDerivedContract(contractType: ContractType): boolean {
+  return contractType === 'cost_plus' || contractType === 'time_and_materials';
+}
+
+/**
+ * §5 — is there ANYTHING on this invoice a retainage percent could apply to?
+ *
+ * The old rule was "a T&M INVOICE never withholds retainage", which was
+ * expressible as one boolean only while an invoice had one instrument. Now the
+ * percent is refused just when EVERY instrument in play is T&M — there would be
+ * no eligible line for it to touch. When some are and some are not, the percent
+ * is legal and the PER-LINE split keeps T&M money out of the base.
+ */
+export function anyRetainableInstrument(types: InstrumentTypes): boolean {
+  return [...Object.values(types.byKey), types.fallback].some(
+    (t) => t !== 'time_and_materials'
+  );
+}
+
 export interface PickableCost {
   allocationId: string;
   expenseId: string;

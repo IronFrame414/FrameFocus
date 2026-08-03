@@ -27,13 +27,19 @@ import {
   updateInvoiceSettings,
   voidInvoice,
 } from '@/lib/services/invoices-client';
-import { DUE_ON_RECEIPT_LABEL, findSplitDays } from '@/lib/services/invoices-shared';
+import {
+  DUE_ON_RECEIPT_LABEL,
+  findSplitDays,
+  isDerivedContract,
+  lineInstrumentKey,
+} from '@/lib/services/invoices-shared';
 import type { InvoiceDelivery } from '@/lib/services/invoice-delivery-shared';
 import { InvoiceDeliveryPanel } from './invoice-delivery-panel';
 import type {
   AvailableCredit,
   ContractType,
-  InstrumentRef,
+  InstrumentOption,
+  InstrumentTypes,
   InvoiceWithLines,
   PickableCost,
   PickableHour,
@@ -62,11 +68,16 @@ interface InvoiceBuilderProps {
   deliveries: InvoiceDelivery[];
   recipientEmail: string | null;
   memberId: string | null;
-  contractType: ContractType;
-  instrument: InstrumentRef | null;
-  instrumentLabel: string;
-  changeOrderOptions: Array<{ id: string; label: string; coType: ContractType }>;
-  pickableCosts: PickableCost[];
+  /** §2 — every instrument this invoice may bill, estimate first. */
+  instruments: InstrumentOption[];
+  /** §5 — contract type by instrument, for the per-line retainage split. */
+  instrumentTypes: InstrumentTypes;
+  /** Where a person-day's hours go unless reassigned (Josh's ruling): the
+   *  ORIGINAL CONTRACT. */
+  defaultInstrumentKey: string | null;
+  sourceEstimateId: string | null;
+  /** Keyed by instrument key; only DERIVED instruments have an entry. */
+  pickableCostsByInstrument: Record<string, PickableCost[]>;
   pickableHours: PickableHour[];
   availableCredits: AvailableCredit[];
   originalContractValue: number | null;
@@ -110,11 +121,11 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
     deliveries,
     recipientEmail,
     memberId,
-    contractType,
-    instrument,
-    instrumentLabel,
-    changeOrderOptions,
-    pickableCosts,
+    instruments,
+    instrumentTypes,
+    defaultInstrumentKey,
+    sourceEstimateId,
+    pickableCostsByInstrument,
     pickableHours,
     availableCredits,
     originalContractValue,
@@ -127,8 +138,36 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
+  // ── §2 — instrument tabs, and ONE selection that survives switching ────────
+  //
+  // These were `<a href="?instrument=co:…">` links. Because switching was a
+  // page NAVIGATION, the two Sets below (useState) were discarded every time,
+  // so a mixed selection could not even be assembled. They are now tabs and the
+  // selection is held across all of them.
+  //
+  // An allocation id belongs to exactly one instrument (attribution is
+  // transitive through project_budget_items), so ONE Set of allocation ids is
+  // unambiguous across every tab.
+  const derivedInstruments = instruments.filter((i) => isDerivedContract(i.contractType));
+  const [activeKey, setActiveKey] = useState<string | null>(
+    () => derivedInstruments[0]?.key ?? instruments[0]?.key ?? null
+  );
+  const active = instruments.find((i) => i.key === activeKey) ?? null;
+  const activeCosts = active ? pickableCostsByInstrument[active.key] ?? [] : [];
+
   const [selectedCosts, setSelectedCosts] = useState<Set<string>>(new Set());
   const [selectedHours, setSelectedHours] = useState<Set<string>>(new Set());
+
+  // JOSH'S RULING [S97]: a person-day's hours DEFAULT to the ORIGINAL CONTRACT
+  // and can be reassigned to a CO. The assignment is per PERSON-DAY, never per
+  // segment — that is what structurally prevents a day being split across two
+  // instruments, which would round each part UP to the half hour independently
+  // and bill the client more than the whole day (§7.2, the P-4 hazard the
+  // split-day warning already exists for).
+  const [hourDayInstrument, setHourDayInstrument] = useState<Record<string, string>>({});
+  const dayKeyOf = (memberId: string, workDate: string) => `${memberId}|${workDate}`;
+  const instrumentForDay = (memberId: string, workDate: string): string | null =>
+    hourDayInstrument[dayKeyOf(memberId, workDate)] ?? defaultInstrumentKey;
 
   const isDraft = invoice.status === 'draft' || invoice.status === 'pending_approval';
 
@@ -142,12 +181,22 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
     (l) => l.line_type === 'derived_cost' || l.line_type === 'derived_labor'
   ).length;
   const [pickerOpen, setPickerOpen] = useState(() => derivedLineCount === 0);
-  const isDerived = contractType === 'cost_plus' || contractType === 'time_and_materials';
+  const isDerived = derivedInstruments.length > 0;
   const canApprove = role === 'owner' || role === 'admin';
 
-  // §5 — retainage never applies to a deposit or a T&M invoice.
+  // The DRAW panel belongs to the originating contract, which is the only
+  // instrument a percentage-of-contract draw can price against (§2 rule a).
+  const estimateContractType = instrumentTypes.fallback;
+  const drawsAvailable = !isDerivedContract(estimateContractType) && sourceEstimateId !== null;
+
+  // §5 — INVOICE-level: a deposit withholds nothing at all. Whether a given
+  // LINE is retained against is decided per instrument (lineRetainageEligible),
+  // so the control is offered whenever ANY instrument on this job is eligible.
   const retainageAllowed =
-    invoice.invoice_type !== 'deposit' && contractType !== 'time_and_materials';
+    invoice.invoice_type !== 'deposit' &&
+    instruments.some((i) => i.contractType !== 'time_and_materials');
+  const mixedRetainage =
+    retainageAllowed && instruments.some((i) => i.contractType === 'time_and_materials');
 
   async function run(fn: () => Promise<{ success: boolean; error?: string }>, msg?: string) {
     setBusy(true);
@@ -189,22 +238,20 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
     [selectedSegments, pickableHours]
   );
 
-  const selectedCostTotal = pickableCosts
+  /** Every ticked cost across EVERY instrument — the whole submission's worth. */
+  const selectedCostTotal = derivedInstruments
+    .flatMap((i) => pickableCostsByInstrument[i.key] ?? [])
     .filter((c) => selectedCosts.has(c.allocationId))
     .reduce((sum, c) => sum + c.amount, 0);
 
-  async function derive() {
-    if (!instrument) {
-      setError('This project has no originating estimate, so there is no instrument to bill against.');
-      return;
-    }
-    const ok = await run(
-      () =>
-        deriveAndSaveInvoice({
-          invoiceId: invoice.id,
-          instrument,
-          contractType,
-          selectedCosts: pickableCosts
+  /** §2 — one selection PER INSTRUMENT, from the single held selection. */
+  const selections = useMemo(
+    () =>
+      derivedInstruments
+        .map((i) => ({
+          instrument: i.ref,
+          contractType: i.contractType,
+          selectedCosts: (pickableCostsByInstrument[i.key] ?? [])
             .filter((c) => selectedCosts.has(c.allocationId) && !c.blockedReason)
             .map((c) => ({
               allocationId: c.allocationId,
@@ -213,11 +260,60 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
               amount: c.amount,
               expenseDate: c.expenseDate,
             })),
-          selectedHours: selectedSegments,
+          selectedHours: selectedSegments.filter(
+            (s) => instrumentForDay(s.memberId, s.workDate) === i.key
+          ),
+        }))
+        .filter((s) => s.selectedCosts.length > 0 || s.selectedHours.length > 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [derivedInstruments, pickableCostsByInstrument, selectedCosts, selectedSegments, hourDayInstrument, defaultInstrumentKey]
+  );
+
+  /**
+   * Hours assigned to an instrument that CANNOT derive them. Hours bill through
+   * a labor rate, and a fixed-price instrument has none — deriving would fail
+   * with a MissingRateError naming a rate type the user never intended to set.
+   * Caught here so the message names the real problem: the day is pointed at
+   * the wrong instrument.
+   */
+  const misassignedDays = useMemo(() => {
+    const derivedKeys = new Set(derivedInstruments.map((i) => i.key));
+    const bad: Array<{ memberId: string; workDate: string }> = [];
+    const seen = new Set<string>();
+    for (const s of selectedSegments) {
+      const key = dayKeyOf(s.memberId, s.workDate);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const assigned = instrumentForDay(s.memberId, s.workDate);
+      if (!assigned || !derivedKeys.has(assigned)) bad.push({ memberId: s.memberId, workDate: s.workDate });
+    }
+    return bad;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSegments, hourDayInstrument, derivedInstruments, defaultInstrumentKey]);
+
+  async function derive() {
+    if (selections.length === 0) {
+      setError('Nothing is ticked. Select at least one cost or one day of hours to bill.');
+      return;
+    }
+    if (misassignedDays.length > 0) {
+      setError(
+        `${misassignedDays.length === 1 ? 'A day of hours is' : `${misassignedDays.length} days of hours are`} assigned to an instrument that bills a fixed price, which has no labor rate. Reassign ${misassignedDays.length === 1 ? 'it' : 'them'} to a cost-plus or T&M instrument, or untick the hours.`
+      );
+      return;
+    }
+    const ok = await run(
+      () =>
+        deriveAndSaveInvoice({
+          invoiceId: invoice.id,
+          selections,
+          instrumentTypes,
           retainagePercent: retainageAllowed ? invoice.retainage_percent : null,
           isDeposit: invoice.invoice_type === 'deposit',
         }),
-      'Invoice generated from the selected costs and hours.'
+      selections.length > 1
+        ? `Invoice generated from ${selections.length} instruments.`
+        : 'Invoice generated from the selected costs and hours.'
     );
     // ONLY on success. A failed derive (a MissingRateError names the rate type
     // and date that need fixing) must leave the selection intact and the picker
@@ -231,21 +327,39 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
   }
 
   // ── §11 — live presentation preview from the saved lines ──────────────────
+  const labelForKey = useMemo(() => {
+    const map = new Map(instruments.map((i) => [i.key, i.label]));
+    return (key: string) => map.get(key) ?? 'Other';
+  }, [instruments]);
+
+  /** The instruments this invoice's SAVED lines actually bill (§2). */
+  const billedInstrumentLabels = useMemo(() => {
+    const keys: string[] = [];
+    for (const l of invoice.lines) {
+      const key = lineInstrumentKey(l);
+      if (key !== 'none' && !keys.includes(key)) keys.push(key);
+    }
+    return keys.map(labelForKey);
+  }, [invoice.lines, labelForKey]);
+
   const presented = useMemo(
     () =>
       presentInvoice(
-        invoice.lines.map(
-          (l): PresentationLine => ({
+        invoice.lines.map((l): PresentationLine => {
+          const key = lineInstrumentKey(l);
+          return {
             description: l.description,
             category: l.category,
             costBasis: l.cost_basis === null ? null : Number(l.cost_basis),
             amount: Number(l.billed_amount),
             lineType: l.line_type,
-          })
-        ),
+            instrumentKey: key,
+            instrumentLabel: labelForKey(key),
+          };
+        }),
         invoice.presentation_level as PresentationLevel
       ),
-    [invoice.lines, invoice.presentation_level]
+    [invoice.lines, invoice.presentation_level, labelForKey]
   );
 
   return (
@@ -260,7 +374,10 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
             {invoice.title ? ` — ${invoice.title}` : ''}
           </h2>
           <div style={{ fontSize: '12px', color: color.faint }}>
-            {invoice.status.replace('_', ' ')} · {instrumentLabel} · {contractType.replace(/_/g, ' ')}
+            {invoice.status.replace('_', ' ')}
+            {/* §2 — an invoice may span instruments, so the header names what
+                it ACTUALLY bills rather than one selected instrument. */}
+            {billedInstrumentLabels.length > 0 && ` · ${billedInstrumentLabels.join(' + ')}`}
             {invoice.invoice_type === 'deposit' ? ' · deposit' : ''}
             {invoice.invoice_number === null ? ' · numbered when sent' : ''}
           </div>
@@ -321,7 +438,11 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
           }}
         >
           <span style={{ fontSize: '12px', color: color.faint }}>
-            Generated from <strong style={{ color: color.body }}>{instrumentLabel}</strong> —{' '}
+            Generated from{' '}
+            <strong style={{ color: color.body }}>
+              {billedInstrumentLabels.join(' + ') || 'the selected instruments'}
+            </strong>{' '}
+            —{' '}
             {derivedLineCount === 1 ? '1 derived line' : `${derivedLineCount} derived lines`}.
             Anything you left unticked is still unbilled and comes back next time (§6.2).
           </span>
@@ -331,34 +452,55 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
         </div>
       )}
 
-      {/* Instrument switch — P4: one invoice derives from ONE instrument */}
-      {isDraft && pickerOpen && changeOrderOptions.length > 0 && (
+      {/* §2 — INSTRUMENT TABS. One invoice may bill the estimate AND several
+          change orders together (acceptance #2). These are tabs, not links:
+          the selection below is held across all of them, so ticking a cost on
+          the contract and another on a CO builds ONE invoice. */}
+      {isDraft && pickerOpen && instruments.length > 1 && (
         <div style={{ ...cardStyle, padding: '12px 16px' }}>
           <span style={microLabelStyle}>Bill against</span>
           <div style={{ marginTop: '6px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <a href={`?`} style={pillStyle(!instrument?.change_order_id)}>
-              Original Contract
-            </a>
-            {changeOrderOptions.map((co) => (
-              <a key={co.id} href={`?instrument=co:${co.id}`} style={pillStyle(instrument?.change_order_id === co.id)}>
-                {co.label}
-              </a>
-            ))}
+            {instruments.map((i) => {
+              const ticked = (pickableCostsByInstrument[i.key] ?? []).filter((c) =>
+                selectedCosts.has(c.allocationId)
+              ).length;
+              const days = new Set(
+                selectedSegments
+                  .filter((s) => instrumentForDay(s.memberId, s.workDate) === i.key)
+                  .map((s) => dayKeyOf(s.memberId, s.workDate))
+              ).size;
+              return (
+                <button
+                  key={i.key}
+                  type="button"
+                  onClick={() => setActiveKey(i.key)}
+                  style={pillStyle(activeKey === i.key)}
+                >
+                  {i.label}
+                  {ticked + days > 0 && ` · ${ticked + days}`}
+                </button>
+              );
+            })}
           </div>
           <p style={{ fontSize: '11px', color: color.faint, margin: '6px 0 0' }}>
             Each instrument carries its own type and rates (P4) — a change order bills on its own
-            terms and never re-prices the original contract&rsquo;s draws (§4).
+            terms and never re-prices the original contract&rsquo;s draws (§4). Your ticks are kept
+            on every tab; one Generate bills them all together.
           </p>
         </div>
       )}
 
-      {/* §2 — fixed-price draws */}
-      {isDraft && !isDerived && (
+      {/* §2 — fixed-price draws, against the ORIGINATING CONTRACT. Shown
+          whenever that contract is fixed-price, even if a derived CO also sits
+          on this invoice: a mixed invoice can carry a contract draw AND a CO's
+          derived lines. */}
+      {isDraft && drawsAvailable && (
         <DrawPanel
           invoiceId={invoice.id}
           originalContractValue={originalContractValue}
           alreadyBilled={alreadyBilled}
-          contractType={contractType}
+          sourceEstimateId={sourceEstimateId}
+          instrumentTypes={instrumentTypes}
           busy={busy}
           run={run}
         />
@@ -368,13 +510,15 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
       {isDraft && isDerived && pickerOpen && (
         <div style={{ ...cardStyle, overflow: 'hidden' }}>
           <div style={{ padding: '12px 16px', borderBottom: `1px solid ${color.cardBorder}` }}>
-            <span style={microLabelStyle}>Unbilled approved costs</span>
+            <span style={microLabelStyle}>
+              Unbilled approved costs{active ? ` — ${active.label}` : ''}
+            </span>
             <span style={{ fontSize: '11px', color: color.faint, marginLeft: '8px' }}>
               tick what this invoice bills — anything left unticked stays unbilled and comes back
               next time (§6.2)
             </span>
           </div>
-          {pickableCosts.length === 0 ? (
+          {activeCosts.length === 0 ? (
             <div style={{ padding: '18px', fontSize: '13px', color: color.faint }}>
               No unbilled approved costs for this instrument.
             </div>
@@ -391,7 +535,7 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
                 </tr>
               </thead>
               <tbody>
-                {pickableCosts.map((cost) => (
+                {activeCosts.map((cost) => (
                   <tr key={cost.allocationId} style={cost.blockedReason ? { opacity: 0.6 } : undefined}>
                     <td style={tdStyle}>
                       <input
@@ -455,10 +599,24 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
                     <th style={thStyle}>Task</th>
                     <th style={thStyle}>Type</th>
                     <th style={{ ...thStyle, textAlign: 'right' }}>Hours</th>
+                    {/* §2 [S97] — hours carry no instrument of their own, so
+                        the user says where each PERSON-DAY bills. */}
+                    <th style={thStyle}>Bills to</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {pickableHours.map((hour) => (
+                  {pickableHours.map((hour) => {
+                    const dayKey = dayKeyOf(hour.memberId, hour.workDate);
+                    const assigned = instrumentForDay(hour.memberId, hour.workDate);
+                    const assignedOk = derivedInstruments.some((i) => i.key === assigned);
+                    // Only the FIRST row of a person-day carries the control:
+                    // the assignment is per day, which is what stops a day
+                    // being split across instruments (§7.2 rounding).
+                    const firstOfDay =
+                      pickableHours.findIndex(
+                        (h) => dayKeyOf(h.memberId, h.workDate) === dayKey
+                      ) === pickableHours.indexOf(hour);
+                    return (
                     <tr key={hour.segmentId}>
                       <td style={tdStyle}>
                         <input
@@ -482,8 +640,42 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
                       <td style={{ ...tdStyle, textAlign: 'right', fontFamily: font.mono }}>
                         {hour.rawHours.toFixed(2)}
                       </td>
+                      <td style={tdStyle}>
+                        {firstOfDay ? (
+                          <>
+                            <select
+                              disabled={busy}
+                              value={assigned ?? ''}
+                              onChange={(e) =>
+                                setHourDayInstrument((prev) => ({
+                                  ...prev,
+                                  [dayKey]: e.target.value,
+                                }))
+                              }
+                              style={{ ...inputStyle, padding: '3px 6px', maxWidth: '180px' }}
+                            >
+                              {instruments.map((i) => (
+                                <option key={i.key} value={i.key}>
+                                  {i.label}
+                                  {isDerivedContract(i.contractType) ? '' : ' (no labor rate)'}
+                                </option>
+                              ))}
+                            </select>
+                            {!assignedOk && selectedHours.has(hour.segmentId) && (
+                              <div style={{ fontSize: '11px', color: color.warningDeep }}>
+                                Fixed-price instruments have no labor rate — reassign this day.
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <span style={{ fontSize: '11px', color: color.faint }}>
+                            same day &rarr;
+                          </span>
+                        )}
+                      </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
               {hourGroups.length > 0 && (
@@ -503,6 +695,8 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
                   You are splitting {splitDays.length === 1 ? 'a person-day' : 'person-days'} across
                   invoices. Rounding applies per person per day, so billing the parts separately can
                   total more than the whole day would. Bill a day in one piece unless you mean to.
+                  (A day can never be split across INSTRUMENTS — "Bills to" is set per person-day
+                  for exactly this reason.)
                 </div>
               )}
             </>
@@ -535,7 +729,15 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
       )}
 
       {/* Lines + totals */}
-      <LinesPanel invoice={invoice} isDraft={isDraft} contractType={contractType} busy={busy} run={run} presented={presented} />
+      <LinesPanel
+        invoice={invoice}
+        isDraft={isDraft}
+        instrumentTypes={instrumentTypes}
+        instruments={instruments}
+        busy={busy}
+        run={run}
+        presented={presented}
+      />
 
       {/* Adjustments — §8 discount, §4a/§4b/§3a credits */}
       {isDraft && (
@@ -543,7 +745,7 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
           invoice={invoice}
           credits={availableCredits}
           canApprove={canApprove}
-          contractType={contractType}
+          instrumentTypes={instrumentTypes}
           busy={busy}
           run={run}
         />
@@ -554,7 +756,8 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
         <SettingsPanel
           invoice={invoice}
           retainageAllowed={retainageAllowed}
-          contractType={contractType}
+          mixedRetainage={mixedRetainage}
+          instrumentTypes={instrumentTypes}
           busy={busy}
           run={run}
         />
@@ -582,14 +785,18 @@ function DrawPanel({
   invoiceId,
   originalContractValue,
   alreadyBilled,
-  contractType,
+  sourceEstimateId,
+  instrumentTypes,
   busy,
   run,
 }: {
   invoiceId: string;
   originalContractValue: number | null;
   alreadyBilled: number;
-  contractType: ContractType;
+  /** §2 — the draw is a percentage of the ORIGINAL contract, so it carries the
+   *  originating estimate as its instrument. */
+  sourceEstimateId: string | null;
+  instrumentTypes: InstrumentTypes;
   busy: boolean;
   run: (fn: () => Promise<{ success: boolean; error?: string }>, msg?: string) => Promise<boolean>;
 }) {
@@ -673,10 +880,11 @@ function DrawPanel({
                     isFinal,
                   },
                   originalContractValue,
-                  alreadyBilled
+                  alreadyBilled,
+                  sourceEstimateId
                 ).then(async (r) => {
                   if (!r.success) return r;
-                  return recalculateInvoiceTotals(invoiceId, { contractType });
+                  return recalculateInvoiceTotals(invoiceId, { instrumentTypes });
                 }),
               'Draw added.'
             );
@@ -707,14 +915,16 @@ function DrawPanel({
 function LinesPanel({
   invoice,
   isDraft,
-  contractType,
+  instrumentTypes,
+  instruments,
   busy,
   run,
   presented,
 }: {
   invoice: InvoiceWithLines;
   isDraft: boolean;
-  contractType: ContractType;
+  instrumentTypes: InstrumentTypes;
+  instruments: InstrumentOption[];
   busy: boolean;
   run: (fn: () => Promise<{ success: boolean; error?: string }>, msg?: string) => Promise<boolean>;
   presented: ReturnType<typeof presentInvoice>;
@@ -779,7 +989,7 @@ function LinesPanel({
                         run(
                           () =>
                             deleteInvoiceLine(line.id).then(async (r) =>
-                              r.success ? recalculateInvoiceTotals(invoice.id, { contractType }) : r
+                              r.success ? recalculateInvoiceTotals(invoice.id, { instrumentTypes }) : r
                             ),
                           'Line removed.'
                         )
@@ -883,7 +1093,7 @@ function LinesPanel({
                     invoiceId: invoice.id,
                     description: manualLabel.trim(),
                     amount: Number(manualAmount),
-                  }).then(async (r) => (r.success ? recalculateInvoiceTotals(invoice.id, { contractType }) : r)),
+                  }).then(async (r) => (r.success ? recalculateInvoiceTotals(invoice.id, { instrumentTypes }) : r)),
                 'Line added.'
               );
               if (ok) {
@@ -919,14 +1129,14 @@ function AdjustmentsPanel({
   invoice,
   credits,
   canApprove,
-  contractType,
+  instrumentTypes,
   busy,
   run,
 }: {
   invoice: InvoiceWithLines;
   credits: AvailableCredit[];
   canApprove: boolean;
-  contractType: ContractType;
+  instrumentTypes: InstrumentTypes;
   busy: boolean;
   run: (fn: () => Promise<{ success: boolean; error?: string }>, msg?: string) => Promise<boolean>;
 }) {
@@ -952,7 +1162,7 @@ function AdjustmentsPanel({
             const ok = await run(
               () =>
                 addDiscountLine(invoice.id, discountLabel.trim(), Number(discountAmount)).then(
-                  async (r) => (r.success ? recalculateInvoiceTotals(invoice.id, { contractType }) : r)
+                  async (r) => (r.success ? recalculateInvoiceTotals(invoice.id, { instrumentTypes }) : r)
                 ),
               'Discount line added.'
             );
@@ -996,7 +1206,7 @@ function AdjustmentsPanel({
                         totalBeforeCredit,
                         credit.label
                       )
-                  ).then(async (r) => (r.success ? recalculateInvoiceTotals(invoice.id, { contractType }) : r)),
+                  ).then(async (r) => (r.success ? recalculateInvoiceTotals(invoice.id, { instrumentTypes }) : r)),
                 'Credit placed on this invoice.'
               )
             }
@@ -1018,7 +1228,7 @@ function AdjustmentsPanel({
               const ok = await run(
                 () =>
                   addAllowanceCredit(invoice.id, 'Allowance under-run credit', Number(allowanceAmount)).then(
-                    async (r) => (r.success ? recalculateInvoiceTotals(invoice.id, { contractType }) : r)
+                    async (r) => (r.success ? recalculateInvoiceTotals(invoice.id, { instrumentTypes }) : r)
                   ),
                 'Allowance credit applied.'
               );
@@ -1041,13 +1251,16 @@ function AdjustmentsPanel({
 function SettingsPanel({
   invoice,
   retainageAllowed,
-  contractType,
+  mixedRetainage,
+  instrumentTypes,
   busy,
   run,
 }: {
   invoice: InvoiceWithLines;
   retainageAllowed: boolean;
-  contractType: ContractType;
+  /** §5 — this invoice carries BOTH retainable and T&M money. */
+  mixedRetainage: boolean;
+  instrumentTypes: InstrumentTypes;
   busy: boolean;
   run: (fn: () => Promise<{ success: boolean; error?: string }>, msg?: string) => Promise<boolean>;
 }) {
@@ -1073,7 +1286,7 @@ function SettingsPanel({
                   updateInvoiceSettings(
                     invoice.id,
                     { presentation_level: e.target.value as PresentationLevel },
-                    contractType
+                    instrumentTypes
                   ),
                 'Presentation updated.'
               )
@@ -1107,7 +1320,7 @@ function SettingsPanel({
                   updateInvoiceSettings(
                     invoice.id,
                     { due_date: dueDate === '' ? null : dueDate },
-                    contractType
+                    instrumentTypes
                   ),
                 dueDate === '' ? 'Terms set to due on receipt.' : 'Due date updated.'
               )
@@ -1144,7 +1357,7 @@ function SettingsPanel({
                   updateInvoiceSettings(
                     invoice.id,
                     { retainage_percent: retainage === '' ? null : Number(retainage) },
-                    contractType
+                    instrumentTypes
                   ),
                 'Retainage updated.'
               )
@@ -1167,7 +1380,7 @@ function SettingsPanel({
           disabled={busy}
           onChange={(e) =>
             run(
-              () => updateInvoiceSettings(invoice.id, { is_final: e.target.checked }, contractType),
+              () => updateInvoiceSettings(invoice.id, { is_final: e.target.checked }, instrumentTypes),
               'Updated.'
             )
           }
@@ -1176,9 +1389,12 @@ function SettingsPanel({
         <span style={{ fontSize: '11px', color: color.faint }}>(unlocks the §4b allowance credit)</span>
       </label>
 
-      <span style={{ fontSize: '11px', color: color.faint }}>
-        {contractType.replace(/_/g, ' ')} instrument
-      </span>
+      {mixedRetainage && (
+        <span style={{ fontSize: '11px', color: color.warningDeep }}>
+          §5: retainage applies only to the non-T&amp;M lines on this invoice — T&amp;M money is
+          never withheld against, even here.
+        </span>
+      )}
     </div>
   );
 }

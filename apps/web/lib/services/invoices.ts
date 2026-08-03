@@ -30,7 +30,9 @@ export type {
   AvailableCredit,
   ContractType,
   FlaggedInvoice,
+  InstrumentOption,
   InstrumentRef,
+  InstrumentTypes,
   Invoice,
   InvoiceLine,
   InvoiceLineType,
@@ -42,6 +44,11 @@ export type {
   RateRow,
 } from '@/lib/services/invoices-shared';
 export {
+  isDerivedContract,
+  lineInstrumentKey,
+  instrumentKey,
+  contractTypeForLine,
+  lineRetainageEligible,
   companyDay,
   companyToday,
   daysBetween,

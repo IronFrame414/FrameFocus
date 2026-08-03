@@ -436,3 +436,128 @@ describe('§8 — derived vs billed, and discount lines (R1)', () => {
     expect(totals.billedTotal).toBe(5200);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// §2 / acceptance #2 + §5 — MIXED-INSTRUMENT INVOICES [S97]
+//
+// #2 and #5 ship together by necessity: #5 ("retainage is NEVER applied to a
+// deposit or T&M invoice") held before this only because a fixed-price
+// instrument and a T&M instrument could not share an invoice. Multi-instrument
+// without a per-line retainage base would silently withhold against T&M money
+// and look like it was working. These assert the split directly.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('§5 per-line retainage on a MIXED invoice (#2 + #5 together)', () => {
+  // A fixed-price contract draw beside a T&M change order's work.
+  const mixed: InvoiceLineAmount[] = [
+    // Original Contract, fixed price — retainable.
+    { lineType: 'fixed', derivedAmount: 10000, billedAmount: 10000, retainageEligible: true },
+    // CO-2, T&M — NEVER retainable (§5/§7).
+    { lineType: 'derived_labor', derivedAmount: 4200, billedAmount: 4200, retainageEligible: false },
+    { lineType: 'derived_cost', derivedAmount: 412.08, billedAmount: 412.08, retainageEligible: false },
+  ];
+
+  it('withholds against the fixed-price draw ONLY', () => {
+    const totals = computeInvoiceTotals(mixed, { percent: 10, eligible: true });
+    expect(totals.billedTotal).toBe(14612.08);
+    // The base is the draw alone — NOT the $14,612.08 billed total.
+    expect(totals.retainageBase).toBe(10000);
+    expect(totals.retainageWithheld).toBe(1000);
+    expect(totals.amountReceivable).toBe(13612.08);
+  });
+
+  it('would have over-withheld by $461.21 under the old whole-invoice rule', () => {
+    // The exact defect this guards: 10% of everything, including T&M money.
+    const wrong = computeInvoiceTotals(
+      mixed.map((l) => ({ ...l, retainageEligible: true })),
+      { percent: 10, eligible: true }
+    );
+    expect(wrong.retainageWithheld).toBe(1461.21);
+    const right = computeInvoiceTotals(mixed, { percent: 10, eligible: true });
+    expect(Math.round((wrong.retainageWithheld - right.retainageWithheld) * 100) / 100).toBe(461.21);
+  });
+
+  it('#5 still holds absolutely: an all-T&M invoice withholds nothing', () => {
+    const tmOnly = mixed.filter((l) => l.retainageEligible === false);
+    const totals = computeInvoiceTotals(tmOnly, { percent: 10, eligible: true });
+    expect(totals.retainageBase).toBe(0);
+    expect(totals.retainageWithheld).toBe(0);
+    expect(totals.amountReceivable).toBe(4612.08);
+  });
+
+  it('#5 still holds absolutely: a DEPOSIT withholds nothing even on eligible lines', () => {
+    const totals = computeInvoiceTotals(mixed, { percent: 10, eligible: false });
+    expect(totals.retainageWithheld).toBe(0);
+  });
+
+  it('a credit line never adds to the retainage base, eligible or not', () => {
+    const withCredit: InvoiceLineAmount[] = [
+      ...mixed,
+      { lineType: 'discount', billedAmount: -500, retainageEligible: true },
+    ];
+    const totals = computeInvoiceTotals(withCredit, { percent: 10, eligible: true });
+    expect(totals.retainageBase).toBe(10000);
+    expect(totals.billedTotal).toBe(14112.08);
+  });
+
+  it('an unmarked line stays eligible — every pre-S97 caller is unaffected', () => {
+    const legacy: InvoiceLineAmount[] = [
+      { lineType: 'fixed', derivedAmount: 18000, billedAmount: 18000 },
+    ];
+    const totals = computeInvoiceTotals(legacy, { percent: 10, eligible: true });
+    expect(totals.retainageWithheld).toBe(1800); // trace A, unchanged
+    expect(totals.amountReceivable).toBe(16200);
+  });
+});
+
+describe('§11 full detail groups BY INSTRUMENT (Josh ruling, S97)', () => {
+  const lines: PresentationLine[] = [
+    // Original Contract, cost-plus at 20%.
+    { description: 'Lumber', category: 'material', costBasis: 1000, amount: 1200,
+      lineType: 'derived_cost', instrumentKey: 'est:E1', instrumentLabel: 'Original Contract' },
+    { description: '8 hrs @ $95/hr', category: 'labor', costBasis: null, amount: 760,
+      lineType: 'derived_labor', instrumentKey: 'est:E1', instrumentLabel: 'Original Contract' },
+    // CO-106-02, cost-plus at 12% — a DIFFERENT rate.
+    { description: 'Tile', category: 'material', costBasis: 500, amount: 560,
+      lineType: 'derived_cost', instrumentKey: 'co:C1', instrumentLabel: 'CO-106-02' },
+    // Invoice-level adjustment — belongs to no instrument.
+    { description: 'Goodwill discount', category: null, costBasis: null, amount: -100,
+      lineType: 'discount', instrumentKey: 'none', instrumentLabel: 'Other' },
+  ];
+
+  it('one group per instrument, each with its OWN subtotal and markup', () => {
+    const p = presentInvoice(lines, 'full_detail');
+    expect(p.groups).toHaveLength(2);
+
+    const contract = p.groups.find((g) => g.key === 'est:E1');
+    expect(contract?.label).toBe('Original Contract');
+    expect(contract?.nonLaborSubtotal).toBe(1000);
+    expect(contract?.nonLaborMarkup).toBe(200); // 20%
+    expect(contract?.laborLines).toHaveLength(1); // labor stays OUTSIDE the block
+    expect(contract?.total).toBe(1960);
+
+    const co = p.groups.find((g) => g.key === 'co:C1');
+    expect(co?.nonLaborSubtotal).toBe(500);
+    expect(co?.nonLaborMarkup).toBe(60); // 12% — cannot honestly share a markup line
+    expect(co?.total).toBe(560);
+  });
+
+  it('adjustments stay INVOICE-level and never land in a group', () => {
+    const p = presentInvoice(lines, 'full_detail');
+    expect(p.adjustmentLines).toHaveLength(1);
+    expect(p.groups.flatMap((g) => [...g.laborLines, ...g.nonLaborLines])).toHaveLength(3);
+    expect(p.total).toBe(2420); // 1200 + 760 + 560 - 100
+  });
+
+  it('by_section stays CATEGORY-only across the invoice — it exposes no rate', () => {
+    const p = presentInvoice(lines, 'by_section');
+    expect(p.sections.map((s) => s.label)).toEqual(['Labor', 'Materials']);
+    expect(p.sections.find((s) => s.label === 'Materials')?.amount).toBe(1760); // 1200 + 560
+  });
+
+  it('a single-instrument invoice yields exactly ONE group', () => {
+    const p = presentInvoice(lines.filter((l) => l.instrumentKey === 'est:E1'), 'full_detail');
+    expect(p.groups).toHaveLength(1);
+    expect(p.groups[0].nonLaborMarkup).toBe(200);
+  });
+});

@@ -8,10 +8,16 @@ import {
   type PresentationLevel,
   type SelectedSegment,
 } from '@framefocus/shared/utils/invoice-derivation';
-import { canVoidInvoice, companyToday } from '@/lib/services/invoices-shared';
+import {
+  anyRetainableInstrument,
+  canVoidInvoice,
+  companyToday,
+  lineRetainageEligible,
+} from '@/lib/services/invoices-shared';
 import type {
   ContractType,
   InstrumentRef,
+  InstrumentTypes,
   InvoiceLineType,
   InvoiceStatus,
   VoidContext,
@@ -85,8 +91,7 @@ export async function createInvoice(input: CreateInvoiceInput): Promise<CreateRe
 
 // ── §6/§7 — derive and persist a cost-plus / T&M invoice ────────────────────
 
-export interface DeriveInvoiceInput {
-  invoiceId: string;
+export interface DeriveSelectionInput {
   instrument: InstrumentRef;
   contractType: ContractType;
   selectedCosts: Array<{
@@ -97,9 +102,18 @@ export interface DeriveInvoiceInput {
     expenseDate: string;
   }>;
   selectedHours: SelectedSegment[];
-  /** §5 — retainage is NEVER applied to a deposit or a T&M invoice. */
+}
+
+export interface DeriveInvoiceInput {
+  invoiceId: string;
+  /** §2 / acceptance #2 [S97] — one entry per instrument this invoice bills. */
+  selections: DeriveSelectionInput[];
+  /** §5 — the project/invoice retainage percent. Which LINES it applies to is
+   *  decided per instrument; a deposit invoice withholds nothing at all. */
   retainagePercent?: number | null;
   isDeposit?: boolean;
+  /** §5 — contract type by instrument, for the per-line retainage split. */
+  instrumentTypes: InstrumentTypes;
 }
 
 /**
@@ -121,12 +135,7 @@ export async function deriveAndSaveInvoice(input: DeriveInvoiceInput): Promise<R
   const response = await fetch(`/api/invoices/${input.invoiceId}/derive`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      instrument: input.instrument,
-      contractType: input.contractType,
-      selectedCosts: input.selectedCosts,
-      selectedHours: input.selectedHours,
-    }),
+    body: JSON.stringify({ selections: input.selections }),
   });
 
   const payload = (await response.json().catch(() => null)) as
@@ -139,7 +148,7 @@ export async function deriveAndSaveInvoice(input: DeriveInvoiceInput): Promise<R
   return recalculateInvoiceTotals(input.invoiceId, {
     retainagePercent: input.retainagePercent,
     isDeposit: input.isDeposit,
-    contractType: input.contractType,
+    instrumentTypes: input.instrumentTypes,
   });
 }
 
@@ -169,19 +178,30 @@ export async function addFixedLine(input: AddFixedLineInput): Promise<Result> {
   return { success: true };
 }
 
-/** §2 (trace G) — a percentage draw prices off the ORIGINAL contract value; a
- *  final draw bills the REMAINDER. A signed CO never re-prices the draws. */
+/**
+ * §2 (trace G) — a percentage draw prices off the ORIGINAL contract value; a
+ * final draw bills the REMAINDER. A signed CO never re-prices the draws.
+ *
+ * THE DRAW CARRIES ITS INSTRUMENT [S97]. It used to write NULL/NULL, which was
+ * harmless only while an invoice had exactly one instrument. Now that a draw can
+ * sit beside a T&M change order's lines, an un-attributed draw could not be
+ * classified for the per-line retainage split (§5) and would fall to the
+ * invoice fallback — i.e. be decided by something other than its own contract.
+ * A draw belongs to the ORIGINATING ESTIMATE by definition: it is a percentage
+ * of the original contract value.
+ */
 export async function addDrawLine(
   invoiceId: string,
   draw: DrawInput,
   originalContractValue: number,
-  alreadyBilled: number
+  alreadyBilled: number,
+  sourceEstimateId: string | null
 ): Promise<Result> {
   const amount = computeDrawAmount(draw, originalContractValue, alreadyBilled);
   if (!(amount > 0)) {
     return { success: false, error: 'This draw computes to zero or less — nothing left to bill.' };
   }
-  return addFixedLine({ invoiceId, description: draw.label, amount });
+  return addFixedLine({ invoiceId, description: draw.label, amount, sourceEstimateId });
 }
 
 // ── §8 discount + §3a/§4a/§4b credit lines (all negative) ───────────────────
@@ -301,15 +321,33 @@ export async function setLineBilledAmount(lineId: string, billedAmount: number):
 export interface RecalcOptions {
   retainagePercent?: number | null;
   isDeposit?: boolean;
+  /**
+   * §5 PER LINE [S97] — contract type BY INSTRUMENT, so a mixed invoice can be
+   * classified line by line. Omitted means "one instrument, this type", which
+   * is what `contractType` below expresses.
+   */
+  instrumentTypes?: InstrumentTypes;
+  /** Single-instrument shorthand. Equivalent to instrumentTypes with an empty
+   *  map and this as the fallback — every line classifies the same way. */
   contractType?: ContractType;
 }
 
-/** §5 — retainage is NEVER applied to a deposit or a T&M invoice. Cost-plus
- *  and fixed-price MAY carry it. */
-export function retainageEligible(opts: RecalcOptions): boolean {
-  if (opts.isDeposit) return false;
-  if (opts.contractType === 'time_and_materials') return false;
-  return true;
+/**
+ * §5 INVOICE-LEVEL veto — a DEPOSIT invoice withholds nothing at all.
+ *
+ * The T&M half of §5 is NO LONGER decided here. It moved to the line, because
+ * it is a property of the INSTRUMENT and an invoice may now carry several
+ * (§2 / acceptance #2). Deciding T&M once per invoice would withhold against
+ * the T&M money on a mixed invoice — see lineRetainageEligible.
+ */
+export function invoiceRetainageAllowed(opts: { isDeposit?: boolean }): boolean {
+  return !opts.isDeposit;
+}
+
+/** The classification a set of RecalcOptions implies. */
+function typesFrom(opts: RecalcOptions): InstrumentTypes {
+  if (opts.instrumentTypes) return opts.instrumentTypes;
+  return { byKey: {}, fallback: opts.contractType ?? 'fixed_price' };
 }
 
 export async function recalculateInvoiceTotals(
@@ -318,9 +356,11 @@ export async function recalculateInvoiceTotals(
 ): Promise<Result> {
   const supabase = createClient();
 
+  // source_estimate_id / source_change_order_id are selected because retainage
+  // eligibility is now decided PER LINE from the instrument each line carries.
   const { data: lines, error } = await supabase
     .from('invoice_lines')
-    .select('line_type, derived_amount, billed_amount')
+    .select('line_type, derived_amount, billed_amount, source_estimate_id, source_change_order_id')
     .eq('invoice_id', invoiceId);
   if (error) return { success: false, error: error.message };
 
@@ -331,14 +371,15 @@ export async function recalculateInvoiceTotals(
     .single();
 
   const percent = opts.retainagePercent ?? invoice?.retainage_percent ?? null;
-  const eligible = retainageEligible({
-    ...opts,
+  const eligible = invoiceRetainageAllowed({
     isDeposit: opts.isDeposit ?? invoice?.invoice_type === 'deposit',
   });
+  const types = typesFrom(opts);
 
   const totals = computeInvoiceTotals(
     (lines ?? []).map(
       (l): InvoiceLineAmount => ({
+        retainageEligible: lineRetainageEligible(l, types),
         lineType: l.line_type as InvoiceLineType,
         derivedAmount: l.derived_amount === null ? null : Number(l.derived_amount),
         billedAmount: Number(l.billed_amount),
@@ -371,10 +412,19 @@ export async function updateInvoiceSettings(
     is_final?: boolean;
     notes?: string | null;
   },
-  /** Required whenever retainage_percent is being set — §5's "never on a T&M
-   *  invoice" is a money rule and is enforced HERE, not only by a disabled
-   *  input. (The deposit half of the rule is additionally a DB CHECK.) */
-  contractType?: ContractType
+  /**
+   * Required whenever retainage_percent is being set. §5 is a money rule and is
+   * enforced HERE, not only by a disabled input. (The deposit half is
+   * additionally a DB CHECK.)
+   *
+   * [S97] This was a single `contractType` and the rule was "a T&M INVOICE
+   * never withholds retainage" — expressible as one boolean only while an
+   * invoice had one instrument. With §2 real, the percent is refused only when
+   * EVERY instrument in play is T&M; on a mixed invoice it is legal, and the
+   * PER-LINE split in computeInvoiceTotals is what keeps T&M money out of the
+   * retainage base.
+   */
+  instrumentTypes?: InstrumentTypes
 ): Promise<Result> {
   const supabase = createClient();
 
@@ -387,8 +437,11 @@ export async function updateInvoiceSettings(
     if (invoice?.invoice_type === 'deposit') {
       return { success: false, error: 'A deposit invoice never withholds retainage (7D §5).' };
     }
-    if (contractType === 'time_and_materials') {
-      return { success: false, error: 'A T&M invoice never withholds retainage (7D §5/§7).' };
+    if (instrumentTypes && !anyRetainableInstrument(instrumentTypes)) {
+      return {
+        success: false,
+        error: 'Every instrument on this invoice is T&M, and T&M never withholds retainage (7D §5/§7).',
+      };
     }
   }
 
@@ -396,7 +449,7 @@ export async function updateInvoiceSettings(
   const { error } = await supabase.from('invoices').update(updates).eq('id', invoiceId);
   if (error) return { success: false, error: error.message };
   if (updates.retainage_percent !== undefined) {
-    return recalculateInvoiceTotals(invoiceId, { contractType });
+    return recalculateInvoiceTotals(invoiceId, { instrumentTypes });
   }
   return { success: true };
 }
