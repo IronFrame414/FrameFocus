@@ -125,6 +125,21 @@ export async function loadEstimateLineBilling(
   const itemIds = items.map((i) => i.id);
   const categoryIds = [...new Set(items.map((i) => i.category_id).filter(Boolean))] as string[];
 
+  // LIVE invoices on this project, resolved FIRST and passed as an id list.
+  //
+  // NOT a PostgREST embed: invoice_lines has TWO foreign keys to invoices
+  // (invoice_id and source_deposit_invoice_id), so `invoices!inner(...)` is
+  // ambiguous — it errors, and destructuring only `data` swallows that
+  // silently, leaving every billed figure at zero. An explicit id list is
+  // unambiguous and matches loadDepositCredits / getContractBilling.
+  const { data: liveInvoices } = await supabase
+    .from('invoices')
+    .select('id')
+    .eq('project_id', projectId)
+    .eq('is_deleted', false)
+    .neq('status', 'voided');
+  const liveIds = (liveInvoices ?? []).map((i) => i.id);
+
   const [{ data: rows }, { data: categories }, { data: billedLines }] = await Promise.all([
     supabase
       .from('estimate_line_rows')
@@ -133,12 +148,17 @@ export async function loadEstimateLineBilling(
     categoryIds.length > 0
       ? supabase.from('estimate_categories').select('id, name').in('id', categoryIds)
       : Promise.resolve({ data: [] as { id: string; name: string }[] }),
-    // Live invoices only — a VOIDED invoice's lines are retained (§9) but bill
-    // nothing, so its share of a line returns with no cleanup step.
-    supabase
-      .from('invoice_lines')
-      .select('source_estimate_line_item_id, billed_amount, invoice_id, invoices!inner(status, is_deleted)')
-      .in('source_estimate_line_item_id', itemIds),
+    // A VOIDED invoice's lines are retained (§9) but bill nothing, so its share
+    // of a line returns with no cleanup step — that is this filter.
+    liveIds.length > 0
+      ? supabase
+          .from('invoice_lines')
+          .select('source_estimate_line_item_id, billed_amount')
+          .in('source_estimate_line_item_id', itemIds)
+          .in('invoice_id', liveIds)
+      : Promise.resolve({
+          data: [] as Array<{ source_estimate_line_item_id: string | null; billed_amount: number }>,
+        }),
   ]);
 
   const rowTypesByItem = new Map<string, string[]>();
@@ -151,17 +171,8 @@ export async function loadEstimateLineBilling(
   const categoryNameById = new Map((categories ?? []).map((c) => [c.id, c.name]));
 
   const billedByItem = new Map<string, number>();
-  for (const l of (billedLines ?? []) as Array<{
-    source_estimate_line_item_id: string | null;
-    billed_amount: number;
-    invoices: { status: string; is_deleted: boolean } | { status: string; is_deleted: boolean }[];
-  }>) {
+  for (const l of billedLines ?? []) {
     if (!l.source_estimate_line_item_id) continue;
-    // The embed comes back as an object or a one-element array depending on how
-    // PostgREST infers the relation — handle both rather than assume (the
-    // project_budget_amounts precedent in budget.ts).
-    const inv = Array.isArray(l.invoices) ? l.invoices[0] : l.invoices;
-    if (!inv || inv.is_deleted || inv.status === 'voided') continue;
     billedByItem.set(
       l.source_estimate_line_item_id,
       money((billedByItem.get(l.source_estimate_line_item_id) ?? 0) + Number(l.billed_amount))
@@ -202,18 +213,14 @@ export async function loadEstimateLineBilling(
   // carrying the CONTRACT instrument on a live invoice.
   const discountTotal = money(Number(estimate?.discount_total ?? 0));
   let discountApplied = 0;
-  if (discountTotal > 0) {
+  if (discountTotal > 0 && liveIds.length > 0) {
     const { data: discountLines } = await supabase
       .from('invoice_lines')
-      .select('billed_amount, invoices!inner(status, is_deleted)')
+      .select('billed_amount')
       .eq('line_type', 'discount')
-      .eq('source_estimate_id', estimateId);
-    for (const l of (discountLines ?? []) as Array<{
-      billed_amount: number;
-      invoices: { status: string; is_deleted: boolean } | { status: string; is_deleted: boolean }[];
-    }>) {
-      const inv = Array.isArray(l.invoices) ? l.invoices[0] : l.invoices;
-      if (!inv || inv.is_deleted || inv.status === 'voided') continue;
+      .eq('source_estimate_id', estimateId)
+      .in('invoice_id', liveIds);
+    for (const l of discountLines ?? []) {
       discountApplied = money(discountApplied + Math.abs(Number(l.billed_amount)));
     }
   }
