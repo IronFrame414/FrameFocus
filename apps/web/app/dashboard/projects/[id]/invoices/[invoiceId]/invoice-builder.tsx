@@ -277,15 +277,19 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
         />
       </div>
 
-      {/* §13 — email delivery. Owner/Admin only; the route enforces it too.
-          Sent/paid invoices only — a draft is watermarked "not a bill". */}
-      {(invoice.status === 'sent' || invoice.status === 'paid') && (
+      {/* §13 — SEND. Owner/Admin only; the route enforces it too.
+          [S97] No longer gated on the invoice already being sent: on a draft
+          this issues it (allocating the number) and emails it in one action.
+          A voided invoice is the only status with nothing to send. */}
+      {invoice.status !== 'voided' && (
         <div style={{ ...cardStyle, padding: '10px 14px' }}>
           <InvoiceDeliveryPanel
             invoiceId={invoice.id}
             canSend={role === 'owner' || role === 'admin'}
             recipientEmail={recipientEmail}
             deliveries={deliveries}
+            status={invoice.status}
+            hasLines={invoice.lines.length > 0}
           />
         </div>
       )}
@@ -1247,11 +1251,14 @@ function LifecycleActions({
           disabled={busy || invoice.lines.length === 0}
           style={primaryButtonStyle}
           onClick={() => {
-            if (!window.confirm('Mark this invoice sent? A sent invoice is immutable — corrections go through void and reissue.')) return;
-            run(() => markInvoiceSent(invoice.id, timeZone), 'Invoice marked sent.');
+            if (!window.confirm('Issue this invoice WITHOUT emailing it? It will be numbered and frozen — corrections go through void and reissue. Use "Send to client" if you want it emailed.')) return;
+            run(() => markInvoiceSent(invoice.id, timeZone), 'Invoice issued. Nothing was emailed — print or download it to deliver.');
           }}
         >
-          Mark sent
+          {/* §16 #18 — the PRINT path: issue without email. "Send to client" in
+              the delivery panel is the email path and does both. Labelled so
+              the two are not mistaken for the same button [S97]. */}
+          Issue without emailing
         </button>
       )}
 

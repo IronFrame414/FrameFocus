@@ -9,15 +9,23 @@ import {
 } from '@/lib/services/invoice-delivery-shared';
 import { color, secondaryButtonStyle } from '@/lib/theme';
 
-// 7D1 §13 — email the invoice to the client, and show what happened to it.
+// 7D1 §13 — send the invoice to the client, and show what happened to it.
 //
 // OWNER/ADMIN ONLY (the route enforces it; this only decides what renders).
 // NO PAY LINK — payment is QuickBooks-hosted and 7G is not built.
 //
-// A FAILED SEND MUST NEVER LOOK LIKE SUCCESS. The route returns 502 on a
-// delivery failure and logs the attempt as `failed`, and a bounce arrives later
-// via the Resend webhook. Both render in red here with an explicit label; the
-// success line is the only green one.
+// [S97] THIS PANEL NOW RENDERS ON A DRAFT TOO. Sending is ONE action: the route
+// issues the invoice (allocating its number) and emails it. Previously this
+// only appeared once the invoice was already marked sent, which made delivery a
+// second click in a second place and let an invoice sit issued and undelivered.
+//
+// A FAILED SEND MUST NEVER LOOK LIKE SUCCESS — and after issuing, it must not
+// look like nothing happened either. The route returns 502/500 with
+// `issued: true` when the invoice was numbered but delivery or the PDF failed;
+// that case is reported in red AND refreshes the page, because the invoice
+// really did change state. A bounce arrives later via the Resend webhook. Every
+// failure renders in red with an explicit label; the success line is the only
+// green one.
 
 function fmt(value: string | null): string {
   if (!value) return '';
@@ -34,28 +42,63 @@ export function InvoiceDeliveryPanel({
   canSend,
   recipientEmail,
   deliveries,
+  status,
+  hasLines,
 }: {
   invoiceId: string;
   canSend: boolean;
   recipientEmail: string | null;
   deliveries: InvoiceDelivery[];
+  /** Drives the label and the confirm — an unissued invoice is about to be
+   *  numbered and frozen, an issued one is only being re-delivered. */
+  status: string;
+  hasLines: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ text: string; bad: boolean } | null>(null);
 
+  const willIssue = status === 'draft' || status === 'pending_approval';
+
   async function send() {
+    // Issuing is the irreversible half: it allocates the invoice number and
+    // freezes the invoice (§8/§10). Re-delivering an already-issued invoice
+    // changes nothing and needs no confirm.
+    if (
+      willIssue &&
+      !window.confirm(
+        'Send this invoice to the client? It will be numbered and emailed, and a sent invoice is immutable — corrections go through void and reissue.'
+      )
+    ) {
+      return;
+    }
+
     setBusy(true);
     setMessage(null);
     try {
       const res = await fetch(`/api/invoices/${invoiceId}/send`, { method: 'POST' });
       const payload = (await res.json().catch(() => null)) as
-        | { success?: boolean; error?: string; recipientEmail?: string }
+        | {
+            success?: boolean;
+            error?: string;
+            recipientEmail?: string;
+            issued?: boolean;
+            invoiceNumber?: string | null;
+          }
         | null;
       if (!res.ok || !payload?.success) {
         setMessage({ text: payload?.error ?? 'Could not send this invoice.', bad: true });
+        // The invoice may have been ISSUED and only delivery failed — the row
+        // really did change, so the screen must catch up even on the error path
+        // or it will keep offering to "send" an invoice that is already sent.
+        if (payload?.issued) router.refresh();
       } else {
-        setMessage({ text: `Sent to ${payload.recipientEmail}.`, bad: false });
+        setMessage({
+          text: payload.invoiceNumber
+            ? `Invoice ${payload.invoiceNumber} sent to ${payload.recipientEmail}.`
+            : `Sent to ${payload.recipientEmail}.`,
+          bad: false,
+        });
         router.refresh();
       }
     } catch (err) {
@@ -64,6 +107,12 @@ export function InvoiceDeliveryPanel({
       setBusy(false);
     }
   }
+
+  const blockedReason = !recipientEmail
+    ? 'no contact email on this project'
+    : willIssue && !hasLines
+      ? 'this invoice has no lines yet'
+      : null;
 
   const lastFailure = deliveries.find((d) => isDeliveryFailure(d.status));
 
@@ -75,24 +124,35 @@ export function InvoiceDeliveryPanel({
         >
           Delivery
         </span>
-        {recipientEmail ? (
+        {recipientEmail && (
           <span style={{ fontSize: '0.75rem', color: color.faint }}>to {recipientEmail}</span>
-        ) : (
-          <span style={{ fontSize: '0.75rem', color: color.warningDeep }}>
-            no contact email on this project
-          </span>
+        )}
+        {blockedReason && (
+          <span style={{ fontSize: '0.75rem', color: color.warningDeep }}>{blockedReason}</span>
         )}
       </div>
 
       {canSend && (
         <button
           type="button"
-          disabled={busy || !recipientEmail}
+          disabled={busy || !!blockedReason}
           style={{ ...secondaryButtonStyle, marginTop: '0.5rem' }}
           onClick={() => void send()}
         >
-          {busy ? 'Sending…' : deliveries.length > 0 ? 'Email again' : 'Email to client'}
+          {busy
+            ? 'Sending…'
+            : willIssue
+              ? 'Send to client'
+              : deliveries.length > 0
+                ? 'Email again'
+                : 'Email to client'}
         </button>
+      )}
+
+      {canSend && willIssue && !blockedReason && (
+        <p style={{ fontSize: '0.75rem', color: color.faint, margin: '0.375rem 0 0' }}>
+          Sending numbers the invoice, files its PDF under the project and emails it — one action.
+        </p>
       )}
 
       {message && (
@@ -118,8 +178,12 @@ export function InvoiceDeliveryPanel({
 
       {deliveries.length === 0 ? (
         <p style={{ fontSize: '0.75rem', color: color.faint, margin: '0.5rem 0 0' }}>
-          Not emailed yet. Print and Download are unaffected, and the PDF is filed under the
-          project either way.
+          {willIssue
+            ? // A DRAFT's PDF is a preview and is deliberately never stored — a
+              // watermarked draft sitting in Files beside real invoices is the
+              // confusion the watermark exists to prevent.
+              'Not sent yet. Preview PDF and Download work now; the PDF is filed under the project once the invoice is issued.'
+            : 'Not emailed yet. Print and Download are unaffected, and the PDF is filed under the project either way.'}
         </p>
       ) : (
         <ul style={{ listStyle: 'none', padding: 0, margin: '0.5rem 0 0' }}>
