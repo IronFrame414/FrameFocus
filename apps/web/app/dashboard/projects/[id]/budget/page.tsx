@@ -5,7 +5,7 @@ import { getProject } from '@/lib/services/projects';
 import { getBudgetRollup, type InstrumentGroup } from '@/lib/services/budget';
 import { getProjectIncome } from '@/lib/services/project-income';
 import { getDepositCredits } from '@/lib/services/deposit-credit';
-import { getContractBilling, getRevisedContract } from '@/lib/services/contract-value';
+import { getChangeOrderBilling, getContractBilling, getRevisedContract } from '@/lib/services/contract-value';
 import { budgetColumnsFor } from '@/lib/services/invoices-shared';
 import { getExpenses, getJobCostRollup } from '@/lib/services/expenses';
 import { getPayablesSummary } from '@/lib/services/payables';
@@ -136,6 +136,14 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
   // excludes any deposit billed against the ORIGINATING ESTIMATE, because that
   // one is §3's mechanism and already reduces remaining-to-bill — so the two
   // tiles can never describe the same money.
+  // §4 [S97] — what is left to bill on the CHANGE ORDERS. The screen showed
+  // what the COs are worth and what remains on the contract, and omitted the
+  // figure connecting them. Only FIXED-PRICE POSITIVE COs have a remaining;
+  // derived COs are billed as incurred and negative COs are credits, so
+  // neither gets a number. NOT gated on the project's own type — a fixed-price
+  // job can carry a cost-plus CO and vice versa (P4).
+  const coBilling = isOwnerAdmin ? await getChangeOrderBilling(params.id) : null;
+
   const depositCredits = isOwnerAdmin ? await getDepositCredits(params.id) : [];
   const undrawnDeposit = Math.round(
     depositCredits.reduce((sum, d) => sum + d.remaining, 0) * 100
@@ -218,6 +226,38 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                       : contractBilling.issuedAgainstContract > 0
                         ? `original less ${money(contractBilling.issuedAgainstContract)} already invoiced`
                         : 'nothing invoiced against the contract yet',
+                },
+              ]
+            : []),
+          // §4 [S97] — the CO figure that was missing beside "Remaining on
+          // original contract". The VALUE covers fixed-price positive COs only,
+          // and the caption names every kind NOT in it, so the reader never has
+          // to guess the scope. An em-dash rather than $0 when there is nothing
+          // countable but COs exist — a zero would read as "all billed".
+          ...(coBilling && coBilling.orders.length > 0
+            ? [
+                {
+                  label: 'Remaining on change orders',
+                  value: coBilling.fixedCount > 0 ? money(coBilling.fixedRemaining) : '—',
+                  valueColor:
+                    coBilling.fixedCount === 0
+                      ? color.faint
+                      : coBilling.fixedRemaining < 0
+                        ? color.warningDeep
+                        : color.navy,
+                  caption: [
+                    coBilling.fixedCount > 0
+                      ? `${coBilling.fixedCount} fixed-price CO${coBilling.fixedCount === 1 ? '' : 's'}`
+                      : 'no fixed-price COs',
+                    coBilling.asIncurredCount > 0
+                      ? `${coBilling.asIncurredCount} billed as incurred (no fixed amount)`
+                      : null,
+                    coBilling.creditCount > 0
+                      ? `${coBilling.creditCount} credit CO${coBilling.creditCount === 1 ? '' : 's'} excluded`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · '),
                 },
               ]
             : []),
