@@ -145,7 +145,14 @@ export interface PickableCost {
   description: string;
   supplier: string;
   category: CostCategory;
+  /** §6.2 as amended [S97] — what is BILLABLE NOW: the allocation amount less
+   *  every live claim against it. On a cost never billed this equals
+   *  `originalAmount`; on a partially billed one it is the remainder. */
   amount: number;
+  /** The allocation's full amount, for the picker's "X of Y" display. */
+  originalAmount: number;
+  /** Σ live claims — how much of this cost is already on an invoice. */
+  claimedAmount: number;
   expenseDate: string;
   /** §6.2 — "shows how long each cost has sat unbilled", so age is visible
    *  and costs are not accidentally left behind. */

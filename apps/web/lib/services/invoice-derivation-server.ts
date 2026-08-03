@@ -4,6 +4,7 @@ import {
   deriveCostLine,
   deriveLaborLines,
   groupSelectedHours,
+  partialClaimAmount,
   type RatedDayGroup,
   type SelectedCost,
   type SelectedSegment,
@@ -64,6 +65,17 @@ export interface DeriveSelection {
     expenseDate: string;
   }>;
   selectedHours: SelectedSegment[];
+  /**
+   * §6.2 partial billing [S97] — what percentage of each ticked cost's
+   * REMAINING amount this invoice bills. Lives per instrument because the
+   * percentage differs per instrument (Josh's example: draw #2 of the contract
+   * plus 50% of CO-106-02). Absent or >= 100 bills the whole remainder.
+   *
+   * HOURS ARE NOT AFFECTED. §7.2 rounds each person-day UP to the half hour,
+   * so a partial hour claim over-bills; hours stay all-or-nothing per
+   * person-day and this percentage never touches them.
+   */
+  billPercent?: number;
 }
 
 export interface DeriveServerInput {
@@ -100,13 +112,48 @@ async function loadRatesPrivileged(
 }
 
 /**
- * Prices the caller's SELECTED costs and hours and persists the derived lines
- * and their claims. Byte-for-byte the previous deriveAndSaveInvoice body, with
- * two changes: the rate rows are loaded here instead of being passed in, and
- * the writes go through the privileged client.
+ * §6.2 [S97] — REMAINING UNBILLED per allocation, DERIVED and never stored:
  *
- * Returns nothing about rates. The caller re-reads the invoice for totals.
+ *     remaining = expense_allocations.amount − Σ (live claims)
+ *
+ * No column on expense_allocations and no is_billed flag: a stored figure would
+ * need its own sync trigger and would drift, and deriving it makes VOID-RESTORE
+ * free — claims already CASCADE from the invoice, so voiding hands the
+ * remainder straight back with no compensating write.
+ *
+ * `excludeInvoiceId` drops the caller's own claims, so a re-derive replaces
+ * this invoice's claim instead of stacking on top of it.
  */
+async function loadRemaining(
+  admin: SupabaseClient,
+  excludeInvoiceId: string,
+  allocationIds: string[]
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (allocationIds.length === 0) return out;
+
+  const { data: allocations } = await admin
+    .from('expense_allocations')
+    .select('id, amount')
+    .in('id', allocationIds);
+  for (const a of allocations ?? []) out.set(a.id, Number(a.amount));
+
+  const { data: claims } = await admin
+    .from('invoice_cost_claims')
+    .select('expense_allocation_id, claimed_amount, invoice_id')
+    .in('expense_allocation_id', allocationIds);
+  for (const c of claims ?? []) {
+    if (c.invoice_id === excludeInvoiceId) continue;
+    const left = out.get(c.expense_allocation_id);
+    if (left === undefined) continue;
+    out.set(
+      c.expense_allocation_id,
+      Math.round((left - Number(c.claimed_amount)) * 100) / 100
+    );
+  }
+  return out;
+}
+
 /** Everything one selection produced, priced but not yet written. */
 interface PricedSelection {
   selection: DeriveSelection;
@@ -121,9 +168,24 @@ interface PricedSelection {
  */
 async function priceSelection(
   admin: SupabaseClient,
+  invoiceId: string,
   selection: DeriveSelection
 ): Promise<{ priced?: PricedSelection; error?: string }> {
   const rateRows = await loadRatesPrivileged(admin, selection.instrument);
+
+  // §6.2 [S97] — how much of each ticked cost is still unbilled. Computed HERE,
+  // from the authoritative rows, never taken from the caller: the amount the
+  // browser last saw can be stale, and the ceiling on a claim is a money rule.
+  //
+  // Claims belonging to THIS invoice are excluded, because step 2 is about to
+  // delete them — a re-derive REPLACES this invoice's own claim rather than
+  // stacking on it. (This is also why remaining can be computed before the
+  // destructive clear, which keeps the price-first ordering intact.)
+  const remainingByAllocation = await loadRemaining(
+    admin,
+    invoiceId,
+    selection.selectedCosts.map((c) => c.allocationId)
+  );
 
   // Costs. A missing rate for a category actually in use is a hard stop —
   // never price at 0% (§6.1).
@@ -133,11 +195,21 @@ async function priceSelection(
     const row = rateRowInForce(rateRows, rateType, cost.expenseDate);
     if (!row) return { error: new MissingRateError(rateType, cost.expenseDate).message };
 
+    // The portion this invoice bills. The markup then applies to THAT portion,
+    // at this cost's own rate in force on its own incurred date — which does
+    // not move, so partials taken months apart price identically.
+    const remaining = remainingByAllocation.get(cost.allocationId) ?? 0;
+    const claimed = partialClaimAmount(remaining, selection.billPercent ?? 100);
+    // Fully billed already, or a percentage that rounds to nothing: write no
+    // line and no claim rather than a zero-value one (the trigger rejects a
+    // non-positive claim, and a $0 line on a client's bill is noise).
+    if (claimed <= 0) continue;
+
     const selected: SelectedCost = {
       allocationId: cost.allocationId,
       description: cost.description,
       category: cost.category,
-      cost: cost.amount,
+      cost: claimed,
       incurredDate: cost.expenseDate,
       markupPercent: row.rate,
       rateRowId: row.id,
@@ -159,6 +231,11 @@ async function priceSelection(
   return { priced: { selection, costLines, laborLines: deriveLaborLines(rated) } };
 }
 
+/**
+ * Prices every selection's SELECTED costs and hours and persists the derived
+ * lines and their claims. Returns nothing about rates — the caller re-reads the
+ * invoice for totals.
+ */
 export async function deriveInvoiceLines(
   admin: SupabaseClient,
   input: DeriveServerInput
@@ -173,7 +250,7 @@ export async function deriveInvoiceLines(
   //    — one bad instrument must not destroy three good ones' work.
   const priced: PricedSelection[] = [];
   for (const selection of input.selections) {
-    const result = await priceSelection(admin, selection);
+    const result = await priceSelection(admin, input.invoiceId, selection);
     if (result.error) return { success: false, error: result.error };
     priced.push(result.priced as PricedSelection);
   }
@@ -240,6 +317,9 @@ export async function deriveInvoiceLines(
         invoice_id: input.invoiceId,
         invoice_line_id: created.id,
         expense_allocation_id: line.allocationId,
+        // §6.2 — the PORTION billed, not the whole allocation. costBasis IS
+        // that portion (priceSelection passed the claimed amount into
+        // deriveCostLine), so claim and line can never disagree.
         claimed_amount: line.costBasis,
         expense_date: selection.selectedCosts.find((c) => c.allocationId === line.allocationId)!
           .expenseDate,

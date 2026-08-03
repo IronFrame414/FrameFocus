@@ -165,17 +165,39 @@ export async function getPickableCosts(
 
   const expenseById = new Map((expenses ?? []).map((e) => [e.id, e]));
 
-  // Already-claimed allocations drop out of the picker (§6.2 — a billed cost
-  // never reappears; an UNSELECTED one keeps appearing until billed).
+  // §6.2 as amended [S97] — PARTIAL BILLING. A cost is no longer in or out of
+  // the picker; it has a REMAINING amount:
+  //
+  //     remaining = allocation.amount − Σ (live claims against it)
+  //
+  // DERIVED here, never stored — no column on expense_allocations and no
+  // is_billed flag. A FULLY billed cost drops out (remaining is zero); a
+  // PARTIALLY billed one REAPPEARS with its remainder, which is the whole point
+  // of the ruling. Because claims CASCADE from the invoice, voiding an invoice
+  // restores the remainder with no compensating write.
   const { data: claims } = await supabase
     .from('invoice_cost_claims')
-    .select('expense_allocation_id')
+    .select('expense_allocation_id, claimed_amount')
     .in('expense_allocation_id', allocations.map((a) => a.id));
-  const claimed = new Set((claims ?? []).map((c) => c.expense_allocation_id));
+  const claimedByAllocation = new Map<string, number>();
+  for (const c of claims ?? []) {
+    claimedByAllocation.set(
+      c.expense_allocation_id,
+      Math.round(
+        ((claimedByAllocation.get(c.expense_allocation_id) ?? 0) + Number(c.claimed_amount)) * 100
+      ) / 100
+    );
+  }
 
   const out: PickableCost[] = [];
   for (const alloc of allocations) {
-    if (claimed.has(alloc.id)) continue;
+    const original = Number(alloc.amount);
+    const alreadyClaimed = claimedByAllocation.get(alloc.id) ?? 0;
+    const remaining = Math.round((original - alreadyClaimed) * 100) / 100;
+    // Fully billed. Exact decimal on both sides (numeric(12,2)), so this is a
+    // clean comparison rather than a tolerance.
+    if (remaining <= 0) continue;
+
     const expense = expenseById.get(alloc.expense_id);
     if (!expense) continue; // unapproved, rejected or deleted
 
@@ -185,7 +207,11 @@ export async function getPickableCosts(
       description: expense.description || expense.supplier,
       supplier: expense.supplier,
       category: expense.cost_category as CostCategory,
-      amount: Number(alloc.amount),
+      // `amount` is what is BILLABLE NOW. Every caller that bills from this
+      // list wants the remainder, not the original.
+      amount: remaining,
+      originalAmount: original,
+      claimedAmount: alreadyClaimed,
       expenseDate: expense.expense_date,
       ageDays: daysBetween(expense.expense_date, today),
       blockedReason: unattributed.has(alloc.budget_item_id)

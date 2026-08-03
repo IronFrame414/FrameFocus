@@ -45,6 +45,8 @@ interface DeriveSelectionBody {
     rawHours: number;
     taskId?: string | null;
   }>;
+  /** §6.2 [S97] — percentage of each ticked cost's REMAINING amount. */
+  billPercent?: number;
 }
 
 /** §2 [S97] — `selections` is the shape. The bare single-instrument fields are
@@ -91,6 +93,21 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         { status: 400 }
       );
     }
+    // §6.2 — the percentage decides how much money is claimed, so it is
+    // validated here rather than trusted from the browser. The CEILING is
+    // enforced independently by the DB trigger; this only rejects nonsense.
+    if (
+      s.billPercent !== undefined &&
+      (typeof s.billPercent !== 'number' ||
+        !Number.isFinite(s.billPercent) ||
+        s.billPercent <= 0 ||
+        s.billPercent > 100)
+    ) {
+      return NextResponse.json(
+        { error: 'A billing percentage must be greater than 0 and at most 100.' },
+        { status: 400 }
+      );
+    }
   }
   // §2 — one entry PER INSTRUMENT. A repeated instrument would derive twice
   // against the same rates and double-claim its costs, so it is rejected rather
@@ -129,6 +146,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       contractType: s.contractType as ContractType,
       selectedCosts: s.selectedCosts ?? [],
       selectedHours: s.selectedHours ?? [],
+      billPercent: s.billPercent,
     })),
   });
 

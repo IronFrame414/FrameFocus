@@ -71,7 +71,78 @@ export interface DerivedCostLine {
   allocationId: string;
 }
 
-/** non-labor sell = cost × (1 + markup-in-force-at-expense_date)  (§6.1/§7) */
+// ── §6.2 partial billing — how much of a cost this invoice claims [S97] ─────
+//
+// Josh's ruling: a percentage applies across an instrument's unbilled approved
+// costs; each ticked line bills that percentage OF ITS COST; the remainder
+// stays available for a later invoice. A lower per-line dollar amount means
+// BILLING LESS OF THAT COST — a claim reduction, never a discount (§8 keeps the
+// discount line for money actually given up).
+
+/** A cent, as the smallest amount that can be billed or left behind. */
+const ONE_CENT = 0.01;
+
+/**
+ * The amount of an allocation's REMAINING cost that a claim at `percent` takes.
+ *
+ * THE LAST CLAIM BILLS THE EXACT REMAINDER, not a recomputed percentage. This
+ * is trace G rule (b) — already ruled for draws, reused here rather than
+ * invented: multiplying and rounding each part independently leaves a residue
+ * that can never be billed (the draws case summed two cents over $14,413.75).
+ * Applied here it means partials always SUM TO THE WHOLE with nothing stranded:
+ *
+ *   $1,000.00 at 33%  →  330.00, remaining 670.00
+ *              at 33%  →  221.10, remaining 448.90
+ *              at 100% →  448.90  ← exact remainder, not 448.90 recomputed
+ *
+ * and any claim that would leave less than a cent behind absorbs it instead.
+ *
+ * `remaining` is DERIVED by the caller (allocation amount − Σ live claims); it
+ * is never stored. The DB trigger invoice_cost_claims_within_allocation is the
+ * backstop that makes over-claiming impossible even if a caller gets this
+ * wrong — this function decides the amount, the trigger enforces the ceiling.
+ */
+export function partialClaimAmount(remaining: number, percent: number): number {
+  const left = roundMoney(remaining);
+  if (left <= 0 || !(percent > 0)) return 0;
+  if (percent >= 100) return left;
+
+  const take = roundMoney(left * (percent / 100));
+  // Never leave a sub-cent residue that could never be claimed later.
+  if (roundMoney(left - take) < ONE_CENT) return left;
+  return take;
+}
+
+/**
+ * A per-line DOLLAR edit, expressed as the claim it implies (§8 as amended).
+ *
+ * The client types a billed amount; what actually changes is HOW MUCH OF THE
+ * COST is being billed. The markup rate is fixed by the cost's own incurred
+ * date, so the new cost basis is simply the new billed amount scaled back
+ * through the same rate:
+ *
+ *   newCostBasis = currentCostBasis × (newBilled ÷ currentDerived)
+ *
+ * Returns null when the line carries no derived amount to scale from — a manual
+ * or credit line, where the old billed-only behavior still applies.
+ */
+export function claimForBilledAmount(
+  currentCostBasis: number,
+  currentDerivedAmount: number,
+  newBilledAmount: number
+): number | null {
+  if (!(currentDerivedAmount > 0) || !(currentCostBasis > 0)) return null;
+  if (!(newBilledAmount > 0)) return 0;
+  return roundMoney(currentCostBasis * (newBilledAmount / currentDerivedAmount));
+}
+
+/** non-labor sell = cost × (1 + markup-in-force-at-expense_date)  (§6.1/§7).
+ *
+ *  Under partial billing `cost` is the CLAIMED PORTION, not the whole
+ *  allocation — which is why this function needed no change: the markup applies
+ *  to whatever portion is being billed, at that cost's own rate. The rate is
+ *  fixed by the cost's INCURRED date, which does not move, so two partials of
+ *  the same cost taken months apart price identically. */
 export function deriveCostLine(cost: SelectedCost): DerivedCostLine {
   return {
     lineType: 'derived_cost',

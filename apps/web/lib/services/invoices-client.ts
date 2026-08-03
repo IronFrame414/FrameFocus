@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase-browser';
 import {
+  claimForBilledAmount,
   computeDepositCreditLine,
   computeDrawAmount,
   computeInvoiceTotals,
@@ -102,6 +103,10 @@ export interface DeriveSelectionInput {
     expenseDate: string;
   }>;
   selectedHours: SelectedSegment[];
+  /** §6.2 [S97] — the percentage of each ticked cost's REMAINING amount this
+   *  invoice bills, per instrument. Omitted or >= 100 bills the remainder in
+   *  full. Never applies to hours (all-or-nothing per person-day, §7.2). */
+  billPercent?: number;
 }
 
 export interface DeriveInvoiceInput {
@@ -305,12 +310,84 @@ export async function deleteInvoiceLine(lineId: string): Promise<Result> {
   return { success: true };
 }
 
-/** §8 — an override edits the BILLED amount; the derived figure stands. */
+/**
+ * A per-line DOLLAR edit.
+ *
+ * [S97 — Josh's ruling] On a DERIVED COST line a lower amount means BILLING
+ * LESS OF THAT COST. It is a CLAIM REDUCTION, not a discount: the cost basis,
+ * the derived amount and the CLAIM all scale together, and the unbilled
+ * remainder returns to the picker for a later invoice. §8's discount line stays
+ * the separate mechanism for money actually GIVEN UP — that is a negative line
+ * the client can see, and nothing about it returns to the picker.
+ *
+ * Because the markup rate is fixed by the cost's own incurred date, scaling the
+ * billed amount back through the same rate is exact:
+ *
+ *     newCostBasis = costBasis × (newBilled ÷ derivedAmount)
+ *
+ * On every OTHER line type (manual `fixed`, discount, credits) there is no
+ * claim and no cost basis, so the original billed-only behavior applies and
+ * §8's derived-vs-billed gap still means what it always did.
+ *
+ * Raising the amount above what is still unbilled is refused by the DB trigger
+ * invoice_cost_claims_within_allocation — a cost can never be billed for more
+ * than it cost.
+ */
 export async function setLineBilledAmount(lineId: string, billedAmount: number): Promise<Result> {
   const supabase = createClient();
+
+  const { data: line } = await supabase
+    .from('invoice_lines')
+    .select('line_type, cost_basis, derived_amount')
+    .eq('id', lineId)
+    .single();
+
+  const newCostBasis =
+    line?.line_type === 'derived_cost'
+      ? claimForBilledAmount(
+          Number(line.cost_basis ?? 0),
+          Number(line.derived_amount ?? 0),
+          billedAmount
+        )
+      : null;
+
+  // Not a derived cost line (or nothing to scale from) — billed amount only.
+  if (newCostBasis === null) {
+    const { error } = await supabase
+      .from('invoice_lines')
+      .update({ billed_amount: billedAmount })
+      .eq('id', lineId);
+    if (error) return { success: false, error: error.message };
+    return { success: true };
+  }
+
+  if (newCostBasis <= 0) {
+    return {
+      success: false,
+      error:
+        'Bill at least a cent of this cost, or untick it — a zero line bills nothing and leaves the whole cost unbilled anyway.',
+    };
+  }
+
+  // The CLAIM moves first. If the new amount would take the allocation past
+  // what it cost, the trigger rejects it here and the line is left untouched —
+  // rather than the line being edited and the claim silently disagreeing.
+  const { error: claimError } = await supabase
+    .from('invoice_cost_claims')
+    .update({ claimed_amount: newCostBasis })
+    .eq('invoice_line_id', lineId);
+  if (claimError) return { success: false, error: claimError.message };
+
+  // derived_amount tracks billed here BY DESIGN: this is not an §8 override
+  // leaving a reduction behind, it is a smaller claim that was derived
+  // correctly. The gap between derived and billed stays reserved for discounts.
   const { error } = await supabase
     .from('invoice_lines')
-    .update({ billed_amount: billedAmount })
+    .update({
+      billed_amount: billedAmount,
+      derived_amount: billedAmount,
+      cost_basis: newCostBasis,
+    })
     .eq('id', lineId);
   if (error) return { success: false, error: error.message };
   return { success: true };

@@ -46,6 +46,7 @@ import type {
 } from '@/lib/services/invoices-shared';
 import {
   groupSelectedHours,
+  partialClaimAmount,
   presentInvoice,
   type PresentationLevel,
   type PresentationLine,
@@ -165,6 +166,21 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
   // and bill the client more than the whole day (§7.2, the P-4 hazard the
   // split-day warning already exists for).
   const [hourDayInstrument, setHourDayInstrument] = useState<Record<string, string>>({});
+
+  // §6.2 PARTIAL BILLING [S97, Josh] — the percentage lives on the INSTRUMENT
+  // TAB, because it differs per instrument: "draw #2 of the contract plus 50%
+  // of CO-106-02". Keyed by instrument key; absent means 100%.
+  //
+  // It applies to COSTS only. §7.2 rounds each person-day UP to the half hour,
+  // so a partial hour claim over-bills — hours stay all-or-nothing per
+  // person-day and this control never touches them.
+  const [billPercentByInstrument, setBillPercentByInstrument] = useState<Record<string, string>>({});
+  const percentFor = (key: string): number => {
+    const raw = billPercentByInstrument[key];
+    if (raw === undefined || raw.trim() === '') return 100;
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 && n <= 100 ? n : 100;
+  };
   const dayKeyOf = (memberId: string, workDate: string) => `${memberId}|${workDate}`;
   const instrumentForDay = (memberId: string, workDate: string): string | null =>
     hourDayInstrument[dayKeyOf(memberId, workDate)] ?? defaultInstrumentKey;
@@ -238,11 +254,16 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
     [selectedSegments, pickableHours]
   );
 
-  /** Every ticked cost across EVERY instrument — the whole submission's worth. */
-  const selectedCostTotal = derivedInstruments
-    .flatMap((i) => pickableCostsByInstrument[i.key] ?? [])
-    .filter((c) => selectedCosts.has(c.allocationId))
-    .reduce((sum, c) => sum + c.amount, 0);
+  /** What this invoice will actually CLAIM across every instrument — each
+   *  ticked cost at its own tab's percentage, not its whole remainder (§6.2). */
+  const selectedCostTotal = derivedInstruments.reduce(
+    (sum, i) =>
+      sum +
+      (pickableCostsByInstrument[i.key] ?? [])
+        .filter((c) => selectedCosts.has(c.allocationId) && !c.blockedReason)
+        .reduce((s, c) => s + partialClaimAmount(c.amount, percentFor(i.key)), 0),
+    0
+  );
 
   /** §2 — one selection PER INSTRUMENT, from the single held selection. */
   const selections = useMemo(
@@ -263,10 +284,11 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
           selectedHours: selectedSegments.filter(
             (s) => instrumentForDay(s.memberId, s.workDate) === i.key
           ),
+          billPercent: percentFor(i.key),
         }))
         .filter((s) => s.selectedCosts.length > 0 || s.selectedHours.length > 0),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [derivedInstruments, pickableCostsByInstrument, selectedCosts, selectedSegments, hourDayInstrument, defaultInstrumentKey]
+    [derivedInstruments, pickableCostsByInstrument, selectedCosts, selectedSegments, hourDayInstrument, defaultInstrumentKey, billPercentByInstrument]
   );
 
   /**
@@ -510,13 +532,41 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
       {isDraft && isDerived && pickerOpen && (
         <div style={{ ...cardStyle, overflow: 'hidden' }}>
           <div style={{ padding: '12px 16px', borderBottom: `1px solid ${color.cardBorder}` }}>
-            <span style={microLabelStyle}>
-              Unbilled approved costs{active ? ` — ${active.label}` : ''}
-            </span>
-            <span style={{ fontSize: '11px', color: color.faint, marginLeft: '8px' }}>
-              tick what this invoice bills — anything left unticked stays unbilled and comes back
-              next time (§6.2)
-            </span>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
+              <div>
+                <span style={microLabelStyle}>
+                  Unbilled approved costs{active ? ` — ${active.label}` : ''}
+                </span>
+                <span style={{ fontSize: '11px', color: color.faint, marginLeft: '8px' }}>
+                  tick what this invoice bills — anything left unticked, or left unbilled by the
+                  percentage, comes back next time (§6.2)
+                </span>
+              </div>
+              {/* §6.2 PARTIAL BILLING — per instrument tab (Josh's ruling). */}
+              {active && (
+                <label style={{ fontSize: '12px', color: color.body, display: 'inline-flex', gap: '6px', alignItems: 'center', whiteSpace: 'nowrap' }}>
+                  Bill
+                  <input
+                    value={billPercentByInstrument[active.key] ?? ''}
+                    onChange={(e) =>
+                      setBillPercentByInstrument((prev) => ({ ...prev, [active.key]: e.target.value }))
+                    }
+                    placeholder="100"
+                    inputMode="decimal"
+                    disabled={busy}
+                    style={{ ...inputStyle, width: '64px', textAlign: 'right' }}
+                  />
+                  % of each ticked cost
+                </label>
+              )}
+            </div>
+            {active && percentFor(active.key) < 100 && (
+              <p style={{ fontSize: '11px', color: color.faint, margin: '6px 0 0' }}>
+                Each ticked cost bills {percentFor(active.key)}% of what is still unbilled on it; the
+                rest stays available for a later invoice. This is not a discount — §8&rsquo;s
+                discount line is still the way to give money up.
+              </p>
+            )}
           </div>
           {activeCosts.length === 0 ? (
             <div style={{ padding: '18px', fontSize: '13px', color: color.faint }}>
@@ -531,7 +581,8 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
                   <th style={thStyle}>Category</th>
                   <th style={thStyle}>Incurred</th>
                   <th style={{ ...thStyle, textAlign: 'right' }}>Age</th>
-                  <th style={{ ...thStyle, textAlign: 'right' }}>Amount</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>Unbilled</th>
+                  <th style={{ ...thStyle, textAlign: 'right' }}>This invoice</th>
                 </tr>
               </thead>
               <tbody>
@@ -565,6 +616,17 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
                     </td>
                     <td style={{ ...tdStyle, textAlign: 'right', fontFamily: font.mono }}>
                       {money(cost.amount)}
+                      {cost.claimedAmount > 0 && (
+                        <div style={{ fontSize: '11px', color: color.faint }}>
+                          of {money(cost.originalAmount)} — {money(cost.claimedAmount)} already
+                          billed
+                        </div>
+                      )}
+                    </td>
+                    <td style={{ ...tdStyle, textAlign: 'right', fontFamily: font.mono, color: selectedCosts.has(cost.allocationId) ? color.body : color.faint }}>
+                      {selectedCosts.has(cost.allocationId) && !cost.blockedReason
+                        ? money(partialClaimAmount(cost.amount, active ? percentFor(active.key) : 100))
+                        : '—'}
                     </td>
                   </tr>
                 ))}

@@ -8,6 +8,8 @@ import {
   deriveLaborLines,
   depositRemaining,
   groupSelectedHours,
+  partialClaimAmount,
+  claimForBilledAmount,
   presentInvoice,
   roundUpToHalfHour,
   type InvoiceLineAmount,
@@ -559,5 +561,122 @@ describe('§11 full detail groups BY INSTRUMENT (Josh ruling, S97)', () => {
     const p = presentInvoice(lines.filter((l) => l.instrumentKey === 'est:E1'), 'full_detail');
     expect(p.groups).toHaveLength(1);
     expect(p.groups[0].nonLaborMarkup).toBe(200);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// §6.2 PARTIAL BILLING [S97, Josh]
+//
+// "A lower dollar amount on a line means BILLING LESS OF THAT COST — the
+//  unbilled remainder stays available for a later invoice. It is NOT a
+//  discount."
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('§6.2 partialClaimAmount — partials sum to the whole, nothing stranded', () => {
+  it('takes the percentage of what is REMAINING, not of the original', () => {
+    expect(partialClaimAmount(1000, 50)).toBe(500);
+    // After billing 500, the next 50% is of the REMAINDER.
+    expect(partialClaimAmount(500, 50)).toBe(250);
+  });
+
+  it('the LAST claim bills the exact remainder (trace G rule (b))', () => {
+    // 33% three times, then the rest — the parts must total exactly 1000.00.
+    const a = partialClaimAmount(1000, 33); // 330.00
+    const b = partialClaimAmount(1000 - a, 33); // 221.10
+    const c = partialClaimAmount(1000 - a - b, 100); // exact remainder
+    expect(a).toBe(330);
+    expect(b).toBe(221.1);
+    expect(c).toBe(448.9);
+    expect(Math.round((a + b + c) * 100) / 100).toBe(1000);
+  });
+
+  it('absorbs a sub-cent residue rather than stranding it', () => {
+    // 99.999% of a cent would leave a fraction that could never be billed.
+    expect(partialClaimAmount(0.01, 50)).toBe(0.01);
+    // A residue below a cent is swept into this claim.
+    expect(partialClaimAmount(10.001, 99.99)).toBe(10);
+  });
+
+  it('an awkward third still reconciles exactly', () => {
+    const amounts: number[] = [];
+    let left = 100;
+    for (let i = 0; i < 2; i++) {
+      const take = partialClaimAmount(left, 33.333);
+      amounts.push(take);
+      left = Math.round((left - take) * 100) / 100;
+    }
+    amounts.push(partialClaimAmount(left, 100));
+    expect(Math.round(amounts.reduce((s, v) => s + v, 0) * 100) / 100).toBe(100);
+  });
+
+  it('100% bills the whole remainder; nothing left over claims nothing', () => {
+    expect(partialClaimAmount(958.48, 100)).toBe(958.48);
+    expect(partialClaimAmount(0, 50)).toBe(0);
+    expect(partialClaimAmount(-5, 50)).toBe(0);
+    expect(partialClaimAmount(100, 0)).toBe(0);
+  });
+
+  it('markup follows the billed PORTION at that cost’s own rate', () => {
+    // Same cost, same 20% rate, billed in two halves months apart. The rate is
+    // fixed by the INCURRED date, which does not move, so the two halves price
+    // identically and sum to the whole-cost figure.
+    const whole = deriveCostLine({
+      allocationId: 'a', description: 'lumber', category: 'material',
+      cost: 1000, incurredDate: '2026-05-20', markupPercent: 20, rateRowId: rate('r1'),
+    });
+    const first = deriveCostLine({
+      allocationId: 'a', description: 'lumber', category: 'material',
+      cost: partialClaimAmount(1000, 50), incurredDate: '2026-05-20',
+      markupPercent: 20, rateRowId: rate('r1'),
+    });
+    const second = deriveCostLine({
+      allocationId: 'a', description: 'lumber', category: 'material',
+      cost: partialClaimAmount(500, 100), incurredDate: '2026-05-20',
+      markupPercent: 20, rateRowId: rate('r1'),
+    });
+    expect(first.amount).toBe(600);
+    expect(second.amount).toBe(600);
+    expect(sum([first.amount, second.amount])).toBe(whole.amount); // 1200.00
+    expect(sum([first.costBasis, second.costBasis])).toBe(1000);
+  });
+});
+
+describe('§8 as amended — a dollar edit is a CLAIM REDUCTION, not a discount', () => {
+  it('scales the cost basis back through the same markup rate', () => {
+    // A line billing 1,200.00 on a 1,000.00 basis (20% markup). Bill 600
+    // instead: the basis must become 500, i.e. half the cost, still at 20%.
+    expect(claimForBilledAmount(1000, 1200, 600)).toBe(500);
+    expect(claimForBilledAmount(1000, 1200, 1200)).toBe(1000);
+  });
+
+  it('is exact for a rate that does not divide cleanly', () => {
+    // 958.48 at 20% = 1150.18. Billing 575.09 is exactly half.
+    const basis = claimForBilledAmount(958.48, 1150.18, 575.09);
+    expect(basis).toBe(479.24);
+    expect(Math.round((479.24 * 1.2 - 575.088) * 100) / 100).toBe(0);
+  });
+
+  it('returns null on a line with nothing to scale — a manual or credit line', () => {
+    expect(claimForBilledAmount(0, 0, 500)).toBeNull();
+    expect(claimForBilledAmount(1000, 0, 500)).toBeNull();
+  });
+
+  it('a zero bill claims nothing rather than going negative', () => {
+    expect(claimForBilledAmount(1000, 1200, 0)).toBe(0);
+    expect(claimForBilledAmount(1000, 1200, -50)).toBe(0);
+  });
+
+  it('a DISCOUNT is still a separate negative line, untouched by any of this', () => {
+    // The discount mechanism is unchanged: derived stands, billed carries the
+    // negative line, and nothing about it returns to a picker.
+    const totals = computeInvoiceTotals(
+      [
+        { lineType: 'derived_cost', derivedAmount: 1200, billedAmount: 1200 },
+        { lineType: 'discount', billedAmount: -200 },
+      ],
+      { percent: null, eligible: true }
+    );
+    expect(totals.derivedTotal).toBe(1200);
+    expect(totals.billedTotal).toBe(1000);
   });
 });
