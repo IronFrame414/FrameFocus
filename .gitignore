@@ -48,3 +48,4 @@ supabase/.temp/
 *.tsbuildinfo
 .claude/settings.local.json
 .serena/
+prod_backup_*.sql
