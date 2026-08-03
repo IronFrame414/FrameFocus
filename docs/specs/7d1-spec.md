@@ -245,6 +245,25 @@ derived instrument:
 - **Never hidden netting:** the client always sees the derived work **in full**, then the deposit
   applied as its own line.
 - §S must make the per-job deposit credit balance **storable, with its remaining amount visible**.
+  **[S97, 2026-08-03 — BUILT, and DERIVED rather than stored.]** "Storable" is satisfied without a
+  stored column: the balance is `deposit.billed_total − Σ credit_deposit lines on live invoices −
+  Σ issued deposit refunds`. Void and refund therefore correct themselves — a voided deposit leaves
+  `('sent','paid')`, a credit line on a voided invoice stops consuming, and refunded cash is not
+  also an applicable credit. **Visible on the project financial page** as "Deposit credit
+  (undrawn)", Owner/Admin, beside the fixed-price "Remaining to bill" tile so the two contract
+  types read consistently.
+  - **ONE DEFINITION:** `loadDepositCredits` (`deposit-credit.ts`). It was inline in
+    `getAvailableCredits`; the page needs the same figure, and two implementations of one money
+    figure is how they drift. `getAvailableCredits` now consumes it.
+  - **§3 AND §3a ARE ALTERNATIVES; THE INSTRUMENT DECIDES.** A deposit whose line carries the
+    ORIGINATING ESTIMATE is §3's — it reduces remaining-to-bill and is **excluded** here. One
+    carrying a CO (or nothing) is §3a's. Without that split a fixed-price contract deposit would be
+    counted **twice** once §3 shipped — as a reduction of remaining-to-bill *and* as an applicable
+    credit line. The filter is load-bearing; do not remove it.
+  - **A MIXED project (fixed-price contract + cost-plus CO, legal under P4) shows BOTH tiles**, and
+    they can never describe the same money because of that split. Remaining-to-bill is scoped to
+    the ORIGINAL contract; the credit balance belongs to the JOB.
+  - Proof: `apps/web/test/s97ct-deposit-credit.live.ts`.
 
 ---
 
