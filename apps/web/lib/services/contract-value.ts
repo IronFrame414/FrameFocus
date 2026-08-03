@@ -80,6 +80,196 @@ export async function getRevisedContract(projectId: string): Promise<RevisedCont
   return toRevised(financials?.contract_value ?? null, signedDelta);
 }
 
+// ── §3 / acceptance #4 — REMAINING TO BILL on the contract [S97, 2026-08-03] ─
+//
+// JOSH'S RULING: on a FIXED-PRICE job a deposit is money against the contract
+// and reduces what remains to bill. $5,000 deposit on a $50,000 contract leaves
+// $45,000 to invoice. Void or refund it and the figure returns to $50,000.
+//
+// DERIVED HERE, AT THE 7B LAYER, AND NOTHING IS STORED. No write to
+// project_budget_amounts.budgeted_amount, no write to project_financials, no
+// flag anywhere. That is what makes void and refund self-correcting: nothing
+// was copied, so nothing has to be undone. The same doctrine as the revised
+// contract above, §2's income section, §3a's deposit balance, §4a availability
+// and §6.2a's remaining-unbilled.
+//
+// 7D STILL NEVER WRITES CONTRACT VALUE (§4). This function only READS — it is
+// a derivation on top of project_financials, exactly like getRevisedContract.
+// Nothing in 7D gained a write path to a contract figure.
+//
+// ═══ THE TWO DEPOSIT PATHS ARE SEPARATE AND MUST STAY SEPARATE ═══
+//
+//   FIXED-PRICE  → THIS function. A deposit is billed against the contract
+//                  instrument, so it lands in `issuedAgainstContract` and
+//                  reduces remainingToBill. There is no credit balance and no
+//                  credit line.
+//
+//   COST-PLUS /  → §3a's CREDIT BALANCE, which is already built and is NOT
+//   T&M            touched here: the deposit is held as a job credit and drawn
+//                  down across derived invoices as `credit_deposit` lines
+//                  (getAvailableCredits / applyDepositCredit).
+//
+//   THEY CANNOT DOUBLE-COUNT, structurally: this function sums only lines
+//   carrying the ORIGINATING ESTIMATE as their instrument. A cost-plus or T&M
+//   deposit is billed on a CO instrument (or is standalone), so its lines never
+//   match the filter below. A future reader tempted to "unify" the two paths
+//   should read §3a first — Josh ruled the credit-balance mechanism for derived
+//   instruments precisely because "credited against the budgeted amount"
+//   assumes a fixed contract value and does not carry to derived billing.
+
+export interface ContractBilling {
+  /** project_financials.contract_value. NULL below Owner/Admin (RLS). */
+  original: number | null;
+  /** Σ billed on ISSUED (sent/paid), non-voided invoices, counting only lines
+   *  billed against the ORIGINATING ESTIMATE. Includes a deposit invoice's
+   *  line when that deposit is billed against the contract. */
+  issuedAgainstContract: number;
+  /** The same sum over invoices that are still draft/pending_approval. Kept
+   *  SEPARATE because a draft has billed nothing — but the draw math must
+   *  still count it, or two drafts open at once each bill the same remainder. */
+  draftAgainstContract: number;
+  /** Σ ISSUED refunds with source='deposit' whose payment was applied to an
+   *  invoice still in the issued set. Scoped that way so voiding AND refunding
+   *  the same deposit cannot subtract it twice. */
+  depositRefunded: number;
+  /** original − (issuedAgainstContract − depositRefunded). NULL when original
+   *  is null — never 0, which would read as "nothing left to bill". */
+  remainingToBill: number | null;
+}
+
+/**
+ * §3 / acceptance #4 — what is left to invoice on the ORIGINAL contract.
+ *
+ * ORIGINAL, not revised, and deliberately: a signed CO bills separately on its
+ * own terms (§4, P4) and carries its own remaining. Mixing them would hand back
+ * a single number that belongs to no instrument — the same reasoning that keeps
+ * a percentage draw priced off the original (trace G rule (a)).
+ */
+export async function getContractBilling(
+  projectId: string,
+  /** The invoice being BUILT, excluded from the sums so its own draft lines do
+   *  not count as already billed while the user is still editing them. */
+  excludeInvoiceId?: string
+): Promise<ContractBilling> {
+  const supabase = await createClient();
+
+  const [{ data: project }, { data: financials }] = await Promise.all([
+    supabase.from('projects').select('source_estimate_id').eq('id', projectId).maybeSingle(),
+    supabase
+      .from('project_financials')
+      .select('contract_value')
+      .eq('project_id', projectId)
+      .maybeSingle(),
+  ]);
+
+  const original = financials?.contract_value ?? null;
+  const estimateId = project?.source_estimate_id ?? null;
+
+  const empty: ContractBilling = {
+    original,
+    issuedAgainstContract: 0,
+    draftAgainstContract: 0,
+    depositRefunded: 0,
+    remainingToBill: original,
+  };
+  if (!estimateId) return empty;
+
+  const { data: invoices } = await supabase
+    .from('invoices')
+    .select('id, status')
+    .eq('project_id', projectId)
+    .eq('is_deleted', false)
+    // A VOIDED invoice billed nothing. This one predicate is the whole of
+    // "voiding restores the figure" — there is no cleanup step.
+    .neq('status', 'voided');
+
+  const considered = (invoices ?? []).filter((i) => i.id !== excludeInvoiceId);
+
+  const issuedIds = considered
+    .filter((i) => i.status === 'sent' || i.status === 'paid')
+    .map((i) => i.id);
+  const draftIds = considered
+    .filter((i) => i.status === 'draft' || i.status === 'pending_approval')
+    .map((i) => i.id);
+  if (issuedIds.length + draftIds.length === 0) return empty;
+
+  // ONLY lines billed against the CONTRACT instrument. A CO's lines, and a
+  // standalone income line, are other instruments' money and must not reduce
+  // what remains on this one.
+  const { data: lines } = await supabase
+    .from('invoice_lines')
+    .select('invoice_id, billed_amount')
+    .in('invoice_id', [...issuedIds, ...draftIds])
+    .eq('source_estimate_id', estimateId);
+
+  const issuedSet = new Set(issuedIds);
+  let issuedAgainstContract = 0;
+  let draftAgainstContract = 0;
+  for (const l of lines ?? []) {
+    const amount = Number(l.billed_amount);
+    if (issuedSet.has(l.invoice_id)) {
+      issuedAgainstContract = Math.round((issuedAgainstContract + amount) * 100) / 100;
+    } else {
+      draftAgainstContract = Math.round((draftAgainstContract + amount) * 100) / 100;
+    }
+  }
+
+  // Refunds. Scoped through the payment that was applied to a still-issued
+  // invoice, so a deposit that was BOTH voided and refunded is subtracted once
+  // (the void already removed its line) rather than twice.
+  //
+  // DEPOSIT refunds only [S97]. Josh's ruling is about the deposit; an
+  // overpayment refund does not un-bill anything, and nothing has ruled on the
+  // other sources — they are deliberately out of scope rather than assumed.
+  let depositRefunded = 0;
+  if (issuedIds.length > 0) {
+    const { data: refunds } = await supabase
+      .from('client_refunds')
+      .select('amount, source_payment_id')
+      .eq('project_id', projectId)
+      .eq('source', 'deposit')
+      .eq('status', 'issued')
+      .eq('is_deleted', false);
+
+    const paymentIds = (refunds ?? [])
+      .map((r) => r.source_payment_id)
+      .filter((id): id is string => Boolean(id));
+
+    if (paymentIds.length > 0) {
+      const { data: applications } = await supabase
+        .from('client_payment_applications')
+        .select('payment_id, invoice_id')
+        .in('payment_id', paymentIds)
+        .eq('is_deleted', false);
+      const paymentsOnLiveInvoices = new Set(
+        (applications ?? [])
+          .filter((a) => issuedSet.has(a.invoice_id))
+          .map((a) => a.payment_id)
+      );
+      for (const r of refunds ?? []) {
+        if (r.source_payment_id && paymentsOnLiveInvoices.has(r.source_payment_id)) {
+          depositRefunded = Math.round((depositRefunded + Number(r.amount)) * 100) / 100;
+        }
+      }
+    }
+  }
+
+  // Clamped at zero: a refund can only give back what was billed, so net
+  // contract billing can never go negative and remaining can never exceed the
+  // contract. (Over-billing IS representable — remainingToBill goes negative —
+  // because that is a real condition worth surfacing.)
+  const netBilled = Math.max(0, Math.round((issuedAgainstContract - depositRefunded) * 100) / 100);
+
+  return {
+    original,
+    issuedAgainstContract,
+    draftAgainstContract,
+    depositRefunded,
+    remainingToBill:
+      original === null ? null : Math.round((original - netBilled) * 100) / 100,
+  };
+}
+
 /**
  * Batch derivation for list surfaces (7B §3 row 6) — one grouped query, no
  * N+1. Returns an entry for every id the caller can see (RLS-scoped).

@@ -1,7 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
 import { getInvoiceDeliveries } from '@/lib/services/invoice-delivery';
-import { getRevisedContract } from '@/lib/services/contract-value';
+import { getContractBilling } from '@/lib/services/contract-value';
 import { getProject } from '@/lib/services/projects';
 import { getChangeOrders } from '@/lib/services/change-orders';
 import { getCompanyTimeSettings } from '@/lib/services/company';
@@ -131,27 +131,31 @@ export default async function InvoiceDetailPage({
     derivedInstruments.map((i, n) => [i.key, costLists[n]])
   );
 
-  // §2 (trace G) — a percentage draw prices off the ORIGINAL contract value.
-  // projects.contract_value is never mutated (7B derives the revised figure),
-  // so this is exactly the right number, and a signed CO cannot re-price the
-  // draws (rule a / P4).
-  const { data: billedSoFar } = await supabase
-    .from('invoices')
-    .select('billed_total')
-    .eq('project_id', params.id)
-    .neq('status', 'voided')
-    .eq('is_deleted', false)
-    .neq('id', params.invoiceId);
+  // §2 (trace G) — a percentage draw prices off the ORIGINAL contract value,
+  // which is never mutated (7B derives the revised figure), so a signed CO
+  // cannot re-price the draws (rule a / P4). Only the FINAL draw consumes
+  // `alreadyBilled`, to bill the exact remainder (rule b).
+  //
+  // [S97] This used to sum billed_total across EVERY non-voided invoice on the
+  // project. That was safe only while an invoice carried one instrument: since
+  // §2/#2 shipped, a T&M change order's invoice would inflate the figure and
+  // make the contract's FINAL DRAW bill less than the remainder it owes. It is
+  // now scoped to lines billed against the CONTRACT instrument, which is also
+  // exactly the sum remaining-to-bill needs — one derivation, two consumers.
+  //
+  // Drafts ARE counted here (unlike the displayed remaining-to-bill figure):
+  // two drafts open at once must not each bill the same remainder.
+  //
+  // RULING 2 [S97]: the contract value lives in project_financials (Owner/Admin
+  // RLS). Null means EITHER the job has none OR the caller is below Owner/Admin
+  // — DrawPanel refuses to price a percentage draw in both cases rather than
+  // falling back to zero.
+  const contractBilling = await getContractBilling(params.id, params.invoiceId);
   const alreadyBilled =
     Math.round(
-      (billedSoFar ?? []).reduce((sum, i) => sum + Number(i.billed_total ?? 0), 0) * 100
+      (contractBilling.issuedAgainstContract + contractBilling.draftAgainstContract) * 100
     ) / 100;
-
-  // RULING 2 [S97]: the contract value moved to project_financials (Owner/Admin
-  // RLS). Null here means EITHER the job has none OR the caller is below
-  // Owner/Admin — DrawPanel refuses to price a percentage draw in both cases
-  // rather than falling back to zero.
-  const { original: originalContractValue } = await getRevisedContract(params.id);
+  const originalContractValue = contractBilling.original;
 
   // §13 — delivery history + the send control. Read here (server) and handed
   // down; the panel itself renders only for Owner/Admin, and the route enforces

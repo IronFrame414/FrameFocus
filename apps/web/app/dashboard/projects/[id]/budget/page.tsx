@@ -4,7 +4,7 @@ import { notFound, redirect } from 'next/navigation';
 import { getProject } from '@/lib/services/projects';
 import { getBudgetRollup, type InstrumentGroup } from '@/lib/services/budget';
 import { getProjectIncome } from '@/lib/services/project-income';
-import { getRevisedContract } from '@/lib/services/contract-value';
+import { getContractBilling, getRevisedContract } from '@/lib/services/contract-value';
 import { budgetColumnsFor } from '@/lib/services/invoices-shared';
 import { getExpenses, getJobCostRollup } from '@/lib/services/expenses';
 import { getPayablesSummary } from '@/lib/services/payables';
@@ -116,6 +116,13 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
   // the Financial Visibility Floor. §12a's carve-out lets a PM see amounts ON
   // an invoice they can reach; it does not extend to a job-level roll-up.
   const income = isOwnerAdmin ? await getProjectIncome(params.id) : null;
+
+  // §3 / acceptance #4 [S97] — what is left to invoice on the ORIGINAL
+  // contract, with a sent deposit already deducted. Fully DERIVED (see
+  // getContractBilling): void or refund the deposit and this figure returns on
+  // its own, because nothing was ever copied. Fixed-price only — a cost-plus or
+  // T&M deposit is §3a's credit balance and is deliberately not shown here.
+  const contractBilling = isOwnerAdmin && isFixed ? await getContractBilling(params.id) : null;
   const members = isOwnerAdmin ? await getMembers() : [];
   const memberNames: Record<string, string> = Object.fromEntries(
     members.map((m) => [m.id, m.display_name])
@@ -175,6 +182,22 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                   value: revised !== null ? money(revised) : '—',
                   valueColor: '#fff',
                   inverted: true,
+                },
+              ]
+            : []),
+          ...(contractBilling && contractBilling.remainingToBill !== null
+            ? [
+                {
+                  label: 'Remaining to bill',
+                  value: money(contractBilling.remainingToBill),
+                  valueColor:
+                    contractBilling.remainingToBill < 0 ? color.warningDeep : color.navy,
+                  caption:
+                    contractBilling.depositRefunded > 0
+                      ? `original less ${money(contractBilling.issuedAgainstContract)} billed, plus ${money(contractBilling.depositRefunded)} refunded`
+                      : contractBilling.issuedAgainstContract > 0
+                        ? `original less ${money(contractBilling.issuedAgainstContract)} already invoiced`
+                        : 'nothing invoiced against the contract yet',
                 },
               ]
             : []),
