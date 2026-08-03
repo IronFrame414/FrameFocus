@@ -122,6 +122,28 @@ An invoice is created by one of:
 - **Standalone** — built directly, using the same input/detail format as an estimate/CO. A
   standalone invoice's amounts **and categories post into project finances**, because they exist
   nowhere upstream to inherit from.
+  - **[S97, 2026-08-03 — RULED by Josh; BUILT] Standalone lines are NEW INCOME**, shown on the
+    project financial page as their **own independent section**, presented the way CO lines are.
+    **Voiding the invoice removes them.**
+  - **DERIVED, NEVER STORED.** No `project_budget_items` row is created. That table is
+    **insert-only** — SELECT and INSERT (Owner/Admin) are its only policies, `20260818000000`
+    documents the absence of UPDATE/DELETE as deliberate and guards it, and
+    `expense_allocations.budget_item_id` is `ON DELETE NO ACTION` so a charged line cannot be
+    removed by anyone. A stored copy therefore **could never be removed on void** — precisely the
+    removal this ruling requires — and would turn the routine §9 correction into permanent
+    overstatement of the job's income. The section reads
+    `invoice_lines` where `line_type = 'fixed'` **and both source ids are NULL**, on invoices that
+    are neither voided nor deleted. Same doctrine as contract value, the §3a deposit balance,
+    §4a availability, §10's supersede flag and §6.2a's remaining-unbilled.
+  - **A line carrying an INSTRUMENT is not income** — it is a lump-sum billing *of* that
+    instrument (a fixed-price CO, or a draw, which carries the estimate). The manual-line form
+    asks which, with an explicit **Standalone** option; only standalone posts. This also keeps
+    §5's per-line retainage split classifying by the line's own contract rather than by fallback.
+  - **Owner/Admin only** — a sell figure *about the job*, so it sits with contract value and
+    budgeted amount under the Financial Visibility Floor. §12a's carve-out (a PM may see amounts
+    **on an invoice they can reach**) does not extend to a job-level roll-up.
+  - Implementation `apps/web/lib/services/project-income.ts`; proof
+    `apps/web/test/s97ct-standalone-income.live.ts`.
 - **[S96] Derived from incurred cost or worked hours** — on a cost-plus (§6) or T&M (§7) instrument.
 
 **Bill method, per source:**
@@ -162,6 +184,20 @@ detail-level choice.
   first invoice.
 - **Refundable** in full or part if the project does not proceed (refund mechanics are 7E; the
   deposit's refundable status is set here).
+- **[S97, 2026-08-03 — READING, NOT A BUILD] Does §2's derived income mechanism resolve
+  "credits to budget"? Only half of it, so the clause stays open.**
+  - The **visibility** half it does resolve: a deposit invoice's line, if standalone, appears in
+    the income section and disappears on void or reissue, with no extra code.
+  - The **crediting** half it does not. *"Credited against the budgeted amount"* is a claim about
+    a **stored, Owner/Admin figure** — `project_budget_amounts.budgeted_amount` — and writing it
+    from an invoice reintroduces the exact permanence problem the income section exists to avoid:
+    a deposit can be **voided and refunded**, and the credit would have to be undone.
+  - §3a already **superseded** this mechanism for cost-plus and T&M instruments, so what remains is
+    only the **fixed-price** case, where the figure that should move is contract-side — and
+    **7D never writes contract value** (§4); 7B derives it.
+  - **Recommendation for Josh:** resolve it the same way as everything else in this module —
+    **derive** the deposit's effect on remaining-to-bill at the contract-value layer (7B), rather
+    than writing a budget row. Not built pending that ruling.
 - **No retainage** is held on a deposit invoice (see §5) — unchanged by the [S97] §3a below.
 
 ### §3a — Deposits on cost-plus and T&M instruments — **[S97, NEW]**
@@ -659,7 +695,25 @@ is deliberately NOT carried into QB** — it stays internal (7G G4).
 
 ---
 
-## §11 — Presentation detail — **[S96; CONFIRMED against practice [S97]]**
+## §11 — Presentation detail — **[S96; CONFIRMED against practice [S97]; reconciliation FIXED S97 2026-08-03]**
+
+> **[S97, 2026-08-03] TWO DEFECTS FIXED, both caused by the manual-line form never capturing a
+> category.**
+>
+> 1. **The sections did not reconcile.** Section totals skipped every null-category line, so a
+>    manual line vanished and a by-section invoice's sections did not sum to what the client was
+>    charged — asserted at **$5,450 of a $7,310 invoice shown nowhere**. Now: **adjustments are
+>    excluded** from sections (they render in their own block at every level, so counting them
+>    there too was double-counting), and **a work line with no category falls to `other`** rather
+>    than being dropped — `other` is already one of the four sections and is the honest home for a
+>    fixed-price **draw**, which spans the contract and has no single category. The invariant is
+>    now **Σ sections + Σ adjustments = total**, asserted in unit and live tests.
+> 2. **"Subtotal (cost)" contained charges.** It was `Σ (costBasis ?? amount)` over every non-labor
+>    row, so a manual line's **charge** was counted as a **cost** and the client read a cost figure
+>    containing money nobody paid. **A cost basis is now what makes a row a cost row:** rows without
+>    one are CHARGES and sit **outside** the subtotal/markup block, for the same reason labor does
+>    (R3) — the block is an arithmetic claim and a row with no cost cannot honestly join it. They
+>    render as "Other charges"; lump sum includes them.
 
 **Chosen per invoice**, from three levels — all three must be built. **[S97] Confirmed real:** invoices
 are issued at all three levels depending on the job and the client.
@@ -1001,9 +1055,19 @@ OUTPUT  The next invoice nets $5,000 lower; QB sees the smaller invoice,
    reassignable per person-day. Proof: `apps/web/test/s97ct-multi-instrument.live.ts` — one
    invoice, three instruments, three contract types. **Zero migration.**
 3. A standalone invoice built in estimate/CO format posts its amounts **and categories** into
-   project finances.
+   project finances. — **BUILT AND PROVEN [S97, 2026-08-03].** Was FALSE from the original build:
+   there was **no path of any kind** from an invoice to `project_budget_items`, and the manual-line
+   form captured neither a category nor an instrument. §S S.7 had flagged it — _"A standalone
+   invoice's amount/category has **no landing place**… green-field"_ — but that never reached the
+   migration's omissions list, the build report or any acceptance status, so it was **identified
+   and then lost in transit** rather than deferred. Now posts as a DERIVED income section (see §2);
+   proof `apps/web/test/s97ct-standalone-income.live.ts`.
 4. A deposit invoice is a fixed-amount invoice; it credits to budget (or is credited once a budget
-   is set) and can be refunded in full or part.
+   is set) and can be refunded in full or part. — **PARTIALLY TRUE [S97, 2026-08-03].** The deposit
+   *type* exists, §3a's credit-balance mechanism is built for derived instruments, refunds are 7E,
+   and a deposit whose line is standalone now appears in the §2 income section and is removed on
+   void like any other. **§3's "credited against the budgeted amount" clause is still NOT built**,
+   and is deliberately not resolved by the income mechanism — see the reading recorded below.
 5. **[amended S97, 2026-08-03 — retainage is PER LINE]** Retainage defaults from the project
    setting, is editable per invoice, and is **never** applied to a deposit or to **T&M money**.
    _Superseded phrasing: "never applied to a deposit or T&M **invoice**"_ — which was expressible
