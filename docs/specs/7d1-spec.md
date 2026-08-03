@@ -330,6 +330,47 @@ contains, and it accommodates deliberately holding something back.
   mechanic (present approved-and-unbilled, user ticks, unselected reappear with their age). Costs and
   hours are two populations in one control, not two different rules — build them as one pattern.
 
+#### §6.2a — PARTIAL BILLING — **[S97, 2026-08-03 — RULED by Josh. Supersedes all-or-nothing.]**
+
+_Superseded model: a ticked cost was billed **WHOLLY** or not at all. The picker was in-or-out —
+"a billed cost never reappears" — and the enforcement was a UNIQUE index,
+`invoice_cost_claims_one_per_allocation`, i.e. **one live claim per allocation**._
+
+**Now: a cost has a REMAINING amount, and an invoice claims a PORTION of it.**
+
+- **A PERCENTAGE control lives on the INSTRUMENT TAB** (§2 / acceptance #2). It is per instrument
+  because it differs per instrument — Josh's case is _"draw #2 of the contract plus 50% of
+  CO-106-02"_ on one invoice.
+- Within a tab, the percentage applies across that instrument's unbilled approved costs; the user
+  ticks which lines go on this invoice; **each ticked line bills that percentage of ITS cost.**
+- **The remainder STAYS AVAILABLE** and reappears in the picker with its age. The amended rule:
+  a **FULLY** billed cost never reappears; a **PARTIALLY** billed one reappears with its remainder.
+- **Per-line DOLLAR amounts stay editable and are equivalent to a custom percentage on that line.**
+  A lower amount means **BILLING LESS OF THAT COST — a CLAIM REDUCTION, NOT A DISCOUNT.** The cost
+  basis, the derived amount and the claim scale together, and the freed portion returns to the
+  picker. **§8's discount line remains the separate and only mechanism for money GIVEN UP** — a
+  negative client-visible line, and nothing about it returns to any picker.
+- **REMAINING IS DERIVED, NEVER STORED:** `allocation.amount − COALESCE(SUM(live claims), 0)`. No
+  column on `expense_allocations`, no `is_billed` flag. This is also what makes **void-restore free**
+  — claims already CASCADE from the invoice, so voiding hands the whole remainder back with no
+  compensating write.
+- **THE LAST CLAIM BILLS THE EXACT REMAINDER**, never a recomputed percentage — the same rule already
+  ruled for draws (§2, trace G rule (b)). Partials therefore sum to the whole with no cent stranded:
+  33% + 33% + the rest of $1,000 = 330.00 + 221.10 + 448.90.
+- **MARKUP FOLLOWS THE BILLED PORTION** at that cost's own rate in force on its **own incurred
+  date**. The date does not move, so two partials taken months apart price identically and sum to the
+  whole-cost figure to the cent.
+- **HOURS ARE NOT PARTIAL.** `invoice_hour_claims_one_per_segment` stays. §7.2 rounds each person-day
+  UP to the half hour, so billing part of a day now and the rest later rounds **both** parts up and
+  over-bills. Hours remain all-or-nothing per person-day.
+
+**Enforcement.** The unique index is replaced by the invariant `SUM(claimed_amount) <=
+expense_allocations.amount`, enforced by a `BEFORE INSERT OR UPDATE` trigger that takes
+`SELECT … FOR UPDATE` on the allocation row **before** reading the sibling sum — without the lock two
+concurrent claims each read the stale sum and both pass. Both columns are `numeric(12,2)`, so the
+comparison is exact. Migration `20260820000000_partial_cost_claims.sql`; proof
+`apps/web/test/s97ct-partial-billing.live.ts`.
+
 ### §6.3 — Tax base
 
 **The tax base for markup is a per-instrument contract setting.** **[S96]** Some cost-plus contracts
@@ -985,7 +1026,10 @@ OUTPUT  The next invoice nets $5,000 lower; QB sees the smaller invoice,
      instrument with its **task (blank where none)** and **date**; an hour with **no task is
      billable**; `material_run`/`warranty` hours appear and `travel`/`shop`/`break` never do; an
      **unselected hour stays unbilled and reappears** on the next invoice's picker with its age; and
-     a **billed hour never reappears** (§7.2, §6.2).
+     a **billed hour never reappears** (§7.2, §6.2). **[S97, 2026-08-03]** This stays ALL-OR-NOTHING
+     when partial billing shipped for COSTS (§6.2a): §7.2 rounds each person-day UP to the half hour,
+     so billing part of a day now and the rest later rounds both parts up and over-bills. There is no
+     partial hour claim, by ruling.
    - **8b. [S97, NEW — D1]** An **Owner's** approved hours bill exactly like anyone else's — the
      billing math contains **no Owner special case and no auto-approval** (§7.2).
 9. **[S97, replaces the single-rate criterion]** A **cost-plus** invoice bills each user-selected
@@ -994,11 +1038,16 @@ OUTPUT  The next invoice nets $5,000 lower; QB sees the smaller invoice,
    needs **refuses to price** rather than billing at 0%.
 10. **[S97]** The four cost-plus rates can be set to **different** values for labor, material, sub and
     other, and a job billed at one flat percentage across all categories is a valid special case.
-11. **[S97, REPLACES the write-off/hold-back criterion]** _Superseded: "A downward override
-    **prompts** for write-off vs. hold-back; a held-back shortfall reappears in the next invoice's
-    cost picker; a written-off one never does."_ Now: a reduction is an explicit **discount line**
-    (negative amount, client-visible); a discounted amount is **never rebilled**; an unselected cost
-    reappears in the next invoice's picker until billed (§8).
+11. **[S97, REPLACES the write-off/hold-back criterion; AMENDED again S97 2026-08-03 for partial
+    billing]** _Superseded [S96]: "A downward override **prompts** for write-off vs. hold-back; a
+    held-back shortfall reappears in the next invoice's cost picker; a written-off one never does."_
+    _Superseded [S97, first form]: "a reduction is an explicit **discount line** … an unselected cost
+    reappears in the next invoice's picker until billed"_ — which assumed a cost was billed WHOLLY or
+    not at all. Now, per §6.2a: **money GIVEN UP is a discount line** (negative, client-visible,
+    never rebilled), while **a lower dollar amount on a derived cost line is a CLAIM REDUCTION** —
+    that cost is simply billed less, and the unbilled remainder **returns to the picker**. An
+    unselected cost still reappears until billed; a **partially** billed one reappears with its
+    **remainder**; a **fully** billed one never does.
 12. **[S96, amended S97]** Both the **derived** and the **billed** amount survive — derived lines +
     discount lines = billed total — and 7G/7H consume **billed**.
 13. **[S97]** An **unpaid** invoice can be voided by **Owner/Admin** with a reason and reissued as a
