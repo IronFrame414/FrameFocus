@@ -3331,6 +3331,7 @@ export type Database = {
           source_change_order_id: string | null
           source_deposit_invoice_id: string | null
           source_estimate_id: string | null
+          source_estimate_line_item_id: string | null
           unit_rate: number | null
           updated_at: string | null
           updated_by: string | null
@@ -3353,6 +3354,7 @@ export type Database = {
           source_change_order_id?: string | null
           source_deposit_invoice_id?: string | null
           source_estimate_id?: string | null
+          source_estimate_line_item_id?: string | null
           unit_rate?: number | null
           updated_at?: string | null
           updated_by?: string | null
@@ -3375,6 +3377,7 @@ export type Database = {
           source_change_order_id?: string | null
           source_deposit_invoice_id?: string | null
           source_estimate_id?: string | null
+          source_estimate_line_item_id?: string | null
           unit_rate?: number | null
           updated_at?: string | null
           updated_by?: string | null
@@ -3420,6 +3423,13 @@ export type Database = {
             columns: ["source_estimate_id"]
             isOneToOne: false
             referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_lines_source_estimate_line_item_id_fkey"
+            columns: ["source_estimate_line_item_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_line_items"
             referencedColumns: ["id"]
           },
         ]
