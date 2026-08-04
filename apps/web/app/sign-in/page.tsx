@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { createClient } from '@/lib/supabase-browser';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { brand } from '@/lib/brand';
 
 export default function SignInPage() {
   const [email, setEmail] = useState('');
@@ -33,8 +34,19 @@ export default function SignInPage() {
     <main className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-md rounded-xl bg-white p-8 shadow-lg">
         <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold text-brand-900">
-            Frame<span className="text-accent-500">Focus</span>
+          {/* "full-LIGHT" means the variant FOR light backgrounds — not a
+              light-coloured logo. This card is bg-white, so the kicker must be
+              dark: navy #17213C at 15.92:1, vs full-dark's slate #7B849A at
+              3.74:1. Those two files differ in that one fill and nothing else.
+              Navy surfaces (sidebar, landing) use logo-full-ice.svg. */}
+          <h1>
+            <img
+              src="/logo-full-light.svg"
+              alt={brand.name}
+              width={168}
+              height={64}
+              className="mx-auto block h-16 w-auto"
+            />
           </h1>
           <p className="mt-2 text-gray-600">Sign in to your account</p>
         </div>

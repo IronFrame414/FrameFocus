@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Barlow, IBM_Plex_Mono } from 'next/font/google';
+import { brand } from '@/lib/brand';
 import './globals.css';
 
 // ui-01 §S2 — the two 1a families, loaded via next/font (no other mechanism
@@ -20,7 +21,7 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'FrameFocus — Construction Management',
+  title: `${brand.name} — Construction Management`,
   description: 'The all-in-one platform for residential and commercial contractors.',
 };
 
