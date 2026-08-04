@@ -1,10 +1,32 @@
 # M6M — Mobile PWA Spec
 
-> **Status:** DRAFT for build, S98.
+> **Status:** DRAFT — **not build-ready end to end.** The shell, photos, the twelve section screens and
+> the offline contract are complete; **four prerequisites below are not**, and GAP-8 is the outstanding
+> one. S98.
 >
 > **Sources:** the _FrameFocus — Mobile App Shell_ handoff (6b nav menu, 6f projects list, 6g project
 > sections, 6e offline) and the _FrameFocus — Mobile Photos_ handoff (6j gallery, 6k viewer, 6l markup),
 > plus Josh's rulings in this session.
+>
+> ---
+>
+> ## ⚑ PREREQUISITES BEFORE BUILD — read these before §1
+>
+> **Four things must be in place before, or alongside, the first screen.** They are specified deep in this
+> document and a build that starts at §1 would meet them far too late. In order:
+>
+> | # | Prerequisite | Where | Why it blocks |
+> | - | ------------ | ----- | ------------- |
+> | 1 | **The four-policy subcontractor migration** — `files_insert_non_client`, `files_update_non_client`, `project_files_insert_non_client`, `project_files_update_non_client` | **§7a** | **Build step 1, before any route or component.** A photo is two writes — the row and the bytes — under two independent policy sets, and `subcontractor` is missing from both. Until this lands, the camera, which §3.2 puts on every screen, is broken for one role, and every mobile screen demos with its most prominent control failing. |
+> | 2 | **The `sync_conflicts` table** | **§5.7**, ordering in **§7b** | Must land **before any offline write path ships**. Without it the conflict path (D-17) has nowhere to put a held copy, and the only alternatives are the silent overwrite and the silent loss the ruling forbids. Not needed before the shell. |
+> | 3 | **Playwright — a NEW dependency this repo does not carry** | **§10a** | D-18 ruled both harnesses. Roughly half the criteria in §10 are `[Playwright]`; the existing Node harness is `environment: 'node'` with no DOM, service worker or IndexedDB and can never assert them. Adding it brings a new CI surface and browser binaries. |
+> | 4 | **GAP-8 — the _Mobile Field Capture_ handoff** | status note below, **§8** | **The largest outstanding item, and it is not a documentation gap.** Two of D-6's three offline-capable actions have no screen to originate from: the daily log has no entry screen at all, and delivery check-in and incident reporting have none either. A mis-clocked segment also has **no in-app correction path**, because the mid-shift switcher lives in this handoff (§4.5a). The offline queue in §5 is specified in full for writes that two of its three producers cannot yet make. |
+>
+> **1 and 2 are migrations this spec states but does not write.** 3 is a tooling decision already ruled.
+> **4 is not resolvable from inside this document** — it needs the handoff, or a decision to spec those
+> screens here.
+>
+> ---
 >
 > **Gap pass [S98]:** GAP-1b, GAP-3, GAP-4 and GAP-7 closed by **verification** — every claim carries a
 > file and line. GAP-2, GAP-5 and GAP-6 closed by **ruling**. **All eight §11 questions are RULED
@@ -28,14 +50,17 @@
 > | D-6 action | Screen status |
 > | ---------- | ------------- |
 > | Photo capture | **Specced** — §6, and `/m/capture` (§1). |
-> | Clock in / out | **Partly specced, and blocked as it stands.** M-5 (§4.5) specs the button, the state card and the project select — but **not how a segment type is chosen** at clock-in or switched mid-shift. `time_segments.segment_type` is `NOT NULL` under a CHECK, so a session cannot produce a segment without one. The screen cannot complete the write it is specced to perform offline. |
+> | Clock in / out | **Specced** — M-5 (§4.5) plus **§4.5a**, which makes the segment type a required choice at clock-in (D-27) and records the complete per-type project rule. _(Updated [S98]: this row previously read "partly specced, and blocked" because no type selection existed. D-27 closed that.)_ **What remains missing is the mid-shift switcher**, so a crew member who clocks in on the wrong type has no in-app correction path. |
 > | Daily log | **Not specced at all.** M-6 (§4.6) is a *list*, and its "Log the day" button has **no destination** — no entry screen, and no route for one in §1. |
 >
-> **So of the three actions D-6 makes offline-capable, one has a complete screen, one is incomplete in a
-> way that blocks its write, and one has no screen whatsoever.** The offline queue (§5) is specified in
-> full for writes that two of its three producers currently have nowhere to originate. Delivery check-in
-> and incident are the remaining two unspecced capture screens; delivery check-in is online-only (D-6) but
-> still has no screen.
+> **So of the three actions D-6 makes offline-capable, two have complete screens and one — the daily log —
+> has no screen whatsoever.** Delivery check-in and incident reporting are the other unspecced capture
+> screens; check-in is online-only (D-6) but still has no screen. Together with the missing mid-shift
+> switcher, that is four of the handoff's five surfaces still owed.
+>
+> **This spec is NOT build-ready end to end.** §4.11's twelve section screens, the shell, photos and the
+> offline contract are complete and buildable; the field-capture surfaces above are not, and neither are
+> the two migrations in the prerequisites table until someone writes them.
 >
 > **Every question raised this session is ruled** — including all twelve section tiles (§4.11: nine new
 > routes, three shared) and the D-25 segment-type collision, which **D-27 dissolved** by making the type a
