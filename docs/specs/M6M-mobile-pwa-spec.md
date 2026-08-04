@@ -13,9 +13,16 @@
 > **Two figures were deleted rather than derived** — the progress percentage (D-19) and the `estimating`
 > count (D-4) — because neither had a source in the schema. §4.2 and §4.3 carry the respec, not a gap.
 >
-> **BUILD STEP 1 is a migration, not a screen:** widen `files_insert_non_client` to admit
-> `subcontractor` (D-20, §7a). Until it lands, the camera — the most prominent control on every mobile
-> screen — is broken for one role.
+> **BUILD STEP 1 is migrations, not a screen: FOUR policies** — `files_insert_non_client`,
+> `files_update_non_client`, `project_files_insert_non_client`, `project_files_update_non_client`
+> (D-20 as extended, §7a). A photo is two writes, the row and the bytes, and `subcontractor` was missing
+> from both sets. Until they land, the camera — the most prominent control on every mobile screen — is
+> broken for one role. **A second migration**, `sync_conflicts` (§5.7, §7b), must land before any offline
+> write path ships.
+>
+> **⛔ One item is OPEN and blocks a complete build:** what renders when `markup_data` is non-empty and no
+> derivative exists (**§4.7a**). Ruling 3 made the derivative load-bearing; the desktop editor produces
+> markup without one, permanently. Everything else in this spec is ruled.
 >
 > **Verified against the repo at S98** (branch merged to `main` as `91806cf`):
 >
@@ -52,11 +59,11 @@
 | D-14 | Photos badge                  | **Total count only. AMENDED [S98, Josh]: the unseen dot is DEFERRED TO V2.** The number is every photo on the project. _Superseded clause, quoted not rewritten: "with an unseen indicator… an amber dot marks that unseen photos exist for this user."_ No view-tracking table is built. The intended v2 shape is recorded in §9 so it can be added without rework. |
 | D-15 | Punch photos                  | **No migration.** The link already exists on `punch_list_items` as `reference_photo_file_id` and `completion_photo_file_id`. The gallery derives the `Punch` badge by a **read-only** join: a file is punch-sourced if its `id` appears in either column. **Those two columns keep their existing meanings and are not merged, altered, or written to by this work.** |
 | D-16 | Punch counter                 | **Mine first, then the project total** — e.g. `2 mine · 4 open`. Applies to the M-3 stat strip and the Punch List tile. **"Open" means `status IN ('open','in_progress')`** — not `complete`, not `verified`.                                                                                                                                                         |
-| D-17 | Offline sync conflict         | **The server version stands.** [S98, Josh] When a queued mutation targets a row the server has changed since capture, the queued copy **does not overwrite** it and **is not discarded** — it leaves the sync queue and enters a reconciliation review for Owner/Admin. The field user is told. Full contract in §5.6. |
+| D-17 | Offline sync conflict         | **The server version stands.** [S98, Josh] When a queued mutation targets a row the server has changed since capture, the queued copy **does not overwrite** it and **is not discarded** — it leaves the sync queue and enters a reconciliation review for Owner/Admin. The field user is told. **EXTENDED [S98]: the held copy goes to a server-side table, `sync_conflicts`, not to IndexedDB** — it must survive a cleared PWA or a new handset. Contract in §5.6; table, RLS and lifecycle in **§5.7**; migration ordering in §7b. The review *surface* remains out of scope. |
 | D-18 | Offline test tooling          | **Both.** [S98, Josh] Queue logic is unit-tested in the existing Node harness; screen-level and browser-state criteria are tested with **Playwright, a new dependency this repo does not yet carry**. Nothing in §10 is left untestable. Assignment table in §10a. |
 | D-19 | Progress percentage           | **CUT FROM V1.** [S98, Josh] No progress % anywhere on mobile. The M-3 stat strip is **two** stats, not three (§4.3); the M-2 project card has **no** progress bar (§4.2). No project-level progress derivation is invented. |
-| D-20 | Subcontractor photo upload    | **Subs upload.** [S98, Josh] D-11 stands unchanged; `files_insert_non_client` is widened to include `subcontractor`. This is a **required migration and the FIRST build step** — see §7a. |
-| D-21 | Markup storage                | **Both.** [S98, Josh] `files.markup_data` holds the editable annotation layer and **is the source of truth**; Save additionally writes a flattened derivative image for sharing outside the app. The original is never modified. Contract in §4.10. |
+| D-20 | Subcontractor photo access    | **Subs upload AND annotate.** [S98, Josh] D-11 stands unchanged. **EXTENDED [S98]: `files_update_non_client` is widened too**, so a sub can annotate photos including ones they just took — and, found while applying that, **the two `storage.objects` policies carry the same omission and must be widened as well** or the bytes are refused regardless. **Four policies, role array only.** Required migration and the **FIRST build step** — see §7a. |
+| D-21 | Markup storage & display      | **Both, and the derivative is what displays.** [S98, Josh] `files.markup_data` holds the editable annotation layer and **is the source of truth**; Save additionally writes a flattened derivative image. **EXTENDED [S98]: where a photo has markup, the derivative is what the UI renders** — gallery thumbnail, viewer stage and filmstrip — and §4.9's toggle is now the only route to the unannotated image. The original is never modified. Storage contract in §4.10; display precedence in **§4.7a**, which also carries the one case still BLOCKED. |
 
 ---
 
@@ -326,6 +333,62 @@ No handoff mockup exists; built from the locked patterns.
 The mobile equivalent of the desktop Field Ops hub. A **2-column grid of 76px tiles** — same idiom as
 M-1 and M-3: **Daily logs · Deliveries · Safety · Photos**, each with its attention badge. Above the grid,
 a project context row (58px) naming the project the tiles apply to, tappable to switch.
+
+### 4.7a Photo display precedence — **governs M-8, M-9 and M-10** (D-21 as extended [S98])
+
+Stated once here rather than three times below. Every surface that renders a photo obeys it.
+
+> **The rule [S98, Josh]: derivative when `markup_data` is non-empty, original otherwise.**
+
+Where a photo has markup, **the annotated version is what the UI displays** — the M-8 gallery thumbnail,
+the M-9 image stage, and the M-9 filmstrip thumbnail all render the derivative. §4.9's toggle back to the
+original stands and is **now the only way to see the unannotated image**; it is no longer a convenience.
+
+**This makes the derivative load-bearing, not a side artifact.** Three things in this spec were written
+when it was optional and are corrected here:
+
+1. **Generation is part of Save, not after it.** §4.10's Save is not complete until both writes land. A
+   save that writes `markup_data` and fails to write the derivative has produced a photo the UI cannot
+   display correctly, so **`markup_data` and the derivative are written as one unit of work from the
+   user's point of view** — the editor does not report success on a partial save.
+2. **Regeneration is mandatory on every re-edit**, per §4.10 — full re-render from the original bytes,
+   overwritten in place. Under the old model a stale derivative was a cosmetic lag in a sharing artefact.
+   Under this rule a stale derivative is **the app showing the wrong image**.
+3. **The derivative inherits the original's access control**, which is what makes this safe: same bucket,
+   same `{company_id}/{project_id}/` prefix, therefore the same `storage.objects` policies (§7a). No
+   surface may render a derivative by a path that skips the signed-URL flow the original uses
+   (`getSignedUrl`, `files.ts:70`).
+
+**The count is unaffected.** Precedence changes *which bytes render*, never *how many tiles exist*. The
+derivative still gets no `files` row (§4.10), so A-23d's guarantee — photo count and gallery tile count
+unchanged by a markup save — holds exactly as before.
+
+> ### ⛔ BLOCKED — what renders when `markup_data` is non-empty and no derivative exists
+>
+> **This case is real, ongoing, and not covered by the ruling. No fallback is invented here.**
+>
+> The desktop markup editor writes `markup_data` and nothing else —
+> `updateFile(fileId, { markup_data })`
+> (`apps/web/app/dashboard/projects/[id]/files/[fileId]/markup/markup-editor.tsx:244-247`). It does not
+> produce a derivative and, under **A-28** and **D-2**, M6M does not change it. So the population of
+> photos with markup and no derivative is **not a legacy backfill problem that ends** — it is every
+> photo annotated on desktop, before or after this build, permanently.
+>
+> Applying the rule literally sends the mobile gallery after an object that does not exist. The two
+> candidate answers differ in cost and in what the user sees, and choosing between them is Josh's:
+>
+> | Option | What the user sees | Cost |
+> | ------ | ------------------ | ---- |
+> | **A. Fall back to original bytes + a live overlay rendered from `markup_data`** — the mechanism M-9's toggle already needs. | Marks always visible, everywhere. Consistent with desktop. | The gallery **thumbnail** must render an SVG overlay over a thumbnail. Materially more work than showing an image, and it demotes the derivative to a performance optimisation rather than the display source — which is not what this ruling established. |
+> | **B. Fall back to the bare original.** | A photo the user annotated appears **unannotated**, silently. Worse than a broken image, because nothing signals the marks exist. | Trivial. |
+> | **C. Generate the derivative on first mobile view** when markup exists and no derivative does. | Marks always visible; derivative stays the display source. | A read path that writes. Needs the storage-write policies of §7a for whoever happens to open it first, and a crew member browsing a gallery would be issuing writes. |
+> | **D. Change the desktop editor to write a derivative too.** | Fully consistent; the population never arises. | **Breaks A-28** (`apps/web/app/dashboard/**` unchanged) and D-2. A scope change, not a build detail. |
+>
+> **Until this is ruled, the criteria below cover only photos that HAVE a derivative.** No criterion
+> asserts behaviour for the missing case, deliberately — a criterion written against a guess would pass
+> vacuously, which is the failure this spec keeps correcting.
+
+---
 
 ### 4.8 M-8 · Project photos — gallery _(handoff 6j)_
 
@@ -605,22 +668,96 @@ row's `updated_at` against the queued item's `captured_at`:
 `updated_at` to compare, so the ordinary idempotent-upsert path (§5.3) applies unchanged. Conflict
 detection is strictly an update-to-an-existing-row concern.
 
-**Out of scope here, and what it needs.** The **reconciliation review surface itself is not specced by
-M6M** — not the screen, not the route, not the notification. It is desktop Owner/Admin work. What it will
-need, so that this spec's queue does not have to be reopened to serve it:
+**The losing copy goes to a server-side table, not to the phone.** IndexedDB is the wrong home for
+something that must survive the user clearing the PWA, switching handsets, or never opening the app
+again. The store is `sync_conflicts` (§5.7) and it is **required migration 2 of 2** (§7b).
 
-1. **Somewhere durable to put the losing copy.** The phone's IndexedDB is the wrong home — a conflict
-   must survive the user clearing the PWA, changing phones, or never opening the app again. This implies a
-   server-side holding store, which does not exist and is a migration M6M does not write.
-2. **Both sides of the comparison**, captured at detection time: the queued payload, its `captured_at`,
-   the server row as it stood, and its `updated_at`.
-3. **Who and what** — the field user's `member_id`, the desktop editor's, and the target table and row id.
-4. **A terminal state** — resolved-kept-server / resolved-kept-field / dismissed — so a reconciled entry
-   stops being pending, and an audit trail survives it.
+**The review surface itself is still out of scope for M6M** — the Owner/Admin screen that resolves a
+conflict is desktop work, and no route, screen or notification for it is specced here. **What is no
+longer out of scope is the data**: §5.7 defines the table so that surface needs **no schema change** when
+it is built. What it will read and write is stated there.
 
-Until that surface exists, the mobile build must still **detect** the conflict, **hold** the copy, and
-**tell the user** — a held copy with nowhere to go yet is a known, bounded gap, and it is better than
-either silent loss or silent overwrite. **The build must not ship the overwrite as a stopgap.**
+### 5.7 `sync_conflicts` — the holding store (D-17 as extended [S98])
+
+Required migration 2 of 2 (§7b). **Not written here** — this section states the shape; the migration is
+Josh's to run.
+
+**What it holds.** One row per rejected queued copy.
+
+| Column | Type | Notes |
+| ------ | ---- | ----- |
+| `id` | `uuid PK DEFAULT gen_random_uuid()` | |
+| `company_id` | `uuid NOT NULL DEFAULT get_my_company_id()` | Per-tenant, per the house rule. |
+| `target_table` | `text NOT NULL` | `CHECK (target_table = ANY (ARRAY['daily_logs']))` in v1 — see "why the shape is generic" below. |
+| `target_row_id` | `uuid NOT NULL` | The row the copy conflicts with. **No FK** — the target table varies, and a FK to one table would block the CHECK ever widening. |
+| `project_id` | `uuid REFERENCES projects(id)` | Denormalised so a future surface can scope and filter without joining through the target row. |
+| `rejected_body` | `jsonb NOT NULL` | The queued payload **exactly as the online path would have sent it** (§5.2). |
+| `captured_at` | `timestamptz NOT NULL` | The business timestamp from the queue entry — when the field user acted, not when the conflict was detected. |
+| `author_member_id` | `uuid NOT NULL REFERENCES company_members(id)` | The field user whose work is being held. |
+| `server_updated_at` | `timestamptz NOT NULL` | The target row's `updated_at` **at detection** — the value that lost the comparison, kept so a reviewer can see the race that occurred. |
+| `status` | `text NOT NULL DEFAULT 'pending'` | `CHECK (status = ANY (ARRAY['pending','kept_server','kept_field','dismissed']))`. |
+| `resolved_by` | `uuid REFERENCES company_members(id)` | Null while pending. |
+| `resolved_at` | `timestamptz` | Null while pending. |
+| `resolution_note` | `text` | Optional free text from the reviewer. |
+| standard columns | | `created_at`, `updated_at`, `created_by`, `updated_by`, `is_deleted`, `deleted_at`. **This is not an append-only log** — it has a resolution lifecycle, so it takes the full standard column set, both BEFORE UPDATE triggers (`sync_conflicts_updated_at`, `sync_conflicts_set_updated_by`) and the three column defaults. |
+
+**Deliberately NOT stored: a snapshot of the server row.** A reviewer choosing between "the field copy"
+and "the desktop version" should be looking at the desktop version **as it is now**, not as it stood at
+detection — the row may have been edited again since. `server_updated_at` records the race; the live row
+supplies the content. Storing a stale snapshot would let a reviewer keep a version that no longer exists.
+
+**Who can read it — Owner/Admin.** Consistent with D-17: reconciliation is an Owner/Admin job.
+
+```sql
+-- SELECT / UPDATE: Owner and Admin only.
+sync_conflicts_select_owner_admin   -- company_id = get_my_company_id() AND get_my_role() IN ('owner','admin')
+sync_conflicts_update_owner_admin   -- same predicate; this is how a row is resolved
+
+-- INSERT: the author writes their own conflict during sync; Owner/Admin may also write one.
+sync_conflicts_insert_authorized
+  -- company_id = get_my_company_id()
+  -- AND (author_member_id = get_my_member_id() OR get_my_role() IN ('owner','admin'))
+
+-- DELETE: NO POLICY AT ALL. Denied to every role, matching the financial side tables.
+```
+
+> **Consequence the build must handle:** the field user can INSERT their conflict but **cannot SELECT it
+> back** — they are not Owner/Admin. The client must insert **without requesting the representation**
+> (no `.select()` chained onto the insert), or the write appears to fail when only the read was refused.
+> This is the same class of trap as the storage-policy helper issue in CLAUDE.md: the error surfaces far
+> from its cause.
+
+**Lifecycle.**
+
+1. **Created** by the syncing client at the moment §5.6's comparison rejects a replay — one row, status
+   `pending`. This is the same step that removes the entry from the sync queue, and the two must be
+   atomic from the user's point of view: a queue entry is never dropped before its `sync_conflicts` row
+   is durably written. If the insert itself fails, the entry stays queued and retryable — a conflict that
+   could not be recorded has not been handled.
+2. **Resolved** by an Owner or Admin setting `status` to `kept_server`, `kept_field` or `dismissed`,
+   with `resolved_by` and `resolved_at`. Applying a `kept_field` resolution — actually writing the held
+   body onto the target row — is the review surface's job, not the queue's.
+3. **Kept, never deleted.** Resolved rows stay, with their status. They are the audit trail of a
+   near-miss data loss, and the trash-bin rule (soft delete only, no DELETE policy) applies. Nothing
+   expires and nothing is purged on a schedule.
+
+**What a future review surface reads and writes — so it needs no schema change.**
+
+- **Reads:** `sync_conflicts WHERE status = 'pending' AND is_deleted = false`, joined to
+  `company_members` on `author_member_id` for a name, and to the live target row on
+  `(target_table, target_row_id)` for the current server version. `project_id` scopes the list.
+  `rejected_body`, `captured_at` and `server_updated_at` render the field side and the race.
+- **Writes:** `status`, `resolved_by`, `resolved_at`, `resolution_note` — and, for `kept_field`, an
+  ordinary update to the target row through its existing service.
+- **Needs no new column** for any of that. If it later wants notifications or assignment, those are
+  additive and not M6M's problem.
+
+**Why the shape is generic when the ruling named the daily log.** §5.6's comparison applies to any queued
+mutation targeting an existing row, so the table is keyed by `(target_table, target_row_id)` rather than
+by `daily_log_id`. In v1 the daily log is the **only** producer, and that is not an accident: a clock-in
+and a photo are inserts, and A-19f rules an insert is never a conflict. The CHECK is therefore pinned to
+`'daily_logs'` — widening it later is a one-line change, whereas a `daily_log_id` column would have had
+to be migrated away.
 
 ---
 
@@ -654,51 +791,93 @@ nothing in this spec may make them harder.
 
 ---
 
-## §7a — Required migration: let subcontractors upload photos (D-20) — **BUILD STEP 1**
+## §7a — Required migration 1 of 2: subcontractor photo access (D-20, extended [S98]) — **BUILD STEP 1**
 
-**This is the first thing built, before any route, screen or component.** D-11 puts every role on `/m`
-and §3.2 puts the camera in the centre of the tab bar on every screen. Today a subcontractor who taps it
-gets a database rejection **after** taking the photo. Building the shell first means every mobile screen
-is demoed and reviewed in a state where the most prominent control is broken for one role.
+**This is the first thing built, before any route, screen or component.** D-11 puts every role on `/m` and
+§3.2 puts the camera in the centre of the tab bar on every screen. Today a subcontractor who taps it gets
+a rejection **after** taking the photo. Building the shell first means every mobile screen is demoed and
+reviewed with its most prominent control broken for one role.
 
-**What is wrong now.** `files_insert_non_client`
-(`20260728000000_security_rls_96_99.sql:77-101`) gates INSERT on three arms. The **first** one omits
-`subcontractor`:
+### It is FOUR policies, not one
+
+> **[S98] Scope correction — this is the finding that matters most in this section.** The original §7a
+> named one policy: `public.files` INSERT. **That alone would not have worked.** A photo is two writes —
+> the **row** in `public.files` and the **bytes** in `storage.objects` — governed by two independent
+> policy sets, and `subcontractor` is missing from **both**. Widening only `public.files` produces a
+> subcontractor who can insert a file row whose bytes the storage layer refuses. Verified against the
+> current definitions, which live in `20260728000000_security_rls_96_99.sql` (it drops and recreates all
+> four storage policies; the earlier `20260714175906_project_files_storage_policies.sql` is superseded).
+
+| # | Policy | Object | Why it is needed | Ruling |
+| - | ------ | ------ | ---------------- | ------ |
+| 1 | `files_insert_non_client` | `public.files` | The file **row** for a captured photo. | D-20 |
+| 2 | `files_update_non_client` | `public.files` | Markup Save writes `files.markup_data` — an **UPDATE** (`markup-editor.tsx:244`). Without it a sub can upload a photo and not annotate it, including one they just took. | **[S98] Josh — widen it too** |
+| 3 | `project_files_insert_non_client` | `storage.objects` | The photo **bytes**, and the first write of a markup derivative. | **[S98] found while applying the above** |
+| 4 | `project_files_update_non_client` | `storage.objects` | Overwriting the derivative in place on re-edit (§4.10). | **[S98] found while applying the above** |
+
+All four carry the identical five-role array, and all four get `'subcontractor'::text` appended to it:
 
 ```sql
+-- present in all four, and the ONLY thing that changes in any of them
 AND public.get_my_role() = ANY (ARRAY['owner'::text, 'admin'::text, 'project_manager'::text, 'foreman'::text, 'crew_member'::text])
 ```
 
-**Only that array changes.** The other two arms already admit an assigned subcontractor correctly, and
-must not be touched — verified, not assumed:
+### The role array is the only thing that changes
 
-- **The `client_visible` arm** (`:84-87`) requires a non-owner/admin to insert with
-  `COALESCE(client_visible, false) = false`. A sub's field photo is not client-visible, so this passes
-  unchanged and continues to stop subs from publishing to the client portal. Correct as-is.
-- **The category/project arm** (`:88-100`) requires `project_id IS NOT NULL` and, for `category = 'photos'`,
+Verified arm by arm, not assumed. **Every other arm already admits an assigned subcontractor correctly
+and must be left byte-identical.**
+
+**On `public.files` (policies 1 and 2):**
+
+- **The `client_visible` arm** requires a non-owner/admin to write with `COALESCE(client_visible, false)
+  = false`. A sub's field photo is not client-visible, so this passes unchanged and keeps subs from
+  publishing to the client portal. Correct as-is.
+- **The category/project arm** requires `project_id IS NOT NULL` and, for photos,
   `category <> ALL ('contracts','change_orders','invoices') AND can_view_project(project_id)`.
   `can_view_project` (`20260704211000_module5_5a_projects.sql:248-262`) admits **any assigned member
   regardless of role**, so an assigned sub passes and an unassigned one does not. Correct as-is.
 
-So the migration drops and recreates `files_insert_non_client` with `'subcontractor'::text` added to the
-first array and **everything else byte-identical**. It grants a sub exactly one new power: inserting a
-non-client-visible file, on a project they are assigned to, in a non-financial category.
+**On `storage.objects` (policies 3 and 4):**
 
-**A consequence of the `project_id IS NOT NULL` arm that §6 must respect:** for every non-owner/admin
-role — which is every field role — **a file cannot be inserted without a project**. §6's "with no project
-in context, ask which project *after* the shot" is therefore not merely a UX preference; it is the only
-sequence the database permits. The photo must be held client-side until a project is chosen.
+- **The company arm** is the inline-subquery form the house rule requires —
+  `(storage.foldername(name))[1] = (SELECT company_id::text FROM profiles WHERE user_id = auth.uid() …)`.
+  Untouched.
+- **The project-assignment arm** matches segment 2 of the path against the UUID pattern and requires a
+  `project_assignments` row reached via `company_members → profiles → auth.uid()`. That join is **role-blind**,
+  so an assigned sub satisfies it today. Untouched.
+- **SELECT needs no change at all.** `project_files_select_non_client` gates on
+  `get_my_role() <> 'client'` plus the same assignment arm — a subcontractor already passes both. Do not
+  touch it, and do not "tidy" it to match the others.
+- **DELETE stays Owner/Admin.** `project_files_delete_owner_admin` is not in scope and does not change.
 
-**NOT written here.** Per the ruling and the session's scope, this spec states the change; it does not
-write the migration. It is a one-policy DROP/CREATE with no data change, no column change and no
-backfill.
+Net grant to a subcontractor: on a project they are assigned to, write and re-write a non-client-visible,
+non-financial file and its bytes. Nothing else.
 
-> **Flagged, and NOT covered by D-20 — Josh has not ruled on this.** `files_update_non_client`
-> (`20260728000000_security_rls_96_99.sql:103-...`) carries **the same five-role array and the same
-> omission**. Markup Save writes `files.markup_data`, which is an **UPDATE** on `files` (§4.10). So after
-> this migration a subcontractor can **upload** a photo and **not annotate** it — including a photo they
-> just took themselves. The ruling named the INSERT policy specifically, so widening UPDATE is not
-> assumed here. See §11 Decision 7 for the open question.
+### Consequences the rest of the spec depends on
+
+- **A file cannot be inserted without a project** for any non-owner/admin role — every field role. §6's
+  "with no project in context, ask which project *after* the shot" is therefore not a UX preference but
+  the only sequence the database permits; the shot is held client-side until a project is chosen (A-21c).
+- **The derivative is subject to the same storage policies as the original**, because it lives in the
+  same bucket under the same `{company_id}/{project_id}/` prefix (§4.10). Policies 3 and 4 are what let a
+  sub's markup save land at all.
+
+**NOT written here.** Per the ruling and this session's scope, the spec states the changes; it does not
+write the migration. Four DROP/CREATE pairs, no data change, no column change, no backfill.
+
+---
+
+## §7b — Required migration 2 of 2: the conflict holding store (D-17, extended [S98])
+
+Specified in **§5.7**, which defines the table, its RLS, and its lifecycle.
+
+**Ordering — must it land before the mobile build starts?** **Before the offline queue is built; not
+before the shell.** §7a is genuinely build step 1 because the camera is on every screen from the first
+commit. The holding store is only reachable once a write can be queued, so it must land **before any
+offline write path ships**, and no later. Shipping the queue first would mean shipping a conflict path
+with nowhere to put a conflict — which is precisely the bounded gap D-17 was extended to close.
+
+Both migrations are independent of each other and can land in either order relative to one another.
 
 ---
 
@@ -910,6 +1089,12 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 - A-19d The conflicted entry **leaves the sync queue**: no further retry is attempted, no backoff is scheduled, and it **stops counting toward the queued-count pill**, which continues to equal only what will actually upload. `[unit]` _(Without the pill clause this passes while A-18 silently breaks.)_
 - A-19e The field user is shown a message naming the record and stating their copy was kept and sent for review — and it is **not** the generic `Needs attention` retry treatment used for transient failures. `[Playwright]`
 - A-19f A queued **insert** of a row id the server has never seen is **never** treated as a conflict — it takes the ordinary idempotent-upsert path even when the queue is replayed long after capture. `[live]` _(§5.6's "a first write is never a conflict". Without this, an over-eager conflict check strands every offline creation.)_
+- A-19g The held copy is written to **`sync_conflicts`**, not to IndexedDB: after a conflict, clearing the PWA's local storage entirely leaves the rejected body, its `captured_at` and its `author_member_id` still retrievable server-side. `[live]` _(New [S98, ruling 2]. This is the criterion the ruling exists for — a store that survives only while the app does would satisfy A-19c and still lose the work.)_
+- A-19h A queue entry is **never** removed before its `sync_conflicts` row is durably written — if that insert fails, the entry stays queued and retryable. `[unit]` _(§5.7 lifecycle step 1. Without this the conflict path can lose the very copy it exists to preserve.)_
+- A-19i `sync_conflicts` is readable by Owner and Admin and by **no other role** — including the author of the held copy. `[live]`
+- A-19j The author **can insert** their own conflict row while being unable to read it back, and the client does not chain a returning-representation read onto that insert. `[live]` _(§5.7's flagged trap: the write succeeds, the read is refused, and a `.select()` makes it look like the write failed.)_
+- A-19k **No role can DELETE a `sync_conflicts` row**, and a resolved row is retained with its `status`, `resolved_by` and `resolved_at` rather than removed. `[live]`
+- A-19l A `sync_conflicts` row stores `server_updated_at` but **no snapshot of the server row body**. `[live]` _(§5.7's deliberate omission. Needed because "we didn't store it" is invisible otherwise, and a well-meaning build would add it.)_
 
 **Capture**
 
@@ -925,7 +1110,11 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 
 - A-21d A **subcontractor** assigned to a project can complete a photo capture end-to-end: the row inserts, with `client_visible` false. `[live]` _(Fails today; this is the failing-then-passing assertion for the §7a migration.)_
 - A-21e A subcontractor **not** assigned to the project is still refused — the widening did not become a blanket grant. `[live]`
-- A-21f A subcontractor is still refused an insert in `contracts`, `change_orders` and `invoices` categories, and still cannot insert with `client_visible = true`. `[live]` _(The two arms §7a leaves untouched. Without this, a migration that widens more than the role array passes unnoticed.)_
+- A-21f A subcontractor is still refused an insert in `contracts`, `change_orders` and `invoices` categories, and still cannot insert with `client_visible = true`. `[live]` _(The two `public.files` arms §7a leaves untouched. Without this, a migration that widens more than the role array passes unnoticed.)_
+- A-21g A subcontractor's photo **bytes** land in the `project-files` bucket, not just the `files` row. `[live]` _(New [S98]. `storage.objects` policies are independent of `public.files` — widening only the table produces a row whose bytes were refused, and A-21d alone would not catch it.)_
+- A-21h A subcontractor assigned to a project can **save markup** on a photo — both writes land: `files.markup_data` updates and the derivative object is written. `[live]` _(New [S98, ruling 1]. Exercises `files_update_non_client` and `project_files_update_non_client` together; fails today on both.)_
+- A-21i A subcontractor is refused a storage write outside their company prefix, and outside a project they are assigned to. `[live]` _(The company arm and the project-assignment arm §7a leaves untouched on `storage.objects`.)_
+- A-21j A **client**-role user is still refused all four widened policies. `[live]` _(Four role arrays are being edited at once; this fails if `client` is admitted by a careless rewrite.)_
 
 **Photos**
 
@@ -938,7 +1127,17 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 - A-23b The original is **never modified** by a markup save — its bytes, `file_path`, `file_size` and `mime_type` are identical before and after, across two consecutive saves. Only `markup_data` differs. `[live]`
 - A-23c Re-editing marks regenerates the derivative **in full from the original bytes**, not from the previous derivative, and **overwrites it in place** — after N saves there is exactly one derivative object and no accumulated recompression. `[live]`
 - A-23d The derivative does **not** get its own `files` row: after a markup save, the project's photo count (§4.3) and the gallery tile count (§4.8) are unchanged. `[live]` _(The double-count failure §4.10 was written to prevent.)_
-- A-23e The viewer can toggle back to the original, and the toggle renders the original bytes with the overlay suppressed — it does not fetch the derivative. `[Playwright]`
+- A-23e The viewer's toggle reaches the **original** — with markup present and the derivative displaying, the toggle renders the unannotated original bytes. `[Playwright]` _(Amended [S98, ruling 3]: this is now the ONLY route to the unannotated image, so it is load-bearing rather than a convenience.)_
+
+**Display precedence (§4.7a) — all new [S98, ruling 3]. Every criterion here concerns a photo that HAS a derivative; the missing-derivative case is BLOCKED in §4.7a and deliberately carries no criterion.**
+
+- A-23f A photo with non-empty `markup_data` renders the **derivative** in the M-8 gallery thumbnail. `[Playwright]` _(The failure Josh named: a thumbnail showing the original while markup exists.)_
+- A-23g The same photo renders the derivative in the **M-9 image stage** and in the **M-9 filmstrip** thumbnail. `[Playwright]` _(One rule, three surfaces — §4.7a exists so they cannot drift, and testing only the stage would let the filmstrip regress.)_
+- A-23h A photo with **empty or null** `markup_data` renders the **original** on all three surfaces. `[Playwright]` _(Without this, a build that always takes the derivative path passes A-23f–A-23g and breaks every unannotated photo.)_
+- A-23i Adding markup to a previously unannotated photo flips all three surfaces to the derivative **without a reload**, and removing every mark flips them back. `[Playwright]` _(Precedence is a function of current state, not of what was true when the screen mounted.)_
+- A-23j A markup save that writes `markup_data` but fails to write the derivative **does not report success**. `[unit]` _(§4.7a.1. Under the old model this was a cosmetic lag; now it produces a photo the UI cannot display correctly.)_
+- A-23k Re-editing marks updates what all three surfaces display — no surface serves a stale derivative after a re-save. `[Playwright]` _(§4.7a.2. A-23c proves the object was overwritten; this proves the UI is not caching past it.)_
+- A-23l Every surface fetches the derivative through the same signed-URL flow as the original, from the same `{company_id}/{project_id}/` prefix. `[live]` _(§4.7a.3. A path that skips signing would work in testing and leak in production.)_
 - A-24 The active markup tool is distinguishable without colour — it carries a **border** and a label change. _(Corrected [S98]: this read "a label weight change". §4.10 specifies `1.5px #f2453d` border plus a red icon **and label** — a colour change, not a weight change. The criterion was testing something the spec does not say, so it could pass on a build that violated §4.10. The border half is the colour-independent signal; the build must not substitute tint alone.)_
 - A-24b Undo and Redo operate per-mark, and Redo renders dimmed when the redo stack is empty. _(§4.10 — no prior criterion.)_
 - A-24c Cancel with unsaved marks prompts for confirmation; Cancel with no marks exits directly. _(§4.10 — no prior criterion.)_
@@ -1006,7 +1205,8 @@ never prove the amber strip rendered or that a tap landed.
 
 ### What `[live]` proves today, with no new tooling
 
-A-15, A-15b, A-16, A-16b, A-19b, A-19f, A-20c, A-20d, A-21c–A-21f, A-22c, A-23–A-23d, plus A-28/A-28b as
+A-15, A-15b, A-16, A-16b, A-19b, A-19f, A-19g, A-19i–A-19l, A-20c, A-20d, A-21c–A-21j, A-22c, A-23–A-23d,
+A-23l, plus A-28/A-28b as
 shell checks. Two of these deserve their mechanism spelled out because the assertion runs backwards:
 
 - **A-16b** — insert session (`clock_out` NULL) → segments → UPDATE `clock_out`, then repeat with
@@ -1017,10 +1217,12 @@ shell checks. Two of these deserve their mechanism spelled out because the asser
 
 **House rule.** Every fix still needs a failing-then-passing assertion. Under D-18 that rule is now
 satisfiable for every criterion in §10 except A-26, which is manual by nature.
-## §11 — Decision register (ALL EIGHT RULED [S98, Josh])
+## §11 — Decision register (eleven ruled [S98, Josh]; ONE open)
 
-All eight questions raised in the S98 gap pass are closed. **Nothing here is open.** The rulings are
-recorded as D-14 (amended) and D-17…D-21 in §0, and applied throughout §4, §5, §7a, §8a, §9 and §10.
+The eight questions raised in the S98 gap pass are closed, and so are the three follow-ups from the
+second ruling pass. **One item is open — see the blocked box below.** The rulings are recorded as D-14
+(amended) and D-17…D-21 (D-17, D-20 and D-21 each extended by the second pass) in §0, and applied
+throughout §4, §4.7a, §5, §5.7, §7a, §7b, §8a, §9 and §10.
 Options considered are dropped rather than preserved — §0 is the register of what was decided, this is
 the register of where each ruling landed.
 
@@ -1032,20 +1234,35 @@ the register of where each ruling landed.
 | 4 | What does `{m} estimating` count? | **Dropped.** Header shows the active count only; no status added to `projects_status_check`. | §4.2; §8a; A-10c rewritten |
 | 5 | How is `62%` derived? | **Cut from v1.** No progress bar on M-2, no Progress stat on M-3; strip respecced to two stats. | D-19; §4.2; §4.3; §8a; §9; A-10d, A-11e |
 | 6 | What is "Up next" bound to? | **The schedule** — next upcoming item from the existing calendar UNION. No milestone concept introduced. | §4.3 binding table; §8a; A-11f–A-11i |
-| 7 | Subcontractor photo upload? | **Subs upload.** `files_insert_non_client` widened; **first build step**. | D-20; **§7a** (new); A-21d–A-21f |
-| 8 | Markup storage? | **Both.** `markup_data` is the source of truth; Save also writes a flattened derivative. Original never modified. | D-21; §4.10; A-23–A-23e |
+| 7 | Subcontractor photo access? | **Subs upload AND annotate** [extended S98]. **Four** policies widened — two on `public.files`, two on `storage.objects`; **first build step**. | D-20; **§7a** rewritten; A-21d–A-21j |
+| 8 | Markup storage? | **Both**, and [extended S98] **the derivative is what displays** wherever markup exists. Original never modified. | D-21; §4.10; **§4.7a**; A-23–A-23l |
+
+### Second ruling pass [S98] — three follow-ups ruled
+
+| Item | **Ruling** | Applied in |
+| ---- | ---------- | ---------- |
+| Subcontractor UPDATE policy | **Widen it too.** Same discipline — role array only. | D-20 extended; §7a rewritten to four policies; A-21f–A-21j |
+| Conflict holding store | **Add it.** Server-side table, Owner/Admin read, resolved rows kept. | D-17 extended; **§5.7** (new); §7b; §5.6 bounded-gap language removed; A-19g–A-19l |
+| Markup derivative | **Confirmed, and it is what displays** wherever markup exists. | D-21 extended; **§4.7a** (new); A-23e amended, A-23f–A-23l |
+
+### ⛔ ONE ITEM OPEN — the only thing blocking a complete build
+
+**What renders when `markup_data` is non-empty and no derivative exists.** Options and costs in **§4.7a**.
+This is not a leftover from the first pass; ruling 3 created it by making the derivative load-bearing.
+It is **not** a one-time backfill: the desktop editor writes `markup_data` and nothing else
+(`markup-editor.tsx:244-247`), and M6M does not change desktop under A-28/D-2, so the population keeps
+growing. Every other question raised in this session is closed.
 
 ### Carried forward — raised by a ruling, not covered by it
 
-Two items surfaced while applying the rulings. Neither is a reopening of a closed decision; both are new
-ground the rulings created.
+Both items carried out of the first ruling pass are now **CLOSED** by the second — `files_update_non_client`
+is widened (D-20 extended) and the holding store exists (D-17 extended, §5.7). One new item was found
+while applying them, and it is **already applied** rather than carried:
 
-1. **`files_update_non_client` carries the same subcontractor omission as the INSERT policy.** D-20 named
-   the INSERT policy. Markup Save writes `files.markup_data`, which is an **UPDATE**. So after §7a a
-   subcontractor can upload a photo and **not annotate it — including one they just took**. Widening
-   UPDATE was not assumed. Detail and the exact policy at **§7a**, closing note.
-2. **The reconciliation review surface does not exist.** D-17 requires a conflicted copy to be held for
-   Owner/Admin, but the phone's IndexedDB is the wrong home for something that must survive a cleared
-   PWA or a new handset — and no server-side holding store exists. M6M detects, holds and notifies;
-   §5.6 enumerates the four things the review surface will need so the queue is not reopened to serve it.
-   **The build must not ship the overwrite as a stopgap.**
+- **The `storage.objects` policies carried the same subcontractor omission as `public.files`.** A photo is
+  two writes — the row and the bytes — under two independent policy sets. D-20 as originally specced
+  widened only the row, which would have produced a subcontractor who inserts a file row whose bytes the
+  storage layer refuses, and A-21d would have passed on the row insert alone. §7a now covers all four
+  policies and A-21g asserts the bytes specifically. **This was not in either ruling; the direction was
+  unambiguous, so it is applied rather than queued** — flagging it because it changes what "build step 1"
+  costs, from one DROP/CREATE to four.
