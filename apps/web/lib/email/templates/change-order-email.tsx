@@ -10,6 +10,7 @@ import {
   Section,
   Text,
 } from '@react-email/components';
+import { brand } from '@/lib/brand';
 
 // Signed-artifact spec §7 — branded change-order email, modelled on
 // ProposalEmail. Used for CO sent (v1 attached + signing button), CO reminder
@@ -85,7 +86,7 @@ export function ChangeOrderEmail({
           ) : null}
           <Hr style={{ borderColor: '#e5e7eb', margin: '16px 0' }} />
           <Text style={{ fontSize: '11px', color: '#9ca3af' }}>
-            Sent by {companyName} via FrameFocus
+            Sent by {companyName} via {brand.name}
           </Text>
         </Container>
       </Body>

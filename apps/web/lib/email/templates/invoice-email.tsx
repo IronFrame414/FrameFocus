@@ -8,6 +8,7 @@ import {
   Preview,
   Text,
 } from '@react-email/components';
+import { brand } from '@/lib/brand';
 
 // 7D1 §13 — branded invoice email, modelled on ChangeOrderEmail so the two read
 // as the same company writing.
@@ -69,7 +70,7 @@ export function InvoiceEmail({
             Invoice {invoiceNumber} is attached as a PDF.
           </Text>
           <Text style={{ fontSize: '11px', color: '#9ca3af' }}>
-            Sent by {companyName} via FrameFocus
+            Sent by {companyName} via {brand.name}
           </Text>
         </Container>
       </Body>
