@@ -11,7 +11,7 @@
 > (Josh, S98); §11 is now a register, not a queue.** The rulings are D-14 (amended) and D-17…D-21 in §0.
 >
 > **Two figures were deleted rather than derived** — the progress percentage (D-19) and the `estimating`
-> count (D-4) — because neither had a source in the schema. §4.2 and §4.3 carry the respec, not a gap.
+> count (D-23) — because neither had a source in the schema. §4.2 and §4.3 carry the respec, not a gap.
 >
 > **BUILD STEP 1 is migrations, not a screen: FOUR policies** — `files_insert_non_client`,
 > `files_update_non_client`, `project_files_insert_non_client`, `project_files_update_non_client`
@@ -19,6 +19,23 @@
 > from both sets. Until they land, the camera — the most prominent control on every mobile screen — is
 > broken for one role. **A second migration**, `sync_conflicts` (§5.7, §7b), must land before any offline
 > write path ships.
+>
+> **⚠️ THE FIVE FIELD-CAPTURE SCREENS ARE NOT SPECCED BY THIS DOCUMENT.** GAP-8 has been open the whole
+> time under a heading that promises gaps are resolved before build, so it is hoisted here. The _Mobile
+> Field Capture_ handoff — clock, segment switch, daily log entry, delivery check-in, incident — was never
+> provided. Measured against D-6's three offline-capable actions:
+>
+> | D-6 action | Screen status |
+> | ---------- | ------------- |
+> | Photo capture | **Specced** — §6, and `/m/capture` (§1). |
+> | Clock in / out | **Partly specced, and blocked as it stands.** M-5 (§4.5) specs the button, the state card and the project select — but **not how a segment type is chosen** at clock-in or switched mid-shift. `time_segments.segment_type` is `NOT NULL` under a CHECK, so a session cannot produce a segment without one. The screen cannot complete the write it is specced to perform offline. |
+> | Daily log | **Not specced at all.** M-6 (§4.6) is a *list*, and its "Log the day" button has **no destination** — no entry screen, and no route for one in §1. |
+>
+> **So of the three actions D-6 makes offline-capable, one has a complete screen, one is incomplete in a
+> way that blocks its write, and one has no screen whatsoever.** The offline queue (§5) is specified in
+> full for writes that two of its three producers currently have nowhere to originate. Delivery check-in
+> and incident are the remaining two unspecced capture screens; delivery check-in is online-only (D-6) but
+> still has no screen.
 >
 > **Every question raised this session is ruled; nothing is open.** The display question was closed by
 > ruling the derivative **off** the display path: the UI draws marks live from `files.markup_data` over
@@ -72,6 +89,8 @@
 | D-20 | Subcontractor photo access    | **Subs upload AND annotate.** [S98, Josh] D-11 stands unchanged. **EXTENDED [S98]: `files_update_non_client` is widened too**, so a sub can annotate photos including ones they just took — and, found while applying that, **the two `storage.objects` policies carry the same omission and must be widened as well** or the bytes are refused regardless. **Four policies, role array only.** Required migration and the **FIRST build step** — see §7a. |
 | D-21 | Markup storage & display      | **Both stored; the OVERLAY displays.** [S98, Josh] `files.markup_data` holds the editable annotation layer, **is the source of truth, and is drawn live over the original image on every surface** — gallery thumbnail, viewer stage, filmstrip (**Option A**, ruled once the derivative-as-display reading proved unbuildable for desktop-authored markup). Save still writes a flattened derivative, but it is a **sharing artifact only, never displayed**. The original is never modified and is always the image on screen. §4.9's toggle hides the drawn layer; it does not swap files. Storage contract in §4.10; display rule, fit, legibility and load order in **§4.7a**. |
 | D-22 | Pin shape / schema v2         | **Add a `pin` shape type; `MARKUP_SCHEMA_VERSION` → 2.** [S98, Josh] Composing a pin from circle + text would make one pin two undo steps, contradicting §4.10's per-mark Undo/Redo; dropping Pin would remove what punch and incident work needs most. Additive, and `MarkupViewer` has no consumers. **The pin number is STORED, so deletes leave gaps and `next = max + 1`.** Contract, read/forward compatibility and blast radius in **§4.10a** — the first ruling this session to touch shared code desktop imports. |
+| D-23 | `{m} estimating` count        | **Dropped.** [S98, Josh] The M-2 header shows the active count only. There is no `estimating` project status — `projects_status_check` permits `active, on_hold, complete, archived, cancelled` — and none is added. §4.2; §8a; A-10c. _(Renumbered [S98]: this ruling was previously cited as "D-4", which is the list-screen pattern.)_ |
+| D-24 | "Up next" binding             | **Bound to the schedule.** [S98, Josh] The next upcoming item on the project, from the existing calendar UNION; no milestone concept is introduced. §4.3; §8a; A-11f–A-11j. _(Renumbered [S98]: this ruling was previously cited as "D-6", which is offline-capable actions.)_ |
 
 ---
 
@@ -87,7 +106,7 @@ app/m/
   projects/page.tsx                 M-2   projects list
   logs/page.tsx                     M-6   tab slot 4
   field/page.tsx                    M-7   tab slot 5
-  capture/page.tsx                  camera action target (§6)
+  capture/page.tsx                  post-shot handling (§6) — NOT the camera itself
   offline/page.tsx                  M-4   offline / failure state
   p/[projectId]/page.tsx            M-3   project sections hub
   p/[projectId]/photos/page.tsx     M-8   gallery
@@ -179,7 +198,7 @@ Tapping the scrim or the hamburger closes it. **The tab bar stays visible and fu
 
 App bar: "Projects" + mono `{n} active`.
 
-> **AMENDED [S98, D-4 ruling]:** the header read `{n} active · {m} estimating`. **The second half is
+> **AMENDED [S98, D-23]:** the header read `{n} active · {m} estimating`. **The second half is
 > dropped.** There is no `estimating` project status — `projects_status_check` permits exactly
 > `active, on_hold, complete, archived, cancelled` — and no status is added. The header is the active
 > count alone.
@@ -252,7 +271,7 @@ every user rather than erroring.
 
 Body: an **"Up next"** card — blue dot with a 4px `#e7ebf9` halo, item title 16px/700, amber date line.
 
-**Binding [S98, D-6 ruling — bound to the schedule, no milestone concept introduced].** "Up next" is the
+**Binding [S98, D-24 — bound to the schedule, no milestone concept introduced].** "Up next" is the
 **next upcoming scheduled item on this project**, taken from the existing calendar UNION —
 `getCalendarEvents({ projectId })` (`apps/web/lib/services/schedule.ts:106`). That function already unions
 the three things this platform calls "scheduled":
@@ -777,26 +796,67 @@ Why that is safe here, verified rather than assumed:
 
 ### 5.2 Queue model
 
-A single local queue (IndexedDB) of **mutations**, not screens:
+A single local queue (IndexedDB) of **mutations**, not screens. **Respecced [S98]** — the previous shape
+could not express what §5.5 and §5.6 require of it (see the note below):
 
 ```
 {
-  id:            uuid,        // client-generated, IS the target row's primary key
-  kind:          'clock_event' | 'daily_log' | 'photo',
-  payload:       object,      // exactly what the online path would have sent
-  captured_at:   ISO string,  // when the user acted, NOT when it synced
-  attempts:      integer,
-  last_error:    string | null
+  entry_id:         uuid,      // the QUEUE ENTRY's own key. Not the row's.
+  target_id:        uuid,      // the target ROW's primary key — client-generated at
+                               //   capture (D-7). Several entries may share one target_id.
+  op:               'insert' | 'update',
+  entity:           'time_clock_session' | 'time_segment' | 'daily_log' | 'photo',
+  payload:          object,    // exactly what the online path would have sent
+  captured_at:      ISO string,// when the user ACTED, not when it synced
+  base_updated_at:  ISO | null,// the target row's updated_at AS LOADED. null on insert.
+                               //   This is the conflict basis (§5.6) — NOT captured_at.
+  depends_on:       uuid|null, // entry_id that must succeed first (§5.5.1)
+  seq:              integer,   // monotonic capture order; the replay order
+  state:            'queued' | 'conflicted',
+  attempts:         integer,
+  last_error:       string | null
 }
 ```
 
+> **Why the old shape was insufficient [S98].** It was
+> `{ id, kind: 'clock_event'|'daily_log'|'photo', payload, captured_at, attempts, last_error }`, and three
+> rules elsewhere in this spec could not be stated against it:
+>
+> 1. **No `op`.** §5.6 and A-19f require "a queued insert is never a conflict", which is unaskable if an
+>    entry cannot say whether it is an insert.
+> 2. **No `time_segment` kind**, although §5.5.1 replays segments as their own ordered step. Segments had
+>    to hide inside `clock_event`, which also had to mean both the session insert and the later
+>    clock-out update.
+> 3. **`id` was defined as the target row's primary key.** That holds only while one entry equals one
+>    row. §5.5.1's shift is **three** entries against **two** rows — a session insert, segment inserts,
+>    and an update to that same session — so the session's insert and its clock-out update would have
+>    collided on the same `id`. `entry_id` and `target_id` are now separate, and A-16's
+>    replay-three-times-yields-one-row is stated on `target_id`.
+
 1. **`captured_at` is the business timestamp.** A clock-in queued at 6:58am and synced at 11:20am is a
    6:58am clock-in. `time_clock_sessions.clock_in` is already documented as the device timestamp — the
-   client sets it, the server does not substitute receipt time.
-2. **Auto-retry with backoff** on reconnect. `Try again` forces an immediate attempt.
-3. **Never silently discard a queued item.** A permanently failing entry stays in the queue, moves to a
+   client sets it, the server does not substitute receipt time. **`captured_at` is NOT the conflict
+   basis** — that is `base_updated_at`, and conflating the two is the defect §5.6 records.
+2. **`base_updated_at` is captured on the READ path, not the write path.** When a mobile screen loads a
+   row it may later edit, it records that row's `updated_at` exactly as returned, and the queue entry
+   carries it unchanged. For a `daily_log` update that is the `updated_at` of the log as it populated
+   the editor. **On an `insert` it is `null`** — there was no row to have loaded.
+3. **Editing the same row twice offline does not advance the base.** A second edit **coalesces into the
+   existing queued entry**: the payload is replaced, `captured_at` advances, and `base_updated_at`
+   **stays at the originally loaded value**. Re-basing on the phone's own unsynced write would tell the
+   detector the client had seen a server state it never saw, which is the same class of error as using
+   `captured_at`.
+4. **Replay order is `seq`, gated by `depends_on`.** Capture order already produces §5.5.1's required
+   sequence — session insert, then segments, then the clock-out update — so `seq` carries it without a
+   separate scheduler. `depends_on` is the hard gate: an entry whose parent has not succeeded is **not
+   attempted**, so a segment never fails against `owns_open_session` merely because its session has not
+   landed yet.
+5. **Auto-retry with backoff** on reconnect. `Try again` forces an immediate attempt.
+6. **Never silently discard a queued item.** A permanently failing entry stays in the queue, moves to a
    `Needs attention` badge, and surfaces `last_error`.
-4. The queued-count pill must equal the number of records/files that will actually upload.
+7. **The queued-count pill counts `state: 'queued'` only.** Entries at `state: 'conflicted'` have left
+   the queue (§5.6) and must not be counted — the pill means "records and files that will actually
+   upload", and a conflicted entry never will.
 
 ### 5.3 Idempotency (D-7) — schema already supports this
 
@@ -886,13 +946,17 @@ independent. All three are DB facts, verified [S98], not predictions.
    captured offline — clock in 07:00, segments, clock out 15:00 — must therefore replay as
    **INSERT session (`clock_out` NULL) → INSERT segments → UPDATE session set `clock_out`**. If the
    queue collapses the shift into one INSERT that already carries `clock_out`, every segment insert is
-   rejected by RLS and the shift syncs with no attribution. The queue must preserve
-   parent-before-child order and must not fold a later `clock_out` into the original insert.
+   rejected by RLS and the shift syncs with no attribution. **§5.2's entry shape is what makes this
+   expressible:** the shift is three entries against two rows — `op:'insert'` on the
+   `time_clock_session`, `op:'insert'` on each `time_segment` with `depends_on` pointing at the session
+   entry, then `op:'update'` on the same session carrying `clock_out`. Replay follows `seq`, and
+   `depends_on` stops a segment being attempted before its session exists. The queue must never fold the
+   later `clock_out` into the original insert.
 2. **One open session per member, enforced by a partial unique index.**
    `idx_time_clock_sessions_one_open_per_member` (`:127-129`) is
    `UNIQUE (member_id) WHERE (clock_out IS NULL AND is_deleted = false)`. Upsert-on-pk makes a *replay*
    safe, but two genuinely different offline sessions left open will collide on sync. Surface that as a
-   `Needs attention` queue entry (§5.2.3), never as a silent drop.
+   `Needs attention` queue entry (§5.2.6), never as a silent drop.
 3. **Queued photos must upload through `uploadFile`, not straight to storage.** The HEIC→JPEG
    conversion lives inside `uploadFile` (`files-client.ts:84`), not in a storage trigger. A queue that
    holds a blob and PUTs it to the `project-files` bucket on reconnect bypasses the conversion and
@@ -906,27 +970,53 @@ queue. Both writes are legitimate — `daily_logs_update_authorized`
 neither. Left alone, §5.3's upsert-on-primary-key would replay the phone's copy straight over the desktop
 edit with no trace that the desktop edit existed.
 
-**The rule.** Before replaying any queued mutation that targets an **existing** row, compare the server
-row's `updated_at` against the queued item's `captured_at`:
+> **⚠️ CORRECTED [S98] — the first formulation of this rule was unsound and would have shipped the exact
+> data loss D-17 forbids.** It read: _"compare the server row's `updated_at` against the queued item's
+> `captured_at`; server `updated_at` ≤ queued `captured_at` → no conflict."_ Walk it:
+>
+> | Time | Event |
+> | ---- | ----- |
+> | 08:00 | Phone loads the log, goes offline. It has the 08:00 version. |
+> | 08:30 | Desktop edits the log. Server `updated_at` = 08:30. |
+> | 09:00 | Phone edits its stale copy. `captured_at` = 09:00. |
+> | later | Sync. `08:30 ≤ 09:00` → **"no conflict"** → §5.3 upserts the phone's copy **over the desktop edit.** |
+>
+> The desktop edit is destroyed silently. And this is not an edge case — it fires **whenever the field
+> user is offline longer than the office user takes to edit**, which is the ordinary case this feature
+> exists for. The error is that **`captured_at` records when the phone WROTE, not what the phone had
+> READ.** Comparing a server timestamp to it answers a question nobody asked.
 
-- **Server `updated_at` ≤ queued `captured_at`** → no conflict. Replay normally.
-- **Server `updated_at` > queued `captured_at`** → **conflict. The server version stands.**
-  - The queued copy **is not written.** The desktop edit remains live and untouched.
+**The rule.** Conflict detection tests **the version the client loaded**, never when it wrote. Before
+replaying any entry with `op: 'update'`, compare the target row's **current** server `updated_at` against
+the entry's **`base_updated_at`** (§5.2 — the `updated_at` the row carried when the client read it):
+
+- **Current server `updated_at` IS NOT DISTINCT FROM `base_updated_at`** → the row is untouched since the
+  client read it. **No conflict.** Replay normally.
+- **Current server `updated_at` IS DISTINCT FROM `base_updated_at`** → somebody changed the row after the
+  client loaded it. **Conflict. The server version stands.**
+  - The queued copy **is not written.** The other edit remains live and untouched.
   - The queued copy **is not discarded.** This is the whole point of the ruling — offline work is never
     destroyed to protect a server row.
-  - The entry **leaves the sync queue** and **enters reconciliation review.** It stops being retryable:
-    no backoff, no further attempts, and it no longer counts toward the queued-count pill (§5.2.4), which
-    must continue to mean "records that will actually upload".
+  - The entry moves to **`state: 'conflicted'`** and **leaves the sync queue** into reconciliation review.
+    It stops being retryable: no backoff, no further attempts, and it no longer counts toward the
+    queued-count pill (§5.2.7), which must continue to mean "records that will actually upload".
   - **The field user is told**, on the device, at the moment the conflict is detected — not silently
     moved. The message names the record and says their copy was kept and sent for review. It is not the
-    generic `Needs attention` treatment of a failed retry (§5.2.3), because nothing here will succeed on
+    generic `Needs attention` treatment of a failed retry (§5.2.6), because nothing here will succeed on
     a retry and offering one would be a lie.
   - Reconciliation is **manual, by Owner or Admin**, who see both versions and choose. Nothing
     auto-merges. Nothing expires.
 
-**A first write is never a conflict.** An INSERT of a row id the server has never seen has no server
-`updated_at` to compare, so the ordinary idempotent-upsert path (§5.3) applies unchanged. Conflict
-detection is strictly an update-to-an-existing-row concern.
+**Why `IS DISTINCT FROM` and not `>`.** Any change since the load invalidates the client's basis,
+regardless of direction. A greater-than test would wave through a row whose `updated_at` moved
+backwards — a restore, a clock skew between writers, a manual correction — and those are exactly the
+cases where a blind overwrite does the most damage. The client is not asking "is the server newer?", it
+is asking "is the server still what I saw?".
+
+**A first write is never a conflict.** An entry with `op: 'insert'` has `base_updated_at: null` — there
+was no row to load — so it takes the ordinary idempotent-upsert path (§5.3) unchanged, however long it
+has been queued. Conflict detection is strictly an `op: 'update'` concern, which is why §5.2's entry
+carries `op` at all.
 
 **The losing copy goes to a server-side table, not to the phone.** IndexedDB is the wrong home for
 something that must survive the user clearing the PWA, switching handsets, or never opening the app
@@ -1027,6 +1117,15 @@ The tab bar's centre action is a **global capture action**. Tapping it opens the
 (`<input type="file" accept="image/*" capture="environment">`), with a small secondary control to switch to
 the photo library.
 
+> **[S98] What `/m/capture` is for — reconciling §1 with this section.** §1 listed `capture/page.tsx` as
+> the "camera action target", which read as though the route opened the camera. It does not, and cannot:
+> the camera is a **file input rendered in the tab bar**, so tapping it navigates nowhere. Deleting the
+> route was the other option, but it is needed — everything that happens **after** the shutter has to live
+> somewhere. `/m/capture` is that surface: the project prompt when there is no project in context (§6,
+> A-21), the confirmation, and the offline "will upload later" message. The photo is held there until a
+> project is chosen, which is not a UX preference but the only sequence the database permits (§7a, A-21c).
+> With a project already in context and online, the route may be passed through without being seen.
+
 - With a project in context, the photo files to that project.
 - With no project in context, the app asks which project **after** the shot is taken, never before.
 - Offline, the photo enters the queue (§5.2) and the user is told it will upload later — in the same
@@ -1040,14 +1139,58 @@ camera is always the default.
 
 ## §7 — PWA prerequisites
 
-1. `apps/web/app/manifest.ts` (or `public/manifest.webmanifest`): `name`, `short_name: "FrameFocus"`,
-   `start_url: "/m"`, `display: "standalone"`, `background_color: "#14213d"`, `theme_color: "#14213d"`.
-2. Icons at 192, 512, and a 512 maskable.
+> **[S98] Brand values are INHERITED, not authored here.** A parallel session is renaming the product
+> ("EZ Contractor Binder" is the working name) with a new logo and icon set. **This spec does not author,
+> guess, or hard-code any product name, colour or icon.** It names the values the manifest needs and where
+> each comes from; whatever the rebrand settles is what ships. The previous text specified
+> `short_name: "FrameFocus"` and `#14213d` literals — those are removed, not updated.
+
+### 7.1 Manifest
+
+`apps/web/app/manifest.ts` (or `public/manifest.webmanifest`) must declare:
+
+| Manifest field | Value | Source |
+| -------------- | ----- | ------ |
+| `name` | The product's full name | **Rebrand.** Read from the single shared brand source — one module both the manifest and any on-screen product name import. Never a literal in the manifest. |
+| `short_name` | The product's home-screen name | **Rebrand**, same source. This is what appears under the icon on the phone, so a stale value here is the most visible possible regression. |
+| `icons` | 192, 512, and a 512 **maskable** | **Rebrand** — the new icon set. §7.2. |
+| `theme_color` | Product chrome colour | **Rebrand.** See §7.3 — this is not automatically §2's `navy`. |
+| `background_color` | Splash background | **Rebrand**, same as above. |
+| `start_url` | `/m` | **M6M owns this.** It is a routing decision (D-12, §1), unaffected by the rebrand. |
+| `display` | `standalone` | **M6M owns this.** Required for the installed experience and for iOS Web Push (D-10). |
+
+**M6M owns exactly two of these**, and only those two are specified in this document. The rest are
+placeholders pointing at the rebrand; a build that fills them from this spec has filled them wrong.
+
+### 7.2 Icons, service worker, iOS meta
+
+2. Icons at **192, 512, and a 512 maskable** — artwork from the rebrand's icon set.
 3. A service worker registered from the mobile layout — app-shell caching plus the queue's retry hook.
 4. `apple-mobile-web-app-capable` and status-bar-style meta for iOS home-screen install.
 
-These four are also the prerequisites for Web Push on iOS (Gate 4). Notifications are not built here, but
+These are also the prerequisites for Web Push on iOS (Gate 4). Notifications are not built here, but
 nothing in this spec may make them harder.
+
+### 7.3 Is §2's `navy` the same decision as `theme_color`? — **Two decisions, one value today**
+
+Asked because §2 sets `navy #14213d` and the old §7 set `theme_color: "#14213d"`, which invites a build to
+treat them as one constant.
+
+They are **not** the same decision:
+
+- **§2's `navy` is a UI token.** It colours the app bar and primary text *inside* the running app. M6M owns
+  it; it is a design-system choice.
+- **`theme_color` / `background_color` are OS-level product chrome.** They tint the splash screen, the task
+  switcher card and the status bar — surfaces the user sees **before and around** the app, where the
+  product is being identified rather than operated. They belong to the brand.
+
+They coincide today only because the app bar happens to be navy. **After the rebrand they may legitimately
+diverge**, and a build that has aliased them to one constant will silently drag the in-app UI to whatever
+the new brand chrome is — or block the brand chrome from changing at all.
+
+**So:** §2's token stays as specified in this document and is M6M's to own. The manifest colours come from
+the rebrand. If they end up equal, that is a coincidence to be re-checked, not a shared constant to be
+factored out.
 
 ---
 
@@ -1169,7 +1312,7 @@ Both migrations are independent of each other and can land in either order relat
   it is company-wide, not per-user, and cannot be copied. **Ruled: deferred — §11 Decision 1.**
 - **GAP-3 — CLOSED [S98].** Every binding on M-2 and M-3 is bound to a named file and line, **cut by
   ruling**, or **dropped by ruling**. Nothing is left MISSING. See §8a: "Up next" is now bound to the
-  schedule UNION (D-6 ruling), progress % is cut (D-19) and `{m} estimating` is dropped (D-4 ruling).
+  schedule UNION (D-24), progress % is cut (D-19) and `{m} estimating` is dropped (D-23).
 - **GAP-4 — CLOSED [S98]. A client-supplied `id` passes all four INSERT policies.** None of the four
   references `id` in its `WITH CHECK`; each gates on company, role, and membership only. Quoted in
   §5.3. **One consequence the queue model did not account for is recorded in §5.5 — read it before
@@ -1193,28 +1336,34 @@ Both migrations are independent of each other and can land in either order relat
   **No fix is designed here and none is needed.** The only thing the mobile build owes this: the
   offline photo queue must upload **through `uploadFile`**, not by writing to storage directly, or it
   silently loses the conversion. That obligation is recorded in §5.5.
-- **GAP-8 — Mobile Field Capture handoff** (clock, segment switch, daily log, delivery check-in, incident)
-  is referenced by both handoffs but has not been provided. M-5 and M-6 above are specced from the locked
-  patterns, not from that handoff; if it arrives, reconcile.
+- **GAP-8 — OPEN, and hoisted to the status block [S98]. The five field-capture screens are not specced
+  by this document.** The _Mobile Field Capture_ handoff (clock, segment switch, daily log entry, delivery
+  check-in, incident) is referenced by both provided handoffs but was never delivered. M-5 and M-6 are
+  built from the locked patterns, not from it. **This is not a documentation gap — it is a build blocker
+  for two of D-6's three offline-capable actions:** the daily log has no entry screen at all (M-6's "Log
+  the day" button has no destination and §1 has no route for one), and M-5 never specs how a
+  `segment_type` is chosen, which `time_segments`' `NOT NULL` CHECK requires before any segment can be
+  written. Full statement in the status block at the head of this document. If the handoff arrives,
+  reconcile; if it does not, these screens need specifying before the queue has anything to carry.
 
 ---
 
 ## §8a — Data bindings (closes GAP-3)
 
 Every figure on M-2 and M-3, bound to a named file and line, or removed by ruling. **[S98] No row is
-MISSING any more** — the three that were are now ruled: `{m} estimating` dropped (D-4), progress % cut
-(D-19), "Up next" bound to the schedule (D-6). Nothing here was invented to fill a gap; two figures were
+MISSING any more** — the three that were are now ruled: `{m} estimating` dropped (D-23), progress % cut
+(D-19), "Up next" bound to the schedule (D-24). Nothing here was invented to fill a gap; two figures were
 deleted instead.
 
 | Figure (screen)                     | Status      | Source                                                                                                                                                                                                                                                     |
 | ----------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `{n} active` (M-2 app bar)          | **BOUND**   | `projects.status = 'active'` with `is_deleted = false`. Reference derivation: `apps/web/lib/services/dashboard.ts:49-53`, surfaced as `activeProjectCount` at `:91`. On mobile it is the count of the rows M-2 already lists — no second query.            |
-| `{m} estimating` (M-2 app bar)      | **DROPPED [S98, D-4]** | **There is no `estimating` project status** — `projects_status_check` (`20260704211000_module5_5a_projects.sql:120`) permits exactly `active, on_hold, complete, archived, cancelled`, and `ProjectStatus` (`projects.ts:7`) mirrors it. Ruled: the figure is removed from the header rather than a status being added. Nothing binds it because nothing renders it. |
+| `{m} estimating` (M-2 app bar)      | **DROPPED [S98, D-23]** | **There is no `estimating` project status** — `projects_status_check` (`20260704211000_module5_5a_projects.sql:120`) permits exactly `active, on_hold, complete, archived, cancelled`, and `ProjectStatus` (`projects.ts:7`) mirrors it. Ruled: the figure is removed from the header rather than a status being added. Nothing binds it because nothing renders it. |
 | `62%` progress (M-2 card, M-3 stat) | **CUT [S98, D-19]** | No project-level percentage exists; the nearest ingredient is phase-level `PhaseRollup.percent` (`tasks-shared.ts:48, 83-88`), the mean of `tasks.percent_complete` **within one phase**. Ruled cut from v1 rather than derived. The M-2 progress bar and the M-3 Progress stat are both removed — §4.2 and §4.3 carry the respec. |
 | `38 days left` (M-2 card, M-3 stat) | **BOUND**   | `projects.target_end_date` (`20260704211000_module5_5a_projects.sql:105`). Existing derivation: `apps/web/app/dashboard/projects/[id]/page.tsx:104-111`, rendered as the "Days to Target" KPI at `:140-145`. **Signed** — it goes negative past target — and `null` when the date is unset, which the desktop renders as `—` with a "Needs dates" caption. Mobile must carry both states; `38 days left` is only the happy path. |
 | `{total} open` punch (M-3, M-2)     | **BOUND**   | Exact-count query on `punch_list_items`, `is_deleted = false`, `status IN ('open','in_progress')`, `project_id = :id`. Reference: `apps/web/app/dashboard/projects/[id]/page.tsx:71-76`. The company-wide twin is `dashboard.ts:78-85`. D-16's definition of "open" matches both precedents exactly. |
 | `{mine}` punch (M-3, M-2)           | **BOUND**   | The same query plus `assignee_id = get_my_member_id()` — see §4.3 for the exact expression. `get_my_member_id()` is defined at `20260704210000_company_members_foundation.sql:104-114`.                                                                     |
-| "Up next" (M-3)                     | **BOUND [S98, D-6]** | The next upcoming item from the calendar UNION: `getCalendarEvents({ projectId })` (`schedule.ts:106`), filtered to `start_date >= today`, first row of the existing ascending sort (`schedule.ts:200`), tie-broken inspection → task → general → title. Per-source tables and date columns in the §4.3 table. **No milestone entity was introduced** — `grep -rn "milestone"` still returns nothing across `supabase/`, `apps/web/lib` and `packages/`, and nothing was added to make it return something. Viewer-dependent for crew/subcontractor via `schedule_entries_select_scoped` (`20260704213000_module5_5b_tasks_scheduling.sql:406-414`) — stated in §4.3. |
+| "Up next" (M-3)                     | **BOUND [S98, D-24]** | The next upcoming item from the calendar UNION: `getCalendarEvents({ projectId })` (`schedule.ts:106`), filtered to `start_date >= today`, first row of the existing ascending sort (`schedule.ts:200`), tie-broken inspection → task → general → title. Per-source tables and date columns in the §4.3 table. **No milestone entity was introduced** — `grep -rn "milestone"` still returns nothing across `supabase/`, `apps/web/lib` and `packages/`, and nothing was added to make it return something. Viewer-dependent for crew/subcontractor via `schedule_entries_select_scoped` (`20260704213000_module5_5b_tasks_scheduling.sql:406-414`) — stated in §4.3. |
 | "currently clocked into" (M-2, D-12)| **BOUND**   | `getOpenSession()` (`time-tracking.ts:53`) → the open segment → its `project_id`. The open-segment expression already exists twice: `components/time/clock-modal.tsx:149` (`s.segment_end === null && !s.is_deleted` — use this one, it carries the soft-delete guard) and `dashboard/timeclock/timeclock-client.tsx:121`. **Caveat, and it is not an edge case:** `time_segments_project_gate_check` (`20260710130000_module6_6a_time_tracking.sql:225-228`) *forces* `project_id IS NULL` on `travel`, `shop` and `break` segments. A clocked-in user on a break has an open session and **no** current project. See §4.2. |
 | Photo count / gallery (M-3, M-8)    | **BOUND**   | `getFiles({ projectId, category: 'photos' })` (`files.ts:29-48`). There is no count-only function; the count is the length of the list. **The unseen dot is deferred to v2 [S98, D-14 as amended]** — the badge is this count and nothing else, so there is no unbound half left. |
 
@@ -1263,70 +1412,71 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 > **[S98] This section was re-read against the prose of §3–§7, sentence by sentence, rather than against
 > the other criteria.** S97 shipped three gaps because criteria were written from summaries. Additions
 > carry sub-letter IDs so existing numbers stay stable. Two criteria contradicted the sentence they were
-> meant to test — see A-23 and A-24, both now corrected.
+> meant to test — see A-23 and A-24, both since corrected.
 >
 > **Every criterion carries its harness [S98, D-18].** `[live]` = the existing Node harness against
 > rebuild-test; `[unit]` = the committed vitest suite, queue logic with injected storage and online
 > predicate; `[Playwright]` = browser-driven, **a dependency this repo does not currently carry**;
-> `[manual]` = a release check no tool can automate. **Nothing is marked UNTESTABLE any more** —
-> the ten that were are assigned in §10a. Criteria with no marker are static or build-time checks.
+> `[manual]` = a release check no tool can automate; `[build]` / `[shell]` = a compile or a command, no
+> runner needed. **Every criterion carries a marker** — the ten once marked UNTESTABLE are assigned in
+> §10a. The single exception is **A-25e**, which is flagged as unassertable pending a ruling and says so.
 
 **Shell**
 
-- A-1 The tab bar renders on every `/m/**` route except M-9 and M-10, and does not scroll out of view.
-- A-1b On M-9 and M-10 the tab bar is **replaced by that screen's own action row**, not simply absent — the 4-up row on M-9, the Undo/Redo/Done row on M-10. _(§3.2 promised a replacement; A-1 only tested the absence.)_
-- A-1c The active tab reflects the current screen on every `/m/**` route — arriving at `/m/p/{id}` by any path leaves Projects active. _(§3.2 — no prior criterion.)_
+- A-1 The tab bar renders on every `/m/**` route except M-9 and M-10, and does not scroll out of view. `[Playwright]`
+- A-1b On M-9 and M-10 the tab bar is **replaced by that screen's own action row**, not simply absent — the 4-up row on M-9, the Undo/Redo/Done row on M-10. _(§3.2 promised a replacement; A-1 only tested the absence.)_ `[Playwright]`
+- A-1c The active tab reflects the current screen on every `/m/**` route — arriving at `/m/p/{id}` by any path leaves Projects active. _(§3.2 — no prior criterion.)_ `[Playwright]`
 - A-2 With the hamburger sheet open, the tab bar is still visible **and tappable** — tapping Timeclock through the open sheet navigates. `[Playwright]`
-- A-3 The hamburger sheet contains **no** tile for Projects, Timeclock, Logs, or Field.
-- A-3b The hamburger sheet contains **exactly** the seven tiles named in §3.3 — Dashboard, Schedule, Expenses, Subs & Vendors, Team, Contacts, Settings — plus the full-width Sign out row. _(A-3 tested only the negative. §3.3's positive list had no criterion at all — this is the same class of gap S97 shipped.)_
-- A-3c The tile matching the current location carries the blue border and blue label; no other tile does. _(§3.3 — no prior criterion.)_
-- A-3d Tapping the scrim closes the sheet, and tapping the hamburger closes it. _(§3.3 — no prior criterion.)_
-- A-4 On a project screen the hamburger is absent and a back chevron is present.
+- A-3 The hamburger sheet contains **no** tile for Projects, Timeclock, Logs, or Field. `[Playwright]`
+- A-3b The hamburger sheet contains **exactly** the seven tiles named in §3.3 — Dashboard, Schedule, Expenses, Subs & Vendors, Team, Contacts, Settings — plus the full-width Sign out row. _(A-3 tested only the negative. §3.3's positive list had no criterion at all — this is the same class of gap S97 shipped.)_ `[Playwright]`
+- A-3c The tile matching the current location carries the blue border and blue label; no other tile does. _(§3.3 — no prior criterion.)_ `[Playwright]`
+- A-3d Tapping the scrim closes the sheet, and tapping the hamburger closes it. _(§3.3 — no prior criterion.)_ `[Playwright]`
+- A-4 On a project screen the hamburger is absent and a back chevron is present. `[Playwright]`
 - A-5 Every interactive element on every `/m/**` screen measures ≥44px in its smallest dimension, except the markup colour swatches (34px, 8px apart). `[Playwright]`
 
 **Landing (D-12)**
 
-- A-6 A successful sign-in lands on `/m/timeclock`, not `/m/projects` and not the dashboard.
-- A-7 Clocking in with a project selected navigates to that project's hub; clocking in with no project navigates to the dashboard.
+- A-6 A successful sign-in lands on `/m/timeclock`, not `/m/projects` and not the dashboard. `[Playwright]`
+- A-7 Clocking in with a project selected navigates to that project's hub; clocking in with no project navigates to the dashboard. `[Playwright]`
 
 **Projects list**
 
-- A-8 The card for the project the signed-in user is currently clocked into carries the blue border **and** the "On site" pill; no other card does.
-- A-8b With the signed-in user clocked in on a `break` / `travel` / `shop` segment, **no** card carries the border or pill, and no card is highlighted by falling back to a recent project. _(§4.2. A-8 alone passes vacuously in this state, which is the state the DB constraint guarantees exists.)_
-- A-9 Filter chips are single-select — selecting "Mine" deselects "All".
-- A-9b The chip row renders exactly All / Active / Mine / On hold, and each chip changes the rows listed. _(§4.2 — no prior criterion.)_
-- A-9c Typing in the search field filters the list without a submit action. _(§4.2 "Search filters live" — no prior criterion.)_
+- A-8 The card for the project the signed-in user is currently clocked into carries the blue border **and** the "On site" pill; no other card does. `[Playwright]`
+- A-8b With the signed-in user clocked in on a `break` / `travel` / `shop` segment, **no** card carries the border or pill, and no card is highlighted by falling back to a recent project. _(§4.2. A-8 alone passes vacuously in this state, which is the state the DB constraint guarantees exists.)_ `[Playwright]`
+- A-9 Filter chips are single-select — selecting "Mine" deselects "All". `[Playwright]`
+- A-9b The chip row renders exactly All / Active / Mine / On hold, and each chip changes the rows listed. _(§4.2 — no prior criterion.)_ `[Playwright]`
+- A-9c Typing in the search field filters the list without a submit action. _(§4.2 "Search filters live" — no prior criterion.)_ `[Playwright]`
 - A-10 Every number on the screen renders in IBM Plex Mono; no number renders in Barlow. `[Playwright]`
-- A-10b The status pill always renders its text label; no status is conveyed by fill colour alone. _(§4.2. This is the same accessibility class as A-24, which did have a criterion — the pill did not.)_
-- A-10c The app bar renders `{n} active` and **nothing after it** — no second count, no separator, no `estimating` figure. _(Rewritten [S98, D-4]. The old criterion tested a two-part header that no longer exists; this one fails if the dropped half comes back.)_
-- A-10d **No project card renders a progress bar or a percentage anywhere on M-2.** _(New [S98, D-19]. The bar was cut; without this, a build that keeps it violates §4.2 and no criterion notices.)_
-- A-10e The card footer renders days-left in all three states — a positive count, a **negative** count past target rather than a clamp at zero, and the empty state when `target_end_date` is null. _(§4.2 as amended; the desktop precedent at `projects/[id]/page.tsx:104-111, 140-145` already handles all three.)_
+- A-10b The status pill always renders its text label; no status is conveyed by fill colour alone. _(§4.2. This is the same accessibility class as A-24, which did have a criterion — the pill did not.)_ `[Playwright]`
+- A-10c The app bar renders `{n} active` and **nothing after it** — no second count, no separator, no `estimating` figure. _(Rewritten [S98, D-23]. The old criterion tested a two-part header that no longer exists; this one fails if the dropped half comes back.)_ `[Playwright]`
+- A-10d **No project card renders a progress bar or a percentage anywhere on M-2.** _(New [S98, D-19]. The bar was cut; without this, a build that keeps it violates §4.2 and no criterion notices.)_ `[Playwright]`
+- A-10e The card footer renders days-left in all three states — a positive count, a **negative** count past target rather than a clamp at zero, and the empty state when `target_end_date` is null. _(§4.2 as amended; the desktop precedent at `projects/[id]/page.tsx:104-111, 140-145` already handles all three.)_ `[Playwright]`
 
 **Project sections**
 
-- A-11 The Punch stat renders amber when the count is non-zero and muted when it is zero.
-- A-11b The Punch stat and the Punch List tile both read `{mine} mine · {total} open`, and `{mine}` differs between two members with different assignments on the same project.
-- A-11c An item moved to `complete` drops out of both figures; an item at `in_progress` stays in both.
-- A-11d The "Days left" stat renders the signed value from `projects.target_end_date`, renders a negative number past target rather than clamping at zero, and renders the empty state when the date is null. _(§4.3 + §8a. The spec's `38 days left` is the happy path only; the desktop precedent already handles all three states.)_
-- A-11e The stat strip renders **exactly two** stats — Days left and Punch — split 50/50 across the header width, separated by a **single** 1px rule. No third stat, no leftover one-third columns, no empty slot. _(Rewritten [S98, D-19]. The old criterion tested that a Progress stat was bound; the respec means the failure mode is now a strip that keeps three-column geometry after losing a stat, and this criterion catches that.)_
-- A-11f The "Up next" card renders the **first** calendar event with `start_date >= today` for this project, from the union of dated tasks, schedule entries and inspections; a nearer-dated event added afterwards displaces it. _(Rewritten [S98, D-6].)_
-- A-11g With two events on the same date, "Up next" applies the tie-break — inspection before task before general entry, then title ascending — and picks the same one on every render. _(§4.3. The underlying sort is on date alone, so without this the card flickers between equally-dated items.)_
-- A-11h With no event dated today or later, "Up next" renders the "Nothing scheduled" empty state; the card is **not** omitted. _(§4.3.)_
-- A-11i The "Up next" date line renders the event's date. It is **not** bound to `detail.notes`, which is absent for tasks — a task-sourced card renders a date, never a blank line. _(§4.3. This is the failure the binding was written to prevent.)_
+- A-11 The Punch stat renders amber when the count is non-zero and muted when it is zero. `[Playwright]`
+- A-11b The Punch stat and the Punch List tile both read `{mine} mine · {total} open`, and `{mine}` differs between two members with different assignments on the same project. `[live + Playwright]`
+- A-11c An item moved to `complete` drops out of both figures; an item at `in_progress` stays in both. `[live + Playwright]`
+- A-11d The "Days left" stat renders the signed value from `projects.target_end_date`, renders a negative number past target rather than clamping at zero, and renders the empty state when the date is null. _(§4.3 + §8a. The spec's `38 days left` is the happy path only; the desktop precedent already handles all three states.)_ `[Playwright]`
+- A-11e The stat strip renders **exactly two** stats — Days left and Punch — split 50/50 across the header width, separated by a **single** 1px rule. No third stat, no leftover one-third columns, no empty slot. _(Rewritten [S98, D-19]. The old criterion tested that a Progress stat was bound; the respec means the failure mode is now a strip that keeps three-column geometry after losing a stat, and this criterion catches that.)_ `[Playwright]`
+- A-11f The "Up next" card renders the **first** calendar event with `start_date >= today` for this project, from the union of dated tasks, schedule entries and inspections; a nearer-dated event added afterwards displaces it. _(Rewritten [S98, D-24].)_ `[Playwright]`
+- A-11g With two events on the same date, "Up next" applies the tie-break — inspection before task before general entry, then title ascending — and picks the same one on every render. _(§4.3. The underlying sort is on date alone, so without this the card flickers between equally-dated items.)_ `[Playwright]`
+- A-11h With no event dated today or later, "Up next" renders the "Nothing scheduled" empty state; the card is **not** omitted. _(§4.3.)_ `[Playwright]`
+- A-11i The "Up next" date line renders the event's date. It is **not** bound to `detail.notes`, which is absent for tasks — a task-sourced card renders a date, never a blank line. _(§4.3. This is the failure the binding was written to prevent.)_ `[Playwright]`
 - A-11j A crew member's "Up next" reflects the schedule rows RLS grants them — a general entry belonging to a teammate does not appear, while project tasks and inspections do. _(§4.3's viewer-dependency note. Without this the caveat is prose nobody verifies, and a build that "fixes" it by querying with elevated rights leaks another member's schedule.)_ `[live]`
-- A-12 The section grid renders exactly nine tiles and **none** is Budget, Invoices, Payments, or Contracts.
-- A-12b Change Orders and Punch List badges render amber, Deliveries red, Photos and Team plain mono. _(§4.3 — no prior criterion.)_
-- A-13 The Photos tile shows the project's total photo count **and no dot** — no unseen indicator renders under any data condition, including photos created after the user's last visit. _(Rewritten [S98, D-14 as amended]. The dot clause is removed, and the criterion now fails if a dot is built anyway.)_
+- A-12 The section grid renders exactly nine tiles and **none** is Budget, Invoices, Payments, or Contracts. `[Playwright]`
+- A-12b Change Orders and Punch List badges render amber, Deliveries red, Photos and Team plain mono. _(§4.3 — no prior criterion.)_ `[Playwright]`
+- A-13 The Photos tile shows the project's total photo count **and no dot** — no unseen indicator renders under any data condition, including photos created after the user's last visit. _(Rewritten [S98, D-14 as amended]. The dot clause is removed, and the criterion now fails if a dot is built anyway.)_ `[Playwright]`
 
 **Field (M-7) — §4.7 had no criteria at all**
 
-- A-13b M-7 renders a 2-column grid of exactly four tiles — Daily logs, Deliveries, Safety, Photos — each with its attention badge.
-- A-13c M-7's project context row names the project the tiles apply to, and tapping it switches project; the tiles then reflect the new project.
+- A-13b M-7 renders a 2-column grid of exactly four tiles — Daily logs, Deliveries, Safety, Photos — each with its attention badge. `[Playwright]`
+- A-13c M-7's project context row names the project the tiles apply to, and tapping it switches project; the tiles then reflect the new project. `[Playwright]`
 
 **Logs (M-6) — §4.6 was untested apart from the queue**
 
-- A-13d A log still waiting to sync renders the `Queued` badge **in place of** the photo count, not alongside it. _(§4.6.)_
-- A-13e M-6's chips are All / Mine / This project, single-select, and "This project" appears only when a project is in context.
+- A-13d A log still waiting to sync renders the `Queued` badge **in place of** the photo count, not alongside it. _(§4.6.)_ `[Playwright]`
+- A-13e M-6's chips are All / Mine / This project, single-select, and "This project" appears only when a project is in context. `[Playwright]`
 
 **Offline**
 
@@ -1335,20 +1485,26 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 - A-14c A read-only surface with no local data renders the strip **and** its own empty state — it does not spin indefinitely, and it never renders stale data without the strip. `[Playwright]`
 - A-15 A clock-in performed offline at time T and synced at T+3h stores `T` in `time_clock_sessions.clock_in`. `[live/unit]`
 - A-15b The same `captured_at`-is-the-business-timestamp rule holds for a queued daily log and a queued photo, not only for a clock event. _(§5.2.1 is written for all three kinds; A-15 tested one.)_ `[live/unit]`
-- A-16 Replaying the same queued mutation three times produces exactly one row. `[live]`
-- A-16b A shift captured entirely offline (clock in, ≥1 segment, clock out) syncs with its segments attached — replaying in the order §5.5 requires, the segment inserts are not rejected by `owns_open_session`. _(§5.5.1. Without this, A-16 passes and the feature still loses every segment.)_ `[live]`
+- A-16 Replaying the same queued entry three times produces exactly one row **for its `target_id`**. `[live]` _(Restated [S98] on `target_id`: `entry_id` and the row's primary key are now separate fields (§5.2), because one shift is three entries against two rows.)_
+- A-16b A shift captured entirely offline (clock in, ≥1 segment, clock out) syncs with its segments attached — replaying in `seq` order, the segment inserts are not rejected by `owns_open_session`. _(§5.5.1. Without this, A-16 passes and the feature still loses every segment.)_ `[live]`
+- A-16c That shift is queued as **three entries against two rows** — `insert` on the session, `insert` on each segment, `update` on the same session carrying `clock_out` — with the session's insert and its clock-out update sharing one `target_id` and carrying **different `entry_id`s**. `[unit]` _(§5.2. The old shape defined `id` AS the row's primary key, so these two entries collided and the clock-out silently replaced the insert.)_
+- A-16d A segment entry whose `depends_on` parent has not succeeded is **not attempted** — it does not fail against `owns_open_session` and burn a retry. `[unit]` _(§5.2.4. Ordering alone is not enough; a failed parent must gate the child rather than letting it fail on its own.)_
+- A-16e Every entry carries an `entity` of `time_clock_session`, `time_segment`, `daily_log` or `photo` — a segment is its own entity, not folded into a clock event. `[unit]` _(§5.2. Without a distinct entity, §5.5.1's ordered segment step cannot be expressed or asserted.)_
 - A-17 A queued item whose sync fails permanently remains in "Waiting to sync" with its error visible; it is not dropped. `[unit + Playwright]`
 - A-17b "Try again" forces an immediate sync attempt rather than waiting for the backoff interval. `[unit]`
-- A-18 The queued-count pill equals the number of records/files that will actually upload. `[unit + Playwright]`
+- A-18 The queued-count pill equals the number of entries at **`state: 'queued'`** — the records and files that will actually upload — and excludes every `state: 'conflicted'` entry. `[unit + Playwright]` _(Restated [S98, §5.2.7]. "Will actually upload" is only testable once the queue has a state field to exclude on.)_
 - A-19 Attempting a delivery check-in while offline blocks submission with an explicit message and creates **no** queue entry. `[Playwright]`
 
 **Conflict — the server version stands (D-17, §5.6). All new [S98].**
 
-- A-19b A queued update whose target row has a server `updated_at` **later** than the item's `captured_at` **is not written** — the server row is byte-identical before and after the sync attempt. `[live]`
+- A-19b **The 08:00 / 08:30 / 09:00 sequence produces a conflict.** Load a log at 08:00 (client records `base_updated_at` = 08:00); edit it server-side at 08:30; edit the offline copy at 09:00 (`captured_at` = 09:00); sync. The entry **must be rejected as conflicted** and the server row must be **byte-identical** before and after. `[live]` _(**Rewritten [S98].** The old wording — "server `updated_at` later than the item's `captured_at`" — asserted the broken mechanism rather than the outcome, so it PASSED on the unsound rule: 08:30 is not later than 09:00, the detector said "no conflict", and the criterion agreed while the desktop edit was destroyed. A criterion must fail on the scenario, not restate the formula it is checking.)_
+- A-19b2 Detection is on **`base_updated_at`**, never on `captured_at`: a queued update whose `captured_at` is far **later** than the server's `updated_at` is still a conflict when the row changed after the client loaded it. `[unit]` _(The generalised form of A-19b. Without it a build can pass A-19b by special-casing that one timing and keep the wrong comparison everywhere else.)_
+- A-19b3 A server `updated_at` that moved **backwards** relative to `base_updated_at` is also a conflict — detection is `IS DISTINCT FROM`, not `>`. `[unit]` _(§5.6. A greater-than test waves through restores, clock skew between writers and manual corrections, which are the cases where a blind overwrite does the most damage.)_
+- A-19b4 Editing the same row twice offline **does not advance `base_updated_at`** — the second edit coalesces into the existing entry, `captured_at` advances, and the base stays at the originally loaded value. `[unit]` _(§5.2.3. Re-basing on the phone's own unsynced write would tell the detector the client saw a server state it never saw — the same class of error the corrected rule fixes.)_
 - A-19c That same queued copy **is not discarded** — its payload and `captured_at` survive the rejection and remain retrievable. `[unit]`
 - A-19d The conflicted entry **leaves the sync queue**: no further retry is attempted, no backoff is scheduled, and it **stops counting toward the queued-count pill**, which continues to equal only what will actually upload. `[unit]` _(Without the pill clause this passes while A-18 silently breaks.)_
 - A-19e The field user is shown a message naming the record and stating their copy was kept and sent for review — and it is **not** the generic `Needs attention` retry treatment used for transient failures. `[Playwright]`
-- A-19f A queued **insert** of a row id the server has never seen is **never** treated as a conflict — it takes the ordinary idempotent-upsert path even when the queue is replayed long after capture. `[live]` _(§5.6's "a first write is never a conflict". Without this, an over-eager conflict check strands every offline creation.)_
+- A-19f An entry with **`op: 'insert'`** is **never** treated as a conflict — it carries `base_updated_at: null` and takes the ordinary idempotent-upsert path however long it has been queued. `[live]` _(§5.6. Without this, an over-eager conflict check strands every offline creation.)_
 - A-19g The held copy is written to **`sync_conflicts`**, not to IndexedDB: after a conflict, clearing the PWA's local storage entirely leaves the rejected body, its `captured_at` and its `author_member_id` still retrievable server-side. `[live]` _(New [S98, ruling 2]. This is the criterion the ruling exists for — a store that survives only while the app does would satisfy A-19c and still lose the work.)_
 - A-19h A queue entry is **never** removed before its `sync_conflicts` row is durably written — if that insert fails, the entry stays queued and retryable. `[unit]` _(§5.7 lifecycle step 1. Without this the conflict path can lose the very copy it exists to preserve.)_
 - A-19i `sync_conflicts` is readable by Owner and Admin and by **no other role** — including the author of the held copy. `[live]`
@@ -1365,6 +1521,7 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 - A-21 With no project in context, the project prompt appears **after** the shot, not before. `[Playwright]`
 - A-21b With a project in context, the photo files to that project with no prompt at all. `[Playwright]`
 - A-21c A photo is never submitted without a `project_id`. For every non-owner/admin role the DB rejects a project-less insert (§7a), so the shot is held client-side until a project is chosen. `[live]`
+- A-21c2 The tab-bar camera control **navigates nowhere** — it is a file input, and `/m/capture` is entered only **after** the shutter. `[Playwright]` _(§6 as reconciled with §1. A build that routes to `/m/capture` first puts a navigation between the tap and the camera, breaking A-20's "opens the camera directly".)_
 
 **Subcontractor access (D-20, §7a) — all new [S98]**
 
@@ -1378,11 +1535,11 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 
 **Photos**
 
-- A-22 A photo's source badge is derived from its link column; a photo with no link column set renders **no** badge.
-- A-22b A file referenced by `punch_list_items.reference_photo_file_id` or `.completion_photo_file_id` carries the `Punch` badge and appears under the Punch filter chip.
-- A-22c Rendering the gallery writes nothing — `punch_list_items` rows are byte-identical before and after (D-15 is read-only).
-- A-22d The gallery groups by day, newest day first, labels the current day "Today", and loads further days on scroll. _(§4.8 — no prior criterion.)_
-- A-22e Long-press enters multi-select; bulk share and bulk delete act on the selected set. _(§4.8 — no prior criterion.)_
+- A-22 A photo's source badge is derived from its link column; a photo with no link column set renders **no** badge. `[Playwright]`
+- A-22b A file referenced by `punch_list_items.reference_photo_file_id` or `.completion_photo_file_id` carries the `Punch` badge and appears under the Punch filter chip. `[Playwright]`
+- A-22c Rendering the gallery writes nothing — `punch_list_items` rows are byte-identical before and after (D-15 is read-only). `[live]`
+- A-22d The gallery groups by day, newest day first, labels the current day "Today", and loads further days on scroll. _(§4.8 — no prior criterion.)_ `[Playwright]`
+- A-22e Long-press enters multi-select; bulk share and bulk delete act on the selected set. _(§4.8 — no prior criterion.)_ `[Playwright]`
 - A-23 Saving markup writes **both**: the mark list to `files.markup_data`, **and** a flattened derivative image to storage. Asserting only one is not a pass. _(Rewritten [S98, D-21]. The old criterion named `markup_data` alone, so it passed under all three candidate storage models — including the two that never produce a shareable image. That is why it caught nothing.)_ `[live]`
 - A-23b The original is **never modified** by a markup save — its bytes, `file_path`, `file_size` and `mime_type` are identical before and after, across two consecutive saves. Only `markup_data` differs. `[live]`
 - A-23c Re-editing marks regenerates the derivative **in full from the original bytes**, not from the previous derivative, and **overwrites it in place** — after N saves there is exactly one derivative object and no accumulated recompression. `[live]`
@@ -1423,19 +1580,42 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 - A-29j A pin holds a **minimum rendered diameter** at thumbnail size and stays a legible numbered marker rather than collapsing to a dot; it is exempt from §4.7a.3's stroke floor, which does not apply to it. `[Playwright]` _(§4.10a.1. A pin has no `strokeWidth`, so the stroke floor cannot rescue it — without its own rule it is the one mark type that silently vanishes in the gallery.)_
 - A-29k Adding one pin is **one** Undo step — a single Undo removes the whole pin, circle and numeral together. `[Playwright]` _(§4.10's "Undo/Redo are per-mark", and the stated reason this is a shape type rather than circle + text. A composed implementation passes A-29e–A-29h and fails here.)_
 
+**Markup tool state and authoring (§4.10)**
+
+> **Restored [S98].** A-24–A-24d and A-25–A-25d were **deleted in error** by the Option A rewrite
+> (`6808d2e`), which replaced the criteria list from A-23e to the PWA heading and swallowed both blocks.
+> Neither ruling asked for their removal, and eight normative sentences lost their only coverage. The
+> ID-sequence diff in this session's report is what surfaced it.
+
+- A-24 The active markup tool is distinguishable without colour — it carries a **border** and a label change. _(Corrected [S98]: this read "a label weight change". §4.10 specifies `1.5px #f2453d` border plus a red icon **and label** — a colour change, not a weight change. The criterion was testing something the spec does not say, so it could pass on a build that violated §4.10. The border half is the colour-independent signal; the build must not substitute tint alone.)_ `[Playwright]`
+- A-24b Undo and Redo operate per-mark, and Redo renders dimmed when the redo stack is empty. `[Playwright]` _(§4.10. See also A-29k, which pins the per-mark rule for the composite-looking pin specifically.)_
+- A-24c Cancel with unsaved marks prompts for confirmation; Cancel with no marks exits directly. `[Playwright]`
+- A-24d Markup opened from a punch item or an incident returns to that record and stays linked to it. `[Playwright]`
+
+**Viewer gestures and actions (§4.9)**
+
+- A-25 Every gesture on M-9 has a visible on-screen equivalent: swipe-to-page is mirrored by the prev/next circles, and swipe-down-to-dismiss by the close ✕. `[Playwright]` _(§4.9's "the arrows are the visible equivalent of the swipe". A gesture-only affordance is unreachable for anyone who cannot perform the gesture.)_
+- A-25b A photo carrying markup is visibly marked as such **in the viewer**. `[Playwright]` _(§4.9. A-23q covers the gallery/filmstrip indicator; the viewer's own indicator had no criterion.)_
+- A-25c Tapping **Source** navigates to the originating daily log, delivery, or safety incident. `[Playwright]`
+- A-25d Delete prompts for confirmation and is refused for roles that cannot delete. `files_delete_owner_admin` (`20260101000000_baseline_schema.sql:3608`) restricts DELETE to Owner/Admin — "role-gated" in §4.9 means Owner/Admin, and the UI must not offer an action the DB will reject. `[live]`
+- A-25e **Pinch-to-zoom has no specced on-screen equivalent** — §4.9 names the arrows as the equivalent of the *swipe* and says nothing about zoom. This criterion is **NOT ASSERTABLE as written and is flagged, not silently dropped**: either zoom gains a visible control, or §4.9 states that zoom is a non-essential enhancement. **Needs a ruling — see §11.** _(Recording it as a hole beats restoring A-25 as "every gesture" and letting it pass while one gesture has no equivalent at all.)_
+
 **PWA**
 
 - A-26 The app installs to an iOS home screen and launches at `/m` in standalone display. `[manual]` — no tool installs a PWA to an iPhone home screen; this is a release check on a real device under any tooling choice.
-- A-26b The manifest declares `start_url: "/m"`, `display: "standalone"`, `short_name: "FrameFocus"`, and both colours as `#14213d`. _(§7.1 — a plain fetch/parse, unlike A-26.)_ `[unit]`
+- A-26b The manifest declares `start_url: "/m"` and `display: "standalone"` — the two fields M6M owns. `[unit]` _(Rewritten [S98]: the old form also asserted `short_name: "FrameFocus"` and `#14213d` literally, which would have to be edited by the rebrand and would pass in the meantime while shipping a stale product name.)_
+- A-26b2 The manifest's `name`, `short_name`, `theme_color` and `background_color` are **read from the shared brand source**, not written as literals in the manifest — changing that source changes the manifest with no edit to it. `[unit]` _(§7.1. This is the criterion that fails on a stale product name **without naming the new one**: if the rebrand lands and the manifest still ships the old value, the manifest and the source disagree and this breaks.)_
+- A-26b3 No product name appears as a string literal anywhere in the `/m` tree or the manifest. `[unit]` _(A-26b2 alone passes on a build that reads the source **and** hard-codes a duplicate elsewhere; this catches the duplicate.)_
+- A-26b4 §2's `navy` UI token and the manifest's `theme_color` resolve **independently** — changing one does not change the other. `[unit]` _(§7.3. They share a value today and are two decisions; a build that aliases them drags the in-app UI to the brand chrome, or freezes the brand chrome to the UI token.)_
 - A-26c Icons exist at 192, 512, and 512 maskable, and the manifest references all three. `[unit]`
 - A-26d A service worker is registered from the mobile layout and exposes the queue's retry hook. `[Playwright]`
 - A-26e The mobile document head carries `apple-mobile-web-app-capable` and the status-bar-style meta. _(§7.4 — the iOS Web Push precondition D-10 depends on, so a regression here silently blocks Gate 4.)_ `[Playwright]`
-- A-27 A full `npm run build` passes with the mobile tree present.
+- A-27 A full `npm run build` passes with the mobile tree present. `[build]`
 
 **Regression**
 
-- A-28 `apps/web/app/dashboard/**` is unchanged by this work — `git diff --stat` against the merge base shows no desktop route files.
-- A-28b No `lib/services/*` file is duplicated for mobile — the mobile tree imports the existing service functions. _(§1 "The service layer is shared… No duplicate data access is written for mobile" was normative and untested. Assertable by grep over the diff.)_
+- A-28 `apps/web/app/dashboard/**` is unchanged by this work — `git diff --stat` against the merge base shows no desktop route files. `[shell]`
+- A-28b No `lib/services/*` file is duplicated for mobile — the mobile tree imports the existing service functions. _(§1 "The service layer is shared… No duplicate data access is written for mobile" was normative and untested. Assertable by grep over the diff.)_ `[shell]`
 
 ---
 
@@ -1493,10 +1673,11 @@ shell checks. Two of these deserve their mechanism spelled out because the asser
 
 **House rule.** Every fix still needs a failing-then-passing assertion. Under D-18 that rule is now
 satisfiable for every criterion in §10 except A-26, which is manual by nature.
-## §11 — Decision register (thirteen ruled [S98, Josh]; none open)
+## §11 — Decision register (fifteen ruled [S98, Josh]; TWO OPEN from the audit)
 
 The eight questions from the S98 gap pass are closed, as are the three follow-ups from the second ruling
-pass and the display question from the third. **Nothing raised this session is open.** One *pre-existing*
+pass, the display question from the third and the pin gap from the fourth. **Two items from the S98 audit
+are OPEN and are listed first below — this spec is not ready to merge.** One *pre-existing*
 schema gap surfaced while specifying the overlay and is flagged below. The rulings are recorded as D-14
 (amended) and D-17…D-21 in §0 — D-17, D-20 and D-21 each extended, D-21 twice — and applied throughout
 §4, §4.7a, §5, §5.7, §7a, §7b, §8a, §9 and §10.
@@ -1508,9 +1689,9 @@ the register of where each ruling landed.
 | 1 | What backs the unseen-photo dot? | **Deferred to v2. No dot, no view-tracking table.** Photos badge is the total count alone. | D-14 amended; §4.3; §8a; §9 v2 note; A-13 rewritten |
 | 2 | Desktop edit vs queued offline copy? | **The server version stands.** Queued copy neither overwrites nor is discarded — it leaves the queue for Owner/Admin reconciliation, and the field user is told. | D-17; **§5.6** (new); §9; A-19b–A-19f (new) |
 | 3 | Offline test tooling? | **Both** — unit tests for queue logic, **Playwright** for screen-level. Playwright is a new dependency. | D-18; **§10a** rewritten; every §10 criterion now carries a harness marker |
-| 4 | What does `{m} estimating` count? | **Dropped.** Header shows the active count only; no status added to `projects_status_check`. | §4.2; §8a; A-10c rewritten |
+| 4 | What does `{m} estimating` count? **(D-23)** | **Dropped.** Header shows the active count only; no status added to `projects_status_check`. | §4.2; §8a; A-10c rewritten |
 | 5 | How is `62%` derived? | **Cut from v1.** No progress bar on M-2, no Progress stat on M-3; strip respecced to two stats. | D-19; §4.2; §4.3; §8a; §9; A-10d, A-11e |
-| 6 | What is "Up next" bound to? | **The schedule** — next upcoming item from the existing calendar UNION. No milestone concept introduced. | §4.3 binding table; §8a; A-11f–A-11i |
+| 6 | What is "Up next" bound to? **(D-24)** | **The schedule** — next upcoming item from the existing calendar UNION. No milestone concept introduced. | §4.3 binding table; §8a; A-11f–A-11i |
 | 7 | Subcontractor photo access? | **Subs upload AND annotate** [extended S98]. **Four** policies widened — two on `public.files`, two on `storage.objects`; **first build step**. | D-20; **§7a** rewritten; A-21d–A-21j |
 | 8 | Markup storage? | **Both stored**; [S98, final] **the overlay displays**, drawn live from `markup_data` over the original. Derivative is a sharing artifact only. | D-21; §4.10; **§4.7a**; A-23–A-23t |
 
@@ -1552,6 +1733,17 @@ A pure SVG renderer over exactly this schema already exists at
 Demoting the derivative left one hole nothing else covered, so it is specced rather than assumed: if the
 derivative is missing or stale at share time, sharing **degrades to the original with a warning** and never
 passes off an unmarked photo as marked (A-23t).
+
+### ⛔ OPEN — awaiting ruling [S98 audit]
+
+1. **The nine section tiles have no destinations (audit item 4).** §4.3 promises the hub gets you "to any
+   section in one tap" and A-12 asserts nine tiles render, but §1 routes only Photos. **Eight tiles, plus
+   all four of M-7's, have no route, no screen and no stated tap behaviour** — A-12 passes on a grid of
+   dead tiles. Full list and the D-13 problem are in the session report; this is a scope question and no
+   answer is chosen here.
+2. **Pinch-to-zoom has no on-screen equivalent (A-25e).** §4.9 names the arrows as the visible equivalent
+   of the *swipe* and is silent on zoom. Either zoom gains a visible control or §4.9 states that zoom is a
+   non-essential enhancement. Recorded as an unassertable criterion rather than quietly dropped.
 
 ### Fourth ruling pass [S98] — the pin shape
 
