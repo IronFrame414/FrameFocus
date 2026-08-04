@@ -20,9 +20,12 @@
 > broken for one role. **A second migration**, `sync_conflicts` (§5.7, §7b), must land before any offline
 > write path ships.
 >
-> **⛔ One item is OPEN and blocks a complete build:** what renders when `markup_data` is non-empty and no
-> derivative exists (**§4.7a**). Ruling 3 made the derivative load-bearing; the desktop editor produces
-> markup without one, permanently. Everything else in this spec is ruled.
+> **Every question raised this session is ruled.** The last one — what renders when markup exists without
+> a derivative — was closed by ruling the derivative **off** the display path entirely: the UI draws marks
+> live from `files.markup_data` over the original (**Option A, §4.7a**). Desktop-authored markup is
+> correct with no desktop change and no backfill. **One pre-existing schema gap surfaced while specifying
+> it and needs a decision before M-10 is built** — the `Pin` tool has no shape type (§4.7a.5, closing
+> note).
 >
 > **Verified against the repo at S98** (branch merged to `main` as `91806cf`):
 >
@@ -63,7 +66,7 @@
 | D-18 | Offline test tooling          | **Both.** [S98, Josh] Queue logic is unit-tested in the existing Node harness; screen-level and browser-state criteria are tested with **Playwright, a new dependency this repo does not yet carry**. Nothing in §10 is left untestable. Assignment table in §10a. |
 | D-19 | Progress percentage           | **CUT FROM V1.** [S98, Josh] No progress % anywhere on mobile. The M-3 stat strip is **two** stats, not three (§4.3); the M-2 project card has **no** progress bar (§4.2). No project-level progress derivation is invented. |
 | D-20 | Subcontractor photo access    | **Subs upload AND annotate.** [S98, Josh] D-11 stands unchanged. **EXTENDED [S98]: `files_update_non_client` is widened too**, so a sub can annotate photos including ones they just took — and, found while applying that, **the two `storage.objects` policies carry the same omission and must be widened as well** or the bytes are refused regardless. **Four policies, role array only.** Required migration and the **FIRST build step** — see §7a. |
-| D-21 | Markup storage & display      | **Both, and the derivative is what displays.** [S98, Josh] `files.markup_data` holds the editable annotation layer and **is the source of truth**; Save additionally writes a flattened derivative image. **EXTENDED [S98]: where a photo has markup, the derivative is what the UI renders** — gallery thumbnail, viewer stage and filmstrip — and §4.9's toggle is now the only route to the unannotated image. The original is never modified. Storage contract in §4.10; display precedence in **§4.7a**, which also carries the one case still BLOCKED. |
+| D-21 | Markup storage & display      | **Both stored; the OVERLAY displays.** [S98, Josh] `files.markup_data` holds the editable annotation layer, **is the source of truth, and is drawn live over the original image on every surface** — gallery thumbnail, viewer stage, filmstrip (**Option A**, ruled once the derivative-as-display reading proved unbuildable for desktop-authored markup). Save still writes a flattened derivative, but it is a **sharing artifact only, never displayed**. The original is never modified and is always the image on screen. §4.9's toggle hides the drawn layer; it does not swap files. Storage contract in §4.10; display rule, fit, legibility and load order in **§4.7a**. |
 
 ---
 
@@ -334,59 +337,167 @@ The mobile equivalent of the desktop Field Ops hub. A **2-column grid of 76px ti
 M-1 and M-3: **Daily logs · Deliveries · Safety · Photos**, each with its attention badge. Above the grid,
 a project context row (58px) naming the project the tiles apply to, tappable to switch.
 
-### 4.7a Photo display precedence — **governs M-8, M-9 and M-10** (D-21 as extended [S98])
+### 4.7a Photo display — the overlay rule. **Governs M-8, M-9 and M-10** (D-21 as extended [S98])
 
 Stated once here rather than three times below. Every surface that renders a photo obeys it.
 
-> **The rule [S98, Josh]: derivative when `markup_data` is non-empty, original otherwise.**
+> **The rule [S98, Josh — Option A]: render the ORIGINAL image with the annotation layer drawn over it,
+> live, from `files.markup_data`.**
 
-Where a photo has markup, **the annotated version is what the UI displays** — the M-8 gallery thumbnail,
-the M-9 image stage, and the M-9 filmstrip thumbnail all render the derivative. §4.9's toggle back to the
-original stands and is **now the only way to see the unannotated image**; it is no longer a convenience.
+This is the display path everywhere — gallery thumbnail, viewer image stage, filmstrip. **It does not
+depend on a derivative existing**, so the desktop-annotated population renders correctly with **no desktop
+change and no backfill**. D-2 and A-28 hold. The previously blocked case is gone: there is no longer a
+"missing derivative" branch, because the derivative was never on the display path.
 
-**This makes the derivative load-bearing, not a side artifact.** Three things in this spec were written
-when it was optional and are corrected here:
+#### 4.7a.1 The stored coordinate model makes this work — verified, not assumed
 
-1. **Generation is part of Save, not after it.** §4.10's Save is not complete until both writes land. A
-   save that writes `markup_data` and fails to write the derivative has produced a photo the UI cannot
-   display correctly, so **`markup_data` and the derivative are written as one unit of work from the
-   user's point of view** — the editor does not report success on a partial save.
-2. **Regeneration is mandatory on every re-edit**, per §4.10 — full re-render from the original bytes,
-   overwritten in place. Under the old model a stale derivative was a cosmetic lag in a sharing artefact.
-   Under this rule a stale derivative is **the app showing the wrong image**.
-3. **The derivative inherits the original's access control**, which is what makes this safe: same bucket,
-   same `{company_id}/{project_id}/` prefix, therefore the same `storage.objects` policies (§7a). No
-   surface may render a derivative by a path that skips the signed-URL flow the original uses
-   (`getSignedUrl`, `files.ts:70`).
+The concern that this might be unbuildable does not survive contact with the schema.
+`MarkupData` (`packages/shared/types/markup.ts:57-64`) stores:
 
-**The count is unaffected.** Precedence changes *which bytes render*, never *how many tiles exist*. The
-derivative still gets no `files` row (§4.10), so A-23d's guarantee — photo count and gallery tile count
-unchanged by a markup save — holds exactly as before.
+```ts
+export interface MarkupData {
+  version: number;
+  // Natural dimensions of the underlying image. Shapes are stored in image
+  // coordinates so markup renders correctly regardless of display size.
+  imageWidth: number;
+  imageHeight: number;
+  shapes: MarkupShape[];
+}
+```
 
-> ### ⛔ BLOCKED — what renders when `markup_data` is non-empty and no derivative exists
->
-> **This case is real, ongoing, and not covered by the ruling. No fallback is invented here.**
->
-> The desktop markup editor writes `markup_data` and nothing else —
-> `updateFile(fileId, { markup_data })`
-> (`apps/web/app/dashboard/projects/[id]/files/[fileId]/markup/markup-editor.tsx:244-247`). It does not
-> produce a derivative and, under **A-28** and **D-2**, M6M does not change it. So the population of
-> photos with markup and no derivative is **not a legacy backfill problem that ends** — it is every
-> photo annotated on desktop, before or after this build, permanently.
->
-> Applying the rule literally sends the mobile gallery after an object that does not exist. The two
-> candidate answers differ in cost and in what the user sees, and choosing between them is Josh's:
->
-> | Option | What the user sees | Cost |
-> | ------ | ------------------ | ---- |
-> | **A. Fall back to original bytes + a live overlay rendered from `markup_data`** — the mechanism M-9's toggle already needs. | Marks always visible, everywhere. Consistent with desktop. | The gallery **thumbnail** must render an SVG overlay over a thumbnail. Materially more work than showing an image, and it demotes the derivative to a performance optimisation rather than the display source — which is not what this ruling established. |
-> | **B. Fall back to the bare original.** | A photo the user annotated appears **unannotated**, silently. Worse than a broken image, because nothing signals the marks exist. | Trivial. |
-> | **C. Generate the derivative on first mobile view** when markup exists and no derivative does. | Marks always visible; derivative stays the display source. | A read path that writes. Needs the storage-write policies of §7a for whoever happens to open it first, and a crew member browsing a gallery would be issuing writes. |
-> | **D. Change the desktop editor to write a derivative too.** | Fully consistent; the population never arises. | **Breaks A-28** (`apps/web/app/dashboard/**` unchanged) and D-2. A scope change, not a build detail. |
->
-> **Until this is ruled, the criteria below cover only photos that HAVE a derivative.** No criterion
-> asserts behaviour for the missing case, deliberately — a criterion written against a guess would pass
-> vacuously, which is the failure this spec keeps correcting.
+Three properties follow, and all three are load-bearing:
+
+1. **Coordinates are absolute pixels in the ORIGINAL image's natural space** — not screen pixels, not
+   normalised 0–1. The editor converts pointer events through the SVG's own viewBox transform
+   (`markup-editor.tsx:56-68`, _"Works regardless of CSS-applied display size"_), and the viewBox is
+   `0 0 naturalWidth naturalHeight` (`:384`, dims measured at `:273-279`).
+2. **The natural dimensions travel with the markup.** `imageWidth`/`imageHeight` are in the JSON, written
+   by `createEmptyMarkup(imageDims.w, imageDims.h)` at save (`markup-editor.tsx:240-243`). **This is what
+   makes a thumbnail overlay possible at all** — a consumer can build the viewBox without first
+   downloading the full-resolution original to measure it. Had the dimensions been omitted, every gallery
+   tile would have had to fetch a multi-megabyte image to learn its aspect ratio, and Option A would have
+   been impractical.
+3. **Absolute-pixels-plus-viewBox scales better than normalised coordinates would.** The viewBox transform
+   maps image space to any rendered size uniformly. A mark covering 5% of the image covers 5% of the
+   thumbnail, automatically.
+
+**The renderer already exists and is unused.** `packages/shared/components/MarkupViewer.tsx` is a pure
+presentational SVG renderer over exactly this schema — `viewBox={`0 0 ${width} ${height}`}` at `:34`, the
+`<image>` and the shapes in **one** SVG at `:39-42`. It has **zero consumers** anywhere in the repo
+(verified by grep). It lives in `packages/shared/`, **not** `apps/web/app/dashboard/**`, so adopting and
+extending it does not touch A-28 or D-2.
+
+#### 4.7a.2 Aspect-ratio fit — how marks stay on target in a square tile
+
+**The image and the overlay must be rendered in ONE SVG sharing ONE viewBox.** This is the whole
+mechanism, and it is non-negotiable: `<image>` and the shapes both live in image coordinates, so any
+scaling or cropping the SVG applies is applied to both **together**. A build that renders an `<img>` with
+CSS `object-fit: cover` and positions a separate SVG over it will drift at every size that is not the
+authoring size — the two are then cropped by different rules. `MarkupViewer:39-42` already has the
+correct structure.
+
+Fit is then chosen with `preserveAspectRatio`, per surface:
+
+| Surface | Tile shape | `preserveAspectRatio` | Behaviour |
+| ------- | ---------- | --------------------- | --------- |
+| M-8 gallery tile | **square** (§4.8) | `xMidYMid slice` | **Crops with the image.** The image fills the square and is centre-cropped; marks are cropped by exactly the same transform, so a mark in the cropped-away band is cropped away too. Correct — the alternative is a mark floating over a letterbox bar where its subject is not visible. |
+| M-9 image stage | fixed 330px stage, full-bleed (§4.9) | `xMidYMid slice` | Same reasoning; the stage is full-bleed by §4.9. |
+| M-9 filmstrip | square 52px (§4.9) | `xMidYMid slice` | Same as the gallery tile. |
+| M-10 markup canvas | flexible, image-shaped (§4.10) | `xMidYMid meet` | **Never crops.** Authoring must show the whole image or a mark cannot be placed in the cropped region. |
+
+**`MarkupViewer` needs an optional fit prop** to serve both — defaulting to its current `xMidYMid meet`
+(`:37`) so nothing that might adopt it later changes behaviour by surprise. Adding an optional prop with
+the existing value as default is a non-breaking change to a component with no consumers.
+
+**Stated consequence, so nobody reports it as a bug:** a mark near the edge of a landscape photo may be
+invisible in the square thumbnail and visible in the viewer. That is the crop working, not the overlay
+failing.
+
+#### 4.7a.3 Legibility at thumbnail size
+
+A 3-column gallery tile at §4.8's geometry is roughly **120px**. Stroke widths are stored in **image**
+pixels — the editor's default is `20` (`markup-editor.tsx:46`). On a 4000px-wide photo in a 120px tile the
+scale factor is ~0.03, so a 20-unit stroke renders at **~0.6px**. Sub-pixel. Rendered faithfully, the
+overlay is invisible at thumbnail size — which would make the gallery look like Option B, the outcome this
+ruling rejected.
+
+**Decision — a thumbnail renders the geometric overlay with a stroke floor, plus a corner indicator, and
+drops text marks.** Three parts, each with its reason:
+
+1. **Geometry renders, always.** Positions are never adjusted. A mark is where the mark is, at every size.
+2. **Stroke has a floor of 1.5 device px.** Where the display scale would render a stroke below that, the
+   stroke width is raised so the rendered result is 1.5px; it is **never lowered**, so a deliberately
+   heavy mark stays heavy. Only stroke weight is affected — never position, never size, never geometry.
+   `strokeWidth`-derived ornaments scale with it (the arrowhead is `max(strokeWidth * 4, 10)`,
+   `MarkupViewer:108`), so an arrow keeps a visible head.
+3. **`text` marks are omitted from the thumbnail overlay.** `TextShape.fontSize` is in image pixels
+   (`markup.ts:52`); at a 0.03 scale a 40px label renders at ~1.2px — an illegible smudge that reads as
+   an artefact, not as information. A stroke floor cannot rescue text, because legibility needs
+   *letterforms*, not weight. Text renders in full at M-9 and M-10.
+
+**And a corner indicator, because the overlay alone is not a reliable signal.** A photo whose only mark
+sits in the cropped-away band would show a thumbnail indistinguishable from an unannotated photo. So an
+annotated photo carries an explicit indicator.
+
+> **It must not read as a source badge.** §4.8's rule is that *a photo's badge is its provenance — never
+> invent one*, and the source badges (`Log`, `Delivery`, `Safety`, `Punch`) are **bottom-left, rounded
+> rectangles, filled, carrying text**. The markup indicator is therefore deliberately none of those:
+> **top-right, circular, icon-only, no text**, in the neutral `rgba(20,33,61,.72)` chrome fill. Different
+> corner, different shape, no label. It says "this photo is annotated" — a property of the file — and it
+> can never be mistaken for a statement about where the photo came from. A build that renders it as a
+> labelled pill bottom-left has broken §4.8's rule even if the wording is right.
+
+#### 4.7a.4 What renders before the overlay has drawn
+
+The shapes are available immediately — `markup_data` arrives with the `files` row that populated the grid.
+The **image** is what loads asynchronously, over a signed URL.
+
+**The rule: the tile shows its placeholder until the composite is ready, then reveals both at once.** Two
+partial states are specifically forbidden:
+
+- **Shapes over a blank tile.** Both live in one SVG, so an unstyled build paints the shapes the instant
+  the SVG mounts while `<image>` is still fetching — marks floating on nothing.
+- **The bare image with marks arriving a beat later.** This is the more damaging of the two: for that
+  interval the surface is showing an annotated photo as unannotated, which is exactly the failure Option
+  B was rejected for. It is worse than a placeholder because it looks finished.
+
+So: placeholder → complete composite. No intermediate paint. The indicator from §4.7a.3 may render on the
+placeholder, since it derives from `markup_data` alone and needs no image.
+
+#### 4.7a.5 The derivative is a SHARING artifact, not a display source
+
+`markup_data` is the source of truth **and now also the display path**. Save still writes a flattened
+derivative per D-21, and it is used **only** when a marked-up photo has to leave the app — share, email,
+PDF embed. Nothing in the UI reads it.
+
+Reverted [S98] — three hardenings added while the derivative was briefly load-bearing, each put back:
+
+1. **A failed derivative is not a partial-save failure.** _(Was: "Save does not report success".)_ The
+   marks are safe the moment `markup_data` lands, and the UI renders from it, so **Save reports success**.
+   The derivative failure is a **non-blocking notice** on the save confirmation — the sharing image
+   couldn't be made — and the share action regenerates on demand rather than the editor retrying.
+   Sharing degrades to the original with a warning; it never silently shares an unmarked photo as if it
+   were marked.
+2. **Regeneration is cosmetic again.** A stale derivative means an **out-of-date share**, not the app
+   showing the wrong image. §4.10's regenerate-in-full-on-re-edit rule stands as the way to keep the
+   sharing artefact current; missing it is a defect of the share, not a correctness break.
+3. **The signed-URL requirement stands, for the sharing path.** The derivative lives in the same bucket
+   under the same `{company_id}/{project_id}/` prefix and is reached the same way as the original
+   (`getSignedUrl`, `files.ts:70`). A path that skips signing would work in testing and leak in
+   production.
+
+**The count is still unaffected.** The derivative gets no `files` row (§4.10), so photo count and gallery
+tile count are unchanged by a markup save — A-23d holds exactly as before.
+
+> **⚠️ Flagged, not resolved — the `Pin` tool has no shape type.** §4.10 specs a five-tool row —
+> **Draw · Arrow · Box · Text · Pin** — but `MarkupShape` (`markup.ts:55`) is
+> `arrow | circle | rectangle | pen | text`. `Draw`→`pen` and `Box`→`rectangle` map cleanly; **`Pin` maps
+> to nothing**, and `circle` exists in the schema with no tool in §4.10 offering it. A numbered pin
+> ("34px red circle, white 2px ring, mono numeral", §4.10) is not a single existing shape. Options are a
+> new `pin` shape type — which means `MARKUP_SCHEMA_VERSION` 2 (`markup.ts:5`) and a read-compatibility
+> story for v1 rows — or composing it from `circle` + `text`, which makes it two undo steps and breaks
+> §4.10's "Undo/Redo are per-mark". **This predates the ruling and is not created by it**; it surfaced
+> while reading the schema the overlay depends on. It needs a decision before M-10 is built.
 
 ---
 
@@ -435,7 +546,14 @@ Swipe left/right pages; pinch zooms; swipe down dismisses — **the arrows are t
 swipe**. Tapping **Source** navigates to the daily log / delivery / incident. Delete confirms first and is
 role-gated.
 
-**A photo with markup indicates it, and the viewer can toggle back to the original.**
+**A photo with markup indicates it, and the viewer can toggle the overlay off to reveal the unannotated
+original.**
+
+> **Restated [S98, Option A].** This previously read "toggle back to the original", which under the
+> derivative-as-display rule meant **swapping which file is fetched**. It no longer does. The image on
+> screen is always the original; the toggle **hides and shows the annotation layer drawn over it**. No
+> second fetch, no second artefact, and the toggle is instant because the image never changes — only the
+> SVG shapes are added or removed. It remains the only way to see the photo unannotated (§4.7a).
 
 ### 4.10 M-10 · Photo markup _(handoff 6l)_
 
@@ -470,15 +588,20 @@ Both, with a defined relationship:
    loads from here. Undo/Redo, tool state and per-mark editing all operate on this layer, never on
    pixels.
 2. **A flattened derivative image**, written on Save, so a mark-up photo can leave the app — texted to a
-   sub, attached to an email, dropped in a PDF — and still show its marks.
+   sub, attached to an email, dropped in a PDF — and still show its marks. **[S98] It is a SHARING
+   artifact only and is never displayed in the app** (§4.7a.5). A save whose derivative write fails still
+   **reports success**, with a non-blocking notice that the sharing image could not be generated.
 
 The contract between them:
 
 - **The original file is never modified.** Its bytes, `file_path`, `file_size` and `mime_type` are
   untouched by any number of markup saves. Only `markup_data` changes on the original's row.
+  **[S98] It is also what every surface displays** — §4.7a draws the overlay over these bytes.
 - **The derivative is regenerated in full on every re-edit**, from the current `markup_data` against the
   original bytes. It is never edited incrementally and never used as the input to the next render — that
-  would compound JPEG loss with each save.
+  would compound JPEG loss with each save. **[S98] This is a freshness requirement for the sharing
+  artifact, not a correctness requirement for display** — a stale derivative means an out-of-date share,
+  never a wrong image on screen (§4.7a.5).
 - **The previous derivative is overwritten in place**, at a path deterministically derived from the
   original (same `{company_id}/{project_id}/` folder, a reserved suffix on the file name). No history of
   derivatives is kept; `markup_data` is the history that matters, and it is versionable independently.
@@ -489,8 +612,8 @@ The contract between them:
   (`20260101000000_baseline_schema.sql:1384-1385`) are the document-versioning mechanism and are **not**
   overloaded to mean "derivative of".
 - **A file carrying marks is flagged from `markup_data` being non-empty** — that is what M-9's markup
-  indicator (§4.9) reads, and what its toggle-to-original switches off. The toggle is a render choice
-  between the original bytes and the overlay; it does not fetch the derivative.
+  indicator and the gallery's corner indicator (§4.7a.3) read, and what the toggle switches off. The
+  toggle shows or hides the drawn layer; it never fetches a different file.
 
 > **Open sub-question, deliberately not decided here.** If sharing ever needs the derivative to be a
 > first-class, permission-checked, signed-URL artefact rather than a sibling object, it needs its own
@@ -1127,25 +1250,27 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 - A-23b The original is **never modified** by a markup save — its bytes, `file_path`, `file_size` and `mime_type` are identical before and after, across two consecutive saves. Only `markup_data` differs. `[live]`
 - A-23c Re-editing marks regenerates the derivative **in full from the original bytes**, not from the previous derivative, and **overwrites it in place** — after N saves there is exactly one derivative object and no accumulated recompression. `[live]`
 - A-23d The derivative does **not** get its own `files` row: after a markup save, the project's photo count (§4.3) and the gallery tile count (§4.8) are unchanged. `[live]` _(The double-count failure §4.10 was written to prevent.)_
-- A-23e The viewer's toggle reaches the **original** — with markup present and the derivative displaying, the toggle renders the unannotated original bytes. `[Playwright]` _(Amended [S98, ruling 3]: this is now the ONLY route to the unannotated image, so it is load-bearing rather than a convenience.)_
+- A-23e The viewer's toggle reveals the **unannotated original** — with markup present, toggling hides the drawn layer and the image beneath is unchanged. `[Playwright]` _(Amended twice [S98]: it is still the only route to the unannotated image, but it now hides a layer rather than swapping files — A-23e2 pins the difference.)_
+- A-23e2 Toggling issues **no second image request** — the same original is on screen before and after; only SVG shapes are added or removed. `[Playwright]` _(New [S98, Option A]. Without this, a build that fetches a derivative on toggle satisfies A-23e and reintroduces the dependency the ruling removed.)_
 
-**Display precedence (§4.7a) — all new [S98, ruling 3]. Every criterion here concerns a photo that HAS a derivative; the missing-derivative case is BLOCKED in §4.7a and deliberately carries no criterion.**
+**Display — the overlay rule (§4.7a). Rewritten [S98] for Option A; the derivative-as-display criteria they replace are gone, not amended.**
 
-- A-23f A photo with non-empty `markup_data` renders the **derivative** in the M-8 gallery thumbnail. `[Playwright]` _(The failure Josh named: a thumbnail showing the original while markup exists.)_
-- A-23g The same photo renders the derivative in the **M-9 image stage** and in the **M-9 filmstrip** thumbnail. `[Playwright]` _(One rule, three surfaces — §4.7a exists so they cannot drift, and testing only the stage would let the filmstrip regress.)_
-- A-23h A photo with **empty or null** `markup_data` renders the **original** on all three surfaces. `[Playwright]` _(Without this, a build that always takes the derivative path passes A-23f–A-23g and breaks every unannotated photo.)_
-- A-23i Adding markup to a previously unannotated photo flips all three surfaces to the derivative **without a reload**, and removing every mark flips them back. `[Playwright]` _(Precedence is a function of current state, not of what was true when the screen mounted.)_
-- A-23j A markup save that writes `markup_data` but fails to write the derivative **does not report success**. `[unit]` _(§4.7a.1. Under the old model this was a cosmetic lag; now it produces a photo the UI cannot display correctly.)_
-- A-23k Re-editing marks updates what all three surfaces display — no surface serves a stale derivative after a re-save. `[Playwright]` _(§4.7a.2. A-23c proves the object was overwritten; this proves the UI is not caching past it.)_
-- A-23l Every surface fetches the derivative through the same signed-URL flow as the original, from the same `{company_id}/{project_id}/` prefix. `[live]` _(§4.7a.3. A path that skips signing would work in testing and leak in production.)_
-- A-24 The active markup tool is distinguishable without colour — it carries a **border** and a label change. _(Corrected [S98]: this read "a label weight change". §4.10 specifies `1.5px #f2453d` border plus a red icon **and label** — a colour change, not a weight change. The criterion was testing something the spec does not say, so it could pass on a build that violated §4.10. The border half is the colour-independent signal; the build must not substitute tint alone.)_
-- A-24b Undo and Redo operate per-mark, and Redo renders dimmed when the redo stack is empty. _(§4.10 — no prior criterion.)_
-- A-24c Cancel with unsaved marks prompts for confirmation; Cancel with no marks exits directly. _(§4.10 — no prior criterion.)_
-- A-24d Markup opened from a punch item or an incident returns to that record and stays linked to it. _(§4.10 — no prior criterion.)_
-- A-25 Every gesture on M-9 (swipe to page, swipe down to dismiss) has a visible on-screen equivalent.
-- A-25b A photo carrying markup is visibly marked as such in the viewer. _(§4.9. A-23 covers the toggle; nothing covered the indicator.)_
-- A-25c Tapping **Source** navigates to the originating daily log, delivery, or safety incident. _(§4.9 — no prior criterion.)_
-- A-25d Delete prompts for confirmation and is refused for roles that cannot delete. `files_delete_owner_admin` (`20260101000000_baseline_schema.sql:3608`) restricts DELETE to Owner/Admin — "role-gated" in §4.9 means Owner/Admin, and the UI must not offer an action the DB will reject.
+- A-23f A photo with non-empty `markup_data` renders its marks over the **original** in the M-8 gallery thumbnail. `[Playwright]`
+- A-23g The same photo renders its marks in the **M-9 image stage** and the **M-9 filmstrip** thumbnail. `[Playwright]` _(One rule, three surfaces — §4.7a exists so they cannot drift, and testing only the stage would let the filmstrip regress.)_
+- A-23g2 **A photo annotated on desktop, with `markup_data` and NO derivative, renders its marks correctly on all three surfaces.** `[Playwright]` _(New [S98] — the population that blocked the previous rule. This is the criterion that proves Option A actually solved it, and it fails instantly on any build that still consults a derivative.)_
+- A-23h A photo with **empty or null** `markup_data` renders the plain original on all three surfaces, with no overlay element and no indicator. `[Playwright]` _(Without this, a build that always mounts an overlay passes A-23f–A-23g and regresses every unannotated photo.)_
+- A-23i Adding markup flips all three surfaces to the marked rendering **without a reload**; removing every mark flips them back. `[Playwright]` _(Display is a function of current `markup_data`, not of what was true when the screen mounted.)_
+- A-23m The image and the overlay render in **one SVG sharing one viewBox** — marks stay registered to image features at 120px, at the 330px stage, and at full size. `[Playwright]` _(§4.7a.2. The failure this prevents is an `<img object-fit:cover>` with a separately positioned SVG, which looks correct at the authoring size and drifts everywhere else — so the assertion must compare at more than one size or it passes vacuously.)_
+- A-23n Square surfaces (gallery tile, filmstrip) render `xMidYMid slice`: the image fills the square and a mark in the cropped band is cropped **with** it, never floating over a letterbox bar. The M-10 canvas renders `meet` and never crops. `[Playwright]` _(§4.7a.2.)_
+- A-23o A stroke that would render below **1.5 device px** is raised to meet that floor; a stroke already above it is **never lowered**; and no mark's position or size changes at any scale. `[unit]` _(§4.7a.3. The second and third clauses matter — a build that simply normalises all strokes to 1.5px satisfies a floor and destroys deliberate weight.)_
+- A-23p `text` marks are **omitted** from the gallery and filmstrip overlays and **rendered in full** at M-9 and M-10. `[Playwright]` _(§4.7a.3.)_
+- A-23q An annotated photo carries the markup indicator: **top-right, circular, icon-only, no text**. It is not bottom-left, not a rounded rectangle, and carries no label — so it cannot be read as a source badge. `[Playwright]` _(§4.7a.3 against §4.8's "a photo's badge is its provenance". A criterion that only checked "an indicator exists" would pass on a build that violates the provenance rule, which is the whole risk here.)_
+- A-23r A photo whose only mark falls in the cropped-away band still carries the indicator. `[Playwright]` _(§4.7a.3's reason for having an indicator at all. Without this the indicator looks redundant and gets optimised away.)_
+- A-23s Neither partial state ever paints: the tile holds its placeholder until image and overlay are ready, so **shapes never appear over a blank tile** and **the bare image never appears before its marks**. `[Playwright]` _(§4.7a.4. The second clause is the one that matters — for that interval the surface shows an annotated photo as unannotated, the exact failure Option B was rejected for.)_
+- A-23j A markup save whose **derivative** write fails still **reports success**, surfaces a non-blocking notice that the sharing image could not be generated, and leaves the marks rendering correctly from `markup_data`. `[unit]` _(**Reverted [S98].** It previously asserted the opposite — that such a save must NOT report success — which was correct only while the derivative was the display source. It no longer is, and treating a failed share artifact as a lost save would be wrong.)_
+- A-23k Re-editing marks updates all three surfaces immediately, from `markup_data`. `[Playwright]` _(Amended [S98]: this no longer concerns derivative staleness — display never consults the derivative.)_
+- A-23l The **sharing** path fetches the derivative through the same signed-URL flow as the original, from the same `{company_id}/{project_id}/` prefix. `[live]` _(Kept [S98] — §4.7a.5 keeps this requirement even though the derivative left the display path. A path that skips signing would work in testing and leak in production.)_
+- A-23t Sharing a marked-up photo whose derivative is missing or stale **degrades to the original with a warning** — it never silently shares an unmarked photo as if it were marked. `[unit]` _(§4.7a.5. Demoting the derivative created this hole: nothing else now notices it is absent.)_
 
 **PWA**
 
@@ -1205,8 +1330,8 @@ never prove the amber strip rendered or that a tap landed.
 
 ### What `[live]` proves today, with no new tooling
 
-A-15, A-15b, A-16, A-16b, A-19b, A-19f, A-19g, A-19i–A-19l, A-20c, A-20d, A-21c–A-21j, A-22c, A-23–A-23d,
-A-23l, plus A-28/A-28b as
+A-15, A-15b, A-16, A-16b, A-19b, A-19f, A-19g, A-19i–A-19l, A-20c, A-20d, A-21c–A-21j, A-22c,
+A-23–A-23d and A-23l, plus A-28/A-28b as
 shell checks. Two of these deserve their mechanism spelled out because the assertion runs backwards:
 
 - **A-16b** — insert session (`clock_out` NULL) → segments → UPDATE `clock_out`, then repeat with
@@ -1217,12 +1342,13 @@ shell checks. Two of these deserve their mechanism spelled out because the asser
 
 **House rule.** Every fix still needs a failing-then-passing assertion. Under D-18 that rule is now
 satisfiable for every criterion in §10 except A-26, which is manual by nature.
-## §11 — Decision register (eleven ruled [S98, Josh]; ONE open)
+## §11 — Decision register (twelve ruled [S98, Josh])
 
-The eight questions raised in the S98 gap pass are closed, and so are the three follow-ups from the
-second ruling pass. **One item is open — see the blocked box below.** The rulings are recorded as D-14
-(amended) and D-17…D-21 (D-17, D-20 and D-21 each extended by the second pass) in §0, and applied
-throughout §4, §4.7a, §5, §5.7, §7a, §7b, §8a, §9 and §10.
+The eight questions from the S98 gap pass are closed, as are the three follow-ups from the second ruling
+pass and the display question from the third. **Nothing raised this session is open.** One *pre-existing*
+schema gap surfaced while specifying the overlay and is flagged below. The rulings are recorded as D-14
+(amended) and D-17…D-21 in §0 — D-17, D-20 and D-21 each extended, D-21 twice — and applied throughout
+§4, §4.7a, §5, §5.7, §7a, §7b, §8a, §9 and §10.
 Options considered are dropped rather than preserved — §0 is the register of what was decided, this is
 the register of where each ruling landed.
 
@@ -1235,7 +1361,7 @@ the register of where each ruling landed.
 | 5 | How is `62%` derived? | **Cut from v1.** No progress bar on M-2, no Progress stat on M-3; strip respecced to two stats. | D-19; §4.2; §4.3; §8a; §9; A-10d, A-11e |
 | 6 | What is "Up next" bound to? | **The schedule** — next upcoming item from the existing calendar UNION. No milestone concept introduced. | §4.3 binding table; §8a; A-11f–A-11i |
 | 7 | Subcontractor photo access? | **Subs upload AND annotate** [extended S98]. **Four** policies widened — two on `public.files`, two on `storage.objects`; **first build step**. | D-20; **§7a** rewritten; A-21d–A-21j |
-| 8 | Markup storage? | **Both**, and [extended S98] **the derivative is what displays** wherever markup exists. Original never modified. | D-21; §4.10; **§4.7a**; A-23–A-23l |
+| 8 | Markup storage? | **Both stored**; [S98, final] **the overlay displays**, drawn live from `markup_data` over the original. Derivative is a sharing artifact only. | D-21; §4.10; **§4.7a**; A-23–A-23t |
 
 ### Second ruling pass [S98] — three follow-ups ruled
 
@@ -1243,15 +1369,47 @@ the register of where each ruling landed.
 | ---- | ---------- | ---------- |
 | Subcontractor UPDATE policy | **Widen it too.** Same discipline — role array only. | D-20 extended; §7a rewritten to four policies; A-21f–A-21j |
 | Conflict holding store | **Add it.** Server-side table, Owner/Admin read, resolved rows kept. | D-17 extended; **§5.7** (new); §7b; §5.6 bounded-gap language removed; A-19g–A-19l |
-| Markup derivative | **Confirmed, and it is what displays** wherever markup exists. | D-21 extended; **§4.7a** (new); A-23e amended, A-23f–A-23l |
+| Markup derivative | **Confirmed as stored** — but the display question it raised was then re-ruled; see the third pass below. | D-21; **§4.7a**; A-23e, A-23f–A-23t |
 
-### ⛔ ONE ITEM OPEN — the only thing blocking a complete build
+### Third ruling pass [S98] — the display rule, and what it reverted
 
-**What renders when `markup_data` is non-empty and no derivative exists.** Options and costs in **§4.7a**.
-This is not a leftover from the first pass; ruling 3 created it by making the derivative load-bearing.
-It is **not** a one-time backfill: the desktop editor writes `markup_data` and nothing else
-(`markup-editor.tsx:244-247`), and M6M does not change desktop under A-28/D-2, so the population keeps
-growing. Every other question raised in this session is closed.
+**Ruled: Option A.** The UI renders the original with the annotation layer drawn live over it from
+`files.markup_data`, on all three surfaces. The derivative is **not** the display source; it reverts to a
+sharing artifact that Save still writes.
+
+This closed the blocked item by removing its premise — with nothing consulting a derivative at display
+time, the desktop-authored population (markup, no derivative) is simply correct. **No desktop change, no
+backfill, D-2 and A-28 untouched.** A-23g2 is the criterion that proves it.
+
+**Verified buildable before specifying it**, because the alternative was a genuine stop: shapes are stored
+in the original's natural pixel space **and `markup_data` carries `imageWidth`/`imageHeight`**
+(`packages/shared/types/markup.ts:57-64`). Without those two fields a thumbnail would have had to download
+the full-resolution original just to learn its aspect ratio, and Option A would have been impractical.
+A pure SVG renderer over exactly this schema already exists at
+`packages/shared/components/MarkupViewer.tsx` with **zero consumers** — and it sits outside
+`apps/web/app/dashboard/**`, so adopting it touches neither A-28 nor D-2.
+
+**Three hardenings reverted**, added while the derivative was briefly load-bearing:
+
+| Hardening | Then | Now |
+| --------- | ---- | --- |
+| A-23j | A failed derivative meant Save must not report success | Save **reports success**; the failure is a non-blocking notice about the sharing image (§4.7a.5) |
+| Regeneration | A correctness requirement — stale meant the wrong image on screen | **Cosmetic again** — stale means an out-of-date share |
+| A-23l signed URLs | Required for the display path | **Kept**, now for the sharing path |
+
+Demoting the derivative left one hole nothing else covered, so it is specced rather than assumed: if the
+derivative is missing or stale at share time, sharing **degrades to the original with a warning** and never
+passes off an unmarked photo as marked (A-23t).
+
+### ⚠️ Open — pre-existing, surfaced by this work, needed before M-10
+
+**The `Pin` tool has no shape type.** §4.10 specs Draw · Arrow · Box · Text · Pin; `MarkupShape`
+(`markup.ts:55`) is `arrow | circle | rectangle | pen | text`. Draw→pen and Box→rectangle map cleanly;
+**Pin maps to nothing**, and `circle` exists with no tool offering it. Either a new `pin` type — which
+means `MARKUP_SCHEMA_VERSION` 2 and a read-compatibility story for v1 rows — or composing it from
+circle + text, which makes one pin two undo steps and breaks §4.10's "Undo/Redo are per-mark".
+**This predates every ruling in this session**; it surfaced while reading the schema the overlay depends
+on. Detail at §4.7a.5.
 
 ### Carried forward — raised by a ruling, not covered by it
 
