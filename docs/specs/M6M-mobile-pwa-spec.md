@@ -110,10 +110,23 @@ app/m/
   capture/page.tsx                  post-shot handling (§6) — NOT the camera itself
   offline/page.tsx                  M-4   offline / failure state
   p/[projectId]/page.tsx            M-3   project sections hub
-  p/[projectId]/photos/page.tsx     M-8   gallery
+  p/[projectId]/overview/page.tsx   M-11  overview — dates, scope, schedule stepper, status
+  p/[projectId]/schedule/page.tsx   M-12  schedule — the project's calendar events
+  p/[projectId]/changes/page.tsx    M-13  change orders — NO MONEY (§4.11.3)
+  p/[projectId]/punch/page.tsx      M-14  punch list
+  p/[projectId]/deliveries/page.tsx M-15  deliveries  (M-7's Deliveries tile shares this)
+  p/[projectId]/files/page.tsx      M-16  files — non-photo documents
+  p/[projectId]/contacts/page.tsx   M-17  project contacts
+  p/[projectId]/team/page.tsx       M-18  assigned crew
+  p/[projectId]/safety/page.tsx     M-19  safety incidents  (reached from M-7)
+  p/[projectId]/photos/page.tsx     M-8   gallery  (M-7's Photos tile shares this)
   p/[projectId]/photos/[fileId]/page.tsx        M-9   viewer
   p/[projectId]/photos/[fileId]/markup/page.tsx M-10  markup
 ```
+
+**Twelve tiles, nine new routes [S98].** Every tile on M-3 and M-7 resolves to a real mobile screen
+(§4.11). Three tiles reuse a route rather than getting their own — stated in §4.11.10 — and **no tile is
+cut, disabled, or pointed at a desktop page**; D-13 forbids the last of those one layer up.
 
 **Entry.** A viewport or user-agent check is **not** the router. Mobile is entered by URL (`/m`) and by
 the installed PWA's `start_url`. A desktop browser opening `/m` gets the mobile shell; that is intended
@@ -852,6 +865,127 @@ Why that is safe here, verified rather than assumed:
 - **Nothing in `apps/web/app/dashboard/**` is edited** to make pins work. Desktop gains the ability to
   render pins only when someone chooses to add the case — a separate, additive piece of work outside
   M6M's scope.
+
+---
+
+### 4.11 The twelve section screens (M-11 … M-19) [S98]
+
+**Every tile on M-3 and M-7 has a real mobile screen and a route.** None is cut, none is disabled, none
+opens a desktop page. Common rules, stated once so the nine subsections below stay short:
+
+- **Patterns are reused, never re-invented.** Lists use the **project-card geometry** (D-4); hubs use the
+  **76px tile grid** (§3.3); pickers and simple rows use the **58px row**. §2's touch targets and
+  **mono-for-every-number** rule apply unchanged.
+- **App bar** on every screen: back chevron (never a hamburger — §3.1), the section name, and a mono
+  sub-line `PRJ-### · {client}`. The tab bar stays (§3.2), Projects active.
+- **Offline (§5.4).** These are **read-only** surfaces in v1 — none is in D-6's offline-write set. Each
+  renders the app-wide offline strip plus **its own empty state**; none spins indefinitely, and none shows
+  stale data without the strip. Where a screen offers a write, that write is **disabled offline with a
+  plain message**, exactly as delivery check-in is (D-6) — it does **not** silently queue.
+- **Every figure below is bound to a named service function, or CUT.** Nothing is derived to fill a gap;
+  the D-19 precedent applies throughout.
+
+#### 4.11.1 M-11 · Overview — `/m/p/[projectId]/overview`
+
+**It is not a duplicate of M-3.** M-3's header already carries status, days-left and punch, and the "Up
+next" card. M-11 deliberately carries **none of those again** and holds what M-3 has nowhere to put:
+
+- **Dates row** — `start_date`, `target_end_date`, `actual_end_date` (`projects`, `20260704211000_module5_5a_projects.sql:104-106`), via `getProject(id)` (`projects.ts:57`). Mono. Em-dash where null.
+- **Schedule stepper** — phases rolled up from tasks: `rollupPhases(getPhases(id), getTasks(id))` (`tasks-shared.ts:52`, `tasks.ts:31`/`:17`). Renders each phase's `status`; the current phase is the first `in_progress`/`blocked`, else the first incomplete (the desktop rule at `projects/[id]/page.tsx:150-154`). **`PhaseRollup.percent` is NOT rendered** — D-19 cut progress percentages from mobile, and that applies here too.
+- **Details** — `project_type` via `PROJECT_TYPE_LABELS` (`projects.ts:29`), and the source estimate's `estimate_number` when `source_estimate_id` is set.
+- **Scope** — `scope_summary` and `scope_sections` (`:109-110`).
+- **CUT: every money KPI.** The desktop Overview's Revised Contract, Cost to Date and Projected Margin are all absent. Contract value is Owner/Admin-only under the Financial Visibility Floor, and D-9 keeps finance off mobile entirely.
+- **CUT: `internal_notes`.** No mobile requirement was stated for it and it is not field-facing. Not a data gap — a scope decision, recorded so nobody "restores" it.
+- **Status change is NOT offered here.** The desktop `StatusControl` is Owner/Admin/PM; putting a lifecycle transition on a phone that all six roles reach (D-11) is a permission surface this spec has not designed. Read-only.
+
+#### 4.11.2 M-12 · Schedule — `/m/p/[projectId]/schedule`
+
+The project's calendar, as a list — not a grid. A month grid at 402px cannot carry a legible event label.
+
+- **Source:** `getCalendarEvents({ projectId })` (`schedule.ts:106`) — the same UNION that feeds M-3's "Up next" (D-24), so the two can never disagree.
+- **Grouped by day**, newest-first is wrong here: this is forward-looking, so **today first, then ascending**, with past days reachable by scrolling up. Day headers use M-8's mono uppercase section label.
+- Each row: `title`, mono `start_date`–`end_date`, and the member name where `member_id` is set. Source is distinguishable — `task`, `general`, `inspection` — by a text label, never colour alone.
+- **Inherits `schedule_entries_select_scoped`** (`20260704213000_module5_5b_tasks_scheduling.sql:406-414`): crew and subcontractors see only their **own** general entries, while tasks and inspections are project-scoped for everyone. Same caveat as §4.3, same reason, and M-12 must not work around it.
+- **CUT: a Gantt or dependency view.** `getDependencies` (`tasks.ts:45`) exists, but nothing in the handoffs specced a mobile dependency visualisation and it is not derivable from the locked patterns.
+
+#### 4.11.3 M-13 · Change Orders — `/m/p/[projectId]/changes` — **NO MONEY**
+
+- **Source:** `getChangeOrders(projectId)` (`change-orders.ts:61`), which returns `ChangeOrderWithAuthor`.
+- Rows use the project-card geometry: `co_number` mono, `title` 17px/700, a **status pill carrying text** (`CO_STATUS_LABELS`, `change-orders.ts:49`, over `draft | sent | signed | voided`), the author's `display_name`, and mono `sent_at` / `signed_at` where set.
+- **`net_delta` and every dollar figure are CUT from mobile.**
+
+> **Why this is not a stop, and the call I made inside it.** The audit flagged a possible collision with
+> D-9. There isn't one: **a change order is perfectly meaningful without its value** — number, title,
+> status, author and signature dates are what a foreman needs, and D-9's exclusion list is *Budget,
+> Invoices, Payments, Contracts*, which does not name change orders. So the tile stays.
+> The remaining question was whether to show `net_delta` to Owner/Admin only. **I cut it for all roles**,
+> for two reasons: the Financial Visibility Floor gates CO dollar amounts from PM, foreman and crew, so
+> showing it would require the **first role-gated figure anywhere on `/m`** — a pattern this spec has
+> deliberately never introduced (D-11 puts every role on the same screens); and `change_orders.net_delta`
+> is **UI-gated only, with no DB floor behind it** (TECH_DEBT #117), so a mobile leak would not be caught
+> by RLS. Cutting is the D-19 precedent: where a figure cannot be shown correctly, it is not shown.
+> **Reversible by ruling** — if Owner/Admin should see CO values on mobile, that is a role-gating decision
+> for Josh, not a build detail.
+
+#### 4.11.4 M-14 · Punch List — `/m/p/[projectId]/punch`
+
+- **Source:** `getPunchLists(projectId)` (`punch.ts:48`), which already joins `assignee`, `completer` and `verifier` by `display_name`.
+- Filter chips, single-select, same geometry as M-2: **Mine / Open / All**. "Mine" is `assignee_id = get_my_member_id()` and "Open" is `status IN ('open','in_progress')` — **the same two expressions D-16 uses on M-3**, so the tile badge and this screen always agree.
+- Rows: `title` 17px/700, mono `location · trade` where set, a status pill with text (`PUNCH_STATUS_LABELS`, `punch.ts:24`), a priority chip where `priority` is set, and the assignee's `display_name`.
+- **The D-16 divergence is inherited, not re-decided.** An item at `complete` awaiting verification appears under **All** and under neither **Open** nor any closed filter — because `isItemClosed()` (`punch.ts:36`) and D-16's "open" are not complements (§4.3). M-14 must not invent a third definition to tidy this up.
+- Photo links: `reference_photo_file_id` / `completion_photo_file_id` open M-9 (D-15, read-only join).
+
+#### 4.11.5 M-15 · Deliveries — `/m/p/[projectId]/deliveries`
+
+- **Sources:** `getProjectDeliveries(projectId)` (`deliveries.ts:161`) and `getOrderlessDeliveries(projectId)` (`:175`) — both return `DeliveryWithItems` with `items` and `receiver.display_name`.
+- Two groups under mono section labels: **Against a PO** and **No PO**. Rows carry the delivery date, receiver name, and a mono item count.
+- A **damaged** delivery carries the `#c0362c` treatment and a text label — never colour alone.
+- **CUT: purchase-order money.** `PurchaseOrderSummary` (`deliveries.ts:38`) carries `orderedTotal` / `usableTotal`; those are quantity rollups, not currency, and may render — but **no PO cost, price or extended value appears on mobile** (D-9).
+- **Check-in is not offered here.** D-6 makes delivery check-in **online-only**, and the check-in screen is one of GAP-8's five unspecced surfaces. M-15 is a read surface until that handoff lands.
+
+#### 4.11.6 M-16 · Files — `/m/p/[projectId]/files`
+
+- **Source:** `getFiles({ projectId })` (`files.ts:29`), which filters `is_deleted = false` by default.
+- **Photos are excluded** — `category = 'photos'` belongs to M-8. M-16 lists the document categories: `plans`, `permits`, `contracts`, `daily_logs`, `receipts`, `other`, plus `invoices` and `change_orders` where RLS returns them.
+- Rows: `file_name` 17px/700, a mono category label, mono `created_at`, and a mono file size. Tapping opens the signed URL (`getSignedUrl`, `files.ts:70`).
+- **RLS does the gating, not the UI.** `files_select_non_client` (`20260728000000_security_rls_96_99.sql:53-75`) already restricts `contracts`, `change_orders` and `invoices` to Owner/Admin plus the PM-invoices carve-out. M-16 renders what it is given and **must not add a second role check** — a UI filter that disagrees with RLS is how a "missing file" bug that is really a permission becomes unexplainable.
+- **CUT: upload.** Camera capture is §6's job and files to `photos`. General document upload from a phone was never specced.
+
+#### 4.11.7 M-17 · Contacts — `/m/p/[projectId]/contacts`
+
+- **Source:** `getProjectContacts(projectId)` (`project-contacts.ts:19`), joined to the Module 2 contact.
+- 58px rows: `first_name last_name` (or `company_name`), a mono `contact_type` label, and the role on this project from the junction row.
+- **`phone` and `email` are tap-to-act** — `tel:` and `mailto:`. This is the screen's whole reason to exist on a phone; a list that only displays a number wastes the device.
+- Contacts and Subs & Vendors stay distinct (D-9 keeps both in the hamburger at company scope); M-17 is the **project-scoped** view and does not duplicate them.
+
+#### 4.11.8 M-18 · Team — `/m/p/[projectId]/team`
+
+- **Source:** `getProjectAssignments(projectId)` (`project-assignments.ts:16`), which joins `member.display_name`, `member_type` and `schedule_color`.
+- 58px rows: initials avatar tinted with `schedule_color` (falling back to §2's amber when null), `display_name`, and a mono `member_type` label — `crew` or `subcontractor`.
+- **CUT: pay rates, cost rates, burden.** `instrument_rates` is DB-enforced Owner/Admin (`20260806000000_financial_rls_floor.sql` §1). Not a UI decision — the rows are not readable.
+- **CUT: assign/unassign.** Managing assignments is not a field task and no handoff specced it.
+
+#### 4.11.9 M-19 · Safety — `/m/p/[projectId]/safety`
+
+- **Source:** `getIncidentsForProject(projectId)` (`safety.ts:74`), returning `IncidentListItem` with `project.name` and `reporter.display_name`.
+- Rows: `incident_type` label, mono incident date, reporter name, and a status pill carrying text (`IncidentStatus`).
+- Injuries are indicated by presence, not detail — the count from `IncidentDetail.injuries` on the detail read (`safety.ts:87`); **no injured-person names on a list screen** that every role reaches.
+- **Reporting an incident is NOT specced here.** It is one of GAP-8's five capture screens. M-19 is read-only until that handoff lands, and the tile must not imply otherwise.
+
+#### 4.11.10 The three tiles that share a route — confirmed, not assumed
+
+M-7 is project-scoped by its own context row (§4.7), so three of its four tiles resolve to project routes
+that already exist. **They do not get their own screens**, and building duplicates would be wrong:
+
+| M-7 tile | Resolves to | Why not its own route |
+| -------- | ----------- | --------------------- |
+| **Photos** | `/m/p/[projectId]/photos` (M-8) | Identical screen, identical binding. M-7's context row supplies the same `projectId` M-3 would. A second gallery route would drift from M-8's §4.7a display rules. |
+| **Deliveries** | `/m/p/[projectId]/deliveries` (M-15) | Same. |
+| **Daily logs** | `/m/logs` (M-6) with its **This project** chip pre-applied | M-6 already specs that chip (§4.6) and appears "when a project is in context" — which is exactly M-7's state. A project-scoped logs route would duplicate M-6's list for no gain. |
+| Safety | `/m/p/[projectId]/safety` (M-19) | The only M-7 tile needing a new route. |
+
+**M-3's Photos tile and M-7's Photos tile are the same screen.** Confirmed rather than assumed: both are
+project-scoped, both bind to `getFiles({ projectId, category: 'photos' })`, and §4.7a governs both.
 
 ---
 
