@@ -90,6 +90,7 @@
 | D-21 | Markup storage & display      | **Both stored; the OVERLAY displays.** [S98, Josh] `files.markup_data` holds the editable annotation layer, **is the source of truth, and is drawn live over the original image on every surface** — gallery thumbnail, viewer stage, filmstrip (**Option A**, ruled once the derivative-as-display reading proved unbuildable for desktop-authored markup). Save still writes a flattened derivative, but it is a **sharing artifact only, never displayed**. The original is never modified and is always the image on screen. §4.9's toggle hides the drawn layer; it does not swap files. Storage contract in §4.10; display rule, fit, legibility and load order in **§4.7a**. |
 | D-22 | Pin shape / schema v2         | **Add a `pin` shape type; `MARKUP_SCHEMA_VERSION` → 2.** [S98, Josh] Composing a pin from circle + text would make one pin two undo steps, contradicting §4.10's per-mark Undo/Redo; dropping Pin would remove what punch and incident work needs most. Additive, and `MarkupViewer` has no consumers. **The pin number is STORED, so deletes leave gaps and `next = max + 1`.** Contract, read/forward compatibility and blast radius in **§4.10a** — the first ruling this session to touch shared code desktop imports. |
 | D-23 | `{m} estimating` count        | **Dropped.** [S98, Josh] The M-2 header shows the active count only. There is no `estimating` project status — `projects_status_check` permits `active, on_hold, complete, archived, cancelled` — and none is added. §4.2; §8a; A-10c. _(Renumbered [S98]: this ruling was previously cited as "D-4", which is the list-screen pattern.)_ |
+| D-25 | Segment type on clock-in      | **Default `work`, switch afterwards.** [S98, Josh] Clock-in writes `segment_type = 'work'` with no prompt — one tap to start a shift. Changing it is a separate action that **closes the open segment and opens a new one**, because that is the only shape RLS permits a crew member. §4.5a. **A collision this exposes is OPEN — see §11:** `work` requires `project_id IS NOT NULL`, so the no-project clock-in that D-12 and §4.5 contemplate cannot write a `work` segment at all. |
 | D-24 | "Up next" binding             | **Bound to the schedule.** [S98, Josh] The next upcoming item on the project, from the existing calendar UNION; no milestone concept is introduced. §4.3; §8a; A-11f–A-11j. _(Renumbered [S98]: this ruling was previously cited as "D-6", which is offline-capable actions.)_ |
 
 ---
@@ -345,6 +346,63 @@ No handoff mockup exists; built from the locked patterns.
   dashboard** (D-12).
 - Offline-capable (§5). The button works with no signal and the resulting event enters the queue.
 
+#### 4.5a Segment type — default `work`, switch afterwards (D-25 [S98, Josh])
+
+**Clock-in writes `segment_type = 'work'` with no prompt.** The crew clock in with one tap; choosing a
+type is never part of starting a shift. Verified against the schema, not assumed
+(`20260710130000_module6_6a_time_tracking.sql:216-228`):
+
+- `'work'` is permitted by `time_segments_type_check` — the set is
+  `work | material_run | warranty | travel | shop | break`.
+- **`'work'` is one of the three types that CAN carry a project.**
+  `time_segments_project_gate_check` requires `project_id IS NOT NULL` for `work`, `material_run` and
+  `warranty`, and `project_id IS NULL` for `travel`, `shop` and `break`. So `work` is the correct default
+  for a clock-in that D-12 redirects to the project clocked into — the redirect target and the segment's
+  project are the same value.
+- **It carries no extra constraint the others lack.** `time_segments_task_gate_check` says a `task_id`
+  may *only* attach to a `work` segment — a permission, not a requirement. M-5 writes `task_id NULL`, and
+  `time_segments_completion_gate_check` then forces `completion NULL`, which is consistent: a taskless
+  work segment has nothing to complete.
+
+**The switch control.** M-5's state card gains a **58px row** (§2's picker geometry) reading the current
+segment type. Tapping it opens a picker of 58px rows listing the six types.
+
+**What a switch does — it closes and opens, it never edits.**
+
+1. The open segment is **ended**: `segment_end` = the switch moment.
+2. A **new** segment is inserted with the chosen type and `segment_start` = the same moment.
+
+This is not a stylistic choice. `time_segments_update_authorized` lets a member end their **own open**
+segment but not alter one already ended, and `time_segments_insert_authorized` gates inserts on
+`owns_open_session(session_id)` — so close-then-open is the only shape the RLS permits a crew member.
+The session is untouched; clock-out is a separate action.
+
+**Project follows the type, because the CHECK forces it.** Switching to `travel`, `shop` or `break` writes
+`project_id NULL`. Switching to `work`, `material_run` or `warranty` writes the current project — and if
+there is no project in context, **the picker requires one before the switch can be applied**. A build that
+sends `work` with a null project gets a constraint violation, not a validation message.
+
+> **⚠️ Ending a segment requires a note for every type except `break`.** `time_segments.note` is commented
+> _"mandatory on end for every type except break"_ (`:212`). It is a **service-layer** rule — there is no
+> CHECK — but it is a rule, so **the switch is a two-field interaction (type + note), not one tap.**
+> Only the *clock-in* is one tap; this ruling's "one tap" applies to starting a shift, not to switching.
+> Flagged because the difference is easy to lose.
+
+**Offline.** A switch is **two queue entries** (§5.2), not one: an `op:'update'` on the ending segment and
+an `op:'insert'` on the new one, both `entity: 'time_segment'`, the insert carrying `depends_on` the
+update. Both take the switch moment as `captured_at`, so a switch made at 09:40 and synced at 14:00 is a
+09:40 switch. The update carries `base_updated_at` per §5.6.
+
+> **Scope — what is M-5's minimum versus what belongs to the missing handoff (GAP-8).**
+> **Specced here, because this ruling requires it:** the default-to-`work` clock-in, the type row on M-5,
+> the six-type picker, close-and-open semantics, the project rule, the note requirement, and the offline
+> shape.
+> **NOT specced here, and still owed by the _Mobile Field Capture_ handoff:** attaching a `task_id` to a
+> work segment and the `completion` prompt that then becomes mandatory on end; material-run and warranty
+> flows beyond type selection; and any richer segment history or correction UI. **A later handoff should
+> reconcile with this section, not replace it** — the close-and-open rule and the project/note constraints
+> are DB-derived and will not change.
+
 ### 4.6 M-6 · Logs
 
 - App bar: "Logs" + mono `{n} this week`.
@@ -563,8 +621,23 @@ timestamp), **By**, **Source** (the record it came from).
 Bottom: a **4-up action row** of 56px tiles — Save · Share · Comment · **Delete** (`rgba(192,54,44,.16)`
 fill, `#f0908a` icon and label).
 
-Swipe left/right pages; pinch zooms; swipe down dismisses — **the arrows are the visible equivalent of the
-swipe**. Tapping **Source** navigates to the daily log / delivery / incident. Delete confirms first and is
+**Zoom control [S98, Josh].** The stage carries an on-screen zoom control so **pinch has a visible
+equivalent** and §4.9's accessibility rule holds for every gesture without exception. Two **44px**
+translucent circles — `−` and `+` — stacked at the stage's **bottom-right**, inset 14px, 8px apart, in the
+same `rgba(255,255,255,.13)` chrome as the prev/next circles. Each tap steps the zoom by a fixed factor.
+When zoom is above fit, a third 44px **`Fit`** pill appears directly above the pair; at fit it is absent,
+so the resting state is two controls, not three.
+
+- **It does not crowd the stage.** Prev/next sit vertically centred at the left and right edges, spanning
+  roughly 145–185px down a 330px stage. The zoom stack rises from a 14px bottom inset through 220–316px,
+  leaving ~35px of clearance. Nothing overlaps at any zoom level.
+- **44px** satisfies §2's 40–46px on-canvas nav circle band; no new token.
+- **While zoomed, a horizontal swipe pans instead of paging.** The prev/next circles keep paging at every
+  zoom level — which is the second reason the visible controls matter: at zoom the arrows are not merely
+  an *equivalent* of the swipe, they are the **only** way to page.
+
+Swipe left/right pages; pinch zooms; swipe down dismisses — **and every one of those three has a visible
+on-screen equivalent: the arrows, the zoom control, and the close ✕.** Tapping **Source** navigates to the daily log / delivery / incident. Delete confirms first and is
 role-gated.
 
 **A photo with markup indicates it, and the viewer can toggle the overlay off to reveal the unannotated
@@ -1478,6 +1551,17 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 - A-13d A log still waiting to sync renders the `Queued` badge **in place of** the photo count, not alongside it. _(§4.6.)_ `[Playwright]`
 - A-13e M-6's chips are All / Mine / This project, single-select, and "This project" appears only when a project is in context. `[Playwright]`
 
+**Timeclock segments (§4.5a, D-25) — all new [S98]**
+
+- A-7b Clock-in writes exactly one segment, `segment_type = 'work'`, with **no type prompt** — starting a shift with a project selected is one tap. `[Playwright]`
+- A-7c That segment carries the clocked-into project in `project_id` — the same project D-12 redirects to. `[live]`
+- A-7d It carries `task_id NULL` and therefore `completion NULL`. `[live]` _(§4.5a. `time_segments_completion_gate_check` forbids a completion without a task, so a build that stamps one is rejected.)_
+- A-7e Switching type **ends the open segment and inserts a new one** — the ended row is not mutated afterwards, and the session is untouched. `[live]` _(§4.5a. An edit-in-place implementation is refused by `time_segments_update_authorized` for a crew member, so this fails at the DB rather than in review.)_
+- A-7f Switching to `travel`, `shop` or `break` writes `project_id NULL`; switching to `work`, `material_run` or `warranty` writes the current project. `[live]` _(`time_segments_project_gate_check`. Either direction wrong is a constraint violation, not a soft error.)_
+- A-7g With no project in context, the picker **requires a project before applying** `work`, `material_run` or `warranty` — the switch is never sent with a null project. `[Playwright]`
+- A-7h Ending any segment other than `break` requires a note; ending a `break` does not. `[Playwright]` _(§4.5a. Service-layer rule with no CHECK behind it, so nothing else catches its absence.)_
+- A-7i An offline switch queues **two** entries — `update` on the ending segment, `insert` on the new one, the insert `depends_on` the update — and both carry the switch moment as `captured_at`. `[unit]` _(§4.5a + §5.2. A single-entry implementation loses either the end or the start.)_
+
 **Offline**
 
 - A-14 With the network disabled, the amber offline strip renders on the projects list, the project hub, and the timeclock screen — not only on `/m/offline`. `[Playwright]`
@@ -1598,7 +1682,9 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 - A-25b A photo carrying markup is visibly marked as such **in the viewer**. `[Playwright]` _(§4.9. A-23q covers the gallery/filmstrip indicator; the viewer's own indicator had no criterion.)_
 - A-25c Tapping **Source** navigates to the originating daily log, delivery, or safety incident. `[Playwright]`
 - A-25d Delete prompts for confirmation and is refused for roles that cannot delete. `files_delete_owner_admin` (`20260101000000_baseline_schema.sql:3608`) restricts DELETE to Owner/Admin — "role-gated" in §4.9 means Owner/Admin, and the UI must not offer an action the DB will reject. `[live]`
-- A-25e **Pinch-to-zoom has no specced on-screen equivalent** — §4.9 names the arrows as the equivalent of the *swipe* and says nothing about zoom. This criterion is **NOT ASSERTABLE as written and is flagged, not silently dropped**: either zoom gains a visible control, or §4.9 states that zoom is a non-essential enhancement. **Needs a ruling — see §11.** _(Recording it as a hole beats restoring A-25 as "every gesture" and letting it pass while one gesture has no equivalent at all.)_
+- A-25e The zoom control renders on the image stage — `−` and `+` at rest, plus `Fit` only when zoomed above fit — and each steps the zoom without a gesture. `[Playwright]` _(**Restored and now fully assertable [S98, Josh].** It was previously recorded as unassertable because pinch had no visible equivalent; the control closes that, and §4.9's "no gesture without a visible equivalent" rule now holds uniformly for all three gestures.)_
+- A-25f No control overlaps another at any zoom level — the zoom stack and the prev/next circles keep their clearance on the 330px stage. `[Playwright]` _(§4.9. The stage is fixed-height and crowded; a control that covers the next-photo arrow trades one accessibility failure for another.)_
+- A-25g While zoomed above fit, a horizontal swipe **pans** and the prev/next circles **still page**. `[Playwright]` _(§4.9. At zoom the arrows stop being an equivalent of the swipe and become the only way to page, so a build that disables them while zoomed strands the user.)_
 
 **PWA**
 
