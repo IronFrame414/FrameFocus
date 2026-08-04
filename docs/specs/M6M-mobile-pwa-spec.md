@@ -37,7 +37,13 @@
 > and incident are the remaining two unspecced capture screens; delivery check-in is online-only (D-6) but
 > still has no screen.
 >
-> **Every question raised this session is ruled; nothing is open.** The display question was closed by
+> **⛔ ONE COLLISION IS OPEN — this spec is not ready to merge.** D-25 defaults clock-in to
+> `segment_type = 'work'`, but the DB requires `work` to carry a project while D-12 and §4.5 both
+> contemplate clocking in **without** one. The project-selected path is fully specced; the no-project path
+> is blocked. Options in §11.
+>
+> **Everything else raised this session is ruled**, including all twelve section tiles (§4.11 — nine new
+> routes, three shared). The display question was closed by
 > ruling the derivative **off** the display path: the UI draws marks live from `files.markup_data` over
 > the original (**Option A, §4.7a**), so desktop-authored markup is correct with no desktop change and no
 > backfill. The pin gap that surfaced while specifying it is closed too — **`pin` becomes a shape type and
@@ -1672,6 +1678,9 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 - A-11i The "Up next" date line renders the event's date. It is **not** bound to `detail.notes`, which is absent for tasks — a task-sourced card renders a date, never a blank line. _(§4.3. This is the failure the binding was written to prevent.)_ `[Playwright]`
 - A-11j A crew member's "Up next" reflects the schedule rows RLS grants them — a general entry belonging to a teammate does not appear, while project tasks and inspections do. _(§4.3's viewer-dependency note. Without this the caveat is prose nobody verifies, and a build that "fixes" it by querying with elevated rights leaks another member's schedule.)_ `[live]`
 - A-12 The section grid renders exactly nine tiles and **none** is Budget, Invoices, Payments, or Contracts. `[Playwright]`
+- A-12c **Every one of the nine tiles navigates to its own `/m/**` route and renders a screen** — none is inert, none is disabled, and none resolves to a `/dashboard/**` URL. `[Playwright]` _(**Rewritten scope [S98].** A-12 asserts only that nine tiles render, so it passed on a grid of nine dead tiles for the whole of this spec's life. This is the criterion that fails on that. The `/dashboard/**` clause is D-13 one layer up — a tile that opens a desktop page is the thing D-13 rejected for tab screens.)_
+- A-12d **The same holds for all four of M-7's tiles.** `[Playwright]` _(M-7's grid had the identical hole and no criterion at all. A-13b counts its tiles; nothing asserted they went anywhere.)_
+- A-12e M-7's Photos, Deliveries and Daily-logs tiles resolve to the **existing** routes (M-8, M-15, M-6-with-project-chip) — no duplicate gallery, delivery or log screen is built. `[Playwright]` _(§4.11.10. Without this, "every tile has a screen" is satisfied by building four more screens that drift from the originals.)_
 - A-12b Change Orders and Punch List badges render amber, Deliveries red, Photos and Team plain mono. _(§4.3 — no prior criterion.)_ `[Playwright]`
 - A-13 The Photos tile shows the project's total photo count **and no dot** — no unseen indicator renders under any data condition, including photos created after the user's last visit. _(Rewritten [S98, D-14 as amended]. The dot clause is removed, and the criterion now fails if a dot is built anyway.)_ `[Playwright]`
 
@@ -1695,6 +1704,34 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 - A-7g With no project in context, the picker **requires a project before applying** `work`, `material_run` or `warranty` — the switch is never sent with a null project. `[Playwright]`
 - A-7h Ending any segment other than `break` requires a note; ending a `break` does not. `[Playwright]` _(§4.5a. Service-layer rule with no CHECK behind it, so nothing else catches its absence.)_
 - A-7i An offline switch queues **two** entries — `update` on the ending segment, `insert` on the new one, the insert `depends_on` the update — and both carry the switch moment as `captured_at`. `[unit]` _(§4.5a + §5.2. A single-entry implementation loses either the end or the start.)_
+
+**Section screens (§4.11) — all new [S98]**
+
+- A-30 Every `/m/p/[projectId]/*` section screen renders the back chevron and **no hamburger**, and keeps the tab bar with Projects active. `[Playwright]` _(§4.11 common rules + §3.1.)_
+- A-30b Every section screen renders the app-wide offline strip **and its own empty state** when offline — none spins indefinitely, none shows stale data without the strip. `[Playwright]` _(§4.11 against §5.4. Nine new read surfaces is nine new chances to get this wrong.)_
+- A-30c No section screen queues a write offline. Where a screen offers a write, it is **disabled with a plain message**, as delivery check-in is. `[Playwright]` _(§4.11. D-6's offline-write set is closed at three actions; a tenth screen quietly queueing would break A-18's count and §5's whole contract.)_
+- A-30d Every number on every section screen renders in IBM Plex Mono. `[Playwright]` _(§2, extended over nine new screens — A-10 covered M-2 only.)_
+- A-30e Every interactive element on every section screen measures ≥44px in its smallest dimension. `[Playwright]` _(§2, extended over nine new screens — A-5's sweep must include them.)_
+- A-31 **M-11 renders none of M-3's four figures again** — no status pill, no days-left, no punch count, no "Up next". `[Playwright]` _(§4.11.1. The audit's duplicate-screen concern; without this M-11 drifts into a second copy of the hub.)_
+- A-31b M-11 renders **no** progress percentage, including from `PhaseRollup.percent`. `[Playwright]` _(§4.11.1. D-19 cut percentages from mobile; the stepper's underlying data still carries one, so this is the easiest cut in the spec to undo by accident.)_
+- A-31c M-11 renders **no** contract, cost, margin or any other currency figure. `[Playwright]` _(§4.11.1 + D-9.)_
+- A-31d M-11's stepper marks the current phase by the desktop rule — first `in_progress`/`blocked`, else first incomplete. `[unit]` _(§4.11.1. A different rule here and the two surfaces disagree about where the job is.)_
+- A-32 M-12 lists **today first, then ascending**, with past days above — not newest-first. `[Playwright]` _(§4.11.2. M-8's gallery is newest-first, so copying that pattern here is the likely error and it points the screen backwards.)_
+- A-32b M-12 and M-3's "Up next" derive from the **same** `getCalendarEvents({ projectId })` call and never disagree about the next event. `[live]` _(§4.11.2 + D-24.)_
+- A-32c A crew member's M-12 omits a teammate's general schedule entry while showing project tasks and inspections. `[live]` _(`schedule_entries_select_scoped`. Same caveat as A-11j, now on a screen that lists every event rather than one.)_
+- A-33 **M-13 renders no currency anywhere** — no `net_delta`, no line totals, no sums — for **every** role including Owner and Admin. `[live + Playwright]` _(§4.11.3. `change_orders.net_delta` is UI-gated only, with no DB floor behind it (TECH_DEBT #117), so nothing but this criterion catches a leak.)_
+- A-33b M-13 renders each CO's number, title, status label, author and dates — a CO is identifiable and trackable without its value. `[Playwright]` _(The other half of A-33: a screen that shows nothing is not the same as a screen that shows no money.)_
+- A-34 M-14's **Mine** and **Open** chips use the same two expressions as D-16's counts, so the M-3 Punch stat and this screen's filtered totals always agree. `[live]` _(§4.11.4.)_
+- A-34b An item at `complete` awaiting verification appears under **All** and under **neither** Open nor any closed filter. `[live]` _(§4.11.4. The inherited D-16 divergence — this criterion exists so a build that "fixes" it into a third definition fails loudly.)_
+- A-35 M-15 groups deliveries into **Against a PO** and **No PO** from the two separate service calls, and renders **no** PO cost, price or extended value. `[Playwright]` _(§4.11.5.)_
+- A-35b A damaged delivery carries a **text** label, not colour alone. `[Playwright]` _(§4.11.5 + §4.2's status-pill rule.)_
+- A-35c M-15 offers **no** check-in control. `[Playwright]` _(§4.11.5. D-6 makes check-in online-only and its screen is GAP-8's; a tile that implies otherwise is worse than one that says nothing.)_
+- A-36 M-16 excludes `category = 'photos'` and lists the document categories. `[live]` _(§4.11.6. Without the exclusion every photo appears twice across M-8 and M-16.)_
+- A-36b M-16 applies **no role check of its own** — it renders exactly what `files_select_non_client` returns. `[live]` _(§4.11.6. A UI filter that disagrees with RLS turns a permission into an unexplainable missing file.)_
+- A-37 M-17's phone and email are tap-to-act (`tel:` / `mailto:`). `[Playwright]` _(§4.11.7 — the screen's reason to exist on a phone.)_
+- A-38 M-18 renders **no** pay, cost or burden rate. `[live]` _(§4.11.8. `instrument_rates` is DB-enforced Owner/Admin, so this should be unreachable — the criterion proves the screen never tries.)_
+- A-39 M-19 lists incidents with type, date, reporter and status, and shows **no injured-person name** on the list. `[Playwright]` _(§4.11.9. Every role reaches this screen.)_
+- A-39b M-19 offers **no** incident-reporting control. `[Playwright]` _(§4.11.9. GAP-8 owns that screen.)_
 
 **Offline**
 
@@ -1893,11 +1930,11 @@ shell checks. Two of these deserve their mechanism spelled out because the asser
 
 **House rule.** Every fix still needs a failing-then-passing assertion. Under D-18 that rule is now
 satisfiable for every criterion in §10 except A-26, which is manual by nature.
-## §11 — Decision register (fifteen ruled [S98, Josh]; TWO OPEN from the audit)
+## §11 — Decision register (eighteen ruled [S98, Josh]; ONE open collision)
 
 The eight questions from the S98 gap pass are closed, as are the three follow-ups from the second ruling
-pass, the display question from the third and the pin gap from the fourth. **Two items from the S98 audit
-are OPEN and are listed first below — this spec is not ready to merge.** One *pre-existing*
+pass, the display question from the third, the pin gap from the fourth, and both audit items in the fifth.
+**One collision is OPEN — see the block below — so this spec is still not ready to merge.** One *pre-existing*
 schema gap surfaced while specifying the overlay and is flagged below. The rulings are recorded as D-14
 (amended) and D-17…D-21 in §0 — D-17, D-20 and D-21 each extended, D-21 twice — and applied throughout
 §4, §4.7a, §5, §5.7, §7a, §7b, §8a, §9 and §10.
@@ -1954,16 +1991,47 @@ Demoting the derivative left one hole nothing else covered, so it is specced rat
 derivative is missing or stale at share time, sharing **degrades to the original with a warning** and never
 passes off an unmarked photo as marked (A-23t).
 
-### ⛔ OPEN — awaiting ruling [S98 audit]
+### Fifth ruling pass [S98] — twelve screens, zoom, segment default
 
-1. **The nine section tiles have no destinations (audit item 4).** §4.3 promises the hub gets you "to any
-   section in one tap" and A-12 asserts nine tiles render, but §1 routes only Photos. **Eight tiles, plus
-   all four of M-7's, have no route, no screen and no stated tap behaviour** — A-12 passes on a grid of
-   dead tiles. Full list and the D-13 problem are in the session report; this is a scope question and no
-   answer is chosen here.
-2. **Pinch-to-zoom has no on-screen equivalent (A-25e).** §4.9 names the arrows as the visible equivalent
-   of the *swipe* and is silent on zoom. Either zoom gains a visible control or §4.9 states that zoom is a
-   non-essential enhancement. Recorded as an unassertable criterion rather than quietly dropped.
+Both items the audit left open are **CLOSED**, and one new collision opened.
+
+| Audit item | **Ruling** | Applied in |
+| ---------- | ---------- | ---------- |
+| Twelve dead tiles | **Spec all twelve.** No tile cut, disabled, or pointed at a desktop page. | **§4.11** (M-11…M-19), §1 route tree, A-12c–A-12e, A-30–A-39b |
+| Pinch-to-zoom | **Add a visible control.** | §4.9; A-25e restored and now assertable, A-25f/g |
+| Segment type | **Default `work`, switch after.** | D-25, **§4.5a**, A-7b–A-7i |
+
+**Nine new routes, three shared.** M-7's Photos, Deliveries and Daily-logs tiles resolve to M-8, M-15 and
+M-6 rather than getting duplicates (§4.11.10); Safety is M-7's only new route.
+
+**None of the three stop conditions fired.** M-13 can show a change order without its value, so there is
+no D-9 collision; M-11 is not a duplicate of M-3 once M-3's four figures are excluded from it; and M-7's
+Photos tile is confirmed to be the same screen as M-3's, not a second one.
+
+**One decision made inside the ruling, and reversible.** `net_delta` is cut from M-13 **for every role,
+including Owner and Admin** (§4.11.3). Showing it would require the first role-gated figure anywhere on
+`/m`, and the column is UI-gated only with no DB floor behind it (TECH_DEBT #117). If Owner/Admin should
+see CO values on mobile, that is a ruling, not a build detail.
+
+### ⛔ OPEN — one collision, raised by D-25 [S98]
+
+**A no-project clock-in cannot write a `work` segment.** D-25 rules that clock-in writes
+`segment_type = 'work'` with no prompt. But `time_segments_project_gate_check`
+(`20260710130000_module6_6a_time_tracking.sql:225-228`) requires **`project_id IS NOT NULL` for `work`** —
+while **D-12 and §4.5 both explicitly contemplate clocking in with no project** ("Project select… required
+before clock-in **unless the user is clocking in with no project**"; "if no project was selected, navigate
+to the dashboard").
+
+So the two rulings are individually sound and jointly unbuildable on that one path: the CHECK rejects the
+insert. The project-selected path — the ordinary one, and what D-25 is plainly aimed at — is fully specced
+in §4.5a and unaffected. **Only the no-project clock-in is blocked**, and no answer is chosen here. The
+candidate resolutions differ in what they cost:
+
+| | Effect |
+| - | ------ |
+| **A.** Open the session with **no segment** until a project is chosen | Legal — nothing requires a session to have a segment. M-5's state card then has no elapsed time or type to show until the user picks one. |
+| **B.** Require a project before any clock-in | Simplest; contradicts D-12 and §4.5 as written, both of which would need amending. |
+| **C.** Default the no-project case to `shop` | Legal (`shop` requires `project_id IS NULL`), one tap, no prompt — but it silently records shop time for someone who may have been on a job they had not selected. |
 
 ### Fourth ruling pass [S98] — the pin shape
 
