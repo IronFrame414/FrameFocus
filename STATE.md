@@ -231,8 +231,13 @@ Vercel env vars must match `.env.local` exactly.
 
 ## Email behaviour
 
-- **Sending domain:** `rafterworks.com` (verified in Resend). Every tenant sends as
-  `"<Company Name> <slug@rafterworks.com>"` — one verified domain, dynamic local part.
+- **Sending domain:** `ezcontractorbinder.com` (verified in Resend as of S99 — DKIM TXT,
+  SPF MX + TXT and DMARC published at the registrar). Every tenant sends as
+  `"<Company Name> <slug@ezcontractorbinder.com>"` — one verified domain, dynamic local
+  part. Was `rafterworks.com` through S98; the cutover is the `SENDING_DOMAIN` constant in
+  `apps/web/lib/services/email-service.ts`, which is the single composition point.
+  **Not a brand.ts constant, deliberately** — it asserts external DNS/Resend state, so it
+  must be able to diverge from the product name. Rationale is in that file's header.
 - **Reply-To [S97 ruling, platform-wide]:** every client-facing send sets Reply-To to the
   sending company's own address so client replies reach the company, not the platform.
   Resolution order: **`companies.email` → the OWNER's profile email → no header at all.**

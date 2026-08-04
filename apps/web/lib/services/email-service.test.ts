@@ -2,9 +2,20 @@ import { describe, it, expect } from 'vitest';
 import { buildSenderAddress, replaceTemplateVariables } from './email-service';
 
 describe('buildSenderAddress', () => {
+  // Asserted as a LITERAL, not built from SENDING_DOMAIN — importing the
+  // constant would make this agree with whatever the constant says and prove
+  // nothing. A domain change is meant to fail here and be re-confirmed by hand
+  // against what is actually verified in Resend.
   it('formats as display-name with slug at sending domain', () => {
     expect(buildSenderAddress({ name: 'Bishop Contracting', slug: 'bishop' }))
-      .toBe('Bishop Contracting <bishop@rafterworks.com>');
+      .toBe('Bishop Contracting <bishop@ezcontractorbinder.com>');
+  });
+
+  // The local part is the tenant slug, so it is the only part that varies
+  // between tenants — the domain is shared and must not drift per company.
+  it('varies only the local part across tenants', () => {
+    expect(buildSenderAddress({ name: 'Rivera Builders', slug: 'rivera-builders' }))
+      .toBe('Rivera Builders <rivera-builders@ezcontractorbinder.com>');
   });
 });
 

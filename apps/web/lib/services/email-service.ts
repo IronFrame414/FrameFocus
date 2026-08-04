@@ -6,13 +6,13 @@ import type { Database } from '@framefocus/shared/types/database';
 
 // Spec 2 — Resend client wrapper + email_logs bookkeeping.
 // Server-only: API routes and the cron job. Sending domain is
-// rafterworks.com (verified in Resend); each tenant sends as
-// "<Company Name> <slug@rafterworks.com>" (single verified domain,
+// ezcontractorbinder.com (verified in Resend); each tenant sends as
+// "<Company Name> <slug@ezcontractorbinder.com>" (single verified domain,
 // dynamic local part).
 //
 // +REPLY-TO [Josh, S97 — platform-wide]: every CLIENT-FACING send carries
 // Reply-To = the sending company's own address, so a client's reply reaches the
-// company rather than rafterworks.com. The From line is unchanged. Pass
+// company rather than the platform domain. The From line is unchanged. Pass
 // `replyToCompanyId` and sendEmail() resolves it — see resolveCompanyReplyTo
 // for the order (companies.email -> owner's email -> no header).
 //
@@ -22,7 +22,31 @@ import type { Database } from '@framefocus/shared/types/database';
 // reply-to pointing back at it adds nothing. They simply omit
 // replyToCompanyId.
 
-export const SENDING_DOMAIN = 'rafterworks.com';
+/**
+ * The single Resend-verified domain every tenant sends from.
+ *
+ * WHY THIS IS NOT IN lib/brand.ts [S99]
+ * It looks like a brand constant and it is not. Every value in brand.ts can be
+ * edited freely — rename the product and `brand.name` is true the moment it is
+ * saved. This string is a CLAIM ABOUT EXTERNAL STATE: that DKIM, SPF and DMARC
+ * are published for this domain at the registrar and that Resend shows it
+ * verified. Editing it without that being true does not mis-label a screen, it
+ * makes Resend reject EVERY send — proposals, invoices, change orders, all
+ * three reminder crons — with no UI anywhere that would show it.
+ *
+ * Sitting it next to `brand.name` would invite exactly that: a future rename
+ * edits the file, sees a domain that no longer matches the new name, and
+ * "finishes the job". The two must be able to diverge. A sender-reputation
+ * split onto a subdomain, or a rebrand that keeps the warmed-up domain, are
+ * both ordinary — and neither is a brand decision.
+ *
+ * It also belongs on the server side of the line: brand.ts is imported into
+ * client bundles (nav, landing, manifest), this module is `server-only`.
+ * Nothing about the domain is secret, but nothing client-side needs it either.
+ *
+ * TO CHANGE IT: verify the new domain in Resend FIRST, then edit here.
+ */
+export const SENDING_DOMAIN = 'ezcontractorbinder.com';
 
 let _resend: Resend | null = null;
 
