@@ -1,4 +1,5 @@
 import { Document, Image, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
+import { brand } from '@/lib/brand';
 
 // 6D — delivery record PDF (S90 new scope: one PDF per check-in, clean or
 // exception — Josh wants the record). Modelled on daily-log-template.tsx's
@@ -244,7 +245,7 @@ export function DeliveryDocument({ data }: { data: DeliveryPdfData }) {
         <Text style={styles.footer} fixed>
           Point-in-time snapshot generated{' '}
           {new Date(data.generatedAt).toLocaleString('en-US', { timeZone: data.timeZone })} ·{' '}
-          {data.companyName} · FrameFocus
+          {data.companyName} · {brand.name}
         </Text>
       </Page>
     </Document>

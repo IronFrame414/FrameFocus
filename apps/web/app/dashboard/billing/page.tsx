@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { ManageSubscriptionButton } from './manage-subscription-button';
 import { getAddOns } from '@/lib/services/add-ons';
 import { AddOnsSection } from './add-ons-section';
+import { brand } from '@/lib/brand';
 
 export default async function BillingPage() {
   const supabase = await createClient();
@@ -94,8 +95,8 @@ export default async function BillingPage() {
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
             <p className="text-sm text-blue-800">
               {trialDays > 0
-                ? `Your free trial ends in ${trialDays} day${trialDays === 1 ? '' : 's'}. Choose a plan before it expires to keep using FrameFocus.`
-                : 'Your free trial has expired. Choose a plan to continue using FrameFocus.'}
+                ? `Your free trial ends in ${trialDays} day${trialDays === 1 ? '' : 's'}. Choose a plan before it expires to keep using ${brand.name}.`
+                : `Your free trial has expired. Choose a plan to continue using ${brand.name}.`}
             </p>
           </div>
         )}

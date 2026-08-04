@@ -1,4 +1,5 @@
 import { Document, Image, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
+import { brand } from '@/lib/brand';
 import {
   INCIDENT_STATUS_LABELS,
   INCIDENT_TYPE_LABELS,
@@ -223,7 +224,7 @@ export function IncidentDocument({ data }: { data: IncidentPdfData }) {
         <Text style={styles.footer} fixed>
           Point-in-time snapshot generated{' '}
           {new Date(data.generatedAt).toLocaleString('en-US', { timeZone: data.timeZone })} ·{' '}
-          {data.companyName} · FrameFocus
+          {data.companyName} · {brand.name}
         </Text>
       </Page>
     </Document>

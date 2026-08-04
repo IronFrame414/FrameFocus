@@ -53,7 +53,7 @@ export async function regenerateIncidentPdf(
   }
 
   const data: IncidentPdfData = {
-    companyName: company?.name ?? 'FrameFocus',
+    companyName: company?.name ?? 'Company',
     projectName: incident.project?.name ?? 'No project (shop/yard)',
     incidentDate: incident.incident_date,
     incidentType: incident.incident_type,

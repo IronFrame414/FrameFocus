@@ -77,7 +77,7 @@ export async function regenerateDailyLogPdf(
 
   const hoursByMember = new Map(presence.map((p) => [p.member_id, p]));
   const data: DailyLogPdfData = {
-    companyName: company?.name ?? 'FrameFocus',
+    companyName: company?.name ?? 'Company',
     projectName: project?.name ?? 'Project',
     logDate: log.log_date,
     authorName: log.author?.display_name ?? 'Unknown',
