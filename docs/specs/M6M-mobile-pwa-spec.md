@@ -37,13 +37,13 @@
 > and incident are the remaining two unspecced capture screens; delivery check-in is online-only (D-6) but
 > still has no screen.
 >
-> **⛔ ONE COLLISION IS OPEN — this spec is not ready to merge.** D-25 defaults clock-in to
-> `segment_type = 'work'`, but the DB requires `work` to carry a project while D-12 and §4.5 both
-> contemplate clocking in **without** one. The project-selected path is fully specced; the no-project path
-> is blocked. Options in §11.
+> **Every question raised this session is ruled** — including all twelve section tiles (§4.11: nine new
+> routes, three shared) and the D-25 segment-type collision, which **D-27 dissolved** by making the type a
+> required choice at clock-in rather than a default (§4.5a).
 >
-> **Everything else raised this session is ruled**, including all twelve section tiles (§4.11 — nine new
-> routes, three shared). The display question was closed by
+> **The one thing still outstanding is GAP-8**, stated above: the five field-capture screens are not
+> specced by this document, which is why the daily log has no entry screen and the mid-shift segment
+> switcher has no home. The display question was closed by
 > ruling the derivative **off** the display path: the UI draws marks live from `files.markup_data` over
 > the original (**Option A, §4.7a**), so desktop-authored markup is correct with no desktop change and no
 > backfill. The pin gap that surfaced while specifying it is closed too — **`pin` becomes a shape type and
@@ -84,7 +84,7 @@
 | D-9  | Nav scope                     | Contacts, Subs & Vendors, Team **stay** in the hamburger. Finance (Budget, Invoices, Payments, Contracts) is **absent from mobile entirely**.                                                                                                                                                                                                                         |
 | D-10 | Notifications                 | **Out of scope here.** Web Push on iOS requires an installed PWA, so manifest + icons + service worker are prerequisites. GATED.md Gate 4.                                                                                                                                                                                                                            |
 | D-11 | Who gets mobile               | **All roles.** No role gate on `/m`.                                                                                                                                                                                                                                                                                                                                  |
-| D-12 | Landing                       | **Sign-in lands on `/m/timeclock`.** On a successful clock-in, redirect to the project clocked into; if no project was selected, redirect to the dashboard.                                                                                                                                                                                                           |
+| D-12 | Landing                       | **Sign-in lands on `/m/timeclock`.** On a successful clock-in, **the redirect follows the segment type the user chose** [restated S98, D-27]: a type that carries a project (`work`, `material_run`, `warranty`) → that project's hub; a type that cannot (`travel`, `shop`, `break`) → the dashboard. _(Original second clause, quoted: "if no project was selected, redirect to the dashboard" — written before D-27 and describing an accident rather than a rule.)_ |
 | D-13 | Timeclock / Logs / Field tabs | **Real mobile screens**, built in this pass (§4.5–§4.7). Not links to desktop pages.                                                                                                                                                                                                                                                                                  |
 | D-14 | Photos badge                  | **Total count only. AMENDED [S98, Josh]: the unseen dot is DEFERRED TO V2.** The number is every photo on the project. _Superseded clause, quoted not rewritten: "with an unseen indicator… an amber dot marks that unseen photos exist for this user."_ No view-tracking table is built. The intended v2 shape is recorded in §9 so it can be added without rework. |
 | D-15 | Punch photos                  | **No migration.** The link already exists on `punch_list_items` as `reference_photo_file_id` and `completion_photo_file_id`. The gallery derives the `Punch` badge by a **read-only** join: a file is punch-sourced if its `id` appears in either column. **Those two columns keep their existing meanings and are not merged, altered, or written to by this work.** |
@@ -96,7 +96,9 @@
 | D-21 | Markup storage & display      | **Both stored; the OVERLAY displays.** [S98, Josh] `files.markup_data` holds the editable annotation layer, **is the source of truth, and is drawn live over the original image on every surface** — gallery thumbnail, viewer stage, filmstrip (**Option A**, ruled once the derivative-as-display reading proved unbuildable for desktop-authored markup). Save still writes a flattened derivative, but it is a **sharing artifact only, never displayed**. The original is never modified and is always the image on screen. §4.9's toggle hides the drawn layer; it does not swap files. Storage contract in §4.10; display rule, fit, legibility and load order in **§4.7a**. |
 | D-22 | Pin shape / schema v2         | **Add a `pin` shape type; `MARKUP_SCHEMA_VERSION` → 2.** [S98, Josh] Composing a pin from circle + text would make one pin two undo steps, contradicting §4.10's per-mark Undo/Redo; dropping Pin would remove what punch and incident work needs most. Additive, and `MarkupViewer` has no consumers. **The pin number is STORED, so deletes leave gaps and `next = max + 1`.** Contract, read/forward compatibility and blast radius in **§4.10a** — the first ruling this session to touch shared code desktop imports. |
 | D-23 | `{m} estimating` count        | **Dropped.** [S98, Josh] The M-2 header shows the active count only. There is no `estimating` project status — `projects_status_check` permits `active, on_hold, complete, archived, cancelled` — and none is added. §4.2; §8a; A-10c. _(Renumbered [S98]: this ruling was previously cited as "D-4", which is the list-screen pattern.)_ |
-| D-25 | Segment type on clock-in      | **Default `work`, switch afterwards.** [S98, Josh] Clock-in writes `segment_type = 'work'` with no prompt — one tap to start a shift. Changing it is a separate action that **closes the open segment and opens a new one**, because that is the only shape RLS permits a crew member. §4.5a. **A collision this exposes is OPEN — see §11:** `work` requires `project_id IS NOT NULL`, so the no-project clock-in that D-12 and §4.5 contemplate cannot write a `work` segment at all. |
+| D-25 | ~~Segment type on clock-in~~  | **SUPERSEDED by D-27 [S98, Josh].** _Original text, quoted not deleted:_ _"**Default `work`, switch afterwards.** Clock-in writes `segment_type = 'work'` with no prompt — one tap to start a shift. Changing it is a separate action that closes the open segment and opens a new one, because that is the only shape RLS permits a crew member."_ Withdrawn because `work` requires a project while D-12 and §4.5 contemplate clocking in without one — a collision D-27 dissolves rather than works around. |
+| D-26 | CO value on mobile            | **CUT, for every role including Owner and Admin.** [S98, Josh] `change_orders.net_delta` and every derived money figure stay off M-13. Two reasons, both kept: showing it would introduce the **first role-gated figure anywhere on `/m`**, a pattern this spec has deliberately never had (D-11 puts every role on the same screens); and the column is **UI-gated only, with no DB floor behind it** (TECH_DEBT #117), so a mobile leak would not be caught by RLS. §4.11.3; A-33, A-33c. |
+| D-27 | Segment type on clock-in      | **The user selects the type as part of clocking in.** [S98, Josh] No default, no skippable prompt, no post-hoc switch on the clock-in path — a required choice from whatever `time_segments_type_check` permits. **The project requirement then follows from the type**, which is what dissolves D-25's collision. §4.5, §4.5a. |
 | D-24 | "Up next" binding             | **Bound to the schedule.** [S98, Josh] The next upcoming item on the project, from the existing calendar UNION; no milestone concept is introduced. §4.3; §8a; A-11f–A-11j. _(Renumbered [S98]: this ruling was previously cited as "D-6", which is offline-capable actions.)_ |
 
 ---
@@ -358,69 +360,102 @@ No handoff mockup exists; built from the locked patterns.
 - App bar: "Timeclock" + mono `{today's date}`.
 - **State card** (15px radius, card surface): when clocked out — mono `Not clocked in`; when clocked in —
   the project name, the mono elapsed time updating live, and the current segment type.
-- **Project select** (58px row) — required before clock-in unless the user is clocking in with no project.
-- Primary 60px button: amber **"Clock in"**, or `#c0362c` **"Clock out"** when a session is open.
+- **Segment type select** (58px row) — **required** [S98, D-27]. Opens a picker of the six permitted types.
+- **Project select** (58px row) — **present and required only for the types that carry a project**
+  (`work`, `material_run`, `warranty`); **absent** for `travel`, `shop` and `break`. See §4.5a for the
+  complete per-type rule. _(Superseded text: "required before clock-in unless the user is clocking in with
+  no project" — that phrasing predates D-27 and described a state that can no longer arise by accident.)_
+- Primary 60px button: amber **"Clock in"**, or `#c0362c` **"Clock out"** when a session is open. Enabled
+  once the type, and any project that type requires, are set.
 - Below: **today's segments** as 58px rows — segment type, mono start–end, mono duration.
-- **On successful clock-in, navigate to `/m/p/{projectId}`; if no project was selected, navigate to the
-  dashboard** (D-12).
+- **On successful clock-in, the redirect follows the TYPE** (D-12 as restated in §4.5a): a type carrying a
+  project navigates to `/m/p/{projectId}`; a type that cannot carry one navigates to the dashboard.
 - Offline-capable (§5). The button works with no signal and the resulting event enters the queue.
 
-#### 4.5a Segment type — default `work`, switch afterwards (D-25 [S98, Josh])
+#### 4.5a Segment type is chosen at clock-in (D-27 [S98, Josh]) — supersedes D-25
 
-**Clock-in writes `segment_type = 'work'` with no prompt.** The crew clock in with one tap; choosing a
-type is never part of starting a shift. Verified against the schema, not assumed
-(`20260710130000_module6_6a_time_tracking.sql:216-228`):
+**There is no default type and no skippable prompt.** Starting a shift is: **pick a type → pick a project
+where that type allows one → Clock in.** The type is a required choice, not something the app guesses and
+the user corrects afterwards.
 
-- `'work'` is permitted by `time_segments_type_check` — the set is
-  `work | material_run | warranty | travel | shop | break`.
-- **`'work'` is one of the three types that CAN carry a project.**
-  `time_segments_project_gate_check` requires `project_id IS NOT NULL` for `work`, `material_run` and
-  `warranty`, and `project_id IS NULL` for `travel`, `shop` and `break`. So `work` is the correct default
-  for a clock-in that D-12 redirects to the project clocked into — the redirect target and the segment's
-  project are the same value.
-- **It carries no extra constraint the others lack.** `time_segments_task_gate_check` says a `task_id`
-  may *only* attach to a `work` segment — a permission, not a requirement. M-5 writes `task_id NULL`, and
-  `time_segments_completion_gate_check` then forces `completion NULL`, which is consistent: a taskless
-  work segment has nothing to complete.
+**This dissolves D-25's collision instead of working around it.** The problem was that a defaulted `work`
+segment requires a project while D-12 and §4.5 allow clocking in without one. Once the user names the
+type first, the project question has already been answered by their choice — there is no case left where
+the app has committed to a type the project state cannot satisfy.
 
-**The switch control.** M-5's state card gains a **58px row** (§2's picker geometry) reading the current
-segment type. Tapping it opens a picker of 58px rows listing the six types.
+##### The complete per-type rule — all six types, verified from the CHECK
 
-**What a switch does — it closes and opens, it never edits.**
+`time_segments_type_check` (`20260710130000_module6_6a_time_tracking.sql:214-215`) permits exactly six
+types, and `time_segments_project_gate_check` (`:222-225`) partitions **all six** of them — three
+requiring a project, three forbidding one. **No type is optional**, and the constraint has no `ELSE`: a
+type is in one arm or the row is rejected.
 
-1. The open segment is **ended**: `segment_end` = the switch moment.
-2. A **new** segment is inserted with the chosen type and `segment_start` = the same moment.
+| `segment_type` | `project_id` | `task_id` | Note required on end |
+| -------------- | ------------ | --------- | -------------------- |
+| `work` | **REQUIRED** | permitted (the only type that may carry one) | yes |
+| `material_run` | **REQUIRED** | forbidden | yes |
+| `warranty` | **REQUIRED** | forbidden | yes |
+| `travel` | **FORBIDDEN** | forbidden | yes |
+| `shop` | **FORBIDDEN** | forbidden | yes |
+| `break` | **FORBIDDEN** | forbidden | **no** |
 
-This is not a stylistic choice. `time_segments_update_authorized` lets a member end their **own open**
-segment but not alter one already ended, and `time_segments_insert_authorized` gates inserts on
-`owns_open_session(session_id)` — so close-then-open is the only shape the RLS permits a crew member.
-The session is untouched; clock-out is a separate action.
+> **§8a's caveat was correct but incomplete, and is corrected here.** It said `travel`, `shop` and `break`
+> are forced to `project_id IS NULL` — true — but implied `work` was the type that carries a project.
+> **`material_run` and `warranty` require one too.** A build that treats "not work" as "no project" gets a
+> constraint violation on both. The table above is the authority; §8a now points at it.
 
-**Project follows the type, because the CHECK forces it.** Switching to `travel`, `shop` or `break` writes
-`project_id NULL`. Switching to `work`, `material_run` or `warranty` writes the current project — and if
-there is no project in context, **the picker requires one before the switch can be applied**. A build that
-sends `work` with a null project gets a constraint violation, not a validation message.
+`task_id` and note columns come from `time_segments_task_gate_check` (`:229-231`),
+`time_segments_completion_gate_check` (`:236-239`) and the `note` comment at `:242`. **Only `break`
+escapes the note requirement** — a service-layer rule with no CHECK behind it, so nothing but the UI
+enforces it.
 
-> **⚠️ Ending a segment requires a note for every type except `break`.** `time_segments.note` is commented
-> _"mandatory on end for every type except break"_ (`:212`). It is a **service-layer** rule — there is no
-> CHECK — but it is a rule, so **the switch is a two-field interaction (type + note), not one tap.**
-> Only the *clock-in* is one tap; this ruling's "one tap" applies to starting a shift, not to switching.
-> Flagged because the difference is easy to lose.
+##### The clock-in interaction — what it actually is
 
-**Offline.** A switch is **two queue entries** (§5.2), not one: an `op:'update'` on the ending segment and
-an `op:'insert'` on the new one, both `entity: 'time_segment'`, the insert carrying `depends_on` the
-update. Both take the switch moment as `captured_at`, so a switch made at 09:40 and synced at 14:00 is a
-09:40 switch. The update carries `base_updated_at` per §5.6.
+**Not one tap.** The D-25 text claimed "one tap to start a shift"; that claim is withdrawn with the
+ruling. The real interaction:
 
-> **Scope — what is M-5's minimum versus what belongs to the missing handoff (GAP-8).**
-> **Specced here, because this ruling requires it:** the default-to-`work` clock-in, the type row on M-5,
-> the six-type picker, close-and-open semantics, the project rule, the note requirement, and the offline
-> shape.
-> **NOT specced here, and still owed by the _Mobile Field Capture_ handoff:** attaching a `task_id` to a
-> work segment and the `completion` prompt that then becomes mandatory on end; material-run and warranty
-> flows beyond type selection; and any richer segment history or correction UI. **A later handoff should
-> reconcile with this section, not replace it** — the close-and-open rule and the project/note constraints
-> are DB-derived and will not change.
+1. **Type row (58px)** — required. Opens a picker of six 58px rows.
+2. **Project row (58px)** — **present only for `work`, `material_run` and `warranty`, where it is
+   required.** For `travel`, `shop` and `break` the row is **absent, not disabled**. A greyed-out control
+   invites a tap that can never succeed and implies the choice exists; the constraint says it does not.
+3. **Clock in** — the 60px primary button, enabled once the type and any required project are set.
+
+So: **two taps and a confirm for a project type, one tap and a confirm for a project-less type** — plus
+whatever the pickers cost. The gain over D-25 is that no clock-in can be composed that the database will
+reject.
+
+**Ending a segment still requires a note for every type except `break`** — see the table. That is
+unchanged by this ruling and applies wherever a segment ends: clock-out, and any later switch.
+
+##### D-12's redirect now falls out of the type
+
+D-12's second clause was written before this ruling and read as an accident of whether a project happened
+to be selected. **Restated:** the redirect follows from the type the user chose.
+
+- A type that **carries** a project (`work`, `material_run`, `warranty`) → navigate to **that project's
+  hub**, `/m/p/{projectId}`. The project is guaranteed present, because the type required it.
+- A type that **cannot** carry one (`travel`, `shop`, `break`) → navigate to the **dashboard**. Not
+  because the user "didn't select a project" but because there is no project to navigate to.
+
+The old phrasing — _"if no project was selected"_ — described a state that can no longer occur by accident.
+
+##### What happened to the switch control
+
+The mid-shift switcher specced under D-25 **is not part of the clock-in path and is not specced here.**
+Being explicit about which parts survive:
+
+- **Withdrawn from this section:** the type row on the *state card* as a post-hoc corrector, the
+  default-then-switch flow, and its offline two-entry choreography. Those existed only to serve a default
+  that no longer exists. Their criteria are rewritten or removed in §10.
+- **Still true, and still owed by GAP-8's _Mobile Field Capture_ handoff:** a mid-shift change of segment
+  type is a real field need, and when it is specced it **must** close the open segment and insert a new
+  one rather than editing in place — `time_segments_update_authorized` lets a member end their **own
+  open** segment but not alter an ended one, and `time_segments_insert_authorized` gates inserts on
+  `owns_open_session(session_id)`. It must also honour the per-type table above and the note rule. **That
+  is a constraint on the future handoff, not a screen this document specifies.**
+- **Consequence to be honest about:** with the switcher out of scope, a crew member who clocks in on the
+  wrong type has **no in-app correction path in this spec's surface set**. That is GAP-8's gap, and it is
+  now one more reason that handoff is a build blocker rather than a nicety.
 
 ### 4.6 M-6 · Logs
 
@@ -1577,7 +1612,7 @@ deleted instead.
 | `{total} open` punch (M-3, M-2)     | **BOUND**   | Exact-count query on `punch_list_items`, `is_deleted = false`, `status IN ('open','in_progress')`, `project_id = :id`. Reference: `apps/web/app/dashboard/projects/[id]/page.tsx:71-76`. The company-wide twin is `dashboard.ts:78-85`. D-16's definition of "open" matches both precedents exactly. |
 | `{mine}` punch (M-3, M-2)           | **BOUND**   | The same query plus `assignee_id = get_my_member_id()` — see §4.3 for the exact expression. `get_my_member_id()` is defined at `20260704210000_company_members_foundation.sql:104-114`.                                                                     |
 | "Up next" (M-3)                     | **BOUND [S98, D-24]** | The next upcoming item from the calendar UNION: `getCalendarEvents({ projectId })` (`schedule.ts:106`), filtered to `start_date >= today`, first row of the existing ascending sort (`schedule.ts:200`), tie-broken inspection → task → general → title. Per-source tables and date columns in the §4.3 table. **No milestone entity was introduced** — `grep -rn "milestone"` still returns nothing across `supabase/`, `apps/web/lib` and `packages/`, and nothing was added to make it return something. Viewer-dependent for crew/subcontractor via `schedule_entries_select_scoped` (`20260704213000_module5_5b_tasks_scheduling.sql:406-414`) — stated in §4.3. |
-| "currently clocked into" (M-2, D-12)| **BOUND**   | `getOpenSession()` (`time-tracking.ts:53`) → the open segment → its `project_id`. The open-segment expression already exists twice: `components/time/clock-modal.tsx:149` (`s.segment_end === null && !s.is_deleted` — use this one, it carries the soft-delete guard) and `dashboard/timeclock/timeclock-client.tsx:121`. **Caveat, and it is not an edge case:** `time_segments_project_gate_check` (`20260710130000_module6_6a_time_tracking.sql:225-228`) *forces* `project_id IS NULL` on `travel`, `shop` and `break` segments. A clocked-in user on a break has an open session and **no** current project. See §4.2. |
+| "currently clocked into" (M-2, D-12)| **BOUND**   | `getOpenSession()` (`time-tracking.ts:53`) → the open segment → its `project_id`. The open-segment expression already exists twice: `components/time/clock-modal.tsx:149` (`s.segment_end === null && !s.is_deleted` — use this one, it carries the soft-delete guard) and `dashboard/timeclock/timeclock-client.tsx:121`. **Caveat, and it is not an edge case:** `time_segments_project_gate_check` (`20260710130000_module6_6a_time_tracking.sql:222-225`) *forces* `project_id IS NULL` on `travel`, `shop` and `break` segments. **The complete per-type rule — all six types, three requiring a project and three forbidding one — is in §4.5a; `material_run` and `warranty` require a project just as `work` does.** A clocked-in user on a break has an open session and **no** current project. See §4.2. |
 | Photo count / gallery (M-3, M-8)    | **BOUND**   | `getFiles({ projectId, category: 'photos' })` (`files.ts:29-48`). There is no count-only function; the count is the length of the list. **The unseen dot is deferred to v2 [S98, D-14 as amended]** — the badge is this count and nothing else, so there is no unbound half left. |
 
 ---
@@ -1631,7 +1666,9 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 > rebuild-test; `[unit]` = the committed vitest suite, queue logic with injected storage and online
 > predicate; `[Playwright]` = browser-driven, **a dependency this repo does not currently carry**;
 > `[manual]` = a release check no tool can automate; `[build]` / `[shell]` = a compile or a command, no
-> runner needed. **Every criterion carries a marker** — the ten once marked UNTESTABLE are assigned in
+> runner needed. **A-7 and A-7g are superseded placeholders, not live criteria, and carry no marker by
+> design** — they are kept so a withdrawal is visible rather than a silent gap. Every other criterion
+> carries a marker — the ten once marked UNTESTABLE are assigned in
 > §10a. The single exception is **A-25e**, which is flagged as unassertable pending a ruling and says so.
 
 **Shell**
@@ -1650,7 +1687,7 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 **Landing (D-12)**
 
 - A-6 A successful sign-in lands on `/m/timeclock`, not `/m/projects` and not the dashboard. `[Playwright]`
-- A-7 Clocking in with a project selected navigates to that project's hub; clocking in with no project navigates to the dashboard. `[Playwright]`
+- A-7 **Superseded by A-7f [S98, D-27].** _Original: "Clocking in with a project selected navigates to that project's hub; clocking in with no project navigates to the dashboard."_ The distinction it tested — project selected or not — is no longer the one the app makes; the redirect follows the **type**. Placeholder kept so the supersession is visible rather than a gap in the sequence. **Not a live criterion — assert A-7f.**
 
 **Projects list**
 
@@ -1694,16 +1731,27 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 - A-13d A log still waiting to sync renders the `Queued` badge **in place of** the photo count, not alongside it. _(§4.6.)_ `[Playwright]`
 - A-13e M-6's chips are All / Mine / This project, single-select, and "This project" appears only when a project is in context. `[Playwright]`
 
-**Timeclock segments (§4.5a, D-25) — all new [S98]**
+**Timeclock segments (§4.5a, D-27) — rewritten [S98]**
 
-- A-7b Clock-in writes exactly one segment, `segment_type = 'work'`, with **no type prompt** — starting a shift with a project selected is one tap. `[Playwright]`
-- A-7c That segment carries the clocked-into project in `project_id` — the same project D-12 redirects to. `[live]`
-- A-7d It carries `task_id NULL` and therefore `completion NULL`. `[live]` _(§4.5a. `time_segments_completion_gate_check` forbids a completion without a task, so a build that stamps one is rejected.)_
-- A-7e Switching type **ends the open segment and inserts a new one** — the ended row is not mutated afterwards, and the session is untouched. `[live]` _(§4.5a. An edit-in-place implementation is refused by `time_segments_update_authorized` for a crew member, so this fails at the DB rather than in review.)_
-- A-7f Switching to `travel`, `shop` or `break` writes `project_id NULL`; switching to `work`, `material_run` or `warranty` writes the current project. `[live]` _(`time_segments_project_gate_check`. Either direction wrong is a constraint violation, not a soft error.)_
-- A-7g With no project in context, the picker **requires a project before applying** `work`, `material_run` or `warranty` — the switch is never sent with a null project. `[Playwright]`
-- A-7h Ending any segment other than `break` requires a note; ending a `break` does not. `[Playwright]` _(§4.5a. Service-layer rule with no CHECK behind it, so nothing else catches its absence.)_
-- A-7i An offline switch queues **two** entries — `update` on the ending segment, `insert` on the new one, the insert `depends_on` the update — and both carry the switch moment as `captured_at`. `[unit]` _(§4.5a + §5.2. A single-entry implementation loses either the end or the start.)_
+> The previous A-7b…A-7i were written against D-25's default-then-switch model. That model is superseded,
+> so **every one of them was re-checked**: A-7b and A-7d asserted a defaulted `work` segment and are
+> replaced; A-7e/A-7f/A-7g/A-7i asserted the mid-shift switcher, which is no longer specced here and has
+> moved to GAP-8 (A-7j records the constraint it must honour when it lands); A-7c and A-7h survive with
+> their wording corrected.
+
+- A-7b Clock-in **cannot be submitted without a segment type** — the button stays disabled until one is chosen, and no type is pre-selected. `[Playwright]` _(§4.5a, D-27. Replaces the old A-7b, which asserted the opposite: that clock-in wrote `work` with no prompt.)_
+- A-7b2 The type picker offers **exactly** the six types in `time_segments_type_check` — `work`, `material_run`, `warranty`, `travel`, `shop`, `break`. `[Playwright]` _(A seventh option, or a missing one, is a constraint violation waiting to happen.)_
+- A-7c For `work`, `material_run` and `warranty` the project row is **present and required**; clock-in cannot be submitted without a project. `[Playwright]` _(§4.5a. This is the criterion that fails if a build lets a `work` segment through with no project — the exact violation that killed D-25.)_
+- A-7c2 For `travel`, `shop` and `break` the project row is **absent** — not present-and-disabled. `[Playwright]` _(§4.5a. A greyed control invites a tap that can never succeed and implies a choice the constraint forbids.)_
+- A-7c3 A clock-in of `travel`, `shop` or `break` writes `project_id NULL`; **no project is attached under any circumstance**, including when a project was in context from the previous screen. `[live]` _(§4.5a. The context-carry-over is the likely bug: the user was on a project hub, taps Timeclock, picks `break`, and the screen helpfully sends the project — which the CHECK rejects.)_
+- A-7d A clock-in of `work`, `material_run` or `warranty` writes the chosen `project_id`. `[live]`
+- A-7d2 The written `segment_type` is the one the user selected — no substitution, no fallback to a default on any path. `[live]` _(Replaces the old A-7d. With no default in the model, a build that reintroduces one is silently ignoring the user's choice.)_
+- A-7e Clock-in writes `task_id NULL` and therefore `completion NULL` for every type. `[live]` _(§4.5a. `time_segments_task_gate_check` permits a task only on `work`, and `time_segments_completion_gate_check` forbids a completion without one. Task attach is GAP-8's.)_
+- A-7f **The redirect follows the type**: `work`/`material_run`/`warranty` land on `/m/p/{projectId}`; `travel`/`shop`/`break` land on the dashboard. `[Playwright]` _(D-12 as restated. Rewritten [S98] — the old A-7 tested "with a project selected / with no project selected", which is no longer the distinction the app makes.)_
+- A-7g **Withdrawn with D-25 [S98].** _Original: "With no project in context, the picker requires a project before applying `work`, `material_run` or `warranty`."_ It described the mid-shift switcher, which is no longer specced here (§4.5a). The clock-in equivalent is A-7c. Placeholder kept so the removal is visible rather than a silent gap in the sequence.
+- A-7h Ending a segment of any type other than `break` requires a note; ending a `break` does not. `[Playwright]` _(§4.5a. Service-layer rule with no CHECK behind it, so nothing else catches its absence. Survives D-25's withdrawal unchanged — it was never part of the default-then-switch model.)_
+- A-7i An offline clock-in queues the session `insert` and the segment `insert` as **two** entries, the segment carrying `depends_on` the session. `[unit]` _(§5.5.1 + §5.2. Rewritten [S98]: the old A-7i asserted the two-entry shape of a mid-shift *switch*, which is no longer specced here — but clock-in has always had its own two-entry shape and had no criterion for it.)_
+- A-7j **No mid-shift segment switch is offered on any screen in this spec.** `[Playwright]` _(§4.5a. The switcher is GAP-8's. This criterion exists so a build does not helpfully add one that edits a segment in place — which `time_segments_update_authorized` refuses for a crew member — and so the absence is a recorded decision rather than an oversight.)_
 
 **Section screens (§4.11) — all new [S98]**
 
@@ -1721,6 +1769,7 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 - A-32c A crew member's M-12 omits a teammate's general schedule entry while showing project tasks and inspections. `[live]` _(`schedule_entries_select_scoped`. Same caveat as A-11j, now on a screen that lists every event rather than one.)_
 - A-33 **M-13 renders no currency anywhere** — no `net_delta`, no line totals, no sums — for **every** role including Owner and Admin. `[live + Playwright]` _(§4.11.3. `change_orders.net_delta` is UI-gated only, with no DB floor behind it (TECH_DEBT #117), so nothing but this criterion catches a leak.)_
 - A-33b M-13 renders each CO's number, title, status label, author and dates — a CO is identifiable and trackable without its value. `[Playwright]` _(The other half of A-33: a screen that shows nothing is not the same as a screen that shows no money.)_
+- A-33c **No money figure appears on M-13 under ANY role** — signed in as owner, admin, project_manager, foreman, crew_member and subcontractor in turn, the screen renders no currency-formatted value, no `net_delta`, and no sum derived from one. `[live + Playwright]` _(**D-26 [S98, Josh].** A-33 states the rule; this walks all six roles. The owner/admin pass is the one that matters — a build that adds a role gate "because owners may as well see it" satisfies every other criterion here, and #117 means RLS would not stop it.)_
 - A-34 M-14's **Mine** and **Open** chips use the same two expressions as D-16's counts, so the M-3 Punch stat and this screen's filtered totals always agree. `[live]` _(§4.11.4.)_
 - A-34b An item at `complete` awaiting verification appears under **All** and under **neither** Open nor any closed filter. `[live]` _(§4.11.4. The inherited D-16 divergence — this criterion exists so a build that "fixes" it into a third definition fails loudly.)_
 - A-35 M-15 groups deliveries into **Against a PO** and **No PO** from the two separate service calls, and renders **no** PO cost, price or extended value. `[Playwright]` _(§4.11.5.)_
@@ -1930,11 +1979,12 @@ shell checks. Two of these deserve their mechanism spelled out because the asser
 
 **House rule.** Every fix still needs a failing-then-passing assertion. Under D-18 that rule is now
 satisfiable for every criterion in §10 except A-26, which is manual by nature.
-## §11 — Decision register (eighteen ruled [S98, Josh]; ONE open collision)
+## §11 — Decision register (twenty-one ruled [S98, Josh]; nothing open)
 
 The eight questions from the S98 gap pass are closed, as are the three follow-ups from the second ruling
-pass, the display question from the third, the pin gap from the fourth, and both audit items in the fifth.
-**One collision is OPEN — see the block below — so this spec is still not ready to merge.** One *pre-existing*
+pass, the display question from the third, the pin gap from the fourth, both audit items in the fifth, and
+the segment-type collision in the sixth. **Nothing raised in this session remains open.** GAP-8 — the five
+unspecced field-capture screens — is still outstanding and is stated in the status block. One *pre-existing*
 schema gap surfaced while specifying the overlay and is flagged below. The rulings are recorded as D-14
 (amended) and D-17…D-21 in §0 — D-17, D-20 and D-21 each extended, D-21 twice — and applied throughout
 §4, §4.7a, §5, §5.7, §7a, §7b, §8a, §9 and §10.
@@ -2013,27 +2063,36 @@ including Owner and Admin** (§4.11.3). Showing it would require the first role-
 `/m`, and the column is UI-gated only with no DB floor behind it (TECH_DEBT #117). If Owner/Admin should
 see CO values on mobile, that is a ruling, not a build detail.
 
-### ⛔ OPEN — one collision, raised by D-25 [S98]
+### Sixth ruling pass [S98] — segment type at clock-in, CO value cut
 
-**A no-project clock-in cannot write a `work` segment.** D-25 rules that clock-in writes
-`segment_type = 'work'` with no prompt. But `time_segments_project_gate_check`
-(`20260710130000_module6_6a_time_tracking.sql:225-228`) requires **`project_id IS NOT NULL` for `work`** —
-while **D-12 and §4.5 both explicitly contemplate clocking in with no project** ("Project select… required
-before clock-in **unless the user is clocking in with no project**"; "if no project was selected, navigate
-to the dashboard").
+**The D-25 collision is CLOSED — dissolved, not worked around.**
 
-So the two rulings are individually sound and jointly unbuildable on that one path: the CHECK rejects the
-insert. The project-selected path — the ordinary one, and what D-25 is plainly aimed at — is fully specced
-in §4.5a and unaffected. **Only the no-project clock-in is blocked**, and no answer is chosen here. The
-candidate resolutions differ in what they cost:
+| Item | **Ruling** | Applied in |
+| ---- | ---------- | ---------- |
+| Segment type | **The user selects it as part of clocking in.** No default, no skippable prompt, no post-hoc switch on the clock-in path. | **D-27** (D-25 superseded, quoted not deleted); §4.5, **§4.5a**; D-12 restated; A-7b–A-7j |
+| CO value | **Cut for every role, Owner and Admin included.** | **D-26**; §4.11.3; A-33, A-33c |
 
-| | Effect |
-| - | ------ |
-| **A.** Open the session with **no segment** until a project is chosen | Legal — nothing requires a session to have a segment. M-5's state card then has no elapsed time or type to show until the user picks one. |
-| **B.** Require a project before any clock-in | Simplest; contradicts D-12 and §4.5 as written, both of which would need amending. |
-| **C.** Default the no-project case to `shop` | Legal (`shop` requires `project_id IS NULL`), one tap, no prompt — but it silently records shop time for someone who may have been on a job they had not selected. |
+**Why the collision dissolved.** D-25 defaulted the type, so the app committed to `work` — and its project
+requirement — before knowing whether a project existed. Under D-27 the user names the type first, so the
+project question is already answered by their choice. There is no longer a path on which the app composes
+a clock-in the database will reject.
 
-### Fourth ruling pass [S98] — the pin shape
+**The complete per-type rule is now recorded** (§4.5a), and it corrects a gap in §8a: the CHECK partitions
+**all six** types three-and-three, and **`material_run` and `warranty` require a project just as `work`
+does**. §8a had named only the three forbidden types and implied `work` was the sole project-carrier. A
+build that read "not work" as "no project" would have been rejected on two types.
+
+**"One tap to clock in" is withdrawn.** The real interaction is two taps and a confirm for a project type,
+one tap and a confirm for a project-less type. The claim appeared only in D-25's own text and in the
+criterion that tested it; both are superseded.
+
+**The mid-shift switcher is GAP-8's, and its absence is now a recorded consequence:** a crew member who
+clocks in on the wrong type has **no in-app correction path in this spec's surface set** (A-7j asserts the
+switcher is absent, so the omission cannot be mistaken for an oversight). When that handoff lands it must
+close-and-open rather than edit in place, and honour the per-type table — a constraint on the future
+handoff, stated in §4.5a.
+
+### Fourth ruling pass [S98] — the pin shape### Fourth ruling pass [S98] — the pin shape
 
 **Ruled: add a `pin` type; `MARKUP_SCHEMA_VERSION` → 2** (D-22, §4.10a). The gap predated this session
 and surfaced while reading the schema the overlay depends on; it is now closed.
