@@ -20,12 +20,16 @@
 > broken for one role. **A second migration**, `sync_conflicts` (§5.7, §7b), must land before any offline
 > write path ships.
 >
-> **Every question raised this session is ruled.** The last one — what renders when markup exists without
-> a derivative — was closed by ruling the derivative **off** the display path entirely: the UI draws marks
-> live from `files.markup_data` over the original (**Option A, §4.7a**). Desktop-authored markup is
-> correct with no desktop change and no backfill. **One pre-existing schema gap surfaced while specifying
-> it and needs a decision before M-10 is built** — the `Pin` tool has no shape type (§4.7a.5, closing
-> note).
+> **Every question raised this session is ruled; nothing is open.** The display question was closed by
+> ruling the derivative **off** the display path: the UI draws marks live from `files.markup_data` over
+> the original (**Option A, §4.7a**), so desktop-authored markup is correct with no desktop change and no
+> backfill. The pin gap that surfaced while specifying it is closed too — **`pin` becomes a shape type and
+> `MARKUP_SCHEMA_VERSION` goes to 2** (D-22, **§4.10a**), with the number **stored** so deletes leave gaps
+> rather than silently renumbering.
+>
+> **§4.10a is the only work this session that touches shared code the desktop imports**
+> (`packages/shared/types/markup.ts`, `packages/shared/components/MarkupViewer.tsx`). A-28 holds — neither
+> is under `apps/web/app/dashboard/**` — but it is called out rather than left implied.
 >
 > **Verified against the repo at S98** (branch merged to `main` as `91806cf`):
 >
@@ -67,6 +71,7 @@
 | D-19 | Progress percentage           | **CUT FROM V1.** [S98, Josh] No progress % anywhere on mobile. The M-3 stat strip is **two** stats, not three (§4.3); the M-2 project card has **no** progress bar (§4.2). No project-level progress derivation is invented. |
 | D-20 | Subcontractor photo access    | **Subs upload AND annotate.** [S98, Josh] D-11 stands unchanged. **EXTENDED [S98]: `files_update_non_client` is widened too**, so a sub can annotate photos including ones they just took — and, found while applying that, **the two `storage.objects` policies carry the same omission and must be widened as well** or the bytes are refused regardless. **Four policies, role array only.** Required migration and the **FIRST build step** — see §7a. |
 | D-21 | Markup storage & display      | **Both stored; the OVERLAY displays.** [S98, Josh] `files.markup_data` holds the editable annotation layer, **is the source of truth, and is drawn live over the original image on every surface** — gallery thumbnail, viewer stage, filmstrip (**Option A**, ruled once the derivative-as-display reading proved unbuildable for desktop-authored markup). Save still writes a flattened derivative, but it is a **sharing artifact only, never displayed**. The original is never modified and is always the image on screen. §4.9's toggle hides the drawn layer; it does not swap files. Storage contract in §4.10; display rule, fit, legibility and load order in **§4.7a**. |
+| D-22 | Pin shape / schema v2         | **Add a `pin` shape type; `MARKUP_SCHEMA_VERSION` → 2.** [S98, Josh] Composing a pin from circle + text would make one pin two undo steps, contradicting §4.10's per-mark Undo/Redo; dropping Pin would remove what punch and incident work needs most. Additive, and `MarkupViewer` has no consumers. **The pin number is STORED, so deletes leave gaps and `next = max + 1`.** Contract, read/forward compatibility and blast radius in **§4.10a** — the first ruling this session to touch shared code desktop imports. |
 
 ---
 
@@ -489,15 +494,12 @@ Reverted [S98] — three hardenings added while the derivative was briefly load-
 **The count is still unaffected.** The derivative gets no `files` row (§4.10), so photo count and gallery
 tile count are unchanged by a markup save — A-23d holds exactly as before.
 
-> **⚠️ Flagged, not resolved — the `Pin` tool has no shape type.** §4.10 specs a five-tool row —
-> **Draw · Arrow · Box · Text · Pin** — but `MarkupShape` (`markup.ts:55`) is
-> `arrow | circle | rectangle | pen | text`. `Draw`→`pen` and `Box`→`rectangle` map cleanly; **`Pin` maps
-> to nothing**, and `circle` exists in the schema with no tool in §4.10 offering it. A numbered pin
-> ("34px red circle, white 2px ring, mono numeral", §4.10) is not a single existing shape. Options are a
-> new `pin` shape type — which means `MARKUP_SCHEMA_VERSION` 2 (`markup.ts:5`) and a read-compatibility
-> story for v1 rows — or composing it from `circle` + `text`, which makes it two undo steps and breaks
-> §4.10's "Undo/Redo are per-mark". **This predates the ruling and is not created by it**; it surfaced
-> while reading the schema the overlay depends on. It needs a decision before M-10 is built.
+> **✅ RESOLVED [S98, D-22] — the `Pin` tool now has a shape type.** While specifying the overlay it
+> emerged that §4.10's five-tool row (Draw · Arrow · Box · Text · Pin) outran `MarkupShape`
+> (`markup.ts:55`), which was `arrow | circle | rectangle | pen | text` — Draw→pen and Box→rectangle
+> mapped cleanly, **Pin mapped to nothing**. Ruled: add a `pin` type, `MARKUP_SCHEMA_VERSION` → 2.
+> The gap predated this session's rulings; it is closed in **§4.10a**, which also covers read- and
+> forward-compatibility and the blast radius against A-28.
 
 ---
 
@@ -577,6 +579,16 @@ Behaviour: one tool active at a time; the selected colour and width apply to the
 freehand; Arrow and Box are drag-to-place; Text drops a callout and opens the keyboard; Pin drops the next
 number in sequence (34px red circle, white 2px ring, mono numeral).
 
+**[S98, D-22] All five tools are now backed by a stored shape type** — Draw→`pen`, Arrow→`arrow`,
+Box→`rectangle`, Text→`text`, and **Pin→`pin`, added in schema v2 (§4.10a)**. "The next number in
+sequence" is specifically `max(existing pin numbers) + 1`, **not** `count + 1`; deleting a middle pin
+leaves the survivors' numbers untouched and the freed number is never reused (§4.10a.2). One pin is one
+mark and therefore **one** Undo step, which is why it is a shape type rather than a circle plus a text
+mark.
+
+_(Note: `circle` exists in the schema and no tool in this row exposes it. That is spare capacity, not an
+omission — do not add a Circle tool to "use it up".)_
+
 **Markup is a non-destructive layer. Save writes TWO things [S98, D-21].** The previous text —
 _"Save writes an annotated derivative and keeps the original. `files.markup_data jsonb` already exists and
 is the store"_ — named two different storage models in consecutive sentences and never said which won.
@@ -623,6 +635,131 @@ The contract between them:
 Cancel confirms if there are unsaved marks.
 
 Markup is also reachable from a punch item or incident, pre-linked to that record.
+
+---
+
+### 4.10a Markup schema v2 — the pin shape (D-22 [S98])
+
+**Ruled [S98, Josh]: add a `pin` shape type. `MARKUP_SCHEMA_VERSION` goes to 2.**
+
+Recorded rationale, so this is not relitigated: composing a pin from `circle` + `text` would make **one
+pin two undo steps**, contradicting §4.10's _"Undo/Redo are per-mark"_ — and undoing twice to remove one
+mark is bad on a phone in gloves. Dropping Pin instead would remove the capability that punch and incident
+work needs most. The change is **additive**, and `MarkupViewer` has no consumers yet.
+
+#### 4.10a.1 The shape
+
+Added to the `MarkupShape` union in `packages/shared/types/markup.ts`:
+
+```ts
+export interface PinShape extends MarkupShapeBase {
+  type: 'pin';
+  x: number;          // image coordinates, same space as every other shape
+  y: number;          // the pin's POINT — the centre of the circle
+  number: number;     // STORED, not derived. See 4.10a.2.
+}
+```
+
+- **Position** is `(x, y)` in the original image's natural pixel space, identical to every other shape
+  (§4.7a.1), so the pin scales and crops with the overlay under the same viewBox transform. No new
+  coordinate rules.
+- **No `strokeWidth`.** §4.10 fixes the pin's appearance — "34px red circle, white 2px ring, mono
+  numeral" — so its size is a render constant, not authored data. It is therefore **exempt from §4.7a.3's
+  stroke floor** and instead has its own minimum rendered diameter; a pin that scales to 4px in a
+  thumbnail is a dot, not a numbered marker.
+- **`color` is inherited from `MarkupShapeBase`**, so a pin can follow the selected swatch. §4.10's red is
+  the default, not a constraint.
+
+#### 4.10a.2 The number is STORED, not derived — and the consequence is gaps
+
+Both options were live. **Stored wins, and the reason is external references.**
+
+| | Delete pin 2 of 3 | Consequence |
+| - | ----------------- | ----------- |
+| **Derived from array order** | Survivors renumber to 1, 2 | A daily log reading _"cracked sill at pin 3"_, or a foreman saying it on site, now points at a **different mark**. The renumber is silent and retroactive — it rewrites the meaning of text already written elsewhere. |
+| **Stored (ruled)** | Survivors stay 1, 3 | Numbers are stable for the life of the photo. A reference to pin 3 remains valid forever. **The sequence has gaps.** |
+
+**Accepted consequence: pin numbers have gaps after a delete, and they are never reclaimed.** A photo may
+show 1, 3, 7. That is correct, not a defect, and no "tidy up" renumber is offered — renumbering would
+reintroduce exactly the failure the stored model exists to prevent.
+
+**This makes the next-number rule specific, and it is the detail most likely to be got wrong:**
+
+```
+nextNumber = max(number of existing pins) + 1     // NOT count + 1
+```
+
+Counting would collide. Delete pin 2 from {1,2,3}, leaving {1,3}; `count + 1` yields 3 — a duplicate.
+`max + 1` yields 4. **On a photo with no pins, `max` over an empty set is 0, so the first pin is 1.**
+
+**§4.10's "drops the next number in sequence" is therefore `max + 1`**, and deleting a middle pin leaves
+the others untouched — no resequencing, no shifting, no reuse of the freed number.
+
+#### 4.10a.3 Read-compatibility: v1 rows under a v2 reader
+
+**A v2 reader renders a v1 row unchanged.** v1 payloads contain only `arrow | circle | rectangle | pen |
+text`, all of which v2 keeps with identical field shapes — v2 is purely additive. There is no migration of
+stored rows, no rewrite, and no backfill: an untouched v1 row stays `version: 1` on disk and renders
+identically before and after the schema change. Asserted by **A-29**.
+
+#### 4.10a.4 Forward-compatibility: v2 pins under a v1 reader — **VERIFIED, it skips**
+
+This is the half that could have made the ruling unbuildable, so it was checked before being written.
+
+**A reader that does not know `pin` must skip it and render everything else.** That is already what the
+code does — verified at all three shape switches, each of which ends `default: return null`:
+
+| Renderer | Location | Unknown type |
+| -------- | -------- | ------------ |
+| Desktop editor, shape rendering | `markup-editor.tsx:558` | `default: return null` — skipped |
+| Desktop editor, selection highlight | `markup-editor.tsx:627` | `default: return null` — skipped |
+| Shared read-only viewer | `MarkupViewer.tsx:98-102` | `default: return null` — skipped |
+
+**It skips, it does not throw. This ruling therefore exposes no defect and creates none** — had any of the
+three thrown, the fix would have landed in shared code and this would have been a stop.
+
+Two consequences that follow, both real and neither obvious:
+
+1. **Pins round-trip through a v1 editor without data loss.** The desktop editor seeds its state from the
+   loaded array (`markup-editor.tsx:42`, `initialMarkup?.shapes ?? []`) and saves that array back, so a
+   shape it cannot render is still carried through untouched. A PM opening and re-saving a photo on
+   desktop does not destroy the foreman's pins.
+2. **But a v1 editor shows those pins as nothing at all** — not as a placeholder, not as an unknown-mark
+   glyph. Until desktop adds a `pin` case, a photo pinned on the phone opens on desktop appearing to have
+   no pins, while the marks are still in the data. **This is user-visible and is the price of the
+   additive approach.** It is not a data-loss bug, and it resolves the moment desktop adds the case.
+
+> **⚠️ Found while verifying — the `version` field can lie after a desktop round-trip.**
+> Save writes `createEmptyMarkup(...)` first, which sets `version: MARKUP_SCHEMA_VERSION`
+> (`markup.ts:68`), then spreads the shapes over it (`markup-editor.tsx:240-243`). A **v1** desktop saving
+> a photo that contains **v2 pins** therefore writes `version: 1` alongside v2 content. The pins survive
+> (consequence 1 above); the version number becomes wrong.
+> **So readers must be tolerant by SHAPE TYPE, never gated on the version number.** No consumer may do
+> `if (version < 2) skipPins()` — the field is not trustworthy across mixed-version editors. `version` is
+> provenance, not a capability gate. Asserted by **A-29c**.
+
+#### 4.10a.5 Blast radius — A-28 holds, but say the quiet part
+
+**A-28 holds.** The two files this touches —
+`packages/shared/types/markup.ts` and `packages/shared/components/MarkupViewer.tsx` — are **not** under
+`apps/web/app/dashboard/**`, and D-2's subject is the desktop shell's inline styles. Neither is breached.
+
+**But this ruling is the first this session to touch shared code that desktop imports**, and that deserves
+saying plainly rather than hiding behind a passing criterion. Every prior ruling was confined to `/m`,
+migrations, or spec text. This one adds a member to a union type the desktop markup editor imports.
+
+Why that is safe here, verified rather than assumed:
+
+- **Adding a union member does not break the desktop build.** Each switch handles its five cases and falls
+  to `default: return null`; the new member simply widens what reaches the default. None of the three
+  sites asserts exhaustiveness with a `never` binding, so nothing fails to compile.
+- *(Noted in passing: `MarkupViewer.tsx:99-101` carries a comment claiming "TS will error here if a new
+  shape type is added". It will not — there is no `never` assertion behind it. The comment is inaccurate
+  today, independently of this ruling. Fixing it is not required by anything here.)*
+- **`MarkupViewer` has no consumers** anywhere in the repo, so its signature is free.
+- **Nothing in `apps/web/app/dashboard/**` is edited** to make pins work. Desktop gains the ability to
+  render pins only when someone chooses to add the case — a separate, additive piece of work outside
+  M6M's scope.
 
 ---
 
@@ -1272,6 +1409,20 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 - A-23l The **sharing** path fetches the derivative through the same signed-URL flow as the original, from the same `{company_id}/{project_id}/` prefix. `[live]` _(Kept [S98] — §4.7a.5 keeps this requirement even though the derivative left the display path. A path that skips signing would work in testing and leak in production.)_
 - A-23t Sharing a marked-up photo whose derivative is missing or stale **degrades to the original with a warning** — it never silently shares an unmarked photo as if it were marked. `[unit]` _(§4.7a.5. Demoting the derivative created this hole: nothing else now notices it is absent.)_
 
+**Markup schema v2 — the pin shape (§4.10a). All new [S98, D-22].**
+
+- A-29 A **v1** `markup_data` row renders identically before and after the schema change — same marks, same positions — and is **not** rewritten on read. `[unit]` _(§4.10a.3. v2 is additive; a reader that "upgrades" rows on read would silently churn every stored payload.)_
+- A-29b A reader that does not know `pin` **skips it and renders every other shape**. `[unit]` _(§4.10a.4. Verified as today's behaviour at `markup-editor.tsx:558`, `:627` and `MarkupViewer.tsx:98`; this criterion locks it so a later refactor to an exhaustive `never` check cannot turn a skip into a throw.)_
+- A-29c No consumer gates rendering on the **version number** — pins render whenever `type === 'pin'` is present, including on a payload whose `version` reads `1`. `[unit]` _(§4.10a.4's flagged trap: a v1 desktop save rewrites `version` to 1 while carrying v2 pins, so the field is unreliable. A build that does `if (version < 2) skipPins()` passes every other criterion here and drops pins after one desktop round-trip.)_
+- A-29d Pins **survive a v1 editor round-trip**: opening and re-saving a pinned photo in a renderer that cannot draw pins leaves the pin shapes intact in `markup_data`. `[live]` _(§4.10a.4 consequence 1. This is the data-loss criterion — A-29b only proves they are not drawn.)_
+- A-29e The pin's `number` is **stored** in the shape, not derived from array position: reordering the `shapes` array does not change any rendered number. `[unit]`
+- A-29f Deleting a middle pin **leaves the survivors' numbers unchanged** — {1,2,3} minus 2 renders {1,3}, not {1,2}. `[unit]` _(§4.10a.2. The gap is the specified outcome; a build that tidies up has reintroduced the silent-renumber failure.)_
+- A-29g The next pin after that deletion is **4**, not 3 — `max + 1`, never `count + 1`, and never a reused freed number. `[unit]` _(§4.10a.2. `count + 1` produces a duplicate number here, and duplicates are invisible until someone references one.)_
+- A-29h The first pin on a photo with no pins is **1**. `[unit]` _(`max` over an empty set is 0. Without this, an off-by-one starts every photo at 0 or 2.)_
+- A-29i A pin scales and crops with the overlay under the same viewBox transform as every other shape, and honours §4.7a.2's per-surface fit. `[Playwright]`
+- A-29j A pin holds a **minimum rendered diameter** at thumbnail size and stays a legible numbered marker rather than collapsing to a dot; it is exempt from §4.7a.3's stroke floor, which does not apply to it. `[Playwright]` _(§4.10a.1. A pin has no `strokeWidth`, so the stroke floor cannot rescue it — without its own rule it is the one mark type that silently vanishes in the gallery.)_
+- A-29k Adding one pin is **one** Undo step — a single Undo removes the whole pin, circle and numeral together. `[Playwright]` _(§4.10's "Undo/Redo are per-mark", and the stated reason this is a shape type rather than circle + text. A composed implementation passes A-29e–A-29h and fails here.)_
+
 **PWA**
 
 - A-26 The app installs to an iOS home screen and launches at `/m` in standalone display. `[manual]` — no tool installs a PWA to an iPhone home screen; this is a release check on a real device under any tooling choice.
@@ -1331,7 +1482,7 @@ never prove the amber strip rendered or that a tap landed.
 ### What `[live]` proves today, with no new tooling
 
 A-15, A-15b, A-16, A-16b, A-19b, A-19f, A-19g, A-19i–A-19l, A-20c, A-20d, A-21c–A-21j, A-22c,
-A-23–A-23d and A-23l, plus A-28/A-28b as
+A-23–A-23d, A-23l and A-29d, plus A-28/A-28b as
 shell checks. Two of these deserve their mechanism spelled out because the assertion runs backwards:
 
 - **A-16b** — insert session (`clock_out` NULL) → segments → UPDATE `clock_out`, then repeat with
@@ -1342,7 +1493,7 @@ shell checks. Two of these deserve their mechanism spelled out because the asser
 
 **House rule.** Every fix still needs a failing-then-passing assertion. Under D-18 that rule is now
 satisfiable for every criterion in §10 except A-26, which is manual by nature.
-## §11 — Decision register (twelve ruled [S98, Josh])
+## §11 — Decision register (thirteen ruled [S98, Josh]; none open)
 
 The eight questions from the S98 gap pass are closed, as are the three follow-ups from the second ruling
 pass and the display question from the third. **Nothing raised this session is open.** One *pre-existing*
@@ -1370,6 +1521,7 @@ the register of where each ruling landed.
 | Subcontractor UPDATE policy | **Widen it too.** Same discipline — role array only. | D-20 extended; §7a rewritten to four policies; A-21f–A-21j |
 | Conflict holding store | **Add it.** Server-side table, Owner/Admin read, resolved rows kept. | D-17 extended; **§5.7** (new); §7b; §5.6 bounded-gap language removed; A-19g–A-19l |
 | Markup derivative | **Confirmed as stored** — but the display question it raised was then re-ruled; see the third pass below. | D-21; **§4.7a**; A-23e, A-23f–A-23t |
+| Pin shape (4th pass) | **Add the type, schema v2.** Number stored; `next = max + 1`. | D-22; **§4.10a**; §4.10; A-29–A-29k |
 
 ### Third ruling pass [S98] — the display rule, and what it reverted
 
@@ -1401,15 +1553,32 @@ Demoting the derivative left one hole nothing else covered, so it is specced rat
 derivative is missing or stale at share time, sharing **degrades to the original with a warning** and never
 passes off an unmarked photo as marked (A-23t).
 
-### ⚠️ Open — pre-existing, surfaced by this work, needed before M-10
+### Fourth ruling pass [S98] — the pin shape
 
-**The `Pin` tool has no shape type.** §4.10 specs Draw · Arrow · Box · Text · Pin; `MarkupShape`
-(`markup.ts:55`) is `arrow | circle | rectangle | pen | text`. Draw→pen and Box→rectangle map cleanly;
-**Pin maps to nothing**, and `circle` exists with no tool offering it. Either a new `pin` type — which
-means `MARKUP_SCHEMA_VERSION` 2 and a read-compatibility story for v1 rows — or composing it from
-circle + text, which makes one pin two undo steps and breaks §4.10's "Undo/Redo are per-mark".
-**This predates every ruling in this session**; it surfaced while reading the schema the overlay depends
-on. Detail at §4.7a.5.
+**Ruled: add a `pin` type; `MARKUP_SCHEMA_VERSION` → 2** (D-22, §4.10a). The gap predated this session
+and surfaced while reading the schema the overlay depends on; it is now closed.
+
+**The number is stored, not derived.** The trade was between gaps and silent renumbering, and stability
+won: a derived number renumbers survivors after a delete, which retroactively rewrites the meaning of a
+daily-log line reading _"cracked sill at pin 3"_. Stored numbers leave gaps — {1,3,7} is a correct
+sequence — and no tidy-up renumber is offered. The rule that follows is `next = max + 1`, **never**
+`count + 1`, which would duplicate a number after any delete (A-29g).
+
+**Forward-compatibility verified before writing it**, because a throw would have been a stop and the fix
+would have landed in shared code. All three shape switches skip unknown types today —
+`markup-editor.tsx:558`, `:627`, `MarkupViewer.tsx:98`, each `default: return null`. **So this ruling
+exposes no defect and creates none.** A-29b locks that behaviour so a later refactor to an exhaustive
+`never` check cannot turn a skip into a throw.
+
+**Two consequences worth knowing**, neither a blocker: pins **round-trip** through a v1 editor intact
+(it re-saves the array it loaded, `markup-editor.tsx:42`) but render as **nothing at all** there until
+desktop adds the case — a photo pinned on the phone looks unpinned on desktop while the data is fine.
+And the `version` field **can lie**: a v1 desktop save writes `version: 1` over content containing v2
+pins, so readers must be tolerant by shape type and never gate on the version number (A-29c).
+
+**First ruling this session to touch shared code desktop imports.** A-28 holds —
+`packages/shared/**` is not `apps/web/app/dashboard/**` — but §4.10a.5 says so plainly rather than
+letting a passing criterion imply the change was confined to `/m`.
 
 ### Carried forward — raised by a ruling, not covered by it
 
