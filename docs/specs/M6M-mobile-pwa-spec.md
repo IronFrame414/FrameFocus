@@ -186,6 +186,7 @@
 | D-41 | In-app notice that location is captured | **NO. Crew are NOT told in-app.** [S101, Josh] The other half of the item D-34 left open. No banner, no first-run explainer, no line on M-5. **Josh's reasoning, recorded as his:** the capture is a condition of employment rather than a consent the app negotiates, and a per-clock-in notice on the one screen a crew member must use every shift is friction on a required action for a fact that does not change. **This spec records the ruling and does not endorse it as legal advice** — see §4.12.1a. |
 | D-42 | `deliveries.checked_in_at`     | **YES — the column is adopted.** [S101, Josh] Resolves TECH_DEBT #134. `submit_delivery_check_in()` becomes a **state transition** rather than a bare gate: it stamps `checked_in_at` on success, so a half-entered check-in is distinguishable from a finished one. **Specced in §7c; NOT migrated here.** |
 | D-43 | Expenses — who enters, views, edits | **Everyone enters and views. Everyone edits their own UNTIL IT IS APPROVED. Only Owner/Admin edit anything.** [S101, Josh; **edit clause CORRECTED S102**] The "views" gap is closed by **D-47**, which widens the policy. The edit clause is **corrected rather than migrated**: _superseded wording, quoted —_ _"Everyone edits their own."_ The live cap at `status = 'pending'` **is the ruling**, not a mismatch. **A-45d STANDS.** §4.13.3. |
+| D-49 | Retainage on M-26 | **FILTERED OUT, FOR EVERY ROLE. UI-ONLY, and the spec says so rather than implying enforcement.** [S103, Josh] M-26 excludes `expenses.is_retainage = true` rows — no role branch, no migration. **M-26 IS mobile's Receipts tab**, and desktop's Receipts tab excludes exactly these rows by the same mechanism. Josh's rule: *crew cannot see retainage, and all financial information on mobile follows the same rules as desktop* — and desktop's rule for retainage turns out to be **a UI filter, not RLS**, so following it means filtering in the UI. **A-45d is amended, not overridden** — the carve-out is written into the criterion so a later build cannot read it as licence to un-filter. §4.13.3. |
 | D-47 | `expenses_select_scoped` is WIDENED | **crew_member and subcontractor JOIN THE ROLE ARRAY.** [S102, Josh] Closes D-43's "everyone views" clause at the database instead of leaving it as intent. **Role array only — every other arm of the policy is byte-identical.** This is a **widening**, so nothing in the Financial Visibility Floor blocks it: an expense is *actual cost*, which the Floor makes visible to every role by design. **What each role gains sight of is stated plainly in §4.13.3** — this is the one ruling in this pass that exposes rows a role could not previously read. Migration `20260825000000`. |
 | D-48 | Location — the D-40 walk-back | **OWNER/ADMIN RESTRICTION SKIPPED. RETENTION DEFERRED.** [S102, Josh] Supersedes **both** halves of D-40. Coordinates stay on `time_clock_sessions_select_scoped`'s **existing rank ladder**, so **a foreman reads a crew member's location** and a PM reads a foreman's — narrower protection than D-40 promised, and §4.12.1a now says so outright rather than implying it. Retention is deferred with its dependency named: **`pg_cron` is not used anywhere in this repo**, so 30-day expiry is a new operational dependency, not a line of SQL. **No migration, and none owed until it is un-deferred.** |
 | D-44 | 7a fallback order with no GPS fix | **RECENTLY-USED.** [S101, Josh] Closes the D-33 open item. **There is no source function for it today** — stated plainly rather than bound to something approximate. The data exists on `time_segments`; the function does not. §4.12.1; A-7l2 rewritten. |
@@ -1928,6 +1929,49 @@ DB-enforced Owner/Admin.
 exactly what RLS returns, with no UI role check — A-45d, unchanged. What D-47 changes is **what the
 database hands it**. A-45b is rewritten accordingly: the crew arm no longer asserts "own rows only".
 
+##### Retainage is filtered out — D-49 [S103, Josh], and the filter is UI-ONLY
+
+**M-26 excludes every row where `expenses.is_retainage = true`. Every role, no branch.**
+
+**Filter on the COLUMN, never the supplier string.** A retainage accrual's `supplier` reads
+`Retainage held — {sub display_name}` (`20260729010000_7c_accounts_payable.sql:712`), and that is a
+**generated label, not a flag**. `is_retainage` is the boolean that means it; the row also carries
+`stage_label = 'Retainage'`, `cost_category = 'subcontractor'` and a non-null `sub_contract_id`, but
+the boolean is the discriminator.
+
+**Why this is "the same rules as desktop" rather than a departure from them.** Desktop's Receipts tab
+already excludes these rows — `expenses-page-client.tsx:99` filters out anything in
+`getBillsAndCommitments()`, whose predicate includes `is_retainage.eq.true`
+(`payables-shared.ts:30`) — and its Bills & Commitments tab is hidden from crew outright
+(`:77`, *"Crew has nothing in 7C — receipts only"*). **M-26 is mobile's Receipts tab.** It has no Bills
+tab, and §4.13.3 already cuts the payables rollup. Applying the same exclusion makes mobile match
+desktop; leaving it off is what made mobile diverge.
+
+**Why the exposure existed at all, recorded because it was self-inflicted and recent.** **D-47 created
+it.** Before that widening, `expenses_select_scoped` gave crew and subcontractors only rows they
+**authored**, and `expenses_insert_authorized` restricts `is_retainage = true` to Owner/Admin — so crew
+authored none and **read zero retainage rows at the database**. Verified under impersonation [S103]: a
+crew member can now read **3** retainage rows, **0** of them authored by them. Every one arrives through
+the role arm D-47 added. M-26 did not go looking for these rows; the widening handed them over, and
+mobile was simply the first surface with no UI filter above it.
+
+> **⚠️ THE FILTER IS UI-ONLY. WHAT THAT MEANS, PLAINLY.**
+> `expenses_select_scoped` still returns retainage rows to crew and subcontractors — D-49 changes
+> nothing at the database. A direct PostgREST query, a future mobile screen that calls `getExpenses()`
+> without this exclusion, or any other consumer will see them. **This is the same class of protection as
+> TECH_DEBT #117 and #132, and it is recorded as such rather than described as enforcement.**
+>
+> **Option C was considered and rejected:** narrowing `expenses_select_scoped` to exclude `is_retainage`
+> for crew and subcontractors would be real enforcement, and would also close the desktop leak below —
+> but it partially reverses D-47 six commits after making it, and payables are a 7C concern this spec
+> does not own. **Left available if the residual is ever judged unacceptable.**
+>
+> **Desktop has the same residual, one layer further out — filed as TECH_DEBT #136.**
+> `app/dashboard/expenses/page.tsx:83` passes `billRows` to the client component **unconditionally**, so
+> post-D-47 a crew member's browser receives retainage rows in the RSC payload even though no tab
+> renders them. Desktop's protection is **render-deep, not payload-deep**. Independent of mobile and
+> pre-dating D-49; not fixed here.
+
 ##### Cut from M-26
 
 - **CUT: approve / reject.** `approveExpense` / `rejectExpense` (`expenses-client.ts:272`, `:286`) are
@@ -3213,7 +3257,8 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 - A-45b **REWRITTEN [S102, D-47].** Signed in as **crew_member**, `/m/expenses` lists own expenses **and a teammate's expense on an assigned project** — and lists **no** expense on a project the member is not assigned to. `[live]` _(**Rewritten** because D-47 widened the policy. _Superseded text:_ _"lists only expenses that member authored — a teammate's expense on the same project does not appear."_ That asserted the pre-widening behaviour and would now fail on a correct build. **The second half is the load-bearing one**: it proves `can_view_project()` still bounds the widening to assigned projects, which is the arm the migration must not touch.)_
 - A-45c Signed in as **foreman**, `/m/expenses` lists both own expenses and a teammate's expense on an assigned project. `[live]` _(§4.13.3. Unchanged by D-47 — foreman was already in the role array. Retained as the control: if A-45b and A-45c now agree, the widening landed; if only A-45c passes, it did not.)_
 - A-45b2 **NEW [S102, D-47]** Signed in as **subcontractor**, `/m/expenses` behaves exactly as A-45b — own plus assigned-project expenses, nothing beyond. `[live]` _(§4.13.3. The role D-47 exposes most, because a subcontractor is an outside party reading the company's other costs on a shared job. Asserted separately from crew so a migration that adds only one of the two names fails visibly. **Blocked on #127** — rebuild-test has no persistent subcontractor identity; see §7d's evidence note.)_
-- A-45d `/m/expenses` issues **no UI role check** on `amount` — the rendered row set equals what `getExpenses()` returns for that caller, for all six roles. `[live + Playwright]` _(§4.13.3. The default this spec sets is "show what RLS returns". If Josh rules that crew must not see amounts, **this criterion is the one that gets rewritten**, and it is named here so the rewrite is deliberate rather than a silent divergence.)_
+- A-45d **AMENDED [S103, D-49].** `/m/expenses` issues **no UI ROLE check** on `amount` — the rendered row set equals what `getExpenses()` returns for that caller, for all six roles, **with exactly one declared exception: rows where `is_retainage = true` are excluded, for every role alike.** `[live + Playwright]` _(§4.13.3. _Superseded wording, quoted:_ _"the rendered row set equals what `getExpenses()` returns for that caller, for all six roles"_ — with no exception, which D-49 makes deliberately untrue for one row type. **The exception is written into the criterion on purpose**: left implicit, a later build reads A-45d as licence to un-filter, which is the exact failure this amendment exists to prevent. Note what is unchanged — the exclusion is **role-blind**, so the criterion still forbids a role branch. A build that filters retainage for crew but shows it to Owner has introduced the role gate A-45d has always banned.)_
+- A-45i **NEW [S103, D-49]** `/m/expenses` renders **no row with `is_retainage = true`**, signed in as **owner** — the role for which RLS returns the most, and therefore the only role for which removing the filter is visible. `[live + Playwright]` _(§4.13.3. **This is the criterion that fails if the filter is deleted.** A-45d's own assertions still pass without the filter for a role whose row set happens to contain no retainage, so the absence needs its own test bound to the role that would definitely surface them. Asserted against `is_retainage`, never the `supplier` string, which is a generated label.)_
 - A-45e `/m/expenses` renders **no** labor cost, burden, committed total, retainage or job-cost rollup figure under any role. `[Playwright]` _(§4.13.3's cut list. `getJobCostRollup()` is one call away and carries all five.)_
 - A-45f `/m/expenses` offers **no** approve, reject, capture or allocation control under any role, including Owner. `[Playwright]` _(§4.13.3. Read surface in v1.)_
 - A-45g The chip row renders exactly **Mine / Pending / All**, single-select, and each changes the rows listed. "Pending" returns the same set as `getPendingExpenses()`. `[live + Playwright]` _(**New [S101].** §4.13.3's chips had no criterion. The `getPendingExpenses()` half is what stops the chip and that function drifting apart — they are specced as the same predicate.)_
@@ -3586,6 +3631,34 @@ now stands is six screens, M-25 … M-30. What the pass turned up, beyond the tw
 | **`navigator.geolocation` absent entirely** | The three browser error codes cover permission and signal. A browser with no Geolocation API produces **no code at all**. `reason: "unsupported"`, `error_code: null` is the natural extension of §4.12.1a's table; it is **not ruled**, and it is nearly unreachable on the PWA's target browsers. |
 | **Retention and read access for location data** | D-34 records more than before — a denied permission is now a durable fact about a person rather than an absence. Who may read `gps_in`, and for how long it is kept, are unaddressed. `time_clock_sessions` follows the standard company-scoped RLS with no role floor on these columns. |
 | **The desktop markup derivative** | Unchanged from the seventh pass — out of scope, logged as tech debt in a parallel session. |
+
+### Thirteenth ruling pass [S103, Josh] — retainage off M-26
+
+One ruling, **D-49**, and it closes an exposure the twelfth pass created.
+
+| # | Question | **Ruling** | Applied in |
+| - | -------- | ---------- | ---------- |
+| 32 | Retainage on M-26? | **FILTERED OUT, EVERY ROLE, UI-ONLY.** Option B of the four investigated: M-26 is mobile's Receipts tab, and desktop's Receipts tab excludes exactly these rows. No role branch, no migration. | **D-49**; §4.13.3; A-45d amended, A-45i new |
+
+**The investigation is worth keeping, because the obvious reading of the question was wrong.** Josh's two
+clauses — *crew cannot see retainage* and *all financial information on mobile follows the same rules as
+desktop* — appeared to pull against each other, since the rows render on M-26 **because RLS returns
+them** and RLS looked like the desktop rule. It is not. What was actually found:
+
+- **Retainage accruals are ordinary `expenses` rows** carrying `is_retainage = true`, `stage_label =
+  'Retainage'`, `cost_category = 'subcontractor'` and a `sub_contract_id`. Cleanly distinguishable.
+- **Desktop already hides them from crew — in the UI, twice over.** The Bills tab is role-gated to
+  Owner/Admin/PM/Foreman; the Receipts tab filters out every payable row, and the payable predicate
+  includes `is_retainage`. Neither is RLS, and neither is in a service function.
+- **So both clauses agree**: following desktop's rule *means* filtering in the UI. M-26 was the outlier,
+  not the principle.
+- **And the exposure was six commits old.** D-47's widening is what let crew read retainage at all —
+  before it they read zero, because the author arm was their only path and `is_retainage` inserts are
+  Owner/Admin-gated.
+
+**Two residuals recorded rather than fixed:** the mobile filter is UI-only (Option C, narrowing the
+policy, was considered and rejected — it partially reverses D-47 and reaches into 7C), and desktop ships
+the rows to a crew member's browser regardless of which tab renders (**TECH_DEBT #136**).
 
 ### Twelfth ruling pass [S102, Josh] — two closures and two walk-backs
 
