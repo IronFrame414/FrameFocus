@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { billingEnforcementEnabled } from '@/lib/billing-flag';
 
 type CookieEntry = { name: string; value: string; options?: Record<string, unknown> };
 
@@ -49,8 +50,29 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // KILL-SWITCH [S99] — `DISABLE_BILLING_ENFORCEMENT=true` skips the whole
+  // block below. Nothing is deleted; unset the env var and gating is back.
+  //
+  // Guarding the CONDITION rather than early-returning above this block is
+  // deliberate. An early `return supabaseResponse` here would also skip any
+  // code added after the block later, which has nothing to do with billing —
+  // a trap for whoever adds the next middleware rule. This turns off exactly
+  // one thing.
+  //
+  // OPERATIONAL: this is read at runtime (build-time inlining applies to
+  // NEXT_PUBLIC_* vars, which this deliberately is not — it has no business in
+  // a client bundle). But a Vercel deployment carries the env values it was
+  // deployed with, so adding or removing this in the dashboard still does
+  // nothing to already-deployed code until you REDEPLOY.
+  const enforceBilling = billingEnforcementEnabled(process.env.DISABLE_BILLING_ENFORCEMENT);
+
   // Subscription enforcement — only for dashboard pages that are NOT billing
-  if (user && pathname.startsWith('/dashboard') && !pathname.startsWith('/dashboard/billing')) {
+  if (
+    enforceBilling &&
+    user &&
+    pathname.startsWith('/dashboard') &&
+    !pathname.startsWith('/dashboard/billing')
+  ) {
     // Get user's profile to find company_id
     const { data: profile } = await supabase
       .from('profiles')
