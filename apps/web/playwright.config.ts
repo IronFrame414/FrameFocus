@@ -1,0 +1,89 @@
+import { defineConfig, devices } from '@playwright/test';
+
+// M6M §10a / D-18 — the browser harness.
+//
+// WHY THIS EXISTS
+//   The [live] harness (test/live.vitest.config.ts) sets `environment: 'node'`
+//   and mints a bare supabase-js client. That gives real RLS against the real
+//   rebuild-test database and NOTHING ELSE — no DOM, no navigator.onLine, no
+//   service worker, no IndexedDB. It cannot simulate offline and never will.
+//   Equally, a unit test with fakes can prove the queue reorders correctly but
+//   can never prove the amber strip rendered or that a tap landed.
+//   Playwright covers exactly that gap: context.setOffline(true), computed
+//   styles, bounding boxes, real taps.
+//
+// LIVES IN apps/web, NOT THE REPO ROOT, deliberately — vitest already runs from
+// here (`npm test` -> `vitest run` in apps/web/package.json). Two test runners
+// rooted in two different places would be a trap.
+//
+// ---------------------------------------------------------------------------
+// KEEPING PLAYWRIGHT OUT OF THE VITEST RUN — TWO INDEPENDENT MECHANISMS
+// ---------------------------------------------------------------------------
+//   vitest.config.ts includes '**/*.{test,spec}.{ts,tsx}'. Playwright's own
+//   default testMatch is '**/*.@(spec|test).?(c|m)[jt]s?(x)'. Those overlap
+//   COMPLETELY: a file named *.spec.ts in this package would be collected by
+//   BOTH runners, and vitest would execute a Playwright test with no browser
+//   and fail in a way that looks like a broken test rather than a broken
+//   config. So:
+//     1. Playwright owns ./e2e and only ./e2e (testDir below).
+//     2. vitest EXCLUDES 'e2e/**' explicitly (see vitest.config.ts).
+//   Either alone would work today. Both, because the failure mode is confusing
+//   and the cost of the second guard is one line.
+//
+// ---------------------------------------------------------------------------
+// BROWSER BINARIES ARE NOT IN node_modules AND NOT IN THE REPO
+// ---------------------------------------------------------------------------
+//   They live in ~/.cache/ms-playwright (~656 MB for Chromium alone) and DO NOT
+//   survive a Codespace rebuild — same class as .env.local and the Supabase CLI
+//   link. `npm ci` will NOT restore them. After any rebuild:
+//       npx playwright install chromium
+//   Roughly 30 seconds. Without it the suite fails at launch, not at assert.
+
+export default defineConfig({
+  testDir: './e2e',
+
+  // Fail the build if a .only was left behind.
+  forbidOnly: !!process.env.CI,
+
+  // CI machines are noisier; a browser test that flakes once is not news.
+  retries: process.env.CI ? 2 : 0,
+  workers: process.env.CI ? 1 : undefined,
+
+  reporter: process.env.CI
+    ? [['github'], ['html', { open: 'never' }]]
+    : [['list']],
+
+  use: {
+    baseURL: 'http://localhost:3000',
+    // Only kept for a test that already failed once — cheap, and the trace is
+    // the difference between "it flaked" and knowing why.
+    trace: 'on-first-retry',
+  },
+
+  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+
+  // ---------------------------------------------------------------------------
+  // THE DEV SERVER: Playwright STARTS IT, you do not have to.
+  // ---------------------------------------------------------------------------
+  // Playwright drives a real browser against a real HTTP origin, so something
+  // must be serving. `webServer` makes that the runner's job: it launches the
+  // command, waits for the url to answer, runs the tests, and tears the server
+  // down afterwards.
+  //
+  // reuseExistingServer: !process.env.CI — locally, if you already have
+  // `npm run dev` open on :3000, Playwright ATTACHES to it instead of fighting
+  // for the port. In CI there is never a server to reuse, and reusing a stale
+  // one would silently test the wrong build, so CI always starts its own.
+  //
+  // `next dev` rather than `next build && next start`: no build step, and the
+  // env it needs is already in .env.local. The tradeoff is real — the dev
+  // server compiles routes on first request, which is why the timeout is 120s
+  // rather than the default 60s. If e2e ever gates a merge, switch this to a
+  // production build so CI tests what ships.
+  webServer: {
+    command: 'npm run dev',
+    url: 'http://localhost:3000',
+    timeout: 120 * 1000,
+    reuseExistingServer: !process.env.CI,
+  },
+});

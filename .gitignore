@@ -44,6 +44,14 @@ yarn-error.log*
 # Supabase
 supabase/.temp/
 
+# Playwright — run artifacts only. The config, the e2e specs and the lockfile
+# entry are all committed; browser binaries live in ~/.cache/ms-playwright and
+# were never in the repo to begin with.
+playwright-report/
+test-results/
+blob-report/
+.playwright/
+
 # TypeScript
 *.tsbuildinfo
 .claude/settings.local.json

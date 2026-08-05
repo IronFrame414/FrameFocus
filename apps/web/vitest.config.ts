@@ -19,7 +19,11 @@ export default defineConfig({
   },
   test: {
     include: ['**/*.{test,spec}.{ts,tsx}'],
-    exclude: ['node_modules/**', '.next/**'],
+    // e2e/** is Playwright's (playwright.config.ts testDir). The include glob
+    // above and Playwright's default testMatch overlap completely, so without
+    // this vitest would collect a browser test, run it with no browser, and
+    // fail in a way that reads as a broken test rather than a broken config.
+    exclude: ['node_modules/**', '.next/**', 'e2e/**'],
     environment: 'node',
     server: {
       deps: {
