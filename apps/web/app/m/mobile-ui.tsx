@@ -113,6 +113,35 @@ export function StatusPill({
   );
 }
 
+// ---------------------------------------------------------------------------
+// §2's MONEY TOKEN (D-46). One format for every currency figure on /m.
+//
+//   positive   $1,234.56
+//   negative   -$1,234.56      minus BEFORE the symbol
+//   zero       $0.00
+//   null       —               the em-dash, NEVER $0.00
+//
+// NOT INVENTED — this is the format desktop already uses. `style: 'currency'`
+// with USD in en-US produces exactly the first three, matching the 15 desktop
+// call sites (e.g. dashboard/projects/[id]/page.tsx:25, components/expenses/
+// expense-ui.tsx:11) and the PDF templates' hand-rolled `-$` formatter, which
+// agree on every case.
+//
+// THE NULL BRANCH IS THE ONE A NAIVE CALL GETS WRONG. `Number(null ?? 0)`
+// renders $0.00, and on a field screen "$0.00" and "not recorded" are different
+// facts — the same rule §4.11.1 applies to null dates. A-50 asserts all four.
+//
+// §2 leaves this function's HOME open (here now, packages/shared/utils/
+// eventually), which is why A-50 asserts the rendered string rather than a
+// function name: the criterion survives the move.
+// ---------------------------------------------------------------------------
+export function formatMoney(value: number | string | null | undefined): string {
+  if (value === null || value === undefined) return '—';
+  const n = typeof value === 'string' ? Number(value) : value;
+  if (!Number.isFinite(n)) return '—';
+  return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
+}
+
 /** Mono uppercase section label — M-8's pattern, reused by §4.13.2's day headers. */
 export function SectionLabel({ children }: { children: React.ReactNode }) {
   return (

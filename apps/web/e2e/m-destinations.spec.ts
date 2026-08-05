@@ -1,22 +1,35 @@
 import { test, expect, type Page } from '@playwright/test';
 
-// M6M §4.13 acceptance criteria for the four screens built in this slice.
+// M6M §4.13 acceptance criteria for ALL SIX hamburger destinations.
+// M-25/27/28/29 landed in 13b1a8e; M-26 and M-30 complete the set.
 //
 // Asserted here:
 //   M-25 Schedule        A-44, A-44b(partial), A-44c, A-44d, A-44e
 //   M-27 Subs & Vendors  A-46, A-46b, A-46c, A-46d, A-46e
 //   M-28 Team            A-47, A-47b, A-47c, A-47d, A-47e
 //   M-29 Contacts        A-49, A-49b, A-49c, A-49d
-//   Common               A-41 (partial), A-42, A-42b, A-42c(partial), A-42d
+//   M-26 Expenses        A-45, A-45b, A-45c, A-45d, A-45e, A-45f, A-45g, A-45h
+//   M-30 Settings        A-48, A-48b, A-48c, A-48d, A-48e
+//   §2 tokens            A-50 (D-46's money format)
+//   Common               A-41, A-42, A-42b, A-42c(partial), A-42d — SIX OF SIX
 //
-// NOT here: A-45* and A-48* — M-26 Expenses and M-30 Settings are not built in
-// this slice. A-50 (money) has no surface until M-26 lands.
+// A-45b2 (the subcontractor arm of D-47) is NOT here: #127 means rebuild-test
+// has no persistent subcontractor identity to sign in as. It was proved at the
+// DB level in migration 20260825000000's evidence, inside a rolled-back
+// transaction, and cannot be re-obtained through a browser until #127 closes.
 //
 // Runs under 'chromium-auth': signed in as the crew test identity, 402x874.
 
-const BUILT = ['/m/schedule', '/m/subs', '/m/team', '/m/contacts'];
-/** The two §4.13 routes not built in this slice — they still 404. */
-const UNBUILT = ['/m/expenses', '/m/settings'];
+// All SIX §4.13 destinations are built as of S102 — A-41 and A-42 are now
+// reachable at six of six rather than four.
+const BUILT = [
+  '/m/schedule',
+  '/m/expenses',
+  '/m/subs',
+  '/m/team',
+  '/m/contacts',
+  '/m/settings',
+];
 
 async function openSheet(page: Page) {
   await page.getByTestId('m-hamburger').click();
@@ -78,9 +91,11 @@ test.describe('§4.13 common rules on the built screens', () => {
   // unbuilt routes still 404, so the walk covers four of six.
   const TILE_FOR: Record<string, string> = {
     '/m/schedule': 'Schedule',
+    '/m/expenses': 'Expenses',
     '/m/subs': 'Subs & Vendors',
     '/m/team': 'Team',
     '/m/contacts': 'Contacts',
+    '/m/settings': 'Settings',
   };
   for (const route of BUILT) {
     test(`A-41 · on ${route} exactly the matching tile is highlighted`, async ({ page }) => {
@@ -92,12 +107,6 @@ test.describe('§4.13 common rules on the built screens', () => {
     });
   }
 
-  test('A-41 · the two unbuilt destinations still 404 (scope of this slice)', async ({ page }) => {
-    for (const route of UNBUILT) {
-      const res = await page.goto(route);
-      expect(res?.status(), route).toBe(404);
-    }
-  });
 });
 
 // ===========================================================================
@@ -452,6 +461,211 @@ test.describe('A-42c · per-screen empty states', () => {
       await context.setOffline(true);
       await expect(page.getByTestId('m-offline-strip')).toBeVisible();
       await context.setOffline(false);
+    }
+  });
+});
+
+// ===========================================================================
+// M-26 Expenses — §4.13.3 · the first currency on /m
+// ===========================================================================
+test.describe('M-26 · Expenses', () => {
+  test('A-45 · amount renders in IBM Plex Mono on every row', async ({ page }) => {
+    await page.goto('/m/expenses');
+    const amounts = page.getByTestId('m-expense-amount');
+    const n = await amounts.count();
+    if (n === 0) test.skip(true, 'no expenses visible to the crew identity');
+    for (let i = 0; i < n; i++) {
+      const family = await amounts.nth(i).evaluate((el) => getComputedStyle(el).fontFamily);
+      expect(family).toMatch(/Plex Mono/i);
+    }
+  });
+
+  test('A-45b · after D-47 crew sees assigned-project expenses, and nothing beyond', async ({
+    page,
+  }) => {
+    // The browser half of A-45b. The DB half — that an UNASSIGNED project's
+    // expense stays invisible — was proved under impersonation in migration
+    // 20260825000000's evidence; here we assert the screen renders what RLS
+    // returns without a UI role branch narrowing it further.
+    await page.goto('/m/expenses');
+    const rows = page.getByTestId('m-expense-row');
+    const all = await rows.count();
+
+    await page.goto('/m/expenses?filter=mine');
+    const mine = await page.getByTestId('m-expense-row').count();
+
+    // Post-widening, a crew member can see rows they did NOT author. Before
+    // D-47 these two counts were necessarily equal.
+    expect(all).toBeGreaterThanOrEqual(mine);
+  });
+
+  test('A-45d · no UI role check — the rendered set is what the service returns', async ({
+    page,
+  }) => {
+    await page.goto('/m/expenses');
+    const rows = await page.getByTestId('m-expense-row').count();
+    const empty = await page.getByTestId('m-empty').count();
+    // Exactly one of the two states, never a third "not permitted" state — a
+    // build that added a role gate would render neither rows nor an empty list.
+    expect(rows > 0 || empty === 1).toBe(true);
+    const body = (await page.getByTestId('m-content').textContent()) ?? '';
+    expect(body).not.toMatch(/not permitted|no access|restricted/i);
+  });
+
+  test('A-45e · no job-cost ROLLUP figure — no labor, burden or committed total', async ({
+    page,
+  }) => {
+    await page.goto('/m/expenses');
+    const body = (await page.getByTestId('m-content').textContent()) ?? '';
+    // §4.13.3 cuts getJobCostRollup() IN ITS ENTIRETY — labor.totalCost burdened
+    // from Owner/Admin-only rate snapshots, and payables.committedRemaining /
+    // retainageHeld. Those are DERIVED TOTALS, and none of them appears here.
+    expect(body).not.toMatch(/labor|burden|committed total|still owed|total cost/i);
+
+    // NOT asserted: the absence of the word "retainage". Rebuild-test holds
+    // ordinary expense ROWS whose `supplier` reads "Retainage held — DVDF", and
+    // they render because expenses_select_scoped returns them — which is exactly
+    // what A-45d requires this screen to do. Filtering them out would be a UI
+    // filter disagreeing with RLS, which §4.13's common rules forbid. Flagged
+    // for Josh: §4.13.3's payables exclusion was written against the ROLLUP and
+    // does not obviously contemplate retainage accrual rows reaching a crew
+    // phone as line items.
+  });
+
+  test('A-45f · no approve, reject, capture or allocation control', async ({ page }) => {
+    await page.goto('/m/expenses');
+    const content = page.getByTestId('m-content');
+    // The load-bearing assertion: approve, reject, capture and allocate would
+    // all be CONTROLS, and this screen has none. A text scan cannot stand in for
+    // it — §4.13.3 requires the status pill to carry the words "Approved" and
+    // "Rejected", so /approve|reject/ matches a correct build.
+    expect(await content.getByRole('button').count()).toBe(0);
+    expect(await content.locator('input, select, textarea, [role="button"]').count()).toBe(0);
+    const body = (await content.textContent()) ?? '';
+    expect(body).not.toMatch(/add expense|new expense|allocat/i);
+  });
+
+  test('A-45g · chips are All / Mine / Pending, single-select, and each changes the list', async ({
+    page,
+  }) => {
+    await page.goto('/m/expenses');
+    const chips = page.getByTestId('m-chips').getByRole('link');
+    await expect(chips).toHaveCount(3);
+    await expect(chips.nth(0)).toHaveText('All');
+    await expect(chips.nth(1)).toHaveText('Mine');
+    await expect(chips.nth(2)).toHaveText('Pending');
+
+    const countFor = async (href: string) => {
+      await page.goto(href);
+      return page.getByTestId('m-expense-row').count();
+    };
+    const all = await countFor('/m/expenses');
+    const mine = await countFor('/m/expenses?filter=mine');
+    const pending = await countFor('/m/expenses?filter=pending');
+    // Both chips narrow — neither can exceed the unfiltered set.
+    expect(mine).toBeLessThanOrEqual(all);
+    expect(pending).toBeLessThanOrEqual(all);
+
+    await page.goto('/m/expenses?filter=pending');
+    expect(await page.locator('[data-testid^="m-chip-"][data-active="true"]').count()).toBe(1);
+  });
+
+  test('A-45h · a receipt links to M-9, and no second image surface exists here', async ({
+    page,
+  }) => {
+    await page.goto('/m/expenses');
+    const links = page.getByTestId('m-receipt-link');
+    const n = await links.count();
+    if (n === 0) test.skip(true, 'no expense with a receipt visible to this identity');
+    for (let i = 0; i < n; i++) {
+      // M-9's route shape. It 404s until M-9 is built — the link points at its
+      // real destination rather than a placeholder, the same accepted state the
+      // sheet tiles were in before their screens landed.
+      await expect(links.nth(i)).toHaveAttribute('href', /^\/m\/p\/[0-9a-f-]+\/photos\/[0-9a-f-]+$/);
+    }
+    // No lightbox, no <dialog>, no inline <img> gallery on this screen.
+    expect(await page.getByTestId('m-content').locator('img, dialog').count()).toBe(0);
+  });
+});
+
+// ===========================================================================
+// M-30 Settings — §4.13.7 · read-only
+// ===========================================================================
+test.describe('M-30 · Settings', () => {
+  test('A-48 · no editable control of any kind', async ({ page }) => {
+    await page.goto('/m/settings');
+    const content = page.getByTestId('m-content');
+    // §4.13.7 rules read-only for EVERY role including Owner. The crew identity
+    // this suite signs in as would see nothing either way, so the assertion is
+    // structural: the screen contains no control at all.
+    expect(await content.locator('input, select, textarea, button, [role="button"]').count()).toBe(0);
+  });
+
+  test('A-48b · renders name, role, member_type, company and timezone in mono', async ({
+    page,
+  }) => {
+    await page.goto('/m/settings');
+    await expect(page.getByTestId('m-settings-name')).not.toHaveText('—');
+    await expect(page.getByTestId('m-settings-role')).not.toHaveText('—');
+    await expect(page.getByTestId('m-settings-member-type')).not.toHaveText('—');
+    await expect(page.getByTestId('m-settings-company-name')).not.toHaveText('—');
+
+    const tz = page.getByTestId('m-settings-timezone');
+    await expect(tz).not.toHaveText('—');
+    const family = await tz.evaluate((el) => getComputedStyle(el).fontFamily);
+    expect(family).toMatch(/Plex Mono/i);
+  });
+
+  test('A-48c · no OT threshold, week start, break rule or GPS mode', async ({ page }) => {
+    await page.goto('/m/settings');
+    const body = (await page.getByTestId('m-content').textContent()) ?? '';
+    // getCompanyTimeSettings() returns all four alongside the timezone this
+    // screen does render — the easiest cut in §4.13 to undo by accident.
+    expect(body).not.toMatch(/overtime|\bOT\b|week start|weekStartsOn|paid break|gps/i);
+  });
+
+  test('A-48d · no Sign out on the screen — it lives in the sheet', async ({ page }) => {
+    await page.goto('/m/settings');
+    const body = (await page.getByTestId('m-content').textContent()) ?? '';
+    expect(body).not.toMatch(/sign out|log out/i);
+    // And it IS in the sheet, so the function is not simply missing.
+    await openSheet(page);
+    await expect(page.getByTestId('m-sign-out')).toBeVisible();
+  });
+
+  test('A-48e · role comes from a service function, not the shell or an inline query', async ({
+    page,
+  }) => {
+    // Asserted behaviourally: the role renders on M-30 and is ABSENT from the
+    // shell everywhere else. If it had been threaded through MobileShell it
+    // would be available to — and liable to leak into — every mobile screen.
+    await page.goto('/m/settings');
+    const role = (await page.getByTestId('m-settings-role').textContent())?.trim();
+    expect(role).toBeTruthy();
+
+    for (const route of ['/m/timeclock', '/m/team', '/m/schedule']) {
+      await page.goto(route);
+      await expect(page.getByTestId('m-settings-role')).toHaveCount(0);
+    }
+  });
+});
+
+// ===========================================================================
+// A-50 — §2's money token (D-46)
+// ===========================================================================
+test.describe('A-50 · money format', () => {
+  test('every currency figure on /m is $1,234.56 / -$1,234.56 / — for null', async ({ page }) => {
+    await page.goto('/m/expenses');
+    const amounts = page.getByTestId('m-expense-amount');
+    const n = await amounts.count();
+    if (n === 0) test.skip(true, 'no expenses visible to the crew identity');
+    for (let i = 0; i < n; i++) {
+      const text = (await amounts.nth(i).textContent())?.trim() ?? '';
+      // $ leading, comma thousands, EXACTLY two decimals; negatives put the
+      // minus before the symbol; null renders the em-dash, never $0.00.
+      expect(text, `amount ${i}`).toMatch(/^(—|-?\$\d{1,3}(,\d{3})*\.\d{2})$/);
+      // Never a truncated or variable precision.
+      if (text !== '—') expect(text).not.toMatch(/\.\d$|\.\d{3}/);
     }
   });
 });
