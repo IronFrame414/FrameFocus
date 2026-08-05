@@ -339,8 +339,8 @@ export async function getPickableHours(
 
 /**
  * §10 — "when a rate is superseded and invoices have already gone out priced
- * under the typo, FrameFocus flags the affected sent invoices for the user to
- * void and reissue." Nothing is repriced silently and no catch-up invoice is
+ * under the typo, [the platform] flags the affected sent invoices for the user
+ * to void and reissue." Nothing is repriced silently and no catch-up invoice is
  * generated. Derived at read from the rate-row identity on each line (§8) —
  * a stored flag could go stale, a derivation cannot.
  */

@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase-server';
 import { getSubscription } from '@/lib/services/billing';
 import { redirect } from 'next/navigation';
 import { PlanSelection } from './plan-selection';
+import { brand } from '@/lib/brand';
 
 export default async function PlansPage() {
   const supabase = await createClient();
@@ -35,7 +36,7 @@ export default async function PlansPage() {
           <p className="mt-2 text-gray-600">
             {subscription.status === 'trialing'
               ? "Select a plan to continue after your trial ends. You won't be charged until your trial expires."
-              : 'Select a plan to continue using FrameFocus.'}
+              : `Select a plan to continue using ${brand.name}.`}
           </p>
         </div>
         <PlanSelection currentPlan={subscription.plan_tier} status={subscription.status} />

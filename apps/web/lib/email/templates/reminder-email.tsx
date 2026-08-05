@@ -11,6 +11,7 @@ import {
   Section,
   Text,
 } from '@react-email/components';
+import { brand } from '@/lib/brand';
 
 // Spec 2 (4J) — automated follow-up reminder. Includes the active
 // signing link and a CAN-SPAM unsubscribe link that opts the client
@@ -76,7 +77,7 @@ export function ReminderEmail({
           </Section>
           <Hr style={{ borderColor: '#e5e7eb', margin: '16px 0' }} />
           <Text style={{ fontSize: '11px', color: '#9ca3af' }}>
-            Sent by {companyName} via FrameFocus ·{' '}
+            Sent by {companyName} via {brand.name} ·{' '}
             <Link href={unsubscribeUrl} style={{ color: '#9ca3af', textDecoration: 'underline' }}>
               Don&apos;t want reminders about this proposal? Unsubscribe.
             </Link>

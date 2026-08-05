@@ -1,4 +1,5 @@
 import { Document, Image, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
+import { brand } from '@/lib/brand';
 
 // 6B — end-of-day daily log PDF (6B-spec §9; 6B-1 §2.3 regenerate-on-edit).
 // Modelled on co-template.tsx's layout language, without signatures or money.
@@ -258,7 +259,7 @@ export function DailyLogDocument({ data }: { data: DailyLogPdfData }) {
         <Text style={styles.footer} fixed>
           Point-in-time snapshot generated{' '}
           {new Date(data.generatedAt).toLocaleString('en-US', { timeZone: data.timeZone })} ·{' '}
-          {data.companyName} · FrameFocus
+          {data.companyName} · {brand.name}
         </Text>
       </Page>
     </Document>

@@ -10,6 +10,7 @@ import {
   Section,
   Text,
 } from '@react-email/components';
+import { brand } from '@/lib/brand';
 
 // Spec 2 (4E) — branded proposal delivery email. The PDF is
 // attached; the CTA button opens the public signing page. Body text
@@ -77,7 +78,7 @@ export function ProposalEmail({
           </Text>
           <Hr style={{ borderColor: '#e5e7eb', margin: '16px 0' }} />
           <Text style={{ fontSize: '11px', color: '#9ca3af' }}>
-            Sent by {companyName} via FrameFocus
+            Sent by {companyName} via {brand.name}
           </Text>
         </Container>
       </Body>

@@ -261,7 +261,7 @@ describe('S97CT-REMIND — a reminder can be logged, and a failure is visible', 
         estimate_id: null, signing_session_id: null,
         resend_message_id: null, email_type: 'invoice_reminder',
         recipient_email: 'nobody@example.invalid',
-        sender_email: 'noreply@rafterworks.com',
+        sender_email: 'noreply@ezcontractorbinder.com',
         subject: `${MARKER} reminder`, status: 'failed',
         metadata: { error: 'mailbox full', step: 1 },
       })

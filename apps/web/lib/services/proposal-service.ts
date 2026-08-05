@@ -6,6 +6,7 @@ import { randomUUID } from 'crypto';
 import type { Database } from '@framefocus/shared/types/database';
 import { getProposalData, type ProposalData } from '@/lib/proposal/proposal-data';
 import { ProposalDocument } from '@/lib/proposal/proposal-template';
+import { brand } from '@/lib/brand';
 
 // Spec 2 (4E/4F) — PDF orchestration, server-only.
 // E3: unsigned PDFs are regenerated on demand from estimate data and
@@ -87,8 +88,12 @@ export async function compositeSignedPDF(
     font,
     color: rgb(0.07, 0.09, 0.15),
   });
+  // FORWARD-ONLY [S99]. This runs at signing time and stamps the artifact being
+  // generated right now. Already-signed PDFs in project-files keep the name they
+  // were signed under — they are executed documents and are never rewritten.
+  // A rebrand does not reach backwards into a signed record.
   lastPage.drawText(
-    `Signed electronically via FrameFocus on ${new Date(params.signedAtIso).toISOString()}`,
+    `Signed electronically via ${brand.name} on ${new Date(params.signedAtIso).toISOString()}`,
     {
       x: margin,
       y: baselineY - 42,

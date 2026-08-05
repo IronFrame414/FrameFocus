@@ -19,6 +19,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { ROLE_LABELS, type CompanyRole } from '@framefocus/shared';
+import { brand } from '@/lib/brand';
 import type { GpsClockMode } from '@framefocus/shared/utils/time-tracking';
 import type { SessionWithSegments } from '@/lib/services/time-tracking-client';
 import { GlobalClockButton } from '@/components/time/global-clock-button';
@@ -117,10 +118,50 @@ export function DashboardShell({
   return (
     <div className="flex min-h-screen">
       <aside className="flex w-[236px] shrink-0 flex-col bg-brand-900 py-[22px]">
-        {/* Header block */}
+        {/* Header block — the PRODUCT lockup, above the TENANT's company name.
+            /logo-full-ice.svg is the FULL-COLOUR variant for navy, and it is
+            the deliberate choice here [Josh, S98]: the brand sheet's own
+            sidebar mockup puts a coloured mark on navy, not a plain white
+            reversal. logo-white.svg — the one-colour reversal — is NOT the
+            right file for this surface. The auth screens, which are light, use
+            logo-full-light.svg; the one-colour logo-navy.svg and logo-white.svg
+            are currently unused spares.
+
+            NOT logo-full-dark.svg, despite the name. The two files differ in
+            one attribute — the kicker fill — and on this navy that difference
+            decides whether the kicker is readable: slate #7B849A is 4.27:1,
+            ice #CED6E8 is 10.96:1, at a ~8.4px cap height. "full-dark" is
+            named for dark backgrounds generally; on THIS background ice wins.
+            The landing page (app/page.tsx, same bg-brand-900) uses the same
+            file for the same reason — keep the two in step.
+
+            The whole two-line lockup — indigo binder tile, "EZ CONTRACTOR"
+            ice kicker, amber "Binder" wordmark — lives inside the SVG. Do
+            NOT rebuild those lines as markup: the kerning, the two baselines
+            and the mark's optical alignment are all in the file, and a text
+            reconstruction drifts from the brand sheet the moment the font
+            falls back.
+
+            The SVG carries hexes that are off the Tailwind scale on purpose —
+            #3F47CF tile, #CED6E8 kicker, #EDA122 amber (vs accent-500
+            #f59e0b), #17213C (vs brand-900). They are the brand sheet's own
+            values. Leave them as literals in the file; do not "fix" the
+            mismatch by reconciling either side. Note this is the one place
+            the icon indigo appears in the web UI — lib/brand.ts's "indigo is
+            phone-icon only" note is about manifest/theme colours, which this
+            does not touch.
+
+            Sized h-16 = 64px tall -> ~168px wide against the 192px of sidebar
+            width left by px-[22px]. */}
         <div className="px-[22px] pb-[22px]">
-          <h1 className="text-[20px] font-extrabold tracking-[-0.01em] text-white">
-            Rafter<span className="text-accent-500">Works</span>
+          <h1 className="m-0">
+            <img
+              src="/logo-full-ice.svg"
+              alt={brand.name}
+              width={168}
+              height={64}
+              className="h-16 w-auto"
+            />
           </h1>
           <p className="mt-[2px] text-[12px] font-medium text-brand-300">{companyName}</p>
         </div>

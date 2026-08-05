@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { Barlow, IBM_Plex_Mono } from 'next/font/google';
+import { brand } from '@/lib/brand';
 import './globals.css';
 
 // ui-01 §S2 — the two 1a families, loaded via next/font (no other mechanism
@@ -20,8 +21,47 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'FrameFocus — Construction Management',
+  title: `${brand.name} — Construction Management`,
   description: 'The all-in-one platform for residential and commercial contractors.',
+
+  // M6M §7.2 — home-screen install assets.
+  //
+  // The <link rel="manifest"> is NOT here: app/manifest.ts is a file
+  // convention and Next injects that link itself. Adding it here too would
+  // emit two.
+  //
+  // NO favicon.ico EXISTS. Next's automatic favicon handling keys off
+  // app/favicon.ico specifically, so with none present nothing is emitted by
+  // default and the browser falls back to requesting /favicon.ico -> 404.
+  // These explicit entries are what prevent that.
+  icons: {
+    icon: [
+      // SVG first: any browser that understands it takes it and scales
+      // cleanly at every density. The 48px PNG is the fallback, and is listed
+      // second so it is only used when the SVG is not supported.
+      { url: '/app-icon.svg', type: 'image/svg+xml' },
+      { url: '/favicon-ez-48.png', sizes: '48x48', type: 'image/png' },
+    ],
+    // iOS ignores the manifest icons for the home-screen tile and uses this.
+    // 180x180 is the size current iPhones ask for.
+    apple: [{ url: '/apple-touch-icon-180.png', sizes: '180x180', type: 'image/png' }],
+  },
+
+  // §7.2 — iOS home-screen install. Required before Web Push works on iPhone
+  // at all (Safari 16.4+ delivers push only to an installed PWA), which is why
+  // this is a prerequisite rather than polish.
+  appleWebApp: {
+    capable: true,
+    // The home-screen label on iOS. Same short form as the manifest.
+    title: brand.shortName,
+    // 'black', deliberately, and NOT 'black-translucent': translucent makes
+    // content render UNDER the status bar, which needs safe-area-inset padding
+    // in the mobile shell. That shell is not built (§3), so translucent would
+    // ship a layout bug today. 'black' does not overlay and sits closer to the
+    // navy app bar than 'default' (a white strip) would. Revisit when §3.1
+    // lands and safe-area handling exists.
+    statusBarStyle: 'black',
+  },
 };
 
 export default function RootLayout({

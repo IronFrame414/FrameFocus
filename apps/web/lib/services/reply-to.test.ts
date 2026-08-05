@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // +REPLY-TO [Josh, S97 — platform-wide]: every client-facing email carries a
 // Reply-To of the sending COMPANY's address, so a client's reply reaches the
-// company rather than the platform domain (rafterworks.com).
+// company rather than the platform domain (ezcontractorbinder.com).
 //
 // These are unit traces over the shared send path. The DB-backed resolution
 // order is asserted live in s97ct-reply-to.live.ts; what is asserted HERE is the
@@ -40,7 +40,7 @@ async function send(overrides: Record<string, unknown> = {}) {
   vi.resetModules();
   const mod = await import('@/lib/services/email-service');
   return mod.sendEmail({
-    from: 'Bishop Contracting <bishop-contracting@rafterworks.com>',
+    from: 'Bishop Contracting <bishop-contracting@ezcontractorbinder.com>',
     to: RECIPIENT,
     subject: 'test',
     react: null as never,
@@ -110,7 +110,7 @@ describe('+REPLY-TO — it is the COMPANY, never the recipient', () => {
 
     await send({ replyToCompanyId: COMPANY_ID });
     expect(sendMock.mock.calls[0][0].from).toBe(
-      'Bishop Contracting <bishop-contracting@rafterworks.com>'
+      'Bishop Contracting <bishop-contracting@ezcontractorbinder.com>'
     );
   });
 });

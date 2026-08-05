@@ -12,6 +12,9 @@ export default defineConfig({
     tsconfigPaths: true,
     alias: {
       'server-only': new URL('./test/server-only-stub.ts', import.meta.url).pathname,
+      // next/font is a build-time transform and throws outside the Next
+      // compiler — see test/next-font-stub.ts.
+      'next/font/google': new URL('./test/next-font-stub.ts', import.meta.url).pathname,
     },
   },
   test: {

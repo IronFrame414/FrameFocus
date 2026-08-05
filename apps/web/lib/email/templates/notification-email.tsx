@@ -9,6 +9,7 @@ import {
   Section,
   Text,
 } from '@react-email/components';
+import { brand } from '@/lib/brand';
 
 // Spec 2 (4F/4J) — Owner/Admin heads-up on sign / decline /
 // expiration. Internal email: plain, factual, links back into the
@@ -67,7 +68,7 @@ export function NotificationEmail({
               {ctaLabel}
             </Button>
           </Section>
-          <Text style={{ fontSize: '11px', color: '#9ca3af' }}>FrameFocus notification</Text>
+          <Text style={{ fontSize: '11px', color: '#9ca3af' }}>{brand.name} notification</Text>
         </Container>
       </Body>
     </Html>

@@ -13,6 +13,7 @@
 // client was contractually entitled to hold.
 
 import type { ResolvedReminderSettings } from '@/lib/services/reminders-shared';
+import { brand } from '@/lib/brand';
 import { ReminderSettings } from './reminder-settings';
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -732,7 +733,7 @@ function RetainageReleasePanel({
       <span style={microLabelStyle}>Release retainage</span>
       <p style={{ fontSize: '12px', color: color.body, margin: '4px 0 8px' }}>
         {money(amount)} is held on this job. The trigger is the client&rsquo;s <strong>final
-        walkthrough</strong> sign-off (§4.1) — record the date it happened and FrameFocus generates the
+        walkthrough</strong> sign-off (§4.1) — record the date it happened and {brand.name} generates the
         release as its <strong>own draft invoice</strong>, which still waits for Owner/Admin approval
         before sending.
       </p>

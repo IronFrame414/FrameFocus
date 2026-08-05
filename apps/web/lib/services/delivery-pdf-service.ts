@@ -113,7 +113,7 @@ export async function regenerateDeliveryPdf(
   }
 
   const data: DeliveryPdfData = {
-    companyName: company?.name ?? 'FrameFocus',
+    companyName: company?.name ?? 'Company',
     projectName: project?.name ?? 'Project',
     vendorName: delivery.vendor_name,
     deliveryDate: delivery.delivery_date,
