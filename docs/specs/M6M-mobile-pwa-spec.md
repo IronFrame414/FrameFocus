@@ -182,10 +182,12 @@
 | D-36 | The app-bar avatar            | **CUT.** [S100, Josh] §3.1's 38px amber avatar is removed from the app bar entirely — not resized, not made tappable. The hamburger stays as the bar's only left control, and **Sign out remains where §3.3 already puts it**, in the sheet. The bar is now: hamburger (or back chevron) · title block · nothing on the right. §3.1; A-40. _(Raised by the shell build: §3.1 sized the avatar and never gave it an action, and 38px sits under §2's 44px floor for interactive targets — so it was either a sub-spec tap target or a decoration. Ruled: neither. It goes.)_ |
 | D-38 | Dashboard tile / M-24         | **CUT FROM V1.** [S100, Josh] The Dashboard tile leaves §3.3 — the sheet drops to **six** tiles — and `/m/dashboard` is not built. **Not permanent: a v1 cut, in D-19's and D-14's shape.** Three independent reasons, each sufficient. **(1) Every non-money figure is already owned elsewhere**, by a screen that owns it better: `activeProjectCount` by M-2's app bar (A-10c fixes it as `{n} active` **and nothing after it**), `openPunchCount` by D-16's counter and its two expressions, `pastTargetCount` by A-10e's signed days-left on the card the user can act from, `awaitingCount` by M-13. A second copy is a second chance to disagree. **(2) The attention feed — the one thing not duplicated — is office admin, not field work:** CO signature chasing, and project-setup data hygiene. All three item types hard-code `/dashboard/**` hrefs. **(3) `getDashboardData()` selects `change_orders.net_delta` twice** (`dashboard.ts:64`, `:73`) to build `awaitingSum` and the signed-CO items — so calling it from `/m` pulls **the exact column D-26 cut** into the mobile data path, where **TECH_DEBT #117** means RLS would not catch a slip. §3.3; §4.13 (M-24 removed); A-3b, A-41, A-43. |
 | D-39 | App bar on the six destinations | **HAMBURGER, NOT A BACK CHEVRON — a deliberate departure from §4.11's common rule, confirmed [S100, Josh].** §4.11 gives the twelve project-section screens a back chevron; the six hamburger destinations keep the **hamburger**. Two reasons. §3.1's chevron clause is conditioned on being **inside a project** (`/m/p/**`) and these are company-scoped, so it never fires. And decisively: **A-3c can only be observed by opening the sheet while standing on one of these six routes** — a back chevron makes the sheet unopenable there, which would strand the criterion for a second time after §4.13 had just rescued it. **Recorded as a ruling, not a flagged deviation, so a later reader does not "fix" it back to the chevron.** §4.13's common rules; A-42b. |
-| D-40 | Location data — read access and retention | **OWNER/ADMIN READ ONLY. 30-DAY RETENTION.** [S101, Josh] Closes the "retention and read access for location data" item D-34 opened. `gps_in`/`gps_out` are readable by Owner and Admin only, and rows older than 30 days lose their location payload. **NEITHER HALF IS ENFORCED TODAY, and neither is a UI change** — see §4.12.1a's new "Read access and retention" block for the cost. **A migration is required and is NOT written here.** |
+| D-40 | Location data — read access and retention | **SUPERSEDED IN BOTH HALVES BY D-48 [S102, Josh].** _Original text, quoted not rewritten:_ _"**OWNER/ADMIN READ ONLY. 30-DAY RETENTION.** [S101, Josh] Closes the 'retention and read access for location data' item D-34 opened. `gps_in`/`gps_out` are readable by Owner and Admin only, and rows older than 30 days lose their location payload. **NEITHER HALF IS ENFORCED TODAY, and neither is a UI change** … **A migration is required and is NOT written here.**"_ Both halves are withdrawn: the Owner/Admin restriction is **skipped** and retention is **deferred**. See D-48 and §4.12.1a. |
 | D-41 | In-app notice that location is captured | **NO. Crew are NOT told in-app.** [S101, Josh] The other half of the item D-34 left open. No banner, no first-run explainer, no line on M-5. **Josh's reasoning, recorded as his:** the capture is a condition of employment rather than a consent the app negotiates, and a per-clock-in notice on the one screen a crew member must use every shift is friction on a required action for a fact that does not change. **This spec records the ruling and does not endorse it as legal advice** — see §4.12.1a. |
 | D-42 | `deliveries.checked_in_at`     | **YES — the column is adopted.** [S101, Josh] Resolves TECH_DEBT #134. `submit_delivery_check_in()` becomes a **state transition** rather than a bare gate: it stamps `checked_in_at` on success, so a half-entered check-in is distinguishable from a finished one. **Specced in §7c; NOT migrated here.** |
-| D-43 | Expenses — who enters, views, edits | **Everyone enters and views. Everyone edits their own. Only Owner/Admin edit anything.** [S101, Josh] **The live RLS does not implement this, and the gap is in the "views" clause** — `expenses_select_scoped` gives crew and subcontractors **their own rows only**. Two further mismatches on the edit clause. Full comparison, and what each would cost, in §4.13.3's new "The ruling vs the live policies" block. **A-45d STANDS** — it asserts the absence of a UI role check, which this ruling reinforces. |
+| D-43 | Expenses — who enters, views, edits | **Everyone enters and views. Everyone edits their own UNTIL IT IS APPROVED. Only Owner/Admin edit anything.** [S101, Josh; **edit clause CORRECTED S102**] The "views" gap is closed by **D-47**, which widens the policy. The edit clause is **corrected rather than migrated**: _superseded wording, quoted —_ _"Everyone edits their own."_ The live cap at `status = 'pending'` **is the ruling**, not a mismatch. **A-45d STANDS.** §4.13.3. |
+| D-47 | `expenses_select_scoped` is WIDENED | **crew_member and subcontractor JOIN THE ROLE ARRAY.** [S102, Josh] Closes D-43's "everyone views" clause at the database instead of leaving it as intent. **Role array only — every other arm of the policy is byte-identical.** This is a **widening**, so nothing in the Financial Visibility Floor blocks it: an expense is *actual cost*, which the Floor makes visible to every role by design. **What each role gains sight of is stated plainly in §4.13.3** — this is the one ruling in this pass that exposes rows a role could not previously read. Migration `20260825000000`. |
+| D-48 | Location — the D-40 walk-back | **OWNER/ADMIN RESTRICTION SKIPPED. RETENTION DEFERRED.** [S102, Josh] Supersedes **both** halves of D-40. Coordinates stay on `time_clock_sessions_select_scoped`'s **existing rank ladder**, so **a foreman reads a crew member's location** and a PM reads a foreman's — narrower protection than D-40 promised, and §4.12.1a now says so outright rather than implying it. Retention is deferred with its dependency named: **`pg_cron` is not used anywhere in this repo**, so 30-day expiry is a new operational dependency, not a line of SQL. **No migration, and none owed until it is un-deferred.** |
 | D-44 | 7a fallback order with no GPS fix | **RECENTLY-USED.** [S101, Josh] Closes the D-33 open item. **There is no source function for it today** — stated plainly rather than bound to something approximate. The data exists on `time_segments`; the function does not. §4.12.1; A-7l2 rewritten. |
 | D-45 | Change orders on mobile — full lifecycle | **INTENT RECORDED, SCREEN DEFERRED.** [S101, Josh] Owner/Admin/PM will eventually author a CO on mobile end-to-end, creation through send-for-signature. **Not in scope now, and M-13 must not be built in a way that forecloses it.** **Does NOT reverse D-26**, which governs *display on the read-only list*. §4.11.3. |
 | D-46 | Money format on `/m`           | **ONE FORMAT, FIXED AS A §2 TOKEN.** [S101] `$1,234.56` / `-$1,234.56` / `—` for null. Matches the 15 desktop `style: 'currency'` call sites and the PDF templates' hand-rolled formatter, which agree on every case. Written into **§2** rather than §4.13.3 so the next money screen inherits it. A-50. |
@@ -1521,10 +1523,48 @@ than ruled (§11).
 > does not shield it because A-28 protects `apps/web/app/dashboard/**` from *this spec's* changes — this
 > is a defect D-34 would introduce, so D-34 owns it.
 
-##### Read access and retention (D-40 [S101, Josh]) — **ruled, and NOT enforced today**
+##### Read access and retention — **D-40 WITHDRAWN, D-48 [S102, Josh] governs**
 
-**The ruling: `gps_in`/`gps_out` are Owner/Admin read-only, and location is retained 30 days.** This
-closes the item D-34 opened — that a denied permission is now a durable fact about a person rather than
+> **⚠️ BOTH HALVES OF D-40 ARE WITHDRAWN. Read this before the analysis below it.**
+>
+> _D-40's ruling, quoted rather than deleted:_ _"`gps_in`/`gps_out` are Owner/Admin read-only, and
+> location is retained 30 days."_
+>
+> **1 — The Owner/Admin restriction is SKIPPED.** Coordinates stay exactly where they are, on
+> `time_clock_sessions`, governed by the **existing rank ladder** in
+> `time_clock_sessions_select_scoped`. No side table, no column split, no migration.
+>
+> **THE EXPOSURE, STATED PLAINLY RATHER THAN LEFT IMPLIED — this is narrower protection than D-40
+> promised, and the difference is a person's whereabouts:**
+>
+> | Caller | Whose coordinates they can read |
+> | ------ | ------------------------------- |
+> | owner (rank 5) / admin (4) | everyone in the company |
+> | **project_manager (3)** | **foreman, crew and subcontractors** |
+> | **foreman (2)** | **crew members and subcontractors** — the case worth naming: **a foreman reads where a crew member was at clock-in and clock-out** |
+> | crew_member (1) / subcontractor (1) | **their own only** — equal rank never outranks, so crew cannot read each other |
+>
+> The ladder is `time_role_rank()`: `owner 5, admin 4, project_manager 3, foreman 2, crew_member 1,
+> subcontractor 1`, and the policy grants a row when `time_role_rank(get_my_role()) > time_member_rank(member_id)`
+> **or** the row is your own. It is a real gate — crew cannot read each other, and nobody outside the
+> company reads anything — but it is **not** the Owner/Admin gate D-40 described, and any document or
+> conversation that relies on D-40's promise is relying on something that was never built.
+>
+> **2 — Retention is DEFERRED, with the dependency named.** 30-day expiry needs a scheduled job, and
+> **`pg_cron` is not used anywhere in this repo** — verified. So it is a **new operational dependency**
+> rather than a line of SQL, and the alternative (a scheduled Edge Function) is the same decision in a
+> different place. **Location written today is kept indefinitely, and that is the accepted state until
+> this is un-deferred.** No migration is owed while it stands deferred.
+>
+> **What is unchanged by D-48:** D-34 (capture is always attempted, never blocking, reason recorded) and
+> D-41 (crew are not told in-app), including D-41's logged employment-law flag. **The flag matters more
+> under D-48, not less** — the data is retained indefinitely and is readable one rank up.
+>
+> The analysis below was written for D-40 and is **retained as the costing** for whoever un-defers
+> either half. Read it as "what it would take", not as "what is owed".
+
+**D-40's ruling was: `gps_in`/`gps_out` are Owner/Admin read-only, and location is retained 30 days.** It
+closed the item D-34 opened — that a denied permission is now a durable fact about a person rather than
 an absence, with nobody having said who may read it or for how long.
 
 **Neither half exists today, and neither is a UI change.** What is actually live, verified S101:
@@ -1832,9 +1872,9 @@ Verified S101 against rebuild-test:
 
 | Ruling clause | Live policy | Verdict |
 | ------------- | ----------- | ------- |
-| "everyone **views**" | `expenses_select_scoped` = `company_id AND (author_member_id = get_my_member_id() OR (get_my_role() IN ('owner','admin','project_manager','foreman') AND can_view_project(project_id)))` | **⚠️ GAP — the material one.** `crew_member` and `subcontractor` are **absent from the role array**, so they see **only rows they authored**. Not a teammate's, not their own project's. A crew member on a job cannot see the material receipt the foreman filed for that job. **Closing this is a migration widening the role array**, not a UI change — and it is the *opposite* direction from a role gate, so nothing in the Financial Visibility Floor blocks it: an expense is actual cost, which the Floor makes visible to all roles by design. |
+| "everyone **views**" | `expenses_select_scoped` — `crew_member` and `subcontractor` were **absent from the role array** | **✅ CLOSED [S102, D-47] by migration `20260825000000`.** They are now in it. See "What D-47 widens, and what it exposes" below. |
 | "everyone **enters**" | `expenses_insert_authorized` — needs `can_view_project(project_id)`, `author_member_id = mine` (or Owner/Admin), `status='pending'`, and all approval columns NULL | **Holds for the plain case.** But **five columns are role-shaped on insert**: `state='committed'` and `cost_category='subcontractor'` and `sub_contract_id`/`purchase_order_id` and `awaiting_paper` are Owner/Admin/PM; `is_retainage` is Owner/Admin. So "everyone enters" is true of an ordinary actual material/other expense and false of the rest. **M-26 is read-only in v1, so nothing here bites yet** — a future mobile capture screen must not assume a uniform insert. |
-| "everyone edits **their own**" | `expenses_update_authorized` = `company_id AND (Owner/Admin OR (author_member_id = mine AND status = 'pending'))` | **⚠️ GAP — narrower than the ruling.** An author may edit their own **only while `status = 'pending'`**. Once approved or rejected the author is locked out. If the ruling means "their own, always", that is a policy change; if it means "their own, until it is decided", the live policy is already right and **the ruling wants the qualifier written down**. **Ask before migrating** — this one is genuinely ambiguous in the words. |
+| "everyone edits **their own**" | `expenses_update_authorized` = `company_id AND (Owner/Admin OR (author_member_id = mine AND status = 'pending'))` | **✅ NOT A GAP — the cap IS the ruling [S102, Josh].** _Superseded verdict, quoted:_ _"⚠️ GAP — narrower than the ruling … Ask before migrating."_ **Ruled: a user edits their own expense until Owner/Admin approves it; after that only Owner/Admin can.** The live policy already says exactly that, so **D-43's wording was corrected and the policy was left alone.** The `status = 'pending'` cap is the mechanism: approval is the handover point, and an author editing an approved figure would mean the approval no longer refers to what it approved. |
 | "only Owner/Admin edit **anything**" | same policy, first arm | **✅ MATCHES exactly.** |
 
 **Also worth recording: there is no DELETE policy on `expenses` at all**, so DELETE is denied to every
@@ -1843,10 +1883,50 @@ above — meaning an author cannot soft-delete their own expense after approval 
 the trash-bin pattern; noted because "only Owner/Admin edit anything" reads as covering deletion and the
 mechanism is not obvious.
 
-**None of this changes what M-26 builds.** It is a read surface bound to `getExpenses()`, rendering what
-RLS returns, with no UI role check. **What the gaps change is what a crew member SEES on it** — under
-today's policies, only their own expenses. If Josh wants the "everyone views" clause honoured, that is a
-migration on `expenses_select_scoped`, filed as owed work rather than smuggled into a mobile screen.
+##### What D-47 widens, and what it exposes — stated plainly [S102]
+
+Migration `20260825000000` adds `crew_member` and `subcontractor` to
+`expenses_select_scoped`'s role array. **Nothing else in the policy changes** — the company scope, the
+author-own arm and the `can_view_project()` requirement are byte-identical, and the migration proves it
+rather than asserting it.
+
+**The policy after D-47:**
+
+```
+company_id = get_my_company_id()
+AND (
+  author_member_id = get_my_member_id()
+  OR ( get_my_role() = ANY (ARRAY['owner','admin','project_manager','foreman',
+                                  'crew_member','subcontractor'])   -- two added
+       AND can_view_project(project_id) )
+)
+```
+
+**Who gains sight of what. This is a widening, so it is the one ruling in this pass that lets a role
+read rows it previously could not:**
+
+| Role | Before D-47 | After D-47 | What is newly visible |
+| ---- | ----------- | ---------- | --------------------- |
+| **crew_member** | Own expenses only | Own, **plus every expense on every project they are assigned to** | A teammate's material receipts, the foreman's fuel claim, a PM's committed cost line — **including the `amount` on each**, since RLS is row-level and the amount travels with the row. |
+| **subcontractor** | Own expenses only | Same as crew, scoped by `can_view_project()` | The same, on their assigned projects. **This is the widening worth pausing on**: a subcontractor is an outside party, and they can now read the company's other costs on a shared job. |
+| owner, admin, project_manager, foreman | unchanged | unchanged | Nothing. |
+
+**`can_view_project()` is what keeps this bounded, and it is doing real work.** For a non-Owner/Admin
+caller it resolves through `is_assigned_to_project()`, so the widening reaches **assigned projects only**
+— never the whole company. A crew member on one job sees that job's expenses and no others. Remove or
+weaken that arm and this becomes a company-wide disclosure; **the migration must not touch it**, and
+§7d's diff check is what proves it did not.
+
+**Why this is nonetheless the right call, recorded so the exposure is not mistaken for an oversight.**
+An expense is **actual cost**, which the Financial Visibility Floor names as visible to every role by
+design — the deliberate counterpart to the contract/budget/sell figures it gates. D-43's "everyone
+views" is that principle applied to the one screen a field user reaches. The Floor's gated families
+(contract value, budgeted amount, instrument rates) are untouched by this migration and remain
+DB-enforced Owner/Admin.
+
+**None of this changes what M-26 BUILDS.** It is a read surface bound to `getExpenses()`, rendering
+exactly what RLS returns, with no UI role check — A-45d, unchanged. What D-47 changes is **what the
+database hands it**. A-45b is rewritten accordingly: the crew arm no longer asserts "own rows only".
 
 ##### Cut from M-26
 
@@ -3130,8 +3210,9 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 **Expenses (§4.13.3)**
 
 - A-45 `/m/expenses` renders `amount` in IBM Plex Mono on every row. `[Playwright]` _(§4.13.3 + D-37. The first currency on `/m`; §2's mono rule has no currency exception.)_
-- A-45b Signed in as **crew_member**, `/m/expenses` lists only expenses that member authored — a teammate's expense on the same project does not appear. `[live]` _(§4.13.3. `expenses_select_scoped`'s author branch. This is the criterion that proves the screen is row-floored at the database rather than filtered in the UI.)_
-- A-45c Signed in as **foreman**, `/m/expenses` lists both own expenses and a teammate's expense on an assigned project. `[live]` _(§4.13.3. The complement of A-45b — without it, a build that simply filtered to "mine" for everyone would pass A-45b and be wrong.)_
+- A-45b **REWRITTEN [S102, D-47].** Signed in as **crew_member**, `/m/expenses` lists own expenses **and a teammate's expense on an assigned project** — and lists **no** expense on a project the member is not assigned to. `[live]` _(**Rewritten** because D-47 widened the policy. _Superseded text:_ _"lists only expenses that member authored — a teammate's expense on the same project does not appear."_ That asserted the pre-widening behaviour and would now fail on a correct build. **The second half is the load-bearing one**: it proves `can_view_project()` still bounds the widening to assigned projects, which is the arm the migration must not touch.)_
+- A-45c Signed in as **foreman**, `/m/expenses` lists both own expenses and a teammate's expense on an assigned project. `[live]` _(§4.13.3. Unchanged by D-47 — foreman was already in the role array. Retained as the control: if A-45b and A-45c now agree, the widening landed; if only A-45c passes, it did not.)_
+- A-45b2 **NEW [S102, D-47]** Signed in as **subcontractor**, `/m/expenses` behaves exactly as A-45b — own plus assigned-project expenses, nothing beyond. `[live]` _(§4.13.3. The role D-47 exposes most, because a subcontractor is an outside party reading the company's other costs on a shared job. Asserted separately from crew so a migration that adds only one of the two names fails visibly. **Blocked on #127** — rebuild-test has no persistent subcontractor identity; see §7d's evidence note.)_
 - A-45d `/m/expenses` issues **no UI role check** on `amount` — the rendered row set equals what `getExpenses()` returns for that caller, for all six roles. `[live + Playwright]` _(§4.13.3. The default this spec sets is "show what RLS returns". If Josh rules that crew must not see amounts, **this criterion is the one that gets rewritten**, and it is named here so the rewrite is deliberate rather than a silent divergence.)_
 - A-45e `/m/expenses` renders **no** labor cost, burden, committed total, retainage or job-cost rollup figure under any role. `[Playwright]` _(§4.13.3's cut list. `getJobCostRollup()` is one call away and carries all five.)_
 - A-45f `/m/expenses` offers **no** approve, reject, capture or allocation control under any role, including Owner. `[Playwright]` _(§4.13.3. Read surface in v1.)_
@@ -3505,6 +3586,33 @@ now stands is six screens, M-25 … M-30. What the pass turned up, beyond the tw
 | **`navigator.geolocation` absent entirely** | The three browser error codes cover permission and signal. A browser with no Geolocation API produces **no code at all**. `reason: "unsupported"`, `error_code: null` is the natural extension of §4.12.1a's table; it is **not ruled**, and it is nearly unreachable on the PWA's target browsers. |
 | **Retention and read access for location data** | D-34 records more than before — a denied permission is now a durable fact about a person rather than an absence. Who may read `gps_in`, and for how long it is kept, are unaddressed. `time_clock_sessions` follows the standard company-scoped RLS with no role floor on these columns. |
 | **The desktop markup derivative** | Unchanged from the seventh pass — out of scope, logged as tech debt in a parallel session. |
+
+### Twelfth ruling pass [S102, Josh] — two closures and two walk-backs
+
+Four rulings. **Two close gaps the eleventh pass opened; two withdraw things the eleventh pass ruled.**
+Recorded as **D-47** and **D-48**, plus a correction inside D-43.
+
+| # | Question | **Ruling** | Applied in |
+| - | -------- | ---------- | ---------- |
+| 28 | Does `expenses_select_scoped` get widened? | **YES.** `crew_member` and `subcontractor` join the role array. Role array only; every other arm byte-identical. Migration `20260825000000`. | **D-47**; §4.13.3; A-45b rewritten, A-45b2 new |
+| 29 | Does "edits their own" mean always, or only while pending? | **ONLY WHILE PENDING — and the live policy is already right.** A user edits their own until Owner/Admin approves; after that only Owner/Admin. **D-43's wording is corrected; the policy is not touched.** | **D-43 corrected**; §4.13.3 |
+| 30 | 30-day location retention? | **DEFERRED**, dependency named: `pg_cron` is not used in this repo, so this is a new operational dependency rather than SQL. Location is kept indefinitely until un-deferred. | **D-48**; §4.12.1a |
+| 31 | Owner/Admin-only reads on `gps_in`/`gps_out`? | **SKIPPED.** The existing rank ladder stands. | **D-48**; §4.12.1a |
+
+**The two walk-backs are the ones a future reader will trip over, so both are stated as exposures
+rather than as scope decisions.**
+
+- **D-48 leaves location on the rank ladder**, which means **a foreman reads a crew member's
+  coordinates** and a PM reads a foreman's. §4.12.1a now carries the full who-reads-whose table. That is
+  narrower protection than D-40 promised, and D-40's text is quoted in place rather than deleted so the
+  withdrawal is visible.
+- **D-48 also leaves location retained indefinitely.** D-41's logged employment-law flag **matters more
+  under this ruling, not less** — the data is permanent and readable one rank up.
+
+**D-47 is the only ruling in this pass that exposes rows a role could not previously read**, so §4.13.3
+gained a table naming exactly what crew and subcontractors gain sight of, and why `can_view_project()`
+is the arm that keeps it bounded to assigned projects. **A-45b had to be rewritten** — it asserted the
+pre-widening behaviour and would now fail on a correct build.
 
 ### Eleventh ruling pass [S101, Josh] — location, expenses roles, checked_in_at, CO intent, money format
 
