@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics="">
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&amp;family=Barlow+Semi+Condensed:wght@500;600;700&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#e9e7e1;font-family:'Barlow',system-ui,sans-serif}
+  a{color:#2f49d1;text-decoration:none}a:hover{color:#1f33a8}
+  .dv-turn{padding:48px 52px 40px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}
+  .dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 26px}
+  .dv-tid{font:700 10px 'IBM Plex Mono',monospace;padding:4px 8px;background:#17181b;color:#fff;border-radius:5px;text-decoration:none}
+  .dv-tname{font:600 13px/1.2 'Barlow',sans-serif;color:#1a1a1a}
+  .dv-opts{display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start}
+  .dv-opt{flex:none;display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px}
+  .dv-oid{font:700 10.5px 'IBM Plex Mono',monospace;padding:3px 7px;background:rgba(0,0,0,.09);color:#1a1a1a;border-radius:5px;text-decoration:none}
+  .dv-olabel{display:flex;align-items:baseline;gap:8px;font:500 12px/1.3 'Barlow',sans-serif;color:rgba(0,0,0,.55)}
+  .dv-card{max-width:100%;border-radius:16px;overflow:hidden;box-shadow:0 12px 34px rgba(20,30,55,.16)}
+  .dv-opt:target .dv-oid{background:#2f49d1;color:#fff}
+  .dv-next{margin:26px 0 0;font:14px/1.6 'Barlow',sans-serif;color:rgba(0,0,0,.55)}
+  .intro{max-width:940px;margin:0 auto;padding:56px 52px 8px}
+  .intro h1{font:800 30px/1.1 'Barlow',sans-serif;color:#14213d;margin:0 0 6px;letter-spacing:-.01em}
+  .intro .sub{font:500 15px 'IBM Plex Mono',monospace;color:#6b7280;margin:0 0 26px}
+  .intro p{font:400 15px/1.65 'Barlow',sans-serif;color:#33383f;margin:0 0 14px}
+  .intro h3{font:700 13px 'IBM Plex Mono',monospace;letter-spacing:.06em;text-transform:uppercase;color:#14213d;margin:26px 0 10px}
+  .intro li{font:400 15px/1.6 'Barlow',sans-serif;color:#33383f;margin:0 0 7px}
+  .intro strong{color:#14213d;font-weight:700}
+</style>
+</helmet>
+<div class="intro">
+  <h1>FrameFocus — Module 6: Field Operations</h1>
+  <p class="sub">6A Time Tracking · 6B Daily Logs · 6C Safety Incidents · 6D Material Deliveries · 6E Crew Briefings</p>
+  <p>High-fidelity <strong>desktop / office</strong> surfaces for Module 6, in the approved <strong>Refined Navy (1a)</strong> direction, reusing the shared <strong>FFNav</strong> sidebar. Field Ops and Timesheets are now first-class nav items. Options labeled 4a–4f by sub-module. The <strong>mobile field-capture</strong> screens (clock in/out, on-truck delivery check-in, tap-through daily log) are deferred to the mobile build.</p>
+</div>
+
+<section class="dv-turn" id="t4">
+  <div class="dv-thd"><a class="dv-tid" href="#t4">4</a><span class="dv-tname">Module 6 — Field Operations (6A–6E), desktop/office surfaces · Refined Navy</span></div>
+  <div class="dv-opts">
+
+    <!-- ============ 4a Timesheets approval queue ============ -->
+    <div class="dv-opt" id="4a">
+      <div class="dv-olabel"><a class="dv-oid" href="#4a">4a</a>6A · Timesheets — approval queue</div>
+      <div class="dv-card" style="width:1200px;display:flex;background:#f4f6f9;font-size:14px">
+        <dc-import name="FFNav" active="3" hint-size="236px,700px"></dc-import>
+        <main style="flex:1;padding:26px 30px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px">
+            <div><h2 style="font:800 26px 'Barlow';color:#14213d;margin:0;letter-spacing:-.01em">Timesheets</h2><div style="color:#6b7280;font-size:14px;margin-top:2px">Week of Jul 6–12 · you approve roles below Owner</div></div>
+            <div style="display:flex;gap:10px"><button style="font:600 13px 'Barlow';color:#374151;background:#fff;border:1px solid #e0e4ea;padding:9px 15px;border-radius:9px">Export</button><button style="font:600 13px 'Barlow';color:#fff;background:#2f49d1;border:none;padding:9px 16px;border-radius:9px">Approve selected</button></div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px">
+            <div style="background:#fff;border:1px solid #e6e9ef;border-radius:12px;padding:15px 16px"><div style="font:600 10.5px 'IBM Plex Mono';text-transform:uppercase;color:#8a919c">Pending Approval</div><div style="font:600 22px 'IBM Plex Mono';color:#d97706;margin-top:5px">5</div></div>
+            <div style="background:#fff;border:1px solid #e6e9ef;border-radius:12px;padding:15px 16px"><div style="font:600 10.5px 'IBM Plex Mono';text-transform:uppercase;color:#8a919c">Paid Hours (wk)</div><div style="font:600 22px 'IBM Plex Mono';color:#14213d;margin-top:5px">214.5</div></div>
+            <div style="background:#fff;border:1px solid #f3e2c4;border-radius:12px;padding:15px 16px"><div style="font:600 10.5px 'IBM Plex Mono';text-transform:uppercase;color:#b45309">Overtime (derived)</div><div style="font:600 22px 'IBM Plex Mono';color:#b45309;margin-top:5px">6.5</div></div>
+            <div style="background:#fff;border:1px solid #e6e9ef;border-radius:12px;padding:15px 16px"><div style="font:600 10.5px 'IBM Plex Mono';text-transform:uppercase;color:#8a919c">Labor Cost (wk)</div><div style="font:600 22px 'IBM Plex Mono';color:#14213d;margin-top:5px">$9,240</div></div>
+          </div>
+          <div style="background:#fff;border:1px solid #e6e9ef;border-radius:13px;overflow:hidden">
+            <div style="display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr 1fr 1.2fr;gap:12px;padding:12px 20px;background:#f7f9fc;border-bottom:1px solid #eef1f6;font:600 11px 'IBM Plex Mono';text-transform:uppercase;color:#8a919c">
+              <div>Member</div><div style="text-align:right">Paid hrs</div><div style="text-align:right">Worked</div><div style="text-align:right">OT</div><div>Status</div><div style="text-align:right">Action</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr 1fr 1.2fr;gap:12px;padding:13px 20px;border-bottom:1px solid #f1f3f7;align-items:center">
+              <div style="display:flex;align-items:center;gap:10px"><div style="width:32px;height:32px;border-radius:8px;background:#6bab7a;color:#fff;font:700 12px 'Barlow';display:flex;align-items:center;justify-content:center">DM</div><div><div style="font-weight:600;color:#14213d">Dave Morales</div><div style="font:500 11px 'IBM Plex Mono';color:#9aa1ac">Crew</div></div></div>
+              <div style="text-align:right;font:600 13px 'IBM Plex Mono';color:#14213d">40.0</div><div style="text-align:right;font:500 13px 'IBM Plex Mono';color:#6b7280">38.5</div><div style="text-align:right;font:500 13px 'IBM Plex Mono';color:#9aa1ac">0.0</div>
+              <div><span style="font:600 12px 'Barlow';background:#fdece0;color:#b45309;padding:4px 10px;border-radius:20px">Pending</span></div>
+              <div style="text-align:right"><button style="font:600 12px 'Barlow';color:#fff;background:#2f49d1;border:none;padding:6px 14px;border-radius:7px">Approve</button></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr 1fr 1.2fr;gap:12px;padding:13px 20px;border-bottom:1px solid #f1f3f7;align-items:center">
+              <div style="display:flex;align-items:center;gap:10px"><div style="width:32px;height:32px;border-radius:8px;background:#3a4db0;color:#fff;font:700 12px 'Barlow';display:flex;align-items:center;justify-content:center">RT</div><div><div style="font-weight:600;color:#14213d">Rosa Terrell</div><div style="font:500 11px 'IBM Plex Mono';color:#9aa1ac">Crew</div></div></div>
+              <div style="text-align:right;font:600 13px 'IBM Plex Mono';color:#14213d">42.5</div><div style="text-align:right;font:500 13px 'IBM Plex Mono';color:#6b7280">40.0</div><div style="text-align:right;font:600 13px 'IBM Plex Mono';color:#b45309">2.5</div>
+              <div><span style="font:600 12px 'Barlow';background:#fdece0;color:#b45309;padding:4px 10px;border-radius:20px">Pending</span></div>
+              <div style="text-align:right"><button style="font:600 12px 'Barlow';color:#fff;background:#2f49d1;border:none;padding:6px 14px;border-radius:7px">Approve</button></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr 1fr 1.2fr;gap:12px;padding:13px 20px;border-bottom:1px solid #f1f3f7;align-items:center">
+              <div style="display:flex;align-items:center;gap:10px"><div style="width:32px;height:32px;border-radius:8px;background:#b45309;color:#fff;font:700 12px 'Barlow';display:flex;align-items:center;justify-content:center">CC</div><div><div style="font-weight:600;color:#14213d">Carl Chen</div><div style="font:500 11px 'IBM Plex Mono';color:#9aa1ac">Foreman</div></div></div>
+              <div style="text-align:right;font:600 13px 'IBM Plex Mono';color:#14213d">44.0</div><div style="text-align:right;font:500 13px 'IBM Plex Mono';color:#6b7280">40.0</div><div style="text-align:right;font:600 13px 'IBM Plex Mono';color:#b45309">4.0</div>
+              <div><span style="font:600 12px 'Barlow';background:#e4f0e6;color:#3d7a4b;padding:4px 10px;border-radius:20px">Approved</span></div>
+              <div style="text-align:right;font:500 12px 'Barlow';color:#9aa1ac">by Josh</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1.6fr 1fr 1fr 1fr 1fr 1.2fr;gap:12px;padding:13px 20px;align-items:center;background:#fbfcfe">
+              <div style="display:flex;align-items:center;gap:10px"><div style="width:32px;height:32px;border-radius:8px;background:#f59e0b;color:#14213d;font:700 12px 'Barlow';display:flex;align-items:center;justify-content:center">JB</div><div><div style="font-weight:600;color:#14213d">Josh Bishop</div><div style="font:500 11px 'IBM Plex Mono';color:#9aa1ac">Owner</div></div></div>
+              <div style="text-align:right;font:600 13px 'IBM Plex Mono';color:#14213d">40.0</div><div style="text-align:right;font:500 13px 'IBM Plex Mono';color:#6b7280">33.0</div><div style="text-align:right;font:500 13px 'IBM Plex Mono';color:#9aa1ac">0.0</div>
+              <div><span style="font:600 12px 'Barlow';background:#eef1f6;color:#6b7280;padding:4px 10px;border-radius:20px">No approval</span></div>
+              <div style="text-align:right;font:500 12px 'Barlow';color:#9aa1ac">Owner — n/a</div>
+            </div>
+          </div>
+          <div style="margin-top:12px;font:500 12px 'Barlow';color:#9aa1ac;display:flex;align-items:center;gap:7px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9aa1ac" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4m0 4h.01"/></svg>Overtime is derived from weekly paid hours over 40 — never selected. Owner hours carry no approval state.</div>
+        </main>
+      </div>
+    </div>
+
+    <!-- ============ 4b Timesheet detail — segments ============ -->
+    <div class="dv-opt" id="4b">
+      <div class="dv-olabel"><a class="dv-oid" href="#4b">4b</a>6A · Timesheet detail — segment timeline</div>
+      <div class="dv-card" style="width:1200px;display:flex;background:#f4f6f9;font-size:14px">
+        <dc-import name="FFNav" active="3" hint-size="236px,700px"></dc-import>
+        <main style="flex:1;padding:22px 30px">
+          <div style="font:500 12px 'IBM Plex Mono';color:#9aa1ac;margin-bottom:8px">Timesheets / <span style="color:#6b7280">Dave Morales · Tue Jul 8</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px">
+            <div style="display:flex;align-items:center;gap:10px"><h2 style="font:800 24px 'Barlow';color:#14213d;margin:0;letter-spacing:-.01em">Dave Morales — Tue, Jul 8</h2><span style="font:600 12px 'Barlow';background:#fdece0;color:#b45309;padding:4px 10px;border-radius:20px">Pending</span></div>
+            <div style="display:flex;gap:10px"><button style="font:600 13px 'Barlow';color:#374151;background:#fff;border:1px solid #e0e4ea;padding:9px 15px;border-radius:9px">Edit hours</button><button style="font:600 13px 'Barlow';color:#fff;background:#2f49d1;border:none;padding:9px 16px;border-radius:9px">Approve day</button></div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px">
+            <div style="background:#fff;border:1px solid #e6e9ef;border-radius:12px;padding:15px 16px"><div style="font:600 10.5px 'IBM Plex Mono';text-transform:uppercase;color:#8a919c">Clock In / Out</div><div style="font:600 16px 'IBM Plex Mono';color:#14213d;margin-top:6px">08:00 – 16:00</div></div>
+            <div style="background:#fff;border:1px solid #e6e9ef;border-radius:12px;padding:15px 16px"><div style="font:600 10.5px 'IBM Plex Mono';text-transform:uppercase;color:#8a919c">Paid Hours</div><div style="font:600 22px 'IBM Plex Mono';color:#14213d;margin-top:5px">8.0</div></div>
+            <div style="background:#fff;border:1px solid #e6e9ef;border-radius:12px;padding:15px 16px"><div style="font:600 10.5px 'IBM Plex Mono';text-transform:uppercase;color:#8a919c">Worked (job cost)</div><div style="font:600 22px 'IBM Plex Mono';color:#14213d;margin-top:5px">7.5</div></div>
+            <div style="background:#fff;border:1px solid #e6e9ef;border-radius:12px;padding:15px 16px"><div style="font:600 10.5px 'IBM Plex Mono';text-transform:uppercase;color:#8a919c">GPS</div><div style="font:600 13px 'Barlow';color:#16a34a;margin-top:9px;display:flex;align-items:center;gap:6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2"><path d="M12 21s-7-6.3-7-11a7 7 0 1114 0c0 4.7-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>On site</div></div>
+          </div>
+          <div style="background:#fff;border:1px solid #e6e9ef;border-radius:13px;padding:18px 20px">
+            <div style="font:700 14px 'Barlow';color:#14213d;margin-bottom:16px">Segments <span style="font:500 12px 'Barlow';color:#9aa1ac">— contiguous, must sum to the clocked day</span></div>
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <div style="display:flex;align-items:center;gap:14px;padding:12px 14px;border:1px solid #e6e9ef;border-radius:10px">
+                <div style="width:70px;font:600 12px 'IBM Plex Mono';color:#6b7280">08:00</div>
+                <div style="width:6px;height:36px;border-radius:3px;background:#2f49d1;flex:none"></div>
+                <div style="flex:1"><div style="font-weight:600;color:#14213d">Work · <span style="color:#2f49d1">Willow Ridge</span></div><div style="font-size:12px;color:#9aa1ac">Task: Frame east wall <span style="color:#16a34a;font-weight:600">· marked complete</span></div></div>
+                <div style="font:600 14px 'IBM Plex Mono';color:#14213d">4.0 h</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:14px;padding:12px 14px;border:1px solid #e6e9ef;border-radius:10px;background:#fbfcfe">
+                <div style="width:70px;font:600 12px 'IBM Plex Mono';color:#6b7280">12:00</div>
+                <div style="width:6px;height:36px;border-radius:3px;background:#c3c9d4;flex:none"></div>
+                <div style="flex:1"><div style="font-weight:600;color:#14213d">Break <span style="font:600 11px 'Barlow';background:#e4f0e6;color:#3d7a4b;padding:2px 7px;border-radius:20px;margin-left:4px">paid · ≤30 min</span></div><div style="font-size:12px;color:#9aa1ac">No project — never lands on job cost</div></div>
+                <div style="font:600 14px 'IBM Plex Mono';color:#14213d">0.5 h</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:14px;padding:12px 14px;border:1px solid #e6e9ef;border-radius:10px">
+                <div style="width:70px;font:600 12px 'IBM Plex Mono';color:#6b7280">12:30</div>
+                <div style="width:6px;height:36px;border-radius:3px;background:#2f49d1;flex:none"></div>
+                <div style="flex:1"><div style="font-weight:600;color:#14213d">Work · <span style="color:#2f49d1">Willow Ridge</span></div><div style="font-size:12px;color:#9aa1ac">Note: Set headers, blocked openings</div></div>
+                <div style="font:600 14px 'IBM Plex Mono';color:#14213d">3.5 h</div>
+              </div>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-top:14px;padding-top:14px;border-top:1px solid #eef1f6">
+              <div style="font-size:13px;color:#6b7280">Willow Ridge worked hours <span style="font:600 13px 'IBM Plex Mono';color:#14213d">7.5 h</span> · paid lunch <span style="font:600 13px 'IBM Plex Mono';color:#14213d">0.5 h</span></div>
+              <div style="font:700 14px 'IBM Plex Mono';color:#14213d">Day total 8.0 h</div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <!-- ============ 4c Daily log detail ============ -->
+    <div class="dv-opt" id="4c">
+      <div class="dv-olabel"><a class="dv-oid" href="#4c">4c</a>6B · Daily log — detail (office view)</div>
+      <div class="dv-card" style="width:1200px;display:flex;background:#f4f6f9;font-size:14px">
+        <dc-import name="FFNav" active="2" hint-size="236px,760px"></dc-import>
+        <main style="flex:1;padding:22px 30px">
+          <div style="font:500 12px 'IBM Plex Mono';color:#9aa1ac;margin-bottom:8px">Projects / PRJ-101 / Field / <span style="color:#6b7280">Daily Logs</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+            <div><h2 style="font:800 24px 'Barlow';color:#14213d;margin:0;letter-spacing:-.01em">Daily Log — Jul 8</h2><div style="color:#6b7280;font-size:13px;margin-top:2px">by Carl Chen (Foreman) · Willow Ridge</div></div>
+            <div style="display:flex;gap:10px"><button style="font:600 13px 'Barlow';color:#374151;background:#fff;border:1px solid #e0e4ea;padding:9px 15px;border-radius:9px">Download PDF</button></div>
+          </div>
+          <div style="display:flex;gap:2px;border-bottom:1px solid #e6e9ef;margin-bottom:20px">
+            <span style="font:600 13px 'Barlow';padding:10px 14px;color:#14213d;box-shadow:inset 0 -2px 0 #2f49d1">Daily Logs</span>
+            <span style="font:600 13px 'Barlow';padding:10px 14px;color:#8a919c">Crew Briefings</span>
+            <span style="font:600 13px 'Barlow';padding:10px 14px;color:#8a919c">Deliveries</span>
+            <span style="font:600 13px 'Barlow';padding:10px 14px;color:#8a919c">Safety</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 320px;gap:18px;align-items:start">
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div style="background:#fff;border:1px solid #e6e9ef;border-radius:13px;padding:18px 20px">
+                <div style="font:700 13px 'IBM Plex Mono';text-transform:uppercase;color:#14213d;margin-bottom:10px">Work performed</div>
+                <div style="font-size:14px;color:#374151;line-height:1.55">Framed east wall, set headers over the two openings. Blocked for cabinet backing. Cleaned up drops and staged sheathing for tomorrow.</div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+                <div style="background:#fff;border:1px solid #e6e9ef;border-radius:13px;padding:16px 18px"><div style="font:600 11px 'IBM Plex Mono';text-transform:uppercase;color:#8a919c;margin-bottom:8px">Material used</div><div style="font-size:13px;color:#374151">14 sheets 5/8 ply · 1 box 16d</div></div>
+                <div style="background:#fff;border:1px solid #e6e9ef;border-radius:13px;padding:16px 18px"><div style="font:600 11px 'IBM Plex Mono';text-transform:uppercase;color:#8a919c;margin-bottom:8px">Material needed</div><div style="font-size:13px;color:#374151">More 16d nails, 3 LVLs</div></div>
+                <div style="background:#fff;border:1px solid #e6e9ef;border-radius:13px;padding:16px 18px"><div style="font:600 11px 'IBM Plex Mono';text-transform:uppercase;color:#8a919c;margin-bottom:8px">Equipment used</div><div style="font-size:13px;color:#374151">Mini-ex, 3 hrs</div></div>
+                <div style="background:#fff;border:1px solid #e6e9ef;border-radius:13px;padding:16px 18px"><div style="font:600 11px 'IBM Plex Mono';text-transform:uppercase;color:#8a919c;margin-bottom:8px">Tasks for tomorrow</div><div style="font-size:13px;color:#374151">Sheath east wall, set remaining joists</div></div>
+              </div>
+              <div style="background:#fff;border:1px solid #e6e9ef;border-radius:13px;padding:18px 20px">
+                <div style="font:700 13px 'IBM Plex Mono';text-transform:uppercase;color:#14213d;margin-bottom:12px">Photos <span style="font:500 11px 'Barlow';color:#9aa1ac;text-transform:none;letter-spacing:0">— auto-pulled from today's captures</span></div>
+                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+                  <div style="aspect-ratio:1;border-radius:9px;background:linear-gradient(135deg,#dce3ee,#c3cede)"></div>
+                  <div style="aspect-ratio:1;border-radius:9px;background:linear-gradient(135deg,#e0d8cc,#cdbfa8)"></div>
+                  <div style="aspect-ratio:1;border-radius:9px;background:linear-gradient(135deg,#d3ddd6,#b6c7bb)"></div>
+                  <div style="aspect-ratio:1;border-radius:9px;background:#f4f6f9;border:1px dashed #cbd2dc;display:flex;align-items:center;justify-content:center;font:600 12px 'Barlow';color:#9aa1ac">+5</div>
+                </div>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div style="background:#fdf6ec;border:1px solid #f3e2c4;border-radius:13px;padding:16px 18px">
+                <div style="display:flex;align-items:center;gap:9px;margin-bottom:8px"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#b45309" stroke-width="2"><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L14.7 3.9a2 2 0 00-3.4 0z"/><path d="M12 9v4m0 4h.01"/></svg><div style="font:700 13px 'Barlow';color:#8a5a12">Hazard flagged</div></div>
+                <div style="font-size:13px;color:#8a5a12;line-height:1.45;margin-bottom:12px">Loose guardrail on second-floor edge — roped off, fix AM.</div>
+                <button style="width:100%;font:600 13px 'Barlow';color:#fff;background:#c0362c;border:none;padding:9px;border-radius:8px">File an incident report</button>
+              </div>
+              <div style="background:#fff;border:1px solid #e6e9ef;border-radius:13px;padding:18px">
+                <div style="font:700 13px 'IBM Plex Mono';text-transform:uppercase;color:#14213d;margin-bottom:6px">Crew present <span style="font:500 11px 'Barlow';color:#9aa1ac;text-transform:none;letter-spacing:0">· auto-filled</span></div>
+                <div style="display:flex;flex-direction:column;gap:0;margin-top:8px">
+                  <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f4f6f9"><div style="display:flex;align-items:center;gap:9px"><div style="width:28px;height:28px;border-radius:7px;background:#b45309;color:#fff;font:700 11px 'Barlow';display:flex;align-items:center;justify-content:center">CC</div><span style="font-size:13px;color:#374151">Carl Chen</span></div><span style="font:600 13px 'IBM Plex Mono';color:#14213d">8.0 h</span></div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #f4f6f9"><div style="display:flex;align-items:center;gap:9px"><div style="width:28px;height:28px;border-radius:7px;background:#6bab7a;color:#fff;font:700 11px 'Barlow';display:flex;align-items:center;justify-content:center">DM</div><span style="font-size:13px;color:#374151">Dave Morales</span></div><span style="font:600 13px 'IBM Plex Mono';color:#14213d">7.5 h</span></div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0"><div style="display:flex;align-items:center;gap:9px"><div style="width:28px;height:28px;border-radius:7px;background:#3a4db0;color:#fff;font:700 11px 'Barlow';display:flex;align-items:center;justify-content:center">RT</div><span style="font-size:13px;color:#374151">Rosa Terrell</span></div><span style="font:600 13px 'IBM Plex Mono';color:#14213d">4.5 h</span></div>
+                </div>
+                <div style="font:500 11px 'Barlow';color:#9aa1ac;margin-top:8px">Employee hours read-only, from time tracking (6A)</div>
+              </div>
+              <div style="background:#fff;border:1px solid #e6e9ef;border-radius:13px;padding:18px">
+                <div style="font:700 13px 'IBM Plex Mono';text-transform:uppercase;color:#14213d;margin-bottom:10px">Subs on site <span style="font:500 11px 'Barlow';color:#9aa1ac;text-transform:none;letter-spacing:0">· manual</span></div>
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0"><span style="font-size:13px;color:#374151">Ortiz Electric — rough-in 2nd flr</span><span style="font:600 13px 'IBM Plex Mono';color:#14213d">6.0 h</span></div>
+              </div>
+              <div style="background:#fff;border:1px solid #e6e9ef;border-radius:13px;padding:18px">
+                <div style="display:flex;justify-content:space-between"><div><div style="font:700 13px 'IBM Plex Mono';text-transform:uppercase;color:#14213d">Weather</div><div style="font-size:13px;color:#374151;margin-top:6px">92°, humid, brief rain 2pm</div></div><div style="text-align:right"><div style="font:700 13px 'IBM Plex Mono';text-transform:uppercase;color:#14213d">Deliveries</div><div style="font-size:13px;color:#374151;margin-top:6px">Jones Lumber ✓</div></div></div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <!-- ============ 4d Safety incident log ============ -->
+    <div class="dv-opt" id="4d">
+      <div class="dv-olabel"><a class="dv-oid" href="#4d">4d</a>6C · Safety incidents — company log + detail</div>
+      <div class="dv-card" style="width:1200px;display:flex;background:#f4f6f9;font-size:14px">
+        <dc-import name="FFNav" active="2" hint-size="236px,700px"></dc-import>
+        <main style="flex:1;padding:26px 30px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px">
+            <div><h2 style="font:800 26px 'Barlow';color:#14213d;margin:0;letter-spacing:-.01em">Safety Incidents</h2><div style="color:#6b7280;font-size:14px;margin-top:2px">Company-wide log · every incident emails Owner, Admin, PM, Foreman</div></div>
+            <button style="font:600 13px 'Barlow';color:#fff;background:#c0362c;border:none;padding:9px 16px;border-radius:9px">+ Report incident</button>
+          </div>
+          <div style="display:grid;grid-template-columns:1.15fr 320px;gap:18px;align-items:start">
+            <div style="background:#fff;border:1px solid #e6e9ef;border-radius:13px;overflow:hidden">
+              <div style="display:grid;grid-template-columns:1fr 1.6fr 1.2fr 1fr;gap:12px;padding:12px 20px;background:#f7f9fc;border-bottom:1px solid #eef1f6;font:600 11px 'IBM Plex Mono';text-transform:uppercase;color:#8a919c"><div>Date</div><div>Incident</div><div>Project</div><div>Type</div></div>
+              <div style="display:grid;grid-template-columns:1fr 1.6fr 1.2fr 1fr;gap:12px;padding:14px 20px;border-bottom:1px solid #f1f3f7;align-items:center;background:#fbfcfe">
+                <div style="font:500 12px 'IBM Plex Mono';color:#6b7280">Jul 8</div><div><div style="font-weight:600;color:#14213d;font-size:13px">Slipped off platform, cut hand</div><div style="font-size:12px;color:#9aa1ac">Dave Morales · treated</div></div><div style="font-size:13px;color:#4b5563">Willow Ridge</div><div><span style="font:600 11px 'Barlow';background:#fbe4e2;color:#c0362c;padding:4px 9px;border-radius:20px">Injury</span></div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1.6fr 1.2fr 1fr;gap:12px;padding:14px 20px;border-bottom:1px solid #f1f3f7;align-items:center">
+                <div style="font:500 12px 'IBM Plex Mono';color:#6b7280">Jul 1</div><div><div style="font-weight:600;color:#14213d;font-size:13px">Backed truck into dumpster</div><div style="font-size:12px;color:#9aa1ac">No injuries</div></div><div style="font-size:13px;color:#4b5563">Bishop Office TI</div><div><span style="font:600 11px 'Barlow';background:#fdece0;color:#b45309;padding:4px 9px;border-radius:20px">Property</span></div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1.6fr 1.2fr 1fr;gap:12px;padding:14px 20px;align-items:center">
+                <div style="font:500 12px 'IBM Plex Mono';color:#6b7280">Jun 24</div><div><div style="font-weight:600;color:#14213d;font-size:13px">Load shifted, no one under it</div><div style="font-size:12px;color:#9aa1ac">Near miss</div></div><div style="font-size:13px;color:#4b5563">Harbor Duplex</div><div><span style="font:600 11px 'Barlow';background:#e7ebf9;color:#3a4db0;padding:4px 9px;border-radius:20px">Near miss</span></div>
+              </div>
+            </div>
+            <div style="background:#fff;border:1px solid #e6e9ef;border-radius:13px;padding:18px 20px">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px"><div style="font:700 15px 'Barlow';color:#14213d">Jul 8 — Injury</div><span style="font:600 11px 'Barlow';background:#fbe4e2;color:#c0362c;padding:4px 9px;border-radius:20px">Injury</span></div>
+              <div style="display:flex;flex-direction:column;gap:0">
+                <div style="padding:9px 0;border-bottom:1px solid #f4f6f9"><div style="font:600 11px 'IBM Plex Mono';text-transform:uppercase;color:#8a919c">Injured party</div><div style="font-size:13px;color:#374151;margin-top:3px">Dave Morales (crew)</div></div>
+                <div style="padding:9px 0;border-bottom:1px solid #f4f6f9"><div style="font:600 11px 'IBM Plex Mono';text-transform:uppercase;color:#8a919c">Description</div><div style="font-size:13px;color:#374151;margin-top:3px">Slipped off platform, cut hand on flashing.</div></div>
+                <div style="padding:9px 0;border-bottom:1px solid #f4f6f9"><div style="font:600 11px 'IBM Plex Mono';text-transform:uppercase;color:#8a919c">Treatment</div><div style="font-size:13px;color:#374151;margin-top:3px">Urgent care, stitches.</div></div>
+                <div style="padding:9px 0;border-bottom:1px solid #f4f6f9"><div style="font:600 11px 'IBM Plex Mono';text-transform:uppercase;color:#8a919c">Witness</div><div style="font-size:13px;color:#374151;margin-top:3px">Rosa Terrell</div></div>
+                <div style="padding:9px 0"><div style="font:600 11px 'IBM Plex Mono';text-transform:uppercase;color:#8a919c">Reported by</div><div style="font-size:13px;color:#374151;margin-top:3px">Josh Bishop · escalated from daily log</div></div>
+              </div>
+              <div style="margin-top:14px;background:#f5f7ff;border:1px solid #dfe4f5;border-radius:9px;padding:10px 12px;display:flex;gap:8px;align-items:center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3a4db0" stroke-width="2"><path d="M4 4h16v12H5.2L4 17.5z"/></svg><div style="font-size:12px;color:#3a4db0">Notified 4 roles · PDF filed to Willow Ridge → Safety</div></div>
+              <div style="margin-top:10px;font:500 11px 'Barlow';color:#9aa1ac">OSHA 300 recordkeeping handled outside the app in v1.</div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <!-- ============ 4e Material deliveries / PO ============ -->
+    <div class="dv-opt" id="4e">
+      <div class="dv-olabel"><a class="dv-oid" href="#4e">4e</a>6D · Purchase order — deliveries &amp; exceptions</div>
+      <div class="dv-card" style="width:1200px;display:flex;background:#f4f6f9;font-size:14px">
+        <dc-import name="FFNav" active="2" hint-size="236px,720px"></dc-import>
+        <main style="flex:1;padding:22px 30px">
+          <div style="font:500 12px 'IBM Plex Mono';color:#9aa1ac;margin-bottom:8px">Projects / PRJ-101 / Field / Deliveries / <span style="color:#6b7280">PO-2041</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px">
+            <div style="display:flex;align-items:center;gap:10px"><h2 style="font:800 24px 'Barlow';color:#14213d;margin:0;letter-spacing:-.01em">PO-2041 · Jones Lumber</h2><span style="font:600 12px 'Barlow';background:#fdece0;color:#b45309;padding:4px 10px;border-radius:20px">Open</span></div>
+            <div style="display:flex;gap:10px"><button style="font:600 13px 'Barlow';color:#374151;background:#fff;border:1px solid #e0e4ea;padding:9px 15px;border-radius:9px">Close PO</button><button style="font:600 13px 'Barlow';color:#fff;background:#2f49d1;border:none;padding:9px 16px;border-radius:9px">+ Check in delivery</button></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 320px;gap:18px;align-items:start">
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div style="background:#fff;border:1px solid #e6e9ef;border-radius:13px;padding:18px 20px">
+                <div style="font:700 13px 'IBM Plex Mono';text-transform:uppercase;color:#14213d;margin-bottom:14px">Ordered vs. usable <span style="font:500 11px 'Barlow';color:#9aa1ac;text-transform:none;letter-spacing:0">— usable = received − damaged</span></div>
+                <div style="display:flex;flex-direction:column;gap:16px">
+                  <div>
+                    <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-weight:600;color:#14213d;font-size:13px">5/8 plywood sheet</span><span style="font:600 13px 'IBM Plex Mono';color:#16a34a">40 / 40 usable</span></div>
+                    <div style="height:8px;background:#eef1f6;border-radius:20px;overflow:hidden"><div style="width:100%;height:100%;background:#16a34a"></div></div>
+                  </div>
+                  <div>
+                    <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="font-weight:600;color:#14213d;font-size:13px">2x10-16'</span><span style="font:600 13px 'IBM Plex Mono';color:#b45309">10 / 12 usable · 2 damaged</span></div>
+                    <div style="height:8px;background:#eef1f6;border-radius:20px;overflow:hidden;display:flex"><div style="width:83%;height:100%;background:#16a34a"></div><div style="width:17%;height:100%;background:#e88a52"></div></div>
+                  </div>
+                </div>
+                <div style="margin-top:16px;background:#fdf6ec;border:1px solid #f3e2c4;border-radius:9px;padding:11px 13px;font-size:12px;color:#8a5a12;line-height:1.45">Line short by 2 — vendor issued a credit, no replacement coming. Auto-close can't fire; Owner/Admin closes by hand with a reason.</div>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:14px">
+              <div style="font:700 13px 'IBM Plex Mono';text-transform:uppercase;color:#14213d">Deliveries <span style="font:500 11px 'Barlow';color:#9aa1ac;text-transform:none;letter-spacing:0">· split · 2 trucks</span></div>
+              <div style="background:#fff;border:1px solid #e6e9ef;border-radius:13px;padding:16px 18px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div style="font-weight:700;color:#14213d;font-size:14px">Truck 1 · Jul 7</div><span style="font:600 11px 'Barlow';background:#fbe4e2;color:#c0362c;padding:3px 9px;border-radius:20px">Exception</span></div>
+                <div style="font-size:13px;color:#374151;line-height:1.5">20 ply ✓ · 12 joists, <strong style="color:#c0362c">2 split</strong></div>
+                <div style="font-size:12px;color:#9aa1ac;margin-top:4px">by Dave M · "2 splits, returned with driver" · 3 photos</div>
+              </div>
+              <div style="background:#fff;border:1px solid #e6e9ef;border-radius:13px;padding:16px 18px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><div style="font-weight:700;color:#14213d;font-size:14px">Truck 2 · Jul 9</div><span style="font:600 11px 'Barlow';background:#e4f0e6;color:#3d7a4b;padding:3px 9px;border-radius:20px">Clean</span></div>
+                <div style="font-size:13px;color:#374151;line-height:1.5">20 ply ✓ · no damage</div>
+                <div style="font-size:12px;color:#9aa1ac;margin-top:4px">by Carl C · plywood now 40/40</div>
+              </div>
+              <div style="background:#f5f7ff;border:1px solid #dfe4f5;border-radius:9px;padding:10px 12px;font-size:12px;color:#3a4db0;display:flex;gap:8px;align-items:center"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#3a4db0" stroke-width="2"><path d="M4 4h16v12H5.2L4 17.5z"/></svg>Every check-in emails Owner, Admin, PM — clean or flagged.</div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <!-- ============ 4f Crew briefings ============ -->
+    <div class="dv-opt" id="4f">
+      <div class="dv-olabel"><a class="dv-oid" href="#4f">4f</a>6E · Crew briefings — log &amp; detail</div>
+      <div class="dv-card" style="width:1200px;display:flex;background:#f4f6f9;font-size:14px">
+        <dc-import name="FFNav" active="2" hint-size="236px,700px"></dc-import>
+        <main style="flex:1;padding:22px 30px">
+          <div style="font:500 12px 'IBM Plex Mono';color:#9aa1ac;margin-bottom:8px">Projects / PRJ-101 / Field / <span style="color:#6b7280">Crew Briefings</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
+            <div><h2 style="font:800 24px 'Barlow';color:#14213d;margin:0;letter-spacing:-.01em">Crew Briefing — Jul 8</h2><div style="color:#6b7280;font-size:13px;margin-top:2px">6:50am · led by Carl Chen · Willow Ridge</div></div>
+            <button style="font:600 13px 'Barlow';color:#fff;background:#2f49d1;border:none;padding:9px 16px;border-radius:9px">+ New Briefing</button>
+          </div>
+          <div style="display:flex;gap:2px;border-bottom:1px solid #e6e9ef;margin-bottom:20px">
+            <span style="font:600 13px 'Barlow';padding:10px 14px;color:#8a919c">Daily Logs</span>
+            <span style="font:600 13px 'Barlow';padding:10px 14px;color:#14213d;box-shadow:inset 0 -2px 0 #2f49d1">Crew Briefings</span>
+            <span style="font:600 13px 'Barlow';padding:10px 14px;color:#8a919c">Deliveries</span>
+            <span style="font:600 13px 'Barlow';padding:10px 14px;color:#8a919c">Safety</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 320px;gap:18px;align-items:start">
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div style="background:#fff;border:1px solid #e6e9ef;border-radius:13px;padding:18px 20px">
+                <div style="font:700 13px 'IBM Plex Mono';text-transform:uppercase;color:#14213d;margin-bottom:10px">Safety topic <span style="font:500 11px 'Barlow';color:#9aa1ac;text-transform:none;letter-spacing:0">— the evidentiary record</span></div>
+                <div style="font-size:15px;color:#14213d;font-weight:600;line-height:1.5">Ladder setup — 4:1 rule, tie off at the top, inspect rails before climbing.</div>
+              </div>
+              <div style="background:#fff;border:1px solid #e6e9ef;border-radius:13px;padding:18px 20px">
+                <div style="font:700 13px 'IBM Plex Mono';text-transform:uppercase;color:#14213d;margin-bottom:10px">Plan for the day</div>
+                <div style="font-size:14px;color:#374151;line-height:1.55">Sheath east wall, set remaining joists. Ortiz Electric on site for 2nd-floor rough-in — coordinate ladder access.</div>
+              </div>
+              <div style="background:#fff;border:1px solid #e6e9ef;border-radius:13px;padding:18px 20px">
+                <div style="font:700 13px 'IBM Plex Mono';text-transform:uppercase;color:#14213d;margin-bottom:6px">Yesterday's tasks <span style="font:500 11px 'Barlow';color:#9aa1ac;text-transform:none;letter-spacing:0">— read-only from Jul 7 daily log</span></div>
+                <div style="display:flex;align-items:center;gap:9px;margin-top:8px;font-size:13px;color:#374151"><span style="width:6px;height:6px;border-radius:50%;background:#9aa1ac"></span>Sheath east wall</div>
+                <div style="display:flex;align-items:center;gap:9px;margin-top:7px;font-size:13px;color:#374151"><span style="width:6px;height:6px;border-radius:50%;background:#9aa1ac"></span>Confirm LVL delivery window</div>
+              </div>
+            </div>
+            <div style="background:#fff;border:1px solid #e6e9ef;border-radius:13px;padding:18px">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><div style="font:700 13px 'IBM Plex Mono';text-transform:uppercase;color:#14213d">Attendance</div><span style="font:600 13px 'IBM Plex Mono';color:#14213d">3</span></div>
+              <div style="font:500 11px 'Barlow';color:#9aa1ac;margin-bottom:12px">Hand-checked — before anyone clocks in</div>
+              <div style="display:flex;flex-direction:column;gap:9px">
+                <div style="display:flex;align-items:center;gap:10px"><div style="width:18px;height:18px;border-radius:5px;background:#16a34a;display:flex;align-items:center;justify-content:center"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5"><path d="M5 12l5 5L20 6"/></svg></div><div style="width:28px;height:28px;border-radius:7px;background:#b45309;color:#fff;font:700 11px 'Barlow';display:flex;align-items:center;justify-content:center">CC</div><span style="font-size:13px;color:#374151">Carl Chen <span style="color:#9aa1ac">· led</span></span></div>
+                <div style="display:flex;align-items:center;gap:10px"><div style="width:18px;height:18px;border-radius:5px;background:#16a34a;display:flex;align-items:center;justify-content:center"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5"><path d="M5 12l5 5L20 6"/></svg></div><div style="width:28px;height:28px;border-radius:7px;background:#6bab7a;color:#fff;font:700 11px 'Barlow';display:flex;align-items:center;justify-content:center">DM</div><span style="font-size:13px;color:#374151">Dave Morales</span></div>
+                <div style="display:flex;align-items:center;gap:10px"><div style="width:18px;height:18px;border-radius:5px;background:#16a34a;display:flex;align-items:center;justify-content:center"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5"><path d="M5 12l5 5L20 6"/></svg></div><div style="width:28px;height:28px;border-radius:7px;background:#3a4db0;color:#fff;font:700 11px 'Barlow';display:flex;align-items:center;justify-content:center">RT</div><span style="font-size:13px;color:#374151">Rosa Terrell</span></div>
+                <div style="display:flex;align-items:center;gap:10px;opacity:.5"><div style="width:18px;height:18px;border-radius:5px;border:2px solid #cbd2dc"></div><div style="width:28px;height:28px;border-radius:7px;background:#eef1f6;color:#6b7280;font:700 11px 'Barlow';display:flex;align-items:center;justify-content:center">MB</div><span style="font-size:13px;color:#6b7280">Mateo Ruiz</span></div>
+              </div>
+              <div style="font:500 11px 'Barlow';color:#9aa1ac;margin-top:14px;padding-top:12px;border-top:1px solid #eef1f6">No signatures · no email · no PDF in v1</div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+
+  </div>
+  <p class="dv-next">These are the <strong>desktop/office</strong> surfaces of Module 6. The field-capture UIs (mobile clock in/out, on-truck delivery check-in, tap-through daily log) belong to the mobile build — say "design the mobile field screens" when you're ready. Next: "add the Time Tracking mobile clock" · "handoff package for Module 6".</p>
+</section>
+
+
