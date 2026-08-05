@@ -2,8 +2,15 @@ import { test, expect, type Page, type Locator } from '@playwright/test';
 
 // M6M §10 acceptance criteria that the SHELL SLICE can carry.
 //
-// Asserted here: A-1, A-1c, A-2, A-3, A-3b, A-3c, A-3d, A-5, A-14b.
+// Asserted here: A-1, A-1c, A-2, A-3, A-3b, A-3c (negative half), A-3d, A-5,
+// A-14b, and — added [S100] once D-36/D-38 landed — A-40, A-40b and A-43.
 // Everything else in §10 needs a screen this slice does not build.
+//
+// NOT assertable here, and why:
+//   A-3c (positive half) / A-41  need §4.13's six screens. The tiles point at
+//        /m routes now, but those routes 404 until M-25 … M-30 are built, so the
+//        sheet cannot be opened while standing on one of them.
+//   A-42 … A-42d                 same reason — they are about those six screens.
 //
 // Runs under the 'chromium-auth' project (playwright.config.ts): signed in as
 // the crew test identity, 402x874 — §2's reference canvas.
@@ -12,9 +19,12 @@ import { test, expect, type Page, type Locator } from '@playwright/test';
 // exercised via its destination rather than listed.
 const SHELL_ROUTES = ['/m/timeclock', '/m/projects', '/m/logs', '/m/field', '/m/offline'];
 
-/** §3.3's seven tiles, in §3.3's order. */
+/**
+ * §3.3's SIX tiles, in §3.3's order — copied from the spec line verbatim:
+ *   "Tiles: Schedule · Expenses · Subs & Vendors · Team (count) · Contacts · Settings. Six."
+ * Dashboard was the seventh and is CUT (D-38).
+ */
 const SHEET_TILES = [
-  'Dashboard',
   'Schedule',
   'Expenses',
   'Subs & Vendors',
@@ -176,8 +186,8 @@ test.describe('A-3 · the sheet omits the four tab destinations', () => {
   }
 });
 
-test.describe('A-3b · the sheet holds exactly the seven named tiles + Sign out', () => {
-  test('exactly seven tiles, in order, and nothing else', async ({ page }) => {
+test.describe('A-3b · the sheet holds exactly the six named tiles + Sign out', () => {
+  test('exactly six tiles, in order, and nothing else', async ({ page }) => {
     await page.goto('/m/timeclock');
     await openSheet(page);
 
@@ -206,7 +216,7 @@ test.describe('A-3b · the sheet holds exactly the seven named tiles + Sign out'
     expect(row.width).toBeCloseTo(sheet.width - 36, 0);
   });
 
-  test('Sign out is not one of the seven tiles', async ({ page }) => {
+  test('Sign out is not one of the six tiles', async ({ page }) => {
     await page.goto('/m/timeclock');
     await openSheet(page);
     await expect(
@@ -222,14 +232,19 @@ test.describe('A-3c · current-location highlight', () => {
     await page.goto('/m/timeclock');
     await openSheet(page);
 
-    // NOTE ON WHAT THIS PROVES. All seven tiles point at /dashboard/** (§1's
-    // route tree has no /m destination for any of them), and the sheet only
-    // renders on /m/**, so NO tile can match the current location today. The
-    // positive half of A-3c — "the tile matching the current location carries
-    // the blue border and blue label" — is therefore UNASSERTABLE in this
-    // slice, and this test asserts only the negative half: nothing is falsely
-    // highlighted. The highlight logic itself is implemented and will light up
-    // as soon as a tile has a mobile destination. Flagged in the report.
+    // NOTE ON WHAT THIS PROVES, UPDATED FOR §4.13.
+    //
+    // The tiles now point at /m routes, so a match is possible in principle —
+    // that is what §4.13 changed. But /m/timeclock is NOT one of the six
+    // destinations, so nothing should be highlighted here, and that is a real
+    // assertion rather than the vacuous one it used to be: the previous version
+    // passed because no tile COULD match anywhere; this one passes because none
+    // matches on THIS route.
+    //
+    // A-3c's positive half is still not assertable in this slice — §4.13's six
+    // screens are not built, so /m/expenses 404s and the sheet cannot be opened
+    // standing on it. A-41 is the criterion that walks all six and it lands with
+    // those screens, not with the shell.
     await expect(page.locator('[data-testid^="m-sheet-tile-"][data-current="true"]')).toHaveCount(
       0
     );
@@ -328,7 +343,8 @@ test.describe('A-5 · tap targets', () => {
     await page.goto('/m/timeclock');
     await openSheet(page);
     const measured = await measureAll(page);
-    // Seven tiles + sign out + scrim + the shell's own controls.
+    // Six tiles + sign out + scrim + hamburger + four tabs + camera = 14.
+    // The floor is a vacuous-pass guard, not the assertion; A-3b owns the count.
     expect(measured.length).toBeGreaterThan(12);
     const undersized = measured.filter((m) => Math.min(m.w, m.h) < 44);
     expect(undersized, `undersized targets: ${JSON.stringify(undersized)}`).toEqual([]);
@@ -353,20 +369,98 @@ test.describe('A-5 · tap targets', () => {
     const tab = (await page.getByTestId('m-tab-projects').boundingBox())!;
     expect(tab.height).toBeCloseTo(56, 0);
 
-    // §3.1 — 38px avatar. NOT interactive, so A-5's floor does not apply; this
-    // asserts both facts, because a future edit making it a button would be an
-    // A-5 violation that no other test would notice.
-    const avatar = page.getByTestId('m-avatar');
-    const avatarBox = (await avatar.boundingBox())!;
-    expect(avatarBox.width).toBeCloseTo(38, 0);
-    expect(await avatar.evaluate((el) => el.tagName.toLowerCase())).toBe('div');
+    // The 38px avatar assertion that stood here is GONE — D-36 cut the avatar,
+    // so "it is a 38px div" is no longer a true statement about the app bar.
+    // Its replacement is A-40 / A-40b below, which assert the absence rather
+    // than the dimensions.
   });
 
   test('§3.3 tiles are 76px', async ({ page }) => {
     await page.goto('/m/timeclock');
     await openSheet(page);
-    const tile = (await page.getByTestId('m-sheet-tile-Dashboard').boundingBox())!;
+    // Measures the FIRST tile by name rather than by index, and the name comes
+    // from SHEET_TILES so it tracks §3.3. This previously named Dashboard,
+    // which D-38 cut — a stale literal here would have failed as a missing
+    // element rather than as the count mismatch A-3b is for.
+    const tile = (await page.getByTestId(`m-sheet-tile-${SHEET_TILES[0]}`).boundingBox())!;
     expect(tile.height).toBeCloseTo(76, 0);
+  });
+});
+
+// ===========================================================================
+// A-40 / A-40b — the app bar after D-36 cut the avatar
+// ===========================================================================
+test.describe('A-40 · the app bar renders no right-hand element', () => {
+  const ROUTES = [...SHELL_ROUTES, `/m/p/${PROJECT_ID}`];
+
+  for (const route of ROUTES) {
+    test(`no avatar, badge, icon or button on the right on ${route}`, async ({ page }) => {
+      await page.goto(route);
+
+      // The element that used to be there, by its own testid. Direct and
+      // specific: this is the assertion that fails if the avatar comes back
+      // exactly as it was.
+      await expect(page.getByTestId('m-avatar')).toHaveCount(0);
+
+      // And the general form, because a restored avatar might be rebuilt under
+      // a different testid. The app bar's own <header> is the scope; the title
+      // block must be the last thing in the row.
+      const bar = page.locator('header > div').first();
+      const children = await bar.evaluate((el) =>
+        Array.from(el.children).map((c) => c.getAttribute('data-testid') ?? c.tagName.toLowerCase())
+      );
+      // hamburger|back  +  title block. Exactly two, in that order.
+      expect(children).toHaveLength(2);
+      expect(['m-hamburger', 'm-back']).toContain(children[0]);
+      expect(children[1]).toBe('div');
+    });
+  }
+});
+
+test.describe('A-40b · the hamburger or the back chevron, never both', () => {
+  test('company-scoped routes carry the hamburger only', async ({ page }) => {
+    for (const route of SHELL_ROUTES) {
+      await page.goto(route);
+      await expect(page.getByTestId('m-hamburger')).toHaveCount(1);
+      await expect(page.getByTestId('m-back')).toHaveCount(0);
+    }
+  });
+
+  test('a project route carries the back chevron only', async ({ page }) => {
+    await page.goto(`/m/p/${PROJECT_ID}`);
+    await expect(page.getByTestId('m-back')).toHaveCount(1);
+    await expect(page.getByTestId('m-hamburger')).toHaveCount(0);
+  });
+
+  test('the app bar has exactly one interactive control on every route', async ({ page }) => {
+    for (const route of [...SHELL_ROUTES, `/m/p/${PROJECT_ID}`]) {
+      await page.goto(route);
+      const controls = page.locator('header').locator('a, button, [role="button"]');
+      // The offline strip is inside <header> too, but only while offline; these
+      // runs are online, so one control is the whole app bar.
+      expect(await controls.count(), `on ${route}`).toBe(1);
+    }
+  });
+});
+
+// ===========================================================================
+// A-43 — Dashboard is cut (D-38): no tile AND no route
+// ===========================================================================
+test.describe('A-43 · Dashboard is cut', () => {
+  test('the sheet renders no Dashboard tile', async ({ page }) => {
+    await page.goto('/m/timeclock');
+    await openSheet(page);
+    await expect(page.getByTestId('m-sheet-tile-Dashboard')).toHaveCount(0);
+    await expect(
+      page.getByTestId('m-sheet-grid').getByText('Dashboard', { exact: true })
+    ).toHaveCount(0);
+  });
+
+  test('/m/dashboard does not resolve', async ({ page }) => {
+    const response = await page.goto('/m/dashboard');
+    // A tile with no route is an inert tile; a route with no tile is an orphan.
+    // A-43 asserts both halves, so this is the second one.
+    expect(response?.status()).toBe(404);
   });
 });
 

@@ -10,7 +10,6 @@ import {
   Contact,
   Folder,
   HardHat,
-  LayoutGrid,
   Receipt,
   Settings,
   Timer,
@@ -44,35 +43,40 @@ const TABS = [
 ] as const;
 
 // ---------------------------------------------------------------------------
-// §3.3 — the seven sheet tiles, in the spec's order, and nothing else.
+// §3.3 — the SIX sheet tiles, in the spec's order, and nothing else.
 //
 // Projects, Timeclock, Logs and Field are ABSENT BY RULE: "Because the tab bar
 // owns [them], those four are deliberately absent here. A build that adds them
 // back is wrong." A-3 fails if any of them appears.
 //
-// WHERE THESE SEVEN POINT IS AN INFERENCE, NOT A RULING. §1's route tree has no
-// /m route for any of them, so /dashboard/** is the only destination that
-// exists. D-13 forbids pointing at a desktop page, but D-13 is scoped to the
-// Timeclock/Logs/Field TABS, and A-12c's /dashboard/** clause is scoped to
-// M-3's nine section tiles. Neither reaches these seven. Flagged for Josh.
+// DASHBOARD IS ABSENT BY RULING — D-38 [S100] CUT it from v1. Every non-money
+// figure it carried is already owned by M-2, M-3, M-13 or M-14; its attention
+// feed is office admin with /dashboard/** hrefs; and getDashboardData() reaches
+// for change_orders.net_delta twice, which is the exact column D-26 cut. There
+// is no /m/dashboard route, and A-43 asserts BOTH halves — no tile and no route.
+//
+// THE HREFS ARE NOW /m ROUTES, per §4.13 (M-25 … M-30). They previously pointed
+// at /dashboard/**, which was an INFERENCE the spec never ruled; §4.13 replaced
+// it with real mobile screens, so the inference is moot.
+//
+// THESE SIX ROUTES 404 UNTIL §4.13 IS BUILT. Expected for this slice: the tile
+// set, the ordering and the current-location highlight are shell concerns and
+// are correct now; the screens behind them are the next slice. A tile pointing
+// at its real future route is right; one pointing at a desktop page would have
+// to be un-pointed later, and A-12c's principle is that a tile goes where it says.
 // ---------------------------------------------------------------------------
 const SHEET_TILES = [
-  { href: '/dashboard', label: 'Dashboard', Icon: LayoutGrid },
-  { href: '/dashboard/schedule', label: 'Schedule', Icon: CalendarDays },
-  { href: '/dashboard/expenses', label: 'Expenses', Icon: Receipt },
-  { href: '/dashboard/subcontractors', label: 'Subs & Vendors', Icon: Truck },
-  { href: '/dashboard/team', label: 'Team', Icon: Users, badgeKey: 'team' as const },
-  { href: '/dashboard/contacts', label: 'Contacts', Icon: Contact },
-  { href: '/dashboard/settings', label: 'Settings', Icon: Settings },
+  { href: '/m/schedule', label: 'Schedule', Icon: CalendarDays },
+  { href: '/m/expenses', label: 'Expenses', Icon: Receipt },
+  { href: '/m/subs', label: 'Subs & Vendors', Icon: Truck },
+  { href: '/m/team', label: 'Team', Icon: Users, badgeKey: 'team' as const },
+  { href: '/m/contacts', label: 'Contacts', Icon: Contact },
+  { href: '/m/settings', label: 'Settings', Icon: Settings },
 ] as const;
 
-/** First initial of the first and last word — the same rule the desktop shell uses. */
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  const first = parts[0]?.[0] ?? '';
-  const last = parts.length > 1 ? (parts[parts.length - 1][0] ?? '') : '';
-  return (first + last).toUpperCase() || '?';
-}
+// `initials()` lived here and is GONE with the avatar (D-36). The desktop shell
+// keeps its own copy at dashboard-shell.tsx:84 — that one is still in use and is
+// not this ruling's business (A-28).
 
 /** `h:mm` — §4.4 spells the format out, and it is mono everywhere it appears. */
 function hhmm(d: Date): string {
@@ -118,11 +122,13 @@ function defaultTitle(pathname: string): string {
 
 export type MobileShellProps = {
   children: React.ReactNode;
-  userName: string;
   companyName: string;
   /** §3.3 — the Team tile's "(count)" badge. */
   teamCount: number | null;
 };
+// `userName` was a prop here and is GONE with the avatar (D-36) — it had no
+// other consumer. The signed-in name is not lost: M-30 (§4.13.7) binds it to
+// getMyMember(), which is the right source for it anyway.
 
 export function MobileShell(props: MobileShellProps) {
   return (
@@ -132,7 +138,7 @@ export function MobileShell(props: MobileShellProps) {
   );
 }
 
-function MobileShellInner({ children, userName, companyName, teamCount }: MobileShellProps) {
+function MobileShellInner({ children, companyName, teamCount }: MobileShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -206,20 +212,15 @@ function MobileShellInner({ children, userName, companyName, teamCount }: Mobile
             ) : null}
           </div>
 
-          {/* §3.1 — 38px amber avatar with the user's initials.
-              DELIBERATELY NOT A BUTTON. §3.1 gives it a size and contents and
-              never gives it an action, and §2 puts the floor for interactive
-              targets at 44px with only the markup swatches exempt. A 38px
-              BUTTON would violate A-5; a 38px badge does not, because A-5 reads
-              "every interactive element". If a later slice gives it a tap, it
-              needs a >=44px hit area around it. Flagged. */}
-          <div
-            data-testid="m-avatar"
-            aria-hidden="true"
-            className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-full bg-m6m-amber font-mono text-[13px] font-semibold text-m6m-navy"
-          >
-            {initials(userName)}
-          </div>
+          {/* §3.1 as amended — THE RIGHT SIDE IS EMPTY, BY RULING.
+              D-36 [S100] CUT the 38px amber avatar outright: §3.1 gave it a size
+              and never an action, which left it either a sub-44px tap target
+              (A-5) or decoration spending the app bar's scarcest resource.
+              Identity and sign-out already have homes — §3.3's Sign out row and
+              M-30 (§4.13.7). Do NOT add anything here: A-40 asserts the app bar
+              renders no right-hand element at all, and A-40b asserts the
+              hamburger (or, inside a project, the back chevron) is its only
+              interactive control. */}
         </div>
 
         <OfflineStrip />
@@ -373,10 +374,15 @@ function NavSheet({
           {SHEET_TILES.map(({ href, label, Icon, ...rest }) => {
             // §3.3 — "Current location = 1.5px #2f49d1 border, label in blue."
             //
-            // Today this can never match: all seven tiles point at /dashboard/**
-            // and the sheet only renders on /m/**. The rule is implemented
-            // correctly rather than skipped, so it works the moment a tile has a
-            // mobile destination — but it means A-3c passes VACUOUSLY. Flagged.
+            // This CAN match now. The tiles point at /m routes (§4.13), so
+            // opening the sheet on /m/expenses lights the Expenses tile and no
+            // other — which is what makes A-3c assertable at all, and A-41 walks
+            // all six. Until §4.13's screens are built the routes 404, so the
+            // match is not yet reachable by navigation; the rule itself is right.
+            //
+            // Prefix-scoped, per §3.3: equal to the href, or the href plus '/'.
+            // NOT startsWith(href) alone, which would light Schedule on a
+            // hypothetical /m/schedulex.
             const current = pathname === href || pathname.startsWith(`${href}/`);
             const badge =
               'badgeKey' in rest && rest.badgeKey === 'team' && teamCount !== null

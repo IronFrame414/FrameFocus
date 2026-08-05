@@ -34,9 +34,12 @@ export default async function MobileLayout({ children }: { children: React.React
     redirect('/sign-in');
   }
 
+  // `first_name, last_name` were selected here for the app-bar avatar and are
+  // gone with it (D-36). M-30 (§4.13.7) will bind the signed-in name to
+  // getMyMember(), which is the right source; it is not this layout's job.
   const { data: profile } = await supabase
     .from('profiles')
-    .select('first_name, last_name, company_id')
+    .select('company_id')
     .eq('user_id', user.id)
     .single();
 
@@ -53,7 +56,6 @@ export default async function MobileLayout({ children }: { children: React.React
 
   return (
     <MobileShell
-      userName={`${profile.first_name} ${profile.last_name}`}
       companyName={companyResult.data?.name ?? 'My Company'}
       teamCount={members?.length ?? null}
     >
