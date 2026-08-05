@@ -1,12 +1,26 @@
 # M6M — Mobile PWA Spec
 
-> **Status:** DRAFT — **not build-ready end to end.** The shell, photos, the twelve section screens and
-> the offline contract are complete; **four prerequisites below are not**, and GAP-8 is the outstanding
-> one. S98.
+> **Status:** **BUILD-READY [S99]. GAP-8 IS CLOSED.**
+>
+> _Superseded, quoted rather than rewritten:_ _"DRAFT — **not build-ready end to end.** The shell, photos,
+> the twelve section screens and the offline contract are complete; **four prerequisites below are not**,
+> and GAP-8 is the outstanding one. S98."_
+>
+> The _Mobile Field Capture_ handoff — the thing GAP-8 was blocked on for two sessions — arrived and is
+> reconciled in **§4.12**. Its five screens now have routes (§1), M6M-compliant resolutions, and criteria.
+> Prerequisites 1–3 are **done**; a fifth prerequisite, the constraint migration D-30, is **specced here
+> and not yet written**.
 >
 > **Sources:** the _FrameFocus — Mobile App Shell_ handoff (6b nav menu, 6f projects list, 6g project
-> sections, 6e offline) and the _FrameFocus — Mobile Photos_ handoff (6j gallery, 6k viewer, 6l markup),
-> plus Josh's rulings in this session.
+> sections, 6e offline), the _FrameFocus — Mobile Photos_ handoff (6j gallery, 6k viewer, 6l markup) and
+> — **new [S99]** — the _FrameFocus — Mobile Field Capture_ handoff (7a clock in/out, 7b mid-shift
+> segment switcher, 7c daily log entry, 7d delivery check-in, 7e incident report). All three are committed
+> under `docs/handoffs/`. Plus Josh's rulings in S98 and S99.
+>
+> **The handoff bends to this spec, not the reverse [S99, Josh — ruling 1].** Where the handoff contradicts
+> a locked ruling, the ruling wins and §4.12 records how the screen changes. **One exception, ruled
+> separately:** the 7b mid-shift switcher is **ADOPTED**, because it was a gap in this spec rather than a
+> contradiction — §4.5a already owed it and pre-committed its constraints (D-32).
 >
 > ---
 >
@@ -14,6 +28,19 @@
 >
 > **Four things must be in place before, or alongside, the first screen.** They are specified deep in this
 > document and a build that starts at §1 would meet them far too late. In order:
+>
+> **[S99] Status of all five.** 1–3 are done; 4 is closed; 5 is new and outstanding.
+>
+> | # | Prerequisite | State [S99] |
+> | - | ------------ | ----------- |
+> | 1 | Four-policy subcontractor migration (§7a) | **APPLIED** — `20260822000000_m6m_subcontractor_photo_access.sql`, rebuild-test. A-21d fails-then-passes verified under impersonation. **Production NOT yet applied.** |
+> | 2 | `sync_conflicts` table (§5.7, §7b) | **APPLIED** — `20260823000000_m6m_sync_conflicts.sql`, rebuild-test. A-19g/A-19i–A-19l verified. **Production NOT yet applied.** |
+> | 3 | Playwright (§10a) | **INSTALLED** — `apps/web/playwright.config.ts`, `apps/web/e2e/`, CI job added. Browser binaries do not survive a Codespace rebuild; reinstall with `npx playwright install chromium` **and** `sudo npx playwright install-deps chromium`. |
+> | 4 | **GAP-8 — the _Mobile Field Capture_ handoff** | **CLOSED [S99]** — handoff received, reconciled in **§4.12**, routes in §1. |
+> | 5 | **NEW — the constraint migration (D-30)** | **SPECCED, NOT WRITTEN.** §7c. Four UI-only rules become DB constraints. Must land before the field-capture screens are trusted to enforce them. |
+>
+> _The original table is kept below unchanged, because its "why it blocks" reasoning is still the record of
+> why each mattered._
 >
 > | # | Prerequisite | Where | Why it blocks |
 > | - | ------------ | ----- | ------------- |
@@ -42,10 +69,16 @@
 > broken for one role. **A second migration**, `sync_conflicts` (§5.7, §7b), must land before any offline
 > write path ships.
 >
-> **⚠️ THE FIVE FIELD-CAPTURE SCREENS ARE NOT SPECCED BY THIS DOCUMENT.** GAP-8 has been open the whole
+> **✅ [S99] THE FIVE FIELD-CAPTURE SCREENS ARE NOW SPECCED — GAP-8 CLOSED.** The handoff arrived
+> (`docs/handoffs/mobile-field-capture/`, commit `e1d9747`) and is reconciled screen by screen in
+> **§4.12**. 7b, 7c, 7d and 7e have routes in §1 (D-28); 7a gains the type row D-27 requires. The
+> paragraph and table below are the S98 record of the gap, kept because they state precisely what was
+> missing and why it blocked — **read them as history, not as current state.**
+>
+> _Superseded [S99]:_ **"⚠️ THE FIVE FIELD-CAPTURE SCREENS ARE NOT SPECCED BY THIS DOCUMENT.** GAP-8 has been open the whole
 > time under a heading that promises gaps are resolved before build, so it is hoisted here. The _Mobile
 > Field Capture_ handoff — clock, segment switch, daily log entry, delivery check-in, incident — was never
-> provided. Measured against D-6's three offline-capable actions:
+> provided. Measured against D-6's three offline-capable actions:"
 >
 > | D-6 action | Screen status |
 > | ---------- | ------------- |
@@ -58,20 +91,33 @@
 > screens; check-in is online-only (D-6) but still has no screen. Together with the missing mid-shift
 > switcher, that is four of the handoff's five surfaces still owed.
 >
-> **This spec is NOT build-ready end to end.** §4.11's twelve section screens, the shell, photos and the
-> offline contract are complete and buildable; the field-capture surfaces above are not, and neither are
-> the two migrations in the prerequisites table until someone writes them.
+> **[S99] THIS SPEC IS NOW BUILD-READY.** _Superseded:_ _"**This spec is NOT build-ready end to end.**
+> §4.11's twelve section screens, the shell, photos and the offline contract are complete and buildable;
+> the field-capture surfaces above are not, and neither are the two migrations in the prerequisites table
+> until someone writes them."_ Both migrations are written and applied to rebuild-test; the field-capture
+> surfaces are specced in §4.12. **The one outstanding item is the D-30 constraint migration (§7c)** —
+> specced, not written — and it gates enforcement, not the screens.
 >
 > **Every question raised this session is ruled** — including all twelve section tiles (§4.11: nine new
 > routes, three shared) and the D-25 segment-type collision, which **D-27 dissolved** by making the type a
 > required choice at clock-in rather than a default (§4.5a).
 >
-> **The one thing still outstanding is GAP-8**, stated above: the five field-capture screens are not
-> specced by this document, which is why the daily log has no entry screen and the mid-shift segment
-> switcher has no home. The display question was closed by
+> **[S99] GAP-8 is closed and the display question was RE-RULED.** _Superseded:_ _"The one thing still
+> outstanding is GAP-8, stated above: the five field-capture screens are not specced by this document,
+> which is why the daily log has no entry screen and the mid-shift segment switcher has no home."_ Both
+> now have routes and specs (§1, §4.12).
+>
+> **§4.7a IS REVERSED [S99, Josh — D-31]. Option A is overturned: the DERIVATIVE is the display source.**
+> The _Mobile Photos_ handoff specifies it directly — _"save writes an annotated derivative and keeps the
+> original; the viewer should indicate a photo has markup and allow toggling back to the original."_
+> Option A's whole reason for existing was the desktop-annotated population carrying `markup_data` with no
+> derivative; **that population does not exist** — no existing photos need preserving — so the premise is
+> gone. See §4.7a and D-31 for the full reversal and the criteria it rewrites.
+>
+> _Superseded [S99], quoted:_ _"The display question was closed by
 > ruling the derivative **off** the display path: the UI draws marks live from `files.markup_data` over
 > the original (**Option A, §4.7a**), so desktop-authored markup is correct with no desktop change and no
-> backfill. The pin gap that surfaced while specifying it is closed too — **`pin` becomes a shape type and
+> backfill."_ The pin gap that surfaced while specifying it is closed too — **`pin` becomes a shape type and
 > `MARKUP_SCHEMA_VERSION` goes to 2** (D-22, **§4.10a**), with the number **stored** so deletes leave gaps
 > rather than silently renumbering.
 >
@@ -123,7 +169,12 @@
 | D-23 | `{m} estimating` count        | **Dropped.** [S98, Josh] The M-2 header shows the active count only. There is no `estimating` project status — `projects_status_check` permits `active, on_hold, complete, archived, cancelled` — and none is added. §4.2; §8a; A-10c. _(Renumbered [S98]: this ruling was previously cited as "D-4", which is the list-screen pattern.)_ |
 | D-25 | ~~Segment type on clock-in~~  | **SUPERSEDED by D-27 [S98, Josh].** _Original text, quoted not deleted:_ _"**Default `work`, switch afterwards.** Clock-in writes `segment_type = 'work'` with no prompt — one tap to start a shift. Changing it is a separate action that closes the open segment and opens a new one, because that is the only shape RLS permits a crew member."_ Withdrawn because `work` requires a project while D-12 and §4.5 contemplate clocking in without one — a collision D-27 dissolves rather than works around. |
 | D-26 | CO value on mobile            | **CUT, for every role including Owner and Admin.** [S98, Josh] `change_orders.net_delta` and every derived money figure stay off M-13. Two reasons, both kept: showing it would introduce the **first role-gated figure anywhere on `/m`**, a pattern this spec has deliberately never had (D-11 puts every role on the same screens); and the column is **UI-gated only, with no DB floor behind it** (TECH_DEBT #117), so a mobile leak would not be caught by RLS. §4.11.3; A-33, A-33c. |
-| D-27 | Segment type on clock-in      | **The user selects the type as part of clocking in.** [S98, Josh] No default, no skippable prompt, no post-hoc switch on the clock-in path — a required choice from whatever `time_segments_type_check` permits. **The project requirement then follows from the type**, which is what dissolves D-25's collision. §4.5, §4.5a. |
+| D-27 | Segment type on clock-in      | **The user selects the type as part of clocking in.** [S98, Josh] No default, no skippable prompt, no post-hoc switch on the clock-in path — a required choice from whatever `time_segments_type_check` permits. **The project requirement then follows from the type**, which is what dissolves D-25's collision. §4.5, §4.5a. _(Scope note [S99]: D-27 governs the **type**. It says nothing about whether the project row may arrive pre-selected — see §11's open questions.)_ |
+| D-28 | Field-capture screens: route or sheet? | **PAGES.** [S99, Josh] 7b, 7c, 7d and 7e each get a real route under `/m/`. The handoff draws them with ✕ chrome; **that is styling and does not imply a sheet.** Decided once for all four rather than per screen. Routes in §1; screens in §4.12. |
+| D-29 | Hazard → incident escalation  | **CONTEXT ONLY.** [S99, Josh] 7c's hazard toggle offers "File an incident report", which opens a **blank** 7e pre-filled with project and date. **No draft row is written. Nothing persists unless the user submits.** A hazard flag is not an incident. §4.12.3, §4.12.5. |
+| D-30 | The four unenforced UI rules  | **DB CONSTRAINTS.** [S99, Josh] Required `work_performed`, injury-must-name-a-party, orderless-check-in-still-needs-a-project, and the damage-photo rule become a **third migration** — specced in **§7c**, not written here. **Where a constraint cannot reach, §7c says so plainly rather than pretending.** |
+| D-31 | Markup display source         | **REVERSED [S99, Josh] — the DERIVATIVE is the display source.** Overturns D-21's third-pass Option A. Save writes an annotated derivative; the viewer indicates markup and **toggles back to the original by swapping files**. Per the _Mobile Photos_ handoff. **Option A's premise — desktop-annotated photos with `markup_data` and no derivative — no longer applies: no existing photos need preserving.** §4.7a rewritten; A-23e2/A-23g2 deleted, A-23f–A-23s rewritten. |
+| D-32 | The mid-shift switcher (7b)   | **ADOPTED.** [S99, Josh] A gap in this spec, not a contradiction — §4.5a already recorded it as owed and pre-committed its constraints. **A-7j is REWRITTEN, not satisfied**, and **A-7g is revived onto 7b**. 7b must close-and-open (never edit in place), honour the six-type/three-and-three table, and carry a note field. §4.5a, §4.12.2. |
 | D-24 | "Up next" binding             | **Bound to the schedule.** [S98, Josh] The next upcoming item on the project, from the existing calendar UNION; no milestone concept is introduced. §4.3; §8a; A-11f–A-11j. _(Renumbered [S98]: this ruling was previously cited as "D-6", which is offline-capable actions.)_ |
 
 ---
@@ -137,8 +188,10 @@ app/m/
   layout.tsx                        mobile shell: app bar + tab bar + offline strip + sheet host
   page.tsx                          → redirect to /m/timeclock  (D-12)
   timeclock/page.tsx                M-5   tab slot 2
+  timeclock/switch/page.tsx         M-20  7b  mid-shift segment switcher   [S99, D-28/D-32]
   projects/page.tsx                 M-2   projects list
   logs/page.tsx                     M-6   tab slot 4
+  logs/new/page.tsx                 M-21  7c  daily log entry              [S99, D-28]
   field/page.tsx                    M-7   tab slot 5
   capture/page.tsx                  post-shot handling (§6) — NOT the camera itself
   offline/page.tsx                  M-4   offline / failure state
@@ -148,14 +201,25 @@ app/m/
   p/[projectId]/changes/page.tsx    M-13  change orders — NO MONEY (§4.11.3)
   p/[projectId]/punch/page.tsx      M-14  punch list
   p/[projectId]/deliveries/page.tsx M-15  deliveries  (M-7's Deliveries tile shares this)
+  p/[projectId]/deliveries/check-in/page.tsx  M-22  7d  delivery check-in  [S99, D-28]
+                                          ONLINE-ONLY (D-6) — never queues; see §4.12.4
   p/[projectId]/files/page.tsx      M-16  files — non-photo documents
   p/[projectId]/contacts/page.tsx   M-17  project contacts
   p/[projectId]/team/page.tsx       M-18  assigned crew
   p/[projectId]/safety/page.tsx     M-19  safety incidents  (reached from M-7)
+  p/[projectId]/safety/new/page.tsx M-23  7e  incident report              [S99, D-28]
   p/[projectId]/photos/page.tsx     M-8   gallery  (M-7's Photos tile shares this)
   p/[projectId]/photos/[fileId]/page.tsx        M-9   viewer
   p/[projectId]/photos/[fileId]/markup/page.tsx M-10  markup
 ```
+
+**Four field-capture routes added [S99, D-28].** M-20…M-23 are 7b, 7c, 7d and 7e. **They are PAGES, not
+sheets** — the handoff draws them with ✕ chrome rather than a back chevron, and Josh ruled that is styling,
+not structure. Two consequences a build must honour: each is **deep-linkable and browser-back-able**, and
+none of them is hosted by `layout.tsx`'s sheet host. 7a needs no new route — it is M-5, amended in §4.12.1.
+
+**M-21 is what closes GAP-8's core defect.** §4.6's M-6 carries a primary "Log the day" button that until
+now resolved to nothing; `logs/new` is its destination.
 
 **Twelve tiles, nine new routes [S98].** Every tile on M-3 and M-7 resolves to a real mobile screen
 (§4.11). Three tiles reuse a route rather than getting their own — stated in §4.11.10 — and **no tile is
@@ -431,8 +495,22 @@ type is in one arm or the row is rejected.
 
 `task_id` and note columns come from `time_segments_task_gate_check` (`:229-231`),
 `time_segments_completion_gate_check` (`:236-239`) and the `note` comment at `:242`. **Only `break`
-escapes the note requirement** — a service-layer rule with no CHECK behind it, so nothing but the UI
-enforces it.
+escapes the note requirement.**
+
+> **⛔ CORRECTION [S99] — the note rule IS DB-enforced. This section previously said the opposite.**
+>
+> _Superseded, quoted:_ _"— a service-layer rule with no CHECK behind it, so nothing but the UI enforces
+> it."_
+>
+> **`time_segments_note_on_end_check` is live**, verified against rebuild-test:
+>
+> ```sql
+> CHECK ((segment_end IS NULL) OR (segment_type = 'break') OR (note IS NOT NULL))
+> ```
+>
+> **Why this matters rather than being a footnote:** a build that omits the note field does not degrade
+> into an unenforced rule — it throws a constraint violation on **every** non-break segment end. That
+> makes it a hard requirement of 7b (§4.12.2) and of clock-out, not a nicety. A-7h is corrected to match.
 
 ##### The clock-in interaction — what it actually is
 
@@ -464,23 +542,34 @@ to be selected. **Restated:** the redirect follows from the type the user chose.
 
 The old phrasing — _"if no project was selected"_ — described a state that can no longer occur by accident.
 
-##### What happened to the switch control
+##### What happened to the switch control — **ANSWERED [S99, D-32]: it is adopted, as 7b / M-20**
 
-The mid-shift switcher specced under D-25 **is not part of the clock-in path and is not specced here.**
+_Superseded heading and premise, quoted:_ _"The mid-shift switcher specced under D-25 **is not part of the
+clock-in path and is not specced here.**"_ The first half stands — **7b is still not part of the clock-in
+path**, and 7a gains no switch control. The second half is overtaken: the switcher now has a screen
+(§4.12.2) and a route (`/m/timeclock/switch`, M-20).
+
+**This was a GAP, not a contradiction**, which is why it is adopted rather than bent: this section already
+recorded it as *"still true, and still owed by GAP-8's Mobile Field Capture handoff"* and pre-committed
+its three constraints. The handoff satisfies two of them and misses one — see §4.12.2.
+
 Being explicit about which parts survive:
 
 - **Withdrawn from this section:** the type row on the *state card* as a post-hoc corrector, the
   default-then-switch flow, and its offline two-entry choreography. Those existed only to serve a default
   that no longer exists. Their criteria are rewritten or removed in §10.
-- **Still true, and still owed by GAP-8's _Mobile Field Capture_ handoff:** a mid-shift change of segment
-  type is a real field need, and when it is specced it **must** close the open segment and insert a new
-  one rather than editing in place — `time_segments_update_authorized` lets a member end their **own
+- **SATISFIED [S99] — was "still owed by GAP-8's _Mobile Field Capture_ handoff":** a mid-shift change of
+  segment type is a real field need, and when it is specced it **must** close the open segment and insert
+  a new one rather than editing in place — `time_segments_update_authorized` lets a member end their **own
   open** segment but not alter an ended one, and `time_segments_insert_authorized` gates inserts on
-  `owns_open_session(session_id)`. It must also honour the per-type table above and the note rule. **That
-  is a constraint on the future handoff, not a screen this document specifies.**
-- **Consequence to be honest about:** with the switcher out of scope, a crew member who clocks in on the
-  wrong type has **no in-app correction path in this spec's surface set**. That is GAP-8's gap, and it is
-  now one more reason that handoff is a build blocker rather than a nicety.
+  `owns_open_session(session_id)`. It must also honour the per-type table above and the note rule.
+  _(Superseded clause: "That is a constraint on the future handoff, not a screen this document
+  specifies." **It is now §4.12.2.**)_ **All three constraints carry over verbatim as requirements on
+  7b** — the handoff already satisfies close-and-open, and misses the other two.
+- **RESOLVED [S99] — was "Consequence to be honest about":** _quoted:_ _"with the switcher out of scope, a
+  crew member who clocks in on the wrong type has **no in-app correction path in this spec's surface
+  set**. That is GAP-8's gap, and it is now one more reason that handoff is a build blocker rather than a
+  nicety."_ The correction path is `/m/timeclock/switch`.
 
 ### 4.6 M-6 · Logs
 
@@ -498,17 +587,65 @@ The mobile equivalent of the desktop Field Ops hub. A **2-column grid of 76px ti
 M-1 and M-3: **Daily logs · Deliveries · Safety · Photos**, each with its attention badge. Above the grid,
 a project context row (58px) naming the project the tiles apply to, tappable to switch.
 
-### 4.7a Photo display — the overlay rule. **Governs M-8, M-9 and M-10** (D-21 as extended [S98])
+### 4.7a Photo display — **REVERSED [S99, D-31]. Governs M-8, M-9 and M-10**
 
 Stated once here rather than three times below. Every surface that renders a photo obeys it.
 
-> **The rule [S98, Josh — Option A]: render the ORIGINAL image with the annotation layer drawn over it,
-> live, from `files.markup_data`.**
+> ## ⛔ OPTION A IS OVERTURNED [S99, Josh — D-31]
+>
+> **THE RULE NOW: the annotated DERIVATIVE is the display source.** Save writes it; every surface that
+> shows a marked-up photo shows **that file**. The viewer **indicates** a photo has markup and **toggles
+> back to the original by swapping files.**
+>
+> Source — the _Mobile Photos_ handoff (§6l, `docs/handoffs/mobile-photos/README.md`):
+> _"Markup is a non-destructive layer — save writes an annotated derivative and keeps the original; the
+> viewer should indicate a photo has markup and allow toggling back to the original."_
+>
+> _Superseded [S99], quoted rather than deleted:_
+>
+> > _"**The rule [S98, Josh — Option A]: render the ORIGINAL image with the annotation layer drawn over
+> > it, live, from `files.markup_data`.**_
+> >
+> > _This is the display path everywhere — gallery thumbnail, viewer image stage, filmstrip. **It does not
+> > depend on a derivative existing**, so the desktop-annotated population renders correctly with **no
+> > desktop change and no backfill**. D-2 and A-28 hold. The previously blocked case is gone: there is no
+> > longer a "missing derivative" branch, because the derivative was never on the display path."_
 
-This is the display path everywhere — gallery thumbnail, viewer image stage, filmstrip. **It does not
-depend on a derivative existing**, so the desktop-annotated population renders correctly with **no desktop
-change and no backfill**. D-2 and A-28 hold. The previously blocked case is gone: there is no longer a
-"missing derivative" branch, because the derivative was never on the display path.
+#### 4.7a.0 Why the reversal is safe — the premise Option A was built on is gone
+
+Option A existed **for one reason**: a population of photos annotated on desktop, carrying `markup_data`
+with **no derivative**, which a derivative-based display path would render unmarked. Every argument in
+§4.7a.1–§4.7a.4 below is downstream of solving that.
+
+**Ruled [S99, Josh]: that population does not exist. No existing photos need preserving.** With no legacy
+population, the blocked case Option A was designed around cannot occur, and the derivative — which Save
+was already writing per D-21 — is simply the rendered artifact.
+
+**What this costs, stated plainly rather than buried:**
+
+- **The desktop markup editor must write a derivative on save, and currently does not.** Under Option A it
+  never had to, because nothing read one. Under D-31 a desktop-annotated photo with no derivative renders
+  **unmarked** on mobile. **Ruled [S99, Josh]: that is a SEPARATE WORK ITEM, outside this build.** It is
+  not fixed here and M6M states no criterion for it. Recorded in §11's open items so it is not lost.
+- **Toggling is now a file swap, not a layer toggle.** It issues a second image request. A-23e2, which
+  asserted the opposite, is deleted.
+- **A stale or missing derivative is a correctness problem again, not a cosmetic one** — it is what is on
+  screen. §4.7a.5's three "reverted hardenings" revert back; see the note there.
+
+**What it buys:** the display path is one `<img>` against one file. §4.7a.1's coordinate-model reasoning,
+§4.7a.2's shared-viewBox requirement and §4.7a.3's legibility rules **all become moot for display** —
+they described how to draw an overlay that is no longer drawn. They are retained below, struck through in
+purpose but not deleted, because **§4.10's authoring canvas still renders shapes live** and still needs
+every word of them.
+
+> **[S99] SCOPE OF §4.7a.1 – §4.7a.4 AFTER D-31.** These four subsections specified how to draw a live
+> overlay at display time. **Display no longer draws one**, so as *display* rules they are superseded.
+> They are kept in full and unedited because **the M-10 authoring canvas still draws shapes live** over
+> the image being annotated — §4.10 depends on the coordinate model (§4.7a.1), the shared-viewBox
+> requirement (§4.7a.2, still non-negotiable *there*), the stroke floor and text handling (§4.7a.3) and
+> the paint-ordering rule (§4.7a.4). **Read them as authoring rules, not display rules.** The one
+> display-time item that survives unchanged is the markup **indicator** (§4.7a.3) — a derivative-based
+> surface still has to tell the user the photo is annotated.
 
 #### 4.7a.1 The stored coordinate model makes this work — verified, not assumed
 
@@ -625,11 +762,30 @@ partial states are specifically forbidden:
 So: placeholder → complete composite. No intermediate paint. The indicator from §4.7a.3 may render on the
 placeholder, since it derives from `markup_data` alone and needs no image.
 
-#### 4.7a.5 The derivative is a SHARING artifact, not a display source
+#### 4.7a.5 The derivative — **RE-PROMOTED to the display source [S99, D-31]**
 
-`markup_data` is the source of truth **and now also the display path**. Save still writes a flattened
-derivative per D-21, and it is used **only** when a marked-up photo has to leave the app — share, email,
-PDF embed. Nothing in the UI reads it.
+> **[S99] This subsection's title and premise are overturned.** _Superseded, quoted:_ _"**The derivative
+> is a SHARING artifact, not a display source.** `markup_data` is the source of truth **and now also the
+> display path**. Save still writes a flattened derivative per D-21, and it is used **only** when a
+> marked-up photo has to leave the app — share, email, PDF embed. Nothing in the UI reads it."_
+>
+> **The derivative is now BOTH** — what the UI displays *and* what leaves the app. `markup_data` remains
+> the source of truth **for re-editing** (§4.10 regenerates from it), but it is no longer a display input.
+>
+> **The three "reverted hardenings" below therefore revert BACK.** They were correct while the derivative
+> was load-bearing, relaxed when Option A demoted it, and are load-bearing again:
+>
+> | Hardening | Under D-31 |
+> | --------- | ---------- |
+> | A failed derivative write | **Save must NOT report plain success.** The marks are in `markup_data` but the user would see an unmarked photo. A-23j reverts. |
+> | Regeneration staleness | **A correctness break again** — a stale derivative is the wrong image on screen, not an out-of-date share. |
+> | Signed URLs (A-23l) | **Kept, and now for the display path** as well as sharing. Unchanged in substance. |
+>
+> **A-23t is now redundant for sharing and vital for display**: "missing derivative degrades to the
+> original with a warning" was written so a *share* never passes off an unmarked photo as marked. The same
+> failure is now visible on every screen, which raises its severity rather than removing it.
+
+_The S98 text is retained below as the record of the demotion that D-31 undoes._
 
 Reverted [S98] — three hardenings added while the derivative was briefly load-bearing, each put back:
 
@@ -1052,6 +1208,119 @@ that already exist. **They do not get their own screens**, and building duplicat
 
 **M-3's Photos tile and M-7's Photos tile are the same screen.** Confirmed rather than assumed: both are
 project-scoped, both bind to `getFiles({ projectId, category: 'photos' })`, and §4.7a governs both.
+
+---
+
+### 4.12 The five field-capture screens (M-20 … M-23, plus M-5 amended) — **closes GAP-8 [S99]**
+
+Source: `docs/handoffs/mobile-field-capture/` (commit `e1d9747`). The `.dc.html` is a **design reference,
+not production code** — its own README says so, and `ios-frame.jsx` / `support.js` are to be ignored.
+
+**Ruling 1 [S99, Josh]: where the handoff contradicts a locked ruling, THE RULING WINS and the handoff
+bends.** Each subsection below states the contradiction and the resolution. **Ruling 2, the single
+exception:** 7b is **adopted** (D-32) — it was a gap in this spec, not a contradiction.
+
+**Routes are PAGES, not sheets (D-28).** All four are deep-linkable and browser-back-able. The ✕ chrome in
+the handoff is styling.
+
+#### 4.12.1 7a · Clock in / out → **M-5, amended** (`/m/timeclock`)
+
+**⛔ CONTRADICTION — the deepest one. The handoff's 7a has NO segment type selection at all.**
+Its flow is: status block → week line → "Clock in to" project cards → Clock in. Type is implicitly `work`,
+corrected afterwards via 7b. **That is D-25's default-then-switch model, which D-27 superseded.**
+
+**Resolution — 7a bends to §4.5a's numbered interaction:**
+
+1. A **required type row** is added above the project row. Six options, **none pre-selected** (A-7b, A-7b2).
+2. The project row becomes **conditional**: present and required for `work`/`material_run`/`warranty`;
+   **absent — not disabled** — for `travel`/`shop`/`break` (A-7c, A-7c2).
+3. "Clock in" stays disabled until type and any required project are set.
+4. The handoff's "the crew's first tap of the day" framing goes with it. §4.5a already withdrew the
+   one-tap claim.
+
+**Also bends:** the handoff's amber **"Switch task or project"** control on the on-the-clock state now
+navigates to **M-20** rather than acting in place (A-7j2).
+
+**NOT resolved — carried to §11 as an open question:** 7a **pre-selects** the scheduled/nearest project
+with an amber border and a green "Here" GPS chip. D-27's "no default" is scoped to the **type**; A-7b says
+no *type* is pre-selected. **Nothing locked forbids a pre-selected project.** It is contrary to D-27's
+spirit — _"not something the app guesses and the user corrects afterwards"_ — but not to its letter, so it
+is not resolved by ruling here.
+
+#### 4.12.2 7b · Mid-shift segment switcher → **M-20** (`/m/timeclock/switch`) — **ADOPTED (D-32)**
+
+**This is the exception. Adopted, not bent** — §4.5a recorded it as owed and pre-committed three
+constraints. The handoff satisfies one and misses two.
+
+| §4.5a constraint | Handoff | Required |
+| ---------------- | ------- | -------- |
+| **Close-and-open, never edit in place** | ✅ _"starting one closes the previous at the same timestamp"_ | Unchanged. A-7j2. |
+| **The per-type table** | ❌ **2×2 grid = four types** (`work`, `break`, `travel`, `shop`) | **Six types.** `material_run` and `warranty` are missing, so a crew member could clock into either and never switch back. A-7j3. |
+| **The note rule** | ❌ **No note field**; footer is just "Start segment" | **A note on the segment being closed**, except `break`. `time_segments_note_on_end_check` is DB-enforced — without it the switch throws. A-7j4. |
+
+**The handoff's project-visibility rule also bends.** It says _"Break / Travel / Shop take no project"_,
+which implies work-vs-not-work. **The constraint partitions three-and-three** — `material_run` and
+`warranty` require a project exactly as `work` does. §4.5a flagged this trap verbatim: _"a build that
+treats 'not work' as 'no project' gets a constraint violation on both."_
+
+**Adopted as drawn:** the day timeline bar (derived from `time_segments`; no new data), the
+"Ends '<task>' at HH:MM" header, and the "Mark '<task>' complete" row — which is the only surface that may
+write `completion`, and only on a `work` segment carrying a `task_id`.
+
+#### 4.12.3 7c · Daily log entry → **M-21** (`/m/logs/new`)
+
+**This route is what closes GAP-8's core defect** — §4.6's M-6 carries a primary "Log the day" button that
+resolved to nothing.
+
+**Adopted as drawn:** Work performed as the required field; crew hours read-only from 6A; sub hours manual;
+photo grid; the three disclosure rows; the Draft pill; more than one log per project per day (verified —
+`daily_logs` has **no** unique constraint).
+
+**⛔ CONTRADICTION — the hazard escalation.** The handoff offers "File an incident report" on submit,
+pre-filled. **Resolution [D-29]: CONTEXT ONLY.** The offer opens a **blank** 7e pre-filled with project and
+date. **No draft row is written; nothing persists unless the user submits 7e.** A hazard flag is not an
+incident. `daily_logs.hazards_present` + `hazard_notes` back the flag itself, and
+`daily_logs_hazard_notes_check` already enforces that notes accompany it.
+
+**⛔ CONTRADICTION — the camera.** 7c embeds its own camera tile. **Resolution:** it stays as an
+affordance but routes through §6's capture path (D-8). No second camera implementation. §6's
+"ask which project after the shot" does not apply — the log already has a project.
+
+#### 4.12.4 7d · Delivery check-in → **M-22** (`/m/p/[projectId]/deliveries/check-in`)
+
+**⛔ CONTRADICTION — the handoff queues this screen; D-6 makes it ONLINE-ONLY.** The global rules say
+_"Every capture screen keeps a local draft… at minimum, queue and surface it."_ **Delivery check-in is the
+one capture action D-6 deliberately excludes** (restated at §4.11.5 and A-35c).
+
+**Resolution: 7d is exempt from autosave and from the queue.** Offline it fails closed with an offline
+state — **not** a Draft pill, which would promise durability the ruling denies. 7a, 7c and photo capture
+keep the queue.
+
+**Also bends:** M-15 still offers **no** check-in control (A-35c). M-22 is reached from the delivery record,
+not from the list.
+
+**Adopted as drawn:** per-PO-line cards, the Received/Damaged steppers, `usable = received − damaged`
+(derived — there is no stored usable column), the error treatment on damage, orderless check-in, and the
+"notifies Owner, Admin, PM" consequence line.
+
+**Schema note:** orderless check-in is real — `deliveries.purchase_order_id` is nullable — but
+`deliveries.project_id` is **NOT NULL**, so a no-PO check-in still has to capture a project. The handoff's
+header shows PO/vendor/truck and no project. See D-30.
+
+#### 4.12.5 7e · Incident report → **M-23** (`/m/p/[projectId]/safety/new`)
+
+**No contradictions.** The best-grounded screen in the handoff.
+
+**Adopted as drawn**, and verified against the live schema: three incident types match
+`safety_incidents_incident_type_check` **exactly** (`injury`, `property_damage`, `near_miss`); "Who was
+hurt" and Witnesses map to `safety_incident_injuries` and `safety_incident_witnesses`, both of which carry
+`member_id` **and** a name column, which is precisely the member-or-typed-outsider model the handoff
+describes; Treatment given maps to `treatment_sought`/`treatment_notes`; the PDF maps to `pdf_file_id`.
+
+**Reached two ways:** from M-19, and from 7c's hazard escalation pre-filled with project and date (D-29) —
+**with nothing written until the user submits.**
+
+**Also bends:** M-19 continues to offer no reporting control of its own beyond navigating here.
 
 ---
 
@@ -1557,6 +1826,59 @@ Both migrations are independent of each other and can land in either order relat
 
 ---
 
+## §7c — Required migration 3 of 3: the four capture constraints (D-30 [S99, Josh])
+
+**Not written here.** This section states the shape; the migration is Josh's to run. Independent of §7a and
+§7b; may land in any order relative to them, but **before the field-capture screens are trusted to enforce
+these rules**.
+
+**Why it exists.** Reconciling the handoff (§4.12) surfaced four rules the design states as requirements
+and the database does not enforce. Ruled [S99, Josh]: **make them DB constraints.** Three reach cleanly.
+**The fourth does not, and this section says so rather than pretending otherwise.**
+
+### The three that a constraint reaches
+
+| # | Rule | Today | Constraint shape |
+| - | ---- | ----- | ---------------- |
+| 1 | **`work_performed` is required on a daily log** (7c calls it "the only field that must be filled") | `daily_logs.work_performed` is **nullable**; UI-only | `NOT NULL`, or `CHECK (work_performed IS NOT NULL AND btrim(work_performed) <> '')`. **Prefer the CHECK** — `NOT NULL` alone admits `''`, which passes the constraint and fails the intent. **Needs a backfill decision:** existing rows may hold NULL. |
+| 2 | **An injury must name a party** | `safety_incident_injuries.member_id` and `injured_name` are **both nullable**, and nothing ties the rule to `incident_type='injury'` | Two parts. (a) On the child row: `CHECK (member_id IS NOT NULL OR injured_name IS NOT NULL)` — a party row must identify *someone*. (b) The harder half — *an `injury` incident must have **at least one** child row* — **is not a CHECK.** A row-level constraint cannot count rows in another table. Options: a deferred constraint trigger on `safety_incidents`, or enforcement in the submit RPC. **Recommend the trigger**, because the RPC is not the only writer. |
+| 3 | **An orderless check-in still needs a project** | Already enforced — `deliveries.project_id` is **NOT NULL** | **No migration needed.** Recorded because §4.12.4 raised it: the *design* omits a project field on the no-PO path, so this is a **UI defect**, not a schema gap. The constraint is already correct and the screen must supply a project. |
+
+### The fourth — **where a DB constraint cannot reach**
+
+**Rule: "damage requires ≥1 photo before submit" (7d).**
+
+**This is not enforceable as a table constraint, and specifying one would be dishonest.** Three reasons,
+each independently sufficient:
+
+1. **It is a cross-table count.** The rule is "for each `delivery_items` row with `qty_damaged > 0`, at
+   least one `files` row links to it". A `CHECK` sees one row of one table. `files` links via
+   `delivery_item_id` — a different table, counted.
+2. **It is a submit-time rule, not a row-time rule.** A check-in is built up over several inserts. At the
+   moment the damaged line is written, its photo does not exist yet — the user photographs after
+   counting. **A constraint that fired per-row would make the correct sequence impossible.**
+3. **The photo is two writes** (§7a): the `files` row and the `storage.objects` bytes. A constraint on
+   `files` proves a row exists, not that an image does.
+
+**What IS enforceable, and what is therefore specified:**
+
+- **A submit-time check inside a `SECURITY DEFINER` RPC** that finalises the check-in: refuse when any
+  line has `qty_damaged > 0` and no linked `files` row. This is the real enforcement point, and it works
+  because **7d is online-only (D-6)** — there is no queued path that bypasses it. Had check-in been
+  offline-capable, even this would be advisory.
+- **A deferred constraint trigger** as an alternative if a single finalising RPC is not built.
+
+**Stated plainly: outside that RPC, the damage-photo rule is a UI rule.** A direct API caller can write a
+damaged line with no photo. That residual is accepted, and it is recorded here rather than hidden behind a
+constraint that looks stronger than it is.
+
+### Ordering and evidence
+
+Independent of §7a/§7b. Evidence when it lands: a failing-then-passing pair per constraint, under the S90
+impersonation harness — not as `postgres`, which bypasses nothing here but sets the wrong precedent.
+
+---
+
 ## §8 — Known gaps for CC to resolve before build
 
 - **GAP-1 — CLOSED (D-15). No migration.** `files` carries no punch column, but the relationship already
@@ -1609,15 +1931,29 @@ Both migrations are independent of each other and can land in either order relat
   **No fix is designed here and none is needed.** The only thing the mobile build owes this: the
   offline photo queue must upload **through `uploadFile`**, not by writing to storage directly, or it
   silently loses the conversion. That obligation is recorded in §5.5.
-- **GAP-8 — OPEN, and hoisted to the status block [S98]. The five field-capture screens are not specced
-  by this document.** The _Mobile Field Capture_ handoff (clock, segment switch, daily log entry, delivery
-  check-in, incident) is referenced by both provided handoffs but was never delivered. M-5 and M-6 are
-  built from the locked patterns, not from it. **This is not a documentation gap — it is a build blocker
-  for two of D-6's three offline-capable actions:** the daily log has no entry screen at all (M-6's "Log
-  the day" button has no destination and §1 has no route for one), and M-5 never specs how a
-  `segment_type` is chosen, which `time_segments`' `NOT NULL` CHECK requires before any segment can be
-  written. Full statement in the status block at the head of this document. If the handoff arrives,
-  reconcile; if it does not, these screens need specifying before the queue has anything to carry.
+- **GAP-8 — ✅ CLOSED [S99] BY RECONCILIATION.** The _Mobile Field Capture_ handoff arrived
+  (`docs/handoffs/mobile-field-capture/`, commit `e1d9747`) and is reconciled screen by screen in
+  **§4.12**. Closing conditions, each met: **(a)** the daily log has an entry screen and a route — M-21,
+  `/m/logs/new` — so M-6's "Log the day" button resolves; **(b)** the mid-shift switcher has a home — M-20,
+  `/m/timeclock/switch` (D-32), so a mis-clocked segment has an in-app correction path; **(c)** delivery
+  check-in and incident reporting have routes — M-22 and M-23; **(d)** M-5 already specced type selection
+  at S98 via D-27/§4.5a, and §4.12.1 records how the handoff's 7a bends to it. **All three of D-6's
+  offline-capable actions now have a screen to originate from**, and the fourth capture screen (7d) is
+  correctly excluded from the queue as online-only.
+
+  _The S98 statement is kept below as the record of what was blocked and why:_
+  > _"**GAP-8 — OPEN, and hoisted to the status block [S98]. The five field-capture screens are not specced
+  > by this document.** The _Mobile Field Capture_ handoff (clock, segment switch, daily log entry, delivery
+  > check-in, incident) is referenced by both provided handoffs but was never delivered. M-5 and M-6 are
+  > built from the locked patterns, not from it. **This is not a documentation gap — it is a build blocker
+  > for two of D-6's three offline-capable actions:** the daily log has no entry screen at all (M-6's "Log
+  > the day" button has no destination and §1 has no route for one), and M-5 never specs how a
+  > `segment_type` is chosen, which `time_segments`' `NOT NULL` CHECK requires before any segment can be
+  > written. … If the handoff arrives, reconcile; if it does not, these screens need specifying before the
+  > queue has anything to carry."_
+
+  **Reconciliation was the path taken.** One item it surfaced is NOT closed: the handoff asserts four rules
+  the schema does not enforce, which became **D-30 / §7c**, a third migration — specced, not written.
 
 ---
 
@@ -1773,10 +2109,13 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 - A-7d2 The written `segment_type` is the one the user selected — no substitution, no fallback to a default on any path. `[live]` _(Replaces the old A-7d. With no default in the model, a build that reintroduces one is silently ignoring the user's choice.)_
 - A-7e Clock-in writes `task_id NULL` and therefore `completion NULL` for every type. `[live]` _(§4.5a. `time_segments_task_gate_check` permits a task only on `work`, and `time_segments_completion_gate_check` forbids a completion without one. Task attach is GAP-8's.)_
 - A-7f **The redirect follows the type**: `work`/`material_run`/`warranty` land on `/m/p/{projectId}`; `travel`/`shop`/`break` land on the dashboard. `[Playwright]` _(D-12 as restated. Rewritten [S98] — the old A-7 tested "with a project selected / with no project selected", which is no longer the distinction the app makes.)_
-- A-7g **Withdrawn with D-25 [S98].** _Original: "With no project in context, the picker requires a project before applying `work`, `material_run` or `warranty`."_ It described the mid-shift switcher, which is no longer specced here (§4.5a). The clock-in equivalent is A-7c. Placeholder kept so the removal is visible rather than a silent gap in the sequence.
-- A-7h Ending a segment of any type other than `break` requires a note; ending a `break` does not. `[Playwright]` _(§4.5a. Service-layer rule with no CHECK behind it, so nothing else catches its absence. Survives D-25's withdrawal unchanged — it was never part of the default-then-switch model.)_
+- A-7g **REVIVED [S99, D-32] onto 7b.** On the **M-20 switcher**, selecting `work`, `material_run` or `warranty` requires a project before "Start segment" is enabled — with no project in context, the picker demands one. `[Playwright]` _(Original text, withdrawn with D-25 [S98]: "With no project in context, the picker requires a project before applying `work`, `material_run` or `warranty`." **It was withdrawn only because the screen it described left scope. That screen is back (§4.12.2), so the assertion is live again on it.** The clock-in equivalent remains A-7c.)_
+- A-7h **[CORRECTED S99]** Ending a segment of any type other than `break` requires a note; ending a `break` does not. `[live]` _(§4.5a. **Correction: the previous rationale — "Service-layer rule with no CHECK behind it, so nothing else catches its absence" — was FALSE.** `time_segments_note_on_end_check` is live and DB-enforced, so a missing note is a constraint violation, not a silent gap. **Harness changed `[Playwright]` → `[live]`**: this is a database-refusal assertion and the browser cannot see it. Applies at clock-out AND at every 7b switch.)_
 - A-7i An offline clock-in queues the session `insert` and the segment `insert` as **two** entries, the segment carrying `depends_on` the session. `[unit]` _(§5.5.1 + §5.2. Rewritten [S98]: the old A-7i asserted the two-entry shape of a mid-shift *switch*, which is no longer specced here — but clock-in has always had its own two-entry shape and had no criterion for it.)_
-- A-7j **No mid-shift segment switch is offered on any screen in this spec.** `[Playwright]` _(§4.5a. The switcher is GAP-8's. This criterion exists so a build does not helpfully add one that edits a segment in place — which `time_segments_update_authorized` refuses for a crew member — and so the absence is a recorded decision rather than an oversight.)_
+- A-7j **REWRITTEN [S99, D-32] — the prohibition becomes a requirement, and its guard survives.** A mid-shift switch **is** offered, at **M-20** (`/m/timeclock/switch`), reached from M-5's on-the-clock state. `[Playwright]` _(Original, quoted: "**No mid-shift segment switch is offered on any screen in this spec.** (§4.5a. The switcher is GAP-8's. This criterion exists so a build does not helpfully add one that edits a segment in place — which `time_segments_update_authorized` refuses for a crew member — and so the absence is a recorded decision rather than an oversight.)" **Note it carried TWO purposes: prohibit the screen, and prohibit edit-in-place. Only the first is overturned** — the second becomes A-7j2, which is why this is a rewrite and not a deletion.)_
+- A-7j2 **NEW [S99, D-32] — the edit-in-place guard A-7j was really protecting.** A switch **closes the open segment and inserts a new one**; **no path issues an UPDATE against an ended segment.** `[live]` _(`time_segments_update_authorized` lets a member end their **own open** segment but not alter an ended one; `time_segments_insert_authorized` gates inserts on `owns_open_session(session_id)`. `[live]`, not `[Playwright]` — the assertion is that the database refuses, which a browser test cannot distinguish from a UI that simply never tries.)_
+- A-7j3 **NEW [S99, D-32]** The switcher's type picker offers **all six** types, and applies the same three-and-three project rule as clock-in — project row present and required for `work`/`material_run`/`warranty`, **absent** for `travel`/`shop`/`break`. `[Playwright]` _(§4.12.2. The handoff's 2×2 grid shows four; §4.5a's table is the authority. A four-tile grid means a crew member can clock into `material_run` and never switch back to it.)_
+- A-7j4 **NEW [S99, D-32]** Switching **captures a note for the segment being closed**, unless that segment is a `break`. `[live]` _(The handoff's 7b has no note field and its footer is just "Start segment" — but closing a segment *is* a segment end, so `time_segments_note_on_end_check` applies. Without this the switch throws on every non-break segment. See A-7h's correction.)_
 
 **Section screens (§4.11) — all new [S98]**
 
@@ -1873,25 +2212,29 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 - A-23b The original is **never modified** by a markup save — its bytes, `file_path`, `file_size` and `mime_type` are identical before and after, across two consecutive saves. Only `markup_data` differs. `[live]`
 - A-23c Re-editing marks regenerates the derivative **in full from the original bytes**, not from the previous derivative, and **overwrites it in place** — after N saves there is exactly one derivative object and no accumulated recompression. `[live]`
 - A-23d The derivative does **not** get its own `files` row: after a markup save, the project's photo count (§4.3) and the gallery tile count (§4.8) are unchanged. `[live]` _(The double-count failure §4.10 was written to prevent.)_
-- A-23e The viewer's toggle reveals the **unannotated original** — with markup present, toggling hides the drawn layer and the image beneath is unchanged. `[Playwright]` _(Amended twice [S98]: it is still the only route to the unannotated image, but it now hides a layer rather than swapping files — A-23e2 pins the difference.)_
-- A-23e2 Toggling issues **no second image request** — the same original is on screen before and after; only SVG shapes are added or removed. `[Playwright]` _(New [S98, Option A]. Without this, a build that fetches a derivative on toggle satisfies A-23e and reintroduces the dependency the ruling removed.)_
+- A-23e **[REWRITTEN S99, D-31]** The viewer's toggle reveals the **unannotated original by swapping files** — with markup present the stage shows the derivative; toggling loads the original. `[Playwright]` _(Amended three times. The Mobile Photos handoff: "allow toggling back to the original".)_
+- A-23e2 **DELETED [S99, D-31].** _Original, quoted:_ _"Toggling issues **no second image request** — the same original is on screen before and after; only SVG shapes are added or removed. `[Playwright]` (New [S98, Option A]. Without this, a build that fetches a derivative on toggle satisfies A-23e and reintroduces the dependency the ruling removed.)"_ **It asserted the exact behaviour D-31 now requires.** Under D-31 a toggle *is* a file swap and *does* issue a second request. Placeholder kept so the deletion is visible rather than a silent gap in the sequence.
 
 **Display — the overlay rule (§4.7a). Rewritten [S98] for Option A; the derivative-as-display criteria they replace are gone, not amended.**
 
-- A-23f A photo with non-empty `markup_data` renders its marks over the **original** in the M-8 gallery thumbnail. `[Playwright]`
-- A-23g The same photo renders its marks in the **M-9 image stage** and the **M-9 filmstrip** thumbnail. `[Playwright]` _(One rule, three surfaces — §4.7a exists so they cannot drift, and testing only the stage would let the filmstrip regress.)_
-- A-23g2 **A photo annotated on desktop, with `markup_data` and NO derivative, renders its marks correctly on all three surfaces.** `[Playwright]` _(New [S98] — the population that blocked the previous rule. This is the criterion that proves Option A actually solved it, and it fails instantly on any build that still consults a derivative.)_
-- A-23h A photo with **empty or null** `markup_data` renders the plain original on all three surfaces, with no overlay element and no indicator. `[Playwright]` _(Without this, a build that always mounts an overlay passes A-23f–A-23g and regresses every unannotated photo.)_
-- A-23i Adding markup flips all three surfaces to the marked rendering **without a reload**; removing every mark flips them back. `[Playwright]` _(Display is a function of current `markup_data`, not of what was true when the screen mounted.)_
-- A-23m The image and the overlay render in **one SVG sharing one viewBox** — marks stay registered to image features at 120px, at the 330px stage, and at full size. `[Playwright]` _(§4.7a.2. The failure this prevents is an `<img object-fit:cover>` with a separately positioned SVG, which looks correct at the authoring size and drifts everywhere else — so the assertion must compare at more than one size or it passes vacuously.)_
-- A-23n Square surfaces (gallery tile, filmstrip) render `xMidYMid slice`: the image fills the square and a mark in the cropped band is cropped **with** it, never floating over a letterbox bar. The M-10 canvas renders `meet` and never crops. `[Playwright]` _(§4.7a.2.)_
-- A-23o A stroke that would render below **1.5 device px** is raised to meet that floor; a stroke already above it is **never lowered**; and no mark's position or size changes at any scale. `[unit]` _(§4.7a.3. The second and third clauses matter — a build that simply normalises all strokes to 1.5px satisfies a floor and destroys deliberate weight.)_
-- A-23p `text` marks are **omitted** from the gallery and filmstrip overlays and **rendered in full** at M-9 and M-10. `[Playwright]` _(§4.7a.3.)_
+> **[S99, D-31] A-23f–A-23s were written for Option A's live overlay. Every one is re-checked below.**
+> Three patterns: rewritten for the derivative, **deleted** because they asserted Option A itself, or
+> **re-scoped to M-10 authoring**, where shapes are still drawn live and the rule still bites.
+
+- A-23f **[REWRITTEN S99]** A photo with markup renders **the annotated derivative** in the M-8 gallery thumbnail. `[Playwright]` _(Was: "renders its marks over the **original**".)_
+- A-23g **[REWRITTEN S99]** The same photo renders the derivative in the **M-9 image stage** and the **M-9 filmstrip** thumbnail. `[Playwright]` _(One rule, three surfaces — they must not drift; testing only the stage would let the filmstrip regress. Reasoning survives the reversal intact.)_
+- A-23g2 **DELETED [S99, D-31] — this is the criterion that existed to prove Option A.** _Original, quoted:_ _"**A photo annotated on desktop, with `markup_data` and NO derivative, renders its marks correctly on all three surfaces.** `[Playwright]` (New [S98] — the population that blocked the previous rule. This is the criterion that proves Option A actually solved it, and it fails instantly on any build that still consults a derivative.)"_ **Under D-31 it is not merely obsolete, it asserts the opposite of the ruling** — a build satisfying it would be non-compliant. It is deleted rather than rewritten because **the population it protected does not exist** (§4.7a.0). The related desktop-editor work item is logged in §11.
+- A-23h **[REWRITTEN S99]** A photo with **no markup** renders the plain original on all three surfaces, with **no indicator**. `[Playwright]` _(Was "no overlay element and no indicator". The overlay clause is void; the indicator clause survives and is still what stops a build marking every photo.)_
+- A-23i **[REWRITTEN S99]** Saving markup flips all three surfaces to the derivative **without a reload**. `[Playwright]` _(Was "adding/removing marks flips… Display is a function of current `markup_data`". Display is now a function of which file is current; the no-reload requirement is unchanged.)_
+- A-23m **[RE-SCOPED S99 → M-10 only]** On the **M-10 authoring canvas**, the image and the live shape layer render in **one SVG sharing one viewBox** — marks stay registered to image features at every canvas size. `[Playwright]` _(§4.7a.2. No longer a display criterion: M-8 and M-9 render a flat file. The `<img object-fit:cover>` + separate-SVG drift failure is still exactly the risk while authoring, so the multi-size assertion stands.)_
+- A-23n **[RE-SCOPED S99 → M-10 only]** The M-10 canvas renders `meet` and **never crops** — authoring must show the whole image or a mark cannot be placed in the cropped region. `[Playwright]` _(The `slice` half applied to gallery/filmstrip overlays, which no longer exist; **the derivative is pre-flattened and crops as an ordinary image**.)_
+- A-23o **[RE-SCOPED S99 → M-10 only]** A stroke below **1.5 device px** is raised to that floor; a stroke above it is **never lowered**; no mark's position or size changes at any scale. `[unit]` _(§4.7a.3. A rendering rule for the live canvas. Thumbnail legibility is now a property of how the derivative was flattened, not of a runtime overlay.)_
+- A-23p **DELETED [S99, D-31].** _Original, quoted:_ _"`text` marks are **omitted** from the gallery and filmstrip overlays and **rendered in full** at M-9 and M-10. `[Playwright]` (§4.7a.3.)"_ **There are no gallery or filmstrip overlays to omit anything from.** A derivative is flattened once and shows whatever it was flattened with. Whether text is legible at 120px is a flattening-quality question with no criterion attached — noted in §11.
 - A-23q An annotated photo carries the markup indicator: **top-right, circular, icon-only, no text**. It is not bottom-left, not a rounded rectangle, and carries no label — so it cannot be read as a source badge. `[Playwright]` _(§4.7a.3 against §4.8's "a photo's badge is its provenance". A criterion that only checked "an indicator exists" would pass on a build that violates the provenance rule, which is the whole risk here.)_
-- A-23r A photo whose only mark falls in the cropped-away band still carries the indicator. `[Playwright]` _(§4.7a.3's reason for having an indicator at all. Without this the indicator looks redundant and gets optimised away.)_
-- A-23s Neither partial state ever paints: the tile holds its placeholder until image and overlay are ready, so **shapes never appear over a blank tile** and **the bare image never appears before its marks**. `[Playwright]` _(§4.7a.4. The second clause is the one that matters — for that interval the surface shows an annotated photo as unannotated, the exact failure Option B was rejected for.)_
-- A-23j A markup save whose **derivative** write fails still **reports success**, surfaces a non-blocking notice that the sharing image could not be generated, and leaves the marks rendering correctly from `markup_data`. `[unit]` _(**Reverted [S98].** It previously asserted the opposite — that such a save must NOT report success — which was correct only while the derivative was the display source. It no longer is, and treating a failed share artifact as a lost save would be wrong.)_
-- A-23k Re-editing marks updates all three surfaces immediately, from `markup_data`. `[Playwright]` _(Amended [S98]: this no longer concerns derivative staleness — display never consults the derivative.)_
+- A-23r **[REWRITTEN S99]** A photo whose marks are all in a cropped-away band **still carries the indicator**. `[Playwright]` _(§4.7a.3's reason for an indicator at all. The cause changes — the derivative is cropped as a plain image rather than an overlay being cropped — but the user-visible failure is identical: an annotated photo that looks unannotated.)_
+- A-23s **[REWRITTEN S99]** A tile holds its placeholder until its image has loaded — **the original never flashes before the derivative replaces it**. `[Playwright]` _(§4.7a.4. Was: "shapes never appear over a blank tile" and "the bare image never appears before its marks". The first clause is void — there are no free-floating shapes. **The second is now MORE dangerous, not less**: under Option A the un-marked interval was a paint-order bug; under D-31 a build that renders the original first and swaps has an annotated photo showing as unannotated for a full network round-trip.)_
+- A-23j **[REVERTED AGAIN S99, D-31]** A markup save whose **derivative** write fails **must NOT report plain success** — the marks are in `markup_data` but every surface would show the photo unmarked. `[unit]` _(Third position for this criterion, so the reasoning is worth stating: it was strict while the derivative displayed, relaxed by Option A when it did not, and is strict again now that it does. The S98 text is quoted in §4.7a.5.)_
+- A-23k **[REWRITTEN S99]** Re-editing marks regenerates the derivative and updates all three surfaces immediately. `[Playwright]` _(Was "from `markup_data` … no longer concerns derivative staleness". **Staleness is a correctness break again** — see §4.7a.5's table.)_
 - A-23l The **sharing** path fetches the derivative through the same signed-URL flow as the original, from the same `{company_id}/{project_id}/` prefix. `[live]` _(Kept [S98] — §4.7a.5 keeps this requirement even though the derivative left the display path. A path that skips signing would work in testing and leak in production.)_
 - A-23t Sharing a marked-up photo whose derivative is missing or stale **degrades to the original with a warning** — it never silently shares an unmarked photo as if it were marked. `[unit]` _(§4.7a.5. Demoting the derivative created this hole: nothing else now notices it is absent.)_
 
@@ -2004,7 +2347,11 @@ shell checks. Two of these deserve their mechanism spelled out because the asser
 
 **House rule.** Every fix still needs a failing-then-passing assertion. Under D-18 that rule is now
 satisfiable for every criterion in §10 except A-26, which is manual by nature.
-## §11 — Decision register (twenty-one ruled [S98, Josh]; nothing open)
+## §11 — Decision register (twenty-six ruled [S98–S99, Josh]; four open, none blocking)
+
+> **[S99]** Five further rulings — **D-28…D-32** — closed GAP-8 and reversed the markup display rule. They
+> are recorded in the **seventh ruling pass** at the end of this section, with four items left genuinely
+> open and listed rather than guessed. The S98 header read _"twenty-one ruled; nothing open"_.
 
 The eight questions from the S98 gap pass are closed, as are the three follow-ups from the second ruling
 pass, the display question from the third, the pin gap from the fourth, both audit items in the fifth, and
@@ -2157,3 +2504,38 @@ while applying them, and it is **already applied** rather than carried:
   policies and A-21g asserts the bytes specifically. **This was not in either ruling; the direction was
   unambiguous, so it is applied rather than queued** — flagging it because it changes what "build step 1"
   costs, from one DROP/CREATE to four.
+
+---
+
+### Seventh ruling pass [S99, Josh] — the field-capture reconciliation
+
+**GAP-8 is closed** (§8, §4.12). Five rulings, recorded as **D-28 … D-32** in §0.
+
+| # | Question | **Ruling** | Applied in |
+| - | -------- | ---------- | ---------- |
+| 9 | Route or sheet for 7b/7c/7d/7e? | **PAGES.** Real routes under `/m/`; the ✕ chrome is styling, not structure. Decided once for all four. | **D-28**; §1 (M-20…M-23); §4.12 |
+| 10 | Hazard → incident escalation? | **CONTEXT ONLY.** Opens a blank 7e pre-filled with project and date. **No draft row; nothing persists unless submitted.** | **D-29**; §4.12.3; §4.12.5 |
+| 11 | The four unenforced UI rules? | **DB CONSTRAINTS** — a third migration, specced not written. Three reach; **the damage-photo rule does not**, and §7c says where it cannot rather than pretending. | **D-30**; **§7c** (new) |
+| 12 | Markup display source? | **REVERSED — the DERIVATIVE displays.** Option A overturned; its premise (desktop-annotated photos needing preservation) does not exist. Viewer toggles back to the original by swapping files. | **D-31**; **§4.7a** rewritten; §4.7a.0 (new); §4.7a.5 re-promoted; A-23e/f/g/h/i/j/k/r/s rewritten; **A-23e2, A-23g2, A-23p deleted**; A-23m/n/o re-scoped to M-10 |
+| 13 | The mid-shift switcher? | **ADOPTED** — a gap, not a contradiction. A-7j **rewritten**, A-7g **revived**. | **D-32**; §4.5a; §4.12.2; A-7g, A-7j, A-7j2–A-7j4 |
+
+**Correction applied regardless of any ruling.** §4.5a and A-7h both stated the note-on-end rule had
+"no CHECK behind it". **`time_segments_note_on_end_check` is live and DB-enforced.** Both corrected, and
+A-7h's harness moved `[Playwright]` → `[live]` because the assertion is a database refusal.
+
+### Open — carried into build [S99]
+
+**§11 is a register, not a queue — but these four are genuinely open and are recorded rather than
+guessed.** Nothing here blocks the build.
+
+| Item | Status | Why it is open |
+| ---- | ------ | -------------- |
+| **7a pre-selects a project** | **NEEDS A RULING** | D-27's "no default" is scoped to the **type**; A-7b forbids a pre-selected *type*. Nothing locked forbids a pre-selected *project*. Contrary to D-27's spirit — _"not something the app guesses and the user corrects afterwards"_ — but not to its letter. Resolving it by inference would be exactly the over-reach §4.12 exists to avoid. |
+| **GPS capture (7a)** | **UNSPECCED BY RULING [S99, Josh]** | `time_clock_sessions.gps_in`/`gps_out` exist (jsonb, nullable), so the handoff's "captured at clock events, never a blocker" is schema-backed and consistent with the nullability. **No criteria invented.** Behaviour on permission denial is undecided. |
+| **OT week line (7a)** | **UNSPECCED BY RULING [S99, Josh]** | `companies.ot_threshold_hours` and `week_starts_on` both exist, so "This week 32.5 h · 7.5 to OT" is derivable. **No criteria invented.** Note TECH_DEBT #92: changing `week_starts_on` re-buckets historical weeks, and a mobile surface makes that visible to crew. |
+| **The desktop markup editor writes no derivative** | **SEPARATE WORK ITEM [S99, Josh] — outside this build** | D-31 makes the derivative the display source, so a desktop-annotated photo with no derivative renders **unmarked** on mobile. Ruled explicitly as **not fixed here**; M6M states no criterion for it. Recorded so the consequence is not lost. |
+
+Two smaller items with no criterion attached, noted where they arose rather than invented into rules:
+**flattening quality** at thumbnail size (A-23p's deletion removed the text-legibility rule and nothing
+replaced it, §10), and **7b's timeline bar**, adopted as drawn with no criterion because it is derived
+display over `time_segments` and introduces no data.
