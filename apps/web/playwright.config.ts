@@ -60,7 +60,44 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
 
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  // ---------------------------------------------------------------------------
+  // THREE PROJECTS, AND THE SPLIT IS LOAD-BEARING [S99, M6M §3 slice]
+  // ---------------------------------------------------------------------------
+  //   setup          signs in once, writes e2e/.auth/user.json
+  //   chromium       ANONYMOUS. Owns harness.spec.ts and anything else that
+  //                  needs a signed-OUT browser. It must stay anonymous:
+  //                  harness.spec.ts drives /sign-in, and middleware.ts
+  //                  redirects an authenticated request away from /sign-in to
+  //                  /dashboard — a shared session would break it.
+  //   chromium-auth  Carries that session, and runs the m-*.spec.ts files only.
+  //                  Every /m route is behind app/m/layout.tsx's auth gate.
+  //
+  // testIgnore/testMatch are complements on purpose: a new m-*.spec.ts is picked
+  // up by exactly one project, and a spec named anything else by exactly the
+  // other. Neither list needs editing to add a file.
+  //
+  // VIEWPORT 402x874 is M6M §2's reference canvas (iPhone 16 Pro logical px),
+  // in a desktop Chromium. That is §1's stated testing model: "A desktop browser
+  // opening /m gets the mobile shell; that is intended and is how it gets
+  // tested." It matters for A-5 — tap-target geometry is viewport-dependent.
+  projects: [
+    { name: 'setup', testMatch: /auth\.setup\.ts/ },
+    {
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
+      testIgnore: /m-.*\.spec\.ts/,
+    },
+    {
+      name: 'chromium-auth',
+      use: {
+        ...devices['Desktop Chrome'],
+        viewport: { width: 402, height: 874 },
+        storageState: 'e2e/.auth/user.json',
+      },
+      testMatch: /m-.*\.spec\.ts/,
+      dependencies: ['setup'],
+    },
+  ],
 
   // ---------------------------------------------------------------------------
   // THE DEV SERVER: Playwright STARTS IT, you do not have to.

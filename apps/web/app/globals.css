@@ -12,3 +12,18 @@
     @apply bg-white font-sans text-[#374151] antialiased;
   }
 }
+
+/* M6M §2 (Motion) — "Menu sheet slides down from the app bar."
+   120-160ms ease; 140ms sits in the middle of the specified band. Applied via
+   motion-safe: in mobile-shell.tsx, so prefers-reduced-motion gets the sheet
+   with no travel rather than no sheet. */
+@keyframes m6mSheetDrop {
+  from {
+    transform: translateY(-8px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}

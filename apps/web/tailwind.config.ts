@@ -40,6 +40,37 @@ const config: Config = {
           800: '#92400e',
           900: '#78350f',
         },
+        // M6M §2 — the mobile PWA's design tokens, verbatim.
+        //
+        // WHY A SEPARATE NAMESPACE AND NOT `brand`/`accent`. Three of these
+        // values already exist on the 1a scale (brand.900 = navy, brand.500 =
+        // blue, accent.500 = amber) and four do not (surface, card border,
+        // muted-on-light, danger). Folding the new four into `brand`/`accent`
+        // would renumber a live scale that every dashboard screen consumes.
+        // Folding the mobile shell into `brand-900`/`brand-500` instead would
+        // couple §2 to a palette it does not own — a future 1a revision would
+        // silently repaint the field app. So: one namespace, all eight tokens
+        // spelled out, and the duplicated hexes are duplicated ON PURPOSE.
+        // Purely additive; no existing class changes meaning. A-28 untouched.
+        m6m: {
+          navy: '#14213d', // app bar, primary text
+          blue: '#2f49d1', // active state, icons, primary button
+          amber: '#f59e0b', // camera action, avatar, primary field CTA, counts
+          danger: '#c0362c', // sign out, damage/blocking badges
+          surface: '#f4f6f9', // page background
+          card: '#ffffff', // all cards and tiles
+          border: '#e6e9ef', // card border
+          muted: '#8a919c', // inactive tab, captions — on light
+          'muted-navy': '#8fa0c4', // the same role, on navy
+          canvas: '#0d1220', // photo viewer and markup ONLY (M-9, M-10)
+          // §4.4's amber status strip. Not in the §2 table — §4.4 names the two
+          // hexes inline, and they appear nowhere else, so they live here
+          // rather than being retyped at each use site.
+          'strip-bg': '#fdf6ec',
+          'strip-border': '#f3e2c4',
+          // §3.3's Sign-out row border. Same reasoning.
+          'danger-border': '#f0d4d1',
+        },
       },
       fontFamily: {
         sans: ['var(--font-barlow)', 'Barlow', 'system-ui', 'sans-serif'],

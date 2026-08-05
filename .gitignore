@@ -51,6 +51,10 @@ playwright-report/
 test-results/
 blob-report/
 .playwright/
+# The signed-in storageState written by e2e/auth.setup.ts. It holds a real
+# Supabase session cookie for a rebuild-test identity — a credential, and a
+# regenerated-every-run artifact. Never commit it.
+apps/web/e2e/.auth/
 
 # TypeScript
 *.tsbuildinfo
