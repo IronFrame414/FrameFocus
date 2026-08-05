@@ -180,6 +180,8 @@
 | D-32 | The mid-shift switcher (7b)   | **ADOPTED.** [S99, Josh] A gap in this spec, not a contradiction — §4.5a already recorded it as owed and pre-committed its constraints. **A-7j is REWRITTEN, not satisfied**, and **A-7g is revived onto 7b**. 7b must close-and-open (never edit in place), honour the six-type/three-and-three table, and carry a note field. §4.5a, §4.12.2. |
 | D-24 | "Up next" binding             | **Bound to the schedule.** [S98, Josh] The next upcoming item on the project, from the existing calendar UNION; no milestone concept is introduced. §4.3; §8a; A-11f–A-11j. _(Renumbered [S98]: this ruling was previously cited as "D-6", which is offline-capable actions.)_ |
 | D-36 | The app-bar avatar            | **CUT.** [S100, Josh] §3.1's 38px amber avatar is removed from the app bar entirely — not resized, not made tappable. The hamburger stays as the bar's only left control, and **Sign out remains where §3.3 already puts it**, in the sheet. The bar is now: hamburger (or back chevron) · title block · nothing on the right. §3.1; A-40. _(Raised by the shell build: §3.1 sized the avatar and never gave it an action, and 38px sits under §2's 44px floor for interactive targets — so it was either a sub-spec tap target or a decoration. Ruled: neither. It goes.)_ |
+| D-38 | Dashboard tile / M-24         | **CUT FROM V1.** [S100, Josh] The Dashboard tile leaves §3.3 — the sheet drops to **six** tiles — and `/m/dashboard` is not built. **Not permanent: a v1 cut, in D-19's and D-14's shape.** Three independent reasons, each sufficient. **(1) Every non-money figure is already owned elsewhere**, by a screen that owns it better: `activeProjectCount` by M-2's app bar (A-10c fixes it as `{n} active` **and nothing after it**), `openPunchCount` by D-16's counter and its two expressions, `pastTargetCount` by A-10e's signed days-left on the card the user can act from, `awaitingCount` by M-13. A second copy is a second chance to disagree. **(2) The attention feed — the one thing not duplicated — is office admin, not field work:** CO signature chasing, and project-setup data hygiene. All three item types hard-code `/dashboard/**` hrefs. **(3) `getDashboardData()` selects `change_orders.net_delta` twice** (`dashboard.ts:64`, `:73`) to build `awaitingSum` and the signed-CO items — so calling it from `/m` pulls **the exact column D-26 cut** into the mobile data path, where **TECH_DEBT #117** means RLS would not catch a slip. §3.3; §4.13 (M-24 removed); A-3b, A-41, A-43. |
+| D-39 | App bar on the six destinations | **HAMBURGER, NOT A BACK CHEVRON — a deliberate departure from §4.11's common rule, confirmed [S100, Josh].** §4.11 gives the twelve project-section screens a back chevron; the six hamburger destinations keep the **hamburger**. Two reasons. §3.1's chevron clause is conditioned on being **inside a project** (`/m/p/**`) and these are company-scoped, so it never fires. And decisively: **A-3c can only be observed by opening the sheet while standing on one of these six routes** — a back chevron makes the sheet unopenable there, which would strand the criterion for a second time after §4.13 had just rescued it. **Recorded as a ruling, not a flagged deviation, so a later reader does not "fix" it back to the chevron.** §4.13's common rules; A-42b. |
 | D-37 | Expenses on mobile            | **IN SCOPE. D-9 is NARROWED, NOT REVERSED.** [S100, Josh] Expenses gets a real mobile screen (§4.13.3, M-26). **Budget, Invoices, Payments and Contracts stay absent and are deferred to v2** — the exclusion list loses exactly one member and gains nothing. This is the first currency on `/m`, and §4.13.3 states in full what that forces and what it does **not**: unlike D-26's `net_delta`, `expenses_select_scoped` is a **real DB row floor**, and an expense amount is *actual cost*, which the Financial Visibility Floor explicitly makes visible to every role. **The open role question inside that is NOT decided here** — see §4.13.3's "What this forces" and §11's open list. §4.13.3; A-44–A-44f. |
 
 ---
@@ -201,8 +203,8 @@ app/m/
   capture/page.tsx                  post-shot handling (§6) — NOT the camera itself
   offline/page.tsx                  M-4   offline / failure state
 
-  # The seven hamburger-sheet destinations (§3.3 tiles → §4.13)   [S100]
-  dashboard/page.tsx                M-24  see §4.13.1 — ROUTE SPECCED, TILE UNDER RULING
+  # The six hamburger-sheet destinations (§3.3 tiles → §4.13)   [S100]
+  # NO dashboard/ ROUTE — the Dashboard tile is CUT from v1 (D-38).
   schedule/page.tsx                 M-25  company schedule — the calendar across projects
   expenses/page.tsx                 M-26  expenses  [D-37 — first currency on /m]
   subs/page.tsx                     M-27  subs & vendors directory
@@ -235,11 +237,18 @@ none of them is hosted by `layout.tsx`'s sheet host. 7a needs no new route — i
 **M-21 is what closes GAP-8's core defect.** §4.6's M-6 carries a primary "Log the day" button that until
 now resolved to nothing; `logs/new` is its destination.
 
-**Seven hamburger destinations, seven new routes [S100].** Until this pass every tile in §3.3's sheet
-had a label and nothing behind it — no route here, no section in §4, no criterion in §10. They are now
-specced in **§4.13** as M-24 … M-30, under the same rules §4.11 applied to the twelve section screens.
+**Six hamburger destinations, six new routes [S100].** Until this pass every tile in §3.3's sheet had a
+label and nothing behind it — no route here, no section in §4, no criterion in §10. They are now specced
+in **§4.13** as M-25 … M-30, under the same rules §4.11 applied to the twelve section screens.
 `/m/subs` is deliberately shorter than the tile's label ("Subs & Vendors"); a URL segment with an
 ampersand in it is a needless escaping problem, and no other mobile route spells its label out either.
+
+> **Six, not seven — the Dashboard tile is CUT [S100, D-38].** It was specced in this pass as M-24 and
+> then ruled out of v1: every non-money figure it carried is already owned by M-2, M-3, M-13 or M-14, its
+> attention feed is office admin with `/dashboard/**` hrefs, and `getDashboardData()` reaches for
+> `net_delta` twice. **`M-24` is retired and not reused** — the numbering runs M-25 … M-30 with a gap,
+> so a future reader meeting "M-24" in an older document finds the cut rather than a different screen.
+> **There is no `/m/dashboard` route.** A build that adds one has un-ruled D-38.
 
 **Two consequences.** First, **no sheet tile points at `/dashboard/**` any more** — the reading that let
 them do so was an inference, never a ruling, and it is now moot. Second, **A-3c becomes satisfiable** —
@@ -333,20 +342,25 @@ Drops over a `rgba(20,33,61,.5)` scrim. Content inset 18px under a mono **"GO TO
 grid of 76px tiles** — icon top-left `#2f49d1`, bold 15px label bottom-left, optional badge top-right.
 Current location = `1.5px #2f49d1` border, label in blue.
 
-**Tiles:** Dashboard · Schedule · Expenses · Subs & Vendors · Team _(count)_ · Contacts · Settings.
+**Tiles:** Schedule · Expenses · Subs & Vendors · Team _(count)_ · Contacts · Settings. **Six.**
 Below the grid, a full-width **Sign out** row (58px, `#c0362c` text, `#f0d4d1` border).
+
+> **AMENDED [S100, D-38] — Dashboard is CUT and the grid is SIX tiles.** _Superseded line, quoted rather
+> than deleted:_ _"**Tiles:** Dashboard · Schedule · Expenses · Subs & Vendors · Team (count) · Contacts
+> · Settings."_ Reasoning in D-38 and in the note under §4.13's heading. **A v1 cut, not a permanent
+> one** — D-19's and D-14's shape. Six tiles in a 2-column grid is three clean rows, which the seven
+> never were.
 
 Tapping the scrim or the hamburger closes it. **The tab bar stays visible and functional beneath the sheet.**
 
 > Because the tab bar owns Projects, Timeclock, Logs and Field, those four are **deliberately absent**
 > here. A build that adds them back is wrong.
 
-**Every tile resolves to a `/m/` route [S100].** The tile set is unchanged; what changed is that all
-seven now have a screen behind them (§4.13, M-24 … M-30) instead of a label:
+**Every tile resolves to a `/m/` route [S100].** All six now have a screen behind them (§4.13,
+M-25 … M-30) instead of a label:
 
 | Tile | Route | Screen |
 | ---- | ----- | ------ |
-| Dashboard | `/m/dashboard` | M-24 — **route specced, tile under ruling** (§4.13.1) |
 | Schedule | `/m/schedule` | M-25 (§4.13.2) |
 | Expenses | `/m/expenses` | M-26 (§4.13.3) — D-37 |
 | Subs & Vendors | `/m/subs` | M-27 (§4.13.4) |
@@ -358,10 +372,14 @@ seven now have a screen behind them (§4.13, M-24 … M-30) instead of a label:
 location carries the blue border and blue label; no other tile does."* While the tiles pointed at
 `/dashboard/**` and the sheet only ever rendered on `/m/**`, **no tile could match any location the
 sheet was open on** — so A-3c's positive half was unassertable and its negative half passed vacuously.
-The S99 shell build recorded exactly that. With seven `/m/` routes the match is real: open the sheet on
+The S99 shell build recorded exactly that. With six `/m/` routes the match is real: open the sheet on
 `/m/expenses` and the Expenses tile — and only that tile — carries the `1.5px #2f49d1` border and the
 blue label. **The criterion is unchanged; what changed is that the app can now fail it.** A-41 walks all
-seven so the highlight cannot be right for one tile and wrong for the rest.
+six so the highlight cannot be right for one tile and wrong for the rest.
+
+**D-38 does not weaken this.** Cutting Dashboard removed the one tile that had **no** `/m` route, so
+every remaining tile is a live destination — A-3c's positive half is now reachable from every tile in
+the grid, not merely from most of them.
 
 **The comparison is prefix-scoped, and that matters for one pair.** "Current" means the pathname equals
 the tile's href **or** begins with it plus `/`. `/m/schedule` and `/m/settings` share no prefix, but a
@@ -1503,31 +1521,54 @@ describes; Treatment given maps to `treatment_sought`/`treatment_notes`; the PDF
 
 ---
 
-### 4.13 The seven hamburger destinations (M-24 … M-30) [S100]
+### 4.13 The six hamburger destinations (M-25 … M-30) [S100]
 
-**Every tile in §3.3's sheet now has a screen and a route.** Until this pass all seven had a label and
+**Every tile in §3.3's sheet now has a screen and a route.** Until this pass all of them had a label and
 nothing else — no route in §1, no section here, no criterion in §10. That is the same hole §4.11.1's
 predecessor had for M-3's tiles, and it is closed the same way.
 
-Common rules, stated once so the seven subsections stay short. They are §4.11's rules, with **one that
+> **SIX, NOT SEVEN — M-24 · Dashboard is CUT [S100, D-38].** This pass specced it, found it had no
+> distinct job, and Josh ruled it out of v1. The full reasoning is in **D-38**; the short form is that
+> **every non-money figure it carried is already owned by a screen that owns it better** —
+> `activeProjectCount` by M-2's app bar (A-10c), `openPunchCount` by D-16's counter, `pastTargetCount`
+> by A-10e's signed days-left, `awaitingCount` by M-13 — that **the attention feed, the one thing not
+> duplicated, is office admin** with `/dashboard/**` hrefs, and that **`getDashboardData()` reaches for
+> `change_orders.net_delta` twice** (`dashboard.ts:64`, `:73`), pulling the exact column D-26 cut into
+> the mobile data path where #117 means RLS would not catch a slip.
+>
+> **It is a v1 cut, not a permanent one** — the same shape as D-19's progress percentage and D-14's
+> unseen dot. If a mobile dashboard ever earns a job, it will be because something exists for it to show
+> that no other screen owns; nothing does today.
+>
+> **`M-24` is retired and NOT reused.** The numbering below runs M-25 … M-30 with a gap, so an older
+> document citing "M-24" leads a reader to this cut rather than to a different screen. **There is no
+> `/m/dashboard` route**, and A-43 fails on one.
+>
+> **The subsection numbers keep the same gap, on purpose: §4.13 starts at 4.13.2.** Renumbering to close
+> it would silently repoint every existing cross-reference — §3.3's tile table, D-37, and eleven
+> criteria all cite `§4.13.3` for Expenses — at no benefit. A gap that matches the screen numbering is
+> the smaller surprise.
+
+Common rules, stated once so the six subsections stay short. They are §4.11's rules, with **one that
 cannot carry over and one that is new**:
 
 - **Patterns are reused, never re-invented.** Lists use the **project-card geometry** (D-4); pickers and
   simple rows use the **58px row**. §2's touch targets and **mono-for-every-number** rule apply
   unchanged — every count, date, amount, ID, phone number and expiry renders in IBM Plex Mono.
-- **App bar: the HAMBURGER, not a back chevron.** This is the one §4.11 rule that does not carry over,
-  and the reason is structural rather than aesthetic. §3.1 replaces the hamburger with a back chevron
-  **inside a project**; these seven are company-scoped, so that clause never fires. More decisively:
-  **A-3c cannot be satisfied without the hamburger here.** A-3c asserts that the tile matching the
-  current location carries the blue border — which can only ever be *observed* by opening the sheet
-  while standing on one of these seven routes. A back chevron would make the sheet unopenable on exactly
-  the screens A-3c is about, and the criterion would be unassertable for a second time. The hamburger
-  stays.
-- **No tab is active.** The tab bar renders and stays locked (§3.2, A-1), but none of these seven is
+- **App bar: the HAMBURGER, not a back chevron — RULED [S100, D-39], not a flagged deviation.** This is
+  the one §4.11 rule that does not carry over, and the reason is structural rather than aesthetic. §3.1
+  replaces the hamburger with a back chevron **inside a project** (`/m/p/**`); these six are
+  company-scoped, so that clause never fires. More decisively: **A-3c cannot be satisfied without the
+  hamburger here.** A-3c asserts that the tile matching the current location carries the blue border —
+  which can only ever be *observed* by opening the sheet while standing on one of these six routes. A
+  back chevron would make the sheet unopenable on exactly the screens A-3c is about, and the criterion
+  would be unassertable for a second time, immediately after §4.13 rescued it. **The hamburger stays,
+  and D-39 exists so a later reader does not "correct" this back to §4.11's chevron for consistency.**
+- **No tab is active.** The tab bar renders and stays locked (§3.2, A-1), but none of these six is
   owned by Projects, Timeclock, Logs or Field, so **no tab carries the active state** — the same rule
   `/m/offline` already follows. A-42 asserts this. Lighting an unrelated tab to avoid an "empty" bar
   would misstate where the user is.
-- **Offline (§5.4).** All seven are **read-only** surfaces in v1 — none is in D-6's offline-write set.
+- **Offline (§5.4).** All six are **read-only** surfaces in v1 — none is in D-6's offline-write set.
   Each renders the app-wide offline strip **plus its own empty state**; none spins indefinitely and none
   shows stale data without the strip. The empty state is per-screen and says what is missing, never a
   generic spinner.
@@ -1537,59 +1578,6 @@ cannot carry over and one that is new**:
 - **RLS does the gating, not the UI**, except where this section says otherwise **and says that the
   exception is UI-only**. A UI filter that disagrees with RLS is how a permission becomes an
   unexplainable "missing record" bug (§4.11.6's rule, applied company-wide).
-
----
-
-#### 4.13.1 M-24 · Dashboard — `/m/dashboard` — **NO DISTINCT JOB. TILE UNDER RULING.**
-
-**Asked to spec this, the honest finding is that there is nothing for it to do**, and §10's own standard
-— "each criterion tests a sentence of this spec" — cannot be met by a screen whose content would have to
-be invented. So this subsection reports the analysis rather than proposing content.
-
-**What the desktop dashboard actually carries.** `getDashboardData()` (`dashboard.ts:42`) returns
-`{ kpis, attention }`. Taken figure by figure:
-
-| Figure | Status on mobile | Why |
-| ------ | ---------------- | --- |
-| `contractValue`, `contractValueFixed`, `contractValueFixedCount`, `contractValueProjected`, `contractValueProjectedCount` | **OUT** | Portfolio contract value. Owner/Admin-only under the Financial Visibility Floor, and D-9-as-narrowed keeps Contracts off mobile. D-37 narrowed the exclusion list to admit **Expenses only**. |
-| `awaitingSum` | **OUT** | Σ `change_orders.net_delta`. This is the exact figure **D-26** cut for every role including Owner and Admin. |
-| `activeProjectCount` | **Already owned by M-2** | A-10c fixes M-2's app bar as `{n} active` **and nothing after it**. A second copy on another screen is how the two drift. |
-| `openPunchCount` | **Already owned by M-3 and M-14** | D-16 fixes the counter's shape and its two expressions so tile and screen always agree. A third site is a third chance to disagree. |
-| `pastTargetCount` | **Already visible on M-2** | A-10e requires the card footer to render days-left including the **negative** case. "Past target" is that number, per project, where the user can act on it. |
-| `awaitingCount` | **Already owned by M-13** | The Change Orders tile badge. |
-
-**The attention feed is the only thing not duplicated — and it is not field work.** All three item types
-`getDashboardData` can emit are office concerns:
-
-1. a CO awaiting signature for over a week (`dashboard.ts:107`),
-2. an active project **missing start or target dates** (`:115`),
-3. a CO **signed this week** (`:123`).
-
-(1) and (3) are change-order signature administration; (2) is project-setup data hygiene. None is
-something a foreman or crew member on site opens a phone to act on. **And every one of the three carries
-an `href` pointing at `/dashboard/**`** — so the feed as bound today would either navigate off the
-mobile shell or need a per-item route remap that nothing has specced.
-
-**One more fact that decides it.** `getDashboardData()` selects `change_orders.net_delta` directly, twice
-(`:64`, `:73`), to build `awaitingSum` and the signed-CO items. Calling it from `/m` pulls **the exact
-column D-26 cut** into the mobile data path, where the only thing standing between it and a screen is
-UI discipline — TECH_DEBT #117 means RLS would not catch a slip.
-
-**Recommendation: CUT the Dashboard tile.** The sheet becomes six tiles. Nothing is lost that another
-mobile screen does not already own better, and `/m/timeclock` is already the landing screen (D-12), so
-"the screen you arrive at" is not vacated by this.
-
-**This is Josh's call, not a build detail, and the tile set was declared unchanged — so the route is
-specced and the tile stands until ruled.** Three options, with the third rejected on sight:
-
-| Option | What it means | Assessment |
-| ------ | ------------- | ---------- |
-| **A — cut the tile** | Six tiles in §3.3. No `/m/dashboard` route. | **Recommended.** Honest about the duplication. |
-| **B — keep it as an attention feed** | `/m/dashboard` renders `attention` only, with money items and `/dashboard/**` hrefs excluded and the surviving items re-targeted to `/m/**`. | Buildable, but on today's data a field user's feed is usually **empty or one "missing dates" row** — a screen that exists to be empty. If chosen, its empty state is the main state and must be written as such. |
-| **C — redirect to `/m/projects`** | The tile silently lands somewhere else. | **Rejected.** A tile that does not go where it says is worse than no tile; it is the "inert tile" failure A-12c was written to catch, wearing a redirect. |
-
-**Until ruled, `/m/dashboard` exists and renders Option B's attention feed** so the tile is not inert.
-A-43 asserts the money exclusions hold there regardless of which option lands.
 
 ---
 
@@ -2580,7 +2568,7 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 - A-1c The active tab reflects the current screen on every `/m/**` route — arriving at `/m/p/{id}` by any path leaves Projects active. _(§3.2 — no prior criterion.)_ `[Playwright]`
 - A-2 With the hamburger sheet open, the tab bar is still visible **and tappable** — tapping Timeclock through the open sheet navigates. `[Playwright]`
 - A-3 The hamburger sheet contains **no** tile for Projects, Timeclock, Logs, or Field. `[Playwright]`
-- A-3b The hamburger sheet contains **exactly** the seven tiles named in §3.3 — Dashboard, Schedule, Expenses, Subs & Vendors, Team, Contacts, Settings — plus the full-width Sign out row. _(A-3 tested only the negative. §3.3's positive list had no criterion at all — this is the same class of gap S97 shipped.)_ `[Playwright]`
+- A-3b The hamburger sheet contains **exactly** the six tiles named in §3.3 — Schedule, Expenses, Subs & Vendors, Team, Contacts, Settings — plus the full-width Sign out row. _(A-3 tested only the negative. §3.3's positive list had no criterion at all — this is the same class of gap S97 shipped. **Rewritten [S100, D-38]:** the tile set was seven and named Dashboard first; that tile is cut from v1, so a build that still renders it now fails here rather than passing a stale count.)_ `[Playwright]`
 - A-3c The tile matching the current location carries the blue border and blue label; no other tile does. _(§3.3 — no prior criterion.)_ `[Playwright]`
 - A-3d Tapping the scrim closes the sheet, and tapping the hamburger closes it. _(§3.3 — no prior criterion.)_ `[Playwright]`
 - A-4 On a project screen the hamburger is absent and a back chevron is present. `[Playwright]`
@@ -2840,20 +2828,20 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 - A-40 The app bar renders **no right-hand element** — no avatar, no initials badge, no icon, no button — on every `/m/**` route, and the title block runs to the bar's right inset. `[Playwright]` _(§3.1 as amended, D-36. An absence assertion in the shape of A-10d and A-11e: the avatar was specced for the whole of this document's life, so a build that restores it satisfies every other criterion here.)_
 - A-40b The only interactive control in the app bar is the hamburger — or, inside a project, the back chevron — and **never both at once**, on every `/m/**` route. `[Playwright]` _(§3.1. A-4 tests the project case; this asserts the count company-wide, which is what stops a "restore the avatar as a menu button" edit.)_
 
-**The seven hamburger destinations (§4.13)**
+**The six hamburger destinations (§4.13)**
 
-- A-41 Opening the sheet on each of `/m/dashboard`, `/m/schedule`, `/m/expenses`, `/m/subs`, `/m/team`, `/m/contacts`, `/m/settings` in turn, **exactly one tile carries the blue border and blue label, and it is the tile for that route.** `[Playwright]` _(§3.3 + §4.13. This is what makes **A-3c** assertable at all — before §4.13 every tile pointed at `/dashboard/**`, the sheet only rendered on `/m/**`, and no tile could ever match, so A-3c's positive half was unassertable and its negative half passed vacuously. Walking all seven is deliberate: a build can get the highlight right for one tile and wrong for the rest.)_
+- A-41 Opening the sheet on each of `/m/schedule`, `/m/expenses`, `/m/subs`, `/m/team`, `/m/contacts`, `/m/settings` in turn, **exactly one tile carries the blue border and blue label, and it is the tile for that route.** `[Playwright]` _(§3.3 + §4.13. This is what makes **A-3c** assertable at all — before §4.13 every tile pointed at `/dashboard/**`, the sheet only rendered on `/m/**`, and no tile could ever match, so A-3c's positive half was unassertable and its negative half passed vacuously. Walking all six is deliberate: a build can get the highlight right for one tile and wrong for the rest. **Amended [S100, D-38]:** `/m/dashboard` is removed from the walk — cutting that tile removed the only one with no `/m` route, so **every** tile in the grid is now a live destination and this criterion covers the whole set rather than most of it.)_
 - A-41b On `/m/schedule` the **Settings** tile is not highlighted, and on `/m/settings` the **Schedule** tile is not. `[Playwright]` _(§3.3's prefix rule. A build matching on `startsWith(href)` without the trailing-`/` guard is the failure; these two are the closest pair in the set.)_
-- A-42 On all seven routes the tab bar renders and **no tab carries the active state**. `[Playwright]` _(§4.13's common rules. A-1c fixes the active tab for the routes a tab owns; these are owned by none, and a build that lights Projects "so the bar isn't empty" misstates where the user is.)_
-- A-42b All seven carry the **hamburger**, not a back chevron. `[Playwright]` _(§4.13's common rules. Not cosmetic: a back chevron makes the sheet unopenable on exactly the screens A-3c/A-41 are about.)_
-- A-42c Each of the seven renders its **own empty state** when its source returns nothing — naming what is missing — and never an indefinite spinner. With the network disabled each also renders the app-wide offline strip. `[Playwright]` _(§4.13's common rules + §5.4.)_
-- A-42d Every number, date, amount, ID, phone number and expiry on all seven renders in IBM Plex Mono; none renders in Barlow. `[Playwright]` _(§2. A-10 asserts this for M-2 only; §4.13 adds six list screens and the first currency.)_
+- A-42 On all six routes the tab bar renders and **no tab carries the active state**. `[Playwright]` _(§4.13's common rules. A-1c fixes the active tab for the routes a tab owns; these are owned by none, and a build that lights Projects "so the bar isn't empty" misstates where the user is.)_
+- A-42b All six carry the **hamburger**, not a back chevron. `[Playwright]` _(§4.13's common rules as ruled in **D-39**. Not cosmetic: a back chevron makes the sheet unopenable on exactly the screens A-3c/A-41 are about.)_
+- A-42c Each of the six renders its **own empty state** when its source returns nothing — naming what is missing — and never an indefinite spinner. With the network disabled each also renders the app-wide offline strip. `[Playwright]` _(§4.13's common rules + §5.4.)_
+- A-42d Every number, date, amount, ID, phone number and expiry on all six renders in IBM Plex Mono; none renders in Barlow. `[Playwright]` _(§2. A-10 asserts this for M-2 only; §4.13 adds five list screens and the first currency.)_
 
-**Dashboard (§4.13.1)**
+**Dashboard — CUT [S100, D-38]**
 
-- A-43 `/m/dashboard` renders **no currency figure of any kind** — no portfolio contract value, no `awaitingSum`, no sum derived from `change_orders.net_delta` — under every role. `[Playwright]` _(§4.13.1 + D-26 + D-9-as-narrowed. Holds whichever of Options A/B/C is ruled; if the tile is cut the route must be gone, which A-43b covers.)_
-- A-43b If the Dashboard tile is ruled **cut**, the sheet renders **six** tiles and `/m/dashboard` does not resolve. If it is ruled **kept**, the sheet renders seven and `/m/dashboard` renders a screen. `[Playwright]` _(§4.13.1. Written as a conditional on purpose: the ruling is open, and this criterion fails on the half-done state — a cut tile with a live orphan route, or a kept tile pointing at nothing.)_
-- A-43c No attention item on `/m/dashboard` carries an `href` resolving to `/dashboard/**`. `[Playwright]` _(§4.13.1. All three of `getDashboardData()`'s item types hard-code desktop hrefs; D-13's principle one layer up.)_
+- A-43 **The hamburger sheet renders no Dashboard tile, and `/m/dashboard` does not resolve.** `[Playwright]` _(**Rewritten [S100, D-38].** _Superseded text, quoted not deleted:_ _"`/m/dashboard` renders no currency figure of any kind — no portfolio contract value, no `awaitingSum`, no sum derived from `change_orders.net_delta` — under every role."_ The screen is cut, so a criterion about what it renders has nothing to test. This is now an **absence assertion** in the shape of A-10d, A-11e and A-40, because the tile was in §3.3 for the whole of this document's life and a helpful build will put it back. It asserts **both halves deliberately** — a tile with no route is an inert tile (the A-12c failure), and a route with no tile is an orphan only reachable by typing a URL.)_
+- ~~A-43b~~ **DROPPED [S100, D-38].** _Quoted so the deletion is visible:_ _"If the Dashboard tile is ruled cut, the sheet renders six tiles and `/m/dashboard` does not resolve. If it is ruled kept, the sheet renders seven and `/m/dashboard` renders a screen."_ It was written as a conditional **because the ruling was open**. D-38 closed it, so the conditional has one branch left and that branch is now A-43 plus A-3b's count. Keeping it would mean maintaining two criteria that assert the same fact.
+- ~~A-43c~~ **DROPPED [S100, D-38].** _Quoted:_ _"No attention item on `/m/dashboard` carries an `href` resolving to `/dashboard/**`."_ The attention feed was the only content the screen would have carried; with no screen there is no feed and no href. **The concern it protected is not lost** — D-13's "no mobile surface opens a desktop page" is asserted for the tiles that still exist by A-12c and A-12d.
 
 **Schedule (§4.13.2)**
 
@@ -3179,20 +3167,22 @@ Two rulings, recorded as **D-36** and **D-37** in §0, plus the spec pass they e
 | 18 | Expenses on mobile? | **IN SCOPE. D-9 NARROWED, NOT REVERSED.** Budget, Invoices, Payments and Contracts stay out and are deferred to v2; the exclusion list loses exactly one member. | **D-37**; **§4.13.3** (new); §9; A-45–A-45f |
 
 **The spec pass this enabled.** All seven §3.3 tiles had a label and nothing behind it — no route, no
-section, no criterion. **§4.13 is new** and specs them as **M-24 … M-30** under §4.11's rules, with
-seven routes added to §1's tree. What that turned up, beyond the two rulings:
+section, no criterion. **§4.13 is new** and specced them as **M-24 … M-30** under §4.11's rules, with
+seven routes added to §1's tree. **The tenth pass then cut one of the seven** — see below; §4.13 as it
+now stands is six screens, M-25 … M-30. What the pass turned up, beyond the two rulings:
 
 - **A-3c was unassertable and is now satisfiable.** Every tile pointed at `/dashboard/**` while the sheet
   only rendered on `/m/**`, so no tile could ever match the current location: the positive half could not
-  be tested and the negative half passed vacuously. Seven `/m/` routes fix it. **A-41** walks all seven.
-- **One §4.11 common rule could not carry over.** These seven take the **hamburger, not a back chevron** —
+  be tested and the negative half passed vacuously. Real `/m/` routes fix it. **A-41** walks the set.
+- **One §4.11 common rule could not carry over.** These take the **hamburger, not a back chevron** —
   not for symmetry, but because a back chevron makes the sheet unopenable on exactly the screens A-3c is
-  about, which would strand the criterion a second time. §4.13's common rules; A-42b.
-- **Dashboard has no distinct job, and §4.13.1 says so rather than inventing content.** Every non-money
+  about, which would strand the criterion a second time. Flagged here for confirmation; **ruled in the
+  tenth pass as D-39.** §4.13's common rules; A-42b.
+- **Dashboard has no distinct job, and §4.13.1 said so rather than inventing content.** Every non-money
   KPI `getDashboardData()` returns is already owned by M-2, M-3, M-13 or M-14; the money ones are out
   under D-26 and D-9-as-narrowed; and all three attention item types are office admin with `/dashboard/**`
   hrefs. **Recommendation: cut the tile.** Left as an open ruling because the tile set was declared
-  unchanged. **A-43b fails on the half-done state** — a cut tile with a live orphan route, or the reverse.
+  unchanged — **accepted in the tenth pass as D-38.**
 - **Settings has no personal half to carry.** The entire desktop settings surface is company-level and
   Owner/Admin-gated at the page (`settings/page.tsx:32`), and **no personal-settings surface exists
   anywhere in the product** — a user's own record is edited by an Owner or Admin through team management.
@@ -3227,7 +3217,40 @@ seven routes added to §1's tree. What that turned up, beyond the two rulings:
 | Item | Why it is flagged rather than decided |
 | ---- | ------------------------------------- |
 | **Should mobile show LESS than RLS returns on expenses?** | **The one question D-37 explicitly did not answer.** §4.13.3 establishes what the database permits: `expenses_select_scoped` gives crew and subcontractors **their own expenses only**, foreman and PM their own plus assigned projects, Owner/Admin everything — and an expense amount is *actual cost*, which the Financial Visibility Floor makes visible to all roles by design. So showing `amount` on every returned row is **not** a role gate. Whether product policy nonetheless wants crew to see no figure even on their own receipt is a ruling, not a build detail. The spec's default is **show what RLS returns**; **A-45d is the criterion that gets rewritten** if that changes, named so the rewrite is deliberate. |
-| **The Dashboard tile — cut, keep, or keep-as-attention-feed?** | §4.13.1 recommends **cut** and shows the working: every non-money KPI is already owned by another mobile screen, the money ones are out under D-26 and D-9-as-narrowed, and all three attention item types are office admin with `/dashboard/**` hrefs. Left open only because this pass was told the tile set is unchanged. **A-43b fails on the half-done state** either way. |
+| ~~**The Dashboard tile — cut, keep, or keep-as-attention-feed?**~~ | **CLOSED [S100, D-38] — CUT.** The recommendation was accepted in the tenth pass. Kept in this list rather than deleted so the question's short life is visible: raised and answered within one session. |
 | **What currency looks like on `/m`** | M-26 is the first money on mobile. §2 fixes the typeface (mono, like every number) and says nothing about symbol, thousands separator, or how a negative renders. **One answer is needed before a second money screen exists to disagree with it.** Cheap now, a reconciliation later. |
 | **Does `subcontractors` need a real role floor?** | New finding of the TECH_DEBT #117 class, on a different table: `select('*')` plus a policy with no role floor puts `default_hourly_rate`, `default_markup_percent` and `ein` in every role's payload. §4.13.4 cuts them at the UI and says the cut is UI-only. **Out of scope for M6M** — it is a Module 2 / Financial-Visibility-Floor question, and belongs in TECH_DEBT next to #117 rather than being solved inside a mobile spec. |
 | **Tap-to-call on M-28** | `company_members` has no phone column; `profiles` has one and is readable company-wide by every role, but **no named list function selects it**. §4.13.5 cuts the feature rather than deriving it. Enabling it is one added column in one existing `select` — recorded so the decision is visible rather than quietly taken. |
+
+### Tenth ruling pass [S100, Josh] — Dashboard cut, hamburger confirmed
+
+Two rulings, recorded as **D-38** and **D-39** in §0. Both close items the ninth pass raised; neither
+opens anything new.
+
+| # | Question | **Ruling** | Applied in |
+| - | -------- | ---------- | ---------- |
+| 19 | The Dashboard tile — cut, keep, or attention feed? | **CUT FROM V1.** The ninth pass's recommendation, accepted. §3.3's grid drops to **six** tiles; §4.13's M-24 is deleted; there is no `/m/dashboard` route. **A v1 cut, not permanent** — D-19's and D-14's shape. | **D-38**; §1; §3.3; §4.13; A-3b, A-41, A-43 (rewritten), A-43b/A-43c (dropped) |
+| 20 | Hamburger or back chevron on the destinations? | **HAMBURGER — the §4.11 departure is CONFIRMED as a ruling**, not left as a flagged deviation, so a later reader does not "fix" it back to the chevron for consistency with the twelve section screens. | **D-39**; §4.13's common rules; A-42b |
+
+**What the cut touched, so nothing is left half-done.** D-38 is the first ruling this session to remove a
+surface rather than add or narrow one, and a removal leaves more loose ends than an addition:
+
+- **§1's tree** — the `dashboard/page.tsx` line is replaced by an explicit `# NO dashboard/ ROUTE`
+  comment. A silent deletion would read as an oversight to anyone diffing against the ninth pass.
+- **§3.3** — the tile list is amended with the superseded line quoted, not rewritten.
+- **§4.13** — the M-24 subsection is deleted; the heading, the common rules and the counts all read
+  "six". **`M-24` is retired and not reused**, and **the subsection numbers keep the matching gap**
+  (§4.13 starts at 4.13.2) rather than renumbering and silently repointing eleven criteria plus §3.3's
+  table and D-37.
+- **§10** — **A-43 rewritten** from "renders no currency" into an absence assertion covering **both**
+  halves: no tile **and** no route. A tile with no route is the inert-tile failure A-12c exists to
+  catch; a route with no tile is an orphan reachable only by typing a URL. **A-43b and A-43c dropped**,
+  each with its text quoted so the deletion is visible rather than a gap in the ID sequence — the
+  failure mode the S98 audit caught when the Option A rewrite silently swallowed A-24 and A-25.
+  **A-3b** rewritten to six named tiles; **A-41** now walks six routes; **A-42 … A-42d** re-counted.
+- **§11** — the ninth pass's open item is struck through and marked closed rather than deleted, so the
+  question's one-session life stays visible.
+
+**What the cut did NOT touch, deliberately.** `getDashboardData()` and the desktop dashboard are
+untouched — D-38 is a mobile scope ruling, not a judgement on the desktop screen, which keeps every
+figure listed above and is the right place for all of them. **A-28 is unaffected.**
