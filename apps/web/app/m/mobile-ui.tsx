@@ -142,6 +142,130 @@ export function formatMoney(value: number | string | null | undefined): string {
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 }
 
+// ---------------------------------------------------------------------------
+// DAYS LEFT — §8a's binding, and the reason it is a function and not an
+// expression inlined at two call sites.
+//
+// SIGNED, AND NULL IS A THIRD STATE. §8a: "**Signed** — it goes negative past
+// target — and `null` when the date is unset". A-10e (M-2's card) and A-11d
+// (M-3's stat) each assert all THREE states, so a build that clamps at zero, or
+// that renders `0` for a missing date, fails both.
+//
+// The arithmetic is the desktop precedent verbatim —
+// app/dashboard/projects/[id]/page.tsx:104-111 — including the 'T00:00:00'
+// suffix on both sides. That suffix is load-bearing: `new Date('2026-08-05')`
+// parses as UTC midnight while `new Date('2026-08-05T00:00:00')` parses as
+// LOCAL midnight, and mixing the two puts the boundary hours off by the
+// timezone offset. Two surfaces disagreeing about what "today" means is exactly
+// the class of bug §8a's "reference derivation" citations exist to prevent.
+// ---------------------------------------------------------------------------
+export function daysLeft(targetEndDate: string | null): number | null {
+  if (!targetEndDate) return null;
+  const today = new Date().toISOString().slice(0, 10);
+  return Math.round(
+    (new Date(`${targetEndDate}T00:00:00`).getTime() - new Date(`${today}T00:00:00`).getTime()) /
+      86400000
+  );
+}
+
+/**
+ * `12 days left` · `-3 days left` · `—`.
+ *
+ * THE NEGATIVE IS RENDERED AS A NEGATIVE, not reworded to "3 days over" and not
+ * clamped — A-10e and A-11d both say "a **negative** count past target rather
+ * than a clamp at zero", and the desktop KPI it cites renders the signed number
+ * verbatim (`String(daysToTarget)`). Rewording would drop the minus sign and
+ * make the two surfaces disagree in the one state that matters most.
+ *
+ * The em-dash is the null state, NEVER `0` — the same distinction §2's money
+ * token draws between "$0.00" and "not recorded".
+ */
+export function daysLeftLabel(targetEndDate: string | null): string {
+  const n = daysLeft(targetEndDate);
+  return n === null ? '—' : `${n} days left`;
+}
+
+// ---------------------------------------------------------------------------
+// THE 76px TILE — §3.3's geometry, reused by §4.3's nine and §4.7's four.
+//
+// ONE COMPONENT, THREE CALLERS, BY RULE. §4.11's common rules open with
+// "Patterns are reused, never re-invented ... hubs use the 76px tile grid
+// (§3.3)". The sheet's own tiles stay in mobile-shell.tsx because they carry
+// sheet-only state (the current-location highlight, A-3c); the geometry below
+// is the same 76px box, icon top-left #2f49d1, bold 15px label bottom-left,
+// optional badge top-right.
+//
+// THE BADGE TONE IS SPECIFIED PER TILE AND IS NOT A FUNCTION OF THE NUMBER.
+// §4.3: "Change Orders and Punch List amber, Deliveries red, Photos and Team
+// plain mono." A-12b asserts exactly that mapping, so tone is a prop the caller
+// sets from the spec's list — not something derived from whether a count is
+// non-zero, which would make the colours data-dependent and A-12b unassertable
+// on a quiet project.
+// ---------------------------------------------------------------------------
+export type BadgeTone = 'amber' | 'danger' | 'mono';
+
+export function TileGrid({
+  children,
+  testId,
+}: {
+  children: React.ReactNode;
+  testId: string;
+}) {
+  return (
+    <div data-testid={testId} className="grid grid-cols-2 gap-[10px]">
+      {children}
+    </div>
+  );
+}
+
+export function Tile({
+  href,
+  label,
+  icon,
+  badge,
+  tone = 'mono',
+  testId,
+}: {
+  href: string;
+  label: string;
+  icon: React.ReactNode;
+  /** Rendered verbatim. Null renders no badge at all, not an empty slot. */
+  badge?: string | null;
+  tone?: BadgeTone;
+  testId: string;
+}) {
+  const badgeClass =
+    tone === 'amber'
+      ? 'text-m6m-amber'
+      : tone === 'danger'
+        ? 'text-m6m-danger'
+        : 'text-m6m-muted';
+
+  return (
+    <Link
+      href={href}
+      data-testid={testId}
+      data-tone={tone}
+      // 76px (§2's tile target), so A-5/A-30e's >=44px floor holds with room.
+      className="relative flex h-[76px] flex-col justify-between rounded-[14px] border border-m6m-border bg-m6m-card p-[12px] transition-transform duration-150 ease-out active:scale-[.98]"
+    >
+      <span className="text-m6m-blue" aria-hidden>
+        {icon}
+      </span>
+      <span className="text-[15px] font-bold leading-none text-m6m-navy">{label}</span>
+      {badge !== null && badge !== undefined ? (
+        // §2 — every number is mono, badges included.
+        <span
+          data-testid="m-tile-badge"
+          className={`absolute right-[10px] top-[10px] max-w-[60%] truncate text-right font-mono text-[11px] font-semibold ${badgeClass}`}
+        >
+          {badge}
+        </span>
+      ) : null}
+    </Link>
+  );
+}
+
 /** Mono uppercase section label — M-8's pattern, reused by §4.13.2's day headers. */
 export function SectionLabel({ children }: { children: React.ReactNode }) {
   return (

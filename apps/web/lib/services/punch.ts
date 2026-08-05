@@ -71,3 +71,62 @@ export async function getPunchLists(projectId: string): Promise<PunchList[]> {
     items: punchItems.filter((i) => i.punch_list_id === list.id),
   }));
 }
+
+/** D-16's two figures for one project: items assigned to me, and the project total. */
+export interface PunchOpenCounts {
+  mine: number;
+  total: number;
+}
+
+/**
+ * M6M D-16 — the open punch counts behind M-3's stat strip, M-3's Punch List
+ * tile badge and M-2's card callout. One query for any number of projects.
+ *
+ * "OPEN" IS `status IN ('open','in_progress')` — not `complete`, not `verified`
+ * (D-16). This deliberately does NOT use isItemClosed(): the two are not
+ * complements, and an item at `complete` awaiting verification is in neither
+ * set. That divergence is inherited on purpose (M6M §4.3) so this figure agrees
+ * with the two existing surfaces — dashboard.ts:78-85 and
+ * app/dashboard/projects/[id]/page.tsx:71-76 — which both use these two states.
+ *
+ * "MINE" IS A MEMBER COMPARISON, NEVER A USER ID. `punch_list_items.assignee_id`
+ * is FK-constrained to `company_members(id)`, so the comparison is against
+ * `get_my_member_id()` — reached by rpc, the call already in use at
+ * time-tracking.ts:56. Comparing it to `auth.uid()` or a `profiles.id` would
+ * silently return 0 for every user rather than erroring, which is exactly the
+ * failure M6M §4.3 calls out (GAP-1b).
+ *
+ * A caller with no member row gets `mine: 0` and a correct `total` — a
+ * platform-admin-shaped identity should not blank the whole strip.
+ */
+export async function getOpenPunchCounts(
+  projectIds: string[]
+): Promise<Map<string, PunchOpenCounts>> {
+  const counts = new Map<string, PunchOpenCounts>();
+  for (const id of projectIds) counts.set(id, { mine: 0, total: 0 });
+  if (projectIds.length === 0) return counts;
+
+  const supabase = await createClient();
+
+  const [{ data: myMemberId }, { data, error }] = await Promise.all([
+    supabase.rpc('get_my_member_id'),
+    supabase
+      .from('punch_list_items')
+      .select('project_id, assignee_id')
+      .in('project_id', projectIds)
+      .eq('is_deleted', false)
+      .in('status', ['open', 'in_progress']),
+  ]);
+
+  if (error || !data) return counts;
+
+  for (const row of data) {
+    if (!row.project_id) continue;
+    const entry = counts.get(row.project_id);
+    if (!entry) continue;
+    entry.total += 1;
+    if (myMemberId && row.assignee_id === myMemberId) entry.mine += 1;
+  }
+
+  return counts;
+}

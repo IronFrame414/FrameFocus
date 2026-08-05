@@ -1,0 +1,373 @@
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+
+// M6M — deterministic data for the M-2 / M-3 / M-7 criteria.
+//
+// ---------------------------------------------------------------------------
+// WHY A FIXTURE AND NOT "WHATEVER IS ON REBUILD-TEST".
+// ---------------------------------------------------------------------------
+// Several criteria in this slice assert a STATE, not just a rendering, and the
+// database does not currently contain that state:
+//
+//   A-10e / A-11d  days-left in all THREE states. Every project on rebuild-test
+//                  has target_end_date = NULL, so the positive and negative
+//                  arms would pass vacuously — the exact failure §10's preamble
+//                  says S97 shipped three of.
+//   A-9b           "each chip changes the rows listed". No project is on_hold,
+//                  so the On-hold chip could not change anything.
+//   A-8 / A-8b     require an OPEN time segment — first carrying a project,
+//                  then a `break` that constitutionally cannot.
+//   A-11b / A-11c  require open, in-progress and complete punch items, some
+//                  assigned to the signed-in member and some not.
+//   A-11f / A-11j  require dated schedule rows, including one belonging to a
+//                  DIFFERENT member so RLS has something to withhold.
+//
+// ---------------------------------------------------------------------------
+// IT CREATES ITS OWN ROWS AND DELETES THEM. Nothing existing is mutated.
+// ---------------------------------------------------------------------------
+// Every row is named/prefixed `M6M —` and is hard-deleted in teardown. In
+// particular the four fixture PROJECTS are new: m-sections.spec.ts pins
+// eaf0e25b-… by id, and editing that row to give it a target date would change
+// what a passing test was passing on.
+//
+// CREW SEE ONLY PROJECTS THEY ARE ASSIGNED TO — projects_select_visible is
+// `company_id = get_my_company_id() AND (owner/admin OR is_assigned_to_project(id))`.
+// So every fixture project gets a project_assignments row for the crew test
+// identity, or M-2 renders an empty list and every criterion here passes
+// vacuously for the second time.
+//
+// SERVICE ROLE, AND ONLY EVER AGAINST rebuild-test. assertRebuildTest() below
+// refuses to run anywhere else, mirroring test/live-session.ts.
+
+const ENV_PATH = path.join(__dirname, '..', '.env.local');
+
+function loadEnv(): Record<string, string> {
+  let raw: string;
+  try {
+    raw = readFileSync(ENV_PATH, 'utf8');
+  } catch {
+    throw new Error(
+      'apps/web/.env.local not found — it is gitignored and does not survive a Codespace ' +
+        'rebuild. Recreate it from the Vercel env vars before running the e2e suite.'
+    );
+  }
+  const env: Record<string, string> = {};
+  for (const line of raw.split('\n')) {
+    const m = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line);
+    if (m) env[m[1]] = m[2].trim().replace(/^(['"])(.*)\1$/, '$2');
+  }
+  return env;
+}
+
+const REQUIRED_PROJECT_REF = 'nmyphyhmfttxkdoposvf'; // framefocus-rebuild-test
+
+/** Company A (Bishop Contracting) and the crew test identity's member row. */
+export const COMPANY_A = '03bb903f-1084-4ab4-afb8-03192cb58d30';
+export const CREW_MEMBER = '18a105e7-2ff9-4546-a17b-87524a45e978'; // Casey Crew
+export const OTHER_MEMBER = '9b0380c5-18f9-4c93-88b0-229fd18390c4'; // Pat Manager
+
+export type HubFixture = {
+  admin: SupabaseClient;
+  /** target_end_date in the future — the positive days-left arm. */
+  futureProject: string;
+  /** target_end_date in the past — the NEGATIVE arm, which must not clamp. */
+  pastProject: string;
+  /** target_end_date NULL — the em-dash arm. */
+  nullDateProject: string;
+  /** status = on_hold — the only row the On-hold chip can return. */
+  onHoldProject: string;
+  punchListId: string;
+  sessionId: string | null;
+  /** Dates the schedule fixtures use, so the spec can assert against them. */
+  dates: { today: string; plus1: string; plus3: string; plus5: string; minus3: string };
+};
+
+function isoDay(offsetDays: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + offsetDays);
+  return d.toISOString().slice(0, 10);
+}
+
+export async function setupHubFixture(): Promise<HubFixture> {
+  const env = loadEnv();
+  const url = env.NEXT_PUBLIC_SUPABASE_URL;
+  const service = env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url?.includes(REQUIRED_PROJECT_REF)) {
+    throw new Error(`REFUSING TO RUN: linked project is not ${REQUIRED_PROJECT_REF}. URL=${url}`);
+  }
+  if (!service) throw new Error('SUPABASE_SERVICE_ROLE_KEY missing from apps/web/.env.local');
+
+  const admin = createClient(url, service, { auth: { persistSession: false } });
+
+  // Leftovers from an interrupted run would collide on project_number.
+  await hardDelete(admin);
+
+  const { data: contact } = await admin
+    .from('contacts')
+    .select('id')
+    .eq('company_id', COMPANY_A)
+    .eq('is_deleted', false)
+    .limit(1)
+    .single();
+  if (!contact) throw new Error('No contact on company A to hang fixture projects off.');
+
+  const dates = {
+    today: isoDay(0),
+    plus1: isoDay(1),
+    plus3: isoDay(3),
+    plus5: isoDay(5),
+    minus3: isoDay(-3),
+  };
+
+  // project_number AND project_internal_seq are both set explicitly. Their
+  // column defaults are next_project_number() / next_project_internal_seq(),
+  // which resolve the company from get_my_company_id() — and the SERVICE ROLE
+  // has no caller company, so both defaults raise "no company for caller".
+  // Supplying the values is the fix; making the helpers service-role-aware
+  // would be a schema change this slice has no business making.
+  const { data: seqRow } = await admin
+    .from('projects')
+    .select('project_internal_seq')
+    .eq('company_id', COMPANY_A)
+    .order('project_internal_seq', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  let seq = (seqRow?.project_internal_seq ?? 0) + 1000; // clear of the live counter
+
+  const base = {
+    company_id: COMPANY_A,
+    contact_id: contact.id,
+    project_type: 'fixed_price',
+  };
+
+  const { data: projects, error: projErr } = await admin
+    .from('projects')
+    .insert([
+      {
+        ...base,
+        name: 'M6M — future target',
+        project_number: 'M6M-F1',
+        project_internal_seq: seq++,
+        status: 'active',
+        target_end_date: isoDay(12),
+      },
+      {
+        ...base,
+        name: 'M6M — past target',
+        project_number: 'M6M-P1',
+        project_internal_seq: seq++,
+        status: 'active',
+        target_end_date: dates.minus3,
+      },
+      {
+        ...base,
+        name: 'M6M — no target',
+        project_number: 'M6M-N1',
+        project_internal_seq: seq++,
+        status: 'active',
+        target_end_date: null,
+      },
+      {
+        ...base,
+        name: 'M6M — on hold',
+        project_number: 'M6M-H1',
+        project_internal_seq: seq++,
+        status: 'on_hold',
+        target_end_date: null,
+      },
+    ])
+    .select('id, project_number');
+  if (projErr || !projects) throw new Error(`fixture projects: ${projErr?.message}`);
+
+  const byNumber = (n: string) => projects.find((p) => p.project_number === n)!.id;
+  const futureProject = byNumber('M6M-F1');
+  const pastProject = byNumber('M6M-P1');
+  const nullDateProject = byNumber('M6M-N1');
+  const onHoldProject = byNumber('M6M-H1');
+
+  // Crew visibility — without these, projects_select_visible returns nothing.
+  await admin.from('project_assignments').insert(
+    projects.map((p) => ({
+      company_id: COMPANY_A,
+      project_id: p.id,
+      member_id: CREW_MEMBER,
+    }))
+  );
+
+  // -------------------------------------------------------------------------
+  // PUNCH — D-16's two figures, with every state that must and must not count.
+  //   2 open assigned to the crew member       -> mine
+  //   1 in_progress assigned to the crew member-> mine   (A-11c: stays in)
+  //   1 open assigned to ANOTHER member        -> total only
+  //   1 complete assigned to the crew member   -> NEITHER (A-11c: drops out)
+  //   1 verified assigned to the crew member   -> NEITHER
+  // Expect: mine = 3, total = 4.
+  // -------------------------------------------------------------------------
+  const { data: punchList, error: plErr } = await admin
+    .from('punch_lists')
+    .insert({ company_id: COMPANY_A, project_id: futureProject, name: 'M6M — fixture list' })
+    .select('id')
+    .single();
+  if (plErr || !punchList) throw new Error(`fixture punch list: ${plErr?.message}`);
+
+  const item = (title: string, status: string, assignee: string | null) => ({
+    company_id: COMPANY_A,
+    punch_list_id: punchList.id,
+    project_id: futureProject,
+    title,
+    status,
+    assignee_id: assignee,
+    requires_verification: false,
+  });
+
+  await admin.from('punch_list_items').insert([
+    item('M6M — open A', 'open', CREW_MEMBER),
+    item('M6M — open B', 'open', CREW_MEMBER),
+    item('M6M — in progress', 'in_progress', CREW_MEMBER),
+    item('M6M — open, someone else', 'open', OTHER_MEMBER),
+    item('M6M — complete', 'complete', CREW_MEMBER),
+    item('M6M — verified', 'verified', CREW_MEMBER),
+  ]);
+
+  // -------------------------------------------------------------------------
+  // SCHEDULE — "Up next" (D-24).
+  //
+  // schedule_entries_select_scoped limits crew and subcontractors to
+  // `member_id = get_my_member_id()`, so the OWNERSHIP of each row is the whole
+  // point of this block:
+  //
+  //   plus3, crew member  -> the row Up next must land on
+  //   plus5, crew member  -> later, must lose
+  //   plus1, OTHER member -> NEARER, and must NOT appear (A-11j). A build that
+  //                          queried with elevated rights would show this one
+  //                          and fail.
+  //   minus3, crew member -> in the past, must be filtered out (A-11f)
+  // -------------------------------------------------------------------------
+  await admin.from('schedule_entries').insert([
+    {
+      company_id: COMPANY_A,
+      project_id: futureProject,
+      member_id: CREW_MEMBER,
+      entry_date: dates.plus3,
+      general_kind: 'project',
+      notes: 'M6M — should be Up next',
+    },
+    {
+      company_id: COMPANY_A,
+      project_id: futureProject,
+      member_id: CREW_MEMBER,
+      entry_date: dates.plus5,
+      general_kind: 'project',
+      notes: 'M6M — later',
+    },
+    {
+      company_id: COMPANY_A,
+      project_id: futureProject,
+      member_id: OTHER_MEMBER,
+      entry_date: dates.plus1,
+      general_kind: 'project',
+      notes: 'M6M — teammate, must stay hidden',
+    },
+    {
+      company_id: COMPANY_A,
+      project_id: futureProject,
+      member_id: CREW_MEMBER,
+      entry_date: dates.minus3,
+      general_kind: 'project',
+      notes: 'M6M — past',
+    },
+  ]);
+
+  return {
+    admin,
+    futureProject,
+    pastProject,
+    nullDateProject,
+    onHoldProject,
+    punchListId: punchList.id,
+    sessionId: null,
+    dates,
+  };
+}
+
+/**
+ * §4.2's "currently clocked into" state.
+ *
+ * `work` attaches futureProject; `break` CANNOT attach one —
+ * time_segments_project_gate_check forces project_id IS NULL on travel/shop/
+ * break, which is precisely why A-8b exists and why zero highlighted cards is a
+ * normal state rather than a bug.
+ */
+export async function openSegment(
+  f: HubFixture,
+  kind: 'work' | 'break'
+): Promise<void> {
+  await closeSegment(f);
+
+  const { data: session, error } = await f.admin
+    .from('time_clock_sessions')
+    .insert({
+      company_id: COMPANY_A,
+      member_id: CREW_MEMBER,
+      clock_in: new Date().toISOString(),
+      // time_clock_sessions_status_check permits NULL | 'pending' | 'approved'
+      // — 'open' is NOT a status. "Open" is `clock_out IS NULL`, which is what
+      // getOpenSession() actually keys on; status tracks APPROVAL, not state.
+      status: 'pending',
+    })
+    .select('id')
+    .single();
+  if (error || !session) throw new Error(`fixture session: ${error?.message}`);
+
+  const { error: segErr } = await f.admin.from('time_segments').insert({
+    company_id: COMPANY_A,
+    session_id: session.id,
+    segment_type: kind,
+    project_id: kind === 'work' ? f.futureProject : null,
+    segment_start: new Date().toISOString(),
+  });
+  if (segErr) throw new Error(`fixture segment: ${segErr.message}`);
+
+  f.sessionId = session.id;
+}
+
+/** Removes the open session entirely — the clocked-OUT state. */
+export async function closeSegment(f: HubFixture): Promise<void> {
+  await f.admin.from('time_segments').delete().eq('company_id', COMPANY_A).is('segment_end', null);
+  await f.admin
+    .from('time_clock_sessions')
+    .delete()
+    .eq('member_id', CREW_MEMBER)
+    .is('clock_out', null);
+  f.sessionId = null;
+}
+
+export async function teardownHubFixture(f: HubFixture): Promise<void> {
+  await closeSegment(f);
+  await hardDelete(f.admin);
+}
+
+/**
+ * HARD delete, not the trash-bin soft delete. These rows are test scaffolding,
+ * not records — leaving them soft-deleted would leak four projects into every
+ * future trash view. Ordered child-first so no FK blocks the parent.
+ */
+async function hardDelete(admin: SupabaseClient): Promise<void> {
+  const { data: projects } = await admin
+    .from('projects')
+    .select('id')
+    .eq('company_id', COMPANY_A)
+    .like('project_number', 'M6M-%');
+
+  const ids = (projects ?? []).map((p) => p.id);
+  if (ids.length === 0) return;
+
+  await admin.from('punch_list_items').delete().in('project_id', ids);
+  await admin.from('punch_lists').delete().in('project_id', ids);
+  await admin.from('schedule_entries').delete().in('project_id', ids);
+  await admin.from('time_segments').delete().in('project_id', ids);
+  await admin.from('project_assignments').delete().in('project_id', ids);
+  await admin.from('projects').delete().in('id', ids);
+}
