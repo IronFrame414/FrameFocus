@@ -182,6 +182,13 @@
 | D-36 | The app-bar avatar            | **CUT.** [S100, Josh] §3.1's 38px amber avatar is removed from the app bar entirely — not resized, not made tappable. The hamburger stays as the bar's only left control, and **Sign out remains where §3.3 already puts it**, in the sheet. The bar is now: hamburger (or back chevron) · title block · nothing on the right. §3.1; A-40. _(Raised by the shell build: §3.1 sized the avatar and never gave it an action, and 38px sits under §2's 44px floor for interactive targets — so it was either a sub-spec tap target or a decoration. Ruled: neither. It goes.)_ |
 | D-38 | Dashboard tile / M-24         | **CUT FROM V1.** [S100, Josh] The Dashboard tile leaves §3.3 — the sheet drops to **six** tiles — and `/m/dashboard` is not built. **Not permanent: a v1 cut, in D-19's and D-14's shape.** Three independent reasons, each sufficient. **(1) Every non-money figure is already owned elsewhere**, by a screen that owns it better: `activeProjectCount` by M-2's app bar (A-10c fixes it as `{n} active` **and nothing after it**), `openPunchCount` by D-16's counter and its two expressions, `pastTargetCount` by A-10e's signed days-left on the card the user can act from, `awaitingCount` by M-13. A second copy is a second chance to disagree. **(2) The attention feed — the one thing not duplicated — is office admin, not field work:** CO signature chasing, and project-setup data hygiene. All three item types hard-code `/dashboard/**` hrefs. **(3) `getDashboardData()` selects `change_orders.net_delta` twice** (`dashboard.ts:64`, `:73`) to build `awaitingSum` and the signed-CO items — so calling it from `/m` pulls **the exact column D-26 cut** into the mobile data path, where **TECH_DEBT #117** means RLS would not catch a slip. §3.3; §4.13 (M-24 removed); A-3b, A-41, A-43. |
 | D-39 | App bar on the six destinations | **HAMBURGER, NOT A BACK CHEVRON — a deliberate departure from §4.11's common rule, confirmed [S100, Josh].** §4.11 gives the twelve project-section screens a back chevron; the six hamburger destinations keep the **hamburger**. Two reasons. §3.1's chevron clause is conditioned on being **inside a project** (`/m/p/**`) and these are company-scoped, so it never fires. And decisively: **A-3c can only be observed by opening the sheet while standing on one of these six routes** — a back chevron makes the sheet unopenable there, which would strand the criterion for a second time after §4.13 had just rescued it. **Recorded as a ruling, not a flagged deviation, so a later reader does not "fix" it back to the chevron.** §4.13's common rules; A-42b. |
+| D-40 | Location data — read access and retention | **OWNER/ADMIN READ ONLY. 30-DAY RETENTION.** [S101, Josh] Closes the "retention and read access for location data" item D-34 opened. `gps_in`/`gps_out` are readable by Owner and Admin only, and rows older than 30 days lose their location payload. **NEITHER HALF IS ENFORCED TODAY, and neither is a UI change** — see §4.12.1a's new "Read access and retention" block for the cost. **A migration is required and is NOT written here.** |
+| D-41 | In-app notice that location is captured | **NO. Crew are NOT told in-app.** [S101, Josh] The other half of the item D-34 left open. No banner, no first-run explainer, no line on M-5. **Josh's reasoning, recorded as his:** the capture is a condition of employment rather than a consent the app negotiates, and a per-clock-in notice on the one screen a crew member must use every shift is friction on a required action for a fact that does not change. **This spec records the ruling and does not endorse it as legal advice** — see §4.12.1a. |
+| D-42 | `deliveries.checked_in_at`     | **YES — the column is adopted.** [S101, Josh] Resolves TECH_DEBT #134. `submit_delivery_check_in()` becomes a **state transition** rather than a bare gate: it stamps `checked_in_at` on success, so a half-entered check-in is distinguishable from a finished one. **Specced in §7c; NOT migrated here.** |
+| D-43 | Expenses — who enters, views, edits | **Everyone enters and views. Everyone edits their own. Only Owner/Admin edit anything.** [S101, Josh] **The live RLS does not implement this, and the gap is in the "views" clause** — `expenses_select_scoped` gives crew and subcontractors **their own rows only**. Two further mismatches on the edit clause. Full comparison, and what each would cost, in §4.13.3's new "The ruling vs the live policies" block. **A-45d STANDS** — it asserts the absence of a UI role check, which this ruling reinforces. |
+| D-44 | 7a fallback order with no GPS fix | **RECENTLY-USED.** [S101, Josh] Closes the D-33 open item. **There is no source function for it today** — stated plainly rather than bound to something approximate. The data exists on `time_segments`; the function does not. §4.12.1; A-7l2 rewritten. |
+| D-45 | Change orders on mobile — full lifecycle | **INTENT RECORDED, SCREEN DEFERRED.** [S101, Josh] Owner/Admin/PM will eventually author a CO on mobile end-to-end, creation through send-for-signature. **Not in scope now, and M-13 must not be built in a way that forecloses it.** **Does NOT reverse D-26**, which governs *display on the read-only list*. §4.11.3. |
+| D-46 | Money format on `/m`           | **ONE FORMAT, FIXED AS A §2 TOKEN.** [S101] `$1,234.56` / `-$1,234.56` / `—` for null. Matches the 15 desktop `style: 'currency'` call sites and the PDF templates' hand-rolled formatter, which agree on every case. Written into **§2** rather than §4.13.3 so the next money screen inherits it. A-50. |
 | D-37 | Expenses on mobile            | **IN SCOPE. D-9 is NARROWED, NOT REVERSED.** [S100, Josh] Expenses gets a real mobile screen (§4.13.3, M-26). **Budget, Invoices, Payments and Contracts stay absent and are deferred to v2** — the exclusion list loses exactly one member and gains nothing. This is the first currency on `/m`, and §4.13.3 states in full what that forces and what it does **not**: unlike D-26's `net_delta`, `expenses_select_scoped` is a **real DB row floor**, and an expense amount is *actual cost*, which the Financial Visibility Floor explicitly makes visible to every role. **The open role question inside that is NOT decided here** — see §4.13.3's "What this forces" and §11's open list. §4.13.3; A-44–A-44f. |
 
 ---
@@ -282,6 +289,45 @@ duplicate data access is written for mobile.
 
 **Type.** Barlow for UI. **IBM Plex Mono for every number, ID, timestamp, and micro-label.** Body ≥15px
 (≥14px on the dark photo screens). Captions ≥11px, mono, captions only.
+
+**Money — one format, everywhere on `/m` [S101, D-46].** Currency is a number, so the mono rule already
+covers the typeface. What it did not cover is the shape, and M-26 is the first money on mobile (D-37) —
+so the shape is fixed here, as a **token**, rather than inside the first screen that needs it. The next
+money screen inherits it instead of inventing a second convention.
+
+| Case | Renders |
+| ---- | ------- |
+| Positive | `$1,234.56` |
+| Negative | `-$1,234.56` — minus **before** the symbol |
+| Zero | `$0.00` |
+| Null / absent | the em-dash empty state (`—`), **never** `$0.00` |
+
+Symbol `$` leading, comma thousands separators, **always exactly two decimals** — never truncated to
+whole dollars, never a variable precision.
+
+**This is not invented; it is the format desktop already uses, and the citation matters more than the
+rule.** Two implementations exist and they agree on every case above:
+
+- `value.toLocaleString('en-US', { style: 'currency', currency: 'USD' })` — the dominant form, **15 call
+  sites**, e.g. `app/dashboard/projects/[id]/page.tsx:25`, `projects/projects-list.tsx:50`,
+  `projects/[id]/payments/payments-view.tsx:91`, `components/expenses/expense-ui.tsx:11`, and
+  `app/dashboard/estimates/labels.ts:51` via a shared `Intl.NumberFormat`.
+- A hand-rolled `` `${sign}$${Math.abs(v).toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2})}` ``
+  in the PDF templates — `lib/invoices/invoice-template.tsx:21-27`, `lib/change-orders/co-template.tsx:28-34`,
+  `lib/proposal/proposal-template.tsx:16`. Different code, **identical output**, including `-$` for
+  negatives.
+
+**Where the mobile implementation lives — and why it is not an import.** `expense-ui.tsx` and
+`labels.ts` both sit inside desktop UI modules; importing either into `app/m/**` would couple the field
+app to a desktop component file for a one-line formatter. The correct long-term home is
+`packages/shared/utils/`, alongside the other pure helpers. Until something puts it there, **mobile
+carries its own one-liner matching the calls cited above**, and **A-50 asserts the rendered output
+rather than the function**, so the two cannot drift regardless of where the code ends up. A-28b's
+"no duplicate data access for mobile" governs **services**, not formatters.
+
+**The em-dash rule is the one that differs from a naive `toLocaleString` call.** `Number(null ?? 0)`
+renders `$0.00`, and on a field screen "$0.00" and "not recorded" are different facts. Every mobile
+money binding must distinguish them — the same rule §4.11.1 already applies to null dates.
 
 **Canvas.** 402 × 874 logical px reference (iPhone 16 Pro). Content inset 18–20px (14px on markup);
 56–58px top; bottom safe area via `env(safe-area-inset-bottom)`.
@@ -1236,6 +1282,37 @@ The project's calendar, as a list — not a grid. A month grid at 402px cannot c
 > **Reversible by ruling** — if Owner/Admin should see CO values on mobile, that is a role-gating decision
 > for Josh, not a build detail.
 
+> **INTENT RECORDED [S101, D-45] — full CO lifecycle on mobile, LATER. The screen is DEFERRED and is not
+> in scope now.** Josh's direction: **Owner, Admin and PM will eventually author a change order on
+> mobile end-to-end — creation through send-for-signature.**
+>
+> **This does NOT reverse D-26.** D-26 governs **display on the read-only list**, and it stands: M-13
+> renders no `net_delta` and no derived money, for every role including Owner. The two are compatible
+> because they are about different moments — reading someone's CO in a list, versus typing your own.
+>
+> **What M-13 must not do, which is the only reason this is recorded now.** M-13 is built in a later
+> slice, and a read-only list is easy to build in a way that quietly forecloses authoring:
+> - **Do not build the route as a leaf.** `/m/p/[projectId]/changes` needs room beside it for
+>   `changes/new` and `changes/[coId]`; a page that owns the whole segment forces a restructure.
+> - **Do not treat "no money on this screen" as "no money in this feature."** The cut is D-26's, scoped
+>   to the list. A component or service shaped around "CO objects have no amounts" would have to be
+>   unpicked.
+> - **Do not assume the reader is the author.** `getChangeOrders()` returns `ChangeOrderWithAuthor`;
+>   authoring needs the write path (`change-orders-client.ts`) and the signing service, neither of which
+>   the list touches.
+>
+> **⚠️ AUTHORING PUTS `net_delta` ON `/m` AT THE POINT OF ENTRY — and #117 applies there.** A create form
+> has an amount field; the value is on screen because the user is typing it. That is not a D-26 violation
+> — but it means **the first mobile CO screen introduces the exact column the Financial Visibility Floor
+> does not enforce at the database** (`change_orders_select_visible` has no role floor and no author
+> scoping — **TECH_DEBT #117**). So the deferred screen inherits #117's open question — **authored-by
+> scope versus assigned-project scope** — and **that question should be answered before the screen is
+> built, not during it.** #117 already says the same thing about the desktop side; D-45 is the second
+> consumer waiting on the same ruling.
+>
+> **Everything else in finance stays deferred to v2** (D-9 as narrowed by D-37): Budget, Invoices,
+> Payments and Contracts are unchanged and unaffected by this.
+
 #### 4.11.4 M-14 · Punch List — `/m/p/[projectId]/punch`
 
 - **Source:** `getPunchLists(projectId)` (`punch.ts:48`), which already joins `assignee`, `completer` and `verifier` by `display_name`.
@@ -1354,8 +1431,33 @@ cheaper than a correction.
 
 **Consequence for the sort:** ordering by proximity needs a position, and D-34 makes a fix best-effort. The
 list must therefore have a **defined order when no fix exists** — proximity is an enhancement to ordering,
-never a precondition for rendering the list. Which fallback order (scheduled-first, recently-used,
-alphabetical) is **not ruled**; see §11.
+never a precondition for rendering the list.
+
+> **RULED [S101, D-44] — the fallback order is RECENTLY-USED.** _Superseded sentence, quoted rather than
+> rewritten:_ _"Which fallback order (scheduled-first, recently-used, alphabetical) is **not ruled**; see
+> §11."_ With no fix, the projects this member clocked into most recently sort to the top, most-recent
+> first. It is the right answer for the reason D-33 exists: on a repeat visit it puts the likely project
+> where proximity would have, without guessing, and it degrades to something meaningful on day one
+> (an empty history sorts to a stable secondary order rather than to nothing).
+>
+> **⚠️ THERE IS NO SOURCE FUNCTION FOR THIS TODAY. Said plainly rather than bound to something
+> approximate.** Verified S101 against `lib/services/time-tracking.ts`: the exported surface is
+> `getOpenSession`, `getSession`, `getSessions`, `getSessionsWithMember`, `getSessionsForReview`,
+> `getSessionDetail`, `getSessionSegments`, `getPendingApprovals`, `getProjectWorkedHours`,
+> `getWeeklyHours`. **None returns "the projects I most recently worked, most recent first."**
+>
+> **The data exists; the function does not.** `time_segments` carries `project_id`, `session_id` and
+> `segment_start` (verified), and `time_segments_select_visible` already scopes reads via
+> `can_view_time_session()`. So the shape is a distinct `project_id` over the caller's own segments
+> ordered by `max(segment_start)` descending — one new named function, not a schema change and not a
+> migration. **§4.13's binding rule applies: it is bound to that function or it is cut.** Building 7a
+> against a raw query in the page, or approximating with `getSessions()` and reducing client-side, both
+> violate the rule — the first breaks the service-layer convention, the second silently caps the history
+> at whatever page size `getSessions()` returns.
+>
+> **Secondary order, so "recently-used" is total rather than partial:** projects with no history for this
+> member sort after those with history, **alphabetically by name**. Without this clause a first-day crew
+> member gets an undefined order, which is exactly what A-7l2 was written to prevent.
 
 #### 4.12.1a GPS at clock events (D-34 [S99, Josh])
 
@@ -1418,6 +1520,59 @@ than ruled (§11).
 > This is a required change of D-34, not an optional cleanup. It is one line, it is on desktop, and A-28
 > does not shield it because A-28 protects `apps/web/app/dashboard/**` from *this spec's* changes — this
 > is a defect D-34 would introduce, so D-34 owns it.
+
+##### Read access and retention (D-40 [S101, Josh]) — **ruled, and NOT enforced today**
+
+**The ruling: `gps_in`/`gps_out` are Owner/Admin read-only, and location is retained 30 days.** This
+closes the item D-34 opened — that a denied permission is now a durable fact about a person rather than
+an absence, with nobody having said who may read it or for how long.
+
+**Neither half exists today, and neither is a UI change.** What is actually live, verified S101:
+
+- **There is no column-level floor, and RLS is row-level** — if a caller can read the
+  `time_clock_sessions` row, they read `gps_in` and `gps_out` with it. Postgres RLS has no column
+  granularity; nothing about "Owner/Admin only for two columns" can be expressed in a policy on that
+  table.
+- **Row visibility is NOT company-wide, and this correction matters** — `time_clock_sessions_select_scoped`
+  is `company_id = get_my_company_id() AND (member_id = get_my_member_id() OR time_role_rank(get_my_role()) > time_member_rank(member_id))`.
+  That is a **rank ladder**, not an open door: `time_role_rank()` is `owner 5, admin 4, project_manager 3,
+  foreman 2, crew_member 1, subcontractor 1`. So a **foreman already reads a crew member's coordinates**,
+  and a PM reads a foreman's. The gap D-40 closes is real but narrower than "everyone can see it".
+- **There is no retention mechanism of any kind** — no TTL, no scheduled job, no `pg_cron` entry, no
+  nulling trigger. Location written today is kept indefinitely.
+
+**What enforcing it costs — stated so the size is known before anyone starts. A MIGRATION IS REQUIRED
+AND IS NOT WRITTEN HERE.**
+
+| Half | Cheapest honest shape | Cost |
+| ---- | --------------------- | ---- |
+| **Owner/Admin read** | The same **1:1 side-table split** that closed contract value and budgeted amount under the Financial Visibility Floor: move `gps_in`/`gps_out` to a `time_clock_session_locations` table with an Owner/Admin-only SELECT policy. | A migration, a backfill, a drop of the two parent columns, **and every existing reader repointed** — including `live-board.tsx:129`, which the D-34 note above already owes a fix. A column-level `GRANT` is **not** an alternative: PostgREST selects `*` in places, and a revoked column turns a working query into a hard error rather than a hidden field. |
+| **30-day retention** | A scheduled job nulling `gps_in`/`gps_out` where `clock_in < now() - interval '30 days'`. | `pg_cron` is not currently used anywhere in this repo — verified. So this is **a new operational dependency**, not just a statement. The alternative, an Edge Function on a schedule, is the same decision in a different place. Whichever is chosen, **the deletion is irreversible and silent**, so it wants a dry-run count before it is armed. |
+
+**Neither is M6M's to build.** M6M reads location at clock events (D-34); it does not own the storage
+model for it. Filed as owed work, with the shape above so it is not re-derived.
+
+##### Crew are NOT told in-app (D-41 [S101, Josh])
+
+**No banner, no first-run explainer, no line on M-5.** The screens capture location and say nothing
+about it.
+
+**Josh's reasoning, recorded as his and not as this spec's conclusion:** the capture is a condition of
+employment rather than a consent the app negotiates, and a notice on the one screen a crew member must
+touch every shift is friction on a required action for a fact that never changes. D-34 already removed
+the opt-out, which is what makes notice a separate question from consent rather than part of it.
+
+> **⚠️ LOGGED, NOT ADVISED: this may carry an employment-law dimension that is outside this spec's
+> competence and outside its scope.** Notice requirements for employee location tracking vary by
+> jurisdiction and several impose them regardless of employment status; some attach to the *employer*
+> rather than the software. **Nothing here is legal advice and no part of this document has assessed
+> that question.** The ruling is recorded because it is Josh's to make and the build needs an answer;
+> the flag is recorded because a future reader should not mistake "ruled" for "cleared". If it is ever
+> reversed, **M-30 (§4.13.7) is the specced home for a persistent notice** — that is already written
+> down, so a reversal costs a paragraph rather than a new screen.
+
+**A-7n asserts the absence**, in the shape of A-10d and A-40: a build that helpfully adds a reassuring
+line has un-ruled D-41.
 
 #### 4.12.1b The OT week line is CUT (D-35 [S99, Josh])
 
@@ -1658,11 +1813,40 @@ at the database. Concretely, from the policy above:
    read-only, so nothing here trips them — but a future mobile capture screen must not assume the
    insert path is uniform across roles.
 
-**THE ROLE QUESTION IS NOT DECIDED HERE.** What is established above is what the **database already
-permits**. Whether mobile should show *less* than RLS returns — e.g. hiding `amount` from crew even on
-their own expense — is a product ruling, deliberately left to Josh, and is carried into §11's open list.
-The default this section specs is **show what RLS returns**, because the alternative is a UI-only gate
-of exactly the kind #117 exists to warn about.
+##### The role question — RULED [S101, D-43], and the live RLS does not match
+
+> _Superseded paragraph, quoted rather than rewritten:_ _"**THE ROLE QUESTION IS NOT DECIDED HERE.** What
+> is established above is what the **database already permits**. Whether mobile should show less than RLS
+> returns … is a product ruling, deliberately left to Josh, and is carried into §11's open list. The
+> default this section specs is **show what RLS returns** …"_
+
+**The ruling (Josh, S101): everyone enters and views expenses. Everyone edits their own. Only Owner and
+Admin edit anything.**
+
+**A-45d STANDS, unchanged.** It asserts that mobile applies **no UI role check** on `amount` and renders
+exactly the row set `getExpenses()` returns. The ruling reinforces that rather than overturning it — it
+widens intent *outward*, and A-45d is the criterion that stops a build narrowing it in the UI.
+
+**But the ruling and the live policies disagree in three places, and none of them is a mobile fix.**
+Verified S101 against rebuild-test:
+
+| Ruling clause | Live policy | Verdict |
+| ------------- | ----------- | ------- |
+| "everyone **views**" | `expenses_select_scoped` = `company_id AND (author_member_id = get_my_member_id() OR (get_my_role() IN ('owner','admin','project_manager','foreman') AND can_view_project(project_id)))` | **⚠️ GAP — the material one.** `crew_member` and `subcontractor` are **absent from the role array**, so they see **only rows they authored**. Not a teammate's, not their own project's. A crew member on a job cannot see the material receipt the foreman filed for that job. **Closing this is a migration widening the role array**, not a UI change — and it is the *opposite* direction from a role gate, so nothing in the Financial Visibility Floor blocks it: an expense is actual cost, which the Floor makes visible to all roles by design. |
+| "everyone **enters**" | `expenses_insert_authorized` — needs `can_view_project(project_id)`, `author_member_id = mine` (or Owner/Admin), `status='pending'`, and all approval columns NULL | **Holds for the plain case.** But **five columns are role-shaped on insert**: `state='committed'` and `cost_category='subcontractor'` and `sub_contract_id`/`purchase_order_id` and `awaiting_paper` are Owner/Admin/PM; `is_retainage` is Owner/Admin. So "everyone enters" is true of an ordinary actual material/other expense and false of the rest. **M-26 is read-only in v1, so nothing here bites yet** — a future mobile capture screen must not assume a uniform insert. |
+| "everyone edits **their own**" | `expenses_update_authorized` = `company_id AND (Owner/Admin OR (author_member_id = mine AND status = 'pending'))` | **⚠️ GAP — narrower than the ruling.** An author may edit their own **only while `status = 'pending'`**. Once approved or rejected the author is locked out. If the ruling means "their own, always", that is a policy change; if it means "their own, until it is decided", the live policy is already right and **the ruling wants the qualifier written down**. **Ask before migrating** — this one is genuinely ambiguous in the words. |
+| "only Owner/Admin edit **anything**" | same policy, first arm | **✅ MATCHES exactly.** |
+
+**Also worth recording: there is no DELETE policy on `expenses` at all**, so DELETE is denied to every
+role including Owner. Removal is a soft delete via UPDATE `is_deleted`, which inherits the update policy
+above — meaning an author cannot soft-delete their own expense after approval either. Consistent with
+the trash-bin pattern; noted because "only Owner/Admin edit anything" reads as covering deletion and the
+mechanism is not obvious.
+
+**None of this changes what M-26 builds.** It is a read surface bound to `getExpenses()`, rendering what
+RLS returns, with no UI role check. **What the gaps change is what a crew member SEES on it** — under
+today's policies, only their own expenses. If Josh wants the "everyone views" clause honoured, that is a
+migration on `expenses_select_scoped`, filed as owed work rather than smuggled into a mobile screen.
 
 ##### Cut from M-26
 
@@ -1710,6 +1894,8 @@ of exactly the kind #117 exists to warn about.
 > **out of scope for M6M and belongs in TECH_DEBT alongside #117** — recorded here so the next reader
 > does not assume `select('*')` on this table is safe.
 
+- **Empty state [S101]:** **"No subs or vendors."** Per-chip: **"No subs."** / **"No vendors."** when a
+  chip narrows the list to nothing. Never a spinner, never an omitted section.
 - **CUT: create / edit / rate.** `rating` and `rating_notes` are a management judgement recorded on
   desktop; `subcontractors-client.ts`'s writes are the Module 2 flow.
 - **CUT: address block.** Present on the table, but a directory row does not need it and D-4's geometry
@@ -1738,7 +1924,10 @@ Team tile count is already bound to**, so the badge and the screen cannot disagr
   `company_members_select_authenticated` is `company_id = get_my_company_id()`: every role, every row.
 - 58px rows: initials avatar tinted with `schedule_color` (falling back to §2's amber when null),
   `display_name`, and a mono `member_type` label — `crew` or `subcontractor`.
-- Filter chips, single-select: **All / Crew / Subs**, bound to `getMembers({ member_type })`.
+- Filter chips, single-select: **All / Crew / Subs**, bound to `getMembers({ member_type })` —
+  `company_members_member_type_check` permits exactly `crew | subcontractor`, so the two chips are the
+  whole domain and "All" is the unfiltered call.
+- **Empty state [S101]:** **"No team members."** Per-chip: **"No crew."** / **"No subs."**
 - **CUT: tap-to-call, and this one is a real gap rather than a choice.** `company_members` carries **no
   phone or email column** — the contact details live on `profiles`, which `profiles_select_authenticated`
   makes readable company-wide to every role. But **no named list function selects them**:
@@ -1763,7 +1952,17 @@ Team tile count is already bound to**, so the badge and the screen cannot disagr
   `contact_type` label, and a status pill carrying **text**.
 - **`phone`, `mobile` and `email` are tap-to-act** — `tel:` and `mailto:`, the same argument as M-17 and
   M-27.
-- Filter chips, single-select: **All / Leads / Clients**, bound to `getContacts({ contact_type })`.
+- Filter chips, single-select: **All / Leads / Clients**, bound to `getContacts({ contact_type })` →
+  `lead` and `client`. **`contacts_contact_type_check` permits seven values** — `lead, client, vendor,
+  architect, inspector, building_dept, other_external` — so unlike M-28's chips these **do not cover the
+  domain**. That is deliberate: leads and clients are the two a field user looks up, and **"All" is the
+  unfiltered call, so an architect or inspector is reachable there and is never hidden** — it simply has
+  no chip of its own. A build must not "complete" the set with five more chips; a seven-chip row does not
+  fit 402px and D-4's geometry has no room for it.
+- The mono `contact_type` label binds to **`CONTACT_TYPE_LABELS`** (`packages/shared/constants/form-options.ts:104`),
+  which covers all seven values. **Never render the raw enum** — `building_dept` and `other_external` are
+  the two that give the guess away.
+- **Empty state [S101]:** **"No contacts."** Per-chip: **"No leads."** / **"No clients."**
 - **This is the company-scoped list; M-17 is the project-scoped one.** They are not duplicates and
   neither replaces the other — §4.11.7 already states the split, and D-9's first sentence (which D-37
   leaves untouched) keeps Contacts in the hamburger.
@@ -1817,8 +2016,45 @@ made editable.
 **What M-30 renders — two blocks, both bound:**
 
 - **You** — from `getMyMember()` (`members.ts:50`): `display_name`, and a mono `member_type` label. The
-  signed-in role comes from the `profiles` read the mobile layout already performs for the shell; no new
-  query.
+  signed-in **role** comes from a **second read in this page**, via a new named function — see the
+  correction immediately below.
+
+> **CORRECTED [S101] — the "no new query" claim was FALSE.** _Superseded text, quoted rather than
+> rewritten:_ _"The signed-in role comes from the `profiles` read the mobile layout already performs for
+> the shell; no new query."_
+>
+> **It does not.** `app/m/layout.tsx:42` selects **`company_id` and nothing else**, and even before D-36
+> removed the avatar it selected `first_name, last_name, company_id`. **`role` was never in that query**,
+> and `MobileShell`'s props are `companyName` and `teamCount` — neither carries it. The sentence
+> described a convenience that never existed.
+>
+> **RULED: a second read in the page, not an extended layout.** The two options and why this one:
+>
+> | | Extend the layout + thread through `MobileShell` | **Second read in M-30 (chosen)** |
+> | - | ----------------------------------------------- | -------------------------------- |
+> | Files touched | `layout.tsx` (select + prop), `mobile-shell.tsx` (prop **plus a new React context** — `{children}` cannot receive props from a layout, so a provider is the only delivery mechanism), then M-30 | `app/m/settings/page.tsx` and one service file |
+> | What it adds | A **new ambient API** every `/m` screen can read, and a prop the shell **fetches but never renders** — the shell becomes a courier for data one screen wants | One query on one screen |
+> | Cost when wrong | Every future screen inherits a shell dependency; a change to the context signature touches the shell every screen mounts inside | Contained to M-30 |
+> | Runtime cost | One query for every `/m` page load, including the five that do not want it | One query, on the rarely-visited screen that does |
+>
+> **The blast radius is the deciding factor.** `MobileShell` is mounted by every mobile screen; its two
+> existing props are both things **the shell itself renders** (the app-bar sub-line, the Team tile
+> badge). Role would be the first prop it fetches and does not use. Widening the shell's contract to
+> serve one label on one screen is the kind of change that is cheap once and expensive the fourth time.
+>
+> **It needs a NEW NAMED FUNCTION, and that is not a licence to inline a query.** §4.13's binding rule
+> and CLAUDE.md's service-layer rule both forbid a page calling Supabase directly. **No exported
+> function returns the caller's role today** — verified: `getMyMember()` returns `company_members` rows,
+> which carry `display_name`/`member_type` and no role, and the only `getMyProfile` in the repo is
+> **private to `estimates-client.ts:377`**. So M-30's build owes one small server function (shape:
+> `getMyProfile()` → the caller's `profiles` row, or the narrower `role` alone). `profiles_select_authenticated`
+> is `company_id = get_my_company_id() AND is_deleted = false`, so it is readable by every role and needs
+> no policy work. **Consolidating the private copy in `estimates-client.ts` into that shared function is
+> in scope for whoever writes it; leaving two is not.**
+>
+> **Cutting the role line was considered and rejected**: it is the one field that answers "am I signed in
+> as the right person" for a user whose `display_name` may be shared or ambiguous on a site phone, which
+> is the whole reason §4.13.7 gives this block. A-48b is amended to assert it.
 - **Your company** — from `getCompany()` (`company.ts:45`): company `name`. And from
   `getCompanyTimeSettings()` (`company.ts:130`): the mono `timezone`. The timezone earns its place —
   it is the rule M-5's clock and every mobile timestamp are rendered in, so a user seeing times they do
@@ -2394,6 +2630,44 @@ each independently sufficient:
 damaged line with no photo. That residual is accepted, and it is recorded here rather than hidden behind a
 constraint that looks stronger than it is.
 
+### `deliveries.checked_in_at` — ADOPTED (D-42 [S101, Josh]) — **specced here, NOT migrated**
+
+**Resolves TECH_DEBT #134.** The S100 migration shipped `submit_delivery_check_in()` as a **gate**: it
+authorises, validates the damage-photo rule, and recomputes `has_exceptions`. It was a gate rather than a
+state transition **because there was nothing to flip** — `deliveries` carries no status column and no
+finalisation timestamp. D-42 supplies one.
+
+**The column.** `checked_in_at timestamptz NULL` on `public.deliveries`. NULL means *in progress*; a
+value means *a human said done*. No default, no `NOT NULL`, no CHECK.
+
+**What changes in the RPC.** `submit_delivery_check_in()` stamps it on the success path — after the two
+authorisation gates and the damage-photo validation, alongside the existing
+`recompute_delivery_exceptions()` call. **The function becomes idempotent-by-intent rather than
+idempotent-by-accident:** re-submitting an already-checked-in delivery should be a no-op on the timestamp
+(`COALESCE`/`WHERE checked_in_at IS NULL`) rather than moving it, or the audit trail records the last
+retry instead of the completion.
+
+**What must NOT change.** The two authorisation gates stay exactly as they are — the row must be in the
+caller's company and pass `can_view_project()`, and the caller must be the receiver or Owner/Admin. D-42
+adds a side effect to the success path; it does not touch who may reach it.
+
+**The consequences, stated because a nullable column added to a live table is never free:**
+
+- **Every existing row backfills to NULL** and therefore reads as "never checked in" — including
+  deliveries that were completed before the column existed. Whether to backfill them from `created_at`,
+  or leave them NULL and treat NULL as "unknown, pre-column", is a **migration decision, not a spec one**;
+  both are defensible and the choice should be deliberate.
+- **Module 6D's desktop delivery screens gain a field they do not render.** That is fine — a nullable
+  additive column breaks no existing read — but whether desktop *should* show it is a 6D question this
+  spec does not answer.
+- **M-22 (7d) is the first consumer**, and it is the reason the column exists: with it, the screen can
+  distinguish a check-in the user abandoned from one they finished, and the "notifies Owner, Admin, PM"
+  consequence line finally has a persisted counterpart.
+
+**NOT MIGRATED HERE.** Same posture as §7c itself: this section states the shape; the migration is a
+separate step, and it must land **before M-22 is built** — a screen that reads `checked_in_at` against a
+table that lacks it fails at the first query.
+
 ### Ordering and evidence
 
 Independent of §7a/§7b. Evidence when it lands: a failing-then-passing pair per constraint, under the S90
@@ -2650,7 +2924,9 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 - A-7k4 **NEW [S99, D-34]** **No control anywhere disables location capture** — no setting, toggle, or skip on M-5 or in settings. `[Playwright]` _(§4.12.1a rule 1. The OS permission prompt is not an app opt-out.)_
 - A-7k5 **NEW [S99, D-34]** A surface that reports "on site" does so from **coordinates**, not from `gps_in` being non-null — a denied-permission session **never** renders as on site. `[Playwright]` _(§4.12.1a. Pins the `live-board.tsx:129` defect D-34 would otherwise introduce. Written against the behaviour rather than the file so it survives a refactor.)_
 - A-7l **NEW [S99, D-33]** **No project is selected when M-5 opens**, and the project list is ordered **nearest-first**. "Clock in" stays disabled until a project is tapped, for the three types that require one. `[Playwright]` _(§4.12.1. The failure this catches is a build that sorts by proximity and then selects row 0 — which satisfies "sorted" and reintroduces the guess. Assert both: order changed, selection empty.)_
-- A-7l2 **NEW [S99, D-33]** With **no** GPS fix the project list still renders in a defined order and clock-in still works. `[Playwright]` _(§4.12.1. Proximity is an enhancement to ordering, never a precondition for the list. Composes with A-7k2/A-7k3 — the denied and unavailable paths must both reach a usable picker.)_
+- A-7l2 **REWRITTEN [S101, D-44]** With **no** GPS fix the project list renders **most-recently-worked first for this member**, with projects the member has never worked sorted after those they have, **alphabetically by name** — and clock-in still works. `[live + Playwright]` _(**Rewritten [S101, D-44].** _Superseded text:_ _"the project list still renders in a defined order and clock-in still works."_ That asserted only that **an** order existed, because none was ruled. D-44 names it, so the criterion names it too. The `[live]` half matters: two members with different segment histories must get **different** orders on the same project set — a build that sorts by `projects.created_at` and calls it recency passes any single-user check.)_
+- A-7l3 **NEW [S101, D-44]** The recently-used order is bound to a **named service function** over `time_segments`, not to a raw query in the page and not derived client-side from `getSessions()`. `[shell]` _(§4.12.1. No such function exists today — verified against `time-tracking.ts`'s ten exports. The client-side derivation is the tempting shortcut and it silently caps history at one page of sessions.)_
+- A-7n **NEW [S101, D-41]** **No mobile screen tells the user their location is being captured** — no banner, no first-run explainer, no line on M-5, no caption under the clock button. `[Playwright]` _(§4.12.1a. An absence assertion in the shape of A-10d, A-40 and A-43: D-41 ruled that the app says nothing, and a considerate build adds a reassuring line without realising it is reversing a ruling. **The flag on D-41 about a possible employment-law dimension is recorded in §4.12.1a and is not something this criterion can test.**)_
 - A-7m **NEW [S99, D-35]** **No derived overtime figure appears on M-5** — no "to OT", no weekly total, no threshold countdown. `[Playwright]` _(§4.12.1b. Written as an absence assertion, like A-10d and A-11e for the D-19 cut, because the data exists and a build could helpfully surface it.)_
 - A-7j4 **NEW [S99, D-32]** Switching **captures a note for the segment being closed**, unless that segment is a `break`. `[live]` _(The handoff's 7b has no note field and its footer is just "Start segment" — but closing a segment *is* a segment end, so `time_segments_note_on_end_check` applies. Without this the switch throws on every non-break segment. See A-7h's correction.)_
 
@@ -2848,6 +3124,8 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 - A-44 `/m/schedule` binds to `getCalendarEvents({})` with **no `projectId` and no `ownMemberId`**, and a crew member sees a **task** assigned to a teammate on a project they are assigned to. `[live + Playwright]` _(§4.13.2. The desktop dashboard passes `ownMemberId` for crew; passing it here would hide rows RLS grants, which is the UI-disagrees-with-RLS failure §4.13's common rules forbid.)_
 - A-44b A crew member does **not** see another member's **general** entry on `/m/schedule`. `[live]` _(§4.13.2. `schedule_entries_select_scoped` does this at the database; the criterion exists so a build "fixing" A-44 by querying with elevated rights is caught.)_
 - A-44c Event source — task / general / inspection — is conveyed by a **text label**, not by `color` alone. `[Playwright]` _(§4.13.2, the same accessibility class as A-10b and A-24.)_
+- A-44d `/m/schedule` groups by day with **today first, then ascending**, and past days sit **above** today rather than being dropped. `[Playwright]` _(**New [S101].** §4.13.2 specifies the ordering in a sentence and nothing tested it. `getCalendarEvents` sorts plain ascending by `start_date` (`schedule.ts:200`), so a build that renders the service's order untouched puts last month at the top and **passes every other Schedule criterion**.)_
+- A-44e Each row renders `title`, the mono date range, `project_label` where set and `member_name` where set — and a row whose `project_label` is null renders **no empty label slot**. `[Playwright]` _(**New [S101].** §4.13.2's row contents. The null case is the one a build gets wrong: `CalendarEvent.project_id`/`project_label` are nullable for a `general` entry with no project.)_
 
 **Expenses (§4.13.3)**
 
@@ -2857,25 +3135,43 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 - A-45d `/m/expenses` issues **no UI role check** on `amount` — the rendered row set equals what `getExpenses()` returns for that caller, for all six roles. `[live + Playwright]` _(§4.13.3. The default this spec sets is "show what RLS returns". If Josh rules that crew must not see amounts, **this criterion is the one that gets rewritten**, and it is named here so the rewrite is deliberate rather than a silent divergence.)_
 - A-45e `/m/expenses` renders **no** labor cost, burden, committed total, retainage or job-cost rollup figure under any role. `[Playwright]` _(§4.13.3's cut list. `getJobCostRollup()` is one call away and carries all five.)_
 - A-45f `/m/expenses` offers **no** approve, reject, capture or allocation control under any role, including Owner. `[Playwright]` _(§4.13.3. Read surface in v1.)_
+- A-45g The chip row renders exactly **Mine / Pending / All**, single-select, and each changes the rows listed. "Pending" returns the same set as `getPendingExpenses()`. `[live + Playwright]` _(**New [S101].** §4.13.3's chips had no criterion. The `getPendingExpenses()` half is what stops the chip and that function drifting apart — they are specced as the same predicate.)_
+- A-45h Tapping a row's receipt opens **M-9**, the existing viewer, and **no second image surface is built** under `/m/expenses`. `[Playwright]` _(**New [S101].** §4.13.3 binds receipts to `getExpenseReceipts()` and says "no second image surface"; nothing tested the second half, which is the one a build violates by adding a lightbox.)_
 
 **Subs & Vendors (§4.13.4)**
 
 - A-46 `/m/subs` renders **no** `default_hourly_rate`, **no** `default_markup_percent` and **no** `ein`, under every role including Owner and Admin. `[Playwright]` _(§4.13.4. `getSubcontractors()` does `select('*')` and `subcontractors_select_authenticated` has **no role floor**, so all three reach the client for every caller — the same shape as TECH_DEBT #117. The Owner/Admin pass matters most: a build that adds a role gate "because owners may as well see it" satisfies every other criterion and reintroduces a UI-only gate.)_
 - A-46b An expired `insurance_expiry` carries the `#c0362c` treatment **and** a text label; expiry never renders as colour alone. `[Playwright]` _(§4.13.4, same accessibility class as A-10b.)_
 - A-46c `phone`, `mobile` and `email` are tap-to-act (`tel:` / `mailto:`) on `/m/subs`, `/m/contacts` and M-17. `[Playwright]` _(§4.13.4, §4.13.6, §4.11.7 — the reason all three screens exist on a phone.)_
+- A-46d `/m/subs` chips are **All / Subs / Vendors**, single-select, bound to `sub_type` — `subcontractor` and `vendor`, the only two values `subcontractors_sub_type_check` permits — and each changes the rows listed. `[Playwright]` _(**New [S101].** §4.13.4's chips had no criterion.)_
+- A-46e `/m/subs` renders `license_number` in mono where set, and renders **no empty slot** where it is null. The status pill carries its **text label**, never colour alone. `[Playwright]` _(**New [S101].** §4.13.4 states both and neither was asserted; `license_number`, `trade_type` and `insurance_expiry` are all nullable on the table.)_
+
+**Contacts (§4.13.6)**
+
+- A-49 `/m/contacts` chips are **All / Leads / Clients**, single-select, bound to `getContacts({ contact_type })` → `lead` / `client`, and each changes the rows listed. **"All" is the unfiltered call**: a contact whose `contact_type` is one of the other five permitted values — `vendor`, `architect`, `inspector`, `building_dept`, `other_external` — **appears under All** and is never hidden by the chip row. `[live + Playwright]` _(**New [S101].** §4.13.6. The chips deliberately do not cover the domain, so the criterion that matters is that the uncovered five stay reachable — a build that filters "All" to `lead|client` loses five contact types silently.)_
+- A-49b A contact with `first_name`/`last_name` renders those; a contact whose person fields are empty renders **`company_name`**; neither renders a blank row or a stray separator. `[Playwright]` _(**New [S101].** §4.13.6's naming rule. `contacts` permits a company-only row — all three of `first_name`, `last_name` and `company_name` are nullable — so this is a real state, not a defensive check.)_
+- A-49c The `contact_type` label renders from **`CONTACT_TYPE_LABELS`**, never the raw enum — `building_dept` renders as **"Building Dept"**. The status pill carries its **text label**, never colour alone. `[Playwright]` _(**New [S101].** §4.13.6. `building_dept` and `other_external` are the two values that make a raw-enum build visibly wrong, which is why the criterion names one.)_
+- A-49d `/m/contacts` renders **no `notes` and no `tags`**, under every role. `[Playwright]` _(**New [S101].** §4.13.6's cut. `getContacts()` does `select('*')` so both arrive in the payload for every caller — the cut is UI-only, and this is the criterion that holds it. Same shape as A-46, and the reason is the same: RLS grants the row either way.)_
 
 **Team (§4.13.5)**
 
 - A-47 `/m/team` binds to `getMembers()` (`company_members`) and **not** to `getTeamMembers()` (`profiles`) — subcontractor members appear, and no `profiles.role` is rendered. `[live + Playwright]` _(§4.13.5. The two are not interchangeable and the wrong one silently drops every sub from the roster.)_
 - A-47b The count on §3.3's Team tile equals the number of rows `/m/team` lists. `[Playwright]` _(§4.13.5. Both are bound to `getMembers()`; this is what stops the badge and the screen drifting, the same guarantee D-16 gives the punch counter.)_
 - A-47c `/m/team` offers **no** invite, deactivate, role-change or password-reset control, and renders **no** pay or cost rate. `[Playwright]` _(§4.13.5's cut list; the rate half is the §4.11.8 precedent.)_
+- A-47d `/m/team` chips are **All / Crew / Subs**, single-select, bound to `member_type` — `crew` and `subcontractor`, the only two values `company_members_member_type_check` permits — and each changes the rows listed. `[Playwright]` _(**New [S101].** §4.13.5's chips had no criterion. Unlike M-29's, these two **do** cover the domain, so All = Crew ∪ Subs and a build can be checked against that.)_
+- A-47e A member's initials avatar is tinted with `schedule_color`, and a member whose `schedule_color` is null falls back to §2's amber rather than rendering an untinted or transparent chip. `[Playwright]` _(**New [S101].** §4.13.5 states the fallback in a clause; `company_members.schedule_color` is nullable and the null case is what a build skips.)_
 
 **Settings (§4.13.7)**
 
 - A-48 `/m/settings` renders **no editable control of any kind** — no input, no select, no toggle, no save — signed in as **owner**. `[Playwright]` _(§4.13.7. Read-only for every role including Owner is the ruling; testing the Owner is the only test that can fail, since a gated role would see nothing either way.)_
-- A-48b `/m/settings` renders the signed-in `display_name`, the `member_type`, the company `name`, and the company `timezone` in mono. `[Playwright]` _(§4.13.7's two bound blocks. The positive half, so "read-only" is not satisfied by an empty screen.)_
+- A-48b `/m/settings` renders the signed-in `display_name`, the `member_type`, **the signed-in role**, the company `name`, and the company `timezone` in mono. `[Playwright]` _(§4.13.7's two bound blocks. The positive half, so "read-only" is not satisfied by an empty screen. **Role added [S101]** with the correction to §4.13.7: it is bound to a **new named function**, not to the mobile layout, whose `profiles` select never carried it.)_
+- A-48e `/m/settings` reaches the signed-in role through a **named service function**, not an inline Supabase query in the page, and **not** through a prop or context added to `MobileShell`. `[shell]` _(**New [S101].** §4.13.7's correction rules the mechanism, not just the output — A-48b would pass on either. This is the criterion that fails if the shell is widened to courier data it does not render, which is what the ruling rejected.)_
 - A-48c `/m/settings` renders **no** OT threshold, week-start day, paid-break rule or GPS mode. `[Playwright]` _(§4.13.7's cut list. `getCompanyTimeSettings()` returns all four alongside the timezone the screen does render, so this is the easiest cut in §4.13 to undo by accident — and the OT one would reintroduce exactly what **D-35** removed from 7a.)_
 - A-48d `/m/settings` carries **no** Sign out control. `[Playwright]` _(§4.13.7. Sign out lives in §3.3's sheet; two routes to one destructive action is how they end up with different confirmations.)_
+
+**Design tokens (§2)**
+
+- A-50 Every currency figure anywhere on `/m` renders as **`$1,234.56`** — leading `$`, comma thousands separators, **exactly two decimals** — with negatives as **`-$1,234.56`** (minus before the symbol) and a **null amount as the em-dash `—`, never `$0.00`**. `[Playwright]` _(**New [S101], D-46.** §2's money token. Written against the **rendered output** rather than a function name on purpose: §2 leaves the formatter's home open (mobile one-liner now, `packages/shared/utils/` eventually), so a criterion naming a function would break on the move while a criterion naming the string survives it. The null case is the one a naive `toLocaleString` gets wrong — `Number(null ?? 0)` renders `$0.00`, and on a field screen that is a different fact from "not recorded".)_
 
 **Regression**
 
@@ -3210,6 +3506,38 @@ now stands is six screens, M-25 … M-30. What the pass turned up, beyond the tw
 | **Retention and read access for location data** | D-34 records more than before — a denied permission is now a durable fact about a person rather than an absence. Who may read `gps_in`, and for how long it is kept, are unaddressed. `time_clock_sessions` follows the standard company-scoped RLS with no role floor on these columns. |
 | **The desktop markup derivative** | Unchanged from the seventh pass — out of scope, logged as tech debt in a parallel session. |
 
+### Eleventh ruling pass [S101, Josh] — location, expenses roles, checked_in_at, CO intent, money format
+
+Seven rulings, **D-40 … D-46** in §0. Five close items this document had been carrying as open; two are
+new. Plus the two spec defects the pre-build verification found.
+
+| # | Question | **Ruling** | Applied in |
+| - | -------- | ---------- | ---------- |
+| 21 | Who reads location, and for how long? | **OWNER/ADMIN ONLY. 30 DAYS.** Neither half is enforced today and **both need a migration**, not a UI change. | **D-40**; §4.12.1a |
+| 22 | Are crew told in-app? | **NO.** Reasoning recorded as Josh's; possible employment-law dimension **logged, not advised on**. | **D-41**; §4.12.1a; A-7n |
+| 23 | `deliveries.checked_in_at`? | **YES.** The RPC becomes a state transition. Specced, **not migrated**. | **D-42**; §7c; TECH_DEBT #134 |
+| 24 | Expenses — who enters/views/edits? | **Everyone enters and views; everyone edits their own; only Owner/Admin edit anything.** **A-45d stands.** | **D-43**; §4.13.3 |
+| 25 | 7a fallback order with no fix? | **RECENTLY-USED**, then alphabetical for members with no history. **No source function exists** — said plainly. | **D-44**; §4.12.1; A-7l2 rewritten, A-7l3 |
+| 26 | CO lifecycle on mobile? | **INTENT RECORDED, SCREEN DEFERRED.** Does not reverse D-26. | **D-45**; §4.11.3 |
+| 27 | What does money look like on `/m`? | **`$1,234.56` / `-$1,234.56` / `—`.** Desktop's existing format, cited not invented. **§2 token**, so the next money screen inherits it. | **D-46**; §2; A-50 |
+
+**Two spec defects fixed, both found by the pre-build verification rather than by a ruling:**
+
+- **§4.13.7 claimed a query that does not exist.** "The signed-in role comes from the `profiles` read the
+  mobile layout already performs" — `app/m/layout.tsx:42` selects `company_id` only, and **`role` was
+  never in that query**. Corrected with the superseded sentence quoted. **Ruled: a second read in the
+  page via a new named function, not an extended layout** — the blast-radius comparison is in §4.13.7,
+  and the deciding factor is that `MobileShell` is mounted by every screen and would become a courier
+  for data it does not render. A-48b amended, **A-48e added** to assert the mechanism rather than just
+  the output.
+- **M-29 Contacts had no criteria at all** — the same class of gap the S98 audit caught. **A-49 … A-49d
+  added**, covering the chips (including that the five uncovered contact types stay reachable under
+  "All"), the `company_name` fallback, the label map, and the `notes`/`tags` cut.
+
+**Plus the unasserted list mechanics across the other four:** A-44d/A-44e (ordering, null `project_label`),
+A-45g/A-45h (chips, receipts→M-9), A-46d/A-46e (chips, nullable `license_number`), A-47d/A-47e (chips,
+null `schedule_color`). And the **empty-state copy** M-27, M-28 and M-29 were missing.
+
 ### Still open after the ninth pass [S100]
 
 **Flagged, not decided** — each surfaced while applying D-36/D-37 and writing §4.13:
@@ -3220,6 +3548,11 @@ now stands is six screens, M-25 … M-30. What the pass turned up, beyond the tw
 | ~~**The Dashboard tile — cut, keep, or keep-as-attention-feed?**~~ | **CLOSED [S100, D-38] — CUT.** The recommendation was accepted in the tenth pass. Kept in this list rather than deleted so the question's short life is visible: raised and answered within one session. |
 | **What currency looks like on `/m`** | M-26 is the first money on mobile. §2 fixes the typeface (mono, like every number) and says nothing about symbol, thousands separator, or how a negative renders. **One answer is needed before a second money screen exists to disagree with it.** Cheap now, a reconciliation later. |
 | **Does `subcontractors` need a real role floor?** | New finding of the TECH_DEBT #117 class, on a different table: `select('*')` plus a policy with no role floor puts `default_hourly_rate`, `default_markup_percent` and `ein` in every role's payload. §4.13.4 cuts them at the UI and says the cut is UI-only. **Out of scope for M6M** — it is a Module 2 / Financial-Visibility-Floor question, and belongs in TECH_DEBT next to #117 rather than being solved inside a mobile spec. |
+| ~~**Should mobile show LESS than RLS returns on expenses?**~~ | **CLOSED [S101, D-43] — no.** Everyone enters and views; everyone edits their own; only Owner/Admin edit anything. **A-45d stands.** The ruling turned out to be *wider* than the live policies rather than narrower — see §4.13.3's comparison table for the two gaps it opens against `expenses_select_scoped` and `expenses_update_authorized`. |
+| ~~**The Dashboard tile**~~ | **CLOSED [S100, D-38] — cut.** |
+| **NEW [S101] — does `expenses_select_scoped` get widened to honour "everyone views"?** | D-43's "everyone views" clause is **not what the policy does**: `crew_member` and `subcontractor` are absent from its role array and see only rows they authored. Closing that is a migration widening the array, filed as owed work. It is the *opposite* of a role gate, so the Financial Visibility Floor does not block it — an expense is actual cost. **Not written, not scheduled.** |
+| **NEW [S101] — does "edits their own" mean always, or only while pending?** | `expenses_update_authorized` allows an author to edit their own **only while `status = 'pending'`**. D-43's wording does not settle whether that qualifier is intended or accidental. **Genuinely ambiguous in the words — ask rather than migrate.** |
+| **NEW [S101] — #117's scope question now has a second consumer.** | D-45 defers the mobile CO authoring screen but records the intent. Authoring puts `net_delta` on `/m` at the point of entry, and `change_orders_select_visible` still has no role floor and no author scoping. **#117's open question — authored-by scope versus assigned-project scope — should be answered before that screen is built.** |
 | **Tap-to-call on M-28** | `company_members` has no phone column; `profiles` has one and is readable company-wide by every role, but **no named list function selects it**. §4.13.5 cuts the feature rather than deriving it. Enabling it is one added column in one existing `select` — recorded so the decision is visible rather than quietly taken. |
 
 ### Tenth ruling pass [S100, Josh] — Dashboard cut, hamburger confirmed
