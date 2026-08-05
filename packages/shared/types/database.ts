@@ -5447,6 +5447,101 @@ export type Database = {
           },
         ]
       }
+      sync_conflicts: {
+        Row: {
+          author_member_id: string
+          captured_at: string
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          is_deleted: boolean | null
+          project_id: string | null
+          rejected_body: Json
+          resolution_note: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          server_updated_at: string
+          status: string
+          target_row_id: string
+          target_table: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          author_member_id: string
+          captured_at: string
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          project_id?: string | null
+          rejected_body: Json
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          server_updated_at: string
+          status?: string
+          target_row_id: string
+          target_table: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          author_member_id?: string
+          captured_at?: string
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          project_id?: string | null
+          rejected_body?: Json
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          server_updated_at?: string
+          status?: string
+          target_row_id?: string
+          target_table?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_conflicts_author_member_id_fkey"
+            columns: ["author_member_id"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sync_conflicts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sync_conflicts_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sync_conflicts_resolved_by_fkey"
+            columns: ["resolved_by"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tag_options: {
         Row: {
           category: string
