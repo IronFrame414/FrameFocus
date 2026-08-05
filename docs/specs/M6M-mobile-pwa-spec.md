@@ -174,6 +174,9 @@
 | D-29 | Hazard → incident escalation  | **CONTEXT ONLY.** [S99, Josh] 7c's hazard toggle offers "File an incident report", which opens a **blank** 7e pre-filled with project and date. **No draft row is written. Nothing persists unless the user submits.** A hazard flag is not an incident. §4.12.3, §4.12.5. |
 | D-30 | The four unenforced UI rules  | **DB CONSTRAINTS.** [S99, Josh] Required `work_performed`, injury-must-name-a-party, orderless-check-in-still-needs-a-project, and the damage-photo rule become a **third migration** — specced in **§7c**, not written here. **Where a constraint cannot reach, §7c says so plainly rather than pretending.** |
 | D-31 | Markup display source         | **REVERSED [S99, Josh] — the DERIVATIVE is the display source.** Overturns D-21's third-pass Option A. Save writes an annotated derivative; the viewer indicates markup and **toggles back to the original by swapping files**. Per the _Mobile Photos_ handoff. **Option A's premise — desktop-annotated photos with `markup_data` and no derivative — no longer applies: no existing photos need preserving.** §4.7a rewritten; A-23e2/A-23g2 deleted, A-23f–A-23s rewritten. |
+| D-33 | 7a project pre-selection      | **NO PRE-SELECTION. SORT NEAREST-FIRST.** [S99, Josh] No project is chosen when M-5 opens; the crew member taps one. The list is **ordered by proximity** so the likely-right project is at the top. **This extends D-27's principle from type to project** — the app does not guess and let the user correct. The "Here" GPS chip becomes a **status indicator on the nearest card, not a selection**. Rationale: wrong-project time lands in job costing. §4.12.1; A-7l. |
+| D-34 | GPS at clock events           | **ALWAYS REQUESTED, NEVER BLOCKING, REASON RECORDED.** [S99, Josh] No opt-out — no setting, toggle or skip. Requested at every clock in and clock out. A missing fix **never** blocks: `gps_in`/`gps_out` stay nullable. **Why a fix is absent is recorded in a `reason` field INSIDE the existing jsonb — no new column** — mapped from the browser Geolocation API's own error codes. §4.12.1a; A-7k–A-7k3. |
+| D-35 | OT week line on 7a            | **CUT.** [S99, Josh] 7a shows **no derived overtime figure**. Same shape as D-19's progress cut: the data exists (`companies.ot_threshold_hours`, `week_starts_on`) and is deliberately not surfaced. §4.12.1b; A-7m. |
 | D-32 | The mid-shift switcher (7b)   | **ADOPTED.** [S99, Josh] A gap in this spec, not a contradiction — §4.5a already recorded it as owed and pre-committed its constraints. **A-7j is REWRITTEN, not satisfied**, and **A-7g is revived onto 7b**. 7b must close-and-open (never edit in place), honour the six-type/three-and-three table, and carry a note field. §4.5a, §4.12.2. |
 | D-24 | "Up next" binding             | **Bound to the schedule.** [S98, Josh] The next upcoming item on the project, from the existing calendar UNION; no milestone concept is introduced. §4.3; §8a; A-11f–A-11j. _(Renumbered [S98]: this ruling was previously cited as "D-6", which is offline-capable actions.)_ |
 
@@ -1241,11 +1244,121 @@ corrected afterwards via 7b. **That is D-25's default-then-switch model, which D
 **Also bends:** the handoff's amber **"Switch task or project"** control on the on-the-clock state now
 navigates to **M-20** rather than acting in place (A-7j2).
 
-**NOT resolved — carried to §11 as an open question:** 7a **pre-selects** the scheduled/nearest project
-with an amber border and a green "Here" GPS chip. D-27's "no default" is scoped to the **type**; A-7b says
-no *type* is pre-selected. **Nothing locked forbids a pre-selected project.** It is contrary to D-27's
-spirit — _"not something the app guesses and the user corrects afterwards"_ — but not to its letter, so it
-is not resolved by ruling here.
+**⛔ CONTRADICTION — project pre-selection. RULED [S99, D-33]: NO PRE-SELECTION, SORT BY PROXIMITY.**
+
+_Superseded, quoted:_ _"**NOT resolved — carried to §11 as an open question:** 7a **pre-selects** the
+scheduled/nearest project with an amber border and a green "Here" GPS chip. D-27's "no default" is scoped
+to the **type**; A-7b says no *type* is pre-selected. **Nothing locked forbids a pre-selected project.** It
+is contrary to D-27's spirit … but not to its letter, so it is not resolved by ruling here."_
+
+**Josh ruled the spirit governs. D-27 now extends from type to project:** the app does not guess and let
+the user correct.
+
+- **Nothing is selected when M-5 opens.** No amber border, no implicit choice. "Clock in" stays disabled
+  until the crew member **taps** a project (for the three types that require one).
+- **The list sorts nearest-first**, so the likely-right project is the top row. Proximity changes
+  **order**, never **selection** — this is the whole distinction, and a build that "helpfully" selects
+  row 0 after sorting has reimplemented the thing the ruling removed.
+- **The "Here" chip survives with a changed job: it is a STATUS INDICATOR on the nearest card, not a
+  selection.** It reports "you appear to be at this one". It carries no selected styling, and tapping the
+  card is still required.
+
+**Why the tap is required, recorded so it is not optimised away later:** a wrong-project clock-in writes
+`time_segments.project_id`, which flows into **job costing**. A mis-attributed shift is not a UI
+annoyance — it is money on the wrong job, discovered at review if at all. That cost is why a tap is
+cheaper than a correction.
+
+**Consequence for the sort:** ordering by proximity needs a position, and D-34 makes a fix best-effort. The
+list must therefore have a **defined order when no fix exists** — proximity is an enhancement to ordering,
+never a precondition for rendering the list. Which fallback order (scheduled-first, recently-used,
+alphabetical) is **not ruled**; see §11.
+
+#### 4.12.1a GPS at clock events (D-34 [S99, Josh])
+
+M6M had **no** GPS ruling before this; D-34 reverses nothing and binds the build. The handoff's line —
+_"GPS is captured at clock events for verification and displayed as status — never a blocker"_ — is
+adopted and made precise.
+
+**Three rules:**
+
+1. **No opt-out.** There is **no setting, toggle or skip control** to disable location. The app requests
+   GPS at **every** clock in and clock out. (The OS-level permission prompt is not an app opt-out — it is
+   outside the app's control and is exactly what rule 3 exists to record.)
+2. **Never blocking.** `time_clock_sessions.gps_in`/`gps_out` are nullable and **stay nullable**. A crew
+   member inside a steel building, in a basement or underground **starts their shift**. No spinner that
+   must resolve, no confirmation dialog, no degraded button.
+3. **The reason for an absent fix is recorded** — see below.
+
+##### Why a fix is absent, recorded in the existing jsonb — no new column
+
+**The problem being solved:** today a denied permission and a genuine signal failure both produce the same
+thing — nothing — and are **indistinguishable in the data**. One is a policy question about a crew member;
+the other is a jobsite condition. They should not look alike.
+
+**Shape.** `gps_in`/`gps_out` already hold `GpsFix` (`time-tracking-client.ts:23-28`):
+`{ lat, lng, accuracy?, captured_at? }`. On failure the same column takes a **failure object** instead:
+
+```
+{ "reason": "permission_denied", "error_code": 1, "captured_at": "…" }
+```
+
+**No column is added.** A row therefore has three distinguishable states, which is the point:
+
+| `gps_in` | Meaning |
+| -------- | ------- |
+| `{ lat, lng, … }` | A fix was acquired |
+| `{ reason, error_code, … }` | **We asked and failed, and this is why** |
+| `NULL` | **Nothing was recorded at all** — a legacy row, or a write path predating D-34. Not "no signal". |
+
+**The vocabulary is the browser's, not invented.** Source: the `GeolocationPositionError` codes passed to
+`navigator.geolocation.getCurrentPosition`'s error callback. Mapping, stated so it is auditable:
+
+| Browser constant | `error_code` | `reason` |
+| ---------------- | ------------ | -------- |
+| `PERMISSION_DENIED` | `1` | `permission_denied` |
+| `POSITION_UNAVAILABLE` | `2` | `position_unavailable` |
+| `TIMEOUT` | `3` | `timeout` |
+
+`error_code` is stored **alongside** `reason` deliberately: the numeric code is the API's stable contract,
+the string is what a human reads in a query. Storing only the string would make a future vocabulary change
+silently lossy. A fourth state — the API absent entirely (no `navigator.geolocation`) — has **no browser
+code**; `reason: "unsupported"` with `error_code: null` is the natural extension, and it is flagged rather
+than ruled (§11).
+
+> **⚠️ A LIVE DESKTOP CONSUMER BREAKS ON THIS, and it is in scope to say so.**
+> `apps/web/app/dashboard/timeclock/timesheets/live-board.tsx:129` renders
+> `{row.gps_in != null ? ' · on site' : ''}`. It treats **any non-null** `gps_in` as "on site". Once a
+> failure writes a jsonb object rather than NULL, **a crew member whose GPS was denied would display as
+> "· on site"** — the exact opposite of the truth, on the board a supervisor watches.
+> **The check must become "has coordinates", not "is not null"** — e.g. `row.gps_in?.lat != null`.
+> This is a required change of D-34, not an optional cleanup. It is one line, it is on desktop, and A-28
+> does not shield it because A-28 protects `apps/web/app/dashboard/**` from *this spec's* changes — this
+> is a defect D-34 would introduce, so D-34 owns it.
+
+#### 4.12.1b The OT week line is CUT (D-35 [S99, Josh])
+
+The handoff's 7a carries _"This week 32.5 h · **7.5 to OT**"_ so overtime is visible before it is earned.
+**Ruled: cut. 7a shows no derived overtime figure.**
+
+**Same shape as D-19's progress cut** — but for a different reason, and the difference is worth stating.
+D-19 cut the progress bar because **the figure had no source in the schema**. Here the data *does* exist:
+`companies.ot_threshold_hours` and `companies.week_starts_on` are both live columns and the figure is
+genuinely derivable. **It is deliberately not surfaced.**
+
+**Why, and this is the load-bearing part:** `week_starts_on` is **re-bucketing**, per TECH_DEBT #92 —
+week windows and derived OT are computed at read time from the *current* setting, so changing it
+re-groups **all historical sessions** into new weeks and re-derives OT for past periods. Josh accepted
+that in S86 as a one-time consequence of a rarely-changed setting, on a **desktop, Owner/Admin** surface
+with a caption explaining it. **Putting the derived figure on a crew phone changes who is exposed to it:**
+a crew member would watch "7.5 to OT" shift without explanation, on a screen with no room for the caption
+and no authority to ask about it. The figure is not wrong — it is unstable in a way that only makes sense
+to someone who can see the setting.
+
+**What 7a keeps:** the hero counter and the current segment. Hours worked *this shift* are a fact of the
+session, not a derivation over a re-bucketable window.
+
+**Reversible by ruling.** If crew should see OT, that is a decision about exposure and about #92's caption,
+not a build detail.
 
 #### 4.12.2 7b · Mid-shift segment switcher → **M-20** (`/m/timeclock/switch`) — **ADOPTED (D-32)**
 
@@ -2115,6 +2228,14 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 - A-7j **REWRITTEN [S99, D-32] — the prohibition becomes a requirement, and its guard survives.** A mid-shift switch **is** offered, at **M-20** (`/m/timeclock/switch`), reached from M-5's on-the-clock state. `[Playwright]` _(Original, quoted: "**No mid-shift segment switch is offered on any screen in this spec.** (§4.5a. The switcher is GAP-8's. This criterion exists so a build does not helpfully add one that edits a segment in place — which `time_segments_update_authorized` refuses for a crew member — and so the absence is a recorded decision rather than an oversight.)" **Note it carried TWO purposes: prohibit the screen, and prohibit edit-in-place. Only the first is overturned** — the second becomes A-7j2, which is why this is a rewrite and not a deletion.)_
 - A-7j2 **NEW [S99, D-32] — the edit-in-place guard A-7j was really protecting.** A switch **closes the open segment and inserts a new one**; **no path issues an UPDATE against an ended segment.** `[live]` _(`time_segments_update_authorized` lets a member end their **own open** segment but not alter an ended one; `time_segments_insert_authorized` gates inserts on `owns_open_session(session_id)`. `[live]`, not `[Playwright]` — the assertion is that the database refuses, which a browser test cannot distinguish from a UI that simply never tries.)_
 - A-7j3 **NEW [S99, D-32]** The switcher's type picker offers **all six** types, and applies the same three-and-three project rule as clock-in — project row present and required for `work`/`material_run`/`warranty`, **absent** for `travel`/`shop`/`break`. `[Playwright]` _(§4.12.2. The handoff's 2×2 grid shows four; §4.5a's table is the authority. A four-tile grid means a crew member can clock into `material_run` and never switch back to it.)_
+- A-7k **NEW [S99, D-34] — fix acquired.** With location granted and a position available, clock-in succeeds and `gps_in` holds **coordinates** (`lat`/`lng` present). `[live]`
+- A-7k2 **NEW [S99, D-34] — permission denied.** With location **denied**, **clock-in still succeeds**, and `gps_in` holds `reason: "permission_denied"`, `error_code: 1` — **not NULL, and not coordinates.** `[live]` _(§4.12.1a. Two failures in one: a build that blocks the shift, and a build that writes NULL and loses the distinction between "denied" and "never asked".)_
+- A-7k3 **NEW [S99, D-34] — position unavailable.** With permission granted but no fix obtainable, **clock-in still succeeds**, and `gps_in` holds `reason: "position_unavailable"`, `error_code: 2`. `[live]` _(§4.12.1a. The steel-building case. Distinguishable from A-7k2 in the stored row — that is the whole reason the reason field exists.)_
+- A-7k4 **NEW [S99, D-34]** **No control anywhere disables location capture** — no setting, toggle, or skip on M-5 or in settings. `[Playwright]` _(§4.12.1a rule 1. The OS permission prompt is not an app opt-out.)_
+- A-7k5 **NEW [S99, D-34]** A surface that reports "on site" does so from **coordinates**, not from `gps_in` being non-null — a denied-permission session **never** renders as on site. `[Playwright]` _(§4.12.1a. Pins the `live-board.tsx:129` defect D-34 would otherwise introduce. Written against the behaviour rather than the file so it survives a refactor.)_
+- A-7l **NEW [S99, D-33]** **No project is selected when M-5 opens**, and the project list is ordered **nearest-first**. "Clock in" stays disabled until a project is tapped, for the three types that require one. `[Playwright]` _(§4.12.1. The failure this catches is a build that sorts by proximity and then selects row 0 — which satisfies "sorted" and reintroduces the guess. Assert both: order changed, selection empty.)_
+- A-7l2 **NEW [S99, D-33]** With **no** GPS fix the project list still renders in a defined order and clock-in still works. `[Playwright]` _(§4.12.1. Proximity is an enhancement to ordering, never a precondition for the list. Composes with A-7k2/A-7k3 — the denied and unavailable paths must both reach a usable picker.)_
+- A-7m **NEW [S99, D-35]** **No derived overtime figure appears on M-5** — no "to OT", no weekly total, no threshold countdown. `[Playwright]` _(§4.12.1b. Written as an absence assertion, like A-10d and A-11e for the D-19 cut, because the data exists and a build could helpfully surface it.)_
 - A-7j4 **NEW [S99, D-32]** Switching **captures a note for the segment being closed**, unless that segment is a `break`. `[live]` _(The handoff's 7b has no note field and its footer is just "Start segment" — but closing a segment *is* a segment end, so `time_segments_note_on_end_check` applies. Without this the switch throws on every non-break segment. See A-7h's correction.)_
 
 **Section screens (§4.11) — all new [S98]**
@@ -2347,11 +2468,15 @@ shell checks. Two of these deserve their mechanism spelled out because the asser
 
 **House rule.** Every fix still needs a failing-then-passing assertion. Under D-18 that rule is now
 satisfiable for every criterion in §10 except A-26, which is manual by nature.
-## §11 — Decision register (twenty-six ruled [S98–S99, Josh]; four open, none blocking)
+## §11 — Decision register (twenty-nine ruled [S98–S99, Josh]; one open, out of scope)
 
-> **[S99]** Five further rulings — **D-28…D-32** — closed GAP-8 and reversed the markup display rule. They
-> are recorded in the **seventh ruling pass** at the end of this section, with four items left genuinely
-> open and listed rather than guessed. The S98 header read _"twenty-one ruled; nothing open"_.
+> **[S99, first pass]** Five rulings — **D-28…D-32** — closed GAP-8 and reversed the markup display rule
+> (**seventh ruling pass**). The S98 header read _"twenty-one ruled; nothing open"_.
+>
+> **[S99, second pass]** Three more — **D-33…D-35** — closed three of the four items that pass left open
+> (**eighth ruling pass**). **The only item still open is the desktop markup derivative, ruled out of
+> scope.** Five smaller questions surfaced while applying D-33/D-34 and are flagged, not decided — listed
+> under "Still open after the eighth pass".
 
 The eight questions from the S98 gap pass are closed, as are the three follow-ups from the second ruling
 pass, the display question from the third, the pin gap from the fourth, both audit items in the fifth, and
@@ -2528,14 +2653,48 @@ A-7h's harness moved `[Playwright]` → `[live]` because the assertion is a data
 **§11 is a register, not a queue — but these four are genuinely open and are recorded rather than
 guessed.** Nothing here blocks the build.
 
-| Item | Status | Why it is open |
-| ---- | ------ | -------------- |
-| **7a pre-selects a project** | **NEEDS A RULING** | D-27's "no default" is scoped to the **type**; A-7b forbids a pre-selected *type*. Nothing locked forbids a pre-selected *project*. Contrary to D-27's spirit — _"not something the app guesses and the user corrects afterwards"_ — but not to its letter. Resolving it by inference would be exactly the over-reach §4.12 exists to avoid. |
-| **GPS capture (7a)** | **UNSPECCED BY RULING [S99, Josh]** | `time_clock_sessions.gps_in`/`gps_out` exist (jsonb, nullable), so the handoff's "captured at clock events, never a blocker" is schema-backed and consistent with the nullability. **No criteria invented.** Behaviour on permission denial is undecided. |
-| **OT week line (7a)** | **UNSPECCED BY RULING [S99, Josh]** | `companies.ot_threshold_hours` and `week_starts_on` both exist, so "This week 32.5 h · 7.5 to OT" is derivable. **No criteria invented.** Note TECH_DEBT #92: changing `week_starts_on` re-buckets historical weeks, and a mobile surface makes that visible to crew. |
-| **The desktop markup editor writes no derivative** | **SEPARATE WORK ITEM [S99, Josh] — outside this build** | D-31 makes the derivative the display source, so a desktop-annotated photo with no derivative renders **unmarked** on mobile. Ruled explicitly as **not fixed here**; M6M states no criterion for it. Recorded so the consequence is not lost. |
+**[S99, second pass] Three of these four are now RULED — D-33, D-34, D-35.** The table is kept with each
+row's original wording so the question is legible next to its answer.
+
+| Item | Status | Original reason it was open → **resolution** |
+| ---- | ------ | ------------------------------------------- |
+| **7a pre-selects a project** | ✅ **RULED — D-33** | _"D-27's 'no default' is scoped to the **type** … Nothing locked forbids a pre-selected *project*. Contrary to D-27's spirit … but not to its letter."_ → **The spirit governs. No pre-selection; sort nearest-first; the "Here" chip becomes a status indicator.** §4.12.1; A-7l, A-7l2. |
+| **GPS capture (7a)** | ✅ **RULED — D-34** | _"No criteria invented. Behaviour on permission denial is undecided."_ → **Always requested, no opt-out, never blocking, and the reason for an absent fix is recorded in the existing jsonb** from the browser's own error codes. §4.12.1a; A-7k–A-7k5. |
+| **OT week line (7a)** | ✅ **RULED — D-35** | _"No criteria invented. Note TECH_DEBT #92: changing `week_starts_on` re-buckets historical weeks."_ → **CUT.** #92 is the reasoning, not a footnote: a crew phone is the wrong surface for a figure that silently re-buckets. §4.12.1b; A-7m. |
+| **The desktop markup editor writes no derivative** | 🔶 **STILL OPEN — out of scope** | D-31 makes the derivative the display source, so a desktop-annotated photo with no derivative renders **unmarked** on mobile. Ruled explicitly as **not fixed here**; M6M states no criterion for it. **[S99] Logged as tech debt in a parallel session; stays recorded here as open.** |
 
 Two smaller items with no criterion attached, noted where they arose rather than invented into rules:
 **flattening quality** at thumbnail size (A-23p's deletion removed the text-legibility rule and nothing
 replaced it, §10), and **7b's timeline bar**, adopted as drawn with no criterion because it is derived
 display over `time_segments` and introduces no data.
+
+---
+
+### Eighth ruling pass [S99, Josh] — closing the open items
+
+Three of the four items left open by the seventh pass are ruled. Recorded as **D-33 … D-35** in §0.
+
+| # | Question | **Ruling** | Applied in |
+| - | -------- | ---------- | ---------- |
+| 14 | 7a project pre-selection? | **NO PRE-SELECTION; SORT NEAREST-FIRST.** Extends D-27 from type to project — the app does not guess and let the user correct. The "Here" chip becomes a **status indicator**, not a selection. Wrong-project time lands in job costing. | **D-33**; §4.12.1; A-7l, A-7l2 |
+| 15 | GPS? | **ALWAYS REQUESTED, NEVER BLOCKING, REASON RECORDED.** No opt-out. Nullable columns stay nullable. Absence is explained by a `reason` + `error_code` **inside the existing jsonb**, mapped from `GeolocationPositionError`. | **D-34**; **§4.12.1a** (new); A-7k–A-7k5 |
+| 16 | OT week line? | **CUT.** The data exists and is deliberately not surfaced — D-19's shape, TECH_DEBT #92's reasoning. | **D-35**; **§4.12.1b** (new); A-7m |
+
+**One required change to existing desktop code, owned by D-34.**
+`app/dashboard/timeclock/timesheets/live-board.tsx:129` reads `gps_in != null ? ' · on site' : ''`.
+Once a failed fix writes an object instead of NULL, **a denied-permission session renders as "· on site"**.
+The test must become "has coordinates". This is a defect D-34 introduces, so D-34 fixes it — it is not
+shielded by A-28, which protects desktop from *this spec's* scope creep, not from its consequences.
+A-7k5 asserts the behaviour rather than the file.
+
+### Still open after the eighth pass
+
+**Flagged, not decided** — each surfaced while applying D-33/D-34 and none was ruled:
+
+| Item | Why it is flagged rather than decided |
+| ---- | ------------------------------------- |
+| **Is the crew told location is being captured?** | D-34 mandates capture with **no opt-out**, which makes notice a separate question from consent. The OS permission prompt is not notice from FrameFocus — it names the browser, not the employer, and says nothing about retention or who reads it. Whether M-5 carries a persistent line, a one-time explainer, or nothing is **not ruled**, and it is the kind of question that is cheaper to answer before the screen ships than after. Likely has an employment-law dimension that is outside this spec entirely. |
+| **Fallback order when there is no fix** | D-33 sorts nearest-first; D-34 makes a fix best-effort, so "no fix" is a normal state, not an edge. The list needs a defined order then — scheduled-first, recently-used, or alphabetical. A-7l2 asserts a *defined* order exists without naming which. |
+| **`navigator.geolocation` absent entirely** | The three browser error codes cover permission and signal. A browser with no Geolocation API produces **no code at all**. `reason: "unsupported"`, `error_code: null` is the natural extension of §4.12.1a's table; it is **not ruled**, and it is nearly unreachable on the PWA's target browsers. |
+| **Retention and read access for location data** | D-34 records more than before — a denied permission is now a durable fact about a person rather than an absence. Who may read `gps_in`, and for how long it is kept, are unaddressed. `time_clock_sessions` follows the standard company-scoped RLS with no role floor on these columns. |
+| **The desktop markup derivative** | Unchanged from the seventh pass — out of scope, logged as tech debt in a parallel session. |
