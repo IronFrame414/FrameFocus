@@ -499,7 +499,7 @@ test.describe('M-26 · Expenses', () => {
     expect(all).toBeGreaterThanOrEqual(mine);
   });
 
-  test('A-45d · no UI role check — the rendered set is what the service returns', async ({
+  test('A-45d · no UI ROLE check — one declared exception, and it is role-blind', async ({
     page,
   }) => {
     await page.goto('/m/expenses');
@@ -510,6 +510,36 @@ test.describe('M-26 · Expenses', () => {
     expect(rows > 0 || empty === 1).toBe(true);
     const body = (await page.getByTestId('m-content').textContent()) ?? '';
     expect(body).not.toMatch(/not permitted|no access|restricted/i);
+
+    // AMENDED [S103, D-49]: the rendered set is what getExpenses() returns with
+    // ONE declared exception — is_retainage rows, excluded for EVERY role. The
+    // exception is role-blind, so this criterion still forbids a role branch;
+    // A-45i is what proves the exclusion actually happens.
+  });
+
+  test('A-45i · no retainage row renders — the criterion that fails if the filter goes', async ({
+    page,
+  }) => {
+    await page.goto('/m/expenses');
+    const rows = page.getByTestId('m-expense-row');
+    const n = await rows.count();
+
+    // NOT VACUOUS, and this is the part worth stating. The identity this suite
+    // signs in as (crew) CAN read retainage rows through RLS — verified S103
+    // under the S90 impersonation harness: 3 retainage rows readable, 0 of them
+    // authored by this member, all arriving via the role arm D-47 added. So if
+    // app/m/expenses/page.tsx's `!e.is_retainage` filter were deleted, those
+    // rows WOULD appear here and this test WOULD fail.
+    expect(n).toBeGreaterThan(0);
+
+    // Asserted on the rendered supplier because is_retainage is deliberately
+    // NOT in the DOM — putting the flag in the markup to make it testable would
+    // leak the very thing being hidden. The PAGE filters on the column; only
+    // the TEST reads the label, which is the right way round.
+    for (let i = 0; i < n; i++) {
+      const text = (await rows.nth(i).textContent()) ?? '';
+      expect(text, `row ${i}`).not.toMatch(/Retainage held/i);
+    }
   });
 
   test('A-45e · no job-cost ROLLUP figure — no labor, burden or committed total', async ({

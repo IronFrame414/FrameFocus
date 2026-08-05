@@ -74,10 +74,32 @@ export default async function MobileExpensesPage({
     getMyMember(),
   ]);
 
+  // ── D-49: RETAINAGE IS EXCLUDED, FOR EVERY ROLE ──────────────────────────
+  // M-26 IS mobile's Receipts tab, and desktop's Receipts tab excludes exactly
+  // these rows (expenses-page-client.tsx:99 filters out everything in
+  // getBillsAndCommitments(), whose predicate includes is_retainage.eq.true).
+  // Applying the same exclusion is what "mobile follows the same rules as
+  // desktop" MEANS here — desktop's rule for retainage is a UI filter, not RLS.
+  //
+  // FILTER THE COLUMN, NEVER THE SUPPLIER STRING. `supplier` reads
+  // "Retainage held — {sub display_name}" (20260729010000:712) — a GENERATED
+  // LABEL, not a flag. `is_retainage` is the boolean that means it.
+  //
+  // ROLE-BLIND ON PURPOSE. A-45d forbids a UI ROLE check and still does; this
+  // exclusion applies to owner and crew alike. Filtering for crew but not for
+  // Owner would introduce exactly the role gate A-45d has always banned.
+  //
+  // THE FILTER IS UI-ONLY. expenses_select_scoped still RETURNS these rows —
+  // D-49 changed nothing at the database — so any other consumer of
+  // getExpenses() will see them. Same class as TECH_DEBT #117 and #132, and the
+  // desktop half of it is #136. A-45i is the criterion that fails if this line
+  // is deleted.
+  const visible = rows.filter((e) => !e.is_retainage);
+
   const expenses =
     active === 'mine' && myMember
-      ? rows.filter((e) => e.author_member_id === myMember.id)
-      : rows;
+      ? visible.filter((e) => e.author_member_id === myMember.id)
+      : visible;
 
   // §4.13.3 binds receipts to getExpenseReceipts(expenseId) — one call per
   // expense. N+1 by construction, accepted for a field user's list: the
