@@ -6309,6 +6309,10 @@ export type Database = {
         }
         Returns: Json
       }
+      submit_delivery_check_in: {
+        Args: { p_delivery_id: string }
+        Returns: undefined
+      }
       supersede_instrument_rate: {
         Args: {
           p_rate_id: string
