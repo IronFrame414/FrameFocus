@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { getProjectPhotos, getUploaderNames } from '@/lib/services/photos';
+import { getProjectPhotos, getReceiptFile, getUploaderNames } from '@/lib/services/photos';
 import { getMyProfile } from '@/lib/services/profiles';
 import { PhotoViewer, type ViewerPhoto } from './viewer';
 
@@ -44,13 +44,27 @@ export default async function PhotoViewerPage({
 }: {
   params: { projectId: string; fileId: string };
 }) {
-  const [photos, profile] = await Promise.all([
+  const [gallery, profile] = await Promise.all([
     getProjectPhotos(params.projectId),
     getMyProfile(),
   ]);
 
-  const index = photos.findIndex((p) => p.id === params.fileId);
-  if (index === -1) notFound();
+  // M-9's SUBJECT IS NOT ONLY THE GALLERY [S107].
+  //
+  // A receipt is an image a field user needs to look at, and M-26 links here
+  // for exactly that. It is NOT a gallery member — §4.8 is the project's photo
+  // grid, and a receipt belongs to an expense — so it is resolved on its own
+  // and shown as a SET OF ONE. That is what keeps prev/next, `n of m` and the
+  // filmstrip honest: a receipt has no neighbours, so it is not given any.
+  //
+  // Before this, every receipt link 404'd — 100% of them, because M-26 uploads
+  // receipts as category 'receipts' and this page resolved only 'photos'.
+  const galleryIndex = gallery.findIndex((p) => p.id === params.fileId);
+  const receipt = galleryIndex === -1 ? await getReceiptFile(params.projectId, params.fileId) : null;
+  if (galleryIndex === -1 && !receipt) notFound();
+
+  const photos = receipt ? [receipt] : gallery;
+  const index = receipt ? 0 : galleryIndex;
 
   const names = await getUploaderNames(photos.map((p) => p.created_by ?? '').filter(Boolean));
 
@@ -84,6 +98,10 @@ export default async function PhotoViewerPage({
       index={index}
       projectId={params.projectId}
       canDelete={canDelete}
+      // MARKUP IS FOR PHOTOS, NOT RECEIPTS. This hides the entry point; the
+      // rule is enforced independently by getPhoto()'s category filter, so a
+      // hand-typed /markup URL 404s rather than relying on a hidden control.
+      canMarkup={receipt === null}
     />
   );
 }

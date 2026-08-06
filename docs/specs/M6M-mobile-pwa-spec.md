@@ -980,6 +980,31 @@ Tap a tile → M-9. Long-press enters multi-select for bulk share/delete. Tab ba
 
 Dark chrome `#0d1220`, dark status bar.
 
+##### M-9's SUBJECT — the gallery, **or a receipt** [S107]
+
+M-9 shipped resolving its subject **only** from `getProjectPhotos()`, i.e. `files.category = 'photos'`.
+M-26 links a row's receipt here (§4.13.3, A-45h) and uploads receipts as **`category = 'receipts'`**, so
+**every receipt link 404'd — 100% of them, not intermittently.** A-45h did not catch it because it
+asserted the href's *shape* and never followed it.
+
+**Ruled: M-9 resolves a receipt too, rather than a second viewer being built.** A receipt is an image a
+field user needs to read, and §4.9 already owns zoom, pan, the filmstrip and the gestures; duplicating
+that for one file type buys nothing and drifts the moment either side changes.
+
+**A receipt is NOT a gallery member.** `getProjectPhotos()` is unchanged — §4.8 is the project's photo
+grid, and a receipt belongs to an expense. It is resolved on its own (`getReceiptFile()`) and presented
+as a **set of one**, which is what keeps `n of m`, prev/next and the filmstrip truthful: a receipt has no
+neighbours, so it is given none.
+
+**Three photo assumptions that explicitly do NOT carry over.** Each is stated because inheriting any of
+them silently is the failure mode this ruling exists to prevent:
+
+| | Photo | Receipt |
+| - | ----- | ------- |
+| **Markup** | offered in the ⋮ menu; M-10 writes `markup_data` + a derivative | **Not offered and not reachable.** `canMarkup={false}` removes the entry point, **and** `getPhoto()` — M-10's only resolver — now filters `category = 'photos'`, so a hand-typed `/photos/{id}/markup` 404s. Two independent gates: hiding a control is not a rule. |
+| **The derivative** | `displayUrl` is the `.markup.jpg` when annotated (D-31) | **Never consulted.** Resolved with `annotated: false` *unconditionally*, so `derivativePathFor()` is never called, no `.markup.jpg` is sought beside a receipt, and `derivativeMissing` stays false rather than reporting a missing file that was never meant to exist. |
+| **The source badge** | one of §4.8's four: log · delivery · safety · punch | **`null` — no badge.** No `'receipt'` member is added to `PhotoSource`: that union is §4.8's badge vocabulary, and a receipt never appears in M-8, so widening it would add a badge to a gallery that can never render one. §4.8's rule stands — a badge is provenance, never invented. |
+
 Header row: 22px **close ✕**, centred filename 15px/700 with mono `3 of 34` beneath, **⋮ overflow** right
 (markup, set as cover, move, report). A fixed **330px image stage**, full-bleed, no radius, with 40px
 translucent prev/next circles inset 14px. A **filmstrip** of 52px thumbnails (`gap:7px`); the current one
@@ -3342,7 +3367,7 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 - A-45e `/m/expenses` renders **no** labor cost, burden, committed total, retainage or job-cost rollup figure under any role. `[Playwright]` _(§4.13.3's cut list. `getJobCostRollup()` is one call away and carries all five.)_
 - A-45f `/m/expenses` offers **no** approve, reject, capture or allocation control under any role, including Owner. `[Playwright]` _(§4.13.3. Read surface in v1.)_
 - A-45g The chip row renders exactly **Mine / Pending / All**, single-select, and each changes the rows listed. "Pending" returns the same set as `getPendingExpenses()`. `[live + Playwright]` _(**New [S101].** §4.13.3's chips had no criterion. The `getPendingExpenses()` half is what stops the chip and that function drifting apart — they are specced as the same predicate.)_
-- A-45h Tapping a row's receipt opens **M-9**, the existing viewer, and **no second image surface is built** under `/m/expenses`. `[Playwright]` _(**New [S101].** §4.13.3 binds receipts to `getExpenseReceipts()` and says "no second image surface"; nothing tested the second half, which is the one a build violates by adding a lightbox.)_
+- A-45h **REWRITTEN [S107].** Tapping a row's receipt **navigates to M-9 and M-9 RENDERS** — the stage and the action row are on screen — and the ⋮ menu, **opened**, offers **no Markup item**; and **no second image surface is built** under `/m/expenses`. `[Playwright]` _(**New [S101]**, rewritten because it PASSED VACUOUSLY: it asserted the href's shape and never followed it, while every receipt link 404'd — M-26 uploads `category = 'receipts'` and M-9 resolved only `'photos'`. A shape assertion cannot see a broken destination. Two things the rewrite is careful about: it asserts a RENDERED screen rather than a URL, since a 404 keeps the URL; and it OPENS the overflow menu before asserting Markup's absence, because the item only exists in the DOM while the menu is open — checking a closed menu would pass even if markup were fully available, which is the same vacuity being removed. §4.9's subject-resolution table is the rule.)_
 
 **Subs & Vendors (§4.13.4)**
 

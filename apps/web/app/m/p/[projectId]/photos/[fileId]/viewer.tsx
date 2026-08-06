@@ -60,11 +60,23 @@ export function PhotoViewer({
   index,
   projectId,
   canDelete,
+  canMarkup = true,
 }: {
   photos: ViewerPhoto[];
   index: number;
   projectId: string;
   canDelete: boolean;
+  /**
+   * False for a RECEIPT [S107]. Markup is a photo-only act: a receipt is a
+   * document to read, not a surface to annotate, and M-10 writes a
+   * `.markup.jpg` derivative beside whatever it edits.
+   *
+   * ABSENT, NOT DISABLED — the same rule §4.5a applies to the project block on
+   * a projectless segment type: a greyed control invites a tap that can never
+   * succeed. And this is presentation only; the route itself refuses a
+   * non-photo category (getPhoto), so hiding it is the courtesy, not the gate.
+   */
+  canMarkup?: boolean;
 }) {
   const router = useRouter();
   const photo = photos[index];
@@ -237,14 +249,16 @@ export function PhotoViewer({
               role="menu"
               className="absolute right-0 top-[48px] z-50 w-[190px] overflow-hidden rounded-[12px] border border-white/15 bg-[#161d2f]"
             >
-              <Link
-                href={`/m/p/${projectId}/photos/${photo.id}/markup`}
-                data-testid="m-viewer-markup"
-                role="menuitem"
-                className="flex min-h-[44px] items-center px-[14px] text-[15px] font-semibold text-white"
-              >
-                Markup
-              </Link>
+              {canMarkup ? (
+                <Link
+                  href={`/m/p/${projectId}/photos/${photo.id}/markup`}
+                  data-testid="m-viewer-markup"
+                  role="menuitem"
+                  className="flex min-h-[44px] items-center px-[14px] text-[15px] font-semibold text-white"
+                >
+                  Markup
+                </Link>
+              ) : null}
               <button
                 type="button"
                 role="menuitem"

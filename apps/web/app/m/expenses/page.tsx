@@ -199,10 +199,12 @@ export default async function MobileExpensesPage({
                   </span>
 
                   {/* §4.13.3 — receipts open into M-9, the EXISTING viewer. No
-                      second image surface is built here (A-45h). M-9 is a later
-                      slice, so this route 404s for now — the same accepted state
-                      as the sheet tiles before their screens landed: a link
-                      points at its real destination rather than a placeholder. */}
+                      second image surface is built here (A-45h). [S107] M-9 now
+                      RESOLVES a receipt: it shipped resolving only category
+                      'photos', so every one of these links 404'd. The stale note
+                      that used to sit here blamed "M-9 is a later slice", which
+                      stopped being true when M-9 landed and left a 100% failure
+                      reading as a known-and-accepted state. */}
                   {receiptId ? (
                     <Link
                       href={`/m/p/${e.project_id}/photos/${receiptId}`}

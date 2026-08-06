@@ -626,13 +626,44 @@ test.describe('M-26 · Expenses', () => {
     const n = await links.count();
     if (n === 0) test.skip(true, 'no expense with a receipt visible to this identity');
     for (let i = 0; i < n; i++) {
-      // M-9's route shape. It 404s until M-9 is built — the link points at its
-      // real destination rather than a placeholder, the same accepted state the
-      // sheet tiles were in before their screens landed.
       await expect(links.nth(i)).toHaveAttribute('href', /^\/m\/p\/[0-9a-f-]+\/photos\/[0-9a-f-]+$/);
     }
     // No lightbox, no <dialog>, no inline <img> gallery on this screen.
     expect(await page.getByTestId('m-content').locator('img, dialog').count()).toBe(0);
+
+    // ⚠️ THE ASSERTIONS ABOVE PASSED WHILE EVERY ONE OF THESE LINKS 404'd
+    // [S107]. They check the href's SHAPE and never that the destination
+    // resolves — and it did not: M-26 uploads receipts as category 'receipts'
+    // while M-9 resolved only 'photos', so the failure rate was 100%, not
+    // intermittent. FOLLOW the link and assert a rendered viewer.
+    //
+    // THE TIMEOUTS ARE EXPLICIT AND THIS IS WHY [S107]. M-9 is the first
+    // heavy route this spec reaches, and in `next dev` it COLD-COMPILES on the
+    // first request — measured at 4.5s / 900 modules, against Playwright's 5s
+    // default. The first run of this test lost by ~half a second: the compile
+    // finished, but the assertion had already given up and the navigation was
+    // abandoned. Once warm the same route serves in ~500ms, and m-photos.spec
+    // exercises it repeatedly without trouble.
+    //
+    // So this is COMPILE latency, not product latency, and the number is
+    // raised deliberately rather than to paper over a slow screen. #135 is the
+    // same family, and CI matters more than local here: it is ALWAYS cold, has
+    // no warm-up step, and would fail this on a correct build.
+    const COLD_COMPILE_MS = 30_000; // auth.setup.ts uses the same allowance
+    await links.first().click();
+    await expect(page).toHaveURL(/\/m\/p\/[0-9a-f-]+\/photos\/[0-9a-f-]+$/, {
+      timeout: COLD_COMPILE_MS,
+    });
+    await expect(page.getByTestId('m-viewer-actions')).toBeVisible({ timeout: COLD_COMPILE_MS });
+    await expect(page.getByTestId('m-stage-image')).toBeVisible({ timeout: COLD_COMPILE_MS });
+
+    // MARKUP IS NOT OFFERED ON A RECEIPT. The item lives INSIDE the overflow
+    // menu, which only renders when open — asserting its absence against a
+    // closed menu would pass even if markup were fully available, which is the
+    // same shape of vacuous check this test just replaced. So: open, then look.
+    await page.getByTestId('m-viewer-overflow').click();
+    await expect(page.getByTestId('m-viewer-menu')).toBeVisible();
+    expect(await page.getByTestId('m-viewer-markup').count()).toBe(0);
   });
 });
 

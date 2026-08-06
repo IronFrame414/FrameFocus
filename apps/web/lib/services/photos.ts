@@ -175,6 +175,20 @@ export async function getPhoto(fileId: string, projectId: string): Promise<Photo
     .from('files')
     .select('*')
     .eq('id', fileId)
+    // MARKUP IS A PHOTO-ONLY ACT [S107]. This function's ONLY consumer is
+    // M-10 (the markup screen), and without this filter it resolved ANY file
+    // by id — so once M-9 learned to display receipts, a hand-typed
+    // /photos/{receiptId}/markup would have let someone annotate a receipt and
+    // write a `.markup.jpg` derivative beside it. Guarding at the resolver
+    // rather than the route means the markup screen cannot be handed a
+    // non-photo by any caller, present or future.
+    //
+    // KNOWN, NOT FIXED HERE: this still does not verify the file belongs to
+    // `projectId` — a file from another project of the same company resolves
+    // under this project's URL. Pre-existing and RLS-bounded (company scope
+    // plus can_view_project still apply). Filed in TECH_DEBT rather than
+    // widened into this change.
+    .eq('category', 'photos')
     .eq('is_deleted', false)
     .maybeSingle();
 
@@ -202,6 +216,79 @@ export async function getPhoto(fileId: string, projectId: string): Promise<Photo
     displayUrl,
     originalUrl,
     derivativeMissing,
+  } satisfies PhotoRecord;
+}
+
+/**
+ * A RECEIPT, resolved as a viewable subject for M-9 [S107].
+ *
+ * WHY M-9 AND NOT A SECOND VIEWER. A receipt is an image a field user needs to
+ * look at, and §4.9 already owns zoom, pan, the filmstrip and the gesture
+ * handling. A second surface would duplicate all of it for no gain and would
+ * drift the moment either side changed.
+ *
+ * WHY NOT JUST WIDEN getProjectPhotos(). That function is M-8's GALLERY list.
+ * §4.8 is the project's photo gallery; a receipt belongs to an expense, not to
+ * the day's site photos, and folding it in would put receipts in the grid, in
+ * the day groupings and in every other viewer's filmstrip. The gallery is
+ * unchanged — this resolves ONE file, addressed directly.
+ *
+ * THE THREE PHOTO ASSUMPTIONS THAT DO **NOT** CARRY OVER:
+ *
+ *  1. MARKUP. Not offered and not reachable. `canMarkup={false}` removes the
+ *     entry point in the viewer, and `getPhoto()` above now refuses any
+ *     non-photo category, so the M-10 route 404s for a receipt even when typed
+ *     by hand. Two independent gates, because hiding a control is not a rule.
+ *
+ *  2. THE DERIVATIVE. `resolveUrls(file, false)` — annotated is FORCED false
+ *     rather than derived from `markup_data`. `derivativePathFor()` is
+ *     therefore never consulted, no `.markup.jpg` is ever sought beside a
+ *     receipt, and `derivativeMissing` is false rather than a lie about a file
+ *     that was never supposed to exist. This holds even if a row somehow
+ *     carried markup_data, which is the point of forcing it.
+ *
+ *  3. THE SOURCE BADGE. Stays `null`, which renders NO badge. Deliberately no
+ *     `'receipt'` member is added to `PhotoSource`: that union is §4.8's badge
+ *     vocabulary (log / delivery / safety / punch), and a receipt never appears
+ *     in M-8, so widening it would add a badge to a gallery that can never show
+ *     one. §4.8's rule stands — a badge is provenance, never invented.
+ */
+export async function getReceiptFile(
+  projectId: string,
+  fileId: string
+): Promise<PhotoRecord | null> {
+  const supabase = await createClient();
+
+  const { data } = await supabase
+    .from('files')
+    .select('*')
+    .eq('id', fileId)
+    .eq('project_id', projectId)
+    .eq('category', 'receipts')
+    .eq('is_deleted', false)
+    .maybeSingle();
+
+  if (!data) return null;
+  const file = data as FileRecord;
+
+  // annotated: false, UNCONDITIONALLY — see point 2 above.
+  const { displayUrl, originalUrl } = await resolveUrls(file, false);
+
+  return {
+    id: file.id,
+    file_name: file.file_name,
+    file_path: file.file_path,
+    created_at: file.created_at,
+    created_by: file.created_by,
+    tags: file.tags,
+    ai_tags: file.ai_tags,
+    hasMarkup: false,
+    markup: null,
+    source: null,
+    sourceId: null,
+    displayUrl,
+    originalUrl,
+    derivativeMissing: false,
   } satisfies PhotoRecord;
 }
 
