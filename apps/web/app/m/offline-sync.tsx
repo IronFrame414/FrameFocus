@@ -130,12 +130,41 @@ export function OfflineSyncProvider({ children }: { children: React.ReactNode })
     async (input: EnqueueInput) => {
       await getQueue().enqueue(input);
       await refresh();
+      // §7.2 item 3 — ask the worker for a Background Sync wake-up. On
+      // Chromium the 'sync' event fires when connectivity returns even if
+      // this tab is backgrounded; the worker answers by posting
+      // 'm6m-queue-sync' back (see the listener below), which calls the SAME
+      // sync() as everything else. iOS has no SyncManager — the catch makes
+      // this a silent no-op there and the online-event/backoff path carries
+      // it alone, as before. Never a second retry path.
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.ready
+          .then((reg) =>
+            (reg as ServiceWorkerRegistration & {
+              sync?: { register(tag: string): Promise<void> };
+            }).sync?.register('m6m-queue-sync')
+          )
+          .catch(() => {});
+      }
       // Captured while online (a transient failure path, or the last moment of
       // signal): try immediately rather than waiting for an event.
       if (navigator.onLine) void sync();
     },
     [getQueue, refresh, sync]
   );
+
+  // §7.2 item 3, the receiving half: the worker's Background Sync hook posts
+  // {type: 'm6m-queue-sync'} and it lands here — one more trigger for the one
+  // retry path. The literal matches public/sw.js; a plain JS worker cannot
+  // import this module, so the unit suite pins the pair instead.
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    const onMessage = (event: MessageEvent) => {
+      if ((event.data as { type?: string } | null)?.type === 'm6m-queue-sync') void sync();
+    };
+    navigator.serviceWorker.addEventListener('message', onMessage);
+    return () => navigator.serviceWorker.removeEventListener('message', onMessage);
+  }, [sync]);
 
   useEffect(() => {
     // Anything already queued from a previous visit starts syncing (and

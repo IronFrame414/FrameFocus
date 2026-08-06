@@ -9,6 +9,10 @@ import type { QueueEntry } from '@/lib/offline/queue';
 
 // M6M §4.4 — M-4, the offline / failure state.
 //
+// [S105] The note below predates the service worker; sw.js now exists and
+// precaches/serves THIS PAGE as the navigation fallback for /m routes, so a
+// failed navigation renders M-4's content even though the URL stays put.
+//
 // Reached two ways, per §4.4: by tapping the app-wide status strip (A-14b), or
 // when a navigation genuinely cannot be served. The SECOND route does not exist
 // yet — it needs the service worker, which is explicitly not this slice — so

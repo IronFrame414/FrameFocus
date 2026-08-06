@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
 import { getMembers } from '@/lib/services/members';
 import { MobileShell } from './mobile-shell';
+import { RegisterSw } from './register-sw';
 
 // M6M §1 — the mobile shell layout. Hosts §3.1's app bar, §3.2's tab bar,
 // §3.3's sheet and §4.4's app-wide offline strip. Nothing under app/dashboard/**
@@ -55,11 +56,16 @@ export default async function MobileLayout({ children }: { children: React.React
   ]);
 
   return (
-    <MobileShell
-      companyName={companyResult.data?.name ?? 'My Company'}
-      teamCount={members?.length ?? null}
-    >
-      {children}
-    </MobileShell>
+    <>
+      {/* §7.2 — the service worker registers from THIS layout (A-26d), so it
+          exists exactly where /m exists and nowhere else. */}
+      <RegisterSw />
+      <MobileShell
+        companyName={companyResult.data?.name ?? 'My Company'}
+        teamCount={members?.length ?? null}
+      >
+        {children}
+      </MobileShell>
+    </>
   );
 }

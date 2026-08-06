@@ -93,7 +93,7 @@ export function TimeclockScreen({
 }) {
   const router = useRouter();
   const offlineSync = useOfflineSync();
-  const entries = offlineSync?.entries ?? [];
+  const entries = offlineSync?.entries;
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
@@ -109,18 +109,19 @@ export function TimeclockScreen({
   // The insert's own payload never carries clock_out — the queue's fold rule
   // forbids it (§5.5.1) — so the clock-out is always its own update entry.
   const queuedShift = useMemo(() => {
-    const sessionInsert = entries.find(
+    const list = entries ?? [];
+    const sessionInsert = list.find(
       (e) =>
         e.entity === 'time_clock_session' &&
         e.op === 'insert' &&
         e.state === 'queued' &&
-        !entries.some(
+        !list.some(
           (u) => u.target_id === e.target_id && u.op === 'update' && 'clock_out' in u.payload
         )
     );
     if (!sessionInsert) return null;
     const segmentInsert =
-      entries.find(
+      list.find(
         (e) =>
           e.entity === 'time_segment' &&
           e.state === 'queued' &&
@@ -537,7 +538,7 @@ function OnTheClock({
           data-testid="m-clock-out-queued"
           className="mt-[12px] rounded-[10px] border border-m6m-border bg-m6m-strip-bg px-[12px] py-[10px] text-[14px] font-semibold text-m6m-navy"
         >
-          Clock-out saved offline — it will sync when you're back online.
+          Clock-out saved offline — it will sync when you&apos;re back online.
         </p>
       ) : null}
 
