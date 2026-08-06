@@ -9,19 +9,34 @@ import { RegisterSw } from './register-sw';
 // is touched (A-28).
 //
 // ---------------------------------------------------------------------------
-// THIS LAYOUT IS THE ONLY AUTH GATE ON /m. middleware.ts matches
-// ['/dashboard/:path*', '/sign-in', '/sign-up'] and NOT /m, so an unsigned
-// request reaches this file rather than being bounced earlier. Hence the
+// THIS LAYOUT IS THE ONLY AUTH *GATE* ON /m — but not the only middleware
+// concern. `/m` IS in the matcher as of [S107] (`middleware.ts` config), and
+// middleware's own redirects are all scoped to `/dashboard`, so an unsigned
+// request still reaches this file rather than being bounced earlier. Hence the
 // explicit redirect below, mirroring app/dashboard/layout.tsx.
 //
-// Two consequences worth stating rather than discovering:
-//   - Adding /m to the middleware matcher would also subject the field app to
-//     the billing-enforcement redirect to /dashboard/billing/plans, which is a
-//     desktop, Owner-only page. Nothing in M6M rules on what an expired
-//     subscription should do to a phone. Left alone; flagged.
+// ⚠️ CORRECTED [S107] — the warning that used to sit here was WRONG, and it
+// would have talked the next reader out of a safe and necessary fix. It read:
+//
+//   "Adding /m to the middleware matcher would also subject the field app to
+//    the billing-enforcement redirect to /dashboard/billing/plans."
+//
+// It does not. That block is itself guarded by
+// `pathname.startsWith('/dashboard')` (middleware.ts), so `/m` never enters it
+// — as is the unauthenticated-redirect block above it. Adding `/m` changes
+// exactly one thing: the session gets REFRESHED on mobile requests. Without
+// that, `lib/supabase-server.ts` cannot persist a refreshed token from a Server
+// Component, so a stale token made this layout's getUser() return null, this
+// file redirected to /sign-in, and middleware bounced that to /dashboard —
+// the field app landing in the desktop one.
+//
+// Still true and still worth stating:
 //   - §1: "A desktop browser opening /m gets the mobile shell; that is intended
 //     and is how it gets tested." There is no viewport or user-agent check here,
 //     deliberately — "a viewport or user-agent check is NOT the router."
+//   - Nothing in M6M rules on what an expired SUBSCRIPTION should do to a
+//     phone. That question is still open — it is simply not answered by the
+//     matcher, which was the confusion.
 // ---------------------------------------------------------------------------
 
 export default async function MobileLayout({ children }: { children: React.ReactNode }) {

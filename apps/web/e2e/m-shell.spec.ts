@@ -57,6 +57,40 @@ const PROJECT_ID = 'eaf0e25b-d60e-49c0-89b2-5612118d94b4';
 // ===========================================================================
 // A-1 — the tab bar renders on every /m/** route and does not scroll out of view
 // ===========================================================================
+// ===========================================================================
+// /m STAYS ON /m — the S107 redirect-chain regression.
+// ===========================================================================
+// An authenticated request to /m must land in the MOBILE SHELL. It used to end
+// at /dashboard, via a two-hop chain that no single file showed: the mobile
+// layout could not refresh a stale session (a Server Component cannot persist
+// cookies), redirected to /sign-in, and middleware bounced that to /dashboard.
+//
+// ⚠️ WHAT THIS CANNOT DO, stated so it is not mistaken for full cover: it runs
+// on a FRESH token (auth.setup signs in immediately before), and the defect only
+// appeared once the access token went stale — so this test would NOT have caught
+// the original bug. The assertion that would have is structural, on the matcher
+// contents, in test/middleware-matcher.test.ts. What this DOES catch is any
+// future change that sends an authenticated /m visitor to the desktop app —
+// a redirect added to the layout, a matcher rule that starts bouncing /m, or a
+// regression in the D-12 landing.
+test.describe('/m does not bounce an authenticated visitor to the desktop app', () => {
+  test('bare /m lands on the mobile shell, not /dashboard', async ({ page }) => {
+    await page.goto('/m');
+    // D-12: /m redirects to the timeclock, and must stay under /m.
+    await expect(page).toHaveURL(/\/m\/timeclock$/);
+    await expect(page).not.toHaveURL(/\/dashboard/);
+    // The shell itself rendered — a URL alone would not prove the mobile app
+    // is what loaded.
+    await expect(page.getByTestId('m-tabbar')).toBeVisible();
+  });
+
+  test('a deep /m route is not bounced either', async ({ page }) => {
+    await page.goto('/m/projects');
+    await expect(page).toHaveURL(/\/m\/projects$/);
+    await expect(page.getByTestId('m-tabbar')).toBeVisible();
+  });
+});
+
 test.describe('A-1 · tab bar is present and locked on every /m route', () => {
   for (const route of SHELL_ROUTES) {
     test(`renders on ${route}`, async ({ page }) => {

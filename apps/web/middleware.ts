@@ -111,6 +111,27 @@ export async function middleware(request: NextRequest) {
   return supabaseResponse;
 }
 
+// ---------------------------------------------------------------------------
+// EVERY ROUTE THAT NEEDS AN AUTHENTICATED SESSION MUST BE LISTED HERE.
+// ---------------------------------------------------------------------------
+// This is not only about the redirects above — it is where the Supabase session
+// gets REFRESHED. `lib/supabase-server.ts` swallows its cookie writes ("Ignored
+// in Server Components (read-only)") because a Server Component cannot set
+// cookies. Middleware can, so it is the only place a refreshed token is
+// persisted. A route left out of this matcher works right up until the access
+// token goes stale, and then fails in a way that points nowhere near the cause.
+//
+// `/m` WAS MISSING [S107] and this is what it did: the mobile layout's
+// getUser() could not refresh, saw no user, and redirected to /sign-in — where
+// this middleware DOES run, refreshed successfully, saw a valid user, and sent
+// it to /dashboard. Net effect: /m bounced to the desktop dashboard, including
+// from the PWA's start_url, so an installed app launched into the wrong app
+// with no address bar to escape it (A-26).
+//
+// Surveyed [S107]: `/m` was the only gap. Everything else calling getUser()
+// lives under /dashboard (covered), or is an API Route Handler — where
+// cookies().set() SUCCEEDS, so those refresh themselves and need no middleware.
+// invite / sign-co / reset-password are token-based and hold no session.
 export const config = {
-  matcher: ['/dashboard/:path*', '/sign-in', '/sign-up'],
+  matcher: ['/dashboard/:path*', '/m', '/m/:path*', '/sign-in', '/sign-up'],
 };
