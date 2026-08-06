@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { getExpenses, getExpenseReceipts } from '@/lib/services/expenses';
 import { getBillsAndCommitments } from '@/lib/services/payables';
 import { getMyMember } from '@/lib/services/members';
+import { emptyCopyFor, selectMine } from './select-mine';
 import { SetMobileHeader } from '../mobile-header';
 import {
   EmptyState,
@@ -131,10 +132,8 @@ export default async function MobileExpensesPage({
   const payableIds = new Set(payables.map((p) => p.id));
   const visible = rows.filter((e) => !payableIds.has(e.id));
 
-  const expenses =
-    active === 'mine' && myMember
-      ? visible.filter((e) => e.author_member_id === myMember.id)
-      : visible;
+  // A null member matches NOTHING, never everything — see select-mine.ts.
+  const expenses = active === 'mine' ? selectMine(visible, myMember?.id ?? null) : visible;
 
   // §4.13.3 binds receipts to getExpenseReceipts(expenseId) — one call per
   // expense. N+1 by construction, accepted for a field user's list: the
@@ -149,8 +148,7 @@ export default async function MobileExpensesPage({
     )
   );
 
-  const emptyCopy =
-    active === 'pending' ? 'No pending expenses.' : active === 'mine' ? 'No expenses of yours.' : 'No expenses.';
+  const emptyCopy = emptyCopyFor(active);
 
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">

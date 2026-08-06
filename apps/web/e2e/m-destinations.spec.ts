@@ -593,8 +593,26 @@ test.describe('M-26 · Expenses', () => {
     const mine = await countFor('/m/expenses?filter=mine');
     const pending = await countFor('/m/expenses?filter=pending');
     // Both chips narrow — neither can exceed the unfiltered set.
+    //
+    // ⚠️ THESE TWO ASSERTIONS ALONE PASSED WITH THE FAIL-OPEN BUG PRESENT
+    // [S107]: `mine <= all` is equally true of a filter that narrows, one that
+    // is inert, and one that returns EVERYTHING because it could not identify
+    // the caller. The null-member half is unreachable from a browser — every
+    // seeded identity has a company_members row — so it is asserted directly
+    // in test/m6m-expenses.test.ts against the extracted selectMine().
     expect(mine).toBeLessThanOrEqual(all);
     expect(pending).toBeLessThanOrEqual(all);
+
+    // When a chip yields nothing, the empty state must name WHICH chip — this
+    // is the copy the fail-open path could never reach.
+    if (mine === 0) {
+      await page.goto('/m/expenses?filter=mine');
+      await expect(page.getByTestId('m-empty')).toHaveText('No expenses of yours.');
+    }
+    if (pending === 0) {
+      await page.goto('/m/expenses?filter=pending');
+      await expect(page.getByTestId('m-empty')).toHaveText('No pending expenses.');
+    }
 
     await page.goto('/m/expenses?filter=pending');
     expect(await page.locator('[data-testid^="m-chip-"][data-active="true"]').count()).toBe(1);
