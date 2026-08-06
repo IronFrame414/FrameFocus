@@ -62,6 +62,14 @@ export async function uploadFile(
     project_id: string;
     category: FileCategory;
     tags?: string[];
+    /**
+     * Client-generated row id (§5.3, offline-ready). When present the insert
+     * is an UPSERT ON THE PRIMARY KEY, so replaying a queued photo N times
+     * produces exactly one `files` row — and a replay that finds the row
+     * already landed removes its just-uploaded duplicate blob instead of
+     * orphaning it.
+     */
+    id?: string;
   }
 ): Promise<UploadResult> {
   // Client-side size check — fail fast before touching storage.
@@ -124,17 +132,43 @@ export async function uploadFile(
   }
 
   // Insert row. Postgres defaults fill in company_id, created_by, updated_by.
+  const row = {
+    ...(options.id ? { id: options.id } : {}),
+    project_id: options.project_id,
+    category: options.category,
+    file_name: upload.name,
+    file_path: storagePath,
+    file_size: upload.size,
+    mime_type: mimeType,
+    tags: options.tags ?? [],
+  };
+
+  if (options.id) {
+    // §5.3 — idempotent on the client-generated id. ignoreDuplicates (DO
+    // NOTHING) mirrors the queue executors: a replay is byte-identical by
+    // definition, and DO UPDATE would run trigger friction for no gain.
+    // `maybeSingle` returns null when the row already existed — the earlier
+    // landing owns the bytes, so this attempt's blob is a duplicate to remove.
+    const { data, error: insertError } = await supabase
+      .from('files')
+      .upsert(row, { onConflict: 'id', ignoreDuplicates: true })
+      .select('id')
+      .maybeSingle();
+
+    if (insertError) {
+      await supabase.storage.from(BUCKET).remove([storagePath]);
+      return { success: false, error: `Database insert failed: ${insertError.message}` };
+    }
+    if (!data) {
+      await supabase.storage.from(BUCKET).remove([storagePath]);
+      return { success: true, id: options.id };
+    }
+    return { success: true, id: data.id };
+  }
+
   const { data, error: insertError } = await supabase
     .from('files')
-    .insert({
-      project_id: options.project_id,
-      category: options.category,
-      file_name: upload.name,
-      file_path: storagePath,
-      file_size: upload.size,
-      mime_type: mimeType,
-      tags: options.tags ?? [],
-    })
+    .insert(row)
     .select('id')
     .single();
 

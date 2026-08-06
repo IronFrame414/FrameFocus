@@ -2520,6 +2520,13 @@ sync_conflicts_insert_authorized
 > (no `.select()` chained onto the insert), or the write appears to fail when only the read was refused.
 > This is the same class of trap as the storage-policy helper issue in CLAUDE.md: the error surfaces far
 > from its cause.
+>
+> **⚠️ CORRECTED [S105, observed under the impersonation harness]:** the consequence is *worse* than
+> first stated. Postgres refuses `INSERT … RETURNING` outright when the new row fails the SELECT
+> policy, and **the whole statement rolls back** — a chained `.select()` does not make a successful
+> write *look* failed, it **prevents the write from landing at all**. The rule is unchanged (never
+> chain `.select()` onto this insert); the stakes are higher: the mistake would silently destroy the
+> very copy §5.6 exists to preserve. A-19j now asserts the rollback, not the mislabelled success.
 
 **Lifecycle.**
 

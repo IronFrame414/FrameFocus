@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { SessionWithSegments, TimeSegment } from '@/lib/services/time-tracking';
 import {
   clockIn,
@@ -10,6 +10,9 @@ import {
   getMyRecentProjectIds,
   type SegmentType,
 } from '@/lib/services/time-tracking-client';
+import { useOfflineSync, type OfflineSyncApi } from '../offline-sync';
+import { buildClockInEntries, buildClockOutEntries } from '@/lib/offline/capture';
+import type { QueueEntry } from '@/lib/offline/queue';
 import { SetMobileHeader } from '../mobile-header';
 import { captureGps } from './capture-gps';
 
@@ -76,24 +79,83 @@ export function TimeclockScreen({
   openSession,
   projects,
   todaySegments,
+  isOwner,
 }: {
   openSession: SessionWithSegments | null;
   projects: PickerProject[];
   todaySegments: TimeSegment[];
+  /**
+   * The role rides from the server so an OFFLINE clock-in can queue the right
+   * approval status without an rpc it cannot make: owner sessions carry NO
+   * approval state (6A §8), everyone else defaults to 'pending'.
+   */
+  isOwner: boolean;
 }) {
+  const router = useRouter();
+  const offlineSync = useOfflineSync();
+  const entries = offlineSync?.entries ?? [];
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
   });
 
+  // §5 — THE QUEUE IS THE SHADOW OF UNSYNCED TRUTH. A shift clocked in offline
+  // does not exist server-side, so `openSession` is null and the server props
+  // would show "Not clocked in" — an invitation to a double clock-in that
+  // §5.5.2's partial unique index will bounce on sync. Derive the queued open
+  // shift from the queue itself (it survives reloads via IndexedDB): a queued
+  // session INSERT with no queued clock-out UPDATE against the same target_id.
+  // The insert's own payload never carries clock_out — the queue's fold rule
+  // forbids it (§5.5.1) — so the clock-out is always its own update entry.
+  const queuedShift = useMemo(() => {
+    const sessionInsert = entries.find(
+      (e) =>
+        e.entity === 'time_clock_session' &&
+        e.op === 'insert' &&
+        e.state === 'queued' &&
+        !entries.some(
+          (u) => u.target_id === e.target_id && u.op === 'update' && 'clock_out' in u.payload
+        )
+    );
+    if (!sessionInsert) return null;
+    const segmentInsert =
+      entries.find(
+        (e) =>
+          e.entity === 'time_segment' &&
+          e.state === 'queued' &&
+          e.payload.session_id === sessionInsert.target_id
+      ) ?? null;
+    return { sessionInsert, segmentInsert };
+  }, [entries]);
+
+  // When the queued shift drains (reconnect sync landed it), the server now
+  // holds the open session the props don't know about — refresh so the screen
+  // doesn't show "Not clocked in" against a live session.
+  const hadQueuedShift = useRef(false);
+  useEffect(() => {
+    if (queuedShift) {
+      hadQueuedShift.current = true;
+    } else if (hadQueuedShift.current && !openSession) {
+      hadQueuedShift.current = false;
+      router.refresh();
+    }
+  }, [queuedShift, openSession, router]);
+
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
       <SetMobileHeader title="Timeclock" sub={today} />
       {openSession ? (
-        <OnTheClock session={openSession} projects={projects} />
+        <OnTheClock session={openSession} projects={projects} offlineSync={offlineSync} />
+      ) : queuedShift ? (
+        <QueuedOnTheClock
+          sessionInsert={queuedShift.sessionInsert}
+          segmentInsert={queuedShift.segmentInsert}
+          projects={projects}
+          offlineSync={offlineSync}
+        />
       ) : (
-        <ClockInForm projects={projects} />
+        <ClockInForm projects={projects} isOwner={isOwner} offlineSync={offlineSync} />
       )}
       <TodaySegments segments={todaySegments} />
     </div>
@@ -104,7 +166,15 @@ export function TimeclockScreen({
 // CLOCKED OUT — the D-27 interaction: pick a type → pick a project where that
 // type allows one → Clock in.
 // ===========================================================================
-function ClockInForm({ projects }: { projects: PickerProject[] }) {
+function ClockInForm({
+  projects,
+  isOwner,
+  offlineSync,
+}: {
+  projects: PickerProject[];
+  isOwner: boolean;
+  offlineSync: OfflineSyncApi | null;
+}) {
   const router = useRouter();
   const [type, setType] = useState<SegmentType | null>(null); // NO DEFAULT
   const [projectId, setProjectId] = useState<string | null>(null); // NO PRESELECTION
@@ -147,9 +217,33 @@ function ClockInForm({ projects }: { projects: PickerProject[] }) {
 
     // D-34 — ALWAYS requested, NEVER blocking. captureGps() resolves to a fix
     // or to a failure record; either way the clock-in proceeds with it.
+    // (GPS is hardware, not network — it works offline too.)
     const gps = await captureGps();
 
     const chosen = needsProject ? projectId : null;
+
+    // §5.5.1 — OFFLINE, the clock-in queues as two entries: the session insert
+    // and the first segment insert gated on it (A-7i). captured_at is the
+    // business timestamp (§5.2.1) — a 6:58 clock-in synced at 11:20 is a 6:58
+    // clock-in. No redirect: the hub is a server render the network can't
+    // serve; the parent re-renders into the queued on-the-clock view instead.
+    if (!navigator.onLine && offlineSync) {
+      const captured_at = new Date().toISOString();
+      const queued = buildClockInEntries({
+        sessionEntryId: crypto.randomUUID(),
+        segmentEntryId: crypto.randomUUID(),
+        sessionId: crypto.randomUUID(),
+        segmentId: crypto.randomUUID(),
+        first_segment: { segment_type: type, project_id: chosen },
+        gps_in: gps,
+        captured_at,
+        status: isOwner ? null : 'pending',
+      });
+      for (const entry of queued) await offlineSync.enqueue(entry);
+      setBusy(false);
+      return;
+    }
+
     const result = await clockIn({
       first_segment: { segment_type: type, project_id: chosen },
       gps_in: gps,
@@ -295,9 +389,11 @@ function ClockInForm({ projects }: { projects: PickerProject[] }) {
 function OnTheClock({
   session,
   projects,
+  offlineSync,
 }: {
   session: SessionWithSegments;
   projects: PickerProject[];
+  offlineSync: OfflineSyncApi | null;
 }) {
   const router = useRouter();
   const [now, setNow] = useState(() => Date.now());
@@ -305,6 +401,18 @@ function OnTheClock({
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // An offline clock-out of THIS server-loaded session sits in the queue as an
+  // update carrying clock_out. Derived from the queue, not local state, so it
+  // survives a reload — while it exists the session is over in fact and the
+  // clock-out controls stay hidden even though the server row is still open.
+  const queuedClockOut = (offlineSync?.entries ?? []).some(
+    (e) =>
+      e.target_id === session.id &&
+      e.op === 'update' &&
+      e.state === 'queued' &&
+      'clock_out' in e.payload
+  );
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30_000);
@@ -330,6 +438,38 @@ function OnTheClock({
 
     // D-34 applies to clock-OUT the same as clock-in.
     const gps = await captureGps();
+
+    // §5.5.1 / §5.6 — OFFLINE, the clock-out of a server-loaded shift queues
+    // as two updates: segment end, and the session's clock_out. Their
+    // `base_updated_at` is each row's updated_at AS LOADED (§5.2.2 — captured
+    // on the read path, straight off the server props): if a desktop edit
+    // lands on either row before this replays, §5.6 must see a basis to
+    // conflict on, not a null.
+    if (!navigator.onLine && offlineSync) {
+      const captured_at = new Date().toISOString();
+      const queued = buildClockOutEntries({
+        segmentEntryId: crypto.randomUUID(),
+        sessionUpdateEntryId: crypto.randomUUID(),
+        sessionId: session.id,
+        segmentId: openSegment.id,
+        end: {
+          segment_id: openSegment.id,
+          segment_type: openSegment.segment_type,
+          task_id: openSegment.task_id,
+          note: noteRequired ? note.trim() : null,
+        },
+        gps_out: gps,
+        captured_at,
+        sessionInsertEntryId: null, // the session is already on the server
+        base_session_updated_at: session.updated_at,
+        base_segment_updated_at: openSegment.updated_at,
+      });
+      for (const entry of queued) await offlineSync.enqueue(entry);
+      setBusy(false);
+      setConfirming(false);
+      setNote('');
+      return;
+    }
 
     const result = await clockOut({
       session_id: session.id,
@@ -392,7 +532,16 @@ function OnTheClock({
         Switch task or project
       </Link>
 
-      {confirming ? (
+      {queuedClockOut ? (
+        <p
+          data-testid="m-clock-out-queued"
+          className="mt-[12px] rounded-[10px] border border-m6m-border bg-m6m-strip-bg px-[12px] py-[10px] text-[14px] font-semibold text-m6m-navy"
+        >
+          Clock-out saved offline — it will sync when you're back online.
+        </p>
+      ) : null}
+
+      {confirming && !queuedClockOut ? (
         <div
           data-testid="m-clock-out-confirm"
           className="mt-[12px] rounded-[14px] border border-m6m-border bg-m6m-card p-[14px]"
@@ -437,7 +586,7 @@ function OnTheClock({
         </p>
       ) : null}
 
-      {!confirming ? (
+      {!confirming && !queuedClockOut ? (
         <button
           type="button"
           data-testid="m-clock-out"
@@ -447,6 +596,157 @@ function OnTheClock({
           Clock out
         </button>
       ) : null}
+    </div>
+  );
+}
+
+// ===========================================================================
+// QUEUED ON THE CLOCK — the shift exists only in the queue (§5.5.1's fully-
+// offline shift). Rendered off the queued entries' payloads: the session
+// insert carries clock_in, the segment insert carries type and project.
+// Clock-out here enqueues the segment-end update (which coalesces into the
+// segment's still-queued insert) and the session's clock-out update, gated by
+// depends_on on the session insert — A-16c's three-entries-two-rows shape.
+// No switch control: M-20 is a server render an offline shift cannot reach.
+// ===========================================================================
+function QueuedOnTheClock({
+  sessionInsert,
+  segmentInsert,
+  projects,
+  offlineSync,
+}: {
+  sessionInsert: QueueEntry;
+  segmentInsert: QueueEntry | null;
+  projects: PickerProject[];
+  offlineSync: OfflineSyncApi | null;
+}) {
+  const [now, setNow] = useState(() => Date.now());
+  const [confirming, setConfirming] = useState(false);
+  const [note, setNote] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(t);
+  }, []);
+
+  const clockIn = sessionInsert.payload.clock_in as string;
+  const segmentType = (segmentInsert?.payload.segment_type ?? null) as SegmentType | null;
+  const projectId = (segmentInsert?.payload.project_id ?? null) as string | null;
+  const project = projectId ? (projects.find((p) => p.id === projectId) ?? null) : null;
+  const noteRequired = segmentType !== null && segmentType !== 'break';
+
+  async function submitClockOut() {
+    if (!segmentInsert || !offlineSync) return;
+    if (noteRequired && !note.trim()) return;
+    setBusy(true);
+
+    // D-34 applies here too — a fix or a failure record, never a block.
+    const gps = await captureGps();
+
+    const captured_at = new Date().toISOString();
+    const queued = buildClockOutEntries({
+      segmentEntryId: crypto.randomUUID(),
+      sessionUpdateEntryId: crypto.randomUUID(),
+      sessionId: sessionInsert.target_id,
+      segmentId: segmentInsert.target_id,
+      end: {
+        segment_id: segmentInsert.target_id,
+        segment_type: segmentType as SegmentType,
+        task_id: null,
+        note: noteRequired ? note.trim() : null,
+      },
+      gps_out: gps,
+      captured_at,
+      // The session never came from the server: gate on its queued insert,
+      // with a null base. The engine re-bases after the insert replays, so
+      // §5.6's comparison asks a question that has an answer.
+      sessionInsertEntryId: sessionInsert.entry_id,
+      base_session_updated_at: null,
+      base_segment_updated_at: null,
+    });
+    for (const entry of queued) await offlineSync.enqueue(entry);
+    setBusy(false);
+    // The parent's queuedShift derivation sees the clock-out update and falls
+    // back to the clock-in form.
+  }
+
+  return (
+    <div>
+      <p
+        data-testid="m-clock-status"
+        className="text-center font-mono text-[13px] font-medium uppercase tracking-wide text-m6m-blue"
+      >
+        On the clock
+      </p>
+      <p
+        data-testid="m-clock-elapsed"
+        className="mt-[4px] text-center font-mono text-[52px] font-semibold leading-none text-m6m-navy"
+      >
+        {elapsed(clockIn, now)}
+      </p>
+
+      <div
+        data-testid="m-state-card"
+        className="mt-[14px] rounded-[15px] border border-m6m-border bg-m6m-card p-[15px]"
+      >
+        <p className="text-[16px] font-bold leading-tight text-m6m-navy">
+          {project ? project.name : (TYPE_LABEL[segmentType ?? ''] ?? 'On the clock')}
+        </p>
+        <p className="mt-[3px] font-mono text-[12px] text-m6m-muted">
+          {segmentType ? `${TYPE_LABEL[segmentType]} · since ${hhmm(clockIn)}` : `since ${hhmm(clockIn)}`}
+        </p>
+        <p
+          data-testid="m-queued-shift-note"
+          className="mt-[6px] font-mono text-[11px] font-semibold text-m6m-muted"
+        >
+          Saved offline — waiting to sync
+        </p>
+      </div>
+
+      {confirming ? (
+        <div
+          data-testid="m-clock-out-confirm"
+          className="mt-[12px] rounded-[14px] border border-m6m-border bg-m6m-card p-[14px]"
+        >
+          {noteRequired ? (
+            <>
+              <label
+                htmlFor="m-clock-out-note"
+                className="mb-[6px] block text-[14px] font-semibold text-m6m-navy"
+              >
+                What did you work on? <span className="text-m6m-danger">(required)</span>
+              </label>
+              <textarea
+                id="m-clock-out-note"
+                data-testid="m-clock-out-note"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                rows={2}
+                className="w-full rounded-[10px] border border-m6m-border px-[12px] py-[8px] text-[15px] text-m6m-navy"
+              />
+            </>
+          ) : null}
+          <button
+            type="button"
+            data-testid="m-clock-out-go"
+            disabled={busy || (noteRequired && !note.trim())}
+            onClick={submitClockOut}
+            className="mt-[10px] flex h-[52px] w-full items-center justify-center rounded-[12px] bg-m6m-danger text-[15px] font-bold text-white disabled:opacity-40"
+          >
+            {busy ? 'Clocking out…' : 'Confirm clock out'}
+          </button>
+        </div>
+      ) : (
+        <button
+          type="button"
+          data-testid="m-clock-out"
+          onClick={() => setConfirming(true)}
+          className="mt-[12px] flex h-[60px] w-full items-center justify-center rounded-[14px] bg-m6m-danger text-[17px] font-bold text-white"
+        >
+          Clock out
+        </button>
+      )}
     </div>
   );
 }

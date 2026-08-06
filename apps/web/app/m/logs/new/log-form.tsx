@@ -10,6 +10,8 @@ import {
   type DayPresence,
   type SubEntryInput,
 } from '@/lib/services/daily-logs-client';
+import { useOfflineSync } from '../../offline-sync';
+import { buildDailyLogEntry, buildPhotoEntry } from '@/lib/offline/capture';
 import { SetMobileHeader } from '../../mobile-header';
 
 // M6M §4.12.3 — the 7c form. Work performed is THE required field (the D-30
@@ -44,6 +46,7 @@ export function LogForm({
   subs: SubMember[];
 }) {
   const router = useRouter();
+  const offlineSync = useOfflineSync();
   const today = new Date().toISOString().slice(0, 10);
 
   const [projectId, setProjectId] = useState<string | null>(initialProjectId);
@@ -59,7 +62,12 @@ export function LogForm({
   const [openRow, setOpenRow] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<{ logId: string; hazard: boolean } | null>(null);
+  const [done, setDone] = useState<{
+    logId: string;
+    hazard: boolean;
+    queued: boolean;
+    rosterDropped: boolean;
+  } | null>(null);
 
   // Crew & hours — "auto from clock", read-only (§4.12.3). The 6A presence RPC
   // is the named source; nothing here is editable.
@@ -83,6 +91,61 @@ export function LogForm({
     if (!ready || !projectId) return;
     setBusy(true);
     setError(null);
+
+    // §5.1 / §5.5.3 — OFFLINE, the log queues as one insert entry and each
+    // photo as its own entry gated on it (depends_on), the Blob riding in the
+    // payload. On reconnect the photos upload THROUGH uploadFile — HEIC
+    // conversion included — with their client-generated fileId (§5.3).
+    //
+    // What the queue CANNOT carry: daily_log_crew and daily_log_sub_entries
+    // rows — §5.2's entity set is closed at four. Offline the presence RPC
+    // returns [] anyway; manually-entered sub hours would be silently lost,
+    // so the confirmation says so instead of pretending (§5.2.6's principle).
+    if (!navigator.onLine && offlineSync) {
+      const captured_at = new Date().toISOString();
+      const logId = crypto.randomUUID();
+      const logEntryId = crypto.randomUUID();
+      await offlineSync.enqueue(
+        buildDailyLogEntry({
+          entryId: logEntryId,
+          logId,
+          projectId,
+          fields: {
+            log_date: today,
+            work_performed: workPerformed.trim(),
+            material_used: materials.trim() || null,
+            equipment_used: equipment.trim() || null,
+            tasks_tomorrow: tomorrow.trim() || null,
+            hazards_present: hazard,
+            hazard_notes: hazard ? hazardNotes.trim() : null,
+          },
+          captured_at,
+        })
+      );
+      for (const file of photos) {
+        await offlineSync.enqueue(
+          buildPhotoEntry({
+            entryId: crypto.randomUUID(),
+            fileId: crypto.randomUUID(),
+            projectId,
+            blob: file,
+            fileName: file.name,
+            captured_at,
+            dependsOn: logEntryId,
+            dailyLogId: logId,
+          })
+        );
+      }
+      setBusy(false);
+      setDone({
+        logId,
+        hazard,
+        queued: true,
+        rosterDropped:
+          presence.length > 0 || subEntries.some((s) => s.member_id && s.hours > 0),
+      });
+      return;
+    }
 
     const result = await createDailyLog(
       projectId,
@@ -115,7 +178,7 @@ export function LogForm({
     }
 
     setBusy(false);
-    setDone({ logId: result.id, hazard });
+    setDone({ logId: result.id, hazard, queued: false, rosterDropped: false });
   }
 
   // -------------------------------------------------------------------------
@@ -130,8 +193,17 @@ export function LogForm({
           data-testid="m-log-saved"
           className="rounded-[15px] border border-m6m-border bg-m6m-card px-[16px] py-[18px] text-center text-[16px] font-bold text-m6m-navy"
         >
-          Log submitted.
+          {done.queued ? 'Log saved offline — it will sync when you’re back online.' : 'Log submitted.'}
         </p>
+        {done.rosterDropped ? (
+          <p
+            data-testid="m-log-roster-dropped"
+            className="mt-[10px] rounded-[10px] border border-m6m-border bg-m6m-strip-bg px-[12px] py-[8px] text-[13px] text-m6m-navy"
+          >
+            Crew and sub hours can&apos;t be saved offline — open the log and add them once
+            you&apos;re back online.
+          </p>
+        ) : null}
         {done.hazard && projectId ? (
           <Link
             // D-29 — a BLANK 7e pre-filled with project (the route segment)

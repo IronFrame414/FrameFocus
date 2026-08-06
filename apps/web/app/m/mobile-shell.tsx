@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase-browser';
 import { MobileHeaderProvider, useMobileHeader } from './mobile-header';
+import { OfflineSyncProvider, useOfflineSync } from './offline-sync';
 
 // M6M §3 — THE MOBILE SHELL.
 //
@@ -157,7 +158,11 @@ export type MobileShellProps = {
 export function MobileShell(props: MobileShellProps) {
   return (
     <MobileHeaderProvider>
-      <MobileShellInner {...props} />
+      {/* §5 — one queue per tab, hosted above every mobile screen so the
+          strip's pill, M-4's list and the capture screens share one truth. */}
+      <OfflineSyncProvider>
+        <MobileShellInner {...props} />
+      </OfflineSyncProvider>
     </MobileHeaderProvider>
   );
 }
@@ -496,21 +501,19 @@ function NavSheet({
 // offline, not only here." So it lives in the shell, under the app bar, and M-4
 // is what it links to (A-14b).
 //
-// WHAT IS REAL HERE AND WHAT IS NOT. `navigator.onLine` plus the online/offline
-// events is the whole detection mechanism, and it is genuine. The QUEUED COUNT
-// is 0 because the queue does not exist in this slice — §5's queue is a later
-// slice, stated in this slice's scope. It renders 0 rather than being omitted
-// because §4.4 puts the pill in the strip unconditionally, and a strip that
-// grows a new element later is a worse regression than one that starts at zero.
-// `last synced` is likewise shell-local: it is the moment this tab last SAW the
-// network, not the moment a sync last succeeded. Both become real when the
-// queue lands. Flagged.
+// THE QUEUED COUNT IS LIVE — §5's queue feeds it, and A-18 pins its meaning:
+// entries at state:'queued' ONLY, the records and files that will actually
+// upload. A conflicted entry has left the queue and is EXCLUDED — counting it
+// would promise an upload that will never happen. `last synced` remains the
+// moment this tab last saw the network. Flagged.
 // ---------------------------------------------------------------------------
 function OfflineStrip() {
   // Start ONLINE, always. navigator.onLine is not available during SSR, and
   // guessing offline would flash the strip on every first paint.
   const [offline, setOffline] = useState(false);
   const [lastOnline, setLastOnline] = useState<Date | null>(null);
+  const offlineSync = useOfflineSync();
+  const queuedCount = offlineSync?.queuedCount ?? 0;
 
   useEffect(() => {
     const sync = () => {
@@ -547,7 +550,7 @@ function OfflineStrip() {
         data-testid="m-queued-pill"
         className="shrink-0 rounded-full bg-m6m-amber/20 px-[8px] py-[2px] font-mono text-[11px] font-semibold text-m6m-navy"
       >
-        0 queued
+        {queuedCount} queued
       </span>
     </Link>
   );

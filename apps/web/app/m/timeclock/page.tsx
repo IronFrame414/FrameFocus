@@ -1,6 +1,7 @@
 import { getOpenSession, getSessions, getSessionSegments } from '@/lib/services/time-tracking';
 import { getProjects } from '@/lib/services/projects';
 import { getMyMember } from '@/lib/services/members';
+import { getMyProfile } from '@/lib/services/profiles';
 import type { TimeSegment } from '@/lib/services/time-tracking';
 import { TimeclockScreen, type PickerProject } from './timeclock-screen';
 
@@ -34,11 +35,15 @@ export default async function MobileTimeclockPage() {
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
 
-  const [openSession, projects, todaySessions, me] = await Promise.all([
+  const [openSession, projects, todaySessions, me, profile] = await Promise.all([
     getOpenSession(),
     getProjects({ status: 'active' }),
     getSessions({ from: todayStart.toISOString() }),
     getMyMember(),
+    // The role rides to the client so an OFFLINE clock-in can queue the right
+    // approval status without an rpc it cannot make: owner sessions carry NO
+    // approval state (6A §8), everyone else defaults to 'pending'.
+    getMyProfile(),
   ]);
 
   // Today's segments (§4.5's list): the caller's OWN sessions only. getSessions
@@ -62,6 +67,7 @@ export default async function MobileTimeclockPage() {
       openSession={openSession}
       projects={picker}
       todaySegments={todaySegments}
+      isOwner={profile?.role === 'owner'}
     />
   );
 }
