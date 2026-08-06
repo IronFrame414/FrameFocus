@@ -186,7 +186,7 @@
 | D-41 | In-app notice that location is captured | **NO. Crew are NOT told in-app.** [S101, Josh] The other half of the item D-34 left open. No banner, no first-run explainer, no line on M-5. **Josh's reasoning, recorded as his:** the capture is a condition of employment rather than a consent the app negotiates, and a per-clock-in notice on the one screen a crew member must use every shift is friction on a required action for a fact that does not change. **This spec records the ruling and does not endorse it as legal advice** — see §4.12.1a. |
 | D-42 | `deliveries.checked_in_at`     | **YES — the column is adopted.** [S101, Josh] Resolves TECH_DEBT #134. `submit_delivery_check_in()` becomes a **state transition** rather than a bare gate: it stamps `checked_in_at` on success, so a half-entered check-in is distinguishable from a finished one. **Specced in §7c; NOT migrated here.** |
 | D-43 | Expenses — who enters, views, edits | **Everyone enters and views. Everyone edits their own UNTIL IT IS APPROVED. Only Owner/Admin edit anything.** [S101, Josh; **edit clause CORRECTED S102**] The "views" gap is closed by **D-47**, which widens the policy. The edit clause is **corrected rather than migrated**: _superseded wording, quoted —_ _"Everyone edits their own."_ The live cap at `status = 'pending'` **is the ruling**, not a mismatch. **A-45d STANDS.** §4.13.3. |
-| D-49 | Retainage on M-26 | **FILTERED OUT, FOR EVERY ROLE. UI-ONLY, and the spec says so rather than implying enforcement.** [S103, Josh] M-26 excludes `expenses.is_retainage = true` rows — no role branch, no migration. **M-26 IS mobile's Receipts tab**, and desktop's Receipts tab excludes exactly these rows by the same mechanism. Josh's rule: *crew cannot see retainage, and all financial information on mobile follows the same rules as desktop* — and desktop's rule for retainage turns out to be **a UI filter, not RLS**, so following it means filtering in the UI. **A-45d is amended, not overridden** — the carve-out is written into the criterion so a later build cannot read it as licence to un-filter. §4.13.3. |
+| D-49 | Payables on M-26 (orig. "retainage") | **FILTERED OUT, FOR EVERY ROLE. UI-ONLY, and the spec says so rather than implying enforcement.** **⚠️ PREMISE CORRECTED [Josh, S106]:** D-49 excluded `is_retainage = true` on the stated ground that desktop's Receipts tab "excludes exactly these rows". Desktop excludes the whole `getBillsAndCommitments()` set — **five** conditions — so the ruling's justification was right about the *principle* (match desktop) and wrong about the *fact*, and the build implemented the fact. M-26 now excludes all five: `state='committed'`, `sub_contract_id`, `purchase_order_id`, `is_retainage`, **plus has-payments**. No role branch, no migration. **M-26 IS mobile's Receipts tab.** Josh's rule: *crew cannot see retainage, and all financial information on mobile follows the same rules as desktop* — and desktop's rule for retainage turns out to be **a UI filter, not RLS**, so following it means filtering in the UI. **A-45d is amended, not overridden** — the carve-out is written into the criterion so a later build cannot read it as licence to un-filter. §4.13.3. |
 | D-47 | `expenses_select_scoped` is WIDENED | **crew_member and subcontractor JOIN THE ROLE ARRAY.** [S102, Josh] Closes D-43's "everyone views" clause at the database instead of leaving it as intent. **Role array only — every other arm of the policy is byte-identical.** This is a **widening**, so nothing in the Financial Visibility Floor blocks it: an expense is *actual cost*, which the Floor makes visible to every role by design. **What each role gains sight of is stated plainly in §4.13.3** — this is the one ruling in this pass that exposes rows a role could not previously read. Migration `20260825000000`. |
 | D-48 | Location — the D-40 walk-back | **OWNER/ADMIN RESTRICTION SKIPPED. RETENTION DEFERRED.** [S102, Josh] Supersedes **both** halves of D-40. Coordinates stay on `time_clock_sessions_select_scoped`'s **existing rank ladder**, so **a foreman reads a crew member's location** and a PM reads a foreman's — narrower protection than D-40 promised, and §4.12.1a now says so outright rather than implying it. Retention is deferred with its dependency named: **`pg_cron` is not used anywhere in this repo**, so 30-day expiry is a new operational dependency, not a line of SQL. **No migration, and none owed until it is un-deferred.** |
 | D-44 | 7a fallback order with no GPS fix | **RECENTLY-USED.** [S101, Josh] Closes the D-33 open item. **There is no source function for it today** — stated plainly rather than bound to something approximate. The data exists on `time_segments`; the function does not. §4.12.1; A-7l2 rewritten. |
@@ -1949,9 +1949,41 @@ DB-enforced Owner/Admin.
 exactly what RLS returns, with no UI role check — A-45d, unchanged. What D-47 changes is **what the
 database hands it**. A-45b is rewritten accordingly: the crew arm no longer asserts "own rows only".
 
-##### Retainage is filtered out — D-49 [S103, Josh], and the filter is UI-ONLY
+##### Payables are filtered out — D-49 [S103, Josh] as CORRECTED [S106], and the filter is UI-ONLY
 
-**M-26 excludes every row where `expenses.is_retainage = true`. Every role, no branch.**
+> **⚠️ CORRECTED [Josh, S106] — D-49's premise was wrong, and the build followed the premise.**
+> D-49 was written as "retainage is filtered out", justified by the claim that this made mobile
+> **match desktop**. It did not. Desktop's Receipts tab excludes **every row in
+> `getBillsAndCommitments()`** — five conditions — while M-26 excluded one of them. So the spec, the
+> code comment and the shipped behaviour disagreed in a way that read as agreement: the comment in
+> `app/m/expenses/page.tsx` correctly described desktop as filtering "everything in
+> `getBillsAndCommitments()`" and the line beneath it filtered `!e.is_retainage`. **A correct comment
+> over wrong code passes a skim.** Ruled: M-26 must operate the same as desktop, so it excludes all
+> five.
+
+**M-26 excludes every row desktop's Receipts tab excludes — the `getBillsAndCommitments()` set.
+Every role, no branch.** That is **five** conditions, four of them `PAYABLE_OR_FILTER`
+(`payables-shared.ts:29-30`):
+
+| # | Condition | |
+| - | --------- | - |
+| 1 | `state = 'committed'` | `PAYABLE_OR_FILTER` |
+| 2 | `sub_contract_id IS NOT NULL` | `PAYABLE_OR_FILTER` |
+| 3 | `purchase_order_id IS NOT NULL` | `PAYABLE_OR_FILTER` |
+| 4 | `is_retainage = true` | `PAYABLE_OR_FILTER` — D-49's original single condition |
+| 5 | **has payments** | the inner-join arm of `getBillsAndCommitments()` |
+
+**Condition 5 is why the build calls `getBillsAndCommitments()` rather than testing rows locally.**
+A **settled manual bill** — `state` flipped back to `'actual'`, no linkage, not retainage — matches
+none of the first four and is caught only by its payments, which is a second query. `isPayableRow(e)`
+with its default `hasPayments = false` answers four of five and would silently keep those rows on the
+list. Taking the same function desktop takes its `payableIds` from is what makes the two sets
+identical rather than merely similar.
+
+> **⛔ `PAYABLE_OR_FILTER` IS READ, NEVER MODIFIED.** It is *also* the budget recompute's ORIGIN test,
+> mirrored in SQL inside `recompute_budget_item_actual` / `_committed`
+> (`20260730010000`). Any change to it silently moves budget numbers
+> (`docs/specs/money-representation.md` §4.5, locked S93). M-26 consumes it; it does not touch it.
 
 **Filter on the COLUMN, never the supplier string.** A retainage accrual's `supplier` reads
 `Retainage held — {sub display_name}` (`20260729010000_7c_accounts_payable.sql:712`), and that is a
@@ -1960,12 +1992,13 @@ database hands it**. A-45b is rewritten accordingly: the crew arm no longer asse
 the boolean is the discriminator.
 
 **Why this is "the same rules as desktop" rather than a departure from them.** Desktop's Receipts tab
-already excludes these rows — `expenses-page-client.tsx:99` filters out anything in
-`getBillsAndCommitments()`, whose predicate includes `is_retainage.eq.true`
-(`payables-shared.ts:30`) — and its Bills & Commitments tab is hidden from crew outright
-(`:77`, *"Crew has nothing in 7C — receipts only"*). **M-26 is mobile's Receipts tab.** It has no Bills
-tab, and §4.13.3 already cuts the payables rollup. Applying the same exclusion makes mobile match
-desktop; leaving it off is what made mobile diverge.
+excludes these rows — `expenses-page-client.tsx:89,99` builds `payableIds` from
+`getBillsAndCommitments()` and filters the tab against it — and its Bills & Commitments tab is hidden
+from crew outright (`:77`, *"Crew has nothing in 7C — receipts only"*). **M-26 is mobile's Receipts
+tab.** It has no Bills tab to hide, so the row-level exclusion is the whole of the parity, and
+§4.13.3 already cuts the payables rollup. **[S106] the original wording of this paragraph named only
+`is_retainage.eq.true` as desktop's predicate — true but partial, and that partial reading is what
+the build implemented.**
 
 **Why the exposure existed at all, recorded because it was self-inflicted and recent.** **D-47 created
 it.** Before that widening, `expenses_select_scoped` gave crew and subcontractors only rows they
@@ -1976,8 +2009,10 @@ the role arm D-47 added. M-26 did not go looking for these rows; the widening ha
 mobile was simply the first surface with no UI filter above it.
 
 > **⚠️ THE FILTER IS UI-ONLY. WHAT THAT MEANS, PLAINLY.**
-> `expenses_select_scoped` still returns retainage rows to crew and subcontractors — D-49 changes
-> nothing at the database. A direct PostgREST query, a future mobile screen that calls `getExpenses()`
+> `expenses_select_scoped` still returns these rows to crew — D-49 changes
+> nothing at the database. (**Subcontractors are no longer in this sentence**: Ruling 1 [S106],
+> migration `20260827000000`, removed them from `expenses_select_scoped` entirely, author arm
+> included, and added a matching floor to `expenses_insert_authorized`.) A direct PostgREST query, a future mobile screen that calls `getExpenses()`
 > without this exclusion, or any other consumer will see them. **This is the same class of protection as
 > TECH_DEBT #117 and #132, and it is recorded as such rather than described as enforcement.**
 >
@@ -3302,8 +3337,8 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 - A-45b **REWRITTEN [S102, D-47].** Signed in as **crew_member**, `/m/expenses` lists own expenses **and a teammate's expense on an assigned project** — and lists **no** expense on a project the member is not assigned to. `[live]` _(**Rewritten** because D-47 widened the policy. _Superseded text:_ _"lists only expenses that member authored — a teammate's expense on the same project does not appear."_ That asserted the pre-widening behaviour and would now fail on a correct build. **The second half is the load-bearing one**: it proves `can_view_project()` still bounds the widening to assigned projects, which is the arm the migration must not touch.)_
 - A-45c Signed in as **foreman**, `/m/expenses` lists both own expenses and a teammate's expense on an assigned project. `[live]` _(§4.13.3. Unchanged by D-47 — foreman was already in the role array. Retained as the control: if A-45b and A-45c now agree, the widening landed; if only A-45c passes, it did not.)_
 - A-45b2 **NEW [S102, D-47]** Signed in as **subcontractor**, `/m/expenses` behaves exactly as A-45b — own plus assigned-project expenses, nothing beyond. `[live]` _(§4.13.3. The role D-47 exposes most, because a subcontractor is an outside party reading the company's other costs on a shared job. Asserted separately from crew so a migration that adds only one of the two names fails visibly. **Blocked on #127** — rebuild-test has no persistent subcontractor identity; see §7d's evidence note.)_
-- A-45d **AMENDED [S103, D-49].** `/m/expenses` issues **no UI ROLE check** on `amount` — the rendered row set equals what `getExpenses()` returns for that caller, for all six roles, **with exactly one declared exception: rows where `is_retainage = true` are excluded, for every role alike.** `[live + Playwright]` _(§4.13.3. _Superseded wording, quoted:_ _"the rendered row set equals what `getExpenses()` returns for that caller, for all six roles"_ — with no exception, which D-49 makes deliberately untrue for one row type. **The exception is written into the criterion on purpose**: left implicit, a later build reads A-45d as licence to un-filter, which is the exact failure this amendment exists to prevent. Note what is unchanged — the exclusion is **role-blind**, so the criterion still forbids a role branch. A build that filters retainage for crew but shows it to Owner has introduced the role gate A-45d has always banned.)_
-- A-45i **NEW [S103, D-49]** `/m/expenses` renders **no row with `is_retainage = true`**, signed in as **owner** — the role for which RLS returns the most, and therefore the only role for which removing the filter is visible. `[live + Playwright]` _(§4.13.3. **This is the criterion that fails if the filter is deleted.** A-45d's own assertions still pass without the filter for a role whose row set happens to contain no retainage, so the absence needs its own test bound to the role that would definitely surface them. Asserted against `is_retainage`, never the `supplier` string, which is a generated label.)_
+- A-45d **AMENDED [S103, D-49; RE-AMENDED S106].** `/m/expenses` issues **no UI ROLE check** on `amount` — the rendered row set equals what `getExpenses()` returns for that caller, for all six roles, **with exactly one declared exception: rows in the `getBillsAndCommitments()` set are excluded, for every role alike.** That set is five conditions — `state='committed'`, `sub_contract_id IS NOT NULL`, `purchase_order_id IS NOT NULL`, `is_retainage=true` (the four of `PAYABLE_OR_FILTER`) **plus has-payments**, which no per-row predicate can answer. `[live + Playwright]` _(§4.13.3. _S103 wording, quoted:_ _"rows where `is_retainage = true` are excluded"_ — **one of the five**, and the narrowness is what made mobile diverge from desktop while the spec claimed parity. _Original wording, quoted:_ _"the rendered row set equals what `getExpenses()` returns for that caller, for all six roles"_ — with no exception at all. **The exception is written into the criterion on purpose**: left implicit, a later build reads A-45d as licence to un-filter. Note what is unchanged — the exclusion is **role-blind**, so the criterion still forbids a role branch. A build that filters payables for crew but shows them to Owner has introduced the role gate A-45d has always banned. Desktop additionally hides its Bills **tab** from crew; mobile has no second tab, so the row exclusion is the whole of the parity.)_
+- A-45i **NEW [S103, D-49; WIDENED S106]** `/m/expenses` renders **no row that appears in `getBillsAndCommitments()`**, signed in as **owner** — the role for which RLS returns the most, and therefore the only role for which removing the filter is visible. `[live + Playwright]` _(§4.13.3. **This is the criterion that fails if the filter is deleted.** A-45d's own assertions still pass without the filter for a role whose row set happens to contain no payables, so the absence needs its own test bound to the role that would definitely surface them. _S103 wording, quoted:_ _"renders no row with `is_retainage = true`"_ — which a build filtering only retainage passed while still listing committed bills, PO-linked costs and settled manual bills. Assert against the **id set**, never `is_retainage` alone and never the `supplier` string, which is a generated label. **A settled manual bill is the case worth building a fixture for**: it matches no `PAYABLE_OR_FILTER` arm and is caught only by condition 5.)_
 - A-45e `/m/expenses` renders **no** labor cost, burden, committed total, retainage or job-cost rollup figure under any role. `[Playwright]` _(§4.13.3's cut list. `getJobCostRollup()` is one call away and carries all five.)_
 - A-45f `/m/expenses` offers **no** approve, reject, capture or allocation control under any role, including Owner. `[Playwright]` _(§4.13.3. Read surface in v1.)_
 - A-45g The chip row renders exactly **Mine / Pending / All**, single-select, and each changes the rows listed. "Pending" returns the same set as `getPendingExpenses()`. `[live + Playwright]` _(**New [S101].** §4.13.3's chips had no criterion. The `getPendingExpenses()` half is what stops the chip and that function drifting apart — they are specced as the same predicate.)_
@@ -3683,7 +3718,7 @@ One ruling, **D-49**, and it closes an exposure the twelfth pass created.
 
 | # | Question | **Ruling** | Applied in |
 | - | -------- | ---------- | ---------- |
-| 32 | Retainage on M-26? | **FILTERED OUT, EVERY ROLE, UI-ONLY.** Option B of the four investigated: M-26 is mobile's Receipts tab, and desktop's Receipts tab excludes exactly these rows. No role branch, no migration. | **D-49**; §4.13.3; A-45d amended, A-45i new |
+| 32 | Retainage on M-26? | **FILTERED OUT, EVERY ROLE, UI-ONLY.** Option B of the four investigated: M-26 is mobile's Receipts tab, and desktop's Receipts tab excludes exactly these rows. No role branch, no migration. **⚠️ [S106] the premise "exactly these rows" was wrong** — desktop excludes the full `getBillsAndCommitments()` set (five conditions), not `is_retainage` alone. Ruling's principle upheld, scope widened to match. | **D-49**; §4.13.3; A-45d amended, A-45i widened |
 
 **The investigation is worth keeping, because the obvious reading of the question was wrong.** Josh's two
 clauses — *crew cannot see retainage* and *all financial information on mobile follows the same rules as

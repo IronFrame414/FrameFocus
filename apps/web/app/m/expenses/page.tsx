@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { getExpenses, getExpenseReceipts } from '@/lib/services/expenses';
+import { getBillsAndCommitments } from '@/lib/services/payables';
 import { getMyMember } from '@/lib/services/members';
 import { SetMobileHeader } from '../mobile-header';
 import {
@@ -69,32 +70,66 @@ export default async function MobileExpensesPage({
   // and M-2's "Mine" chips have exactly this shape. Adding an author filter to
   // a shared service for one mobile chip is a bigger change than this slice
   // should make unasked.
-  const [rows, myMember] = await Promise.all([
+  const [rows, myMember, payables] = await Promise.all([
     getExpenses(active === 'pending' ? { status: 'pending' } : undefined),
     getMyMember(),
+    // RULING 2 [S106] — the SAME source desktop's `payableIds` comes from
+    // (expenses-page-client.tsx:89). Deliberately the whole function and not a
+    // local re-test: it resolves the has-payments condition, which no
+    // predicate over an expense row alone can answer. See below.
+    getBillsAndCommitments(),
   ]);
 
-  // ── D-49: RETAINAGE IS EXCLUDED, FOR EVERY ROLE ──────────────────────────
-  // M-26 IS mobile's Receipts tab, and desktop's Receipts tab excludes exactly
-  // these rows (expenses-page-client.tsx:99 filters out everything in
-  // getBillsAndCommitments(), whose predicate includes is_retainage.eq.true).
-  // Applying the same exclusion is what "mobile follows the same rules as
-  // desktop" MEANS here — desktop's rule for retainage is a UI filter, not RLS.
+  // ── PAYABLES ARE EXCLUDED, FOR EVERY ROLE (D-49 as corrected [S106]) ─────
+  // M-26 IS mobile's Receipts tab, and desktop's Receipts tab excludes every
+  // row in getBillsAndCommitments() — NOT retainage alone.
+  //
+  // ⚠ THE COMMENT THAT USED TO SIT HERE WAS RIGHT AND THE CODE BELOW IT WAS
+  // WRONG, which is how this survived review. It said desktop "filters out
+  // everything in getBillsAndCommitments()" — an accurate description — and
+  // then the line beneath it filtered `!e.is_retainage`, one of the five
+  // conditions. A correct comment over wrong code reads as verified on a
+  // skim. D-49's own premise repeated the same claim, so the spec agreed with
+  // the comment rather than with the behaviour.
+  //
+  // THE EXCLUSION IS FIVE CONDITIONS, FOUR OF WHICH ARE PAYABLE_OR_FILTER:
+  //     state = 'committed'
+  //     sub_contract_id IS NOT NULL
+  //     purchase_order_id IS NOT NULL
+  //     is_retainage = true
+  //   plus HAS PAYMENTS — a settled manual bill (state flipped back to
+  //   'actual', no linkage) matches none of the four and is caught only by its
+  //   payments. That is why this calls getBillsAndCommitments() rather than
+  //   testing rows locally: the fifth condition needs a second query, and
+  //   isPayableRow(e) alone would silently miss it.
+  //
+  // PAYABLE_OR_FILTER IS READ, NEVER MODIFIED. It is also the budget
+  // recompute's ORIGIN test, mirrored in SQL inside
+  // recompute_budget_item_actual/_committed (20260730010000) — changing it
+  // silently moves budget numbers (money-representation.md §4.5, locked S93).
   //
   // FILTER THE COLUMN, NEVER THE SUPPLIER STRING. `supplier` reads
   // "Retainage held — {sub display_name}" (20260729010000:712) — a GENERATED
-  // LABEL, not a flag. `is_retainage` is the boolean that means it.
+  // LABEL, not a flag.
   //
   // ROLE-BLIND ON PURPOSE. A-45d forbids a UI ROLE check and still does; this
   // exclusion applies to owner and crew alike. Filtering for crew but not for
   // Owner would introduce exactly the role gate A-45d has always banned.
+  // (Desktop additionally hides its Bills TAB from crew; mobile has no second
+  // tab to hide, so the row-level exclusion is the whole of the parity.)
+  //
+  // STILL UI-ONLY. expenses_select_scoped returns these rows — nothing changed
+  // at the database — so any other consumer of getExpenses() still sees them.
+  // Same class as TECH_DEBT #117/#132, desktop half #136. A-45i fails if this
+  // is deleted.
   //
   // THE FILTER IS UI-ONLY. expenses_select_scoped still RETURNS these rows —
   // D-49 changed nothing at the database — so any other consumer of
   // getExpenses() will see them. Same class as TECH_DEBT #117 and #132, and the
   // desktop half of it is #136. A-45i is the criterion that fails if this line
   // is deleted.
-  const visible = rows.filter((e) => !e.is_retainage);
+  const payableIds = new Set(payables.map((p) => p.id));
+  const visible = rows.filter((e) => !payableIds.has(e.id));
 
   const expenses =
     active === 'mine' && myMember
