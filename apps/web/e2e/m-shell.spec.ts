@@ -34,8 +34,21 @@ const SHEET_TILES = [
 ];
 
 async function openSheet(page: Page) {
-  await page.getByTestId('m-hamburger').click();
-  await expect(page.getByTestId('m-nav-sheet')).toBeVisible();
+  // THE RETRY IS ABOUT HYDRATION, NOT ABOUT THE SHEET.
+  //
+  // The app bar is server-rendered, so the hamburger exists and is clickable
+  // before React has attached its onClick. A click in that window is not slow —
+  // it is LOST, and no timeout on the following assertion can recover it. Under
+  // a loaded dev server (several spec files, one server, cold route compiles)
+  // that window is wide enough to hit.
+  //
+  // toPass() re-runs the click until the sheet appears. THE ASSERTION IS
+  // UNCHANGED — the sheet must still open; a build where it never opens fails
+  // here exactly as before, just after a few more attempts.
+  await expect(async () => {
+    await page.getByTestId('m-hamburger').click();
+    await expect(page.getByTestId('m-nav-sheet')).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 30_000 });
 }
 
 /** A real project id on rebuild-test. A-1c only needs the ROUTE SHAPE to resolve. */

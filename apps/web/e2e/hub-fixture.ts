@@ -79,6 +79,8 @@ export type HubFixture = {
   onHoldProject: string;
   punchListId: string;
   sessionId: string | null;
+  /** Scopes create and delete so parallel spec files cannot collide. */
+  prefix: string;
   /** Dates the schedule fixtures use, so the spec can assert against them. */
   dates: { today: string; plus1: string; plus3: string; plus5: string; minus3: string };
 };
@@ -89,7 +91,18 @@ function isoDay(offsetDays: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-export async function setupHubFixture(): Promise<HubFixture> {
+// ---------------------------------------------------------------------------
+// THE PREFIX EXISTS FOR CROSS-FILE ISOLATION, AND IT IS LOAD-BEARING.
+//
+// Playwright runs spec FILES in parallel workers, and `beforeAll` runs once per
+// worker. Two files both calling setupHubFixture() would therefore run two
+// setups CONCURRENTLY — and each begins by deleting leftovers, so each would
+// delete the other's freshly-created rows mid-run. The failures that produces
+// look like flaky assertions, not like a fixture collision.
+//
+// Every file passes its own prefix; create and delete are both scoped to it.
+// ---------------------------------------------------------------------------
+export async function setupHubFixture(prefix = 'M6M'): Promise<HubFixture> {
   const env = loadEnv();
   const url = env.NEXT_PUBLIC_SUPABASE_URL;
   const service = env.SUPABASE_SERVICE_ROLE_KEY;
@@ -102,7 +115,7 @@ export async function setupHubFixture(): Promise<HubFixture> {
   const admin = createClient(url, service, { auth: { persistSession: false } });
 
   // Leftovers from an interrupted run would collide on project_number.
-  await hardDelete(admin);
+  await hardDelete(admin, prefix);
 
   const { data: contact } = await admin
     .from('contacts')
@@ -147,32 +160,32 @@ export async function setupHubFixture(): Promise<HubFixture> {
     .insert([
       {
         ...base,
-        name: 'M6M — future target',
-        project_number: 'M6M-F1',
+        name: `${prefix} — future target`,
+        project_number: `${prefix}-F1`,
         project_internal_seq: seq++,
         status: 'active',
         target_end_date: isoDay(12),
       },
       {
         ...base,
-        name: 'M6M — past target',
-        project_number: 'M6M-P1',
+        name: `${prefix} — past target`,
+        project_number: `${prefix}-P1`,
         project_internal_seq: seq++,
         status: 'active',
         target_end_date: dates.minus3,
       },
       {
         ...base,
-        name: 'M6M — no target',
-        project_number: 'M6M-N1',
+        name: `${prefix} — no target`,
+        project_number: `${prefix}-N1`,
         project_internal_seq: seq++,
         status: 'active',
         target_end_date: null,
       },
       {
         ...base,
-        name: 'M6M — on hold',
-        project_number: 'M6M-H1',
+        name: `${prefix} — on hold`,
+        project_number: `${prefix}-H1`,
         project_internal_seq: seq++,
         status: 'on_hold',
         target_end_date: null,
@@ -181,11 +194,11 @@ export async function setupHubFixture(): Promise<HubFixture> {
     .select('id, project_number');
   if (projErr || !projects) throw new Error(`fixture projects: ${projErr?.message}`);
 
-  const byNumber = (n: string) => projects.find((p) => p.project_number === n)!.id;
-  const futureProject = byNumber('M6M-F1');
-  const pastProject = byNumber('M6M-P1');
-  const nullDateProject = byNumber('M6M-N1');
-  const onHoldProject = byNumber('M6M-H1');
+  const byNumber = (n: string) => projects.find((p) => p.project_number === `${prefix}-${n}`)!.id;
+  const futureProject = byNumber('F1');
+  const pastProject = byNumber('P1');
+  const nullDateProject = byNumber('N1');
+  const onHoldProject = byNumber('H1');
 
   // Crew visibility — without these, projects_select_visible returns nothing.
   await admin.from('project_assignments').insert(
@@ -289,6 +302,7 @@ export async function setupHubFixture(): Promise<HubFixture> {
     punchListId: punchList.id,
     sessionId: null,
     dates,
+    prefix,
   };
 }
 
@@ -346,7 +360,7 @@ export async function closeSegment(f: HubFixture): Promise<void> {
 
 export async function teardownHubFixture(f: HubFixture): Promise<void> {
   await closeSegment(f);
-  await hardDelete(f.admin);
+  await hardDelete(f.admin, f.prefix);
 }
 
 /**
@@ -354,12 +368,12 @@ export async function teardownHubFixture(f: HubFixture): Promise<void> {
  * not records — leaving them soft-deleted would leak four projects into every
  * future trash view. Ordered child-first so no FK blocks the parent.
  */
-async function hardDelete(admin: SupabaseClient): Promise<void> {
+async function hardDelete(admin: SupabaseClient, prefix: string): Promise<void> {
   const { data: projects } = await admin
     .from('projects')
     .select('id')
     .eq('company_id', COMPANY_A)
-    .like('project_number', 'M6M-%');
+    .like('project_number', `${prefix}-%`);
 
   const ids = (projects ?? []).map((p) => p.id);
   if (ids.length === 0) return;

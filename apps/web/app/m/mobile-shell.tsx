@@ -109,6 +109,30 @@ export function isInsideProject(pathname: string): boolean {
   return pathname.startsWith('/m/p/');
 }
 
+/**
+ * §4.9 / §4.10 — M-9 and M-10 RUN ON THE DARK CANVAS AND OWN THEIR OWN CHROME.
+ *
+ * These are the two screens the shell steps back from entirely:
+ *
+ *   §3.2  "On the dark photo screens (M-9, M-10) the bar is REPLACED BY THAT
+ *          SCREEN'S OWN ACTION ROW" — the 4-up Save/Share/Comment/Delete row on
+ *          M-9, the Undo/Redo/Done row on M-10 (A-1, A-1b).
+ *   §4.9  its header is a close ✕, the filename with `3 of 34` beneath, and a ⋮
+ *          overflow — not §3.1's hamburger-or-chevron app bar.
+ *   §4.10 the same, with Cancel / "Markup" / Save.
+ *
+ * So the shell renders NEITHER bar here. It is a route test rather than a prop
+ * because layout.tsx is a server component and the shell is where pathname
+ * lives; A-1b asserts the replacement on both screens.
+ *
+ * M-8 is NOT chromeless — §4.8 ends "Tab bar present, Projects active" — hence
+ * the trailing segment: `/photos` alone is the gallery, `/photos/{fileId}` and
+ * below are the dark screens.
+ */
+export function isDarkCanvasScreen(pathname: string): boolean {
+  return /^\/m\/p\/[^/]+\/photos\/[^/]+/.test(pathname);
+}
+
 /** Fallback titles for screens that have not declared their own (see mobile-header.tsx). */
 function defaultTitle(pathname: string): string {
   if (pathname.startsWith('/m/timeclock')) return 'Timeclock';
@@ -148,11 +172,37 @@ function MobileShellInner({ children, companyName, teamCount }: MobileShellProps
   const activeHref = activeTabHref(pathname);
   const title = declared?.title ?? defaultTitle(pathname);
   const sub = declared !== null ? declared.sub : companyName;
+  const darkCanvas = isDarkCanvasScreen(pathname);
 
   // A route change must never leave the sheet hanging over the new screen.
   useEffect(() => {
     setSheetOpen(false);
   }, [pathname]);
+
+  // -------------------------------------------------------------------------
+  // §4.9 / §4.10 — the dark photo screens. No app bar, no tab bar; the screen
+  // supplies both (A-1, A-1b).
+  //
+  // THE OFFLINE STRIP STAYS. §4.4 is explicit that it "renders on every mobile
+  // screen while offline, not only [on M-4]" — app-wide means these two as
+  // well. Dropping it here would trade a specified guarantee for a cleaner
+  // photo, and a field user who has gone offline mid-markup is exactly who
+  // needs to know.
+  // -------------------------------------------------------------------------
+  if (darkCanvas) {
+    return (
+      <div
+        data-testid="m-shell"
+        data-chrome="dark"
+        className="flex h-[100dvh] flex-col overflow-hidden bg-m6m-canvas font-sans"
+      >
+        <OfflineStrip />
+        <main data-testid="m-content" className="min-h-0 flex-1 overflow-y-auto">
+          {children}
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div

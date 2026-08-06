@@ -480,12 +480,17 @@ test.describe('M-3 · Project sections hub', () => {
       'contacts',
       'team',
     ];
+    // `next dev` compiles a route on its first request, and this test visits
+    // eight for the first time while the other spec files hammer the same
+    // server. The BUDGET is raised; every assertion below is unchanged.
+    test.setTimeout(180_000);
+
     for (const key of built) {
       await page.goto(hub());
       const tile = page.getByTestId(`m-tile-${key}`);
       await expect(tile).toHaveAttribute('href', `/m/p/${fx.futureProject}/${key}`);
       await tile.click();
-      await expect(page).toHaveURL(new RegExp(`/m/p/${fx.futureProject}/${key}$`));
+      await page.waitForURL(new RegExp(`/m/p/${fx.futureProject}/${key}$`), { timeout: 60_000 });
       // It rendered a screen, not an error and not an empty shell.
       await expect(page.getByTestId('m-content')).toBeVisible();
       await expect(page.getByTestId('m-tabbar')).toBeVisible();
