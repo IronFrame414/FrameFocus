@@ -2,6 +2,8 @@ import { getProjects, PROJECT_STATUS_LABELS } from '@/lib/services/projects';
 import { getMyAssignedProjectIds } from '@/lib/services/project-assignments';
 import { getOpenPunchCounts } from '@/lib/services/punch';
 import { getOpenSession } from '@/lib/services/time-tracking';
+import { getCompanyTimeSettings } from '@/lib/services/company';
+import { companyToday } from '@framefocus/shared/utils/dates';
 import { SetMobileHeader } from '../mobile-header';
 import { FilterChips, daysLeftLabel, type Chip } from '../mobile-ui';
 import { ProjectsList, type ProjectCard } from './projects-list';
@@ -50,7 +52,10 @@ export default async function MobileProjectsPage({
   // honest across every chip (§8a) and keeps the punch lookup to one round trip.
   const projects = await getProjects();
 
-  const [mineIds, punch, openSession] = await Promise.all([
+  const [timeSettings, mineIds, punch, openSession] = await Promise.all([
+    // Company-tz calendar day [S106] — the days-left basis. A UTC derivation
+    // shifted every card's countdown by one every evening west of UTC.
+    getCompanyTimeSettings(),
     // Only paid for when the chip needs it — every other chip filters on a
     // column already in hand.
     active === 'mine' ? getMyAssignedProjectIds() : Promise.resolve(null),
@@ -104,7 +109,7 @@ export default async function MobileProjectsPage({
       subLine: [p.project_number, client].filter(Boolean).join(' · '),
       statusLabel: PROJECT_STATUS_LABELS[p.status] ?? p.status,
       // Signed, three states, em-dash when target_end_date is null — A-10e.
-      daysLeftLabel: daysLeftLabel(p.target_end_date),
+      daysLeftLabel: daysLeftLabel(p.target_end_date, companyToday(timeSettings.timezone)),
       // §8a binds `{total} open` for M-2. The em-dash at zero rather than
       // `0 open`, matching §4.2's own `—` example.
       punchCallout: open > 0 ? `${open} open` : '—',

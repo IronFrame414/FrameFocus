@@ -19,6 +19,8 @@ import { getProjectDeliveries, getOrderlessDeliveries } from '@/lib/services/del
 import { getProjectAssignments } from '@/lib/services/project-assignments';
 import { getFiles } from '@/lib/services/files';
 import { SetMobileHeader } from '../../mobile-header';
+import { getCompanyTimeSettings } from '@/lib/services/company';
+import { companyToday } from '@framefocus/shared/utils/dates';
 import { Tile, TileGrid, daysLeft } from '../../mobile-ui';
 import { selectUpNext, upNextDateLine } from './up-next';
 
@@ -68,10 +70,12 @@ export default async function MobileProjectHubPage({
   const project = await getProject(params.projectId);
   if (!project) notFound();
 
-  const today = new Date().toISOString().slice(0, 10);
-
-  const [punchCounts, events, changeOrders, withPo, orderless, assignments, photos] =
+  // Company-tz calendar day [S106], not UTC: this is BOTH the Up-next `>= today`
+  // boundary and the days-left basis, so a UTC derivation dropped today's own
+  // schedule row and shifted the countdown every evening west of UTC.
+  const [timeSettings0, punchCounts, events, changeOrders, withPo, orderless, assignments, photos] =
     await Promise.all([
+      getCompanyTimeSettings(),
       getOpenPunchCounts([params.projectId]),
       getCalendarEvents({ projectId: params.projectId }),
       getChangeOrders(params.projectId),
@@ -83,9 +87,10 @@ export default async function MobileProjectHubPage({
       getFiles({ project_id: params.projectId, category: 'photos' }),
     ]);
 
+  const today = companyToday(timeSettings0.timezone);
   const punch = punchCounts.get(params.projectId) ?? { mine: 0, total: 0 };
   const upNext = selectUpNext(events, today);
-  const days = daysLeft(project.target_end_date);
+  const days = daysLeft(project.target_end_date, today);
 
   const client =
     [project.contact?.first_name, project.contact?.last_name].filter(Boolean).join(' ').trim() ||

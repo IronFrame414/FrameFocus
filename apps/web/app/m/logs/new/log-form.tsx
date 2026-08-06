@@ -40,14 +40,22 @@ export function LogForm({
   projects,
   initialProjectId,
   subs,
+  today,
 }: {
   projects: Project[];
   initialProjectId: string | null;
   subs: SubMember[];
+  /**
+   * The company's calendar day, resolved SERVER-SIDE [S106]. `log_date` is a
+   * calendar date, and this form must not derive it from the handset — that is
+   * neither the company's zone (a crew member can be in another one) nor UTC.
+   * It was `new Date().toISOString().slice(0, 10)`, which recorded TOMORROW
+   * for any log filed after ~20:00 EDT.
+   */
+  today: string;
 }) {
   const router = useRouter();
   const offlineSync = useOfflineSync();
-  const today = new Date().toISOString().slice(0, 10);
 
   const [projectId, setProjectId] = useState<string | null>(initialProjectId);
   const [workPerformed, setWorkPerformed] = useState('');

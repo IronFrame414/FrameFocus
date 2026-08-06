@@ -1,5 +1,7 @@
 import { getSubcontractors } from '@/lib/services/subcontractors';
 import { getCompanyTimeSettings } from '@/lib/services/company';
+// [S106] was a local copy of the company-tz calendar-date rule.
+import { companyToday } from '@framefocus/shared/utils/dates';
 import { SetMobileHeader } from '../mobile-header';
 import {
   ContactActions,
@@ -42,11 +44,6 @@ const STATUS_LABEL: Record<string, string> = {
   archived: 'Archived',
 };
 
-/** Today in the company's timezone, ISO date-only — comparable to `insurance_expiry`. */
-function todayInZone(timeZone: string): string {
-  return new Date().toLocaleDateString('en-CA', { timeZone });
-}
-
 export default async function MobileSubsPage({
   searchParams,
 }: {
@@ -64,7 +61,7 @@ export default async function MobileSubsPage({
     getCompanyTimeSettings(),
   ]);
 
-  const today = todayInZone(timeSettings.timezone);
+  const today = companyToday(timeSettings.timezone);
 
   // §4.13.4's empty-state copy, per-chip.
   const emptyCopy =

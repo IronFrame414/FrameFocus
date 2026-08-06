@@ -45,13 +45,20 @@ export function CheckInForm({
   projectId,
   projectName,
   poOptions,
+  today,
 }: {
   projectId: string;
   projectName: string;
   poOptions: PoOption[];
+  /**
+   * The company's calendar day, resolved SERVER-SIDE [S106]. `delivery_date`
+   * is a calendar date; deriving it from the handset clock recorded TOMORROW
+   * for any truck checked in after ~20:00 EDT — a wrong delivery date, not a
+   * display nit.
+   */
+  today: string;
 }) {
   const router = useRouter();
-  const today = new Date().toISOString().slice(0, 10);
 
   const [poId, setPoId] = useState<string | null>(null);
   const [orderless, setOrderless] = useState(poOptions.length === 0);

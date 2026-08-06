@@ -1,5 +1,7 @@
 import { getCalendarEvents, type CalendarEvent } from '@/lib/services/schedule';
 import { getCompanyTimeSettings } from '@/lib/services/company';
+// [S106] was a local copy of the company-tz calendar-date rule.
+import { companyToday } from '@framefocus/shared/utils/dates';
 import { SectionHeader } from '../section-header';
 import { EmptyState, ListRow, SectionLabel } from '../../../mobile-ui';
 
@@ -24,10 +26,6 @@ const SOURCE_LABEL: Record<CalendarEvent['source'], string> = {
   inspection: 'Inspection',
 };
 
-function todayInZone(timeZone: string): string {
-  return new Date().toLocaleDateString('en-CA', { timeZone });
-}
-
 function formatDay(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
   return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-US', {
@@ -48,7 +46,7 @@ export default async function ProjectSchedulePage({
     getCompanyTimeSettings(),
   ]);
 
-  const today = todayInZone(timeSettings.timezone);
+  const today = companyToday(timeSettings.timezone);
 
   // getCalendarEvents sorts plain ascending (schedule.ts:200). Rendering that
   // untouched would put last month at the top — A-32 requires today first with

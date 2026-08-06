@@ -1,5 +1,7 @@
 import { getCalendarEvents, type CalendarEvent } from '@/lib/services/schedule';
 import { getCompanyTimeSettings } from '@/lib/services/company';
+// [S106] was a local copy of the company-tz calendar-date rule.
+import { companyToday } from '@framefocus/shared/utils/dates';
 import { SetMobileHeader } from '../mobile-header';
 import { EmptyState, ListRow, SectionLabel } from '../mobile-ui';
 import { ScrollToToday } from './scroll-to-today';
@@ -26,13 +28,6 @@ const SOURCE_LABEL: Record<CalendarEvent['source'], string> = {
   inspection: 'Inspection',
 };
 
-/** `YYYY-MM-DD` in the company's timezone — the same rule every mobile timestamp uses. */
-function todayInZone(timeZone: string): string {
-  // en-CA yields ISO-ordered parts, which is what makes this comparable to the
-  // date-only strings the calendar UNION returns.
-  return new Date().toLocaleDateString('en-CA', { timeZone });
-}
-
 function formatDay(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
   return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString('en-US', {
@@ -54,7 +49,7 @@ export default async function MobileSchedulePage() {
     getCompanyTimeSettings(),
   ]);
 
-  const today = todayInZone(timeSettings.timezone);
+  const today = companyToday(timeSettings.timezone);
 
   // Group by day. `getCalendarEvents` already sorts ascending by `start_date`
   // (`schedule.ts:200`), so insertion order into the map is the ascending order

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { CalendarEvent } from '@/lib/services/schedule';
 import { selectUpNext, upNextDateLine } from '@/app/m/p/[projectId]/up-next';
 import { daysLeft, daysLeftLabel, formatMoney } from '@/app/m/mobile-ui';
+import { companyToday } from '@framefocus/shared/utils/dates';
 
 // M6M — the pure rules behind M-2's card footer and M-3's "Up next" card.
 //
@@ -122,29 +123,41 @@ describe('M-3 · the "Up next" date line (A-11i)', () => {
 });
 
 describe('M-2 / M-3 · days left (A-10e, A-11d)', () => {
+  // `today` is an INPUT as of [S106] — the company-tz calendar day, resolved by
+  // the server caller. These were clock-dependent (they derived the expected
+  // value the same UTC way the code did, so they agreed with the bug); pinning
+  // the day makes them deterministic AND lets the boundary be asserted below.
+  const TODAY = '2026-08-06';
+
   it('is null when target_end_date is unset — the em-dash state, never zero', () => {
-    expect(daysLeft(null)).toBeNull();
-    expect(daysLeftLabel(null)).toBe('—');
+    expect(daysLeft(null, TODAY)).toBeNull();
+    expect(daysLeftLabel(null, TODAY)).toBe('—');
   });
 
   it('goes NEGATIVE past target rather than clamping at zero', () => {
-    const past = new Date();
-    past.setDate(past.getDate() - 4);
-    const n = daysLeft(past.toISOString().slice(0, 10));
-    expect(n).toBe(-4);
-    expect(daysLeftLabel(past.toISOString().slice(0, 10))).toBe('-4 days left');
+    expect(daysLeft('2026-08-02', TODAY)).toBe(-4);
+    expect(daysLeftLabel('2026-08-02', TODAY)).toBe('-4 days left');
   });
 
   it('counts forward from today', () => {
-    const soon = new Date();
-    soon.setDate(soon.getDate() + 9);
-    expect(daysLeft(soon.toISOString().slice(0, 10))).toBe(9);
+    expect(daysLeft('2026-08-15', TODAY)).toBe(9);
   });
 
   it('is zero — not null — on the target date itself', () => {
-    const today = new Date().toISOString().slice(0, 10);
-    expect(daysLeft(today)).toBe(0);
-    expect(daysLeftLabel(today)).toBe('0 days left');
+    expect(daysLeft(TODAY, TODAY)).toBe(0);
+    expect(daysLeftLabel(TODAY, TODAY)).toBe('0 days left');
+  });
+
+  it('[S106] counts from the COMPANY day, not the UTC day — an evening in New York', () => {
+    // 21:00 EDT on the 6th is 01:00 UTC on the 7th. The old implementation
+    // derived `today` from toISOString(), so every card west of UTC lost a day
+    // after ~20:00 local.
+    const evening = new Date('2026-08-07T01:00:00.000Z');
+    expect(companyToday('America/New_York', evening)).toBe('2026-08-06');
+    expect(companyToday('UTC', evening)).toBe('2026-08-07');
+
+    expect(daysLeft('2026-08-16', companyToday('America/New_York', evening))).toBe(10);
+    expect(daysLeft('2026-08-16', companyToday('UTC', evening))).toBe(9); // what shipped
   });
 });
 

@@ -1,6 +1,8 @@
 import { getProjectPhotos } from '@/lib/services/photos';
 import { getMyProfile } from '@/lib/services/profiles';
 import { getProject } from '@/lib/services/projects';
+import { getCompanyTimeSettings } from '@/lib/services/company';
+import { companyToday } from '@framefocus/shared/utils/dates';
 import { SetMobileHeader } from '../../../mobile-header';
 import { FilterChips, type Chip } from '../../../mobile-ui';
 import { PhotoGrid, type GridPhoto } from './photo-grid';
@@ -75,7 +77,10 @@ export default async function ProjectPhotosPage({
       )
     : filtered;
 
-  const todayIso = new Date().toISOString().slice(0, 10);
+  // Company-tz calendar day [S106]. The TODAY label is compared against
+  // created_at's date part, so a UTC "today" mislabelled the day's own photos
+  // every evening west of UTC.
+  const todayIso = companyToday((await getCompanyTimeSettings()).timezone);
 
   // Day is derived once, on the server, so the grid never has to parse dates
   // and the "Today" label cannot disagree between two components.

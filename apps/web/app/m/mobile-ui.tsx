@@ -159,9 +159,8 @@ export function formatMoney(value: number | string | null | undefined): string {
 // timezone offset. Two surfaces disagreeing about what "today" means is exactly
 // the class of bug §8a's "reference derivation" citations exist to prevent.
 // ---------------------------------------------------------------------------
-export function daysLeft(targetEndDate: string | null): number | null {
+export function daysLeft(targetEndDate: string | null, today: string): number | null {
   if (!targetEndDate) return null;
-  const today = new Date().toISOString().slice(0, 10);
   return Math.round(
     (new Date(`${targetEndDate}T00:00:00`).getTime() - new Date(`${today}T00:00:00`).getTime()) /
       86400000
@@ -180,8 +179,8 @@ export function daysLeft(targetEndDate: string | null): number | null {
  * The em-dash is the null state, NEVER `0` — the same distinction §2's money
  * token draws between "$0.00" and "not recorded".
  */
-export function daysLeftLabel(targetEndDate: string | null): string {
-  const n = daysLeft(targetEndDate);
+export function daysLeftLabel(targetEndDate: string | null, today: string): string {
+  const n = daysLeft(targetEndDate, today);
   return n === null ? '—' : `${n} days left`;
 }
 

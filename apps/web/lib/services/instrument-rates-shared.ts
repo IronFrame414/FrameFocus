@@ -79,20 +79,17 @@ export function latestLiveEffectiveFrom(
  *
  * `now` is injectable so the boundary is testable without touching the clock.
  *
- * Deliberately restated here rather than imported from 7D's invoices-shared
- * `companyToday`: instrument rates are UPSTREAM of invoicing and must not
- * depend on it. Same precedent as co-rate-section restating RATE_FIELDS —
- * six lines is a smaller cost than a backwards module dependency. The two
- * are pinned to the same rule by test.
+ * CONSOLIDATED [S106]. This was deliberately restated here rather than
+ * imported from 7D's `companyToday`, on the grounds that "instrument rates are
+ * UPSTREAM of invoicing and must not depend on it". That reasoning was right,
+ * and the implementation now lives in a NEUTRAL, dependency-free module that
+ * neither domain has to import the other to reach. No backwards dependency is
+ * created, the local name is preserved for every call site here, and the two
+ * are no longer merely "pinned to the same rule by test" — they are the same
+ * function. Six copies of this rule existed across the repo; see the header of
+ * `@framefocus/shared/utils/dates`.
  */
-export function todayInZone(timeZone: string, now: Date = new Date()): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(now);
-}
+export { companyToday as todayInZone } from '@framefocus/shared/utils/dates';
 
 export function rateInForce(
   rates: RateInForceInput[],

@@ -1,5 +1,7 @@
 import { getProjects } from '@/lib/services/projects';
 import { getMembers } from '@/lib/services/members';
+import { getCompanyTimeSettings } from '@/lib/services/company';
+import { companyToday } from '@framefocus/shared/utils/dates';
 import { LogForm, type SubMember } from './log-form';
 
 // M6M §4.12.3 — M-21 · Daily log entry (7c). THE ROUTE THAT CLOSES GAP-8's
@@ -14,9 +16,10 @@ export default async function NewDailyLogPage({
 }: {
   searchParams: { project?: string };
 }) {
-  const [projects, members] = await Promise.all([
+  const [projects, members, timeSettings] = await Promise.all([
     getProjects({ status: 'active' }),
     getMembers().catch(() => []),
+    getCompanyTimeSettings(),
   ]);
 
   const subs: SubMember[] = (members ?? [])
@@ -34,6 +37,10 @@ export default async function NewDailyLogPage({
       }))}
       initialProjectId={initial}
       subs={subs}
+      // log_date is a CALENDAR DATE — resolved server-side in the company's
+      // zone [S106]. The form is a client component and must not re-derive it
+      // from the handset clock, which is neither the company's zone nor UTC.
+      today={companyToday(timeSettings.timezone)}
     />
   );
 }

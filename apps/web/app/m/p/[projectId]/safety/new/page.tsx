@@ -1,6 +1,8 @@
 import { notFound } from 'next/navigation';
 import { getProject } from '@/lib/services/projects';
 import { getMembers } from '@/lib/services/members';
+import { getCompanyTimeSettings } from '@/lib/services/company';
+import { companyToday } from '@framefocus/shared/utils/dates';
 import { IncidentForm, type RosterMember } from './incident-form';
 
 // M6M §4.12.5 — M-23 · Incident report (7e). "No contradictions — the
@@ -30,9 +32,13 @@ export default async function NewIncidentPage({
     member_type: m.member_type,
   }));
 
+  // The default incident date is a CALENDAR DATE, so it must be the company's
+  // day, not UTC's [S106]. Derived from toISOString() an incident reported
+  // after ~20:00 EDT defaulted to TOMORROW — wrong data on a safety record,
+  // not a display nit.
   const date = /^\d{4}-\d{2}-\d{2}$/.test(searchParams.date ?? '')
     ? searchParams.date!
-    : new Date().toISOString().slice(0, 10);
+    : companyToday((await getCompanyTimeSettings()).timezone);
 
   return (
     <IncidentForm

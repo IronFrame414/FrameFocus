@@ -1,6 +1,8 @@
 import { notFound } from 'next/navigation';
 import { getProject } from '@/lib/services/projects';
 import { getPurchaseOrders } from '@/lib/services/deliveries';
+import { getCompanyTimeSettings } from '@/lib/services/company';
+import { companyToday } from '@framefocus/shared/utils/dates';
 import { CheckInForm, type PoOption } from './check-in-form';
 
 // M6M §4.12.4 — M-22 · Delivery check-in (7d). A PAGE (D-28), and the ONE
@@ -16,9 +18,10 @@ export default async function DeliveryCheckInPage({
 }: {
   params: { projectId: string };
 }) {
-  const [project, pos] = await Promise.all([
+  const [project, pos, timeSettings] = await Promise.all([
     getProject(params.projectId),
     getPurchaseOrders(params.projectId),
+    getCompanyTimeSettings(),
   ]);
   if (!project) notFound();
 
@@ -47,6 +50,7 @@ export default async function DeliveryCheckInPage({
       projectId={params.projectId}
       projectName={project.name}
       poOptions={options}
+      today={companyToday(timeSettings.timezone)}
     />
   );
 }
