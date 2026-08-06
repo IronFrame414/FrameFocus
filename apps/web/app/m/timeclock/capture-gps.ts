@@ -60,20 +60,14 @@ export function captureGps(): Promise<GpsRecord> {
 }
 
 /**
- * A-7k5 — "on site" is a statement about COORDINATES, never about gps_in being
- * non-null. A denied-permission session carries a failure OBJECT, which is
- * non-null; a build that tests nullity renders the exact opposite of the truth
- * for exactly the rows D-34 created. One predicate, shared, so no surface
- * re-derives it wrongly.
+ * A-7k5 — "on site" is about COORDINATES, never about gps_in being non-null.
+ *
+ * MOVED [S106] to `@framefocus/shared/utils/time-tracking` and re-exported
+ * here so mobile callers and the existing unit suite keep one import path.
+ * It had to move to be shared at all: the desktop timesheet surfaces that
+ * were re-deriving it (wrongly) cannot import from the mobile tree.
  */
-export function hasCoordinates(gps: unknown): gps is { lat: number; lng: number } {
-  return (
-    typeof gps === 'object' &&
-    gps !== null &&
-    typeof (gps as { lat?: unknown }).lat === 'number' &&
-    typeof (gps as { lng?: unknown }).lng === 'number'
-  );
-}
+export { hasCoordinates } from '@framefocus/shared/utils/time-tracking';
 
 /** Straight-line metres between a fix and a project's coordinates. */
 export function distanceMeters(

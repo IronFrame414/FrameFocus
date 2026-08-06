@@ -10,7 +10,7 @@ import {
   listOpenSessionsLive,
   type LiveSessionRow,
 } from '@/lib/services/time-tracking-client';
-import { SEGMENT_TYPE_LABELS } from '@framefocus/shared/utils/time-tracking';
+import { SEGMENT_TYPE_LABELS, hasCoordinates } from '@framefocus/shared/utils/time-tracking';
 import { ROLE_LABELS, type CompanyRole } from '@framefocus/shared';
 import { SegmentBar, ReadOnlyCaption, fmtTime, monoValue } from '@/components/time/time-ui';
 import { cardStyle, color, microLabelStyle } from '@/lib/theme';
@@ -133,8 +133,11 @@ export function LiveBoard({ timeZone }: { timeZone: string }) {
                       crew member whose GPS was DENIED would display as
                       "· on site" — the exact opposite of the truth, on the
                       board a supervisor watches. §4.12.1a names this line as
-                      D-34's own required change; A-28 does not shield it. */}
-                  {(row.gps_in as { lat?: unknown } | null)?.lat != null ? ' · on site' : ''}
+                      D-34's own required change; A-28 does not shield it.
+                      [S106] Now resolved through the shared hasCoordinates()
+                      predicate, with the two readers this line originally
+                      missed. */}
+                  {hasCoordinates(row.gps_in) ? ' · on site' : ''}
                 </p>
               </div>
             </div>
