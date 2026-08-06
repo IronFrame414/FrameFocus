@@ -2482,7 +2482,7 @@ Josh's to run.
 | ------ | ---- | ----- |
 | `id` | `uuid PK DEFAULT gen_random_uuid()` | |
 | `company_id` | `uuid NOT NULL DEFAULT get_my_company_id()` | Per-tenant, per the house rule. |
-| `target_table` | `text NOT NULL` | `CHECK (target_table = ANY (ARRAY['daily_logs']))` in v1 — see "why the shape is generic" below. |
+| `target_table` | `text NOT NULL` | `CHECK (target_table = ANY (ARRAY['daily_logs','time_clock_sessions','time_segments']))` — **widened from `['daily_logs']` [S105, migration 20260826000000]**; see "why the shape is generic" below. |
 | `target_row_id` | `uuid NOT NULL` | The row the copy conflicts with. **No FK** — the target table varies, and a FK to one table would block the CHECK ever widening. |
 | `project_id` | `uuid REFERENCES projects(id)` | Denormalised so a future surface can scope and filter without joining through the target row. |
 | `rejected_body` | `jsonb NOT NULL` | The queued payload **exactly as the online path would have sent it** (§5.2). |
@@ -2548,10 +2548,28 @@ sync_conflicts_insert_authorized
 
 **Why the shape is generic when the ruling named the daily log.** §5.6's comparison applies to any queued
 mutation targeting an existing row, so the table is keyed by `(target_table, target_row_id)` rather than
-by `daily_log_id`. In v1 the daily log is the **only** producer, and that is not an accident: a clock-in
-and a photo are inserts, and A-19f rules an insert is never a conflict. The CHECK is therefore pinned to
-`'daily_logs'` — widening it later is a one-line change, whereas a `daily_log_id` column would have had
-to be migrated away.
+by `daily_log_id`.
+
+> **⚠️ CORRECTED [S105] — the first formulation of the CHECK was too narrow and would have wedged the
+> queue.** It read: _"In v1 the daily log is the **only** producer, and that is not an accident: a
+> clock-in and a photo are inserts, and A-19f rules an insert is never a conflict. The CHECK is
+> therefore pinned to `'daily_logs'`."_ That reasoning counted **inserts only**. The clock-out is an
+> `op:'update'` on `time_clock_sessions` and the segment-end is an `op:'update'` on `time_segments` —
+> both run §5.6's comparison whenever their base was loaded from the server, which is exactly the
+> online-started-shift-clocked-out-offline case. Had such an update conflicted, `recordConflict` would
+> have hit the CHECK, thrown, and §5.6's own safety rule ("a conflict that could not be recorded has
+> not been handled") would have kept the entry queued and **retrying forever** against a condition no
+> retry can clear.
+>
+> **Ruled [Josh, S105]:** the CHECK admits every table the queue can target with an `op:'update'` —
+> `daily_logs`, `time_clock_sessions`, `time_segments`. Widened by migration `20260826000000`, with
+> failing-then-passing evidence under the impersonation harness. `files` stays out: a photo is only
+> ever an insert (A-19f), so it has no update path until some future queue entity grows one — the
+> correct admission test is "can the queue emit an `op:'update'` against this table?", not "which
+> entity did the ruling name?".
+
+Widening the CHECK further is a one-line change, whereas a `daily_log_id` column would have had to be
+migrated away — that half of the original reasoning stands.
 
 ---
 
