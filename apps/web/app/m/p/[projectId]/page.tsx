@@ -274,14 +274,11 @@ export default async function MobileProjectHubPage({
           ))}
         </TileGrid>
 
-        {/* §4.3's bottom action. 60px, full width, amber.
-            IT POINTS AT /m/logs/new — M-21, which §1 routes and a later slice
-            builds. The tile-goes-where-it-says precedent from the shell slice:
-            a control pointing at its real future route is right; one pointed at
-            a desktop page would have to be un-pointed later, and D-13 forbids
-            resolving a mobile action to a desktop screen. */}
+        {/* §4.3's bottom action. 60px, full width, amber. Points at M-21 with
+            THIS project in the query — /m/logs/new is company-scoped, and the
+            hub is the one caller that already knows the project. */}
         <Link
-          href="/m/logs/new"
+          href={`/m/logs/new?project=${params.projectId}`}
           data-testid="m-log-the-day"
           className="mt-[18px] flex h-[60px] w-full items-center justify-center rounded-[14px] bg-m6m-amber text-[16px] font-bold text-m6m-navy transition-transform duration-150 ease-out active:scale-[.99]"
         >

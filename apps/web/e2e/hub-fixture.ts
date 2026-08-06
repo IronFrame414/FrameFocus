@@ -378,10 +378,57 @@ async function hardDelete(admin: SupabaseClient, prefix: string): Promise<void> 
   const ids = (projects ?? []).map((p) => p.id);
   if (ids.length === 0) return;
 
+  // EVERY dependent first, and the final delete is CHECKED. Playwright
+  // restarts a worker after a test failure and beforeAll re-runs there — if a
+  // failed test left a daily log, delivery or incident on a fixture project,
+  // an unchecked project delete fails silently on the FK and the re-setup
+  // collides on project_number with an error that points at the wrong thing.
   await admin.from('punch_list_items').delete().in('project_id', ids);
   await admin.from('punch_lists').delete().in('project_id', ids);
   await admin.from('schedule_entries').delete().in('project_id', ids);
   await admin.from('time_segments').delete().in('project_id', ids);
+
+  const { data: logs } = await admin.from('daily_logs').select('id').in('project_id', ids);
+  const logIds = (logs ?? []).map((l) => l.id);
+  if (logIds.length) {
+    await admin.from('daily_log_crew').delete().in('daily_log_id', logIds);
+    await admin.from('daily_log_sub_entries').delete().in('daily_log_id', logIds);
+  }
+
+  const { data: incidents } = await admin
+    .from('safety_incidents')
+    .select('id')
+    .in('project_id', ids);
+  const incidentIds = (incidents ?? []).map((i) => i.id);
+  if (incidentIds.length) {
+    await admin.from('safety_incident_injuries').delete().in('incident_id', incidentIds);
+    await admin.from('safety_incident_witnesses').delete().in('incident_id', incidentIds);
+  }
+
+  // Files on fixture projects (delivery PDFs, incident PDFs, log photos) —
+  // rows first so FKs clear, then the objects.
+  const { data: files } = await admin.from('files').select('id, file_path').in('project_id', ids);
+  if (files?.length) {
+    await admin.from('files').delete().in('id', files.map((f) => f.id));
+    await admin.storage.from('project-files').remove(files.map((f) => f.file_path));
+  }
+
+  await admin.from('daily_logs').delete().in('project_id', ids);
+  await admin.from('safety_incidents').delete().in('project_id', ids);
+  await admin.from('delivery_items').delete().in(
+    'delivery_id',
+    (await admin.from('deliveries').select('id').in('project_id', ids)).data?.map((d) => d.id) ?? []
+  );
+  await admin.from('deliveries').delete().in('project_id', ids);
+  await admin.from('tasks').delete().in('project_id', ids);
   await admin.from('project_assignments').delete().in('project_id', ids);
-  await admin.from('projects').delete().in('id', ids);
+
+  const { error } = await admin.from('projects').delete().in('id', ids);
+  if (error) {
+    throw new Error(
+      `fixture hardDelete could not remove projects (${error.message}) — a dependent row ` +
+        'from a previous run is still attached; the collision this prevents would otherwise ' +
+        'surface as a misleading duplicate-key error in the next setup.'
+    );
+  }
 }
