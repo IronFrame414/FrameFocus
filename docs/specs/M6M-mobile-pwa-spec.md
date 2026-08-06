@@ -164,7 +164,7 @@
 | D-18 | Offline test tooling          | **Both.** [S98, Josh] Queue logic is unit-tested in the existing Node harness; screen-level and browser-state criteria are tested with **Playwright, a new dependency this repo does not yet carry**. Nothing in §10 is left untestable. Assignment table in §10a. |
 | D-19 | Progress percentage           | **CUT FROM V1.** [S98, Josh] No progress % anywhere on mobile. The M-3 stat strip is **two** stats, not three (§4.3); the M-2 project card has **no** progress bar (§4.2). No project-level progress derivation is invented. |
 | D-20 | Subcontractor photo access    | **Subs upload AND annotate.** [S98, Josh] D-11 stands unchanged. **EXTENDED [S98]: `files_update_non_client` is widened too**, so a sub can annotate photos including ones they just took — and, found while applying that, **the two `storage.objects` policies carry the same omission and must be widened as well** or the bytes are refused regardless. **Four policies, role array only.** Required migration and the **FIRST build step** — see §7a. |
-| D-21 | Markup storage & display      | **Both stored; the OVERLAY displays.** [S98, Josh] `files.markup_data` holds the editable annotation layer, **is the source of truth, and is drawn live over the original image on every surface** — gallery thumbnail, viewer stage, filmstrip (**Option A**, ruled once the derivative-as-display reading proved unbuildable for desktop-authored markup). Save still writes a flattened derivative, but it is a **sharing artifact only, never displayed**. The original is never modified and is always the image on screen. §4.9's toggle hides the drawn layer; it does not swap files. Storage contract in §4.10; display rule, fit, legibility and load order in **§4.7a**. |
+| D-21 | Markup storage & display      | **DISPLAY HALF SUPERSEDED BY D-31 [S99]; storage half stands.** What survives: both are stored — `files.markup_data` is the source of truth for re-editing, and Save writes a flattened derivative. What D-31 overturned: the derivative, not the live overlay, is the display source, and §4.9's toggle **swaps files**. _Original text, quoted not rewritten [marker added S104, build — this row still stated Option A with no pointer to D-31]:_ _"**Both stored; the OVERLAY displays.** [S98, Josh] `files.markup_data` holds the editable annotation layer, **is the source of truth, and is drawn live over the original image on every surface** — gallery thumbnail, viewer stage, filmstrip (**Option A**, ruled once the derivative-as-display reading proved unbuildable for desktop-authored markup). Save still writes a flattened derivative, but it is a **sharing artifact only, never displayed**. The original is never modified and is always the image on screen. §4.9's toggle hides the drawn layer; it does not swap files."_ Storage contract in §4.10; display rule in **§4.7a**. |
 | D-22 | Pin shape / schema v2         | **Add a `pin` shape type; `MARKUP_SCHEMA_VERSION` → 2.** [S98, Josh] Composing a pin from circle + text would make one pin two undo steps, contradicting §4.10's per-mark Undo/Redo; dropping Pin would remove what punch and incident work needs most. Additive, and `MarkupViewer` has no consumers. **The pin number is STORED, so deletes leave gaps and `next = max + 1`.** Contract, read/forward compatibility and blast radius in **§4.10a** — the first ruling this session to touch shared code desktop imports. |
 | D-23 | `{m} estimating` count        | **Dropped.** [S98, Josh] The M-2 header shows the active count only. There is no `estimating` project status — `projects_status_check` permits `active, on_hold, complete, archived, cancelled` — and none is added. §4.2; §8a; A-10c. _(Renumbered [S98]: this ruling was previously cited as "D-4", which is the list-screen pattern.)_ |
 | D-25 | ~~Segment type on clock-in~~  | **SUPERSEDED by D-27 [S98, Josh].** _Original text, quoted not deleted:_ _"**Default `work`, switch afterwards.** Clock-in writes `segment_type = 'work'` with no prompt — one tap to start a shift. Changing it is a separate action that closes the open segment and opens a new one, because that is the only shape RLS permits a crew member."_ Withdrawn because `work` requires a project while D-12 and §4.5 contemplate clocking in without one — a collision D-27 dissolves rather than works around. |
@@ -1011,14 +1011,25 @@ Swipe left/right pages; pinch zooms; swipe down dismisses — **and every one of
 on-screen equivalent: the arrows, the zoom control, and the close ✕.** Tapping **Source** navigates to the daily log / delivery / incident. Delete confirms first and is
 role-gated.
 
-**A photo with markup indicates it, and the viewer can toggle the overlay off to reveal the unannotated
-original.**
+**A photo with markup indicates it, and the viewer toggles back to the unannotated original by SWAPPING
+FILES** — with markup present the stage shows the derivative; the toggle loads the original (§4.7a, D-31;
+A-23e).
 
-> **Restated [S98, Option A].** This previously read "toggle back to the original", which under the
-> derivative-as-display rule meant **swapping which file is fetched**. It no longer does. The image on
-> screen is always the original; the toggle **hides and shows the annotation layer drawn over it**. No
-> second fetch, no second artefact, and the toggle is instant because the image never changes — only the
-> SVG shapes are added or removed. It remains the only way to see the photo unannotated (§4.7a).
+> **CORRECTED [S104, build] — the paragraph below survived D-31 unreversed, and the M-8/M-9/M-10 build
+> found the spec contradicting itself: §4.7a said file-swap while this said layer-toggle.** §4.7a is the
+> governing section ("stated once here rather than three times below") and the build followed it; this
+> restatement is now superseded, quoted rather than deleted:
+>
+> > _**Restated [S98, Option A].** This previously read "toggle back to the original", which under the
+> > derivative-as-display rule meant **swapping which file is fetched**. It no longer does. The image on
+> > screen is always the original; the toggle **hides and shows the annotation layer drawn over it**. No
+> > second fetch, no second artefact, and the toggle is instant because the image never changes — only the
+> > SVG shapes are added or removed. It remains the only way to see the photo unannotated (§4.7a)._
+>
+> Under D-31 every clause of that is inverted: the image on screen is the **derivative**, the toggle
+> **does** fetch a second file and is **not** instant, and A-23e2 — the criterion that pinned
+> "no second image request" — was **deleted** by the reversal. The toggle remains the only way to see the
+> photo unannotated; that is the one sentence that survives.
 
 ### 4.10 M-10 · Photo markup _(handoff 6l)_
 
@@ -1062,21 +1073,28 @@ Both, with a defined relationship:
    (`apps/web/app/dashboard/projects/[id]/files/[fileId]/markup/markup-editor.tsx`). Re-opening markup
    loads from here. Undo/Redo, tool state and per-mark editing all operate on this layer, never on
    pixels.
-2. **A flattened derivative image**, written on Save, so a mark-up photo can leave the app — texted to a
-   sub, attached to an email, dropped in a PDF — and still show its marks. **[S98] It is a SHARING
-   artifact only and is never displayed in the app** (§4.7a.5). A save whose derivative write fails still
-   **reports success**, with a non-blocking notice that the sharing image could not be generated.
+2. **A flattened derivative image**, written on Save — **and under D-31 it is the DISPLAY SOURCE as well
+   as the sharing artifact** (§4.7a.5 as re-promoted). A save whose derivative write fails **must NOT
+   report plain success** — the marks are in `markup_data` but every surface would show the photo
+   unmarked (A-23j, third position). _Superseded [S104, build] — the S98 clause, quoted:_ _"It is a
+   SHARING artifact only and is never displayed in the app (§4.7a.5). A save whose derivative write fails
+   still **reports success**, with a non-blocking notice that the sharing image could not be generated."_
+   _Both halves were Option A's; §4.7a.5's re-promotion table reversed both and this sentence was missed._
 
 The contract between them:
 
 - **The original file is never modified.** Its bytes, `file_path`, `file_size` and `mime_type` are
   untouched by any number of markup saves. Only `markup_data` changes on the original's row.
-  **[S98] It is also what every surface displays** — §4.7a draws the overlay over these bytes.
+  **[S104] It is what the M-10 authoring canvas draws on, and what the viewer's toggle reveals** —
+  display everywhere else is the derivative (D-31). _Superseded S98 clause, quoted:_ _"It is also what
+  every surface displays — §4.7a draws the overlay over these bytes."_
 - **The derivative is regenerated in full on every re-edit**, from the current `markup_data` against the
   original bytes. It is never edited incrementally and never used as the input to the next render — that
-  would compound JPEG loss with each save. **[S98] This is a freshness requirement for the sharing
-  artifact, not a correctness requirement for display** — a stale derivative means an out-of-date share,
-  never a wrong image on screen (§4.7a.5).
+  would compound JPEG loss with each save. **[S104] Under D-31 this is a CORRECTNESS requirement again**
+  — a stale derivative is the wrong image on screen, not merely an out-of-date share (§4.7a.5's
+  re-promotion table; A-23k). _Superseded S98 clause, quoted:_ _"This is a freshness requirement for the
+  sharing artifact, not a correctness requirement for display — a stale derivative means an out-of-date
+  share, never a wrong image on screen (§4.7a.5)."_
 - **The previous derivative is overwritten in place**, at a path deterministically derived from the
   original (same `{company_id}/{project_id}/` folder, a reserved suffix on the file name). No history of
   derivatives is kept; `markup_data` is the history that matters, and it is versionable independently.
@@ -1087,8 +1105,10 @@ The contract between them:
   (`20260101000000_baseline_schema.sql:1384-1385`) are the document-versioning mechanism and are **not**
   overloaded to mean "derivative of".
 - **A file carrying marks is flagged from `markup_data` being non-empty** — that is what M-9's markup
-  indicator and the gallery's corner indicator (§4.7a.3) read, and what the toggle switches off. The
-  toggle shows or hides the drawn layer; it never fetches a different file.
+  indicator and the gallery's corner indicator (§4.7a.3) read, and what selects the derivative as the
+  display file. **[S104] The toggle swaps files** — derivative to original and back (D-31, A-23e).
+  _Superseded S98 clause, quoted:_ _"The toggle shows or hides the drawn layer; it never fetches a
+  different file."_
 
 > **Open sub-question, deliberately not decided here.** If sharing ever needs the derivative to be a
 > first-class, permission-checked, signed-URL artefact rather than a sibling object, it needs its own
