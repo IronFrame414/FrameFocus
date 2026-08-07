@@ -240,6 +240,9 @@
 | D-57 | A subcontractor's punch visibility | **ASSIGNEE OR AUTHOR, AND NOTHING ELSE ON THE PROJECT.** [S110, Josh] **EXTENDED TO UPDATE by D-58 [S111]** — one migration, two policies. Replaces D-52's withdrawn exclusion. A subcontractor sees a punch item **only** if `assignee_id = get_my_member_id()` **or** `created_by = auth.uid()`. **Punch LISTS stay fully visible** and subs may create both. **This is NARROWER than what ships today, not wider** — `punch_list_items_select_visible`'s first arm is `can_view_project()`, which is role-blind, so an assigned sub currently sees **every** punch item on the project. **`created_by` EXISTS** (`DEFAULT auth.uid()`, FK to `auth.users`), so the auto-assign fallback is **not needed**. **One policy, one migration; no application code changes.** §4.11.14a; A-59, A-59c–A-59e. |
 | D-54 | Role-gated access on `/m`     | **D-11 IS AMENDED — recorded as a decision, not allowed to arrive silently.** [S108, Josh] _D-11's text, quoted:_ _"**All roles.** No role gate on `/m`."_ **The first clause stands and the second does not:** every role still *gets* mobile, but D-51 and D-53 mean roles no longer all see the same screens. **RESOLVED [S109, Josh] — HIDE AND ACTUALLY BLOCK.** Option A adopted: the control is **hidden** *and* the route is **guarded**. **A hidden button is not a permission** — the URL survives a shared screenshot, a stale PWA cache and a bookmark, so the guard is the gate and hiding is cosmetic on top of it. The full per-surface block list, derived from the policies rather than from prose, is **§4.11.10b**. §4.11.10a, §4.11.10b; A-65–A-66. |
 | D-55 | Detail screens are PAGES      | **A GENERAL RULE, NOT A PER-SCREEN CALL.** [S109, Josh] **Every list row opens its own page with its own route** — punch items (M-34), change orders (M-31), team (M-35), contacts (M-36), files (§4.11.16). No bottom sheets, no expanding rows, no modal-over-list. **Consistent with D-28**, which ruled pages over sheets for the four field-capture screens on the same reasoning: each is deep-linkable and browser-back-able, and none is hosted by `layout.tsx`'s sheet host. **Recorded as a rule so the next detail screen does not re-litigate it** — D-28 settled the question once for capture and was then re-argued for M-34; that is the loop this closes. **M-34 is no longer PROPOSED.** §1; §4.11.14. |
+| D-60 | Which list an M-33 item lands in | **THE AUTHOR TARGETS A LIST EXPLICITLY — pick an existing one OR create a new one. NO DEFAULT AND NO AUTO-TARGET.** [S115, Josh] Closes the open item §4.11.13 recorded as *"auto-create a default, or make the user pick when more than one exists — not ruled here."* **Both halves of that proposal are rejected**: no silent default list, and no "only ask when ambiguous" — the picker is unconditional, because a rule that asks only sometimes is a rule a field user cannot predict. Every item lands in a list the author chose. **M-14's shape does NOT change** — see D-61. §4.11.13, §4.11.4; A-67, A-67b, A-67c. |
+| D-61 | M-14's shape under D-60      | **M-14 STAYS A FLAT ITEM LIST. It does not become a list of lists.** [S115, Josh] Ruled explicitly because D-60 invites the opposite inference and the build would otherwise have to guess. The parent list becomes a **label on the row**, not a level of hierarchy. **Three things break if M-14 nests:** the Mine/Open/All chips filter ITEMS and have no meaning over lists; **D-16's counters would stop agreeing with M-3's badge**, which is the one guarantee §4.11.4 makes; and **A-34b** asserts a flat count relationship (`open ≤ all`) that a grouped list cannot express. **A punch list with no items stays visible** — a real state under D-57, already owed empty-state copy. §4.11.4; A-67c. |
+| D-62 | CO types on mobile           | **#140 IS FIXED FIRST, THEN ALL THREE TYPES SHIP. No `fixed_price`-only restriction.** [S115, Josh] **Rejects the interim §4.11.12 proposed** (*"until it is resolved, M-32 should offer `fixed_price` only"*) — that was proposed, never ruled, and is now withdrawn rather than adopted. The ordering is the ruling: the rate-visibility collision is closed **before** M-32 offers `cost_plus` or `time_and_materials`, so mobile never ships the defect. **The fix is not mobile-scoped** — it is desktop and shared code, and A-28 does not shield it. §4.11.12, §4.11.12a; A-68–A-68d; TECH_DEBT #140. |
 | D-56 | TECH_DEBT #117 on mobile      | **UI-ONLY IS ACCEPTED, FOR NOW.** [S109, Josh] `change_orders_select_visible` keeps **no role floor and no author scoping**; the Owner/Admin/PM gate on M-31/M-32 lives in the interface. **The exposure, stated plainly rather than implied away: a foreman gets the row from the database — `net_delta`, and the line rows' `total`, `rate`, `unit_cost` and `amount` — and only the interface stops them seeing it.** **The write side needs no migration**: `change_orders_insert_authorized` / `_update_authorized` and both child tables' INSERT/UPDATE/DELETE already carry exactly `owner, admin, project_manager`. **TECH_DEBT #117 amended, not closed.** §4.11.10b, §4.11.11. |
 
 ---
@@ -1522,6 +1525,34 @@ The project's calendar, as a list — not a grid. A month grid at 402px cannot c
   **The chips, the counts and the D-16 divergence above are unchanged** — see §4.11.14's D-16 check,
   which confirms verification touches no counter because `complete → verified` leaves the
   `('open','in_progress')` set on both sides.
+> ##### ✅ RULED [S115, Josh, D-61] — M-14 STAYS FLAT. D-60 does not turn this into a list of lists.
+>
+> **Ruled explicitly because D-60 invites the opposite inference.** If every item now belongs to a
+> deliberately-chosen list, the tempting next step is to make the Punch tile open a list *of lists* and
+> drill into items. **It must not.** The parent list becomes **a label on the item row** — mono, beside
+> `location · trade` — and nothing else about this screen moves.
+>
+> **Three things break the moment M-14 nests, and they are not stylistic:**
+>
+> 1. **The chips filter ITEMS.** Mine / Open / All are `assignee_id = get_my_member_id()` and
+>    `status IN ('open','in_progress')` — predicates over items. Over a list of lists they have no
+>    meaning; a build would have to invent "a list containing at least one open item", which is a
+>    **third definition of open** and §4.11.4 forbids exactly that.
+> 2. **D-16's agreement with M-3's badge dies.** The badge counts items; a grouped screen counts
+>    groups. §4.11.4's one guarantee is that the tile badge and this screen always agree, and they
+>    stop agreeing the moment the units differ.
+> 3. **A-34b asserts a flat relationship** — `open ≤ all` over item counts. A grouped list cannot
+>    express it, so the criterion would have to be rewritten to accommodate a shape nobody ruled.
+>
+> **A punch list with no items stays visible.** Under D-57 a subcontractor routinely sees a list whose
+> items are all filtered away, and §4.11.4 already owes empty-state copy for it. **That state is a
+> property of the list, not of the flat item view** — M-14 renders no row for such a list, and the
+> place a user sees it is **M-33's picker**, which shows every list on the project.
+>
+> **The source is unchanged.** `getPunchLists(projectId)` already returns lists with nested items and
+> the build already flattens them (`lists.flatMap((l) => l.items ?? [])`). D-60 adds a field to M-33;
+> it adds **no query, no fetch and no shape change** here.
+
 - **WHAT A SUBCONTRACTOR SEES HERE IS NARROWED [S110, D-57]** — assignee or author only, never the rest
   of the project's items. **The rule is a SELECT policy and a migration is owed** (§4.11.14a); until it
   lands **it is not in force at all**, and an assigned sub sees every item. A sub may also see a punch
@@ -1948,14 +1979,115 @@ editing a `draft`, reached from M-31's Edit.
 >   path and is **not designed here**.
 > - **Owed as TECH_DEBT.** Not in the register today; verified absent.
 >
-> **Until it is resolved, M-32 should offer `fixed_price` only** — proposed, not ruled, and listed in the
-> open items.
+> _Superseded proposal, quoted:_ _"**Until it is resolved, M-32 should offer `fixed_price` only** —
+> proposed, not ruled, and listed in the open items."_
 
-- **CUT: `co_type` selection beyond the default**, for the reason directly above.
+> ##### ✅ RULED [S115, Josh, D-62] — fix #140 FIRST, then ship all three types
+>
+> **The `fixed_price`-only interim is WITHDRAWN, not adopted. #140 is closed before M-32 offers a
+> `co_type` choice, and then all three types ship.** The ordering is the ruling: mobile never carries
+> the defect, and the restriction never exists to be forgotten about later.
+>
+> **⚠️ THE BLOCK ABOVE IS FACTUALLY WRONG ABOUT THE SYMPTOM, and the correction matters more than the
+> wording — verified live [S115] against rebuild-test, not read off the code.** It says a PM "gets a
+> silently wrong total". **They do not, and have not since `assertInstrumentRatesInForce` landed.**
+> What actually happens, measured on `CO-105-02` (cost_plus, real rates, material + subcontractor rows):
+>
+> | | rates the caller can read | `assertInstrumentRatesInForce` | outcome |
+> |---|---|---|---|
+> | Owner | material 20%, sub 20% | passes | prices and persists `net_delta` |
+> | **PM** | **none — RLS returns 0 rows** | **throws** | **recalculation refused** |
+>
+> So the guard already converts the silent path into a hard stop. **Two real defects remain, and they
+> are the ones D-62 is fixing:**
+>
+> 1. **THE ERROR NAMES A CAUSE THAT IS FALSE.** `NoRateInForceError` reads *"No material markup in
+>    force for this instrument — set a rate before totals can recalculate."* **The rate IS in force.**
+>    The PM simply cannot read it. CLAUDE.md is explicit — *"API errors never name a cause that hasn't
+>    been verified"* — and this one sends a PM to ask an Owner to set a rate that already exists.
+> 2. **A PM CANNOT RECALCULATE A NON-FIXED CO AT ALL.** Any `cost_plus` CO with a material,
+>    subcontractor or other row, and every `time_and_materials` CO, is refused. **That is D-51's
+>    lifecycle broken for two of three types** — which is precisely what D-62 will not ship.
+>
+> **The narrow silent case that DOES survive is not role-dependent and is not this bug.** A `cost_plus`
+> CO whose rows are **all labor** passes the guard for everyone — `assertInstrumentRatesInForce` never
+> checks `cost_plus_labor_hourly` — but labor bills flat at the **row's own rate** under
+> `flat_rate_labor` (S97), so a PM and an Owner compute the **same** total. Recorded so a later reader
+> does not mistake it for #140 and "fix" it into a regression.
+>
+> **The fix, and its scope — see §4.11.12a.**
+
+- **CUT: `co_type` selection beyond the default** — **[S115, D-62] this cut is LIFTED once §4.11.12a
+  lands.** M-32 offers all three types; the reason for the cut was the collision above, and D-62
+  closes it rather than routing around it.
 - **CUT: attachments.** No file picker; `/m` has no document-upload path (§4.11.6's cut stands).
 - **Online-only.** Disabled offline with a plain message. Does not queue — a CO is not in D-6's set.
 - **Send is not on this screen.** Create lands on M-31, and sending is an explicit second action there,
   so "save a draft" and "commit to a number in front of a client" are never one tap.
+
+#### 4.11.12a The #140 fix — privileged CO recalculation — **[S115, D-62]**
+
+**Built S115.** The pattern is `invoice-derivation-server.ts`'s (7D1 RULING B), followed rather than
+re-invented, because it was designed for the identical collision.
+
+**Three files, and the shape is the point:**
+
+| File | What it is |
+| --- | --- |
+| `lib/services/instrument-rates-shared.ts` | **`buildInstrumentPricingContext()` EXTRACTED**, not copied — the pure "rate rows → pricing context" mapping. |
+| `lib/services/change-order-totals-server.ts` | **NEW.** `import 'server-only'`. Reads rates with the **service role**, prices with the shared functions, persists row/line/`net_delta`. **Returns `{ success }` — no rate, no rows, no markup.** |
+| `app/api/change-orders/[id]/recalculate/route.ts` | **NEW.** 401 → 403 (owner/admin/PM) → **RLS-scoped CO read** → 404. All three BEFORE the privileged call. |
+
+`recalculateChangeOrderTotals()` in `change-orders-client.ts` now POSTs to that route. **Its signature
+is unchanged**, so no call site moved.
+
+> ##### ⚠️ WHY `buildInstrumentPricingContext` WAS EXTRACTED RATHER THAN DUPLICATED
+>
+> The two paths read the rates through **different clients** — RLS-scoped on the caller side, service
+> role on the server side — but they must **shape them identically**. A second copy of that mapping is
+> the one defect that would make a PM's total differ from an Owner's **in value** rather than merely
+> failing, and it would look exactly like #140 to whoever found it. One definition, two callers.
+>
+> It lives in `instrument-rates-shared.ts` because that module is deliberately bundle-neutral: a
+> `server-only` module can import it without dragging in `supabase-browser`, which is why the shaping
+> could not simply be imported from the client service file.
+
+> ##### ✅ A-28's SCOPE — CONFIRMED, AND THIS FIX IS OUTSIDE IT
+>
+> **A-28 reads:** _"`apps/web/app/dashboard/**` is unchanged by this work — `git diff --stat` against
+> the merge base shows no desktop route files."_ **It is a claim about `app/dashboard/**` only.** It is
+> not a claim about `lib/services/**`, and §2482 already records the precedent in as many words:
+> _"A-28 protects `apps/web/app/dashboard/**` from *this spec's* changes."_
+>
+> **This fix touches NO file under `app/dashboard/**`. A-28 holds, unweakened and unamended.** The
+> three desktop consumers — `co-builder.tsx`, `correct-rates.tsx`, `renegotiate-rate.tsx` — call
+> `recalculateChangeOrderTotals(id)` exactly as before; **the signature was kept `Promise<Result>`
+> specifically so they would not have to move**, which is what keeps A-28 a meaningful assertion rather
+> than one satisfied by luck.
+>
+> **A-28b is the criterion that DOES bind here, and it is satisfied by extraction.** _"No `lib/services/*`
+> file is duplicated for mobile."_ The new server module is not a mobile duplicate of anything — it is
+> the privileged half of a path both surfaces share, and the logic it needs was extracted into one
+> shared definition rather than copied.
+>
+> **⚠️ SAY THE PART A-28 DOES NOT COVER.** This fix **changes desktop behaviour**, and that is
+> intended, not incidental. A PM on the desktop CO builder could not recalculate a cost-plus or T&M
+> change order before this; now they can. **#140 was always a desktop defect** — the register says so —
+> and D-62's ordering means it is fixed there first and mobile inherits a working path. A reader who
+> takes A-28 to mean "this spec never affects desktop" is reading it too broadly: it constrains which
+> **route files** move, not which behaviour improves.
+
+> ##### ⚠️ THE UTC-SLICE DEFECT IS PRE-EXISTING, IS NOT FIXED HERE, AND THE REASON IS DELIBERATE
+>
+> Both paths compute their as-of date as `new Date().toISOString().slice(0, 10)` — **UTC**, not company
+> time. `instrument-rates-shared.ts`'s own header explains why that is wrong for `effective_from`:
+> after ~20:00 EDT the UTC slice is **tomorrow**, so pricing can ask what is in force on the wrong
+> calendar day and pick up a dormant future rate.
+>
+> **The privileged path deliberately keeps the same UTC slice.** Moving only one side to `companyToday()`
+> would make a PM's total differ from an Owner's for a few hours every evening — **a worse bug than the
+> one being fixed, and indistinguishable from #140 to whoever hit it.** Fixing it means moving **both**
+> paths in one change, with the company timezone loaded server-side. **Owed, and not done here.**
 
 #### 4.11.13 M-33 · Punch item create — `/m/p/[projectId]/punch/new` — **[S108, D-52]**
 
@@ -1964,8 +2096,42 @@ editing a `draft`, reached from M-31's Edit.
 - **Write:** `createPunchItem({...})` (`punch-client.ts:70`).
 - **A punch item needs a parent list.** `punch_list_items.punch_list_id` is required, and a project may
   have none. `createPunchList(projectId, name)` (`punch-client.ts:34`) exists and RLS admits every role
-  (`punch_lists_insert_authenticated`). **Which list a mobile-created item lands in is an open item** —
-  auto-create a default, or make the user pick when more than one exists. Not ruled here.
+  (`punch_lists_insert_authenticated`).
+  _Superseded clause, quoted:_ _"**Which list a mobile-created item lands in is an open item** —
+  auto-create a default, or make the user pick when more than one exists. Not ruled here."_
+
+> ##### ✅ RULED [S115, Josh, D-60] — the author targets a list, always
+>
+> **Creating a punch item on mobile means EITHER picking an existing list OR creating a new one.
+> Every item lands in a list the author chose. There is no default and no auto-target.**
+>
+> **Both halves of the old open item are rejected, and for the same reason.** "Auto-create a default"
+> hides the decision; "ask only when more than one exists" makes the screen behave differently on its
+> second use than its first — a field user taps **New item** on a project with one list and is never
+> asked, then taps it on a project with two and is suddenly asked to choose something they have never
+> seen. **A rule that asks only sometimes is a rule nobody can predict.** The picker is unconditional.
+>
+> **What M-33 gains — the whole of it:**
+>
+> - **A required list target.** No submit without one. The field sits **above `title`**, because the
+>   answer to "where does this go" changes nothing about what the user types but reading it afterwards
+>   changes everything about finding the item again.
+> - **Existing lists come from the project's own lists** — `getPunchLists(projectId)` (`punch.ts:48`)
+>   already returns them and is already loaded by M-14, which is the screen M-33 is reached from.
+>   **Do not add a second fetch**; §1's shared-service rule and A-28b both bind here.
+> - **Creating a list inline** calls `createPunchList(projectId, name)` (`punch-client.ts:34`),
+>   which returns the new id. **It is a second write, not a nested one** — the list is created first,
+>   its id is used for the item, and **a failed item insert leaves the new list behind**. That is
+>   accepted rather than papered over: an empty list is a legal, visible state (D-57 already produces
+>   them) and the alternative is a transaction this service layer does not offer.
+> - **⚠️ THE LIST PICKER IS NOT A ROLE SURFACE.** `punch_lists_insert_authenticated` admits every role,
+>   subcontractors included (D-52 as corrected). A build must not gate list creation to Foreman+ by
+>   analogy with `deletePunchList` — **delete is Foreman+, create is not**, and they are different
+>   verbs on the same table.
+> - **⚠️ WHAT A SUBCONTRACTOR SEES IN THE PICKER.** D-57 narrows `punch_list_items`, **not**
+>   `punch_lists` — lists stay fully visible to a sub, so the picker shows the project's lists in full
+>   even though M-14's item rows are narrowed. **This is correct and must not be "fixed"**: a sub who
+>   could not see the lists could not file an item at all, which is exactly what D-52 restored.
 - Fields: `title` (required), `location`, `trade`, `priority`, `assignee_id`, `reference_photo_file_id`.
 - **`assignee_id` is a `company_members` id, never a user id or a `profiles.id`** — the same trap
   §4.3/GAP-1b names for D-16's "mine". Bind the picker to `getMembers()` (`members.ts:14`).
@@ -4376,6 +4542,19 @@ _Role gating — D-54_
 
 - A-65 **Every gated route refuses at the route, not only by hiding its control** — typing `/m/p/{id}/changes/new` as a foreman does not render the form. `[Playwright]` _(§4.11.10a's recommendation, and **the half that is enforcement rather than cosmetics**. A hidden button is not a permission: the URL survives a shared screenshot, a stale PWA cache and a bookmark. Whatever Josh rules for the visible behaviour, this criterion holds.)_
 - A-66 **A role that lacks access lands somewhere that explains itself** — never a blank screen, never a silent bounce to the hub with no message. `[Playwright]` _(§4.11.10a. **Deliberately written to be satisfiable by whichever of options A/B/C is ruled**, because the option is Josh's and the criterion is not waiting on it. The failure it forbids is the one all three options can produce by accident: a sub taps a Punch tile, arrives back at M-3, and has been given a bug rather than a permission.)_
+
+**D-60 / D-61 — punch list targeting (M-33, M-14)**
+
+- A-67 **NEW [S115, D-60]** — **M-33 does not submit without a list target.** With no list chosen the create control is refused, and the refusal names the missing list rather than failing on `title`. `[Playwright]` _(§4.11.13. The criterion is the ABSENCE of a default: a build that auto-created "Punch List" or silently used the project's only list satisfies every other assertion on that screen and violates D-60. Assert that a project **with exactly one list still asks** — that is the case a "pick when ambiguous" implementation gets wrong, and the case a user meets first.)_
+- A-67b **NEW [S115, D-60]** — **a list can be created from M-33 and the item lands in it.** The new list is the one the item's `punch_list_id` points at, and it appears in M-14 afterwards. `[live]` _(§4.11.13. Two writes, not one — `createPunchList` then `createPunchItem`. **A failed item insert leaves the new list behind**, which is accepted (D-60) and must not be "fixed" with a cleanup that deletes a list a user may have meant to keep; an empty list is a legal state.)_
+- A-67c **NEW [S115, D-61]** — **M-14 renders a FLAT item list, not a list of lists**, and the Mine/Open/All chips still filter items. The parent list appears as a row label. `[Playwright]` _(§4.11.4. Written because D-60 invites the opposite build. The cheap check is that `m-punch-row` count still equals the project's visible item count rather than its list count — a grouped screen fails it immediately, and so does one that renders list headers as rows.)_
+
+**D-62 / TECH_DEBT #140 — a PM recalculates a non-fixed CO**
+
+- A-68 **NEW [S115, D-62]** — **an empty rate set never becomes a priceable 0%.** `buildInstrumentPricingContext` on zero rows returns `null` markups, and pricing REFUSES. `[unit]` _(§4.11.12a. **This is the criterion that fails on the tempting repair** — defaulting a missing rate to 0 makes every screen render and every change order silently sell at cost. Verified sensitive: injecting `?? 0` in place of `?? null` fails 4 of the 7 assertions in `test/co-rate-visibility.test.ts`.)_
+- A-68b **NEW [S115, D-62]** — **recalculation through a caller-scoped client is REFUSED; through the privileged client it prices correctly.** The same function, two clients, opposite outcomes, and nothing is persisted on the refusal. `[live]` _(§4.11.12a. **The shape is the assertion**: #140 is entirely about WHICH client reads `instrument_rates`, so a happy-path test passes on the broken build — which priced perfectly well for an Owner. This also fails if the route is later "simplified" to hand the caller's own client to the privileged function. `test/s115-co-recalc-rates.live.ts`.)_
+- A-68c **NEW [S115, D-62]** — **no rate value reaches the caller.** The privileged function's result has exactly one key, `success`, and no response body contains a rate. `[live]` _(§4.11.12a; 7D1 RULING B's property. Asserted structurally, because the regression is someone returning the context "for debugging" and handing a PM the Owner/Admin-floored figure.)_
+- A-68d **NEW [S115, D-62]** — **the route refuses before the privilege.** Unauthenticated → 401; foreman/crew/subcontractor → 403; a CO outside the caller's company or unassigned project → 404, and none of the three falls through to another. `[live]` _(§4.11.12a. The service role bypasses RLS entirely, so the route's own checks are the only protection — the `record_client_payment` trap the S97 isolation proof caught. 403 and 404 stay distinct per CLAUDE.md's error contract.)_
 
 **Regression**
 
