@@ -27,12 +27,16 @@
 > blocked from exactly **four detail routes** (M-31, M-35, M-36, file-open), and **A-12's nine-tile count
 > needs no carve-out** — a S109 flag withdrawn as mistaken.
 >
-> **Not build-ready for the new scope.** **Six items need a ruling**, **four are filed as tech debt**
-> (#117 amended, #140, #141 rewritten, #142), a **migration is owed for D-57** — and the S109
-> four-policy punch floor is **WITHDRAWN; do not build it**. **TECH_DEBT #127 gates verification, harder
-> now than before**: D-57's failure mode is *a sub sees nothing*, which looks exactly like the rule
-> working. **Seed the identity, then migrate, then prove both arms.** The build-ready status below
-> applies to the pre-S108 scope.
+> **[S111] Two rulings finish D-57 — D-58, D-59.** Punch **UPDATE is narrowed to match SELECT** (same
+> predicate, same migration, two policies), closing the blind-write asymmetry D-57 left. A
+> subcontractor's Punch badge **keeps `{mine} mine · {total} open`** — no role-conditional copy on `/m`.
+>
+> **Not build-ready for the new scope.** **Four items need a ruling**, **four are filed as tech debt**
+> (#117 amended, #140, #141 rewritten, #142), and the S109 four-policy punch floor is **WITHDRAWN; do not
+> build it**. The D-57/D-58 migration is **specified in §4.11.14a and executed in a fixed order the
+> failure mode dictates**: **close #127 → migrate → prove both arms**, because a wrong predicate makes a
+> sub see nothing, which looks exactly like the rule working. The build-ready status below applies to
+> the pre-S108 scope.
 
 > **Status:** **BUILD-READY [S99]. GAP-8 IS CLOSED.**
 >
@@ -231,7 +235,9 @@
 | D-51 | Change orders on mobile       | **FULL LIFECYCLE, OWNER/ADMIN/PM ONLY — creation through send-for-signature.** [S108, Josh] **Activates D-45's recorded intent rather than introducing it.** **D-26 is AMENDED, not reversed:** M-13's *list* still renders no `net_delta` for any role, and the author-facing surfaces (M-31, M-32) show the value the author is entering. The write side is already DB-floored to exactly these three roles (`change_orders_insert_authorized` / `_update_authorized`), so unlike the read side this ruling does **not** depend on UI discipline. §4.11.3, §4.11.11, §4.11.12; A-51–A-55. |
 | D-52 | Punch list on mobile          | **CORRECTED TWICE [S110, Josh]. Create and complete: EVERY role, subcontractors INCLUDED. Verify: FOREMAN+.** _Superseded text, quoted not rewritten:_ _"**CREATE, COMPLETE AND VERIFY — everyone except subcontractors.**"_ **Both halves of that were wrong.** (a) **The subcontractor exclusion is WITHDRAWN** — subs get punch lists, including creating them; what changes instead is **visibility**, ruled separately as **D-57**. (b) **Verify follows desktop: Foreman+, and crew are excluded.** `verifyPunchItem`'s `FOREMAN_PLUS` is right and D-52's "everyone" was wrong; **5C §4 stands unreversed**. **Still does not change D-16's counter** for the five non-sub roles: verification moves `complete → verified` and neither state is in `('open','in_progress')` — but see D-57 for what it does to a **sub's** counts. §4.11.4, §4.11.13, §4.11.14; A-56–A-59. |
 | D-53 | Detail views                  | **CORRECTED [S110, Josh] — PHOTOS ARE WITHDRAWN FROM THE EXCLUSION.** _Superseded text, quoted:_ _"**CHANGE ORDERS, TEAM MEMBERS, CONTACTS, FILES AND PHOTOS — everyone except subcontractors.**"_ **Subs get FULL photo access: view every photo on a project they can reach, take and add new ones, and annotate.** §7a/D-20's intent stands and D-53 should never have cut across it — four policies were widened as the **first build step** for exactly that. The exclusion now names **four** surfaces, not five: **change-order detail, team-member detail, contact detail, and opening a file.** [S108, Josh] Files means **actually opening the document**; `getSignedUrl` has **zero call sites under `/m`**. Contacts means **the whole row opens the contact**. §4.11.6, §4.11.7, §4.11.8, §4.11.11, §4.11.15, §4.11.16; A-60–A-64. |
-| D-57 | A subcontractor's punch visibility | **ASSIGNEE OR AUTHOR, AND NOTHING ELSE ON THE PROJECT.** [S110, Josh] Replaces D-52's withdrawn exclusion. A subcontractor sees a punch item **only** if `assignee_id = get_my_member_id()` **or** `created_by = auth.uid()`. **Punch LISTS stay fully visible** and subs may create both. **This is NARROWER than what ships today, not wider** — `punch_list_items_select_visible`'s first arm is `can_view_project()`, which is role-blind, so an assigned sub currently sees **every** punch item on the project. **`created_by` EXISTS** (`DEFAULT auth.uid()`, FK to `auth.users`), so the auto-assign fallback is **not needed**. **One policy, one migration; no application code changes.** §4.11.14a; A-59, A-59c–A-59e. |
+| D-58 | Punch UPDATE vs D-57's SELECT | **NARROWED TO MATCH. Same predicate, same migration.** [S111, Josh] Closes the asymmetry D-57 left: `punch_list_items_update_authenticated` kept its role-blind `can_view_project()` arm, so **a subcontractor could write to an item they cannot read** — a blind update by id. **Incoherent, and now closed.** The UPDATE policy takes D-57's two arms verbatim: `assignee_id = get_my_member_id() OR created_by = auth.uid()` for a sub, the original predicate untouched for everyone else. **Same two identity axes, and they must not be mixed** — member id on the first, user id on the second. §4.11.14a; A-59f. |
+| D-59 | A subcontractor's Punch badge label | **UNCHANGED — `{mine} mine · {total} open`, the same string every role sees.** [S111, Josh] Closes the label question D-57 opened. For a sub, "total open" now means **the open items they can see**, which is the honest answer to the question they are actually asking. **Josh's reasoning, recorded as his:** a sub-specific string would be **the first role-conditional label anywhere on `/m`** and would have to say something awkward. **The number narrowing is the feature; the label does not explain it.** §4.11.14's D-57 caveat; A-59e. |
+| D-57 | A subcontractor's punch visibility | **ASSIGNEE OR AUTHOR, AND NOTHING ELSE ON THE PROJECT.** [S110, Josh] **EXTENDED TO UPDATE by D-58 [S111]** — one migration, two policies. Replaces D-52's withdrawn exclusion. A subcontractor sees a punch item **only** if `assignee_id = get_my_member_id()` **or** `created_by = auth.uid()`. **Punch LISTS stay fully visible** and subs may create both. **This is NARROWER than what ships today, not wider** — `punch_list_items_select_visible`'s first arm is `can_view_project()`, which is role-blind, so an assigned sub currently sees **every** punch item on the project. **`created_by` EXISTS** (`DEFAULT auth.uid()`, FK to `auth.users`), so the auto-assign fallback is **not needed**. **One policy, one migration; no application code changes.** §4.11.14a; A-59, A-59c–A-59e. |
 | D-54 | Role-gated access on `/m`     | **D-11 IS AMENDED — recorded as a decision, not allowed to arrive silently.** [S108, Josh] _D-11's text, quoted:_ _"**All roles.** No role gate on `/m`."_ **The first clause stands and the second does not:** every role still *gets* mobile, but D-51 and D-53 mean roles no longer all see the same screens. **RESOLVED [S109, Josh] — HIDE AND ACTUALLY BLOCK.** Option A adopted: the control is **hidden** *and* the route is **guarded**. **A hidden button is not a permission** — the URL survives a shared screenshot, a stale PWA cache and a bookmark, so the guard is the gate and hiding is cosmetic on top of it. The full per-surface block list, derived from the policies rather than from prose, is **§4.11.10b**. §4.11.10a, §4.11.10b; A-65–A-66. |
 | D-55 | Detail screens are PAGES      | **A GENERAL RULE, NOT A PER-SCREEN CALL.** [S109, Josh] **Every list row opens its own page with its own route** — punch items (M-34), change orders (M-31), team (M-35), contacts (M-36), files (§4.11.16). No bottom sheets, no expanding rows, no modal-over-list. **Consistent with D-28**, which ruled pages over sheets for the four field-capture screens on the same reasoning: each is deep-linkable and browser-back-able, and none is hosted by `layout.tsx`'s sheet host. **Recorded as a rule so the next detail screen does not re-litigate it** — D-28 settled the question once for capture and was then re-argued for M-34; that is the loop this closes. **M-34 is no longer PROPOSED.** §1; §4.11.14. |
 | D-56 | TECH_DEBT #117 on mobile      | **UI-ONLY IS ACCEPTED, FOR NOW.** [S109, Josh] `change_orders_select_visible` keeps **no role floor and no author scoping**; the Owner/Admin/PM gate on M-31/M-32 lives in the interface. **The exposure, stated plainly rather than implied away: a foreman gets the row from the database — `net_delta`, and the line rows' `total`, `rate`, `unit_cost` and `amount` — and only the interface stops them seeing it.** **The write side needs no migration**: `change_orders_insert_authorized` / `_update_authorized` and both child tables' INSERT/UPDATE/DELETE already carry exactly `owner, admin, project_manager`. **TECH_DEBT #117 amended, not closed.** §4.11.10b, §4.11.11. |
@@ -2041,9 +2047,22 @@ editing a `draft`, reached from M-31's Edit.
 >
 > **No counter expression changes and none should.** This is the RLS-shaped-count pattern the spec has
 > already accepted once: **A-11j** asserts that a crew member's "Up next" reflects only the schedule rows
-> RLS grants them, for the same structural reason. **What is NOT yet decided is the label** — whether a
-> sub's badge should read differently, or whether the figure simply is what they can see. **Open item
-> 11.** A build must not "fix" it by bypassing RLS to recover a project-wide count.
+> RLS grants them, for the same structural reason. A build must not "fix" it by bypassing RLS to recover
+> a project-wide count.
+>
+> **THE LABEL IS UNCHANGED — RULED [S111, Josh, D-59].** A subcontractor's badge reads
+> **`{mine} mine · {total} open`**, the same string every other role sees. **No role-conditional copy.**
+>
+> **Josh's reasoning, recorded as his rather than paraphrased into a justification:** for a sub,
+> "total open" now means **the open items they can see, which is the honest answer to the question they
+> are asking** — a sub looking at a project's punch badge wants to know what is outstanding *for them*,
+> not an audit of work they have no part in. A sub-specific string would be **the first role-conditional
+> label anywhere on `/m`**, and it would have to say something awkward to earn its place.
+> **The number narrowing is the feature; the label does not explain it.**
+>
+> **What this forecloses**, so a considerate build does not undo it: no "(visible to you)" suffix, no
+> tooltip, no asterisk, no second figure. **D-16's format is one string for six roles**, and A-59e
+> asserts the *number*, deliberately not the copy.
 
 #### 4.11.14a A subcontractor's punch visibility — **[S110, Josh, D-57]**
 
@@ -2174,25 +2193,70 @@ CREATE POLICY punch_list_items_select_visible ON public.punch_list_items
   they hold no `project_assignments` row for still sees that item — preserving the "broad assignment"
   intent the original policy's second arm was written for, and which its own comment calls out.
 
+##### 5. UPDATE takes the SAME predicate — **RULED [S111, Josh, D-58]**
+
+_S110 left this open (item 12) and it is now closed._ `punch_list_items_update_authenticated` keeps a
+role-blind `can_view_project()` arm, so **a subcontractor could write to an item they cannot read** — a
+blind update by id. **D-58 narrows UPDATE with the identical two arms**, in the **same migration**:
+
+```sql
+DROP POLICY punch_list_items_update_authenticated ON public.punch_list_items;
+
+CREATE POLICY punch_list_items_update_authenticated ON public.punch_list_items
+  FOR UPDATE TO authenticated
+  USING (
+    company_id = public.get_my_company_id()
+    AND (
+      -- Every non-subcontractor role: the original predicate, byte for byte.
+      (
+        public.get_my_role() IS DISTINCT FROM 'subcontractor'::text
+        AND (
+          public.can_view_project(project_id)
+          OR assignee_id = public.get_my_member_id()
+        )
+      )
+      -- Subcontractor (D-57 + D-58): assignee or author, matching SELECT exactly.
+      OR (
+        public.get_my_role() = 'subcontractor'::text
+        AND (
+          assignee_id = public.get_my_member_id()
+          OR created_by = auth.uid()
+        )
+      )
+    )
+  );
+```
+
+**Three things about this that are decisions, not incidentals:**
+
+- **The two policies must stay identical.** The whole point is that readable and writable are the same
+  set. If a later change touches one, it touches both — **A-59f** asserts the pair agree rather than
+  asserting each separately, so drift fails loudly.
+- **`WITH CHECK` is deliberately omitted, and that is not an oversight.** Postgres defaults an UPDATE
+  policy's `WITH CHECK` to its `USING` expression, so the **post-update row must also satisfy the
+  predicate**. For a sub that means they cannot reassign an item they merely authored to someone else
+  and keep it — which is coherent with the rule rather than a side effect of it. Spelling out an
+  explicit `WITH CHECK` would only restate the default and invite the two to drift apart.
+- **INSERT is untouched.** A sub creating an item lands `created_by = auth.uid()` by column default and
+  can therefore read and update it immediately. **No INSERT floor is added — D-52's reversal stands.**
+
 **Cost.**
 
-- **One policy, no data change, no column change, no backfill.** Smaller than §7a's four-policy widening.
+- **ONE migration, TWO policies** — `punch_list_items_select_visible` (D-57) and
+  `punch_list_items_update_authenticated` (D-58). No data change, no column change, no backfill.
+  Still smaller than §7a's four-policy widening.
 - **ZERO application code changes.** `getPunchLists()`, `getOpenPunchCounts()`, M-14, M-34 and the
   desktop panel all query through RLS and simply receive fewer rows. Nothing in the service layer needs
   to learn about subcontractors.
-- **INSERT and UPDATE are deliberately left alone** — subs may create and complete, per the corrected
-  D-52.
-- **⚠️ UPDATE now permits more than SELECT, and that asymmetry is NOT ruled.**
-  `punch_list_items_update_authenticated` keeps its `can_view_project()` arm, so **a sub could update an
-  item they can no longer read** — a blind write by id. Incoherent rather than dangerous, and the tidy
-  fix is to mirror the same two arms onto UPDATE. **Proposed, not ruled — open item 12.**
-- **A sub may now see a punch LIST with no items in it**, because lists stay visible while items filter
-  out. That is a real state, not an error, and M-14 needs empty-state copy that does not read as a
-  loading failure — the A-30b rule, on a new path.
-- **It cannot be proven on rebuild-test as things stand.** **TECH_DEBT #127** — no `subcontractor`
-  profile identity exists, so the probe has no identity to run as. **Seed first, then migrate, then
-  prove it.** Migrating blind here is worse than usual: the failure mode of a wrong predicate is *a sub
-  sees nothing*, which looks exactly like the rule working.
+- **INSERT is deliberately left alone** — subs may create, per the corrected D-52. **`punch_lists` is
+  untouched in all three verbs**: subs get lists.
+- **A sub may see a punch LIST with no items in it**, because lists stay visible while items filter out.
+  That is a real state, not an error, and M-14 needs empty-state copy that does not read as a loading
+  failure — the A-30b rule, on a new path.
+- **It cannot be proven without a subcontractor identity.** **TECH_DEBT #127** was the blocker and is
+  **closed first, deliberately** — see §4.11.14b. **Seed, then migrate, then prove both arms.** Migrating
+  blind here is worse than usual: the failure mode of a wrong predicate is *a sub sees nothing*, which
+  looks exactly like the rule working.
 
 #### 4.11.15 M-35 · Team-member detail — `/m/team/[memberId]` — **[S108, D-53]**
 
@@ -4297,6 +4361,7 @@ _Punch list — D-52_
 - A-59c **NEW [S110]** — **a subcontractor sees a punch item only if `assignee_id = get_my_member_id()` OR `created_by = auth.uid()`**, and sees no other item on the project. `[live — BLOCKED on TECH_DEBT #127]` _(**D-57**, §4.11.14a. **This must be asserted against the DATABASE, not the screen** — the rule is a SELECT policy, and a build that filters in `getPunchLists()` instead would pass a screen-level check while still shipping the rows, which is **TECH_DEBT #136**'s mistake exactly. **The two halves sit on different identity axes** — `assignee_id` is a `company_members` id, `created_by` is an `auth.users` id — so the fixture must exercise both arms separately or a swapped comparison passes on the arm that happens to work.)_
 - A-59d **NEW [S110]** — **the narrowing changes nothing for the other six roles.** An owner, admin, PM, foreman or crew member sees exactly the same punch items after D-57's migration as before it. `[live]` _(§4.11.14a. The proposed policy is two mutually exclusive arms specifically so this is provable; without the criterion, a subtle change to the shared first arm would go unnoticed because every mobile screen would still look right.)_
 - A-59e **NEW [S110]** — **a subcontractor's M-3 Punch badge counts only the items D-57 lets them see**, and no code path recovers a project-wide count for them. `[live — BLOCKED on TECH_DEBT #127]` _(§4.11.14's D-57 caveat. `getOpenPunchCounts` reads through RLS, so this is what correct behaviour looks like — the same shape **A-11j** already accepts for a crew member's "Up next". The criterion exists because the figure reads oddly (`{mine} mine · {total} open` where "open" is no longer the project's), and **the tempting fix is to bypass RLS to make the number look right**. Whether the LABEL should change for a sub is open item 11 and is deliberately not asserted here.)_
+- A-59f **NEW [S111, D-58]** — **`punch_list_items`' SELECT and UPDATE policies grant the same set: anything a subcontractor can read they can write, and nothing they cannot read.** `[live — needs the sub identity]` _(§4.11.14a §5. **Written as an agreement between the two policies, not as two separate assertions**, because the defect it guards is drift: a later change that touches one and not the other reopens the blind-write hole D-58 closed, and per-policy criteria would both still pass. The probe is direct: for each of the three fixture items, attempt a read and an update as the sub and assert the two outcomes match.)_
 - A-59b **The ten section screens with no ruled write still offer none** — M-11, M-12, M-15, M-16, M-17, M-18, M-19 and the three shared routes render no button, input, select or textarea that mutates. `[Playwright]` _(**This is what survives of A-30c's blanket sweep**, narrowed from twelve screens to ten rather than deleted. D-50 reversed the rule for two screens and explicitly did not reverse it for the rest; without this, "read-only" quietly stops meaning anything. Note M-16's row tap and M-17's row tap are **navigation**, not writes, and must not trip it.)_
 
 _Detail views — D-53_
@@ -4373,7 +4438,7 @@ shell checks. Two of these deserve their mechanism spelled out because the asser
 
 **House rule.** Every fix still needs a failing-then-passing assertion. Under D-18 that rule is now
 satisfiable for every criterion in §10 except A-26, which is manual by nature.
-## §11 — Decision register (D-1…D-57; **five [S108], three [S109], three [S110]**; six items open — sixteenth pass)
+## §11 — Decision register (D-1…D-59; **five [S108], three [S109], three [S110], two [S111]**; four items open — seventeenth pass)
 
 > **[S108] Fourteenth ruling pass — D-50…D-54, the read-only reversal.** The header below counted
 > "twenty-nine ruled [S98–S99]; one open, out of scope" and had already fallen behind by four passes
@@ -4848,15 +4913,10 @@ rather than bound to something approximate — the D-19 and D-44 precedent:
     was wrong when raised.** D-53 gates **detail views**; M-3's tiles point at **list** screens, and no
     tile is hidden from anyone. **A-12 holds verbatim.** Tile-by-tile check in §4.11.10b; the S109
     paragraph that caused it is corrected in §4.11.10a.
-11. **⚠️ NEW [S110] — what should a subcontractor's Punch badge SAY?** D-57 makes `getOpenPunchCounts`
-    return only the items a sub may see, so `{mine} mine · {total} open` stops meaning "open on this
-    project" for them and starts meaning "open, of the ones you can see". **The figure is correct and no
-    counter expression should change** (the A-11j precedent). **The label is not ruled.**
-12. **⚠️ NEW [S110] — should punch UPDATE be narrowed to match D-57's SELECT?** As specced,
-    `punch_list_items_update_authenticated` keeps its role-blind `can_view_project()` arm, so a sub could
-    **write to an item they can no longer read** — a blind update by id. Incoherent rather than
-    dangerous. The tidy fix is to mirror D-57's two arms onto UPDATE in the same migration.
-    **Proposed in §4.11.14a, not ruled.**
+11. ~~**What should a subcontractor's Punch badge SAY?**~~ **CLOSED [S111, Josh, D-59]: unchanged —
+    `{mine} mine · {total} open`, the same string every role sees.** No role-conditional copy on `/m`.
+12. ~~**Should punch UPDATE be narrowed to match D-57's SELECT?**~~ **CLOSED [S111, Josh, D-58]: yes,
+    same predicate, same migration.** Two policies, not one. §4.11.14a §5.
 
 #### Owed to TECH_DEBT by this pass — **FILED [S109]**
 
@@ -4957,6 +5017,19 @@ over-reaching paragraph is quoted and corrected in §4.11.10a, the tile-by-tile 
 subcontractor floor on `punch_list_items_{insert,update}_authenticated` and
 `punch_lists_{insert,update}_authenticated`. D-52's reversal makes the *absence* of that floor correct.
 **TECH_DEBT #141 is rewritten** so a reader does not build a migration that has been reversed.
+
+---
+
+### Seventeenth ruling pass [S111, Josh] — the two that finish D-57
+
+| # | Question | **Ruling** | Applied in |
+| - | -------- | ---------- | ---------- |
+| 39 | Narrow punch UPDATE to match SELECT? | **YES — same predicate, same migration, two policies.** A sub writing to an item they cannot read is incoherent. Same two identity axes, not mixed. | **D-58**; §4.11.14a §5; **A-59f** |
+| 40 | Does a sub's Punch badge get its own label? | **NO — `{mine} mine · {total} open`, unchanged.** For a sub "total open" means the open items they can see, which is the honest answer to the question they are asking. A sub-specific string would be the **first role-conditional label on `/m`**. **The number narrowing is the feature; the label does not explain it.** | **D-59**; §4.11.14's D-57 caveat; A-59e |
+
+**Open items 11 and 12 are closed by these two, and the D-57 work is now fully specified.** What remains
+before it is real is execution, in a fixed order that the failure mode dictates rather than convenience:
+**close #127 → apply the migration → prove both arms.** §4.11.14b records the identity seeding.
 
 ---
 
