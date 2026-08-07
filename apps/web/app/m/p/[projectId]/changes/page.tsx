@@ -1,6 +1,8 @@
 import { getChangeOrders, CO_STATUS_LABELS } from '@/lib/services/change-orders';
+import { getMyProfile } from '@/lib/services/profiles';
+import { canReachDetail } from '@/app/m/detail-access';
 import { SectionHeader } from '../section-header';
-import { EmptyState, ListRow, StatusPill } from '../../../mobile-ui';
+import { DeniedNotice, EmptyState, ListRow, ListRowLink, StatusPill } from '../../../mobile-ui';
 
 // M6M §4.11.3 — M-13 · Change Orders. ⚠ NO MONEY, FOR ANY ROLE.
 //
@@ -32,22 +34,38 @@ import { EmptyState, ListRow, StatusPill } from '../../../mobile-ui';
 
 export default async function ProjectChangesPage({
   params,
+  searchParams,
 }: {
   params: { projectId: string };
+  searchParams: { denied?: string };
 }) {
-  const cos = await getChangeOrders(params.projectId);
+  const [cos, profile] = await Promise.all([
+    getChangeOrders(params.projectId),
+    getMyProfile(),
+  ]);
+
+  // D-54 step 1 — HIDE the row tap for a subcontractor. Step 2, the real gate,
+  // is requireDetailAccess() on M-31 itself. A hidden row is not a permission:
+  // the URL survives a screenshot, a bookmark and a stale PWA cache.
+  // The LIST stays open to subs — §4.11.10b: "Gets the list. Only the detail
+  // route (M-31) is blocked."
+  const canOpen = canReachDetail(profile?.role);
 
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
       <SectionHeader projectId={params.projectId} title="Change Orders" />
+      <DeniedNotice kind={searchParams.denied} />
 
       {cos.length === 0 ? (
         <EmptyState>No change orders.</EmptyState>
       ) : (
         <ul className="rounded-[15px] border border-m6m-border bg-m6m-card px-[12px]">
           {cos.map((co) => (
-            <ListRow key={co.id} testId="m-co-row">
-              <div className="min-w-0 flex-1">
+            <CoRow
+              key={co.id}
+              href={canOpen ? `/m/p/${params.projectId}/changes/${co.id}` : null}
+              label={`${co.co_number} ${co.title}`}
+            >
                 <p className="font-mono text-[11px] font-semibold text-m6m-muted">
                   {co.co_number}
                 </p>
@@ -69,11 +87,36 @@ export default async function ProjectChangesPage({
                       : `sent ${co.sent_at!.slice(0, 10)}`}
                   </p>
                 ) : null}
-              </div>
-            </ListRow>
+            </CoRow>
           ))}
         </ul>
       )}
     </div>
+  );
+}
+
+/** One M-13 row, tappable or not. Written as one component so the two forms
+ *  cannot drift — §4.11.10a names "two places to keep in sync" as the one real
+ *  cost of Option A, and this is how that cost is paid down. */
+function CoRow({
+  href,
+  label,
+  children,
+}: {
+  href: string | null;
+  label: string;
+  children: React.ReactNode;
+}) {
+  if (!href) {
+    return (
+      <ListRow testId="m-co-row">
+        <div className="min-w-0 flex-1">{children}</div>
+      </ListRow>
+    );
+  }
+  return (
+    <ListRowLink href={href} testId="m-co-row" label={label}>
+      {children}
+    </ListRowLink>
   );
 }

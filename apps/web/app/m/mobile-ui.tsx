@@ -349,3 +349,145 @@ export function ContactActions({
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// §4.11.16 / D-55 — A ROW THAT OPENS ITS OWN PAGE.
+//
+// ⚠️ WHY THIS IS NOT JUST `<ListRow>` WITH A `<Link>` WRAPPED ROUND IT.
+//
+// §4.11.16 is explicit that on M-17/M-29 the row gains a navigation target
+// **around two existing buttons**: the `tel:` and `mailto:` circles stay, and
+// "the affordances must not swallow each other". Nesting an <a> inside an <a>
+// is invalid HTML — the browser closes the outer one early, and what actually
+// ships is a row where the call button either navigates to the contact or does
+// nothing, depending on the engine. Neither is the spec.
+//
+// So the link and the trailing actions are SIBLINGS. The link fills the row's
+// main area and stretches to the full row via `after:absolute` — a click
+// anywhere that is not a button hits the link — while `trailing` renders above
+// it (`relative z-10`) and keeps its own 44px targets.
+//
+// All three targets clear §2's 44px floor: the row is min-h-58px and the
+// circles are h-11 w-11.
+// ---------------------------------------------------------------------------
+export function ListRowLink({
+  href,
+  children,
+  trailing,
+  testId,
+  label,
+}: {
+  href: string;
+  children: React.ReactNode;
+  /** Rendered OUTSIDE the link — tap-to-act circles and the like. */
+  trailing?: React.ReactNode;
+  testId?: string;
+  /** Accessible name for the row link when the visible content is a fragment. */
+  label?: string;
+}) {
+  return (
+    <li
+      data-testid={testId}
+      className="relative flex min-h-[58px] items-center gap-[10px] border-b border-m6m-border px-[2px] py-[10px] last:border-b-0"
+    >
+      <Link
+        href={href}
+        data-testid="m-row-link"
+        aria-label={label}
+        // ⚠️ `min-h-[44px]` IS LOAD-BEARING AND WAS ADDED AFTER A-30e CAUGHT IT.
+        //
+        // The `after:inset-0` pseudo-element already makes the whole 58px row
+        // clickable, so the HIT AREA was never the problem. But the anchor's own
+        // box was only as tall as its text — 39.75px on a two-line contact row —
+        // and A-30e measures element boxes. Leaving it would have meant the
+        // thing the suite measures and the thing a thumb lands on were different
+        // sizes, which is exactly the discrepancy §2's floor exists to prevent.
+        //
+        // flex-col + justify-content centres the content when the row is taller
+        // than its text, so nothing shifts visually.
+        className="flex min-h-[44px] min-w-0 flex-1 flex-col justify-center after:absolute after:inset-0 after:content-['']"
+      >
+        {children}
+      </Link>
+      {trailing ? <div className="relative z-10 shrink-0">{trailing}</div> : null}
+    </li>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// A-66 — a role that lacks access LANDS SOMEWHERE THAT EXPLAINS ITSELF.
+//
+// "never a blank screen, never a silent bounce to the hub with no message." A
+// route guard that redirects and says nothing has handed the user a bug rather
+// than a permission — which is the failure mode §4.11.10a says all three of its
+// options can produce by accident.
+//
+// The guard bounces to the LIST the row lives on, with `?denied=<surface>`, and
+// the list renders this. Staying on the list matters: the user is returned to
+// something they can still use, with an explanation, rather than to the hub.
+// ---------------------------------------------------------------------------
+export const DENIED_COPY: Record<string, string> = {
+  co: 'Change order details are not available to subcontractors.',
+  member: 'Team member details are not available to subcontractors.',
+  contact: 'Contact details are not available to subcontractors.',
+  file: 'Opening documents is not available to subcontractors.',
+};
+
+export function DeniedNotice({ kind }: { kind: string | undefined }) {
+  const copy = kind ? DENIED_COPY[kind] : undefined;
+  if (!copy) return null;
+  return (
+    <p
+      data-testid="m-denied"
+      role="status"
+      className="mb-[12px] rounded-[15px] border border-m6m-border bg-m6m-card px-[14px] py-[12px] text-[14px] text-m6m-navy"
+    >
+      {copy}
+    </p>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Detail-screen field rows. A label and a value, mono where §2 says mono.
+// Renders NOTHING when the value is absent — §4.13's "no empty slot where
+// null", applied to the five detail views.
+// ---------------------------------------------------------------------------
+export function DetailField({
+  label,
+  value,
+  mono = false,
+  testId,
+}: {
+  label: string;
+  value: React.ReactNode;
+  mono?: boolean;
+  testId?: string;
+}) {
+  if (value === null || value === undefined || value === '') return null;
+  return (
+    <div data-testid={testId} className="border-b border-m6m-border py-[10px] last:border-b-0">
+      <p className="font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
+        {label}
+      </p>
+      <p className={`mt-[3px] text-[15px] text-m6m-navy ${mono ? 'font-mono' : ''}`}>{value}</p>
+    </div>
+  );
+}
+
+/** The card the detail fields sit in. */
+export function DetailCard({
+  children,
+  testId,
+}: {
+  children: React.ReactNode;
+  testId?: string;
+}) {
+  return (
+    <section
+      data-testid={testId}
+      className="rounded-[15px] border border-m6m-border bg-m6m-card px-[14px]"
+    >
+      {children}
+    </section>
+  );
+}

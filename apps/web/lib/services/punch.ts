@@ -72,6 +72,38 @@ export async function getPunchLists(projectId: string): Promise<PunchList[]> {
   }));
 }
 
+/**
+ * ONE punch item by id — M6M §4.11.14's owed function, written S116 (D-55).
+ *
+ * WHY THIS EXISTS RATHER THAN PASSING THE ITEM THROUGH FROM M-14. D-55 makes
+ * every detail screen a real, deep-linkable page. Handing M-34 an item out of
+ * M-14's already-loaded set would make the route un-deep-linkable — a shared
+ * link, a bookmark or a PWA cold start would have nothing to render — and D-55
+ * forbids that outcome, not merely the bottom-sheet alternative it replaced.
+ *
+ * READS THROUGH RLS, WHICH IS THE GATE. `punch_list_items_select_visible` is
+ * narrowed for subcontractors by D-57 (assignee or author only,
+ * `20260828000000_punch_subcontractor_visibility.sql`), so a sub who deep-links
+ * to an item that is neither theirs to do nor theirs to have written gets NULL
+ * here and the page 404s. That is real enforcement, not a UI check — and it is
+ * why M-34 needs no role guard of its own while M-31/M-35/M-36 do.
+ *
+ * Returns null rather than throwing, so the page renders notFound() instead of
+ * a 500 — the same contract getMember() and getContact() already use.
+ */
+export async function getPunchItem(id: string): Promise<PunchItem | null> {
+  const supabase = await createClient();
+
+  const { data } = await supabase
+    .from('punch_list_items')
+    .select(ITEM_JOIN)
+    .eq('id', id)
+    .eq('is_deleted', false)
+    .maybeSingle();
+
+  return (data as unknown as PunchItem) ?? null;
+}
+
 /** D-16's two figures for one project: items assigned to me, and the project total. */
 export interface PunchOpenCounts {
   mine: number;

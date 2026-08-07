@@ -1,7 +1,15 @@
 import { getPunchLists, PUNCH_STATUS_LABELS, isItemClosed } from '@/lib/services/punch';
 import { getMyMember } from '@/lib/services/members';
 import { SectionHeader } from '../section-header';
-import { EmptyState, FilterChips, ListRow, StatusPill, type Chip } from '../../../mobile-ui';
+import { EmptyState, FilterChips, ListRowLink, StatusPill, type Chip } from '../../../mobile-ui';
+
+// D-55 — every row opens M-34. NO ROLE GATE, and that is deliberate: D-52's
+// subcontractor exclusion was withdrawn [S110] and replaced by D-57's
+// visibility NARROWING, which is enforced in the DATABASE
+// (20260828000000_punch_subcontractor_visibility.sql). A sub sees only rows
+// they are assigned or authored, so every row they can see here is one they
+// may open. §4.11.10a: gating a fourth surface "because there is a pattern
+// now" exceeds D-54.
 
 // M6M §4.11.4 — M-14 · Punch List.
 //
@@ -66,8 +74,12 @@ export default async function ProjectPunchPage({
       ) : (
         <ul className="mt-[14px] rounded-[15px] border border-m6m-border bg-m6m-card px-[12px]">
           {items.map((item) => (
-            <ListRow key={item.id} testId="m-punch-row">
-              <div className="min-w-0 flex-1">
+            <ListRowLink
+              key={item.id}
+              testId="m-punch-row"
+              href={`/m/p/${params.projectId}/punch/${item.id}`}
+              label={item.title}
+            >
                 <p className="truncate text-[17px] font-bold leading-tight text-m6m-navy">
                   {item.title}
                 </p>
@@ -89,8 +101,7 @@ export default async function ProjectPunchPage({
                     <span className="font-mono text-[11px] text-m6m-muted">awaiting verification</span>
                   ) : null}
                 </p>
-              </div>
-            </ListRow>
+            </ListRowLink>
           ))}
         </ul>
       )}

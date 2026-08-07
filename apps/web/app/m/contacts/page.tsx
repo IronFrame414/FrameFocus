@@ -1,12 +1,16 @@
 import { CONTACT_TYPE_LABELS } from '@framefocus/shared/constants';
 import { getContacts } from '@/lib/services/contacts';
+import { getMyProfile } from '@/lib/services/profiles';
+import { canReachDetail } from '@/app/m/detail-access';
 import { SetMobileHeader } from '../mobile-header';
 import {
   ContactActions,
   EmptyState,
   FilterChips,
   ListRow,
+  ListRowLink,
   StatusPill,
+  DeniedNotice,
   type Chip,
 } from '../mobile-ui';
 
@@ -55,12 +59,19 @@ function displayName(c: {
 export default async function MobileContactsPage({
   searchParams,
 }: {
-  searchParams: { type?: string };
+  searchParams: { type?: string; denied?: string };
 }) {
   const raw = searchParams.type;
   const active = raw === 'lead' || raw === 'client' ? raw : null;
 
-  const contacts = await getContacts(active ? { contact_type: active } : undefined);
+  const [contacts, profile] = await Promise.all([
+    getContacts(active ? { contact_type: active } : undefined),
+    getMyProfile(),
+  ]);
+
+  // D-54 step 1 — hide the row tap for a subcontractor; requireDetailAccess()
+  // on M-36 is the real gate. The tap-to-act circles stay for every role.
+  const canOpen = canReachDetail(profile?.role);
 
   const emptyCopy =
     active === 'lead' ? 'No leads.' : active === 'client' ? 'No clients.' : 'No contacts.';
@@ -71,6 +82,8 @@ export default async function MobileContactsPage({
 
       <FilterChips chips={CHIPS} active={active} basePath="/m/contacts" param="type" />
 
+      <DeniedNotice kind={searchParams.denied} />
+
       {contacts.length === 0 ? (
         <div className="pt-[18px]">
           <EmptyState>{emptyCopy}</EmptyState>
@@ -80,8 +93,14 @@ export default async function MobileContactsPage({
           {contacts.map((c) => {
             const name = displayName(c);
             return (
-              <ListRow key={c.id} testId="m-contact-row">
-                <div className="min-w-0 flex-1">
+              <ContactRow
+                key={c.id}
+                href={canOpen ? `/m/contacts/${c.id}` : null}
+                label={name}
+                actions={
+                  <ContactActions phone={c.phone} mobile={c.mobile} email={c.email} name={name} />
+                }
+              >
                   <p className="truncate text-[17px] font-bold leading-tight text-m6m-navy">
                     {name}
                   </p>
@@ -101,19 +120,40 @@ export default async function MobileContactsPage({
                       both are in the payload for every role — the cut is UI-only
                       and A-49d is what holds it. `notes` on a lead can carry
                       commercial detail with no reason to be on a crew phone. */}
-                </div>
-
-                <ContactActions
-                  phone={c.phone}
-                  mobile={c.mobile}
-                  email={c.email}
-                  name={name}
-                />
-              </ListRow>
+                </ContactRow>
             );
           })}
         </ul>
       )}
     </div>
+  );
+}
+
+/** One M-29 row. Navigation AROUND the action circles, never wrapping them —
+ *  §4.11.16. Identical shape to M-17's, because the two lists reach the same
+ *  detail route and must not behave differently. */
+function ContactRow({
+  href,
+  label,
+  actions,
+  children,
+}: {
+  href: string | null;
+  label: string;
+  actions: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  if (!href) {
+    return (
+      <ListRow testId="m-contact-row">
+        <div className="min-w-0 flex-1">{children}</div>
+        {actions}
+      </ListRow>
+    );
+  }
+  return (
+    <ListRowLink href={href} testId="m-contact-row" label={label} trailing={actions}>
+      {children}
+    </ListRowLink>
   );
 }

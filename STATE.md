@@ -114,6 +114,21 @@ claude mcp list
 
 ## Codebase State
 
+> **M6M Part B — the five detail views, built S116.** `/m` now has real detail pages: **M-31**
+> `p/[projectId]/changes/[coId]`, **M-34** `p/[projectId]/punch/[itemId]`, **M-35** `team/[memberId]`,
+> **M-36** `contacts/[contactId]`, plus **M-16's file-open path** (`files/open-file.tsx` — the first
+> `getSignedUrl` consumer anywhere under `app/m/`). Seven list screens gained row navigation.
+> **Read-only; every write is Part C.**
+>
+> Two shared pieces carry the pattern: `mobile-ui.tsx`'s **`ListRowLink`** (link and tap-to-act circles
+> as SIBLINGS — nesting them is invalid HTML and silently breaks the call button) and
+> **`app/m/detail-access.ts`**, the D-54 route guard.
+>
+> **⚠️ On four of the five, the guard is the ONLY enforcement.** `change_orders`, `company_members`,
+> `contacts` and `files` carry no `subcontractor` arm on SELECT, so a subcontractor's token still reads
+> every one of those rows — measured S115 at full value (`net_delta` 1410 and 21385.91). **M-34 is the
+> exception**: D-57's migration is real, so an item a sub may not see resolves to `notFound()`.
+
 ### apps/web (Next.js)
 
 ```

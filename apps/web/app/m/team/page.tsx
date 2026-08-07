@@ -1,6 +1,15 @@
 import { getMembers } from '@/lib/services/members';
+import { getMyProfile } from '@/lib/services/profiles';
+import { canReachDetail } from '@/app/m/detail-access';
 import { SetMobileHeader } from '../mobile-header';
-import { EmptyState, FilterChips, ListRow, type Chip } from '../mobile-ui';
+import {
+  DeniedNotice,
+  EmptyState,
+  FilterChips,
+  ListRow,
+  ListRowLink,
+  type Chip,
+} from '../mobile-ui';
 
 // M6M §4.13.5 — M-28 · Team.
 //
@@ -40,12 +49,19 @@ function initials(name: string): string {
 export default async function MobileTeamPage({
   searchParams,
 }: {
-  searchParams: { type?: string };
+  searchParams: { type?: string; denied?: string };
 }) {
   const raw = searchParams.type;
   const active = raw === 'crew' || raw === 'subcontractor' ? raw : null;
 
-  const members = await getMembers(active ? { member_type: active } : undefined);
+  const [members, profile] = await Promise.all([
+    getMembers(active ? { member_type: active } : undefined),
+    getMyProfile(),
+  ]);
+
+  // D-54 step 1 — hide the row tap for a subcontractor; requireDetailAccess()
+  // on M-35 is the real gate.
+  const canOpen = canReachDetail(profile?.role);
 
   const emptyCopy =
     active === 'crew' ? 'No crew.' : active === 'subcontractor' ? 'No subs.' : 'No team members.';
@@ -56,6 +72,8 @@ export default async function MobileTeamPage({
 
       <FilterChips chips={CHIPS} active={active} basePath="/m/team" param="type" />
 
+      <DeniedNotice kind={searchParams.denied} />
+
       {members.length === 0 ? (
         <div className="pt-[18px]">
           <EmptyState>{emptyCopy}</EmptyState>
@@ -63,7 +81,12 @@ export default async function MobileTeamPage({
       ) : (
         <ul className="mt-[14px] rounded-[15px] border border-m6m-border bg-m6m-card px-[12px]">
           {members.map((m) => (
-            <ListRow key={m.id} testId="m-member-row">
+            <MemberRow
+              key={m.id}
+              href={canOpen ? `/m/team/${m.id}` : null}
+              label={m.display_name}
+            >
+              <span className="flex items-center gap-[10px]">
               {/* §4.13.5 — initials avatar tinted with schedule_color, FALLING
                   BACK TO §2's AMBER when null. The column is nullable and the
                   null case is the one a build skips; A-47e asserts it. */}
@@ -93,10 +116,30 @@ export default async function MobileTeamPage({
                   company_members carries no phone or email column, and no named
                   list function selects profiles.phone. §4.13.5 cuts it rather
                   than deriving it — see TECH_DEBT #135's neighbour entry. */}
-            </ListRow>
+              </span>
+            </MemberRow>
           ))}
         </ul>
       )}
     </div>
+  );
+}
+
+/** One M-28 row. Keyed by the MEMBER id — company_members.id — which is the id
+ *  M-35's getMember() takes. */
+function MemberRow({
+  href,
+  label,
+  children,
+}: {
+  href: string | null;
+  label: string;
+  children: React.ReactNode;
+}) {
+  if (!href) return <ListRow testId="m-member-row">{children}</ListRow>;
+  return (
+    <ListRowLink href={href} testId="m-member-row" label={label}>
+      {children}
+    </ListRowLink>
   );
 }

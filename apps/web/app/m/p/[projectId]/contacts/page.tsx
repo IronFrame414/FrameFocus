@@ -1,7 +1,9 @@
 import { CONTACT_TYPE_LABELS } from '@framefocus/shared/constants';
 import { getProjectContacts } from '@/lib/services/project-contacts';
+import { getMyProfile } from '@/lib/services/profiles';
+import { canReachDetail } from '@/app/m/detail-access';
 import { SectionHeader } from '../section-header';
-import { ContactActions, EmptyState, ListRow } from '../../../mobile-ui';
+import { ContactActions, DeniedNotice, EmptyState, ListRow, ListRowLink } from '../../../mobile-ui';
 
 // M6M §4.11.7 — M-17 · Project contacts.
 //
@@ -14,14 +16,26 @@ import { ContactActions, EmptyState, ListRow } from '../../../mobile-ui';
 
 export default async function ProjectContactsPage({
   params,
+  searchParams,
 }: {
   params: { projectId: string };
+  searchParams: { denied?: string };
 }) {
-  const rows = await getProjectContacts(params.projectId);
+  const [rows, profile] = await Promise.all([
+    getProjectContacts(params.projectId),
+    getMyProfile(),
+  ]);
+
+  // D-54 step 1. The real gate is requireDetailAccess() on M-36.
+  // ⚠️ THE TAP-TO-ACT CIRCLES STAY FOR EVERY ROLE — A-37 requires them and they
+  // are the screen's reason to exist on a phone. What a sub loses is the ROW
+  // navigation, not the ability to call the person.
+  const canOpen = canReachDetail(profile?.role);
 
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
       <SectionHeader projectId={params.projectId} title="Contacts" />
+      <DeniedNotice kind={searchParams.denied} />
 
       {rows.length === 0 ? (
         <EmptyState>No contacts on this project.</EmptyState>
@@ -34,8 +48,16 @@ export default async function ProjectContactsPage({
               c?.company_name?.trim() ||
               'Unnamed contact';
             return (
-              <ListRow key={pc.id} testId="m-project-contact-row">
-                <div className="min-w-0 flex-1">
+              <ContactRow
+                key={pc.id}
+                href={canOpen && c?.id ? `/m/contacts/${c.id}` : null}
+                label={name}
+                // `mobile` is NOT selected by getProjectContacts' join (it is a
+                // Pick of seven columns), so it is not passed. M-36 has it —
+                // getContact() selects '*' — which is one more reason the row
+                // opening the contact is worth having.
+                actions={<ContactActions phone={c?.phone} email={c?.email} name={name} />}
+              >
                   <p className="truncate text-[17px] font-bold leading-tight text-m6m-navy">
                     {name}
                   </p>
@@ -52,13 +74,41 @@ export default async function ProjectContactsPage({
                       <span className="text-[13px] text-m6m-muted">{pc.role}</span>
                     ) : null}
                   </p>
-                </div>
-                <ContactActions phone={c?.phone} email={c?.email} name={name} />
-              </ListRow>
+              </ContactRow>
             );
           })}
         </ul>
       )}
     </div>
+  );
+}
+
+/** One M-17 row. The navigation target sits AROUND the two action circles
+ *  rather than wrapping them — §4.11.16: "the affordances must not swallow each
+ *  other". ListRowLink keeps them siblings; nesting an <a> in an <a> would make
+ *  the call button navigate to the contact instead of dialling. */
+function ContactRow({
+  href,
+  label,
+  actions,
+  children,
+}: {
+  href: string | null;
+  label: string;
+  actions: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  if (!href) {
+    return (
+      <ListRow testId="m-project-contact-row">
+        <div className="min-w-0 flex-1">{children}</div>
+        {actions}
+      </ListRow>
+    );
+  }
+  return (
+    <ListRowLink href={href} testId="m-project-contact-row" label={label} trailing={actions}>
+      {children}
+    </ListRowLink>
   );
 }

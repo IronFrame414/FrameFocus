@@ -2160,7 +2160,10 @@ is unchanged**, so no call site moved.
   `getPunchItem(id)`**. Stated rather than assumed — the D-19 and D-44 precedent, where the spec names
   the gap instead of binding to something approximate. **The workaround is now foreclosed:** passing the
   item through from M-14's already-loaded set makes the route un-deep-linkable, and **D-55 forbids that
-  outcome, not merely the sheet**. `getPunchItem(id)` is owed.
+  outcome, not merely the sheet**. ~~`getPunchItem(id)` is owed.~~ **[S116] WRITTEN** — `punch.ts`,
+  reading through RLS with `maybeSingle()` and returning `null` rather than throwing, so a row D-57
+  hides resolves to `notFound()`. **That 404 is real enforcement**, which is why M-34 takes no route
+  guard while the other four detail routes do.
 - **Complete:** `completePunchItem(item, completionPhotoFileId?)` (`punch-client.ts:146`). It enforces the
   photo gate itself and returns a plain message. Capturing the photo is §6's existing camera path.
 - **Verify:** `verifyPunchItem(item, userRole)` (`punch-client.ts:182`). It enforces **Foreman+**,
@@ -2461,6 +2464,12 @@ and M-29 (company directory) — `getProjectContacts` joins the Module 2 contact
   **The action circles stay** — A-37 and A-46c require them, and one-tap calling from a list is the
   screen's reason to exist (§4.11.7). So the row gains a navigation target **around** two existing
   buttons: the affordances must not swallow each other, and §2's 44px floor applies to all three.
+  **✅ BUILT [S116]** as `ListRowLink` (`mobile-ui.tsx`): the link and the circles are **siblings**, and
+  the link stretches over the row with `after:absolute` while the circles sit above it on `z-10`.
+  **Nesting the circles inside the link would have been invalid HTML** — a browser closes the outer
+  anchor early, and what ships is a call button that navigates to the contact instead of dialling.
+  `e2e/m-details.spec.ts` asserts the `tel:` href separately from the row href for exactly that reason,
+  because a "does the row navigate" test cannot see it.
 - Renders: name (or `company_name` per A-49b's fallback), `contact_type` via `CONTACT_TYPE_LABELS`
   (never the raw enum — A-49c), phone, mobile, email, and address where set.
 - **CUT: `notes` and `tags`** — **A-49d's cut, and it matters more here.** `getContacts()` and
@@ -2475,6 +2484,14 @@ and M-29 (company directory) — `getProjectContacts` joins the Module 2 contact
 never been true of the build**: `getSignedUrl` has **zero call sites anywhere under `app/m/`** (verified —
 the callers are two desktop pages, the API route, `photos.ts` and `ai-tagging.ts`), and M-16's rows are
 `ListRow`s with no `href`. D-53 makes it real.
+
+> **✅ BUILT [S116].** `app/m/p/[projectId]/files/open-file.tsx` — a client component that fetches
+> `/api/files/signed-url?path=…` **at tap time** and navigates to the result. Asserted in
+> `e2e/m-details.spec.ts` by waiting on the REQUEST, because "a link exists" would pass on a build that
+> still rendered nothing. The response URL is asserted **not** to carry `download=`, which is the
+> inline-versus-save ruling below. The fixture project is one where the crew identity sees **2 of 13**
+> non-photo files — the other eleven are refused by `files_select_non_client`'s category floor, so the
+> screen also demonstrates that the real enforcement is doing its job.
 
 - **Path:** tap → `GET /api/files/signed-url?path={file_path}` → open the returned URL. **A Route
   Handler, not a server-rendered link** — a signed URL minted at render time starts expiring when the
@@ -4540,8 +4557,8 @@ _Detail views — D-53_
 
 _Role gating — D-54_
 
-- A-65 **Every gated route refuses at the route, not only by hiding its control** — typing `/m/p/{id}/changes/new` as a foreman does not render the form. `[Playwright]` _(§4.11.10a's recommendation, and **the half that is enforcement rather than cosmetics**. A hidden button is not a permission: the URL survives a shared screenshot, a stale PWA cache and a bookmark. Whatever Josh rules for the visible behaviour, this criterion holds.)_
-- A-66 **A role that lacks access lands somewhere that explains itself** — never a blank screen, never a silent bounce to the hub with no message. `[Playwright]` _(§4.11.10a. **Deliberately written to be satisfiable by whichever of options A/B/C is ruled**, because the option is Josh's and the criterion is not waiting on it. The failure it forbids is the one all three options can produce by accident: a sub taps a Punch tile, arrives back at M-3, and has been given a bug rather than a permission.)_
+- A-65 **Every gated route refuses at the route, not only by hiding its control** — typing `/m/p/{id}/changes/new` as a foreman does not render the form. `[Playwright]` _(§4.11.10a's recommendation, and **the half that is enforcement rather than cosmetics**. A hidden button is not a permission: the URL survives a shared screenshot, a stale PWA cache and a bookmark. Whatever Josh rules for the visible behaviour, this criterion holds.)_ **[S116] SATISFIED for the four READ routes** — M-31, M-35, M-36 and the file-open path, `e2e/m-details.spec.ts`. Each test **types the URL** rather than looking for a missing link, which is the only thing a screenshot or a stale cache would do. **Verified load-bearing**: removing `requireDetailAccess()` from M-36 while leaving the hidden row in place — D-54 step 1 without step 2 — makes the subcontractor reach the contact and the test **fail** (exit 1); restored, exit 0. The M-32 write route named in the criterion text is Part C.
+- A-66 **A role that lacks access lands somewhere that explains itself** — never a blank screen, never a silent bounce to the hub with no message. `[Playwright]` _(§4.11.10a. **Deliberately written to be satisfiable by whichever of options A/B/C is ruled**, because the option is Josh's and the criterion is not waiting on it. The failure it forbids is the one all three options can produce by accident: a sub taps a Punch tile, arrives back at M-3, and has been given a bug rather than a permission.)_ **[S116] SATISFIED.** The guard redirects to **the list the row lives on** with `?denied=<surface>`, and the list renders `DeniedNotice` — so the user lands on something they can still use, with a sentence, rather than on the hub. **Not the hub, deliberately**: bouncing to M-3 is the exact failure the criterion names.
 
 **D-60 / D-61 — punch list targeting (M-33, M-14)**
 
