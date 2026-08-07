@@ -6,7 +6,9 @@ import { test, expect, type Page } from '@playwright/test';
 //   Common   A-30, A-30b(partial), A-30c, A-30d, A-30e
 //   M-11     A-31, A-31b, A-31c
 //   M-12     A-32
-//   M-13     A-33, A-33b, A-33c   ← A-33c walks all six roles
+//   M-13     A-33, A-33b, A-33c   ← A-33c walks all six roles (six of six as
+//                                   of S114 — the subcontractor arm was blocked
+//                                   on #127 and is now live)
 //   M-14     A-34b(partial)
 //   M-15     A-35, A-35b, A-35c
 //   M-16     A-36
@@ -215,9 +217,17 @@ test.describe('M-13 · Change Orders', () => {
 });
 
 // ---------------------------------------------------------------------------
-// A-33c — ALL SIX ROLES. This is the pass that matters: #117 means
-// change_orders_select_visible has no role floor, so RLS would NOT catch a leak.
-// Each role signs in for real rather than being simulated.
+// A-33c — ALL SIX ROLES, and as of S114 that is literally six rather than five.
+// This is the pass that matters: #117 means change_orders_select_visible has no
+// role floor, so RLS would NOT catch a leak. Each role signs in for real rather
+// than being simulated.
+//
+// [S114] The subcontractor arm was skipped on #127 grounds. #127 is closed and
+// the arm now runs. It is not a formality — verified at the database, the QA sub
+// reads both COs on this project at full value (net_delta 1410 and 21385.91).
+// RLS hands those dollars over; the ONLY thing keeping them off the screen is
+// M-13's own rendering. That is precisely what this criterion tests, and the
+// subcontractor is the role with the least business seeing them.
 // ---------------------------------------------------------------------------
 const ROLE_LOGINS: Array<{ role: string; email: string }> = [
   { role: 'owner', email: 'josh+test50@worthprop.com' },
@@ -225,6 +235,9 @@ const ROLE_LOGINS: Array<{ role: string; email: string }> = [
   { role: 'project_manager', email: 'josh+pm@worthprop.com' },
   { role: 'foreman', email: 'josh+qa-foreman@worthprop.com' },
   { role: 'crew_member', email: 'josh+crew@worthprop.com' },
+  // The sixth, added S114 once #127 closed. It is the arm that matters most:
+  // a subcontractor is an OUTSIDE PARTY, and #117 leaves net_delta unfloored.
+  { role: 'subcontractor', email: 'josh+qa-sub@worthprop.com' },
 ];
 const PASSWORD = process.env.E2E_PASSWORD ?? 'FrameFocusTest!2026';
 
@@ -252,9 +265,29 @@ test.describe('A-33c · no money on M-13 under ANY role', () => {
     });
   }
 
-  // The sixth role, subcontractor, has no persistent identity on rebuild-test
-  // (#127). Recorded rather than silently dropped.
-  test.skip('signed in as subcontractor — blocked on #127', async () => {});
+  // -------------------------------------------------------------------------
+  // THE NON-VACUITY GUARD [S114] — read this before touching the loop above.
+  // -------------------------------------------------------------------------
+  // Every assertion in the loop is an ABSENCE ("no currency"), and an absence
+  // is trivially true of an empty screen. That is not a theoretical worry for
+  // the subcontractor arm specifically: a sub reaches M-13 only through
+  // `can_view_project()`, which needs a `project_assignments` row that
+  // scripts/seed-test-identities.mjs creates. Lose that row and the sub arm
+  // goes green while asserting nothing at all.
+  //
+  // So this test pins the precondition the loop depends on: the sub really is
+  // looking at a POPULATED change-order list. It is the difference between
+  // "the UI withheld the money" and "there was no money to withhold".
+  test('the subcontractor arm is not vacuous — a sub genuinely reaches a populated M-13', async ({
+    page,
+  }) => {
+    await signInAs(page, 'josh+qa-sub@worthprop.com');
+    await page.goto(routeFor('changes'));
+    await expect(
+      page.getByTestId('m-co-row'),
+      'the sub sees no CO rows — the seed assignment is missing, so A-33c above is passing on an empty page'
+    ).not.toHaveCount(0);
+  });
 });
 
 // ===========================================================================

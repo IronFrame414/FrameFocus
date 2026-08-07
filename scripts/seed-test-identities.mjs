@@ -444,6 +444,47 @@ await ensureRow(
   }
 );
 
+// 5b. Assign the sub to the project the BROWSER suite drives [S114].
+//
+//     A-33c ("no money on M-13 under ANY role") walks all six roles against
+//     e2e/m-sections.spec.ts's PROJECT_ID, which is NOT the isolation fixture
+//     above. The subcontractor arm of that criterion was skipped on #127
+//     grounds; #127 is closed, but simply unskipping it would have produced a
+//     VACUOUS PASS — an unassigned sub fails `can_view_project()`, reaches the
+//     screen with nothing on it, and "renders no currency" is then true of an
+//     empty page.
+//
+//     ⚠️ A-33c IS THE CRITERION THAT MOST NEEDS A REAL ROW SET. TECH_DEBT #117
+//     rules `change_orders_select_visible` UI-only — company + can_view_project,
+//     no role floor — so RLS hands a sub every CO on a project they are on, at
+//     full `net_delta`. Nothing but the UI keeps those dollars off the screen.
+//     The assertion is therefore only worth running against a sub who can
+//     actually read the change orders, and this row is what makes that true.
+//     That project carries 2 non-deleted COs; the isolation fixture carries 0,
+//     which is why the fixture project could not be used instead.
+const SECTIONS_PROJECT_ID = 'eaf0e25b-d60e-49c0-89b2-5612118d94b4';
+{
+  const { data: sectionsProject } = await db
+    .from('projects').select('id, company_id').eq('id', SECTIONS_PROJECT_ID).maybeSingle();
+  if (!sectionsProject) {
+    note('assignment sub → m-sections project', 'WARN',
+      `${SECTIONS_PROJECT_ID} not found — e2e/m-sections.spec.ts PROJECT_ID has moved; A-33c's sub arm will be vacuous`);
+  } else if (sectionsProject.company_id !== companyA.id) {
+    throw new Error(
+      `m-sections PROJECT_ID ${SECTIONS_PROJECT_ID} belongs to company ${sectionsProject.company_id}, not company A — refusing to cross tenants.`
+    );
+  } else {
+    await ensureRow(
+      'assignment sub → m-sections project', 'project_assignments',
+      { project_id: SECTIONS_PROJECT_ID, member_id: subMember.id },
+      {
+        company_id: companyA.id, project_id: SECTIONS_PROJECT_ID,
+        member_id: subMember.id, role_on_project: 'subcontractor',
+      }
+    );
+  }
+}
+
 // 6. The client. NO member row, deliberately — `create_member_for_new_profile()`
 //    skips 'client' because a client is not assignable to work, and a client
 //    identity exists to exercise the `get_my_role() <> 'client'` arms that

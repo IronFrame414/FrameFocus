@@ -8,15 +8,20 @@ import { test, expect, type Page } from '@playwright/test';
 //   M-27 Subs & Vendors  A-46, A-46b, A-46c, A-46d, A-46e
 //   M-28 Team            A-47, A-47b, A-47c, A-47d, A-47e
 //   M-29 Contacts        A-49, A-49b, A-49c, A-49d
-//   M-26 Expenses        A-45, A-45b, A-45c, A-45d, A-45e, A-45f, A-45g, A-45h
+//   M-26 Expenses        A-45, A-45b, A-45b2, A-45c, A-45d, A-45e, A-45f, A-45g, A-45h
 //   M-30 Settings        A-48, A-48b, A-48c, A-48d, A-48e
 //   §2 tokens            A-50 (D-46's money format)
 //   Common               A-41, A-42, A-42b, A-42c(partial), A-42d — SIX OF SIX
 //
-// A-45b2 (the subcontractor arm of D-47) is NOT here: #127 means rebuild-test
-// has no persistent subcontractor identity to sign in as. It was proved at the
-// DB level in migration 20260825000000's evidence, inside a rolled-back
-// transaction, and cannot be re-obtained through a browser until #127 closes.
+// A-45b2 IS here as of S114, and it asserts the OPPOSITE of what it originally
+// said. Two things changed since that criterion was written:
+//   - #127 closed [S113], so a real subcontractor identity exists to sign in as.
+//   - RULING 1 [Josh, S106], migration 20260827000000, took subcontractors out
+//     of `expenses` ENTIRELY — author-own arm included, plus an INSERT floor.
+// A-45b2 as authored [S102, D-47] said a sub sees "own plus assigned-project
+// expenses"; that rule is withdrawn, and the criterion has been corrected in the
+// spec. The DB half lives in test/s114-subcontractor-surfaces.live.ts; what is
+// asserted here is the SCREEN half — an empty state, not a broken one.
 //
 // Runs under 'chromium-auth': signed in as the crew test identity, 402x874.
 
@@ -497,6 +502,42 @@ test.describe('M-26 · Expenses', () => {
     // Post-widening, a crew member can see rows they did NOT author. Before
     // D-47 these two counts were necessarily equal.
     expect(all).toBeGreaterThanOrEqual(mine);
+  });
+
+  // -------------------------------------------------------------------------
+  // A-45b2 [S114] — the subcontractor arm, as RULED rather than as authored.
+  // -------------------------------------------------------------------------
+  // RULING 1 [S106] removed subs from `expenses` entirely, so the screen half
+  // of this criterion is: /m/expenses renders for a sub, and renders NOTHING.
+  //
+  // The distinction that makes this worth a browser test at all — RLS returning
+  // zero rows must surface as M-26's ORDINARY EMPTY STATE, not as an error, a
+  // crash, or a "not permitted" panel. A-45d forbids a UI role branch; a build
+  // that reacted to the empty set by rendering a permission notice would be
+  // introducing exactly that branch, and no DB-level assertion can see it.
+  test('A-45b2 · a subcontractor sees no expense rows, and gets the ordinary empty state', async ({
+    page,
+  }) => {
+    await page.context().clearCookies();
+    await page.goto('/sign-in');
+    await page.locator('#email').fill('josh+qa-sub@worthprop.com');
+    await page.locator('#password').fill(process.env.E2E_PASSWORD ?? 'FrameFocusTest!2026');
+    await page.getByRole('button', { name: /sign in/i }).click();
+    await expect(page).toHaveURL(/\/dashboard/, { timeout: 30_000 });
+
+    await page.goto('/m/expenses');
+
+    // Zero rows — Ruling 1's whole content.
+    await expect(page.getByTestId('m-expense-row')).toHaveCount(0);
+
+    // …presented as the empty state, not as a failure. This is the half a DB
+    // assertion cannot reach.
+    await expect(page.getByTestId('m-empty')).toHaveCount(1);
+    const body = (await page.getByTestId('m-content').textContent()) ?? '';
+    expect(body).not.toMatch(/not permitted|no access|restricted|error|something went wrong/i);
+
+    // And no currency leaked into the empty state's own copy.
+    expect(body).not.toMatch(/[$£€]\s?\d/);
   });
 
   test('A-45d · no UI ROLE check — one declared exception, and it is role-blind', async ({

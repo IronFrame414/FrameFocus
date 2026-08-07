@@ -293,7 +293,10 @@ platform gates on:
 >   `handle_new_user()`'s invite branch does. Member id `6600b2a9-bc7d-49f7-a2d9-70a2af490cbf`,
 >   vendor row *QA Subcontractor Co (TEST IDENTITY)*, and it is **assigned to the
 >   `QA A — isolation fixture` project** — without that assignment D-57 would be a no-op rather than
->   a narrowing.
+>   a narrowing. **[S114] It carries a SECOND assignment**, to the project
+>   `e2e/m-sections.spec.ts` drives (`eaf0e25b-…`), which is a different project and carries the 2
+>   change orders A-33c's subcontractor arm needs. Without it that arm passes on an empty screen —
+>   see the non-vacuity guard in that spec.
 > - The **client** deliberately has **no member row**. A client is not assignable to work; the
 >   identity exists to exercise the `get_my_role() <> 'client'` arms that `files_select_non_client`
 >   and its three siblings are built on. The seed asserts the absence rather than assuming it.
@@ -351,7 +354,7 @@ cd apps/web && npx vitest run --config test/live.vitest.config.ts
 `apps/web/test/*.live.ts` are live harnesses against rebuild-test, **excluded from the CI suite**
 by the `.live.ts` suffix. **This table is not exhaustive** — the directory holds more harnesses than
 are listed here (the `s97ct-*` financial-floor set among them) and the tally below covers only the
-rows shown, **89 assertions**:
+rows shown, **102 assertions**:
 
 | Harness | Covers | Tally |
 | --- | --- | --- |
@@ -359,6 +362,7 @@ rows shown, **89 assertions**:
 | `s97ct-isolation.live.ts` | cross-company isolation, both directions | 14/14 |
 | `s97ct-roles.live.ts` | the S95/7D role-gated surfaces | 21/26 — **5 open defects**, see GATED.md → Gate 2 |
 | `s113-punch-sub-visibility.live.ts` | D-57/D-58 — a sub sees and writes only their own punch items | 15/15 |
+| `s114-subcontractor-surfaces.live.ts` | A-59 sub punch create/complete, A-59e badge counts, A-45b2 expenses floor | 13/13 |
 
 Session helper: `test/live-session.ts` (`sessionFor`, `admin`, `assertRebuildTest`) — copy that
 pattern for any new role check. The runner compiles JSX via `oxc`, so a harness can render a real
