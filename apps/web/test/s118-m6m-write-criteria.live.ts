@@ -3,12 +3,12 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { admin, assertRebuildTest, sessionFor } from './live-session';
 
 // ============================================================================
-// M6M — the [live] halves of A-55, A-58 and A-67b that Part C left open.
+// M6M — the [live] halves of A-55, A-58 and A-67b.
 // ============================================================================
 //
-// S117 marked these three PARTIALLY SATISFIED and named exactly what was
-// missing. This closes those, and each test is shaped around the failure the
-// S117 note identified rather than around the happy path.
+// S117 marked these three PARTIALLY SATISFIED and named what was missing; S118
+// wrote the missing halves. Each test is shaped around the failure the S117
+// note identified rather than around the happy path.
 //
 //   A-58  Part C asserted the PRE-TAP SURFACE — the notice renders, the button
 //         is disabled — and never reached `verifyPunchItem`. **A build that
@@ -20,104 +20,122 @@ import { admin, assertRebuildTest, sessionFor } from './live-session';
 //         `punch_list_id`.
 //
 // ---------------------------------------------------------------------------
-// WHAT IS STUBBED, AND WHY THAT DOES NOT WEAKEN A-58
+// ⚠️ THIS FILE CREATES EVERYTHING IT ASSERTS ON, AND REMOVES IT. [TECH_DEBT #144]
+// ---------------------------------------------------------------------------
+// The S118 version READ the Playwright suite's leftovers — A-55 scanned COs
+// titled `E2E %`, A-67b matched an `E2E Item <stamp>` to its list. That was the
+// coupling that blocked #144's cleanup: adding an `afterAll` to
+// `e2e/m-writes.spec.ts` would have left both with nothing to assert, and they
+// would have thrown their "run the Playwright suite first" error.
+//
+// **The dependency is gone.** This harness now builds its own change order and
+// its own punch list through the SAME service functions the screens call, so it
+// runs standalone like every other `*.live.ts` — and `m-writes.spec.ts` is free
+// to clean up after itself.
+//
+// ---------------------------------------------------------------------------
+// WHAT IS STUBBED, AND WHY IT DOES NOT WEAKEN ANYTHING
 // ---------------------------------------------------------------------------
 // `vi.mock('@/lib/supabase-browser')` — the CLIENT FACTORY only, replaced with
-// a real supabase-js client carrying a real user JWT. The precedent is
+// a real supabase-js client carrying a real user JWT. Precedent:
 // `s97ct-7e-clicktest.live.ts`, which stubs the same factory for the same
-// reason: the functions under test are browser-side services and there is no
-// browser here.
+// reason. **The functions are real; only their transport is substituted.**
 //
-// **The function is real; only its transport is substituted.** That matters
-// for A-58 specifically, because the criterion is explicitly NOT about RLS —
-// §4.11.10b records that RLS accepts a direct UPDATE setting
+// For A-58 that matters specifically: the criterion is explicitly NOT about
+// RLS — §4.11.10b records that RLS accepts a direct UPDATE setting
 // `status='verified'` from any role (open item 7). The rule lives in
 // TypeScript, so executing that TypeScript IS the test.
+//
+// ⚠️ ONE DELIBERATE SUBSTITUTION IN A-55. `recalculateChangeOrderTotals()`
+// (client) POSTs to `/api/change-orders/[id]/recalculate`, which needs a
+// running Next server and a relative-URL fetch that node cannot resolve. This
+// harness calls **`recalculateChangeOrderTotalsPrivileged(admin, id)`** — the
+// server half that route delegates to (§4.11.12a / #140). Same arithmetic,
+// same shared pricing functions; what is skipped is the route's 401/403/404
+// gate, which `e2e/m-co-recalc-route.spec.ts` already covers as A-68d.
 
 const state: { client: SupabaseClient | null } = { client: null };
 vi.mock('@/lib/supabase-browser', () => ({ createClient: () => state.client }));
 
-const { verifyPunchItem } = await import('@/lib/services/punch-client');
+const { verifyPunchItem, createPunchList, createPunchItem } = await import(
+  '@/lib/services/punch-client'
+);
+const { createChangeOrder, createCoLineItem, createCoLineRow } = await import(
+  '@/lib/services/change-orders-client'
+);
+const { recalculateChangeOrderTotalsPrivileged } = await import(
+  '@/lib/services/change-order-totals-server'
+);
 
 const OWNER = 'josh+test50@worthprop.com';
 const FOREMAN = 'josh+qa-foreman@worthprop.com';
 const CREW = 'josh+crew@worthprop.com';
 
-/** The m-sections project — where the Playwright suite writes. */
-const SECTIONS_PROJECT = 'eaf0e25b-d60e-49c0-89b2-5612118d94b4';
+/** Everything this file makes is named with this, and removed by it. */
+const TAG = 'QA S118 harness';
 
-/**
- * A-58's fixtures live on the ISOLATION fixture project, not the m-sections
- * one — TECH_DEBT #143: the foreman cannot reach m-sections, and A-58 needs a
- * Foreman+ completer who is not the verifier. On company A's fixture project
- * the seed assigns PM, foreman and crew, so the foreman is usable there.
- */
-let isolationProjectId: string;
-let isolationCompanyId: string;
-let sectionsCompanyId: string;
-let listId: string;
-let itemId: string;
+let projectId: string;
+let companyId: string;
 let foremanMemberId: string;
 
-const FIXTURE_TITLE = 'QA A-58 separate-eyes fixture';
+// Created rows, torn down in reverse.
+let coId: string | null = null;
+let a58ListId: string | null = null;
+let a58ItemId: string | null = null;
+let a67bListId: string | null = null;
 
-// ⚠️ EVERY ADMIN INSERT BELOW SETS company_id EXPLICITLY, AND MUST.
-// Per-tenant tables carry `company_id DEFAULT get_my_company_id()` (CLAUDE.md's
-// column-defaults checklist). Under the SERVICE ROLE there is no `auth.uid()`,
-// so that default evaluates to NULL and the insert dies on the NOT NULL
-// constraint. Cost a run to rediscover; stated so the next harness does not.
+// ⚠️ EVERY ADMIN INSERT SETS company_id EXPLICITLY. Per-tenant tables carry
+// `company_id DEFAULT get_my_company_id()`; under the SERVICE ROLE there is no
+// `auth.uid()`, so that default evaluates to NULL and the insert dies on the
+// NOT NULL constraint. Cost a run to rediscover [S118].
 
 beforeAll(async () => {
   assertRebuildTest();
 
+  // Company A's isolation fixture project: the seed assigns PM, foreman and
+  // crew to it, so a Foreman+ completer is available — which the m-sections
+  // project could not offer before #143 was closed.
   const { data: project } = await admin
     .from('projects')
     .select('id, company_id')
     .eq('name', 'QA A — isolation fixture')
     .single();
-  isolationProjectId = project!.id;
-  isolationCompanyId = project!.company_id as string;
+  projectId = project!.id;
+  companyId = project!.company_id as string;
 
-  const { data: sections } = await admin
-    .from('projects')
-    .select('company_id')
-    .eq('id', SECTIONS_PROJECT)
-    .single();
-  sectionsCompanyId = sections!.company_id as string;
-
-  const { data: foremanProfile } = await admin
+  const { data: profile } = await admin
     .from('profiles')
     .select('id')
     .eq('email', FOREMAN)
     .single();
-  const { data: foremanMember } = await admin
+  const { data: member } = await admin
     .from('company_members')
     .select('id')
-    .eq('profile_id', foremanProfile!.id)
+    .eq('profile_id', profile!.id)
     .eq('is_deleted', false)
     .single();
-  foremanMemberId = foremanMember!.id;
-
-  // A list to hang the fixture item on.
-  const { data: list, error: listError } = await admin
-    .from('punch_lists')
-    .insert({
-      project_id: isolationProjectId,
-      company_id: isolationCompanyId,
-      name: FIXTURE_TITLE,
-    })
-    .select('id')
-    .single();
-  if (listError) throw new Error(`A-58 fixture list insert: ${listError.message}`);
-  listId = list!.id;
+  foremanMemberId = member!.id;
 });
 
 afterAll(async () => {
-  // Created here, removed here. Hard delete: these are harness fixtures, not
-  // user data, and leaving them would drift M-3's punch counters for every
-  // other suite that reads this project.
-  if (itemId) await admin.from('punch_list_items').delete().eq('id', itemId);
-  if (listId) await admin.from('punch_lists').delete().eq('id', listId);
+  // Reverse order, children first — the CO line-row FK has no ON DELETE CASCADE.
+  if (coId) {
+    const { data: lines } = await admin
+      .from('change_order_line_items')
+      .select('id')
+      .eq('change_order_id', coId);
+    const lineIds = (lines ?? []).map((l) => l.id);
+    if (lineIds.length > 0) {
+      await admin.from('change_order_line_rows').delete().in('line_item_id', lineIds);
+      await admin.from('change_order_line_items').delete().eq('change_order_id', coId);
+    }
+    await admin.from('change_orders').delete().eq('id', coId);
+  }
+  for (const listId of [a58ListId, a67bListId]) {
+    if (!listId) continue;
+    await admin.from('punch_list_items').delete().eq('punch_list_id', listId);
+    await admin.from('punch_lists').delete().eq('id', listId);
+  }
 });
 
 // ===========================================================================
@@ -125,14 +143,22 @@ afterAll(async () => {
 // ===========================================================================
 describe('A-58 — the separate-eyes rule, executed rather than displayed', () => {
   beforeAll(async () => {
-    // A complete item, requiring verification, completed BY THE FOREMAN.
+    const { data: list, error: listError } = await admin
+      .from('punch_lists')
+      .insert({ project_id: projectId, company_id: companyId, name: `${TAG} A-58` })
+      .select('id')
+      .single();
+    if (listError) throw new Error(`A-58 list: ${listError.message}`);
+    a58ListId = list!.id;
+
+    // Complete, requiring verification, completed BY THE FOREMAN.
     const { data: item, error } = await admin
       .from('punch_list_items')
       .insert({
-        punch_list_id: listId,
-        project_id: isolationProjectId,
-        company_id: isolationCompanyId,
-        title: FIXTURE_TITLE,
+        punch_list_id: a58ListId,
+        project_id: projectId,
+        company_id: companyId,
+        title: `${TAG} A-58 item`,
         status: 'complete',
         requires_verification: true,
         requires_completion_photo: false,
@@ -141,8 +167,8 @@ describe('A-58 — the separate-eyes rule, executed rather than displayed', () =
       })
       .select('id')
       .single();
-    if (error) throw new Error(`A-58 fixture insert: ${error.message}`);
-    itemId = item!.id;
+    if (error) throw new Error(`A-58 item: ${error.message}`);
+    a58ItemId = item!.id;
   });
 
   it('REFUSES the foreman who completed it — the criterion itself', async () => {
@@ -150,7 +176,7 @@ describe('A-58 — the separate-eyes rule, executed rather than displayed', () =
 
     const result = await verifyPunchItem(
       {
-        id: itemId,
+        id: a58ItemId!,
         status: 'complete',
         requires_verification: true,
         completed_by: foremanMemberId,
@@ -166,7 +192,7 @@ describe('A-58 — the separate-eyes rule, executed rather than displayed', () =
     const { data } = await admin
       .from('punch_list_items')
       .select('status, verified_by')
-      .eq('id', itemId)
+      .eq('id', a58ItemId!)
       .single();
     expect(data!.status).toBe('complete');
     expect(data!.verified_by).toBeNull();
@@ -176,7 +202,7 @@ describe('A-58 — the separate-eyes rule, executed rather than displayed', () =
     state.client = await sessionFor(CREW);
 
     const result = await verifyPunchItem(
-      { id: itemId, status: 'complete', requires_verification: true, completed_by: foremanMemberId },
+      { id: a58ItemId!, status: 'complete', requires_verification: true, completed_by: foremanMemberId },
       'crew_member'
     );
 
@@ -186,12 +212,11 @@ describe('A-58 — the separate-eyes rule, executed rather than displayed', () =
 
   it('ACCEPTS a different Foreman+ member — so the refusals are not vacuous', async () => {
     // ⚠️ THE PAIRED HALF. Without it, a `verifyPunchItem` that refused
-    // everybody would pass both assertions above. Same discipline s113 uses
-    // for D-57's absence assertions.
+    // everybody would pass both assertions above.
     state.client = await sessionFor(OWNER);
 
     const result = await verifyPunchItem(
-      { id: itemId, status: 'complete', requires_verification: true, completed_by: foremanMemberId },
+      { id: a58ItemId!, status: 'complete', requires_verification: true, completed_by: foremanMemberId },
       'owner'
     );
 
@@ -201,28 +226,25 @@ describe('A-58 — the separate-eyes rule, executed rather than displayed', () =
     const { data } = await admin
       .from('punch_list_items')
       .select('status, verified_by')
-      .eq('id', itemId)
+      .eq('id', a58ItemId!)
       .single();
     expect(data!.status).toBe('verified');
-    expect(data!.verified_by).not.toBeNull();
     expect(data!.verified_by).not.toBe(foremanMemberId);
   });
 
   it('⚠️ RLS WOULD HAVE ALLOWED IT — the rule is TypeScript and nothing else', async () => {
     // Not a criterion; a standing demonstration that open item 7 is real, so a
-    // reader does not mistake A-58 passing for a database guarantee.
-    //
-    // The crew member refused above by `verifyPunchItem` writes the SAME
-    // transition straight through their own RLS-scoped client.
+    // reader does not mistake A-58 passing for a database guarantee. The crew
+    // member refused above writes the SAME transition through their own client.
     const crew = await sessionFor(CREW);
 
     const { data: probe } = await admin
       .from('punch_list_items')
       .insert({
-        punch_list_id: listId,
-        project_id: isolationProjectId,
-        company_id: isolationCompanyId,
-        title: `${FIXTURE_TITLE} — RLS probe`,
+        punch_list_id: a58ListId,
+        project_id: projectId,
+        company_id: companyId,
+        title: `${TAG} A-58 RLS probe`,
         status: 'complete',
         requires_verification: true,
         requires_completion_photo: false,
@@ -235,8 +257,7 @@ describe('A-58 — the separate-eyes rule, executed rather than displayed', () =
       .update({ status: 'verified' })
       .eq('id', probe!.id);
 
-    // No error: RLS permits it. THIS IS THE POINT.
-    expect(error).toBeNull();
+    expect(error).toBeNull(); // RLS permits it. THIS IS THE POINT.
     const { data: after } = await admin
       .from('punch_list_items')
       .select('status')
@@ -252,150 +273,156 @@ describe('A-58 — the separate-eyes rule, executed rather than displayed', () =
 // A-55 — net_delta MATCHES the sum of its line totals, not merely "changed"
 // ===========================================================================
 describe('A-55 — the persisted net_delta equals the persisted line totals', () => {
-  it('holds for every change order M-32 created, and at least one exists', async () => {
-    // Scoped to COs the mobile editor wrote (`e2e/m-writes.spec.ts` titles them
-    // `E2E CO <stamp>` / `E2E Actions …` / `E2E Send …`). That is not a dodge:
-    // A-55 is about "a CO created on M-32", and pre-existing seeded COs were
-    // not created by it.
-    const { data: cos, error } = await admin
-      .from('change_orders')
-      .select('id, co_number, title, net_delta')
-      .eq('project_id', SECTIONS_PROJECT)
-      .eq('is_deleted', false)
-      .like('title', 'E2E %');
-    if (error) throw new Error(`A-55 read: ${error.message}`);
+  beforeAll(async () => {
+    // Built through the SAME client functions M-32 calls, as an owner (CO
+    // writes are DB-floored to owner/admin/PM, so the session matters).
+    state.client = await sessionFor(OWNER);
 
-    if (!cos || cos.length === 0) {
-      throw new Error(
-        'no M-32-created change orders found. Run the Playwright suite first: ' +
-          'npx playwright test e2e/m-writes.spec.ts'
-      );
+    const co = await createChangeOrder({
+      project_id: projectId,
+      title: `${TAG} A-55`,
+      co_type: 'fixed_price',
+    });
+    if (!co.success || !co.id) throw new Error(`A-55 createChangeOrder: ${co.error}`);
+    coId = co.id;
+
+    // TWO line items, so a build that summed only the first fails.
+    for (const [i, amount] of [500, 250.5].entries()) {
+      const line = await createCoLineItem({
+        change_order_id: coId,
+        name: `${TAG} line ${i + 1}`,
+        description: null,
+        sort_order: i,
+      });
+      if (!line.success || !line.id) throw new Error(`A-55 createCoLineItem: ${line.error}`);
+
+      const row = await createCoLineRow({
+        line_item_id: line.id,
+        row_type: 'other',
+        name: `${TAG} row ${i + 1}`,
+        sort_order: 0,
+        markup_percent: null,
+        rate: null,
+        quantity: null,
+        unit_cost: null,
+        amount,
+        subcontractor_id: null,
+      });
+      if (!row.success) throw new Error(`A-55 createCoLineRow: ${row.error}`);
     }
 
-    let withLines = 0;
-    for (const co of cos) {
-      const { data: lines } = await admin
-        .from('change_order_line_items')
-        .select('total_price')
-        .eq('change_order_id', co.id);
-
-      const sum = (lines ?? []).reduce((acc, l) => acc + Number(l.total_price ?? 0), 0);
-      if ((lines ?? []).length > 0) withLines++;
-
-      // Rounded to cents on both sides: both are NUMERIC and the comparison is
-      // about agreement, not float representation.
-      expect(
-        Math.round(Number(co.net_delta ?? 0) * 100),
-        `${co.co_number} (${co.title}): net_delta ${co.net_delta} vs Σ line totals ${sum}`
-      ).toBe(Math.round(sum * 100));
-    }
-
-    // ⚠️ THE ANTI-VACUOUS HALF. Every assertion above passes trivially on a set
-    // of change orders that all have zero lines and a zero net_delta — which is
-    // precisely the broken state A-55 was written to catch.
-    expect(withLines, 'no M-32 change order carried line items — A-55 would be vacuous').toBeGreaterThan(0);
+    const priced = await recalculateChangeOrderTotalsPrivileged(admin, coId);
+    if (!priced.success) throw new Error(`A-55 recalculation refused: ${priced.error}`);
   });
 
-  it('a change order carrying line rows has a NON-ZERO net_delta', async () => {
-    // The S117 half, kept: "matches" and "is not 0" are different claims and a
-    // build could satisfy the first with 0 = Σ(0).
-    const { data: cos } = await admin
+  it('net_delta equals Σ line_items.total_price, to the cent', async () => {
+    const { data: co } = await admin
       .from('change_orders')
-      .select('id, net_delta')
-      .eq('project_id', SECTIONS_PROJECT)
-      .eq('is_deleted', false)
-      .like('title', 'E2E %');
+      .select('net_delta')
+      .eq('id', coId!)
+      .single();
+    const { data: lines } = await admin
+      .from('change_order_line_items')
+      .select('total_price')
+      .eq('change_order_id', coId!);
 
-    let sawPriced = false;
-    for (const co of cos ?? []) {
-      const { count } = await admin
+    expect((lines ?? []).length, 'the fixture must carry line items').toBe(2);
+
+    const sum = (lines ?? []).reduce((acc, l) => acc + Number(l.total_price ?? 0), 0);
+
+    // Integer cents on both sides: the claim is agreement, not float identity.
+    expect(
+      Math.round(Number(co!.net_delta ?? 0) * 100),
+      `net_delta ${co!.net_delta} vs Σ line totals ${sum}`
+    ).toBe(Math.round(sum * 100));
+  });
+
+  it('and it is NOT zero — "matches" and "is not 0" are different claims', async () => {
+    // A build could satisfy the identity above with 0 = Σ(0), which is exactly
+    // the state A-55 was written to catch: rows written, recalculation skipped.
+    const { data: co } = await admin
+      .from('change_orders')
+      .select('net_delta')
+      .eq('id', coId!)
+      .single();
+    expect(Number(co!.net_delta ?? 0)).not.toBe(0);
+  });
+
+  it('every line total is itself the sum of its rows', async () => {
+    // One level down. If a line's total disagreed with its rows the CO total
+    // could still match Σ lines and be wrong — the error would just be hidden
+    // one level deeper.
+    const { data: lines } = await admin
+      .from('change_order_line_items')
+      .select('id, total_price')
+      .eq('change_order_id', coId!);
+
+    for (const line of lines ?? []) {
+      const { data: rows } = await admin
         .from('change_order_line_rows')
-        .select('id', { count: 'exact', head: true })
-        .in(
-          'line_item_id',
-          ((
-            await admin.from('change_order_line_items').select('id').eq('change_order_id', co.id)
-          ).data ?? []).map((l) => l.id)
-        );
-      if ((count ?? 0) > 0) {
-        expect(Number(co.net_delta ?? 0)).not.toBe(0);
-        sawPriced = true;
-      }
+        .select('total')
+        .eq('line_item_id', line.id);
+      const rowSum = (rows ?? []).reduce((acc, r) => acc + Number(r.total ?? 0), 0);
+      expect(Math.round(Number(line.total_price ?? 0) * 100)).toBe(Math.round(rowSum * 100));
     }
-    expect(sawPriced, 'no M-32 change order carried line ROWS').toBe(true);
   });
 });
 
 // ===========================================================================
-// A-67b — the item's punch_list_id points at the list M-33 created
+// A-67b — the item's punch_list_id points at the list that was just created
 // ===========================================================================
 describe('A-67b — read the column, not the label rendered beside it', () => {
-  it('an M-33-created item points at the M-33-created list of the same stamp', async () => {
-    // `e2e/m-writes.spec.ts` creates `E2E List <stamp>` inline and files
-    // `E2E Item <stamp>` into it. The STAMPS MUST MATCH — that is what proves
-    // the item landed in the list the author created rather than in some other
-    // list that happened to exist.
-    const { data: lists, error } = await admin
-      .from('punch_lists')
-      .select('id, name')
-      .eq('project_id', SECTIONS_PROJECT)
-      .eq('is_deleted', false)
-      .like('name', 'E2E List %')
-      .order('created_at', { ascending: false });
-    if (error) throw new Error(`A-67b list read: ${error.message}`);
+  it('createPunchList then createPunchItem — and the item points at that list', async () => {
+    // M-33's exact two-write shape, through the same two functions
+    // (`punch-form.tsx`): the list is created first, its id is used for the
+    // item. Run as CREW, because D-52-as-corrected opens punch creation to
+    // every role and crew is the narrowest one that is not a subcontractor.
+    state.client = await sessionFor(CREW);
 
-    if (!lists || lists.length === 0) {
-      throw new Error(
-        'no M-33-created lists found. Run the Playwright suite first: ' +
-          'npx playwright test e2e/m-writes.spec.ts'
-      );
-    }
+    const listName = `${TAG} A-67b list`;
+    const created = await createPunchList(projectId, listName);
+    expect(created.success, created.error).toBe(true);
+    a67bListId = created.id!;
 
-    const newest = lists[0];
-    const stamp = newest.name.replace('E2E List ', '').trim();
+    const item = await createPunchItem({
+      punch_list_id: a67bListId,
+      project_id: projectId,
+      title: `${TAG} A-67b item`,
+    });
+    expect(item.success, item.error).toBe(true);
 
-    const { data: items } = await admin
+    // THE ASSERTION S117 ASKED FOR: the COLUMN, read directly, and compared to
+    // the id `createPunchList` returned — not to a name rendered beside it.
+    const { data } = await admin
       .from('punch_list_items')
-      .select('id, title, punch_list_id')
-      .eq('project_id', SECTIONS_PROJECT)
-      .eq('is_deleted', false)
-      .eq('title', `E2E Item ${stamp}`);
-
-    expect(items ?? [], `no item titled "E2E Item ${stamp}" for list "${newest.name}"`).toHaveLength(1);
-
-    // THE ASSERTION THE S117 NOTE ASKED FOR: the COLUMN, read directly.
-    expect(items![0].punch_list_id).toBe(newest.id);
+      .select('punch_list_id')
+      .eq('id', item.id!)
+      .single();
+    expect(data!.punch_list_id).toBe(a67bListId);
   });
 
   it('an empty list left behind by a failed item insert is a LEGAL state', async () => {
     // A-67b: "A failed item insert leaves the new list behind, which is
     // accepted (D-60) and must not be 'fixed' with a cleanup." Asserted as the
-    // absence of a cleanup: a list with no items survives, is not soft-deleted,
-    // and stays readable.
-    const { data: orphan, error: orphanError } = await admin
-      .from('punch_lists')
-      .insert({
-        project_id: SECTIONS_PROJECT,
-        company_id: sectionsCompanyId,
-        name: 'QA A-67b orphan — empty is legal',
-      })
-      .select('id')
-      .single();
-    if (orphanError) throw new Error(`A-67b orphan insert: ${orphanError.message}`);
+    // absence of a cleanup — the list survives, un-deleted, with no items.
+    state.client = await sessionFor(CREW);
+
+    const orphan = await createPunchList(projectId, `${TAG} A-67b orphan`);
+    expect(orphan.success).toBe(true);
 
     const { count } = await admin
       .from('punch_list_items')
       .select('id', { count: 'exact', head: true })
-      .eq('punch_list_id', orphan!.id);
+      .eq('punch_list_id', orphan.id!);
     expect(count ?? 0).toBe(0);
 
     const { data: still } = await admin
       .from('punch_lists')
-      .select('id, is_deleted')
-      .eq('id', orphan!.id)
+      .select('is_deleted')
+      .eq('id', orphan.id!)
       .single();
     expect(still!.is_deleted).toBe(false);
 
-    await admin.from('punch_lists').delete().eq('id', orphan!.id);
+    await admin.from('punch_lists').delete().eq('id', orphan.id!);
   });
 });

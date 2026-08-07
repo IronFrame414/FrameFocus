@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { adminClient } from './hub-fixture';
 
 // M6M Part C — the write paths. D-51 (CO create → edit → send), D-52 as
 // corrected (punch create / complete / verify), D-60 (the list target),
@@ -87,6 +88,149 @@ async function createDraftCo(page: Page, title: string): Promise<string> {
   await expect(page).toHaveURL(/\/changes\/new\?co=[0-9a-f-]{36}/, { timeout: 30_000 });
   return new URL(page.url()).searchParams.get('co')!;
 }
+
+// ---------------------------------------------------------------------------
+// ⚠️ THIS FILE CLEANS UP AFTER ITSELF. TECH_DEBT #144. [S119]
+// ---------------------------------------------------------------------------
+// Every run used to leave ~5 change orders (with line items and rows), ~5 punch
+// lists with items, and a completion photo per punch test PERMANENTLY on the
+// project every mobile spec drives. Nothing removed them, so the dataset grew
+// linearly in runs.
+//
+// **It had already caused a failure.** M-13 got long enough that `m-details`'
+// D-55 navigation stopped finishing inside Playwright's 5s default and the
+// suite went red on a test that had been green twice — a real regression signal
+// spent on fixture debt.
+//
+// THE ORDER BELOW IS FORCED, NOT STYLISTIC:
+//   · `change_order_line_rows` before `change_order_line_items` — the FK has
+//     **no ON DELETE CASCADE** (`deleteCoLineItem` deletes rows first for the
+//     same reason).
+//   · punch items before their lists.
+//   · `files` rows AFTER the items that referenced them, because
+//     `completion_photo_file_id` points at them.
+//
+// **Scoped by name prefix AND project**, never "everything on the project" —
+// the fixture COs (`CO-101-01`, `CO-101-02`) and the seeded punch data must
+// survive, and a cleanup that took them would break m-sections and the D-57
+// harness in a way that looks nothing like a cleanup bug.
+//
+// Returns its counts so a caller can prove the cleanup CLEANED. A cleanup that
+// misses one table looks perfectly green on the first run.
+async function cleanUpFixtures(): Promise<Record<string, number>> {
+  const admin = adminClient();
+  const removed: Record<string, number> = {
+    coRows: 0, coLines: 0, cos: 0, punchItems: 0, punchLists: 0, files: 0,
+  };
+
+  // ── Change orders ───────────────────────────────────────────────────────
+  const { data: cos } = await admin
+    .from('change_orders')
+    .select('id')
+    .eq('project_id', PROJECT)
+    .like('title', 'E2E %');
+
+  for (const co of cos ?? []) {
+    const { data: lines } = await admin
+      .from('change_order_line_items')
+      .select('id')
+      .eq('change_order_id', co.id);
+    const lineIds = (lines ?? []).map((l) => l.id);
+
+    if (lineIds.length > 0) {
+      const { count: rowCount } = await admin
+        .from('change_order_line_rows')
+        .delete({ count: 'exact' })
+        .in('line_item_id', lineIds);
+      removed.coRows += rowCount ?? 0;
+
+      const { count: lineCount } = await admin
+        .from('change_order_line_items')
+        .delete({ count: 'exact' })
+        .eq('change_order_id', co.id);
+      removed.coLines += lineCount ?? 0;
+    }
+  }
+  if ((cos ?? []).length > 0) {
+    const { count } = await admin
+      .from('change_orders')
+      .delete({ count: 'exact' })
+      .in('id', (cos ?? []).map((c) => c.id));
+    removed.cos += count ?? 0;
+  }
+
+  // ── Punch lists, their items, and the photos those items point at ───────
+  const { data: lists } = await admin
+    .from('punch_lists')
+    .select('id')
+    .eq('project_id', PROJECT)
+    .like('name', 'E2E %');
+  const listIds = (lists ?? []).map((l) => l.id);
+
+  // Matched by BOTH the list and the item's own title prefix: an item this
+  // suite filed into a pre-existing list would otherwise survive.
+  const { data: items } = await admin
+    .from('punch_list_items')
+    .select('id, completion_photo_file_id')
+    .eq('project_id', PROJECT)
+    .or(
+      listIds.length > 0
+        ? `punch_list_id.in.(${listIds.join(',')}),title.like.E2E %`
+        : 'title.like.E2E %'
+    );
+
+  const photoIds = (items ?? [])
+    .map((i) => i.completion_photo_file_id)
+    .filter((id): id is string => Boolean(id));
+
+  if ((items ?? []).length > 0) {
+    const { count } = await admin
+      .from('punch_list_items')
+      .delete({ count: 'exact' })
+      .in('id', (items ?? []).map((i) => i.id));
+    removed.punchItems += count ?? 0;
+  }
+  if (listIds.length > 0) {
+    const { count } = await admin
+      .from('punch_lists')
+      .delete({ count: 'exact' })
+      .in('id', listIds);
+    removed.punchLists += count ?? 0;
+  }
+
+  // The completion photos. Storage object first, then the row — the reverse
+  // orphans a blob nothing points at, which is the harder leak to find later.
+  if (photoIds.length > 0) {
+    const { data: files } = await admin.from('files').select('id, file_path').in('id', photoIds);
+    const paths = (files ?? []).map((f) => f.file_path).filter(Boolean) as string[];
+    if (paths.length > 0) await admin.storage.from('project-files').remove(paths);
+
+    const { count } = await admin.from('files').delete({ count: 'exact' }).in('id', photoIds);
+    removed.files += count ?? 0;
+  }
+
+  return removed;
+}
+
+// BOTH ENDS, and the `beforeAll` is not belt-and-braces — it is what makes the
+// starting state DETERMINISTIC. A run killed part-way through leaves rows
+// behind, and the next run would then start against a project with an unknown
+// number of punch lists. `hub-fixture.ts` opens with the same reasoning
+// ("Leftovers from an interrupted run would collide").
+//
+// ⚠️ THIS IS WHAT GIVES A-67 ITS "EXACTLY ONE LIST" CASE. After cleanup the
+// fixture project holds exactly ONE punch list, which is the state D-60's
+// criterion asks for and which no separate seeded project was needed to
+// produce — see the A-67 test below.
+test.beforeAll(async () => {
+  console.log(`[m-writes pre-clean] ${JSON.stringify(await cleanUpFixtures())}`);
+});
+
+// Runs whether the tests passed or not — a failed run is exactly when
+// leftovers are most likely.
+test.afterAll(async () => {
+  console.log(`[m-writes cleanup] ${JSON.stringify(await cleanUpFixtures())}`);
+});
 
 // ===========================================================================
 // D-54 / A-65 — the CO WRITE route refuses at the route, not by hiding
@@ -366,13 +510,28 @@ test.describe('D-60 · the author targets a list, always', () => {
 
     await expect(page.getByTestId('m-punch-list-target')).toBeVisible();
 
-    // THE ABSENCE OF A DEFAULT IS THE CRITERION. A build that auto-created a
-    // "Punch List", or that used the project's only list silently, satisfies
-    // every other assertion on this screen and violates D-60.
+    // ⚠️ A-67's SPECIFIC CASE: "a project with EXACTLY ONE list still asks".
+    // [S119] This is now asserted rather than hoped for. `beforeAll` cleans the
+    // suite's own leftovers, so the fixture project holds exactly one punch
+    // list at this point — the state the criterion names as "the case a 'pick
+    // when ambiguous' implementation gets wrong, and the case a user meets
+    // first".
     //
-    // Asserting "no option is active" also covers A-67's "a project with
-    // exactly one list still asks": a "pick only when ambiguous" build renders
-    // NO picker at all in that case, and the visibility assertion above fails.
+    // The picker's options are the project's lists PLUS the `__new__` sentinel,
+    // so exactly one existing list means exactly two options.
+    const options = page.locator('[data-testid^="m-punch-list-"][data-active]');
+    await expect(
+      options,
+      'expected 1 existing list + the "New list…" option — if this fails, either the fixture ' +
+        'project gained a list or a previous run did not clean up (TECH_DEBT #144)'
+    ).toHaveCount(2);
+    await expect(page.getByTestId('m-punch-list-__new__')).toBeVisible();
+
+    // THE ABSENCE OF A DEFAULT IS THE CRITERION. A build that auto-created a
+    // "Punch List", or that silently used the project's only list, satisfies
+    // every other assertion on this screen and violates D-60. With exactly one
+    // list present, a "pick only when ambiguous" build would either preselect
+    // it (caught here) or skip the picker entirely (caught above).
     const active = page.locator('[data-testid^="m-punch-list-"][data-active="true"]');
     await expect(active).toHaveCount(0);
   });

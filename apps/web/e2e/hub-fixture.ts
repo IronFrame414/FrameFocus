@@ -62,6 +62,28 @@ function loadEnv(): Record<string, string> {
 
 const REQUIRED_PROJECT_REF = 'nmyphyhmfttxkdoposvf'; // framefocus-rebuild-test
 
+/**
+ * A service-role client for specs that must clean up after themselves.
+ *
+ * Exported [S119, TECH_DEBT #144] so `m-writes.spec.ts` can delete what it
+ * created without a second copy of the .env.local parsing above — and, more
+ * importantly, without a second copy of the rebuild-test guard. A cleanup
+ * routine is the last thing that should be able to run against the wrong
+ * database.
+ */
+export function adminClient(): SupabaseClient {
+  const env = loadEnv();
+  const url = env.NEXT_PUBLIC_SUPABASE_URL;
+  const service = env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url?.includes(REQUIRED_PROJECT_REF)) {
+    throw new Error(`REFUSING TO RUN: linked project is not ${REQUIRED_PROJECT_REF}. URL=${url}`);
+  }
+  if (!service) throw new Error('SUPABASE_SERVICE_ROLE_KEY missing from apps/web/.env.local');
+
+  return createClient(url, service, { auth: { persistSession: false } });
+}
+
 /** Company A (Bishop Contracting) and the crew test identity's member row. */
 export const COMPANY_A = '03bb903f-1084-4ab4-afb8-03192cb58d30';
 export const CREW_MEMBER = '18a105e7-2ff9-4546-a17b-87524a45e978'; // Casey Crew

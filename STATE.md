@@ -181,10 +181,13 @@ claude mcp list
 > **`josh+qa-admin@` was suspected of the same fault and is CLEAR** (measured: owner, admin, PM, crew
 > and sub all reach the project; **only the foreman does not**).
 >
-> **⚠️ #144 RAISED [S118]** — the Part C suite writes permanent fixture data every run and never cleans
-> up; it caused one flake already (M-13 grew until a 5s default navigation timeout was too tight, fixed
-> with explicit 30s timeouts on `m-details`' D-55 block). **The obvious cleanup is blocked by a coupling
-> S118 introduced**: the live harnesses read those leftovers. Read #144 before touching either.
+> **✅ #144 CLOSED [S119]** — the Part C suite cleans up at **both ends**, and the live harnesses now
+> create their own data so they run standalone. **Proven by two back-to-back runs**: the project went
+> from `{cos:15, punchLists:23, punchItems:23, files:17}` to the fixture baseline
+> `{cos:2, punchLists:1, punchItems:1, files:0}`, **run 2's pre-clean sweep removed ZERO**, and the
+> counts after each run were identical. The live harnesses then passed with the leftovers gone.
+> **Side-effect:** the project now starts every run with **exactly one punch list**, which is A-67's
+> "still asks" case — now asserted (1 list + `__new__` = 2 options, none preselected) rather than owed.
 
 ### apps/web (Next.js)
 
