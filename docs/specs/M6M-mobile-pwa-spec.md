@@ -17,12 +17,22 @@
 > every detail screen, with who reaches it, who is blocked, and whether the database would refuse them
 > anyway, derived from the policies rather than from prose.
 >
-> **Not build-ready for the new scope.** **Seven items still need a ruling** (three of the original seven
-> closed, three new ones opened by building the block list), **four are filed as tech debt** (#117
-> amended, #140, #141, #142), a **migration is owed** for D-52's subcontractor exclusion — shape in
-> §4.11.10b, **not written** — and **TECH_DEBT #127 gates verification**: rebuild-test has no
-> subcontractor identity, so every criterion asserting a sub is refused will skip rather than pass. The
-> build-ready status below applies to the pre-S108 scope.
+> **[S110] The subcontractor reversal — D-52 and D-53 CORRECTED, D-57 new.** **Subs are no longer
+> excluded from punch or from photos.** They get punch lists including creating them, and **full photo
+> access** — view, capture, annotate. What replaces the punch exclusion is **D-57**: a sub sees an item
+> only if they are the **assignee or the author**, which is **narrower than what ships today**, because
+> `can_view_project()`'s assignment arm is role-blind and an assigned sub currently sees the whole
+> project's punch list. **One migration, one policy, zero application code changes** — §4.11.14a, not
+> written. **Verify follows desktop: Foreman+, crew excluded, 5C §4 unreversed.** A subcontractor is now
+> blocked from exactly **four detail routes** (M-31, M-35, M-36, file-open), and **A-12's nine-tile count
+> needs no carve-out** — a S109 flag withdrawn as mistaken.
+>
+> **Not build-ready for the new scope.** **Six items need a ruling**, **four are filed as tech debt**
+> (#117 amended, #140, #141 rewritten, #142), a **migration is owed for D-57** — and the S109
+> four-policy punch floor is **WITHDRAWN; do not build it**. **TECH_DEBT #127 gates verification, harder
+> now than before**: D-57's failure mode is *a sub sees nothing*, which looks exactly like the rule
+> working. **Seed the identity, then migrate, then prove both arms.** The build-ready status below
+> applies to the pre-S108 scope.
 
 > **Status:** **BUILD-READY [S99]. GAP-8 IS CLOSED.**
 >
@@ -219,8 +229,9 @@
 | D-37 | Expenses on mobile            | **IN SCOPE. D-9 is NARROWED, NOT REVERSED.** [S100, Josh] Expenses gets a real mobile screen (§4.13.3, M-26). **Budget, Invoices, Payments and Contracts stay absent and are deferred to v2** — the exclusion list loses exactly one member and gains nothing. This is the first currency on `/m`, and §4.13.3 states in full what that forces and what it does **not**: unlike D-26's `net_delta`, `expenses_select_scoped` is a **real DB row floor**, and an expense amount is *actual cost*, which the Financial Visibility Floor explicitly makes visible to every role. **The open role question inside that is NOT decided here** — see §4.13.3's "What this forces" and §11's open list. §4.13.3; A-44–A-44f. |
 | D-50 | §4.11's read-only-in-v1 rule  | **REVERSED [S108, Josh] — ruled from a real-device test.** _Superseded clause, quoted not rewritten:_ _"These are **read-only** surfaces in v1 — none is in D-6's offline-write set."_ **The offline half stands; the read-only half does not.** Josh used `/m` on a phone and found the section screens are lists with no detail views and no write actions. **That is exactly what §4.11 specified, so this is a reversal of a ruling, not a defect report.** D-51…D-54 are its four parts. **A-30c is REWRITTEN, not satisfied.** §4.11 common rules; A-30c. |
 | D-51 | Change orders on mobile       | **FULL LIFECYCLE, OWNER/ADMIN/PM ONLY — creation through send-for-signature.** [S108, Josh] **Activates D-45's recorded intent rather than introducing it.** **D-26 is AMENDED, not reversed:** M-13's *list* still renders no `net_delta` for any role, and the author-facing surfaces (M-31, M-32) show the value the author is entering. The write side is already DB-floored to exactly these three roles (`change_orders_insert_authorized` / `_update_authorized`), so unlike the read side this ruling does **not** depend on UI discipline. §4.11.3, §4.11.11, §4.11.12; A-51–A-55. |
-| D-52 | Punch list on mobile          | **CREATE, COMPLETE AND VERIFY — everyone except subcontractors.** [S108, Josh] **Does not change D-16's counter**: verification moves `complete → verified`, and neither state is in `('open','in_progress')`. `punch_list_items` RLS carries **no role floor at all** — the exclusion is service-layer only today, and for `subcontractor` it does not exist anywhere. **A migration is owed and is NOT written here.** §4.11.4, §4.11.13, §4.11.14; A-56–A-59. |
-| D-53 | Detail views                  | **CHANGE ORDERS, TEAM MEMBERS, CONTACTS, FILES AND PHOTOS — everyone except subcontractors.** [S108, Josh] Files means **actually opening the document**; M-16's rows are not tappable today and `getSignedUrl` has **zero call sites under `/m`**. Contacts means **the whole row opens the contact**, not only the `tel:`/`mailto:` buttons. **Photos is already satisfied** — M-9 is the photo detail view and is built. §4.11.6, §4.11.7, §4.11.8, §4.11.11, §4.11.15, §4.11.16; A-60–A-64. |
+| D-52 | Punch list on mobile          | **CORRECTED TWICE [S110, Josh]. Create and complete: EVERY role, subcontractors INCLUDED. Verify: FOREMAN+.** _Superseded text, quoted not rewritten:_ _"**CREATE, COMPLETE AND VERIFY — everyone except subcontractors.**"_ **Both halves of that were wrong.** (a) **The subcontractor exclusion is WITHDRAWN** — subs get punch lists, including creating them; what changes instead is **visibility**, ruled separately as **D-57**. (b) **Verify follows desktop: Foreman+, and crew are excluded.** `verifyPunchItem`'s `FOREMAN_PLUS` is right and D-52's "everyone" was wrong; **5C §4 stands unreversed**. **Still does not change D-16's counter** for the five non-sub roles: verification moves `complete → verified` and neither state is in `('open','in_progress')` — but see D-57 for what it does to a **sub's** counts. §4.11.4, §4.11.13, §4.11.14; A-56–A-59. |
+| D-53 | Detail views                  | **CORRECTED [S110, Josh] — PHOTOS ARE WITHDRAWN FROM THE EXCLUSION.** _Superseded text, quoted:_ _"**CHANGE ORDERS, TEAM MEMBERS, CONTACTS, FILES AND PHOTOS — everyone except subcontractors.**"_ **Subs get FULL photo access: view every photo on a project they can reach, take and add new ones, and annotate.** §7a/D-20's intent stands and D-53 should never have cut across it — four policies were widened as the **first build step** for exactly that. The exclusion now names **four** surfaces, not five: **change-order detail, team-member detail, contact detail, and opening a file.** [S108, Josh] Files means **actually opening the document**; `getSignedUrl` has **zero call sites under `/m`**. Contacts means **the whole row opens the contact**. §4.11.6, §4.11.7, §4.11.8, §4.11.11, §4.11.15, §4.11.16; A-60–A-64. |
+| D-57 | A subcontractor's punch visibility | **ASSIGNEE OR AUTHOR, AND NOTHING ELSE ON THE PROJECT.** [S110, Josh] Replaces D-52's withdrawn exclusion. A subcontractor sees a punch item **only** if `assignee_id = get_my_member_id()` **or** `created_by = auth.uid()`. **Punch LISTS stay fully visible** and subs may create both. **This is NARROWER than what ships today, not wider** — `punch_list_items_select_visible`'s first arm is `can_view_project()`, which is role-blind, so an assigned sub currently sees **every** punch item on the project. **`created_by` EXISTS** (`DEFAULT auth.uid()`, FK to `auth.users`), so the auto-assign fallback is **not needed**. **One policy, one migration; no application code changes.** §4.11.14a; A-59, A-59c–A-59e. |
 | D-54 | Role-gated access on `/m`     | **D-11 IS AMENDED — recorded as a decision, not allowed to arrive silently.** [S108, Josh] _D-11's text, quoted:_ _"**All roles.** No role gate on `/m`."_ **The first clause stands and the second does not:** every role still *gets* mobile, but D-51 and D-53 mean roles no longer all see the same screens. **RESOLVED [S109, Josh] — HIDE AND ACTUALLY BLOCK.** Option A adopted: the control is **hidden** *and* the route is **guarded**. **A hidden button is not a permission** — the URL survives a shared screenshot, a stale PWA cache and a bookmark, so the guard is the gate and hiding is cosmetic on top of it. The full per-surface block list, derived from the policies rather than from prose, is **§4.11.10b**. §4.11.10a, §4.11.10b; A-65–A-66. |
 | D-55 | Detail screens are PAGES      | **A GENERAL RULE, NOT A PER-SCREEN CALL.** [S109, Josh] **Every list row opens its own page with its own route** — punch items (M-34), change orders (M-31), team (M-35), contacts (M-36), files (§4.11.16). No bottom sheets, no expanding rows, no modal-over-list. **Consistent with D-28**, which ruled pages over sheets for the four field-capture screens on the same reasoning: each is deep-linkable and browser-back-able, and none is hosted by `layout.tsx`'s sheet host. **Recorded as a rule so the next detail screen does not re-litigate it** — D-28 settled the question once for capture and was then re-argued for M-34; that is the loop this closes. **M-34 is no longer PROPOSED.** §1; §4.11.14. |
 | D-56 | TECH_DEBT #117 on mobile      | **UI-ONLY IS ACCEPTED, FOR NOW.** [S109, Josh] `change_orders_select_visible` keeps **no role floor and no author scoping**; the Owner/Admin/PM gate on M-31/M-32 lives in the interface. **The exposure, stated plainly rather than implied away: a foreman gets the row from the database — `net_delta`, and the line rows' `total`, `rate`, `unit_cost` and `amount` — and only the interface stops them seeing it.** **The write side needs no migration**: `change_orders_insert_authorized` / `_update_authorized` and both child tables' INSERT/UPDATE/DELETE already carry exactly `owner, admin, project_manager`. **TECH_DEBT #117 amended, not closed.** §4.11.10b, §4.11.11. |
@@ -1381,8 +1392,17 @@ opens a desktop page. Common rules, stated once so the nine subsections below st
 > | Surface | Action | Who | Ruling |
 > | ------- | ------ | --- | ------ |
 > | M-13 / M-31 / M-32 | Change orders: create → edit → **send for signature** | **Owner, Admin, PM** | D-51 |
-> | M-14 / M-33 / M-34 | Punch items: create, complete, **verify** | **Everyone except subcontractors** | D-52 |
-> | M-31, M-35, M-36, M-16, M-9 | Detail views (read) | **Everyone except subcontractors** | D-53 |
+> | M-14 / M-33 / M-34 | Punch items: **create and complete** | **EVERY role, subcontractors included** _(corrected S110)_ | D-52 |
+> | M-34 | Punch items: **verify** | **Foreman+** — crew and subs excluded, as on desktop _(corrected S110)_ | D-52 |
+> | M-14 / M-34 | Punch items: **what a SUBCONTRACTOR sees** | **Assignee or author only** — narrower than today | **D-57** |
+> | M-31, M-35, M-36, M-16 | Detail views (read) | Everyone **except subcontractors** | D-53 |
+> | M-8 / M-9 / M-10 | Photos: view, capture, annotate | **EVERY role, subcontractors included** _(corrected S110)_ | D-53 / §7a |
+>
+> **⚠️ THREE ROWS ABOVE WERE CORRECTED AT [S110] and the original ruling text is superseded** — see
+> D-52, D-53 and D-57 in §0. The S108 table read: _"M-14 / M-33 / M-34 · Punch items: create, complete,
+> **verify** · **Everyone except subcontractors** · D-52"_ and _"M-31, M-35, M-36, M-16, **M-9** ·
+> Detail views (read) · **Everyone except subcontractors** · D-53"_. **Both over-reached**: verify was
+> never crew's, and subs were never meant to lose punch or photos.
 >
 > **Everything not in that table stays read-only.** M-11's status control is still not offered
 > (§4.11.1), M-15 still offers no check-in (§4.11.5, D-6), M-18 still offers no assign/unassign
@@ -1489,12 +1509,18 @@ The project's calendar, as a list — not a grid. A month grid at 402px cannot c
 - Rows: `title` 17px/700, mono `location · trade` where set, a status pill with text (`PUNCH_STATUS_LABELS`, `punch.ts:24`), a priority chip where `priority` is set, and the assignee's `display_name`.
 - **The D-16 divergence is inherited, not re-decided.** An item at `complete` awaiting verification appears under **All** and under neither **Open** nor any closed filter — because `isItemClosed()` (`punch.ts:36`) and D-16's "open" are not complements (§4.3). M-14 must not invent a third definition to tidy this up.
 - Photo links: `reference_photo_file_id` / `completion_photo_file_id` open M-9 (D-15, read-only join).
-- **WRITES ADDED [S108, D-52] — everyone except subcontractors.** M-14 gains a primary **New item**
-  control (→ **M-33**, §4.11.13), and each row opens **M-34** (§4.11.14) for complete and verify.
+- **WRITES ADDED [S108, D-52 — roles CORRECTED S110].** M-14 gains a primary **New item** control
+  (→ **M-33**, §4.11.13), and each row opens **M-34** (§4.11.14) for complete and verify.
+  _Superseded clause, quoted:_ _"everyone except subcontractors."_ **Create and complete are open to
+  EVERY role, subcontractors included; verify is Foreman+, as on desktop.**
   **The chips, the counts and the D-16 divergence above are unchanged** — see §4.11.14's D-16 check,
   which confirms verification touches no counter because `complete → verified` leaves the
-  `('open','in_progress')` set on both sides. **`punch_list_items` carries no DB role floor and a
-  migration is owed** — §4.11.14 states the gap in full and it is not restated here.
+  `('open','in_progress')` set on both sides.
+- **WHAT A SUBCONTRACTOR SEES HERE IS NARROWED [S110, D-57]** — assignee or author only, never the rest
+  of the project's items. **The rule is a SELECT policy and a migration is owed** (§4.11.14a); until it
+  lands **it is not in force at all**, and an assigned sub sees every item. A sub may also see a punch
+  **list** with no items in it, which is a real state and needs empty-state copy, not a spinner.
+  **The S109 four-policy sub floor on INSERT/UPDATE is WITHDRAWN — do not build it.**
 
 #### 4.11.5 M-15 · Deliveries — `/m/p/[projectId]/deliveries`
 
@@ -1630,15 +1656,30 @@ as cosmetic.** Reasons, in order of weight:
    everyone but subcontractors. It is listed because it is the option a build reaches for by instinct,
    and it contradicts a ruling in the same pass.
 
-**Subcontractors are the harder half, and A extends to them with one addition [S109].** D-52 and D-53
-exclude subs from whole *screens*, not merely from a control, so "hide the button" has nothing to hide —
-**the tile is the affordance**. The ruling applies in the same two steps: **hide the tile** on M-3 for a
-subcontractor, and **block the route**. This is the one place D-54 tolerates what Option C describes, and
-the distinction is worth stating: C was rejected for *crew on M-13*, where D-53 keeps reading open and
-removing the tile would remove a permitted read. For a **sub**, the read is not permitted, so removing the
-tile states the truth rather than hiding a capability. **A-12's "exactly nine tiles" therefore holds for
-five roles and not for subcontractors**, and the criterion needs that carve-out written into it rather
-than discovered — see the open list, which is what remains of this item.
+> **⚠️ CORRECTED [S110] — the paragraph that stood here over-reached, and it was wrong when written.**
+>
+> _Superseded text, quoted not rewritten:_ _"**Subcontractors are the harder half, and A extends to them
+> with one addition [S109].** D-52 and D-53 exclude subs from whole *screens*, not merely from a control,
+> so 'hide the button' has nothing to hide — **the tile is the affordance**. The ruling applies in the
+> same two steps: **hide the tile** on M-3 for a subcontractor, and **block the route** … **A-12's
+> 'exactly nine tiles' therefore holds for five roles and not for subcontractors**, and the criterion
+> needs that carve-out written into it rather than discovered."_
+>
+> **No tile is hidden from anyone, and A-12 needs no carve-out.** The error was reading D-53 as excluding
+> subs from *screens* when it excludes them from **detail views** — and M-3's nine tiles point at **list**
+> screens. Tile-by-tile check in §4.11.10b. **This is a correction of a S109 mistake, not a consequence
+> of the S110 rulings.**
+>
+> **[S110] also shrinks what is left.** D-52's punch exclusion is withdrawn (replaced by **D-57**'s
+> visibility narrowing) and D-53's photo exclusion is withdrawn, so a subcontractor is now blocked from
+> exactly **four detail routes**: **M-31** (CO detail), **M-35** (member detail), **M-36** (contact
+> detail), and **opening a file** from M-16.
+>
+> **So Option A applies to subs unchanged, with nothing added.** The affordance to hide is the **row tap**
+> on M-13, M-16, M-17 and M-18 — a control, exactly like the "New CO" button — and the route guard does
+> the enforcing. **Option C is not reached for any role.** **A-66 carries the weight here:** a sub who taps
+> a contact row and gets nothing has been handed a bug, so either the row does not invite the tap or the
+> destination explains itself.
 
 **How the role is read.** `getMyProfile()` (`profiles.ts:35`) returns
 `{ id, role, first_name, last_name }` server-side and is **already the pattern on `/m`** — M-30 uses it
@@ -1652,9 +1693,16 @@ no new query belongs in a page. **Do not read the role from `getMyMember()`**: `
 > §7a's four widened policies key on). Separately, `company_members.member_type` permits **two** values,
 > `crew` and `subcontractor`, and TECH_DEBT #127 records that rebuild-test holds **32 rows with
 > `member_type = 'subcontractor'` and ZERO profiles with `role = 'subcontractor'`** — roster rows, not
-> auth identities. **D-52 and D-53's "except subcontractors" is a `get_my_role()` test**, because only a
-> role can be checked at sign-in. A build that tests `member_type` instead will exclude 32 roster
-> members who are not the signed-in user and gate nothing.
+> auth identities. **Every "subcontractor" rule in this spec is a `get_my_role()` test** — D-53's four
+> remaining detail exclusions, and **D-57's visibility narrowing** — because only a role can be checked
+> at sign-in. A build that tests `member_type` instead will exclude 32 roster members who are not the
+> signed-in user and gate nothing.
+>
+> **[S110] D-57 makes this trap sharper, because it uses BOTH axes in one predicate.** The rule is
+> `assignee_id = get_my_member_id() OR created_by = auth.uid()` — a **member** id on the left of the
+> first arm and a **user** id on the second — while the *role* test that selects the arm is a third
+> thing again (`get_my_role()`). **Three identity concepts in one policy**, and a swap between any two
+> returns no rows rather than an error. §4.11.14a spells the mapping out in a table for this reason.
 
 #### 4.11.10b The block list — **every gated surface, derived from the policies [S109, D-54]**
 
@@ -1667,6 +1715,11 @@ refuses · **UI-ONLY** = the interface is the only thing stopping them.
 
 ##### Write actions
 
+> **REVISED [S110].** D-52's subcontractor exclusion is withdrawn and its verify clause corrected, so
+> five rows below changed. The **hidden + blocked** column for punch is now empty of subcontractors —
+> subs may create and complete. What replaces it is **D-57's visibility narrowing on SELECT**, which is
+> a *read* rule and appears in the read table.
+
 | Action | Reaches it | Hidden + blocked from | Would the DB refuse them? | The policy that does it |
 | ------ | ---------- | --------------------- | ------------------------- | ----------------------- |
 | **Create / edit a CO** (M-32) — `createChangeOrder`, `updateChangeOrder` | owner, admin, project_manager | foreman, crew_member, **subcontractor** | **YES — DB** | `change_orders_insert_authorized` / `change_orders_update_authorized`, both `get_my_role() = ANY (owner, admin, project_manager)` — `20260704215000_module5_5d_change_orders.sql:339-351` |
@@ -1674,21 +1727,10 @@ refuses · **UI-ONLY** = the interface is the only thing stopping them.
 | **Add / edit / delete CO line rows** (M-32) | owner, admin, project_manager | foreman, crew_member, subcontractor | **YES — DB** | `change_order_line_rows_{insert,update,delete}_authorized`, same array — `:402-421` |
 | **Send a CO for signature** (M-31) — `sendChangeOrder` | owner, admin, project_manager | foreman, crew_member, subcontractor | **YES — route, 403** | `app/api/change-orders/[id]/send/route.ts:51` reads `profiles.role` and returns 403. Plus the underlying UPDATE is DB-floored as above. |
 | **Void a CO** (M-31) — `voidChangeOrder` | owner, admin, project_manager | foreman, crew_member, subcontractor | **YES — route, 403** | `app/api/change-orders/[id]/void/route.ts:31` — same check, 403; also 409 on a bad status |
-| **Create a punch item** (M-33) — `createPunchItem` | owner, admin, project_manager, foreman, crew_member | **subcontractor** | **NO — UI-ONLY** | `punch_list_items_insert_authenticated` requires only `company_id` + `can_view_project()` — **no role arm** (`20260704214000_module5_5c_punch_lists.sql:197-202`). **`createPunchItem` carries no role check either.** |
-| **Create a punch LIST** (M-33, when a project has none) — `createPunchList` | same five | **subcontractor** | **NO — UI-ONLY** | `punch_lists_insert_authenticated`, same two arms, no role — `:169-174`. **Closing punch items without closing lists leaves a sub a way in.** |
-| **Complete a punch item** (M-34) — `completePunchItem` | same five | **subcontractor** | **NO — UI-ONLY** | `punch_list_items_update_authenticated` — `company_id` + (`can_view_project()` OR assignee), **no role arm** (`:204-215`). **`completePunchItem` carries no role check**; it enforces only the photo gate. |
-| **Verify a punch item** (M-34) — `verifyPunchItem` | owner, admin, project_manager, foreman | **crew_member**, **subcontractor** | **NO — UI-ONLY** | Same policy as above. The **Foreman+** floor, the `requires_verification` check, the `status = 'complete'` check and the **separate-eyes** rule are **all four in `punch-client.ts:182-211`**, in TypeScript. A direct UPDATE setting `status='verified'` is accepted. |
-
-> **Two things this table makes visible that prose kept hiding.**
->
-> **1. The change-order half is genuinely enforced and the punch half is not.** Every CO write is refused
-> by the database or by a 403 in a Route Handler. **Every punch write is refused by nothing.** The two
-> rulings read alike in D-50's summary table and are not alike at all.
->
-> **2. `crew_member` is blocked from verify by the same nothing that blocks a sub.** D-52 grants verify to
-> "everyone except subcontractors", but `verifyPunchItem` enforces **Foreman+**, which excludes crew as
-> well. That is a **conflict between the ruling and the code**, not a gap in the code — see the note
-> under the read table.
+| **Create a punch item** (M-33) — `createPunchItem` | **EVERY role, subcontractors included** [S110, D-52 corrected] | *nobody* | n/a — nothing to refuse | `punch_list_items_insert_authenticated` has no role arm, and **that is now correct behaviour** rather than a gap. The author lands in `created_by` (`DEFAULT auth.uid()`), which is half of D-57's visibility predicate. |
+| **Create a punch LIST** (M-33) — `createPunchList` | **EVERY role, subcontractors included** [S110] | *nobody* | n/a | `punch_lists_insert_authenticated`, same. **The four-policy sub floor proposed at S109 is WITHDRAWN and must not be built.** |
+| **Complete a punch item** (M-34) — `completePunchItem` | **EVERY role, subcontractors included** [S110] | *nobody* | n/a | `punch_list_items_update_authenticated`. `completePunchItem` enforces only the photo gate, correctly. |
+| **Verify a punch item** (M-34) — `verifyPunchItem` | owner, admin, project_manager, **foreman** | **crew_member**, **subcontractor** | **NO — UI-ONLY** | **[S110] D-52 corrected: verify follows desktop, Foreman+, 5C §4 unreversed** — so the ruling and the code now agree. But the floor still lives in `punch-client.ts:182-211` (TypeScript), together with the `requires_verification`, `status = 'complete'` and **separate-eyes** checks. A direct UPDATE setting `status='verified'` is still accepted by RLS. Open item 7. |
 
 ##### Detail screens (reads)
 
@@ -1697,65 +1739,71 @@ refuses · **UI-ONLY** = the interface is the only thing stopping them.
 | **M-31 CO detail** — `getChangeOrder(id)` | owner, admin, project_manager, foreman, crew_member | **subcontractor** | **NO — UI-ONLY** | `change_orders_select_visible` = `company_id` + `can_view_project()`. **No role floor, no author scoping** — `:332-337`. **TECH_DEBT #117, accepted UI-only by D-56.** |
 | ↳ **the money on it** — `net_delta`, and each line row's `total`, `rate`, `unit_cost`, `amount` | owner, admin, project_manager | **foreman, crew_member** (D-51), subcontractor | **NO — UI-ONLY** | Parent as above; children `change_order_line_items_select_visible` (`:355-364`) and `change_order_line_rows_select_visible` (`:389-399`) are **also** `can_view_project()` with no role arm. **The exposure is wider than `net_delta` alone.** |
 | ↳ **signing activity** — `getCoSigningSessions` | owner, admin, project_manager | foreman, crew_member, subcontractor | **YES — DB** | `co_signing_sessions_select_manager`, `get_my_role() = ANY (owner, admin, project_manager)` — `:427-433`. **The one CO read that is floored.** |
-| **M-34 punch item** | owner, admin, project_manager, foreman, crew_member | **subcontractor** | **NO — UI-ONLY** | `punch_list_items_select_visible` = `company_id` + (`can_view_project()` OR assignee), no role arm — `:185-195` |
+| **M-14 punch list / M-34 punch item** | **EVERY role** — but a **subcontractor sees only items they are assigned or authored** [S110, D-57] | *nobody is blocked from the screen* | **WILL BE — DB, once D-57's migration lands** | Today `punch_list_items_select_visible` (`:185-195`) is `can_view_project()` OR assignee — **role-blind, so an assigned sub sees every item on the project.** D-57 **narrows** it. Proposed policy in §4.11.14a. **Until it lands, the rule is not in force at all** — not in RLS, not in the service layer. |
+| **Punch LISTS** (`punch_lists`) | **EVERY role, subcontractors included** | *nobody* | n/a | `punch_lists_select_visible` = `company_id` + `can_view_project()`. **Unchanged by D-57 on purpose** — subs get lists; only items filter. A sub may therefore see an empty list. |
 | **M-35 team-member detail** — `getMember(id)` | owner, admin, project_manager, foreman, crew_member | **subcontractor** | **NO — UI-ONLY** | `company_members_select_authenticated` is `company_id = get_my_company_id()` and **nothing else** — `20260704210000_company_members_foundation.sql:81-83` |
 | **M-36 contact detail** — `getContact(id)` | owner, admin, project_manager, foreman, crew_member | **subcontractor** | **NO — UI-ONLY** | `contacts_select_authenticated` is company + `is_deleted = false`, **no role arm** — `20260101000000_baseline_schema.sql:3267` |
 | **M-16 open a file** — `getSignedUrl` | owner, admin, project_manager, foreman, crew_member | **subcontractor** | **PARTLY — DB** | `files_select_non_client` refuses `client` and floors `contracts`/`change_orders`/`invoices` to owner/admin (+PM for invoices) — `20260728000000_security_rls_96_99.sql:53-73`, mirrored on storage by `project_files_select_non_client`. **A subcontractor passes both** (they are not `client`), so **the sub exclusion specifically is UI-only**; the category floor is real. |
-| **M-9 photo viewer** (already built) | owner, admin, project_manager, foreman, crew_member | **subcontractor** | **NO for the sub exclusion — UI-ONLY** | Same two policies. Photos fall in the *not category-gated* arm, so any non-`client` role with `can_view_project()` passes — **including a sub, deliberately, per D-20/§7a**, which widened four policies *for* subs. **D-53 now excludes them from the viewer while §7a lets them upload and annotate.** See the conflict note. |
+| **M-8 gallery / M-9 viewer / M-10 markup** | **EVERY role, subcontractors included** [S110, D-53 corrected] | *nobody* | n/a — the DB already permits it, deliberately | **D-53's exclusion of subs is WITHDRAWN.** §7a/D-20 widened **four** policies as the **first build step** precisely so a sub could upload and annotate; `files_select_non_client` and `project_files_select_non_client` already admit any non-`client` role with `can_view_project()`. **Subs view every project photo, take new ones, and annotate.** |
 
-##### Three conflicts this table surfaced — **none is a code defect; each is a ruling that needs finishing**
+##### The three conflicts this table surfaced — **two RESOLVED [S110], one standing**
 
-1. **⚠️ D-52 grants verify to crew; the code refuses crew.** `verifyPunchItem`'s `FOREMAN_PLUS` array is
-   `['owner','admin','project_manager','foreman']` (`punch-client.ts:5`) and 5C §4 is cited in its
-   docstring as the source. So D-52's "everyone except subcontractors" and the live behaviour disagree
-   **about crew_member**, and the block list above records the code's answer, not the ruling's. **Which
-   one is right is Josh's call** — either D-52 narrows to Foreman+ for verify, or 5C §4 is being
-   reversed too. Recorded, not resolved.
-2. **⚠️ D-53 excludes subs from the photo viewer; §7a/D-20 exists to let subs use photos.** §7a widened
-   **four** policies specifically so a subcontractor can upload and annotate a photo, and called it the
-   **first build step**. D-53 now hides M-9 from them. A sub who can take and annotate a photo but cannot
-   open one is not obviously what either ruling intended. **Not resolved here.**
-3. **The sub exclusion is UI-only on every single read surface.** Not one of `change_orders`,
-   `punch_list_items`, `company_members`, `contacts` or `files` carries a `subcontractor` role arm on
-   SELECT. D-54's route guard is therefore the *entire* enforcement of D-53.
+1. ~~**D-52 grants verify to crew; the code refuses crew.**~~ **RESOLVED [S110, Josh]: DESKTOP WINS.**
+   `verifyPunchItem`'s `FOREMAN_PLUS` is right; **D-52 is corrected** and **5C §4 stands unreversed**.
+   Verify is **Foreman+**, and `crew_member` is excluded on mobile exactly as on desktop. The block list
+   above already recorded the code's answer, which is now also the ruling's.
+2. ~~**D-53 excludes subs from the photo viewer; §7a/D-20 exists to let subs use photos.**~~
+   **RESOLVED [S110, Josh]: §7a WINS.** **Subs get full photo access** — view every photo on a project
+   they can reach, take and add new ones, annotate. **D-53's photo exclusion is withdrawn** and the
+   exclusion list drops from five surfaces to four.
+3. **STANDS — the sub exclusion is UI-only on every read surface it still covers.** `change_orders`,
+   `company_members`, `contacts` and `files` carry **no `subcontractor` arm on SELECT**, so **D-54's
+   route guard is the entire enforcement** of what remains of D-53. **[S110] `punch_list_items` leaves
+   this list** — not because it gained a floor, but because D-57 replaces exclusion with a narrowing
+   that **will** be enforced in RLS (§4.11.14a).
 
-##### Closing the subcontractor write gap — cost and migration shape (**NOT written**)
+##### ⚠️ A-12's tile count needs NO carve-out — a S109 flag WITHDRAWN [S110]
 
-**What is broken.** `can_view_project()` is `owner/admin OR is_assigned_to_project()`, and that second arm
-is **role-blind** (`20260704211000_module5_5a_projects.sql:248-262`) — the same property §7a relies on for
-sub photo access. So **an assigned subcontractor can insert and update punch items and punch lists
-today**, and D-52's exclusion exists in neither RLS nor the service layer.
+**S109's open item 10 said A-12's "exactly nine tiles" needed a subcontractor carve-out because D-54
+hides tiles rather than controls for subs. On re-examination that was wrong, and it was wrong at S109 —
+this is a correction, not a consequence of the new rulings.**
 
-**Shape — copy `20260827000000_expenses_subcontractor_floor.sql` exactly.** That migration added
-`AND public.get_my_role() IS DISTINCT FROM 'subcontractor'::text` to an existing policy, **role arm only,
-every other arm byte-identical**, and its header explains why the author arm stays role-blind. Four
-policies need the same clause, and it must be four rather than two:
+**D-53 gates DETAIL VIEWS. M-3's nine tiles point at LIST screens.** The tiles are `overview, schedule,
+changes, punch, deliveries, files, photos, contacts, team`
+(`app/m/p/[projectId]/page.tsx:53-63`), and each resolves to a §4.11 section screen — **not** to M-31,
+M-35 or M-36. Nothing in D-51, D-52, D-53 or D-57 removes a **list** screen from a subcontractor:
 
-| Policy | Object | Why it cannot be skipped |
-| ------ | ------ | ------------------------ |
-| `punch_list_items_insert_authenticated` | `punch_list_items` | The item itself |
-| `punch_list_items_update_authenticated` | `punch_list_items` | Complete and verify are UPDATEs |
-| `punch_lists_insert_authenticated` | `punch_lists` | Otherwise a sub creates a *list* instead — §4.11.13 already notes an item needs a parent list |
-| `punch_lists_update_authenticated` | `punch_lists` | Same reasoning, for renaming |
+| Tile | Sub's access after S110 |
+| ---- | ----------------------- |
+| changes → M-13 | **Gets the list.** Only the *detail* route (M-31) is blocked. |
+| punch → M-14 | **Gets the list**, with items narrowed by D-57. |
+| photos → M-8 | **Gets everything**, D-53's exclusion withdrawn. |
+| files → M-16 | **Gets the list.** Only *opening a document* is blocked. |
+| contacts → M-17, team → M-18 | **Gets both lists.** Only the *detail* routes (M-36, M-35) are blocked. |
+| overview, schedule, deliveries | Never gated by anything. |
 
-**`IS DISTINCT FROM`, not `<> `** — `get_my_role()` can return NULL, and `NULL <> 'subcontractor'` is NULL,
-which fails the policy open. The expenses precedent uses `IS DISTINCT FROM` for exactly this reason.
+**So the M-3 grid is nine tiles for every role, and A-12 holds verbatim.** §4.11.10a's line about hiding
+the tile for subs is **corrected there** — it was reasoning from an exclusion broader than D-53 ever
+ruled. **What a sub actually meets is D-54's route guard on four detail routes**, which is A-65's
+territory, and **A-66's explain-itself requirement is what makes that acceptable** rather than a dead end.
 
-**What it costs.**
+##### ~~Closing the subcontractor write gap~~ — **WITHDRAWN [S110]. Do not build it.**
 
-- **Cheap in SQL, and reversible.** Four DROP/CREATE pairs, no data change, no column change, no backfill.
-  The same size as §7a's four-policy widening, in the opposite direction.
-- **It does NOT close verify.** Verify is a **column-level, actor-relative** rule — *only these columns,
-  only by not-the-completer* — and **RLS cannot express that**. A row policy that admits an UPDATE admits
-  it for every column. Closing verify properly needs a **BEFORE UPDATE trigger**, which is a materially
-  bigger change and a different decision. **This migration closes gap 2 in §4.11.14 and leaves gap 1 open.**
-- **It cannot be verified on rebuild-test as things stand.** **TECH_DEBT #127** — there is no
-  `subcontractor` profile identity, so the probe that would prove the policy works has no identity to run
-  as. **Seed first (#127), then migrate, then prove it** — migrating blind here means shipping an
-  unexercised policy on the one role the ruling is about.
-- **Check the blast radius on desktop before applying.** These are shared policies, not mobile ones. A sub
-  who legitimately updates punch items through a desktop surface today would stop being able to. Nothing
-  in this spec surveyed the desktop punch UI for sub usage, and **that survey is part of the cost**.
+_S109 proposed a four-policy subcontractor floor on `punch_list_items_{insert,update}_authenticated` and
+`punch_lists_{insert,update}_authenticated`, copying `20260827000000_expenses_subcontractor_floor.sql`._
+
+**That migration is withdrawn in full.** D-52's exclusion is reversed: **subs get punch lists, including
+creating them**, so the absence of a role floor on punch INSERT and UPDATE is **correct behaviour, not a
+gap**. Nothing is owed there.
+
+**What is owed instead is the opposite change — a NARROWING of SELECT, one policy, specified in
+§4.11.14a.** The S109 write-up is superseded rather than deleted because its underlying finding was
+sound and is now load-bearing in the other direction: **`can_view_project()`'s assignment arm is
+role-blind**, which is exactly why an assigned sub can see the whole project's punch list today and why
+D-57 is a narrowing.
+
+**TECH_DEBT #141 is rewritten to match** — a reader who finds the old entry would otherwise build a
+migration that has been reversed.
 
 #### 4.11.11 M-31 · Change order detail — `/m/p/[projectId]/changes/[coId]` — **[S108, D-51/D-53]**
 
@@ -1949,37 +1997,27 @@ editing a `draft`, reached from M-31's Edit.
 - **CUT: delete.** `deletePunchItem` (`:216`) is Foreman+ and destructive; no field need was stated.
 - **Online-only**, disabled offline with a plain message.
 
-> ##### ⚠️ D-52 versus the live RLS — a real gap, in TECH_DEBT #117's class
+> ##### ⚠️ WITHDRAWN AND REPLACED [S110, Josh] — the subcontractor EXCLUSION is gone; a VISIBILITY rule takes its place
 >
-> **`punch_list_items` has NO role floor in the database, at all.** Verified verbatim
-> (`20260704214000_module5_5c_punch_lists.sql:197-215`): both
-> `punch_list_items_insert_authenticated` and `punch_list_items_update_authenticated` require only
-> `company_id = get_my_company_id()` plus `can_view_project(project_id)` (UPDATE also admits the
-> assignee). The migration's own comment says so outright: _"Column-level rules (toggles Foreman+;
-> verify not-completer; photo gate) and soft-delete restriction (Foreman+) are **service-layer**."_
+> _What this block said, quoted rather than deleted, because its finding about the live RLS was correct
+> even though the ruling it served has been withdrawn:_ _"**`punch_list_items` has NO role floor in the
+> database, at all** … an assigned sub can insert and update punch items today, and D-52 says they must
+> not … A migration is owed … Two policies need it: `punch_list_items_insert_authenticated` and
+> `punch_list_items_update_authenticated`. **`punch_lists` needs the same treatment** or a sub simply
+> creates a list instead."_
 >
-> Two distinct gaps follow, and only one of them is new:
+> **That four-policy floor is NOT built.** D-52's exclusion is withdrawn: **subs get punch lists,
+> including creating them.** The absence of a role floor on INSERT and UPDATE is therefore **correct
+> behaviour**, not a gap — nothing is owed there. **What is owed instead is the opposite migration: a
+> NARROWING of SELECT.** See §4.11.14a.
 >
-> | # | Gap | New? | Consequence |
-> | - | --- | ---- | ----------- |
-> | 1 | **Verify is Foreman+ in TypeScript only.** `verifyPunchItem`'s `FOREMAN_PLUS` check, the `requires_verification` check, the `status = 'complete'` check and the separate-eyes rule are **all** in `punch-client.ts`. A direct UPDATE setting `status='verified'`, `verified_by`, `verified_at` is accepted by RLS. | **No** — pre-existing, and true of desktop. | D-52 puts the verify control on a phone, widening who meets it. |
-> | 2 | **`can_view_project()` admits an assigned subcontractor**, because it is `owner/admin OR is_assigned_to_project()` and that arm is **role-blind** (`20260704211000_module5_5a_projects.sql:248-262`) — the same property §7a relies on for sub photo access. So **an assigned sub can insert and update punch items today**, and D-52 says they must not. | **Yes** — created by this ruling. | The exclusion exists **nowhere**: not in RLS, and not in the service layer either (`createPunchItem` and `completePunchItem` carry **no role check at all**). |
->
-> **A migration is owed and is NOT written here.** The precedent to copy is exact:
-> `20260827000000_expenses_subcontractor_floor.sql` adds `public.get_my_role() IS DISTINCT FROM
-> 'subcontractor'::text` to an existing policy, **role array only, every other arm byte-identical** —
-> the same discipline §7a applied to its four policies. Two policies need it:
-> `punch_list_items_insert_authenticated` and `punch_list_items_update_authenticated`.
-> **`punch_lists` needs the same treatment** or a sub simply creates a list instead.
-> Whether verify should also gain a DB floor is a **separate, larger question** — it is a column-level
-> rule, not a row-level one, and RLS cannot express "only these columns, only by not-the-completer"
-> without a trigger. **Not designed here.**
->
-> **This cannot be tested live today.** **TECH_DEBT #127** — rebuild-test holds **no `subcontractor`
-> profile identity** (verified S100; `subcontractor` and `client` profile counts are both 0). Every
-> criterion below that asserts a sub is refused is `[live — BLOCKED on #127]`, exactly as
-> `m-sections.spec.ts`'s existing sub case already is (`test.skip`, "blocked on #127"). **Do not mark
-> D-52 verified on a green suite that skipped the only role the ruling excludes.**
+> **The one finding that survives is gap 1, and it survives with its conclusion reversed.** Verify's
+> `FOREMAN_PLUS` floor lives in TypeScript (`punch-client.ts:182-211`) and RLS accepts a direct UPDATE
+> setting `status='verified'`. **[S110] D-52 is corrected so the ruling now MATCHES that code** — verify
+> is Foreman+, crew are excluded, 5C §4 stands. So this is no longer a ruling-versus-code conflict; it
+> is a plain, pre-existing, desktop-wide observation that a column-level rule is unenforced at the
+> database. **Still true, still not closed by any migration proposed here** — RLS cannot express "only
+> these columns, only by not-the-completer" without a trigger. Open item 7.
 
 > ##### D-16 is UNCHANGED by D-52 — checked, not assumed
 >
@@ -1993,6 +2031,168 @@ editing a `draft`, reached from M-31's Edit.
 > writes `status = 'open'` (+1 to `total`, and +1 to `mine` when the author assigns it to themselves),
 > and completing one moves it out of the open set (−1). **No counter definition changes, no new
 > expression is introduced, and `isItemClosed()` is still not used for these figures.**
+>
+> **⚠️ [S110] D-57 DOES change what the badge MEANS — for subcontractors only, and this needs saying.**
+> `getOpenPunchCounts` queries `punch_list_items` **through RLS**, so once SELECT is narrowed a
+> subcontractor's `total` counts **only the items D-57 lets them see**, not the project's open items.
+> The badge reads `{mine} mine · {total} open`, and for a sub **"open" silently stops meaning "open on
+> this project"** and starts meaning "open, of the ones you can see" — `total` becomes `mine` plus items
+> they authored but are not assigned.
+>
+> **No counter expression changes and none should.** This is the RLS-shaped-count pattern the spec has
+> already accepted once: **A-11j** asserts that a crew member's "Up next" reflects only the schedule rows
+> RLS grants them, for the same structural reason. **What is NOT yet decided is the label** — whether a
+> sub's badge should read differently, or whether the figure simply is what they can see. **Open item
+> 11.** A build must not "fix" it by bypassing RLS to recover a project-wide count.
+
+#### 4.11.14a A subcontractor's punch visibility — **[S110, Josh, D-57]**
+
+**The rule.** A subcontractor sees a punch **item** only if they are the **assignee** or they **created**
+it. Nothing else on the project. **Punch lists stay fully visible**, and subs may create both lists and
+items. Every other role is unaffected, byte for byte.
+
+##### 1. `created_by` EXISTS — the fallback is not needed
+
+Checked before proposing, per the ruling. `punch_list_items` carries the full standard-column set
+(`20260704214000_module5_5c_punch_lists.sql`):
+
+```
+created_by  uuid  DEFAULT auth.uid()
+  → punch_list_items_created_by_fkey  FOREIGN KEY (created_by) REFERENCES auth.users(id)
+```
+
+So **"or they created it" keys on it directly** and Josh's auto-assign fallback is **moot**.
+
+> **⚠️ BUT THE TWO HALVES OF THE RULE SIT ON DIFFERENT IDENTITY AXES, and a build that misses this
+> writes a predicate that silently matches nothing.**
+>
+> | Column | FK target | Compare against |
+> | ------ | --------- | --------------- |
+> | `assignee_id` | **`company_members(id)`** (`:116`) | `public.get_my_member_id()` |
+> | `created_by` | **`auth.users(id)`** (`:126`) | `auth.uid()` |
+>
+> **They are not interchangeable.** This is GAP-1b's trap (§4.3) in a new place: comparing `created_by`
+> to `get_my_member_id()`, or `assignee_id` to `auth.uid()`, **returns no rows rather than erroring** —
+> so a sub would see nothing and the failure would read as "the ruling works" until someone noticed subs
+> had lost their own items.
+
+##### 2. What the fallback would have cost — reported, since it was asked, and it lands where Josh guessed
+
+Not needed, but the survey was cheap and the answer is worth recording in case auto-assign is ever
+reconsidered for another reason. **Desktop creates items assigned to someone other than the creator as a
+matter of course, and most often to nobody at all:**
+
+- `punch-panel.tsx:79` — `const [itemAssignee, setItemAssignee] = useState('')`. The field starts
+  **empty**.
+- `:114` — `assignee_id: itemAssignee || null`. So **the default desktop punch item is created
+  UNASSIGNED**.
+- `:272-278` — the dropdown lists **every** company member, unfiltered, with **no self-preselection**.
+
+**So the cost would have been a silent behaviour change on desktop, not just an extra tap.** Every item
+a foreman creates today lands unassigned; auto-assigning to the creator would make **the foreman the
+assignee of every item they write**, and the "reassign as a second step" tax Josh anticipated would fall
+on exactly that person — the one who creates items for other people all day. It would also corrupt
+D-16's `mine` count, which is `assignee_id = get_my_member_id()`: a foreman's "mine" would jump to
+include every item they had merely written down. **Avoided, because `created_by` exists.**
+
+##### 3. This is NARROWER than what ships today — stated plainly
+
+**Today an assigned subcontractor sees EVERY punch item on the project.** The live policy is:
+
+```sql
+CREATE POLICY punch_list_items_select_visible ON public.punch_list_items
+  FOR SELECT TO authenticated
+  USING (
+    company_id = public.get_my_company_id()
+    AND (
+      public.can_view_project(project_id)
+      OR assignee_id = public.get_my_member_id()
+    )
+  );
+```
+
+`can_view_project()` is `owner/admin OR is_assigned_to_project()`, and **that second arm is role-blind**
+(`20260704211000_module5_5a_projects.sql:248-262`) — the same property §7a relies on for sub photo
+access. An assigned sub satisfies it, so **the first arm already grants them the whole project's punch
+list**. D-57 **takes that away.** It is a restriction of current behaviour, not a grant, and **nothing a
+sub can do today stops working except seeing other people's items.**
+
+##### 4. Migration or service layer? — **MIGRATION. One policy.**
+
+**It must be RLS, and the argument is not "RLS is nicer".**
+
+1. **RLS can express this exactly.** Unlike the verify rule — column-level and actor-relative, which
+   needs a trigger — this is a **pure row-level predicate over columns on the row itself**. It is
+   precisely what a SELECT policy is for.
+2. **A service-layer filter would leave the rows in the payload.** **TECH_DEBT #136** is this exact
+   mistake already made once: desktop ships retainage rows to a crew member's browser because the
+   protection was **render-deep, not payload-deep**. A visibility rule enforced in `getPunchLists()`
+   would be the same shape, on the same kind of data.
+3. **`getPunchLists()` is shared with desktop** (§1: the service layer is shared). Filtering there
+   changes desktop too — which is arguably right, but it makes a mobile ruling silently rewrite a
+   desktop query, and it still leaves a direct API call returning everything.
+4. **The house rule.** Every other role floor that *could* go in the database did (the Financial
+   Visibility Floor closed three of four families that way). **#117 is the one accepted exception, and
+   it is accepted because the split was unbuildable** — here it is one predicate.
+
+**Proposed shape — one DROP/CREATE, structured so the non-sub path is provably unchanged:**
+
+```sql
+DROP POLICY punch_list_items_select_visible ON public.punch_list_items;
+
+CREATE POLICY punch_list_items_select_visible ON public.punch_list_items
+  FOR SELECT TO authenticated
+  USING (
+    company_id = public.get_my_company_id()
+    AND (
+      -- Every non-subcontractor role: the original predicate, byte for byte.
+      (
+        public.get_my_role() IS DISTINCT FROM 'subcontractor'::text
+        AND (
+          public.can_view_project(project_id)
+          OR assignee_id = public.get_my_member_id()
+        )
+      )
+      -- Subcontractor (D-57): assignee or author, and nothing else on the project.
+      OR (
+        public.get_my_role() = 'subcontractor'::text
+        AND (
+          assignee_id = public.get_my_member_id()
+          OR created_by = auth.uid()
+        )
+      )
+    )
+  );
+```
+
+- **`IS DISTINCT FROM`, not `<>`** — `get_my_role()` can return NULL and `NULL <> 'subcontractor'` is
+  NULL, which would fail the arm closed and blank the screen for anyone without a resolvable role. The
+  `20260827000000_expenses_subcontractor_floor.sql` precedent uses `IS DISTINCT FROM` for this reason.
+- **The two arms are mutually exclusive and jointly exhaustive**, so the change is provably a no-op for
+  the other six roles — which is what makes it reviewable.
+- **The sub arm deliberately does NOT require `can_view_project()`.** A sub assigned an item on a project
+  they hold no `project_assignments` row for still sees that item — preserving the "broad assignment"
+  intent the original policy's second arm was written for, and which its own comment calls out.
+
+**Cost.**
+
+- **One policy, no data change, no column change, no backfill.** Smaller than §7a's four-policy widening.
+- **ZERO application code changes.** `getPunchLists()`, `getOpenPunchCounts()`, M-14, M-34 and the
+  desktop panel all query through RLS and simply receive fewer rows. Nothing in the service layer needs
+  to learn about subcontractors.
+- **INSERT and UPDATE are deliberately left alone** — subs may create and complete, per the corrected
+  D-52.
+- **⚠️ UPDATE now permits more than SELECT, and that asymmetry is NOT ruled.**
+  `punch_list_items_update_authenticated` keeps its `can_view_project()` arm, so **a sub could update an
+  item they can no longer read** — a blind write by id. Incoherent rather than dangerous, and the tidy
+  fix is to mirror the same two arms onto UPDATE. **Proposed, not ruled — open item 12.**
+- **A sub may now see a punch LIST with no items in it**, because lists stay visible while items filter
+  out. That is a real state, not an error, and M-14 needs empty-state copy that does not read as a
+  loading failure — the A-30b rule, on a new path.
+- **It cannot be proven on rebuild-test as things stand.** **TECH_DEBT #127** — no `subcontractor`
+  profile identity exists, so the probe has no identity to run as. **Seed first, then migrate, then
+  prove it.** Migrating blind here is worse than usual: the failure mode of a wrong predicate is *a sub
+  sees nothing*, which looks exactly like the rule working.
 
 #### 4.11.15 M-35 · Team-member detail — `/m/team/[memberId]` — **[S108, D-53]**
 
@@ -4089,10 +4289,14 @@ _Change orders — D-51_
 
 _Punch list — D-52_
 
-- A-56 **M-14 offers a create control and each row opens M-34**, for owner, admin, project_manager, foreman and crew_member. `[Playwright]` _(§4.11.4 as amended. The positive half of D-52, walked across the five roles that have it — a single-role check passes on a build that gates crew out by accident, which is the exact failure D-52 reverses.)_
-- A-57 **Completing an item on M-34 moves M-3's Punch badge down by one; verifying an item moves it by nothing at all.** `[live]` _(§4.11.14's D-16 check. **Written as one criterion on purpose**: the two halves are the whole claim that D-52 does not disturb D-16, and asserting them separately invites a build to satisfy the easy half. `getOpenPunchCounts` filters `('open','in_progress')`, so `complete → verified` must be invisible to it.)_
+- A-56 **REWRITTEN [S110]** — **M-14 offers a create control and each row opens M-34, for EVERY role including subcontractors.** `[Playwright]` _(§4.11.4 as amended. **Rewritten, not satisfied.** _Superseded text:_ _"for owner, admin, project_manager, foreman and crew_member"_ — which excluded subs, per D-52 before its correction. **Six roles now, not five.** The failure it catches is a build that carries the withdrawn exclusion forward from the S108 text.)_
+- A-57 **Completing an item on M-34 moves M-3's Punch badge down by one; verifying an item moves it by nothing at all.** `[live]` _(§4.11.14's D-16 check. **Written as one criterion on purpose**: the two halves are the whole claim that D-52 does not disturb D-16, and asserting them separately invites a build to satisfy the easy half. `getOpenPunchCounts` filters `('open','in_progress')`, so `complete → verified` must be invisible to it. **[S110] Assert this as a non-subcontractor** — D-57 changes what the badge counts for a sub, which is A-59e.)_
 - A-58 **`verifyPunchItem` refuses the member who completed the item**, on mobile as on desktop. `[live]` _(§4.11.14. The separate-eyes rule is service-layer only — **RLS accepts the UPDATE** — so a mobile path that calls the table directly instead of the function silently defeats it.)_
-- A-59 **An assigned subcontractor is refused punch create, complete and verify.** `[live — BLOCKED on TECH_DEBT #127]` _(§4.11.14's gap table, row 2. **This criterion CANNOT RUN TODAY and must not be marked passing.** rebuild-test holds zero `profiles.role = 'subcontractor'` identities, and the exclusion exists in neither RLS nor the service layer — `createPunchItem` and `completePunchItem` carry no role check at all, and `can_view_project()` admits an assigned sub. **A green suite here means the case was skipped**, exactly as `m-sections.spec.ts`'s existing sub case is. Unblocked by seeding the identity (#127) **and** by the owed migration.)_
+- A-58b **NEW [S110]** — **verify is Foreman+ on mobile: a crew member is offered no verify control and `verifyPunchItem` refuses one.** `[live + Playwright]` _(**D-52 corrected [S110]: desktop wins, 5C §4 stands unreversed.** The S108 ruling said "everyone except subcontractors", which would have granted crew verify and **silently reversed 5C §4 on mobile only**. This criterion exists so that reading cannot come back — it is the one place where a mobile build could have diverged from desktop on a sign-off rule.)_
+- A-59 **REWRITTEN [S110] — the exclusion is gone; a VISIBILITY rule replaces it.** **A subcontractor may create punch lists and items, and complete them** — nothing refuses them. `[live — BLOCKED on TECH_DEBT #127]` _(**Rewritten, not satisfied.** _Superseded text:_ _"An assigned subcontractor is refused punch create, complete and verify."_ **That assertion is now WRONG on create and complete and must fail until rewritten**; only the verify third survives, and it survives via A-58b as a Foreman+ rule rather than a sub rule. D-52's exclusion is withdrawn; D-57 narrows what a sub can SEE instead.)_
+- A-59c **NEW [S110]** — **a subcontractor sees a punch item only if `assignee_id = get_my_member_id()` OR `created_by = auth.uid()`**, and sees no other item on the project. `[live — BLOCKED on TECH_DEBT #127]` _(**D-57**, §4.11.14a. **This must be asserted against the DATABASE, not the screen** — the rule is a SELECT policy, and a build that filters in `getPunchLists()` instead would pass a screen-level check while still shipping the rows, which is **TECH_DEBT #136**'s mistake exactly. **The two halves sit on different identity axes** — `assignee_id` is a `company_members` id, `created_by` is an `auth.users` id — so the fixture must exercise both arms separately or a swapped comparison passes on the arm that happens to work.)_
+- A-59d **NEW [S110]** — **the narrowing changes nothing for the other six roles.** An owner, admin, PM, foreman or crew member sees exactly the same punch items after D-57's migration as before it. `[live]` _(§4.11.14a. The proposed policy is two mutually exclusive arms specifically so this is provable; without the criterion, a subtle change to the shared first arm would go unnoticed because every mobile screen would still look right.)_
+- A-59e **NEW [S110]** — **a subcontractor's M-3 Punch badge counts only the items D-57 lets them see**, and no code path recovers a project-wide count for them. `[live — BLOCKED on TECH_DEBT #127]` _(§4.11.14's D-57 caveat. `getOpenPunchCounts` reads through RLS, so this is what correct behaviour looks like — the same shape **A-11j** already accepts for a crew member's "Up next". The criterion exists because the figure reads oddly (`{mine} mine · {total} open` where "open" is no longer the project's), and **the tempting fix is to bypass RLS to make the number look right**. Whether the LABEL should change for a sub is open item 11 and is deliberately not asserted here.)_
 - A-59b **The ten section screens with no ruled write still offer none** — M-11, M-12, M-15, M-16, M-17, M-18, M-19 and the three shared routes render no button, input, select or textarea that mutates. `[Playwright]` _(**This is what survives of A-30c's blanket sweep**, narrowed from twelve screens to ten rather than deleted. D-50 reversed the rule for two screens and explicitly did not reverse it for the rest; without this, "read-only" quietly stops meaning anything. Note M-16's row tap and M-17's row tap are **navigation**, not writes, and must not trip it.)_
 
 _Detail views — D-53_
@@ -4169,7 +4373,7 @@ shell checks. Two of these deserve their mechanism spelled out because the asser
 
 **House rule.** Every fix still needs a failing-then-passing assertion. Under D-18 that rule is now
 satisfiable for every criterion in §10 except A-26, which is manual by nature.
-## §11 — Decision register (D-1…D-56; **five new [S108], three [S109]**; seven items open — fifteenth pass)
+## §11 — Decision register (D-1…D-57; **five [S108], three [S109], three [S110]**; six items open — sixteenth pass)
 
 > **[S108] Fourteenth ruling pass — D-50…D-54, the read-only reversal.** The header below counted
 > "twenty-nine ruled [S98–S99]; one open, out of scope" and had already fallen behind by four passes
@@ -4635,16 +4839,24 @@ rather than bound to something approximate — the D-19 and D-44 precedent:
 7. **Does the verify column-rule get a DB floor?** Separate from and larger than gap 2 in §4.11.14: RLS
    cannot express "only these columns, only by not-the-completer" without a trigger. **The §4.11.10b
    migration does NOT close this** — it closes the row-level sub gap and leaves this one open.
-8. **⚠️ NEW [S109] — D-52 says crew may verify; the code says Foreman+.** `verifyPunchItem`'s
-   `FOREMAN_PLUS` array excludes `crew_member`, citing 5C §4. Either D-52 narrows to Foreman+ for verify,
-   or 5C §4 is being reversed too. **§4.11.10b records the code's answer, not the ruling's**, because
-   guessing between them in a spec is worse than naming the conflict.
-9. **⚠️ NEW [S109] — D-53 hides the photo viewer from subcontractors; §7a/D-20 exists to give subs
-   photos.** §7a widened four policies as the **first build step** so a sub could upload and annotate.
-   D-53 now excludes them from M-9. **Which ruling gives way is not obvious and is not decided here.**
-10. **NEW [S109] — A-12's "exactly nine tiles" needs a subcontractor carve-out written into it.** D-54
-    hides tiles rather than controls for subs, so the M-3 grid is role-dependent for exactly one role.
-    The criterion currently tolerates no such variance and would fail a correct build.
+8. ~~**D-52 says crew may verify; the code says Foreman+.**~~ **CLOSED [S110, Josh]: desktop wins.**
+   Verify is **Foreman+**, crew excluded, **5C §4 stands unreversed**. D-52 corrected; A-58b added.
+9. ~~**D-53 hides the photo viewer from subcontractors; §7a/D-20 exists to give subs photos.**~~
+   **CLOSED [S110, Josh]: §7a wins.** **Subs get full photo access** — view all, capture, annotate.
+   D-53's photo exclusion withdrawn; the exclusion list drops from five surfaces to four.
+10. ~~**A-12's "exactly nine tiles" needs a subcontractor carve-out.**~~ **WITHDRAWN [S110] — the flag
+    was wrong when raised.** D-53 gates **detail views**; M-3's tiles point at **list** screens, and no
+    tile is hidden from anyone. **A-12 holds verbatim.** Tile-by-tile check in §4.11.10b; the S109
+    paragraph that caused it is corrected in §4.11.10a.
+11. **⚠️ NEW [S110] — what should a subcontractor's Punch badge SAY?** D-57 makes `getOpenPunchCounts`
+    return only the items a sub may see, so `{mine} mine · {total} open` stops meaning "open on this
+    project" for them and starts meaning "open, of the ones you can see". **The figure is correct and no
+    counter expression should change** (the A-11j precedent). **The label is not ruled.**
+12. **⚠️ NEW [S110] — should punch UPDATE be narrowed to match D-57's SELECT?** As specced,
+    `punch_list_items_update_authenticated` keeps its role-blind `can_view_project()` arm, so a sub could
+    **write to an item they can no longer read** — a blind update by id. Incoherent rather than
+    dangerous. The tidy fix is to mirror D-57's two arms onto UPDATE in the same migration.
+    **Proposed in §4.11.14a, not ruled.**
 
 #### Owed to TECH_DEBT by this pass — **FILED [S109]**
 
@@ -4684,17 +4896,82 @@ rather than from the previous pass's prose changed the picture in three ways wor
    `punch_list_items`, `company_members`, `contacts` and `files` all lack a `subcontractor` arm on
    SELECT. **D-54's route guard is the entire enforcement of D-53.**
 
-**Two new conflicts surfaced by building the table, and neither is a code defect:**
+**Two new conflicts surfaced by building the table, and neither is a code defect** — **both were RULED at
+[S110] and the code won each time**, which is the strongest argument this pass makes for deriving the
+block list from the policies rather than from prose:
 
-- **⚠️ D-52 grants verify to crew; `verifyPunchItem` refuses crew** (`FOREMAN_PLUS`, citing 5C §4). The
-  ruling and the code disagree about `crew_member`. **Open item 8.**
+- **⚠️ D-52 grants verify to crew; `verifyPunchItem` refuses crew** (`FOREMAN_PLUS`, citing 5C §4).
+  **→ CLOSED [S110]: desktop wins, D-52 corrected.**
 - **⚠️ D-53 hides M-9 from subcontractors while §7a/D-20 exists to let subs upload and annotate photos** —
-  four policies were widened as the **first build step** for exactly that. A sub who can take and
-  annotate a photo but cannot open one is unlikely to be what either ruling intended. **Open item 9.**
+  four policies were widened as the **first build step** for exactly that. **→ CLOSED [S110]: §7a wins,
+  D-53's photo exclusion withdrawn.**
 
-#### Testing note — **do not read a green suite as verification of D-52**
+> **⚠️ Point 3 above has been overtaken [S110] and point 1's second half is now WRONG.** Read them
+> against the sixteenth pass. `punch_list_items` leaves point 3's list — not by gaining a floor, but
+> because **D-57 replaces exclusion with a narrowing that WILL be enforced in RLS**. And "every punch
+> write is refused by nothing at all" is no longer a finding: **subs may write, so there is nothing left
+> to refuse.** Point 2 stands unchanged.
 
-**TECH_DEBT #127 blocks A-59 outright.** rebuild-test has no `subcontractor` (or `client`) profile
-identity, so every criterion asserting a sub is refused will **skip**, not pass —
-`m-sections.spec.ts` already carries one such skip ("blocked on #127"). D-52 and D-53 both turn on
-excluding subcontractors, which makes #127 a **gate on this pass**, not background debt.
+### Sixteenth ruling pass [S110, Josh] — the subcontractor reversal
+
+**Three rulings, two of them reversals of S108 text, and one correction of a S109 mistake I made.**
+
+| # | Question | **Ruling** | Applied in |
+| - | -------- | ---------- | ---------- |
+| 36 | Are subs excluded from punch? | **NO — WITHDRAWN. Subs get punch lists, including creating them.** What changes instead is **visibility**: a sub sees an item only if **assignee or author**. | **D-52** corrected, **D-57** new; §4.11.14a; A-56, A-59, A-59c–A-59e |
+| 37 | May crew verify? | **NO — DESKTOP WINS. Verify is Foreman+; 5C §4 stands unreversed.** D-52's "everyone" was wrong and the code was right. | **D-52** corrected; §4.11.10b; **A-58b** new |
+| 38 | Are subs excluded from photos? | **NO — WITHDRAWN. Full access: view all, capture, annotate.** §7a/D-20's intent stands. | **D-53** corrected; §4.11.10b |
+
+**The two checks the ruling asked for, answered before proposing:**
+
+1. **`created_by` EXISTS** — `DEFAULT auth.uid()`, FK to `auth.users(id)`
+   (`20260704214000_module5_5c_punch_lists.sql:126`). **So the auto-assign fallback is not needed.**
+   The catch a build must not miss: **`created_by` is a USER id and `assignee_id` is a MEMBER id**, so
+   the predicate is `assignee_id = get_my_member_id() OR created_by = auth.uid()`. Mixing the axes
+   returns no rows rather than erroring — GAP-1b's trap in a new place.
+2. **Desktop creates items for other people constantly, and usually for nobody.** `itemAssignee` starts
+   `''` and writes `null` (`punch-panel.tsx:79`, `:114`); the dropdown lists every member with no
+   self-preselection (`:272-278`). **So the fallback would have been a silent desktop behaviour change**
+   — every item a foreman writes would become theirs, and their D-16 `mine` count would absorb it.
+   Reported because it was asked; moot because `created_by` exists.
+
+**D-57 is NARROWER than what ships today, not wider — stated plainly.** `punch_list_items_select_visible`
+is `can_view_project(project_id) OR assignee_id = get_my_member_id()`, and **the first arm is role-blind**
+(`can_view_project` = owner/admin OR `is_assigned_to_project()`, `20260704211000_module5_5a_projects.sql:248-262`).
+**An assigned sub therefore sees every punch item on the project today.** D-57 takes that away. Nothing a
+sub can do stops working except seeing other people's items.
+
+**It needs a MIGRATION, not a service-layer filter — one policy.** It is a pure row-level predicate over
+columns on the row, which is exactly what a SELECT policy expresses; a service filter would leave the
+rows in the payload (**TECH_DEBT #136**'s mistake), and `getPunchLists()` is shared with desktop. **Zero
+application code changes** — every caller reads through RLS and receives fewer rows. Shape, arms and cost
+in **§4.11.14a**; **not written**.
+
+**What I got wrong at S109, corrected here rather than quietly dropped.** S109 said D-54 hides *tiles*
+from subs and that **A-12's nine-tile count needed a carve-out**. It does not. D-53 gates **detail
+views**; M-3's nine tiles point at **list** screens, and no tile is hidden from any role. The
+over-reaching paragraph is quoted and corrected in §4.11.10a, the tile-by-tile check is in §4.11.10b, and
+**open item 10 is withdrawn rather than closed** — it was never a real item.
+
+**And one S109 proposal is WITHDRAWN outright: do not build the four-policy punch floor.** S109 specced a
+subcontractor floor on `punch_list_items_{insert,update}_authenticated` and
+`punch_lists_{insert,update}_authenticated`. D-52's reversal makes the *absence* of that floor correct.
+**TECH_DEBT #141 is rewritten** so a reader does not build a migration that has been reversed.
+
+---
+
+#### Testing note — **#127 is a HARDER gate after S110, not a softer one**
+
+**TECH_DEBT #127 blocks A-59, A-59c and A-59e.** rebuild-test has no `subcontractor` (or `client`)
+profile identity, so every criterion turning on a sub will **skip**, not pass — `m-sections.spec.ts`
+already carries one such skip ("blocked on #127").
+
+**S110 makes this worse rather than better, and the reason is worth stating.** D-52's and D-53's
+exclusions were **absence** assertions: *a sub is refused*. An unrun absence assertion is a missed check.
+**D-57 is a presence-and-absence assertion:** *a sub sees these items and not those*. Its failure mode is
+**a sub who sees nothing at all** — which is indistinguishable, from the outside, from the rule working
+perfectly. **A wrong predicate in D-57's policy will look like a correct one until a subcontractor
+complains.** So the sequence is not negotiable: **seed the identity (#127) → apply the migration →
+prove both arms**, and not in any other order.
+
+---
