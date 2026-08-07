@@ -9,7 +9,7 @@ import { SetMobileHeader } from '../../mobile-header';
 //    (§3.2), Projects active."
 //
 // The chevron and the active tab need no code here — the shell already derives
-// both from the pathname (`isInsideProject()` and `activeTabHref()` in
+// both from the pathname (`showsBackChevron()` and `activeTabHref()` in
 // mobile-shell.tsx), and A-30 asserts them. What each screen owes is the TITLE
 // and the SUB-LINE, which is what this resolves.
 

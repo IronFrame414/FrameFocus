@@ -105,10 +105,51 @@ export function activeTabHref(pathname: string): string | null {
   return null;
 }
 
-/** §3.1 — "Inside a project, the hamburger is replaced by a back chevron." */
-export function isInsideProject(pathname: string): boolean {
-  return pathname.startsWith('/m/p/');
+/**
+ * Detail routes that hang off a HAMBURGER destination rather than a project.
+ *
+ * Exactly the two in §1's table — `contacts/[contactId]` (M-36) and
+ * `team/[memberId]` (M-35). Listed explicitly rather than inferred from "has a
+ * path segment that looks like an id", because the capture screens
+ * (`/m/logs/new`, `/m/timeclock/switch`) are the same shape and are NOT detail
+ * views — they own their own chrome and their own exits.
+ */
+const COMPANY_DETAIL_PREFIXES = ['/m/contacts/', '/m/team/'];
+
+/**
+ * §3.1 — "Inside a project, the hamburger is replaced by a back chevron."
+ *
+ * ⚠️ RENAMED FROM `isInsideProject` [S120], AND THE RENAME IS THE FIX.
+ *
+ * The old name transcribed §3.1's sentence literally, so the implementation was
+ * `startsWith('/m/p/')` and every screen outside a project got the hamburger.
+ * That is right for a top-level destination and WRONG for a detail view:
+ * `/m/contacts/{id}` and `/m/team/{id}` (M-36, M-35) are drilled into from a
+ * list, and they shipped with no way back at all. Found on a phone [S120,
+ * Josh] — the tab bar leaves the section entirely and a standalone-display PWA
+ * has no browser back gesture, so the user was simply stranded.
+ *
+ * **The rule the user experiences is DEPTH, not project-ness.** A screen you
+ * drilled into needs a way back; a destination you picked from the sheet does
+ * not. `/m/p/` happened to be the only depth that existed when §3.1 was
+ * written, which is why the two readings agreed until M-35 and M-36 landed.
+ *
+ * The name now states the rule it implements, so the next detail route added
+ * outside `/m/p/` has an obvious place to declare itself.
+ */
+export function showsBackChevron(pathname: string): boolean {
+  // Everything inside a project — §3.1's original case, unchanged.
+  if (pathname.startsWith('/m/p/')) return true;
+
+  // The company-scoped DETAIL routes. The trailing slash and the length check
+  // together are what keep this a depth test rather than a prefix test: the
+  // LIST at `/m/contacts` must keep its hamburger (it is a sheet destination),
+  // while `/m/contacts/{id}` must not.
+  return COMPANY_DETAIL_PREFIXES.some(
+    (prefix) => pathname.startsWith(prefix) && pathname.length > prefix.length
+  );
 }
+
 
 /**
  * §4.9 / §4.10 — M-9 and M-10 RUN ON THE DARK CANVAS AND OWN THEIR OWN CHROME.
@@ -173,7 +214,7 @@ function MobileShellInner({ children, companyName, teamCount }: MobileShellProps
   const [sheetOpen, setSheetOpen] = useState(false);
   const declared = useMobileHeader();
 
-  const insideProject = isInsideProject(pathname);
+  const insideProject = showsBackChevron(pathname);
   const activeHref = activeTabHref(pathname);
   const title = declared?.title ?? defaultTitle(pathname);
   const sub = declared !== null ? declared.sub : companyName;

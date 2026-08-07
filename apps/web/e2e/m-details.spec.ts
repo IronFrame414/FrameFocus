@@ -329,3 +329,101 @@ test.describe('M-16 · the file-open path exists (zero call sites before this pa
     await expect(page.getByTestId('m-file-open')).toHaveCount(0);
   });
 });
+
+// ===========================================================================
+// A-30f — EVERY DETAIL VIEW OFFERS A WAY BACK
+// ===========================================================================
+// Reported from a phone [S120, Josh]: the contact and team-member detail
+// screens had no back chevron, so a user who tapped a row was stranded — the
+// only exits were the tab bar (which leaves the section entirely) or the
+// browser gesture (which a PWA in standalone display mode does not give you).
+//
+// ---------------------------------------------------------------------------
+// WHY A-30 DID NOT CATCH THIS, AND WHY IT MUST NOT SIMPLY BE WIDENED
+// ---------------------------------------------------------------------------
+// A-30 reads: "Every `/m/p/[projectId]/*` SECTION screen renders the back
+// chevron and no hamburger, and keeps the tab bar with **Projects active**."
+// It passed throughout, correctly — its set is the nine section screens, and
+// every one of them is under `/m/p/`, where §3.1's "inside a project" rule
+// already produced a chevron.
+//
+// **Widening A-30 to cover the detail views would assert something FALSE.**
+// Its third clause is "Projects active", and that holds only for the
+// project-scoped screens. M-35 (`/m/team/[memberId]`) and M-36
+// (`/m/contacts/[contactId]`) are COMPANY-scoped: they hang off the hamburger
+// destinations, not off a tab, and A-42 already asserts that **no tab is
+// active** on that family. A-30 bundles three claims and only two of them
+// travel.
+//
+// So the detail views get their own criterion. What it asserts is the half
+// that generalises — **chevron present, hamburger absent** — and it says
+// nothing about the tab bar, because the right answer there differs by family.
+//
+// ---------------------------------------------------------------------------
+// THE ROOT CAUSE WAS A PREDICATE THAT NAMED THE WRONG THING
+// ---------------------------------------------------------------------------
+// The shell chose the chevron with `isInsideProject(pathname)` —
+// `startsWith('/m/p/')`. That is §3.1's sentence transcribed literally, and it
+// is why the two project-scoped detail views (M-31, M-34) were always fine and
+// the two company-scoped ones never were. The rule the user experiences is not
+// "am I inside a project" but "did I drill in from a list", so the predicate is
+// now `showsBackChevron()` and covers both families.
+//
+// M-16's file-open path is not a route — it is a control on M-16, which is
+// under `/m/p/` and had its chevron all along. Four routes, not five.
+test.describe('A-30f · every detail view offers a way back', () => {
+  test('M-36 · contact detail has a back chevron and no hamburger', async ({ page }) => {
+    await page.goto('/m/contacts');
+    await page.getByTestId('m-contact-row').first().getByTestId('m-row-link').click();
+    await expect(page).toHaveURL(/\/m\/contacts\/[0-9a-f-]{36}$/, NAV);
+
+    await expect(page.getByTestId('m-back')).toBeVisible();
+    await expect(page.getByTestId('m-hamburger')).toHaveCount(0);
+  });
+
+  test('M-35 · team-member detail has a back chevron and no hamburger', async ({ page }) => {
+    await page.goto('/m/team');
+    await page.getByTestId('m-member-row').first().getByTestId('m-row-link').click();
+    await expect(page).toHaveURL(/\/m\/team\/[0-9a-f-]{36}$/, NAV);
+
+    await expect(page.getByTestId('m-back')).toBeVisible();
+    await expect(page.getByTestId('m-hamburger')).toHaveCount(0);
+  });
+
+  test('M-31 · change-order detail has one too (it always did — the control case)', async ({
+    page,
+  }) => {
+    // ⚠️ NOT REDUNDANT. Without the project-scoped pair, a "fix" that swapped
+    // the branches — chevron for company-scoped, hamburger for project-scoped —
+    // would satisfy the two tests above and break the two screens that worked.
+    await page.goto(`/m/p/${PROJECT}/changes`);
+    await page.getByTestId('m-co-row').first().getByTestId('m-row-link').click();
+    await expect(page).toHaveURL(new RegExp(`/m/p/${PROJECT}/changes/[0-9a-f-]{36}$`), NAV);
+
+    await expect(page.getByTestId('m-back')).toBeVisible();
+    await expect(page.getByTestId('m-hamburger')).toHaveCount(0);
+  });
+
+  test('M-34 · punch item detail has one too', async ({ page }) => {
+    await page.goto(`/m/p/${PROJECT}/punch`);
+    await page.getByTestId('m-punch-row').first().getByTestId('m-row-link').click();
+    await expect(page).toHaveURL(/\/punch\/[0-9a-f-]{36}$/, NAV);
+
+    await expect(page.getByTestId('m-back')).toBeVisible();
+    await expect(page.getByTestId('m-hamburger')).toHaveCount(0);
+  });
+
+  test('the LISTS these open from still carry the hamburger — the chevron is DEPTH', async ({
+    page,
+  }) => {
+    // The other direction, and the reason this is not just "put a chevron
+    // everywhere": a company-scoped LIST is a top-level destination reached
+    // from the sheet, so it keeps the hamburger. If this ever fails, the
+    // predicate has stopped distinguishing depth and is matching a prefix.
+    for (const list of ['/m/contacts', '/m/team']) {
+      await page.goto(list);
+      await expect(page.getByTestId('m-hamburger')).toBeVisible();
+      await expect(page.getByTestId('m-back')).toHaveCount(0);
+    }
+  });
+});
