@@ -256,7 +256,8 @@ Vercel env vars must match `.env.local` exactly.
 
 ### Persistent test identities — rebuild-test only [S97, 2026-08-02]
 
-These close **GATED.md Gate 2** (#103 foreman identity, #104 second test company). They live
+These close **GATED.md Gate 2** (#103 foreman identity, #104 second test company) and, as of
+S113, **#127** (the missing `subcontractor` and `client` identities). They live
 **only on rebuild-test** (`nmyphyhmfttxkdoposvf`) and must **never** be created on production.
 
 Seeded and re-seeded by:
@@ -278,6 +279,29 @@ platform gates on:
 | `project_manager` | josh+pm@worthprop.com            | Pat Manager   |
 | `foreman`         | **josh+qa-foreman@worthprop.com**| QA Foreman A  |
 | `crew_member`     | josh+crew@worthprop.com          | Casey Crew    |
+| `subcontractor`   | **josh+qa-sub@worthprop.com**    | QA Sub A      |
+| `client`          | **josh+qa-client@worthprop.com** | QA Client A   |
+
+> **The two added S113 (#127) are not shaped like the other five, and the difference matters.**
+> `create_member_for_new_profile()` (`20260704210000`) returns early for both `client` and
+> `subcontractor`, so neither gets an auto-created `company_members` row.
+>
+> - The **subcontractor** needs one anyway — `assignee_id`, `completed_by` and `get_my_member_id()`
+>   all speak in member ids, and a sub without one is invisible to every punch query while looking
+>   perfectly fine in `profiles`. The seed builds it the way production does: insert a
+>   `subcontractors` row, let `subcontractors_create_member` fire, then link `profile_id` exactly as
+>   `handle_new_user()`'s invite branch does. Member id `6600b2a9-bc7d-49f7-a2d9-70a2af490cbf`,
+>   vendor row *QA Subcontractor Co (TEST IDENTITY)*, and it is **assigned to the
+>   `QA A — isolation fixture` project** — without that assignment D-57 would be a no-op rather than
+>   a narrowing.
+> - The **client** deliberately has **no member row**. A client is not assignable to work; the
+>   identity exists to exercise the `get_my_role() <> 'client'` arms that `files_select_non_client`
+>   and its three siblings are built on. The seed asserts the absence rather than assuming it.
+>
+> **⚠️ Do not substitute the 32 roster rows.** `company_members` holds 33 rows with
+> `member_type = 'subcontractor'`; **32 have `profile_id IS NULL`** — domain roster entries with no
+> auth user, which cannot sign in and cannot drive an RLS probe. Exactly one is an identity: the row
+> above. A member row is not an identity.
 
 **Company B — Ridgeline Builders (TEST CO 2)** (`f079a1f4-12db-4bc8-ae95-2d647d688260`) — exists
 solely so cross-company isolation can be *proved* rather than asserted from code:
@@ -286,12 +310,12 @@ solely so cross-company isolation can be *proved* rather than asserted from code
 | ------- | -------------------------------- | ------------ |
 | `owner` | **josh+qa-b-owner@worthprop.com**| QA Owner B   |
 
-**Password (all six): `FrameFocusTest!2026`**
+**Password (all eight): `FrameFocusTest!2026`**
 
 > Committed deliberately, and only defensible because of what it protects: a disposable test
 > database with no real customer data, in a private repo. **Never reuse it anywhere else, never
 > create these identities on production, and rotate it if rebuild-test ever holds anything real.**
-> Re-running the seed **resets this password on all six**, including Josh's originals.
+> Re-running the seed **resets this password on all eight**, including Josh's originals.
 > The harnesses sign in with it too (`test/live-session.ts`), falling back to a service-role
 > magic link — password first because Supabase rate-limits OTP generation hard enough to break
 > a few harness runs in a row, and because signing in the way a human would keeps this entry
@@ -302,6 +326,22 @@ project, sent invoice, client payment + application, expense, member pay rate �
 `QA A — …` / `QA B — …` so they are obvious in the UI. Company A's set exists because the proof
 runs in *both* directions and A had no payments of its own to hide.
 
+**D-57 punch fixtures [S113].** Company A's fixture project also carries a punch list
+*QA — D-57 fixtures* with three items, seeded permanently so the D-57/D-58 proof is reproducible by
+anyone rather than depending on rows a one-off script made and threw away:
+
+| Title | Shape | Sub sees it? |
+| --- | --- | --- |
+| `QA D-57 ASSIGNED to the sub` | `assignee_id` = the sub's **member** id, authored by owner | yes — assignee arm |
+| `QA D-57 AUTHORED by the sub` | `created_by` = the sub's **auth user** id, assigned to crew | yes — author arm |
+| `QA D-57 NEITHER — sub must not see this` | assigned to crew, authored by owner | **no** |
+
+The first two are deliberately assigned-not-authored and authored-not-assigned, because the two arms
+sit on **different identity axes** (`assignee_id` → `company_members(id)`, `created_by` →
+`auth.users(id)`) and comparing either against the wrong one **returns no rows rather than erroring**
+— so a fixture that put the same id in both would not distinguish a correct predicate from a broken
+one.
+
 **Using them in a test** — role and cross-company checks are a test run, not a manual login:
 
 ```bash
@@ -309,13 +349,16 @@ cd apps/web && npx vitest run --config test/live.vitest.config.ts
 ```
 
 `apps/web/test/*.live.ts` are live harnesses against rebuild-test, **excluded from the CI suite**
-by the `.live.ts` suffix. Current coverage — **74 assertions**:
+by the `.live.ts` suffix. **This table is not exhaustive** — the directory holds more harnesses than
+are listed here (the `s97ct-*` financial-floor set among them) and the tally below covers only the
+rows shown, **89 assertions**:
 
 | Harness | Covers | Tally |
 | --- | --- | --- |
 | `s97ct-7e-clicktest.live.ts` | 7E payments, all four money paths + role gates | 34/34 |
 | `s97ct-isolation.live.ts` | cross-company isolation, both directions | 14/14 |
 | `s97ct-roles.live.ts` | the S95/7D role-gated surfaces | 21/26 — **5 open defects**, see GATED.md → Gate 2 |
+| `s113-punch-sub-visibility.live.ts` | D-57/D-58 — a sub sees and writes only their own punch items | 15/15 |
 
 Session helper: `test/live-session.ts` (`sessionFor`, `admin`, `assertRebuildTest`) — copy that
 pattern for any new role check. The runner compiles JSX via `oxc`, so a harness can render a real
