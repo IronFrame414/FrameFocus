@@ -318,6 +318,45 @@ test.describe('M-31 · write controls are Owner/Admin/PM, on a screen foreman an
 });
 
 // ===========================================================================
+// A-56 — M-14 OFFERS A CREATE CONTROL, for every role including subcontractors
+// ===========================================================================
+// S117 recorded this half as asserted by no test: the control was built
+// ungated, which is not the same claim as "proven visible to all six roles".
+// This is the assertion a future build hiding it from subs would fail.
+//
+// Six roles, and the sixth is the point — D-52 as corrected [S110] opens punch
+// creation to subcontractors, reversing the S108 exclusion.
+test.describe('A-56 · M-14 offers a create control to every role', () => {
+  for (const [role, email] of [
+    ['owner', OWNER],
+    ['project_manager', PM],
+    ['crew_member', CREW],
+    ['subcontractor', SUB],
+  ] as const) {
+    test(`${role} sees the create control on M-14`, async ({ page }) => {
+      await signInAs(page, email);
+      await page.goto(`/m/p/${PROJECT}/punch`);
+
+      await expect(page.getByTestId('m-punch-new')).toBeVisible();
+      await expect(page.getByTestId('m-punch-new')).toHaveAttribute(
+        'href',
+        `/m/p/${PROJECT}/punch/new`
+      );
+    });
+  }
+
+  // ⚠️ FOREMAN AND ADMIN ARE ABSENT FROM THE LOOP, FOR DIFFERENT REASONS.
+  //   foreman — TECH_DEBT #143: cannot reach this project at all, so the
+  //             assertion would pass or fail for reasons unrelated to A-56.
+  //             Covered instead by test/s118-fixture-reachability.live.ts,
+  //             which asserts the gap itself.
+  //   admin   — reaches the project (measured S118) but is not in the mobile
+  //             suite's identity set; adding it is cheap and owed once #143's
+  //             fix makes the six-role loop uniform.
+  // Four of six is stated rather than presented as complete.
+});
+
+// ===========================================================================
 // D-60 / A-67 — M-33 does not submit without a list target
 // ===========================================================================
 test.describe('D-60 · the author targets a list, always', () => {
@@ -471,6 +510,99 @@ test.describe('M-34 · complete, and the photo gate the service function owns', 
     // Complete — and now the VERIFY half of the screen appears, because
     // requires_verification also defaults true.
     await expect(page.getByTestId('m-punch-complete')).toHaveCount(0, { timeout: 30_000 });
+  });
+});
+
+// ===========================================================================
+// A-57 — completing moves M-3's Punch badge by ONE; verifying moves it by NONE
+// ===========================================================================
+// S117 recorded this NOT SATISFIED: completing and verifying became testable
+// the moment Part C shipped them, and the criterion was simply never written.
+//
+// ---------------------------------------------------------------------------
+// HARNESS NOTE — SPECIFIED `[live]`, WRITTEN IN PLAYWRIGHT, AND STRONGER FOR IT
+// ---------------------------------------------------------------------------
+// A `[live]` harness cannot import `getOpenPunchCounts` (punch.ts pulls
+// supabase-server → next/headers), so it would have to REIMPLEMENT the
+// `.in('status', ['open','in_progress'])` filter and assert its own copy —
+// which is the one thing that cannot go wrong here. Reading the RENDERED stat
+// exercises the real function, server-side, and asserts the number a user
+// actually sees. The deviation is deliberate and is the stronger test.
+//
+// D-16's "open" is exactly ('open','in_progress'), so `complete → verified`
+// must be INVISIBLE to it. That second half is the whole claim that D-52 does
+// not disturb D-16 — and it is the half a build satisfies by accident, which
+// is why the criterion insists on both in one test.
+//
+// Asserted as a NON-SUBCONTRACTOR per A-57's [S110] note: D-57 changes what the
+// badge counts for a sub, which is A-59e's problem and not this one.
+
+/** M-3's punch stat reads `{mine} mine · {total} open`. Returns the total. */
+async function openCount(page: Page): Promise<number> {
+  const text = (await page.getByTestId('m-stat-punch').textContent()) ?? '';
+  const match = /(\d+)\s*open/.exec(text);
+  if (!match) throw new Error(`could not read an open count from the punch stat: "${text}"`);
+  return Number(match[1]);
+}
+
+test.describe('A-57 · the badge moves on complete and not on verify', () => {
+  test('complete takes it down by one; verify leaves it alone', async ({ page }) => {
+    test.setTimeout(180_000);
+
+    const id = stamp();
+    const itemTitle = `E2E Badge ${id}`;
+
+    // ── As CREW: baseline, create, complete.
+    await signInAs(page, CREW);
+    await page.goto(`/m/p/${PROJECT}`);
+    const before = await openCount(page);
+
+    await page.goto(`/m/p/${PROJECT}/punch/new`);
+    await page.getByTestId('m-punch-list-__new__').click();
+    await page.getByTestId('m-punch-new-list-name').fill(`E2E BList ${id}`);
+    await page.getByTestId('m-punch-title').fill(itemTitle);
+    await page.getByTestId('m-punch-create').click();
+    await expect(page).toHaveURL(new RegExp(`/m/p/${PROJECT}/punch$`), { timeout: 30_000 });
+
+    // A new item is `open`, so the count must rise by exactly one. This is the
+    // control: without it, a "down by one" after completing could be measured
+    // against a baseline that never moved.
+    await page.goto(`/m/p/${PROJECT}`);
+    const afterCreate = await openCount(page);
+    expect(afterCreate).toBe(before + 1);
+
+    await page.goto(`/m/p/${PROJECT}/punch`);
+    await page.getByTestId('m-punch-row').filter({ hasText: itemTitle }).click();
+    await expect(page).toHaveURL(/\/punch\/[0-9a-f-]{36}$/, { timeout: 30_000 });
+    const itemUrl = page.url();
+
+    await page.getByTestId('m-punch-photo-input').setInputFiles({
+      name: 'done.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(PNG_8, 'base64'),
+    });
+    await expect(page.getByTestId('m-punch-photo-attached')).toBeVisible({ timeout: 30_000 });
+    await page.getByTestId('m-punch-complete').click();
+    await expect(page.getByTestId('m-punch-complete')).toHaveCount(0, { timeout: 30_000 });
+
+    // ── FIRST HALF: completing moves it DOWN BY ONE.
+    await page.goto(`/m/p/${PROJECT}`);
+    expect(await openCount(page)).toBe(afterCreate - 1);
+
+    // ── As PM: verify it. Crew cannot verify (Foreman+), and the crew member
+    // completed it anyway, so separate-eyes would refuse them twice over.
+    await signInAs(page, PM);
+    await page.goto(`/m/p/${PROJECT}`);
+    const beforeVerify = await openCount(page);
+
+    await page.goto(itemUrl);
+    await page.getByTestId('m-punch-verify').click();
+    await expect(page.getByTestId('m-punch-done')).toBeVisible({ timeout: 30_000 });
+
+    // ── SECOND HALF: verifying moves it BY NOTHING. `complete → verified` is a
+    // transition between two states the filter already excludes.
+    await page.goto(`/m/p/${PROJECT}`);
+    expect(await openCount(page)).toBe(beforeVerify);
   });
 });
 

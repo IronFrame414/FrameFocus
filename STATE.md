@@ -154,11 +154,37 @@ claude mcp list
 > inclusion despite a narrower brief; **the punch route guard that was declined, and why** (guarding a
 > screen D-52 opened would reverse a ruling); and the crew-for-foreman test-identity substitution.
 >
-> **⚠️ Criteria status is NOT uniformly green — read §10 before assuming.** Only **A-67 and A-67c** are
-> cleanly satisfied. **A-57 is NOT SATISFIED** — completing and verifying now exist, so the M-3 badge
-> criterion became testable this session and simply was not written. A-55, A-56, A-58 and A-67b are
-> **partial**, each with the missing half named. **#143 raised**: `josh+qa-foreman@` is not assigned to
-> the fixture project, so assertions under it pass vacuously.
+> **⚠️ Criteria status [S117]:** only A-67/A-67c cleanly satisfied, A-57 NOT satisfied, four partial.
+> **→ CLOSED [S118], see below.**
+
+> **M6M — the Part C criteria gaps closed, S118.** Two new live harnesses, and one Playwright
+> addition, written specifically against the failures S117 named:
+>
+> | Criterion | Now | Harness |
+> | --- | --- | --- |
+> | **A-55** | ✅ full | `s118-m6m-write-criteria.live.ts` — `net_delta = Σ line totals` in integer cents, **plus** an anti-vacuous guard requiring a CO with lines |
+> | **A-57** | ✅ full | `m-writes.spec.ts` — reads the **rendered** `m-stat-punch`: create **+1**, complete **−1**, verify **0** |
+> | **A-58** | ✅ full | `s118-…live.ts` — calls `verifyPunchItem`, asserts refusal **and that nothing was written**, paired with an acceptance |
+> | **A-67b** | ✅ full | `s118-…live.ts` — reads `punch_list_id`, stamp-matched to the list M-33 created |
+> | **A-56** | ✅ 4 of 6 | `m-writes.spec.ts` — owner/PM/crew/**sub**; foreman blocked by #143, admin not in the suite's identity set. Both absences named. |
+>
+> **A-58 was verified LOAD-BEARING**: deleting the separate-eyes check from `punch-client.ts` fails it
+> (exit 1); restored, exit 0. S117's disabled-button version could not produce that failure — which is
+> exactly why it was refused as "satisfied".
+>
+> **A-57 is Playwright, not the specified `[live]`, and that is the stronger choice**: a live harness
+> cannot import `getOpenPunchCounts` (it pulls `next/headers`), so it would assert its own copy of the
+> `('open','in_progress')` filter. Reading the rendered stat runs the real function.
+>
+> **#143 is now machine-checked** — `s118-fixture-reachability.live.ts` asserts every seeded identity's
+> reach against a declared table, so closing the gap breaks a test that says what to do about it.
+> **`josh+qa-admin@` was suspected of the same fault and is CLEAR** (measured: owner, admin, PM, crew
+> and sub all reach the project; **only the foreman does not**).
+>
+> **⚠️ #144 RAISED [S118]** — the Part C suite writes permanent fixture data every run and never cleans
+> up; it caused one flake already (M-13 grew until a 5s default navigation timeout was too tight, fixed
+> with explicit 30s timeouts on `m-details`' D-55 block). **The obvious cleanup is blocked by a coupling
+> S118 introduced**: the live harnesses read those leftovers. Read #144 before touching either.
 
 ### apps/web (Next.js)
 

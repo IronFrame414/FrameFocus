@@ -51,6 +51,21 @@ const PROJECT = 'eaf0e25b-d60e-49c0-89b2-5612118d94b4';
 /** A project where the crew identity can see 2 non-photo files (of 13 — the rest are DB-floored). */
 const FILES_PROJECT = '545edc73-e3e6-402a-a594-a8da00701f09';
 
+// ---------------------------------------------------------------------------
+// ⚠️ NAVIGATION ASSERTIONS CARRY AN EXPLICIT TIMEOUT. [S118]
+// ---------------------------------------------------------------------------
+// These are App Router navigations: the URL does not change until the SERVER
+// has rendered the destination. Under `next dev`, at the tail of a 220-test
+// run, that can exceed Playwright's 5s default — this block flaked exactly
+// once that way, on a page whose snapshot showed the row link present and
+// correct (`/url: …/changes/f1adfa39…`), so the LINK was never in doubt.
+//
+// The claim these tests make is "the row opens the detail page", not "the dev
+// server renders it inside five seconds". Timing out on the latter reports a
+// D-55 regression that has not happened, which is the worst kind of red.
+// `signInAs` below already used 30s for the same reason.
+const NAV = { timeout: 30_000 };
+
 async function signInAs(page: Page, email: string) {
   await page.context().clearCookies();
   await page.goto('/sign-in');
@@ -69,7 +84,7 @@ test.describe('D-55 · the row opens the detail page', () => {
     const row = page.getByTestId('m-co-row').first();
     await expect(row).toBeVisible();
     await row.getByTestId('m-row-link').click();
-    await expect(page).toHaveURL(new RegExp(`/m/p/${PROJECT}/changes/[0-9a-f-]{36}$`));
+    await expect(page).toHaveURL(new RegExp(`/m/p/${PROJECT}/changes/[0-9a-f-]{36}$`), NAV);
     await expect(page.getByTestId('m-co-detail')).toBeVisible();
   });
 
@@ -78,7 +93,7 @@ test.describe('D-55 · the row opens the detail page', () => {
     const row = page.getByTestId('m-punch-row').first();
     await expect(row).toBeVisible();
     await row.getByTestId('m-row-link').click();
-    await expect(page).toHaveURL(new RegExp(`/m/p/${PROJECT}/punch/[0-9a-f-]{36}$`));
+    await expect(page).toHaveURL(new RegExp(`/m/p/${PROJECT}/punch/[0-9a-f-]{36}$`), NAV);
     await expect(page.getByTestId('m-punch-detail')).toBeVisible();
   });
 
@@ -87,7 +102,7 @@ test.describe('D-55 · the row opens the detail page', () => {
     const row = page.getByTestId('m-assignment-row').first();
     await expect(row).toBeVisible();
     await row.getByTestId('m-row-link').click();
-    await expect(page).toHaveURL(/\/m\/team\/[0-9a-f-]{36}$/);
+    await expect(page).toHaveURL(/\/m\/team\/[0-9a-f-]{36}$/, NAV);
     await expect(page.getByTestId('m-member-detail')).toBeVisible();
   });
 
@@ -99,7 +114,7 @@ test.describe('D-55 · the row opens the detail page', () => {
     const row = page.getByTestId('m-member-row').first();
     await expect(row).toBeVisible();
     await row.getByTestId('m-row-link').click();
-    await expect(page).toHaveURL(/\/m\/team\/[0-9a-f-]{36}$/);
+    await expect(page).toHaveURL(/\/m\/team\/[0-9a-f-]{36}$/, NAV);
   });
 
   test('M-29 → M-36 · the company directory reaches the contact', async ({ page }) => {
@@ -107,7 +122,7 @@ test.describe('D-55 · the row opens the detail page', () => {
     const row = page.getByTestId('m-contact-row').first();
     await expect(row).toBeVisible();
     await row.getByTestId('m-row-link').click();
-    await expect(page).toHaveURL(/\/m\/contacts\/[0-9a-f-]{36}$/);
+    await expect(page).toHaveURL(/\/m\/contacts\/[0-9a-f-]{36}$/, NAV);
     await expect(page.getByTestId('m-contact-detail')).toBeVisible();
   });
 });
@@ -123,7 +138,7 @@ test.describe('§4.11.16 · the row and the call button do not swallow each othe
     const row = page.getByTestId('m-project-contact-row').first();
     await expect(row).toBeVisible();
     await row.getByTestId('m-row-link').click();
-    await expect(page).toHaveURL(/\/m\/contacts\/[0-9a-f-]{36}$/);
+    await expect(page).toHaveURL(/\/m\/contacts\/[0-9a-f-]{36}$/, NAV);
   });
 
   test('M-17 · the tel: circle is still a tel: link, not the row link', async ({ page }) => {
@@ -277,7 +292,7 @@ test.describe('M-34 · a subcontractor DOES reach punch detail (D-52 corrected, 
     const row = page.getByTestId('m-punch-row').first();
     await expect(row).toBeVisible();
     await row.getByTestId('m-row-link').click();
-    await expect(page).toHaveURL(/\/punch\/[0-9a-f-]{36}$/);
+    await expect(page).toHaveURL(/\/punch\/[0-9a-f-]{36}$/, NAV);
     await expect(page.getByTestId('m-punch-detail')).toBeVisible();
     await expect(page.getByTestId('m-denied')).toHaveCount(0);
   });
