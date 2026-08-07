@@ -5,16 +5,33 @@ import {
   CO_STATUS_LABELS,
 } from '@/lib/services/change-orders';
 import { getMyProfile } from '@/lib/services/profiles';
-import { requireDetailAccess } from '@/app/m/detail-access';
+import { canWriteCo, requireDetailAccess } from '@/app/m/detail-access';
 import { SectionHeader } from '../../section-header';
 import { DetailCard, DetailField, formatMoney, StatusPill } from '../../../../mobile-ui';
+import { CoActions } from './co-actions';
 
 // M6M §4.11.11 — M-31 · Change order detail.
 //
-// READ-ONLY IN THIS PASS. D-51's write controls — Edit, Send for signature,
-// Void — are Part C. §4.11.11 is explicit that "read and write are separate
-// gates on one screen and must not be collapsed", so the read gate below is not
-// doing double duty and the absence of the buttons is not a permission.
+// **[S117] THE WRITE CONTROLS ARE NOW HERE** — Edit, Send for signature, Void.
+// _Superseded note, quoted rather than deleted:_ _"READ-ONLY IN THIS PASS.
+// D-51's write controls — Edit, Send for signature, Void — are Part C."_
+//
+// ===========================================================================
+// READ AND WRITE ARE SEPARATE GATES ON ONE SCREEN, AND ARE NOT COLLAPSED
+// ===========================================================================
+// THREE distinct audiences now share this file, and conflating any two of them
+// is the defect:
+//
+//   1. WHO REACHES THE SCREEN — everyone except subcontractors (D-53).
+//      requireDetailAccess(). UI-only; see detail-access.ts.
+//   2. WHO SEES THE MONEY — Owner/Admin/PM (D-51). UI-only, #117.
+//   3. WHO GETS THE WRITE CONTROLS — Owner/Admin/PM (D-51). **DB-enforced**,
+//      and the only one of the three that is.
+//
+// 2 and 3 share a role list and NOTHING else. Deriving one from the other would
+// be right today and wrong the moment either rule moves — so `showMoney` and
+// `canWrite` are computed separately from the same profile, deliberately, even
+// though the expressions currently agree.
 //
 // ===========================================================================
 // TWO GATES, AND ONLY ONE OF THEM IS A ROUTE GUARD
@@ -67,6 +84,12 @@ export default async function ChangeOrderDetailPage({
   if (!co) notFound();
 
   const showMoney = MONEY_ROLES.includes(profile?.role ?? '');
+
+  // Gate 3. Same three roles as `showMoney` TODAY, computed separately on
+  // purpose — see the header. This one is backed by
+  // `change_orders_update_authorized`, so hiding the controls is cosmetic and
+  // the database is the gate.
+  const canWrite = canWriteCo(profile?.role);
 
   // §4.11.11 — signing activity is the ONE CO read that is DB-floored:
   // co_signing_sessions_select_manager is get_my_role() = ANY (owner, admin,
@@ -187,6 +210,19 @@ export default async function ChangeOrderDetailPage({
             ))}
           </ul>
         </>
+      ) : null}
+
+      {/* D-51's write controls. Hidden from foreman and crew — who legitimately
+          READ this screen — and refused by the API routes and by RLS besides. */}
+      {canWrite ? (
+        <CoActions
+          projectId={params.projectId}
+          coId={co.id}
+          status={co.status}
+          // First send versus re-send. The route reuses an existing contractor
+          // signature verbatim and only demands one when this is null.
+          needsSignature={!co.contractor_signed_at}
+        />
       ) : null}
     </div>
   );

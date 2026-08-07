@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { getPunchLists, PUNCH_STATUS_LABELS, isItemClosed } from '@/lib/services/punch';
 import { getMyMember } from '@/lib/services/members';
 import { SectionHeader } from '../section-header';
@@ -46,6 +47,21 @@ export default async function ProjectPunchPage({
 
   const allItems = lists.flatMap((l) => l.items ?? []);
 
+  // D-61 / A-67c — the parent list is a LABEL ON THE ROW, not a level of
+  // hierarchy. D-60 makes every item belong to a list the author chose, which
+  // invites the inference that M-14 should group by list; D-61 rules it out
+  // explicitly, because three things break if it nests: the Mine/Open/All chips
+  // filter ITEMS and mean nothing over lists, D-16's counters would stop
+  // agreeing with M-3's badge, and A-34b asserts a flat `open <= all` a grouped
+  // list cannot express.
+  //
+  // So the name is looked up and rendered on the row. `m-punch-row` count still
+  // equals the visible ITEM count, which is exactly what A-67c checks.
+  const listNameByItemId = new Map<string, string>();
+  for (const list of lists) {
+    for (const item of list.items ?? []) listNameByItemId.set(item.id, list.name);
+  }
+
   const items =
     active === 'mine'
       ? allItems.filter((i) => i.assignee_id && myMember && i.assignee_id === myMember.id)
@@ -67,6 +83,18 @@ export default async function ProjectPunchPage({
         param="filter"
       />
 
+      {/* A-56 — the create control, for EVERY role including subcontractors.
+          No `canReachDetail` here and no role prop: D-52 as corrected opens
+          M-33 to all six roles, and gating this link would be the hidden half
+          of a permission that does not exist. */}
+      <Link
+        href={`/m/p/${params.projectId}/punch/new`}
+        data-testid="m-punch-new"
+        className="mt-[14px] flex min-h-[52px] w-full items-center justify-center rounded-[14px] bg-m6m-blue text-[15px] font-bold text-white"
+      >
+        New punch item
+      </Link>
+
       {items.length === 0 ? (
         <div className="pt-[18px]">
           <EmptyState>{emptyCopy}</EmptyState>
@@ -83,11 +111,16 @@ export default async function ProjectPunchPage({
                 <p className="truncate text-[17px] font-bold leading-tight text-m6m-navy">
                   {item.title}
                 </p>
-                {item.location || item.trade ? (
-                  <p className="mt-[2px] truncate font-mono text-[11px] text-m6m-muted">
-                    {[item.location, item.trade].filter(Boolean).join(' · ')}
-                  </p>
-                ) : null}
+                {/* D-61's row label. Rendered even when location and trade are
+                    both null — knowing which list an item is in is the whole
+                    point of D-60's targeting, and hiding it on sparse rows
+                    would make the choice invisible on exactly the items where
+                    it is the only distinguishing fact. */}
+                <p className="mt-[2px] truncate font-mono text-[11px] text-m6m-muted">
+                  {[listNameByItemId.get(item.id), item.location, item.trade]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
                 <p className="mt-[3px] flex flex-wrap items-center gap-[6px]">
                   <StatusPill label={PUNCH_STATUS_LABELS[item.status] ?? item.status} />
                   {item.priority ? (

@@ -1,0 +1,548 @@
+import { test, expect, type Page } from '@playwright/test';
+
+// M6M Part C — the write paths. D-51 (CO create → edit → send), D-52 as
+// corrected (punch create / complete / verify), D-60 (the list target),
+// D-54 (hidden AND route-guarded).
+//
+// ---------------------------------------------------------------------------
+// THE ONE THING THIS SUITE IS BUILT AROUND: THE TWO HALVES ARE NOT SYMMETRIC
+// ---------------------------------------------------------------------------
+// Both halves write. Their enforcement could hardly be more different, and a
+// suite that tested them the same way would imply a guarantee that only one of
+// them has.
+//
+//   CHANGE ORDERS — DB-enforced. `change_orders_insert_authorized` and
+//     `_update_authorized` carry exactly owner/admin/project_manager, and the
+//     send/void routes return 403 on top. The route guard and the hidden button
+//     are BOTH cosmetic here; deleting them would degrade the experience and
+//     leak nothing. So these tests assert the SCREEN behaves, and say plainly
+//     that RLS is what actually refuses.
+//
+//   PUNCH — barely enforced, and deliberately so on two of three verbs.
+//     Create and complete are open to EVERY role including subcontractors
+//     (D-52 corrected, S110) — `punch_list_items_insert/update_authenticated`
+//     have no role arm and §4.11.10b records that as CORRECT rather than a gap.
+//     **Verify is Foreman+ and lives ONLY in TypeScript**: RLS accepts a direct
+//     UPDATE setting status='verified' from any role (open item 7). So the
+//     verify tests below assert a UI/service gate and prove nothing about the
+//     database — which is exactly A-58's point.
+//
+// A reader looking for "does RLS stop a crew member verifying" will not find it
+// here, because the answer is no and no test can make it yes.
+
+const CREW = 'josh+crew@worthprop.com';
+const OWNER = 'josh+test50@worthprop.com';
+const PM = 'josh+pm@worthprop.com';
+const FOREMAN = 'josh+qa-foreman@worthprop.com';
+const SUB = 'josh+qa-sub@worthprop.com';
+const PASSWORD = process.env.E2E_PASSWORD ?? 'FrameFocusTest!2026';
+
+/** The project the rest of the mobile suite drives. */
+const PROJECT = 'eaf0e25b-d60e-49c0-89b2-5612118d94b4';
+
+/** An 8x8 PNG — real bytes, so `uploadFile`'s mime inference behaves. */
+const PNG_8 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAYAAADED76LAAAAHElEQVQoz2P8z8Dwn4GKgIlqJo0aOGrgqIHDwEAAaSgDBaMLcOgAAAAASUVORK5CYII=';
+
+/** Unique enough that reruns do not collide, short enough to read on a phone. */
+function stamp(): string {
+  return String(Date.now()).slice(-6);
+}
+
+async function signInAs(page: Page, email: string) {
+  await page.context().clearCookies();
+  await page.goto('/sign-in');
+  await page.locator('#email').fill(email);
+  await page.locator('#password').fill(PASSWORD);
+  await page.getByRole('button', { name: /sign in/i }).click();
+  await expect(page).toHaveURL(/\/dashboard/, { timeout: 30_000 });
+}
+
+// ---------------------------------------------------------------------------
+// ⚠️ WHICH IDENTITIES CAN REACH THIS PROJECT — MEASURED [S117], NOT ASSUMED
+// ---------------------------------------------------------------------------
+// The first run of this suite failed five tests and the failures were the
+// discovery: `qa-foreman` HAS NO ACCESS TO THIS PROJECT. `change_orders_select_visible`
+// is `company_id + can_view_project()`, so the foreman's M-13 is empty, and
+// `getProject()` returns null for them — which makes M-33 404 outright.
+//
+// Confirmed by contrast in the same run: the PM's row click succeeded, so
+// `josh+pm@` IS assigned. `josh+crew@` is the identity the whole mobile suite
+// drives this project as.
+//
+// So the role-exclusion assertions below use CREW rather than FOREMAN wherever
+// the test needs the role to actually SEE something. Crew is refused CO writes
+// on exactly the same footing, so nothing is weakened — and using an identity
+// that sees nothing would have made those assertions pass vacuously, which is
+// the worse outcome.
+//
+// The FOREMAN identity is still used for the route-guard tests, which need no
+// project access to be meaningful: the guard fires before any data is read.
+
+/** Creates a fresh DRAFT change order and returns its id. */
+async function createDraftCo(page: Page, title: string): Promise<string> {
+  await page.goto(`/m/p/${PROJECT}/changes/new`);
+  await page.getByTestId('m-co-title').fill(title);
+  await page.getByTestId('m-co-create').click();
+  await expect(page).toHaveURL(/\/changes\/new\?co=[0-9a-f-]{36}/, { timeout: 30_000 });
+  return new URL(page.url()).searchParams.get('co')!;
+}
+
+// ===========================================================================
+// D-54 / A-65 — the CO WRITE route refuses at the route, not by hiding
+// ===========================================================================
+// Every test here TYPES THE URL. A hidden button is not a permission: the URL
+// survives a shared screenshot, a bookmark and a stale PWA cache.
+//
+// Note what is NOT claimed: these prove the screen refuses. The database would
+// refuse the INSERT anyway, which is what makes the CO half the strong one.
+test.describe('D-54 · the CO write route refuses five roles at the route', () => {
+  for (const [label, email] of [
+    ['a foreman', FOREMAN],
+    ['a crew member', CREW],
+    ['a subcontractor', SUB],
+  ] as const) {
+    test(`M-32 · ${label} typing the URL is redirected, and lands somewhere that explains itself`, async ({
+      page,
+    }) => {
+      await signInAs(page, email);
+      await page.goto(`/m/p/${PROJECT}/changes/new`);
+
+      // A-66 — the destination is the LIST the control lives on, not the hub,
+      // and it carries a sentence.
+      await expect(page).toHaveURL(new RegExp(`/m/p/${PROJECT}/changes\\?denied=co-write`));
+      await expect(page.getByTestId('m-denied')).toBeVisible();
+      await expect(page.getByTestId('m-denied')).toContainText(/owner, admin or project manager/i);
+
+      // The editor never rendered.
+      await expect(page.getByTestId('m-co-title')).toHaveCount(0);
+    });
+  }
+
+  test('the guard is not vacuous — an owner reaches the same URL and gets the form', async ({
+    page,
+  }) => {
+    await signInAs(page, OWNER);
+    await page.goto(`/m/p/${PROJECT}/changes/new`);
+
+    await expect(page).toHaveURL(new RegExp(`/m/p/${PROJECT}/changes/new$`));
+    await expect(page.getByTestId('m-co-title')).toBeVisible();
+    await expect(page.getByTestId('m-denied')).toHaveCount(0);
+  });
+});
+
+// ===========================================================================
+// D-54 step 1 — the control is hidden too. Cosmetic, on top of the guard.
+// ===========================================================================
+test.describe('D-54 step 1 · the CO create control is hidden from the roles the route refuses', () => {
+  test('a crew member gets the LIST but no create control', async ({ page }) => {
+    // CREW, not FOREMAN — see the identity note above. The foreman cannot see
+    // this project at all, so the second assertion would pass vacuously.
+    await signInAs(page, CREW);
+    await page.goto(`/m/p/${PROJECT}/changes`);
+
+    await expect(page.getByTestId('m-co-new')).toHaveCount(0);
+    // §4.11.10b — "changes → M-13: Gets the list." The list is NOT gated; only
+    // the write route and the detail route are. A build that hid the whole
+    // screen would pass the line above and be wrong.
+    await expect(page.getByTestId('m-co-row').first()).toBeVisible();
+  });
+
+  test('an owner gets the create control', async ({ page }) => {
+    await signInAs(page, OWNER);
+    await page.goto(`/m/p/${PROJECT}/changes`);
+    await expect(page.getByTestId('m-co-new')).toBeVisible();
+  });
+});
+
+// ===========================================================================
+// D-62 — all three CO types ship, and the value is NOT a field
+// ===========================================================================
+test.describe('M-32 · D-62 and the scope fact', () => {
+  test('all three co_types are offered — the fixed_price-only interim was withdrawn', async ({
+    page,
+  }) => {
+    await signInAs(page, OWNER);
+    await page.goto(`/m/p/${PROJECT}/changes/new`);
+
+    // D-62 rejected the interim that would have shipped fixed_price alone.
+    // c87e370 fixed #140 first, which is what made all three safe.
+    await expect(page.getByTestId('m-co-type-fixed_price')).toBeVisible();
+    await expect(page.getByTestId('m-co-type-cost_plus')).toBeVisible();
+    await expect(page.getByTestId('m-co-type-time_and_materials')).toBeVisible();
+  });
+
+  test('there is NO amount field — the value comes from line rows', async ({ page }) => {
+    await signInAs(page, OWNER);
+    await page.goto(`/m/p/${PROJECT}/changes/new`);
+
+    // §4.11.12's "BIGGEST SCOPE FACT IN D-51": createChangeOrder takes no
+    // amount. A build that added an amount box would have to write it to
+    // net_delta, which recalculateChangeOrderTotals then overwrites — so the
+    // number the author typed would silently vanish.
+    const money = page.locator(
+      'input[data-testid*="amount"], input[data-testid*="net-delta"], input[data-testid*="value"]'
+    );
+    await expect(money).toHaveCount(0);
+  });
+});
+
+// ===========================================================================
+// A-55 — a CO created with line rows has a net_delta matching them, NOT 0
+// ===========================================================================
+// The criterion exists because `net_delta` defaults to 0 and is ONLY ever set
+// by recalculateChangeOrderTotals(). A build that writes rows and skips the
+// recalculation sends a client a change order worth nothing — and every
+// screen-level assertion passes while it does. So this test walks the whole
+// three-level editor and then asserts the STORED total on M-31, which is the
+// figure the client would see.
+test.describe('A-55 · the three-level editor produces a real net_delta', () => {
+  test('CO → line item → row, and the total is not $0.00 on either screen', async ({ page }) => {
+    test.setTimeout(120_000);
+    await signInAs(page, OWNER);
+
+    const title = `E2E CO ${stamp()}`;
+
+    // ── LEVEL 1 — the change order.
+    await page.goto(`/m/p/${PROJECT}/changes/new`);
+    await page.getByTestId('m-co-title').fill(title);
+    await page.getByTestId('m-co-type-fixed_price').click();
+    await page.getByTestId('m-co-create').click();
+
+    // Lands in the editor with the new id — one route, `?co=` selects edit mode.
+    await expect(page).toHaveURL(/\/changes\/new\?co=[0-9a-f-]{36}/, { timeout: 30_000 });
+    const coId = new URL(page.url()).searchParams.get('co')!;
+
+    // A change order with no rows is worth nothing, and says so.
+    await expect(page.getByTestId('m-co-editor-total')).toHaveText('$0.00');
+    await expect(page.getByTestId('m-co-no-lines')).toBeVisible();
+
+    // ── LEVEL 2 — a line item.
+    await page.getByTestId('m-co-new-line-name').fill('Extra framing');
+    await page.getByTestId('m-co-add-line').click();
+    await expect(page.getByTestId('m-co-edit-line')).toHaveCount(1, { timeout: 30_000 });
+
+    // ── LEVEL 3 — a row. `other` carries a flat amount and needs no
+    // instrument_rates read, so this half of the test is independent of #140.
+    await page.getByTestId('m-co-line-toggle').click();
+    await page.getByTestId('m-co-add-row-other').click();
+    await page.getByTestId('m-co-new-row-name').fill('Materials allowance');
+    await page.getByTestId('m-co-new-row-amount').fill('500');
+    await page.getByTestId('m-co-save-new-row').click();
+
+    // THE ASSERTION. Not "a row exists" — the recalculated total.
+    await expect(page.getByTestId('m-co-editor-total')).not.toHaveText('$0.00', {
+      timeout: 30_000,
+    });
+
+    // And the same figure, re-read from the database on M-31 — which is the
+    // screen the author sends from.
+    await page.goto(`/m/p/${PROJECT}/changes/${coId}`);
+    await expect(page.getByTestId('m-co-net-delta')).toBeVisible();
+    await expect(page.getByTestId('m-co-net-delta')).not.toHaveText('$0.00');
+  });
+});
+
+// ===========================================================================
+// M-31 — the write controls, and who does not get them
+// ===========================================================================
+test.describe('M-31 · write controls are Owner/Admin/PM, on a screen foreman and crew still read', () => {
+  test('an owner gets Edit, Send and Void on a draft', async ({ page }) => {
+    test.setTimeout(120_000);
+    await signInAs(page, OWNER);
+
+    // A FRESH DRAFT, not `.first()`. The first CO on this project is terminal
+    // (signed or voided), so it legitimately has no controls — asserting
+    // against it tested the fixture's status rather than D-51's rule.
+    const coId = await createDraftCo(page, `E2E Actions ${stamp()}`);
+    await page.goto(`/m/p/${PROJECT}/changes/${coId}`);
+
+    await expect(page.getByTestId('m-co-edit')).toBeVisible();
+    await expect(page.getByTestId('m-co-send')).toBeVisible();
+    await expect(page.getByTestId('m-co-void')).toBeVisible();
+  });
+
+  test('a terminal change order says so instead of rendering an empty box', async ({ page }) => {
+    await signInAs(page, OWNER);
+    await page.goto(`/m/p/${PROJECT}/changes`);
+    await page.getByTestId('m-co-row').first().getByTestId('m-row-link').click();
+    await expect(page).toHaveURL(/\/changes\/[0-9a-f-]{36}$/, { timeout: 30_000 });
+
+    // Whatever status the first CO is in, the actions section must never be
+    // empty markup: either it offers controls, or it explains why it does not.
+    const hasControls = (await page.getByTestId('m-co-send').count()) > 0;
+    if (!hasControls) await expect(page.getByTestId('m-co-terminal')).toBeVisible();
+  });
+
+  test('a crew member READS the change order and gets no write controls at all', async ({
+    page,
+  }) => {
+    // CREW, not FOREMAN — the foreman cannot reach this project (see the
+    // identity note). Crew is excluded from CO writes on the same footing and
+    // is D-53-admitted to the READ, which is exactly the pair being asserted.
+    await signInAs(page, CREW);
+    await page.goto(`/m/p/${PROJECT}/changes`);
+    await page.getByTestId('m-co-row').first().getByTestId('m-row-link').click();
+    await expect(page).toHaveURL(/\/changes\/[0-9a-f-]{36}$/, { timeout: 30_000 });
+
+    // D-53 keeps CO READING open to everyone but subcontractors — the screen
+    // renders. D-51 keeps the writes to three roles.
+    await expect(page.getByTestId('m-co-detail')).toBeVisible();
+    await expect(page.getByTestId('m-co-actions')).toHaveCount(0);
+    await expect(page.getByTestId('m-co-send')).toHaveCount(0);
+    await expect(page.getByTestId('m-co-void')).toHaveCount(0);
+    // And still no money — D-51's other half, unchanged by Part C.
+    await expect(page.getByTestId('m-co-net-delta')).toHaveCount(0);
+  });
+
+  test('send demands a printed name on the first send', async ({ page }) => {
+    test.setTimeout(120_000);
+    // A PM — D-51's third role, and the one #140 used to break for. Confirmed
+    // assigned to this project [S117].
+    await signInAs(page, PM);
+
+    const coId = await createDraftCo(page, `E2E Send ${stamp()}`);
+    await page.goto(`/m/p/${PROJECT}/changes/${coId}`);
+
+    await page.getByTestId('m-co-send').click();
+
+    // The route returns 400 without mode + printed name (send/route.ts:110) —
+    // signed-artifact §4.2, sending IS the contractor-side acceptance. The
+    // control refuses BEFORE the round trip rather than surfacing a 400.
+    await expect(page.getByTestId('m-co-sig-name')).toBeVisible();
+    await expect(page.getByTestId('m-co-send-confirm')).toBeDisabled();
+
+    await page.getByTestId('m-co-sig-name').fill('QA Sender');
+    await expect(page.getByTestId('m-co-send-confirm')).toBeEnabled();
+  });
+});
+
+// ===========================================================================
+// D-60 / A-67 — M-33 does not submit without a list target
+// ===========================================================================
+test.describe('D-60 · the author targets a list, always', () => {
+  test('the picker renders and NOTHING is preselected', async ({ page }) => {
+    await signInAs(page, CREW);
+    await page.goto(`/m/p/${PROJECT}/punch/new`);
+
+    await expect(page.getByTestId('m-punch-list-target')).toBeVisible();
+
+    // THE ABSENCE OF A DEFAULT IS THE CRITERION. A build that auto-created a
+    // "Punch List", or that used the project's only list silently, satisfies
+    // every other assertion on this screen and violates D-60.
+    //
+    // Asserting "no option is active" also covers A-67's "a project with
+    // exactly one list still asks": a "pick only when ambiguous" build renders
+    // NO picker at all in that case, and the visibility assertion above fails.
+    const active = page.locator('[data-testid^="m-punch-list-"][data-active="true"]');
+    await expect(active).toHaveCount(0);
+  });
+
+  test('submitting with no list refuses, and names the LIST rather than the title', async ({
+    page,
+  }) => {
+    await signInAs(page, CREW);
+    await page.goto(`/m/p/${PROJECT}/punch/new`);
+
+    // Title filled, list not. A build that validated in field order would
+    // complain about the title and send the user hunting.
+    await page.getByTestId('m-punch-title').fill('Refusal probe');
+    await page.getByTestId('m-punch-create').click();
+
+    const error = page.getByTestId('m-punch-create-error');
+    await expect(error).toBeVisible();
+    await expect(error).toContainText(/list/i);
+    await expect(error).not.toContainText(/title/i);
+
+    // Nothing navigated — no item was written.
+    await expect(page).toHaveURL(/\/punch\/new$/);
+  });
+
+  test('M-33 is open to a SUBCONTRACTOR — no guard, by ruling', async ({ page }) => {
+    await signInAs(page, SUB);
+    await page.goto(`/m/p/${PROJECT}/punch/new`);
+
+    // D-52 corrected [S110]: subs create punch lists and items. Guarding this
+    // screen would reverse a ruling, and §4.11.10a forecloses gating a further
+    // surface "because there is a pattern now".
+    await expect(page).toHaveURL(/\/punch\/new$/);
+    await expect(page.getByTestId('m-punch-title')).toBeVisible();
+    await expect(page.getByTestId('m-denied')).toHaveCount(0);
+  });
+});
+
+// ===========================================================================
+// A-67b / A-67c — inline list creation, and M-14 stays FLAT
+// ===========================================================================
+test.describe('D-60 / D-61 · a list can be created inline, and M-14 does not become a list of lists', () => {
+  test('a new list is created and the item lands in it, labelled on the row', async ({ page }) => {
+    test.setTimeout(120_000);
+    await signInAs(page, CREW);
+
+    const id = stamp();
+    const listName = `E2E List ${id}`;
+    const itemTitle = `E2E Item ${id}`;
+
+    await page.goto(`/m/p/${PROJECT}/punch/new`);
+    await page.getByTestId('m-punch-list-__new__').click();
+    await page.getByTestId('m-punch-new-list-name').fill(listName);
+    await page.getByTestId('m-punch-title').fill(itemTitle);
+    await page.getByTestId('m-punch-create').click();
+
+    // TWO WRITES, not one — createPunchList then createPunchItem. A failed
+    // item insert would leave the list behind, which A-67b accepts.
+    await expect(page).toHaveURL(new RegExp(`/m/p/${PROJECT}/punch$`), { timeout: 30_000 });
+
+    // D-61 — the parent list is a LABEL ON THE ROW.
+    const row = page.getByTestId('m-punch-row').filter({ hasText: itemTitle });
+    await expect(row).toHaveCount(1);
+    await expect(row).toContainText(listName);
+  });
+
+  test('A-67c · the row count is the ITEM count, not the list count', async ({ page }) => {
+    await signInAs(page, CREW);
+    await page.goto(`/m/p/${PROJECT}/punch`);
+
+    const rows = page.getByTestId('m-punch-row');
+    const all = await rows.count();
+    expect(all).toBeGreaterThan(0);
+
+    // A grouped screen fails immediately, and so does one that renders list
+    // headers as rows: every m-punch-row must link to an ITEM route.
+    for (let i = 0; i < all; i++) {
+      const href = await rows.nth(i).getByTestId('m-row-link').getAttribute('href');
+      expect(href).toMatch(/\/punch\/[0-9a-f-]{36}$/);
+    }
+
+    // And the chips still filter ITEMS — D-61's first breakage if it nested.
+    await page.goto(`/m/p/${PROJECT}/punch?filter=open`);
+    const open = await page.getByTestId('m-punch-row').count();
+    expect(open).toBeLessThanOrEqual(all);
+  });
+});
+
+// ===========================================================================
+// M-34 — complete (every role) and the photo gate
+// ===========================================================================
+// `requires_completion_photo` DEFAULTS TO TRUE (20260704214000:90), so an item
+// created on mobile needs a photo before it can be completed. That makes the
+// gate testable on a freshly-created item rather than needing a fixture.
+test.describe('M-34 · complete, and the photo gate the service function owns', () => {
+  test('complete is refused without the photo, then succeeds with one', async ({ page }) => {
+    test.setTimeout(150_000);
+    await signInAs(page, CREW);
+
+    const id = stamp();
+    const itemTitle = `E2E Complete ${id}`;
+
+    // Create an item into a fresh list, so this test owns its own data.
+    await page.goto(`/m/p/${PROJECT}/punch/new`);
+    await page.getByTestId('m-punch-list-__new__').click();
+    await page.getByTestId('m-punch-new-list-name').fill(`E2E CList ${id}`);
+    await page.getByTestId('m-punch-title').fill(itemTitle);
+    await page.getByTestId('m-punch-create').click();
+    await expect(page).toHaveURL(new RegExp(`/m/p/${PROJECT}/punch$`), { timeout: 30_000 });
+
+    await page.getByTestId('m-punch-row').filter({ hasText: itemTitle }).click();
+    await expect(page).toHaveURL(/\/punch\/[0-9a-f-]{36}$/, { timeout: 30_000 });
+
+    // The gate is visible before the tap.
+    await expect(page.getByTestId('m-punch-photo-gate')).toBeVisible();
+
+    // ⚠️ THE REFUSAL COMES FROM completePunchItem, NOT FROM THIS SCREEN. The
+    // UI does not duplicate the rule — it lets the service function answer, so
+    // the message is the same one desktop gets.
+    await page.getByTestId('m-punch-complete').click();
+    const error = page.getByTestId('m-punch-action-error');
+    await expect(error).toBeVisible();
+    await expect(error).toContainText(/completion photo is required/i);
+
+    // Attach a real image through uploadFile (never a raw bucket PUT — that is
+    // where HEIC→JPEG lives, #94).
+    await page.getByTestId('m-punch-photo-input').setInputFiles({
+      name: 'done.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(PNG_8, 'base64'),
+    });
+    await expect(page.getByTestId('m-punch-photo-attached')).toBeVisible({ timeout: 30_000 });
+
+    await page.getByTestId('m-punch-complete').click();
+
+    // Complete — and now the VERIFY half of the screen appears, because
+    // requires_verification also defaults true.
+    await expect(page.getByTestId('m-punch-complete')).toHaveCount(0, { timeout: 30_000 });
+  });
+});
+
+// ===========================================================================
+// Verify — Foreman+, and UI/SERVICE-ONLY
+// ===========================================================================
+// ⚠️ NOTHING BELOW PROVES A DATABASE RULE. `punch_list_items_update_authenticated`
+// has no role arm; RLS accepts a direct UPDATE setting status='verified' from a
+// crew member's session (open item 7). These tests assert that the SCREEN and
+// `verifyPunchItem` refuse — which is the entire enforcement that exists.
+test.describe('M-34 · verify is Foreman+, enforced in TypeScript and nowhere else', () => {
+  test('a crew member gets no verify control, and is told who can', async ({ page }) => {
+    test.setTimeout(150_000);
+    await signInAs(page, CREW);
+
+    const id = stamp();
+    const itemTitle = `E2E Verify ${id}`;
+
+    await page.goto(`/m/p/${PROJECT}/punch/new`);
+    await page.getByTestId('m-punch-list-__new__').click();
+    await page.getByTestId('m-punch-new-list-name').fill(`E2E VList ${id}`);
+    await page.getByTestId('m-punch-title').fill(itemTitle);
+    await page.getByTestId('m-punch-create').click();
+    await expect(page).toHaveURL(new RegExp(`/m/p/${PROJECT}/punch$`), { timeout: 30_000 });
+
+    await page.getByTestId('m-punch-row').filter({ hasText: itemTitle }).click();
+    await page.getByTestId('m-punch-photo-input').setInputFiles({
+      name: 'done.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(PNG_8, 'base64'),
+    });
+    await expect(page.getByTestId('m-punch-photo-attached')).toBeVisible({ timeout: 30_000 });
+    await page.getByTestId('m-punch-complete').click();
+
+    // Crew completed it. Crew cannot verify it — 5C §4, unreversed, and D-52's
+    // crew grant corrected away at S110.
+    await expect(page.getByTestId('m-punch-verify-denied')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('m-punch-verify')).toHaveCount(0);
+  });
+
+  test('A-58 · the member who completed an item cannot verify it', async ({ page }) => {
+    test.setTimeout(150_000);
+    // A PM, not the foreman: `verifyPunchItem`'s FOREMAN_PLUS is
+    // owner/admin/project_manager/foreman, so a PM exercises the same branch —
+    // and unlike the foreman identity, the PM can reach this project at all.
+    // (The foreman run failed on `getProject()` returning null, which 404s M-33
+    // before any punch code executes.)
+    await signInAs(page, PM);
+
+    const id = stamp();
+    const itemTitle = `E2E SelfVerify ${id}`;
+
+    await page.goto(`/m/p/${PROJECT}/punch/new`);
+    await page.getByTestId('m-punch-list-__new__').click();
+    await page.getByTestId('m-punch-new-list-name').fill(`E2E SList ${id}`);
+    await page.getByTestId('m-punch-title').fill(itemTitle);
+    await page.getByTestId('m-punch-create').click();
+    await expect(page).toHaveURL(new RegExp(`/m/p/${PROJECT}/punch$`), { timeout: 30_000 });
+
+    await page.getByTestId('m-punch-row').filter({ hasText: itemTitle }).click();
+    await page.getByTestId('m-punch-photo-input').setInputFiles({
+      name: 'done.png',
+      mimeType: 'image/png',
+      buffer: Buffer.from(PNG_8, 'base64'),
+    });
+    await expect(page.getByTestId('m-punch-photo-attached')).toBeVisible({ timeout: 30_000 });
+    await page.getByTestId('m-punch-complete').click();
+
+    // The foreman MAY verify in general — so the control is present — but not
+    // THIS item, because they completed it. Shown before the tap rather than as
+    // an error after it (§4.11.14).
+    await expect(page.getByTestId('m-punch-self-verify')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('m-punch-verify')).toBeDisabled();
+  });
+});

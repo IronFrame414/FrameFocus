@@ -431,6 +431,11 @@ export const DENIED_COPY: Record<string, string> = {
   member: 'Team member details are not available to subcontractors.',
   contact: 'Contact details are not available to subcontractors.',
   file: 'Opening documents is not available to subcontractors.',
+  // D-51's write surface. Worded by ROLE rather than by exclusion because this
+  // one refuses five roles, not one — a foreman reading "not available to
+  // subcontractors" on a screen they were just bounced from would reasonably
+  // conclude the app was broken.
+  'co-write': 'Only an owner, admin or project manager can write change orders.',
 };
 
 export function DeniedNotice({ kind }: { kind: string | undefined }) {

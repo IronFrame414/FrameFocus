@@ -1,11 +1,17 @@
 import { notFound } from 'next/navigation';
 import { getPunchItem, PUNCH_STATUS_LABELS } from '@/lib/services/punch';
+import { getMyProfile } from '@/lib/services/profiles';
+import { getMyMember } from '@/lib/services/members';
 import { SectionHeader } from '../../section-header';
 import { DetailCard, DetailField, StatusPill } from '../../../../mobile-ui';
+import { PunchActions } from './punch-actions';
 
-// M6M §4.11.14 — M-34 · Punch item detail.
+// M6M §4.11.14 — M-34 · Punch item detail, complete and verify.
 //
-// READ-ONLY IN THIS PASS. Complete and verify are writes and belong to Part C.
+// **[S117] THE WRITE ACTIONS ARE NOW HERE.** _Superseded note, quoted:_
+// _"READ-ONLY IN THIS PASS. Complete and verify are writes and belong to
+// Part C."_ The enforcement ladder for both — and why verify's is the weakest
+// in the pass — is in `punch-actions.tsx`.
 //
 // ===========================================================================
 // ⚠️ NO ROLE GUARD HERE, AND THAT IS THE RULING RATHER THAN AN OMISSION
@@ -52,7 +58,11 @@ export default async function PunchItemDetailPage({
 }: {
   params: { projectId: string; itemId: string };
 }) {
-  const item = await getPunchItem(params.itemId);
+  const [item, profile, myMember] = await Promise.all([
+    getPunchItem(params.itemId),
+    getMyProfile(),
+    getMyMember(),
+  ]);
   if (!item) notFound();
 
   // A punch item deep-linked from another project's URL is a wrong link, not a
@@ -121,6 +131,16 @@ export default async function PunchItemDetailPage({
           mono
         />
       </DetailCard>
+
+      {/* NO ROLE GATE ON RENDERING THIS — every role reaches M-34 (D-52
+          corrected), and the component hides only the VERIFY control, which is
+          Foreman+. Complete is offered to everyone, subcontractors included. */}
+      <PunchActions
+        projectId={params.projectId}
+        item={item}
+        userRole={profile?.role ?? ''}
+        myMemberId={myMember?.id ?? null}
+      />
     </div>
   );
 }

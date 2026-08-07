@@ -63,8 +63,8 @@ import { getMyProfile } from '@/lib/services/profiles';
 // tested member_type would exclude 32 roster rows that are not the signed-in
 // user and gate precisely nothing.
 
-/** The four surfaces D-53 still excludes subcontractors from. */
-export type GatedSurface = 'co' | 'member' | 'contact' | 'file';
+/** The four surfaces D-53 still excludes subcontractors from, plus D-51's write surface. */
+export type GatedSurface = 'co' | 'member' | 'contact' | 'file' | 'co-write';
 
 /**
  * Block subcontractors from a gated detail route, server-side, before render.
@@ -104,3 +104,92 @@ export async function requireDetailAccess(
 export function canReachDetail(role: string | null | undefined): boolean {
   return role !== 'subcontractor';
 }
+
+// ===========================================================================
+// D-51's WRITE surface — and the asymmetry with everything above
+// ===========================================================================
+// Everything above this line gates a READ, and §4.11.10b's third conflict is
+// why: those four tables carry no subcontractor arm on SELECT, so the guard is
+// the only thing there is.
+//
+// CO WRITES ARE THE OPPOSITE CASE, and the difference is worth stating rather
+// than leaving a reader to infer that this file is uniformly load-bearing:
+//
+//   change_orders_insert_authorized      get_my_role() = ANY (owner, admin,
+//   change_orders_update_authorized        project_manager)
+//   change_order_line_items_{insert,update,delete}_authorized   — same array
+//   change_order_line_rows_{insert,update,delete}_authorized    — same array
+//                                        20260704215000:339-351, :366-386, :402-421
+//
+// So a foreman, a crew member or a subcontractor CANNOT author, alter or void a
+// change order no matter what this file does — **the database refuses them.**
+// The guard below is D-54 step 2 applied to a write surface, and its job is to
+// make the refusal HONEST (a screen that explains itself, per A-66) rather than
+// to be the refusal. A build that deleted it would leak an empty editor whose
+// every save failed with an RLS error, which is a worse experience than a
+// redirect but is NOT a permission hole.
+//
+// §4.11.11 puts it as the asymmetry that makes #117 tolerable: "Writing is
+// DB-enforced; reading is not." This file now holds one example of each.
+
+/** D-51's three roles. Mirrors `change_orders_insert_authorized` exactly. */
+const CO_WRITE_ROLES = ['owner', 'admin', 'project_manager'];
+
+/**
+ * Block a role the DB would refuse from ever reaching a CO write screen.
+ *
+ * Unlike `requireDetailAccess`, this excludes FIVE roles rather than one —
+ * foreman and crew_member are refused here even though D-53 lets them READ
+ * M-31. Two different rules on one entity, which is exactly why they are two
+ * functions rather than one parameterised guard.
+ */
+export async function requireCoWriteAccess(backTo: string): Promise<void> {
+  const profile = await getMyProfile();
+
+  // As above: app/m/layout.tsx owns the auth gate.
+  if (!profile) return;
+
+  if (!CO_WRITE_ROLES.includes(profile.role)) {
+    redirect(`${backTo}?denied=co-write`);
+  }
+}
+
+/** The same test, for HIDING the control (D-54 step 1). */
+export function canWriteCo(role: string | null | undefined): boolean {
+  return CO_WRITE_ROLES.includes(role ?? '');
+}
+
+// ===========================================================================
+// ⚠️ THERE IS DELIBERATELY NO PUNCH GUARD IN THIS FILE. READ THIS BEFORE ADDING ONE.
+// ===========================================================================
+// It is tempting, and §4.11.10b's write table is what makes it tempting:
+// `punch_list_items_insert_authenticated` and `_update_authenticated` carry NO
+// ROLE ARM, so punch writes are not DB-enforced the way CO writes are. The
+// inference — "no DB floor, therefore a route guard must be the enforcement" —
+// is the right instinct applied to the wrong table.
+//
+// **NO ROLE IS EXCLUDED FROM THE PUNCH SCREENS, so there is nothing to guard.**
+// D-52 as corrected [S110] opens M-33 and M-34 to every role, subcontractors
+// included, and §4.11.10b records the missing role arm as "n/a — nothing to
+// refuse ... **that is now correct behaviour** rather than a gap". Guarding
+// `punch/new` would reverse a ruling Josh made, and §4.11.10a forecloses it in
+// as many words: a build that gates a further surface "because there is a
+// pattern now" has exceeded D-54.
+//
+// THE ONE PUNCH WRITE THAT IS ROLE-RESTRICTED IS **VERIFY**, and it is not a
+// route — it is a button on M-34. Its Foreman+ floor lives in
+// `verifyPunchItem` (punch-client.ts:186), in TypeScript, together with the
+// requires_verification, status='complete' and separate-eyes checks. **RLS
+// accepts a direct UPDATE setting status='verified' from any role** — open
+// item 7, pre-existing and desktop-wide.
+//
+// So the punch enforcement ladder, stated plainly because it is the weakest in
+// this pass and must not be mistaken for one of the strong ones:
+//
+//   create / complete   nothing refuses anyone — by ruling, not by omission
+//   verify              hidden control + service-layer check. NO DB FLOOR.
+//                       The service function is the gate; the hiding is
+//                       cosmetic on top of it, and neither is RLS.
+//
+// A mobile path that called the table directly instead of verifyPunchItem
+// would silently defeat the separate-eyes rule — which is A-58's whole point.

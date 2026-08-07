@@ -1,6 +1,7 @@
+import Link from 'next/link';
 import { getChangeOrders, CO_STATUS_LABELS } from '@/lib/services/change-orders';
 import { getMyProfile } from '@/lib/services/profiles';
-import { canReachDetail } from '@/app/m/detail-access';
+import { canReachDetail, canWriteCo } from '@/app/m/detail-access';
 import { SectionHeader } from '../section-header';
 import { DeniedNotice, EmptyState, ListRow, ListRowLink, StatusPill } from '../../../mobile-ui';
 
@@ -51,10 +52,27 @@ export default async function ProjectChangesPage({
   // route (M-31) is blocked."
   const canOpen = canReachDetail(profile?.role);
 
+  // D-51 step 1 — the create control is Owner/Admin/PM. Step 2 is
+  // requireCoWriteAccess() on M-32, and BOTH sit on top of
+  // `change_orders_insert_authorized`, which would refuse the other three roles
+  // anyway. This is the one write in the pass where hiding, guarding and the
+  // database all agree.
+  const canWrite = canWriteCo(profile?.role);
+
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
       <SectionHeader projectId={params.projectId} title="Change Orders" />
       <DeniedNotice kind={searchParams.denied} />
+
+      {canWrite ? (
+        <Link
+          href={`/m/p/${params.projectId}/changes/new`}
+          data-testid="m-co-new"
+          className="mb-[14px] flex min-h-[52px] w-full items-center justify-center rounded-[14px] bg-m6m-blue text-[15px] font-bold text-white"
+        >
+          New change order
+        </Link>
+      ) : null}
 
       {cos.length === 0 ? (
         <EmptyState>No change orders.</EmptyState>
