@@ -129,6 +129,37 @@ claude mcp list
 > every one of those rows — measured S115 at full value (`net_delta` 1410 and 21385.91). **M-34 is the
 > exception**: D-57's migration is real, so an item a sub may not see resolves to `notFound()`.
 
+> **M6M Part C — the write paths, built S117** (`0837412`). `/m` now writes: **M-32**
+> `p/[projectId]/changes/new` (create AND edit — **one route, `?co=<id>` selects edit**, because §1's
+> table lists one), **M-31** gains Edit / Send-for-signature / Void, **M-33** `punch/new`, and **M-34**
+> gains complete and verify. New shared client module **`app/m/write-ui.tsx`** — separate from
+> `mobile-ui.tsx` on purpose, which is server-safe and must stay that way.
+>
+> **A change order has no amount field.** `createChangeOrder` takes none, so M-32 is a **three-level
+> editor** — CO → line items → line rows — and **every structural write calls
+> `recalculateChangeOrderTotals()`**. `net_delta` defaults to `0` and is set nowhere else; skipping the
+> recalculation ships a change order worth nothing while every screen assertion still passes. All six
+> existing line functions are used; no seventh was written. Send goes through the **existing** route and
+> collects the contractor signature it demands on first send — no second authorisation path.
+>
+> **⚠️ THE TWO HALVES ARE NOT EQUALLY ENFORCED, AND THE CODE SAYS SO IN BOTH PLACES.**
+>
+> | | Who is refused | By what |
+> | --- | --- | --- |
+> | **CO writes** | foreman, crew, sub | **THE DATABASE.** `change_orders_{insert,update}_authorized` + both child tables. The route guard makes the refusal *honest*; it is not the refusal. |
+> | **Punch create / complete** | **nobody** | Nothing — and that is CORRECT, not a gap (D-52 corrected, S110). **There is deliberately no punch route guard.** |
+> | **Punch verify** | crew, sub | **TypeScript only.** `verifyPunchItem`'s `FOREMAN_PLUS`. RLS accepts a direct `status='verified'` UPDATE from any role — open item 7. **No database rung at all.** |
+>
+> **Four things the build ruled for itself** — spec **§4.11.11b**: the single `changes/new` route; Void's
+> inclusion despite a narrower brief; **the punch route guard that was declined, and why** (guarding a
+> screen D-52 opened would reverse a ruling); and the crew-for-foreman test-identity substitution.
+>
+> **⚠️ Criteria status is NOT uniformly green — read §10 before assuming.** Only **A-67 and A-67c** are
+> cleanly satisfied. **A-57 is NOT SATISFIED** — completing and verifying now exist, so the M-3 badge
+> criterion became testable this session and simply was not written. A-55, A-56, A-58 and A-67b are
+> **partial**, each with the missing half named. **#143 raised**: `josh+qa-foreman@` is not assigned to
+> the fixture project, so assertions under it pass vacuously.
+
 ### apps/web (Next.js)
 
 ```
