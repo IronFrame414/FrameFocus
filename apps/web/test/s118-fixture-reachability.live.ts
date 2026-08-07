@@ -51,30 +51,47 @@ const IDENTITIES = [
 /** The project every mobile Playwright spec drives. */
 const SECTIONS_PROJECT = 'eaf0e25b-d60e-49c0-89b2-5612118d94b4';
 
+/**
+ * Company B's fixture project — the CROSS-TENANT negative.
+ *
+ * ⚠️ THIS IS WHAT KEEPS THE GUARD FROM BEING VACUOUS, and it became necessary
+ * the moment #143 closed. While the foreman could not reach the m-sections
+ * project, the table below contained a `false` and that alone proved the check
+ * could distinguish reach from no-reach. Now every company-A identity reaches
+ * every company-A project, so a `can_view_project()` that simply returned TRUE
+ * for everything would satisfy the whole first table.
+ *
+ * Company B is a different tenant: no company-A identity may reach it, by
+ * `company_id` rather than by assignment. Asserting both directions is the same
+ * paired-assertion discipline `s113` uses for D-57.
+ */
+const COMPANY_B_PROJECT_NAME = 'QA B — isolation fixture';
+
 // ---------------------------------------------------------------------------
 // THE DECLARED EXPECTATION — today's measured truth, not today's ideal.
 // ---------------------------------------------------------------------------
-// `false` here is a RECORD OF A GAP, not an endorsement of it. #143 is open and
-// its fix is to seed the missing assignment; when that lands this table changes
-// and this file is where you find out.
+// ✅ #143 CLOSED [S119]. `josh+qa-foreman@` now carries a `project_assignments`
+// row on this project, seeded idempotently alongside PM and crew by
+// `scripts/seed-test-identities.mjs`. Before that it was the one identity that
+// could not reach the project every mobile spec drives — so every "the foreman
+// does NOT see X" assertion passed VACUOUSLY, silently, for the wrong reason.
 const EXPECTED_REACH: Record<string, boolean> = {
   // Owner and admin need no assignment — can_view_project() admits them to
   // every project in the company.
   owner: true,
   admin: true,
-  // Assigned on the project itself (it carries 4 assignment rows), not by the
-  // seed script.
+  // Assigned on the project itself (it carries its own assignment rows).
   project_manager: true,
   crew_member: true,
   // Seeded S114 specifically so A-33c's subcontractor arm is not vacuous.
   subcontractor: true,
-  // ⚠️ #143. The seed assigns PM/foreman/crew to company A's ISOLATION fixture
-  // project only; the foreman never got a row on this one, and unlike PM and
-  // crew the project did not already carry one for them.
-  foreman: false,
+  // Seeded S119 — TECH_DEBT #143. The seed had only ever given this identity a
+  // row on company A's ISOLATION fixture project, never on this one.
+  foreman: true,
 };
 
 const reach = new Map<string, boolean>();
+const crossTenantReach = new Map<string, boolean>();
 
 beforeAll(async () => {
   assertRebuildTest();
@@ -91,20 +108,38 @@ beforeAll(async () => {
     );
   }
 
+  const { data: bProject } = await admin
+    .from('projects')
+    .select('id')
+    .eq('name', COMPANY_B_PROJECT_NAME)
+    .single();
+
   for (const [role, email] of IDENTITIES) {
     const client = await sessionFor(email);
+
     const { data } = await client
       .from('projects')
       .select('id')
       .eq('id', SECTIONS_PROJECT)
       .maybeSingle();
     reach.set(role, data !== null);
+
+    const { data: cross } = await client
+      .from('projects')
+      .select('id')
+      .eq('id', bProject!.id)
+      .maybeSingle();
+    crossTenantReach.set(role, cross !== null);
   }
 
   // Printed unconditionally: when this file fails, the matrix is the first
   // thing worth seeing and re-running with a debugger to get it is a waste.
-  const rows = IDENTITIES.map(([role]) => `${role.padEnd(16)} ${reach.get(role) ? 'REACHES' : 'no'}`);
-  console.log(`\n#143 reach over ${SECTIONS_PROJECT}:\n${rows.join('\n')}\n`);
+  const rows = IDENTITIES.map(
+    ([role]) =>
+      `${role.padEnd(16)} own=${reach.get(role) ? 'REACHES' : 'no'.padEnd(7)}  ` +
+      `companyB=${crossTenantReach.get(role) ? 'REACHES' : 'no'}`
+  );
+  console.log(`\n#143 reach over ${SECTIONS_PROJECT} (and the cross-tenant negative):\n${rows.join('\n')}\n`);
 });
 
 describe('#143 — the seeded identities reach exactly what is written down', () => {
@@ -114,31 +149,35 @@ describe('#143 — the seeded identities reach exactly what is written down', ()
     });
   }
 
-  it('at least one identity CANNOT reach it — otherwise this guard is vacuous', () => {
-    // If every identity reached every project the table would assert nothing.
-    // This is the same paired-assertion discipline s113 uses for D-57.
-    expect(Object.values(EXPECTED_REACH)).toContain(false);
-  });
-
-  it('⚠️ #143 IS STILL OPEN — the foreman cannot reach the mobile fixture project', () => {
-    // A deliberately redundant, deliberately named assertion. It exists so the
-    // gap appears in the test OUTPUT rather than only in a table a reader has
-    // to interpret — and so that closing #143 breaks a test whose name says
-    // what to do about it.
-    expect(reach.get('foreman')).toBe(false);
+  it('✅ #143 IS CLOSED — the foreman reaches the mobile fixture project', () => {
+    // Deliberately redundant and deliberately named, so the state appears in
+    // the test OUTPUT rather than only in a table a reader has to interpret.
+    // Its previous form asserted `false` and said "#143 IS STILL OPEN"; seeding
+    // the assignment broke it, which is exactly what it was built to do.
+    expect(reach.get('foreman')).toBe(true);
   });
 });
 
-describe('#143 — the substitution the Part C suite makes is still necessary', () => {
-  it('crew reaches the project, which is why crew stands in for foreman', () => {
-    // M6M §4.11.11b ruling 4. If this ever fails, the substitution is not just
-    // unnecessary — it is broken, and m-writes.spec.ts is asserting nothing.
-    expect(reach.get('crew_member')).toBe(true);
-  });
+// ===========================================================================
+// THE NEGATIVE HALF — without it the table above asserts nothing
+// ===========================================================================
+// Every company-A identity now reaches every company-A project, so "reach" on
+// its own can no longer distinguish a working `can_view_project()` from one
+// that returns TRUE unconditionally. Company B is a different tenant.
+describe('#143 — the guard is not vacuous: nobody crosses tenants', () => {
+  for (const [role] of IDENTITIES) {
+    it(`${role} does NOT reach company B's project`, () => {
+      expect(crossTenantReach.get(role)).toBe(false);
+    });
+  }
 
-  it('the PM reaches it too — the contrast that proved #143 was identity-specific', () => {
-    // Measured S117: the PM's row click succeeded in the same run the foreman's
-    // timed out. That contrast is what ruled out "the project is broken".
-    expect(reach.get('project_manager')).toBe(true);
+  it('and the same sessions DO reach their own — both directions, same clients', () => {
+    // Stated as one assertion over the whole set: the identities that were just
+    // refused company B are the identities that reach company A. A harness
+    // whose sessions were simply broken would fail here rather than passing the
+    // refusals above for the wrong reason.
+    for (const [role] of IDENTITIES) {
+      expect(reach.get(role), `${role} should reach its own company's project`).toBe(true);
+    }
   });
 });

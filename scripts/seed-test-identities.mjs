@@ -482,6 +482,36 @@ const SECTIONS_PROJECT_ID = 'eaf0e25b-d60e-49c0-89b2-5612118d94b4';
         member_id: subMember.id, role_on_project: 'subcontractor',
       }
     );
+
+    // ── TECH_DEBT #143 [S119] — EVERY FIELD ROLE, NOT JUST THE SUB ─────────
+    //
+    // The sub got its row at S114 for A-33c; PM and crew already had one from
+    // the project's own assignments. **The foreman never did**, and because
+    // `can_view_project()` is what gates `change_orders_select_visible` and
+    // `getProject()`, that identity saw an EMPTY M-13 and got a 404 on M-33.
+    //
+    // ⚠️ THE COST WAS NOT THE 404. It was that every assertion of the form
+    // "the foreman does NOT see X" passed VACUOUSLY — for the wrong reason,
+    // silently. #127 was the same class of gap and at least failed loudly.
+    // Found only because M6M Part C's suite failed 5/21 on it [S117].
+    //
+    // Seeded for ALL THREE rather than just the foreman, so the set is uniform
+    // and the next identity added here does not inherit the same silent hole.
+    // `ensureRow` matches on (project_id, member_id), so the two that already
+    // have rows are left exactly as they are.
+    for (const { email, role } of COMPANY_A_IDENTITIES) {
+      if (role === 'owner' || role === 'admin') continue; // reach every project already
+      const { data: p } = await db.from('profiles').select('id').eq('email', email).single();
+      const memberId = await memberIdFor(p.id);
+      await ensureRow(
+        `assignment ${role} → m-sections project`, 'project_assignments',
+        { project_id: SECTIONS_PROJECT_ID, member_id: memberId },
+        {
+          company_id: companyA.id, project_id: SECTIONS_PROJECT_ID,
+          member_id: memberId, role_on_project: role,
+        }
+      );
+    }
   }
 }
 

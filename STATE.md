@@ -176,10 +176,13 @@ claude mcp list
 > cannot import `getOpenPunchCounts` (it pulls `next/headers`), so it would assert its own copy of the
 > `('open','in_progress')` filter. Reading the rendered stat runs the real function.
 >
-> **#143 is now machine-checked** — `s118-fixture-reachability.live.ts` asserts every seeded identity's
-> reach against a declared table, so closing the gap breaks a test that says what to do about it.
-> **`josh+qa-admin@` was suspected of the same fault and is CLEAR** (measured: owner, admin, PM, crew
-> and sub all reach the project; **only the foreman does not**).
+> **✅ #143 CLOSED [S119]** — the seed assigns PM/foreman/crew to the m-sections project; running it
+> created **exactly one row, the foreman's**, confirming the diagnosis. The crew-for-foreman
+> substitutions in the role-exclusion tests are reverted, so they name the role they mean again.
+> **The guard needed a new negative:** once every company-A identity reached every company-A project
+> the declared table held no `false`, so a `can_view_project()` returning TRUE for everything would
+> have passed it — `s118-fixture-reachability.live.ts` now also asserts that **no company-A identity
+> reaches company B's project**. (`josh+qa-admin@` was suspected of the same fault and is clear.)
 >
 > **✅ #144 CLOSED [S119]** — the Part C suite cleans up at **both ends**, and the live harnesses now
 > create their own data so they run standalone. **Proven by two back-to-back runs**: the project went

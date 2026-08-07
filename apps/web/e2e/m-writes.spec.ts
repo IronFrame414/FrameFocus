@@ -60,25 +60,21 @@ async function signInAs(page: Page, email: string) {
 }
 
 // ---------------------------------------------------------------------------
-// ⚠️ WHICH IDENTITIES CAN REACH THIS PROJECT — MEASURED [S117], NOT ASSUMED
+// WHICH IDENTITIES CAN REACH THIS PROJECT — MEASURED, AND NOW UNIFORM [S119]
 // ---------------------------------------------------------------------------
 // The first run of this suite failed five tests and the failures were the
-// discovery: `qa-foreman` HAS NO ACCESS TO THIS PROJECT. `change_orders_select_visible`
-// is `company_id + can_view_project()`, so the foreman's M-13 is empty, and
-// `getProject()` returns null for them — which makes M-33 404 outright.
+// discovery: `josh+qa-foreman@` had no `project_assignments` row here, so its
+// M-13 was empty and `getProject()` returned null — which 404s M-33 outright.
+// Every "the foreman does NOT see X" assertion therefore passed VACUOUSLY.
 //
-// Confirmed by contrast in the same run: the PM's row click succeeded, so
-// `josh+pm@` IS assigned. `josh+crew@` is the identity the whole mobile suite
-// drives this project as.
+// **TECH_DEBT #143 is CLOSED [S119]**: the seed now assigns PM, foreman and
+// crew to this project idempotently, so all six identities reach it and the
+// role-exclusion tests below name the role they actually mean. The
+// crew-for-foreman substitutions S117 was forced into are reverted.
 //
-// So the role-exclusion assertions below use CREW rather than FOREMAN wherever
-// the test needs the role to actually SEE something. Crew is refused CO writes
-// on exactly the same footing, so nothing is weakened — and using an identity
-// that sees nothing would have made those assertions pass vacuously, which is
-// the worse outcome.
-//
-// The FOREMAN identity is still used for the route-guard tests, which need no
-// project access to be meaningful: the guard fires before any data is read.
+// `test/s118-fixture-reachability.live.ts` asserts the matrix — in both
+// directions, since "everyone reaches everything" would otherwise be
+// indistinguishable from a broken `can_view_project()`.
 
 /** Creates a fresh DRAFT change order and returns its id. */
 async function createDraftCo(page: Page, title: string): Promise<string> {
@@ -279,10 +275,11 @@ test.describe('D-54 · the CO write route refuses five roles at the route', () =
 // D-54 step 1 — the control is hidden too. Cosmetic, on top of the guard.
 // ===========================================================================
 test.describe('D-54 step 1 · the CO create control is hidden from the roles the route refuses', () => {
-  test('a crew member gets the LIST but no create control', async ({ page }) => {
-    // CREW, not FOREMAN — see the identity note above. The foreman cannot see
-    // this project at all, so the second assertion would pass vacuously.
-    await signInAs(page, CREW);
+  test('a foreman gets the LIST but no create control', async ({ page }) => {
+    // FOREMAN, restored [S119, #143]. Until that closed this had to run as
+    // crew, because the foreman saw no rows at all and the second assertion
+    // below would have passed for the wrong reason.
+    await signInAs(page, FOREMAN);
     await page.goto(`/m/p/${PROJECT}/changes`);
 
     await expect(page.getByTestId('m-co-new')).toHaveCount(0);
@@ -418,13 +415,13 @@ test.describe('M-31 · write controls are Owner/Admin/PM, on a screen foreman an
     if (!hasControls) await expect(page.getByTestId('m-co-terminal')).toBeVisible();
   });
 
-  test('a crew member READS the change order and gets no write controls at all', async ({
+  test('a foreman READS the change order and gets no write controls at all', async ({
     page,
   }) => {
-    // CREW, not FOREMAN — the foreman cannot reach this project (see the
-    // identity note). Crew is excluded from CO writes on the same footing and
-    // is D-53-admitted to the READ, which is exactly the pair being asserted.
-    await signInAs(page, CREW);
+    // FOREMAN, restored [S119, #143]. This is the pairing D-53/D-51 actually
+    // describe — a foreman is admitted to the READ and refused the WRITES — and
+    // asserting it under crew was a workaround, not the criterion.
+    await signInAs(page, FOREMAN);
     await page.goto(`/m/p/${PROJECT}/changes`);
     await page.getByTestId('m-co-row').first().getByTestId('m-row-link').click();
     await expect(page).toHaveURL(/\/changes\/[0-9a-f-]{36}$/, { timeout: 30_000 });
@@ -474,6 +471,7 @@ test.describe('A-56 · M-14 offers a create control to every role', () => {
   for (const [role, email] of [
     ['owner', OWNER],
     ['project_manager', PM],
+    ['foreman', FOREMAN],
     ['crew_member', CREW],
     ['subcontractor', SUB],
   ] as const) {
@@ -489,15 +487,10 @@ test.describe('A-56 · M-14 offers a create control to every role', () => {
     });
   }
 
-  // ⚠️ FOREMAN AND ADMIN ARE ABSENT FROM THE LOOP, FOR DIFFERENT REASONS.
-  //   foreman — TECH_DEBT #143: cannot reach this project at all, so the
-  //             assertion would pass or fail for reasons unrelated to A-56.
-  //             Covered instead by test/s118-fixture-reachability.live.ts,
-  //             which asserts the gap itself.
-  //   admin   — reaches the project (measured S118) but is not in the mobile
-  //             suite's identity set; adding it is cheap and owed once #143's
-  //             fix makes the six-role loop uniform.
-  // Four of six is stated rather than presented as complete.
+  // FIVE OF SIX. The foreman joined the loop at S119 when #143 closed; admin
+  // is the one still absent, and only because it is not in the mobile suite's
+  // identity set — it does reach the project (measured S118/S119). Stated
+  // rather than presented as complete.
 });
 
 // ===========================================================================
@@ -804,12 +797,11 @@ test.describe('M-34 · verify is Foreman+, enforced in TypeScript and nowhere el
 
   test('A-58 · the member who completed an item cannot verify it', async ({ page }) => {
     test.setTimeout(150_000);
-    // A PM, not the foreman: `verifyPunchItem`'s FOREMAN_PLUS is
-    // owner/admin/project_manager/foreman, so a PM exercises the same branch —
-    // and unlike the foreman identity, the PM can reach this project at all.
-    // (The foreman run failed on `getProject()` returning null, which 404s M-33
-    // before any punch code executes.)
-    await signInAs(page, PM);
+    // FOREMAN, restored [S119, #143]. A PM stood in while the foreman could
+    // not reach the project — same FOREMAN_PLUS branch, but the criterion is
+    // about the completer being refused regardless of which Foreman+ role they
+    // hold, and the foreman is the role the rule is named for.
+    await signInAs(page, FOREMAN);
 
     const id = stamp();
     const itemTitle = `E2E SelfVerify ${id}`;
