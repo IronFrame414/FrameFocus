@@ -248,6 +248,16 @@ test.describe('M-8 · gallery', () => {
     expect(days).toEqual(sorted);
 
     // The fixture's photos were created just now, so the first section is today.
+    //
+    // ⚠️ [S112] THIS ASSERTION IS NOT THE TIMEZONE GUARD — do not treat it as one.
+    // It reads the wall clock, so it agreed with a real bug for twenty hours a
+    // day and only failed inside the ~20:00–24:00 EDT window, where the UTC day
+    // and the company day differ. It PASSED at 22:00 UTC and FAILED at 01:40 UTC
+    // on the next run, against unchanged code. The boundary is pinned properly,
+    // with an injected clock, in `test/m6m-hubs.test.ts` → "[S112] a photo taken
+    // at 21:40 in New York is labelled TODAY". What this line still earns is the
+    // end-to-end half: that the server's day derivation reaches the rendered
+    // label at all.
     await expect(page.getByTestId('m-day-label').first()).toContainText('TODAY');
   });
 

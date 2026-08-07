@@ -34,20 +34,46 @@
 // ============================================================================
 
 /**
- * TODAY as a company-timezone calendar date, `YYYY-MM-DD`.
+ * The calendar date an INSTANT falls on, in `timeZone`, as `YYYY-MM-DD`.
  *
  * `en-CA` is used because it formats as ISO-ordered `YYYY-MM-DD`, which is
  * what makes the result directly comparable to the date-only strings the
  * database returns.
  *
- * `now` is injectable so the timezone boundary is testable without touching
- * the clock.
+ * ---------------------------------------------------------------------------
+ * WHY THIS EXISTS SEPARATELY FROM `companyToday` [S112]
+ * ---------------------------------------------------------------------------
+ *   It is the SAME rule and the SAME `Intl` call — `companyToday` delegates to
+ *   it, so there is still exactly one implementation in the repo. What it adds
+ *   is an honest NAME for the other half of the comparison.
+ *
+ *   S106 moved `todayIso` onto the company timezone and left the value it was
+ *   compared against — `created_at.slice(0, 10)`, the UTC day — untouched.
+ *   That put the two sides of one `===` in two different zones, which is the
+ *   bug S106 was fixing, inverted. It survived because there was a well-named
+ *   helper for "today in the company's zone" and nothing at all for "the day
+ *   THIS timestamp fell on in the company's zone", so the second one kept
+ *   getting hand-rolled as a slice.
+ *
+ *   If you are comparing a stored `timestamptz` to a company day, BOTH sides
+ *   go through this module. Neither side is a slice.
  */
-export function companyToday(timeZone: string, now: Date = new Date()): string {
+export function calendarDayInZone(instant: Date | string, timeZone: string): string {
+  const d = typeof instant === 'string' ? new Date(instant) : instant;
   return new Intl.DateTimeFormat('en-CA', {
     timeZone,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-  }).format(now);
+  }).format(d);
+}
+
+/**
+ * TODAY as a company-timezone calendar date, `YYYY-MM-DD`.
+ *
+ * `now` is injectable so the timezone boundary is testable without touching
+ * the clock.
+ */
+export function companyToday(timeZone: string, now: Date = new Date()): string {
+  return calendarDayInZone(now, timeZone);
 }

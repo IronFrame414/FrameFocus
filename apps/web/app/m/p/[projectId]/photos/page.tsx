@@ -2,7 +2,7 @@ import { getProjectPhotos } from '@/lib/services/photos';
 import { getMyProfile } from '@/lib/services/profiles';
 import { getProject } from '@/lib/services/projects';
 import { getCompanyTimeSettings } from '@/lib/services/company';
-import { companyToday } from '@framefocus/shared/utils/dates';
+import { calendarDayInZone, companyToday } from '@framefocus/shared/utils/dates';
 import { SetMobileHeader } from '../../../mobile-header';
 import { FilterChips, type Chip } from '../../../mobile-ui';
 import { PhotoGrid, type GridPhoto } from './photo-grid';
@@ -77,15 +77,21 @@ export default async function ProjectPhotosPage({
       )
     : filtered;
 
-  // Company-tz calendar day [S106]. The TODAY label is compared against
-  // created_at's date part, so a UTC "today" mislabelled the day's own photos
-  // every evening west of UTC.
-  const todayIso = companyToday((await getCompanyTimeSettings()).timezone);
+  // Company-tz calendar day [S106, COMPLETED S112]. BOTH SIDES OF THIS
+  // COMPARISON MUST LIVE IN THE SAME ZONE — S106 moved `todayIso` here and left
+  // the other side as `created_at.slice(0, 10)`, the UTC day, so from ~20:00
+  // EDT a photo taken tonight was grouped under TOMORROW and never said TODAY.
+  // The A-22d Playwright assertion agreed with the bug for four hours a night
+  // and failed at 01:40 UTC; the boundary is now pinned in a unit test
+  // (m6m-hubs.test.ts) instead of depending on when the suite runs.
+  const timezone = (await getCompanyTimeSettings()).timezone;
+  const todayIso = companyToday(timezone);
 
   // Day is derived once, on the server, so the grid never has to parse dates
   // and the "Today" label cannot disagree between two components.
   const rows: GridPhoto[] = searched.map((p) => {
-    const day = (p.created_at ?? '').slice(0, 10);
+    // NOT `.slice(0, 10)` — that is the UTC day. See the note above `timezone`.
+    const day = p.created_at ? calendarDayInZone(p.created_at, timezone) : '';
     return {
       id: p.id,
       file_name: p.file_name,
