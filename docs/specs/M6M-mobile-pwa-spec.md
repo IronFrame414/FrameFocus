@@ -11,10 +11,18 @@
 > screens, M-31…M-36), **§1** (routes), and **§10** (**A-30c rewritten, not satisfied**; A-51–A-66 new).
 > Full pass notes and the open list: **§11, fourteenth ruling pass**.
 >
-> **Not build-ready for the new scope.** Seven items need a ruling, three items are owed to TECH_DEBT,
-> a **migration is owed** for D-52's subcontractor exclusion, and **TECH_DEBT #127 gates verification** —
-> rebuild-test has no subcontractor identity, so every criterion asserting a sub is refused will skip
-> rather than pass. The build-ready status below applies to the pre-S108 scope.
+> **[S109] Three more rulings — D-54 RESOLVED, D-55, D-56.** Detail screens are **pages**, as a general
+> rule (D-55). Gated screens **hide the control AND block the route** (D-54). **#117 stays UI-only,
+> accepted** (D-56). The output that matters is **§4.11.10b — the block list**: every write action and
+> every detail screen, with who reaches it, who is blocked, and whether the database would refuse them
+> anyway, derived from the policies rather than from prose.
+>
+> **Not build-ready for the new scope.** **Seven items still need a ruling** (three of the original seven
+> closed, three new ones opened by building the block list), **four are filed as tech debt** (#117
+> amended, #140, #141, #142), a **migration is owed** for D-52's subcontractor exclusion — shape in
+> §4.11.10b, **not written** — and **TECH_DEBT #127 gates verification**: rebuild-test has no
+> subcontractor identity, so every criterion asserting a sub is refused will skip rather than pass. The
+> build-ready status below applies to the pre-S108 scope.
 
 > **Status:** **BUILD-READY [S99]. GAP-8 IS CLOSED.**
 >
@@ -213,7 +221,9 @@
 | D-51 | Change orders on mobile       | **FULL LIFECYCLE, OWNER/ADMIN/PM ONLY — creation through send-for-signature.** [S108, Josh] **Activates D-45's recorded intent rather than introducing it.** **D-26 is AMENDED, not reversed:** M-13's *list* still renders no `net_delta` for any role, and the author-facing surfaces (M-31, M-32) show the value the author is entering. The write side is already DB-floored to exactly these three roles (`change_orders_insert_authorized` / `_update_authorized`), so unlike the read side this ruling does **not** depend on UI discipline. §4.11.3, §4.11.11, §4.11.12; A-51–A-55. |
 | D-52 | Punch list on mobile          | **CREATE, COMPLETE AND VERIFY — everyone except subcontractors.** [S108, Josh] **Does not change D-16's counter**: verification moves `complete → verified`, and neither state is in `('open','in_progress')`. `punch_list_items` RLS carries **no role floor at all** — the exclusion is service-layer only today, and for `subcontractor` it does not exist anywhere. **A migration is owed and is NOT written here.** §4.11.4, §4.11.13, §4.11.14; A-56–A-59. |
 | D-53 | Detail views                  | **CHANGE ORDERS, TEAM MEMBERS, CONTACTS, FILES AND PHOTOS — everyone except subcontractors.** [S108, Josh] Files means **actually opening the document**; M-16's rows are not tappable today and `getSignedUrl` has **zero call sites under `/m`**. Contacts means **the whole row opens the contact**, not only the `tel:`/`mailto:` buttons. **Photos is already satisfied** — M-9 is the photo detail view and is built. §4.11.6, §4.11.7, §4.11.8, §4.11.11, §4.11.15, §4.11.16; A-60–A-64. |
-| D-54 | Role-gated access on `/m`     | **D-11 IS AMENDED — recorded as a decision, not allowed to arrive silently.** [S108, Josh] _D-11's text, quoted:_ _"**All roles.** No role gate on `/m`."_ **The first clause stands and the second does not:** every role still *gets* mobile, but D-51 and D-53 mean roles no longer all see the same screens. **What a gated screen does for a role that lacks access is PROPOSED here and NOT decided** — three options with a recommendation in §4.11.10a. §4.11.10a; A-65–A-66. |
+| D-54 | Role-gated access on `/m`     | **D-11 IS AMENDED — recorded as a decision, not allowed to arrive silently.** [S108, Josh] _D-11's text, quoted:_ _"**All roles.** No role gate on `/m`."_ **The first clause stands and the second does not:** every role still *gets* mobile, but D-51 and D-53 mean roles no longer all see the same screens. **RESOLVED [S109, Josh] — HIDE AND ACTUALLY BLOCK.** Option A adopted: the control is **hidden** *and* the route is **guarded**. **A hidden button is not a permission** — the URL survives a shared screenshot, a stale PWA cache and a bookmark, so the guard is the gate and hiding is cosmetic on top of it. The full per-surface block list, derived from the policies rather than from prose, is **§4.11.10b**. §4.11.10a, §4.11.10b; A-65–A-66. |
+| D-55 | Detail screens are PAGES      | **A GENERAL RULE, NOT A PER-SCREEN CALL.** [S109, Josh] **Every list row opens its own page with its own route** — punch items (M-34), change orders (M-31), team (M-35), contacts (M-36), files (§4.11.16). No bottom sheets, no expanding rows, no modal-over-list. **Consistent with D-28**, which ruled pages over sheets for the four field-capture screens on the same reasoning: each is deep-linkable and browser-back-able, and none is hosted by `layout.tsx`'s sheet host. **Recorded as a rule so the next detail screen does not re-litigate it** — D-28 settled the question once for capture and was then re-argued for M-34; that is the loop this closes. **M-34 is no longer PROPOSED.** §1; §4.11.14. |
+| D-56 | TECH_DEBT #117 on mobile      | **UI-ONLY IS ACCEPTED, FOR NOW.** [S109, Josh] `change_orders_select_visible` keeps **no role floor and no author scoping**; the Owner/Admin/PM gate on M-31/M-32 lives in the interface. **The exposure, stated plainly rather than implied away: a foreman gets the row from the database — `net_delta`, and the line rows' `total`, `rate`, `unit_cost` and `amount` — and only the interface stops them seeing it.** **The write side needs no migration**: `change_orders_insert_authorized` / `_update_authorized` and both child tables' INSERT/UPDATE/DELETE already carry exactly `owner, admin, project_manager`. **TECH_DEBT #117 amended, not closed.** §4.11.10b, §4.11.11. |
 
 ---
 
@@ -254,7 +264,7 @@ app/m/
   p/[projectId]/punch/page.tsx      M-14  punch list
   p/[projectId]/punch/new/page.tsx            M-33  punch item create  [S108, D-52]
   p/[projectId]/punch/[itemId]/page.tsx       M-34  punch item — complete / verify
-                                          ⚠️ PROPOSED, not ruled — see §4.11.14
+                                          RULED a PAGE [S109, D-55] — not a sheet
   p/[projectId]/deliveries/page.tsx M-15  deliveries  (M-7's Deliveries tile shares this)
   p/[projectId]/deliveries/check-in/page.tsx  M-22  7d  delivery check-in  [S99, D-28]
                                           ONLINE-ONLY (D-6) — never queues; see §4.12.4
@@ -296,6 +306,24 @@ see the note at the end of §3.3.
 **Twelve tiles, nine new routes [S98].** Every tile on M-3 and M-7 resolves to a real mobile screen
 (§4.11). Three tiles reuse a route rather than getting their own — stated in §4.11.10 — and **no tile is
 cut, disabled, or pointed at a desktop page**; D-13 forbids the last of those one layer up.
+
+> ### DETAIL SCREENS ARE PAGES — a general rule **[S109, Josh, D-55]**
+>
+> **Every list row opens its own page with its own route.** Punch items, change orders, team members,
+> contacts, files. **No bottom sheets, no expanding rows, no modal-over-list.**
+>
+> **This is D-28 generalised, not a second ruling with the same content.** D-28 settled pages-versus-
+> sheets for the four field-capture screens and gave two reasons that are not specific to capture:
+> each surface is **deep-linkable and browser-back-able**, and none is hosted by `layout.tsx`'s sheet
+> host. Both apply verbatim to a detail screen. **It is recorded as a rule because it was re-argued** —
+> §4.11.14 proposed M-34 as a page and offered a sheet as the cheaper alternative, which is exactly the
+> re-litigation D-28 should already have foreclosed. **M-34 is ruled: it is a page**, and its
+> `[itemId]` route loses the ⚠️ PROPOSED marker.
+>
+> **What follows for a build.** A detail screen that has no single-row service function needs one written
+> rather than the row passed through from the list — **passing through is what makes a route
+> un-deep-linkable**, and D-55 forbids the outcome, not just the sheet. This is why
+> **`getPunchItem(id)` is owed** (§4.11.14) rather than optional.
 
 **Six new routes, and one deliberate non-route [S108, D-50…D-53].** M-31…M-36 are the write and detail
 surfaces the read-only reversal requires. Three things about the shape of this list are decisions, not
@@ -1534,7 +1562,7 @@ that already exist. **They do not get their own screens**, and building duplicat
 **M-3's Photos tile and M-7's Photos tile are the same screen.** Confirmed rather than assumed: both are
 project-scoped, both bind to `getFiles({ projectId, category: 'photos' })`, and §4.7a governs both.
 
-#### 4.11.10a Role-gated access on `/m` — **D-11 AMENDED [S108, D-54]; the behaviour is PROPOSED, not decided**
+#### 4.11.10a Role-gated access on `/m` — **D-11 AMENDED [S108]; behaviour RULED [S109, D-54]: hide AND block**
 
 _D-11's text, quoted rather than rewritten:_ **_"Who gets mobile — All roles. No role gate on `/m`."_**
 
@@ -1552,10 +1580,35 @@ in D-50's table, and **nothing else** — a build that gates a fourth because "t
 exceeded D-54. §4.11.1's status control in particular is still not offered; D-54 removes its stated
 reason but does not decide it (see the open list).
 
-##### How a gated screen behaves for a role that lacks access — **THREE OPTIONS, RECOMMENDATION, NOT RULED**
+##### How a gated screen behaves — **RULED [S109, Josh]: HIDE AND ACTUALLY BLOCK**
 
-This is the part that needs Josh. The options are not interchangeable and the difference is visible to a
-crew member every day.
+> **Option A adopted, in the form the recommendation asked for: the control is HIDDEN _and_ the route is
+> GUARDED.** Both, always, on every gated surface. **A hidden button is not a permission** — the URL
+> survives a shared screenshot, a stale PWA cache, a bookmark and a typed address bar, so **the guard is
+> the gate and hiding it is cosmetic on top of a real check**.
+>
+> **Two obligations, and a build must do both:**
+>
+> 1. **Hide** — the affordance does not render for a role that lacks it. No disabled state, no tooltip,
+>    no greyed control. Option B's visible-but-refused shape is **rejected**: see the table below.
+> 2. **Block** — the route itself refuses, server-side, before rendering. **This is the part that is
+>    enforcement**, and it is what **A-65** tests. A build that ships only step 1 has shipped no
+>    permission at all.
+>
+> **The block is a server-side check in the page, not middleware.** `/m` is now in the middleware matcher
+> ([S107]), but middleware's redirects are all scoped to `/dashboard` and adding role branches there
+> would put per-route permission logic in a file whose job is session refresh. Each gated page calls
+> `getMyProfile()` (`profiles.ts:35`) and redirects — the pattern `app/m/layout.tsx` already uses for the
+> auth gate, and the pattern **A-48e** already requires for reading a role.
+>
+> **What "redirect" means is fixed by A-66:** the destination must explain itself. A silent bounce to the
+> hub is the failure mode all three options can produce, and it reads as a bug rather than a permission.
+>
+> **The full per-surface list — who is hidden, who is blocked, and what the database would do anyway — is
+> §4.11.10b.** It is derived from the policies, not from this prose.
+
+_The three options are kept below because the ruling is a choice among them, and the reasons B and C were
+rejected are the reasons a later build should not drift back to either._
 
 | | Option | What a crew member sees on M-13 | Cost |
 | - | ------ | ------------------------------- | ---- |
@@ -1563,8 +1616,8 @@ crew member every day.
 | **B** | **Visible but refused** — the control renders, tapping it explains the refusal. | A "New CO" button that says *"Change orders are created by Owners, Admins and Project Managers."* | Honest about the system's shape; discoverable when a role changes. **Advertises a wall** on a screen a crew member cannot act on, every time they open it. |
 | **C** | **Hidden tile** — the whole M-13 tile leaves M-3's grid for ungated roles. | No Change Orders tile at all; M-3's grid is eight tiles for crew, nine for Owner/Admin/PM. | **Breaks A-12's "exactly nine tiles" and D-50's promise that reading a CO stays open to everyone.** Also makes the grid role-dependent, which no criterion currently tolerates. |
 
-**Recommendation: A, with the route guard treated as the real gate and the hidden control as cosmetic.**
-Reasons, in order of weight:
+**Recommendation, ADOPTED [S109]: A, with the route guard treated as the real gate and the hidden control
+as cosmetic.** Reasons, in order of weight:
 
 1. **Only the guard is enforcement.** Hiding a button is not a permission — the route is reachable by
    typing a URL, from a stale PWA cache, or from a link in a shared screenshot. Whatever is ruled, the
@@ -1577,13 +1630,17 @@ Reasons, in order of weight:
    everyone but subcontractors. It is listed because it is the option a build reaches for by instinct,
    and it contradicts a ruling in the same pass.
 
-**Subcontractors are a separate case and A does not cover them.** D-52 and D-53 exclude subs from screens
-the other five roles read, not merely from a control. Whether a sub gets Option A's redirect, Option B's
-message, or something else is **part of the same open question** and is called out again in the open list
-— it is the harder half, because a sub who taps a Punch tile and lands back on the hub with no
-explanation has been given a bug, not a permission.
+**Subcontractors are the harder half, and A extends to them with one addition [S109].** D-52 and D-53
+exclude subs from whole *screens*, not merely from a control, so "hide the button" has nothing to hide —
+**the tile is the affordance**. The ruling applies in the same two steps: **hide the tile** on M-3 for a
+subcontractor, and **block the route**. This is the one place D-54 tolerates what Option C describes, and
+the distinction is worth stating: C was rejected for *crew on M-13*, where D-53 keeps reading open and
+removing the tile would remove a permitted read. For a **sub**, the read is not permitted, so removing the
+tile states the truth rather than hiding a capability. **A-12's "exactly nine tiles" therefore holds for
+five roles and not for subcontractors**, and the criterion needs that carve-out written into it rather
+than discovered — see the open list, which is what remains of this item.
 
-**How the role is read, whichever option is ruled.** `getMyProfile()` (`profiles.ts:35`) returns
+**How the role is read.** `getMyProfile()` (`profiles.ts:35`) returns
 `{ id, role, first_name, last_name }` server-side and is **already the pattern on `/m`** — M-30 uses it
 and **A-48e** exists to keep it a service call rather than an inline query. No new function is needed and
 no new query belongs in a page. **Do not read the role from `getMyMember()`**: `company_members` carries
@@ -1598,6 +1655,107 @@ no new query belongs in a page. **Do not read the role from `getMyMember()`**: `
 > auth identities. **D-52 and D-53's "except subcontractors" is a `get_my_role()` test**, because only a
 > role can be checked at sign-in. A build that tests `member_type` instead will exclude 32 roster
 > members who are not the signed-in user and gate nothing.
+
+#### 4.11.10b The block list — **every gated surface, derived from the policies [S109, D-54]**
+
+**Read this as the authority; the prose elsewhere is commentary on it.** Every row was checked against the
+migration or route file named in it. **"DB refuses" means the database would reject the operation even if
+the UI were bypassed entirely** — a `curl` with the user's token. Where nothing refuses, the row says so.
+
+**Legend.** ✅ reach it · 🚫 hidden **and** route-blocked (D-54's two steps) · **DB** = database also
+refuses · **UI-ONLY** = the interface is the only thing stopping them.
+
+##### Write actions
+
+| Action | Reaches it | Hidden + blocked from | Would the DB refuse them? | The policy that does it |
+| ------ | ---------- | --------------------- | ------------------------- | ----------------------- |
+| **Create / edit a CO** (M-32) — `createChangeOrder`, `updateChangeOrder` | owner, admin, project_manager | foreman, crew_member, **subcontractor** | **YES — DB** | `change_orders_insert_authorized` / `change_orders_update_authorized`, both `get_my_role() = ANY (owner, admin, project_manager)` — `20260704215000_module5_5d_change_orders.sql:339-351` |
+| **Add / edit / delete CO line items** (M-32) | owner, admin, project_manager | foreman, crew_member, subcontractor | **YES — DB** | `change_order_line_items_{insert,update,delete}_authorized`, same three-role array — `:366-386` |
+| **Add / edit / delete CO line rows** (M-32) | owner, admin, project_manager | foreman, crew_member, subcontractor | **YES — DB** | `change_order_line_rows_{insert,update,delete}_authorized`, same array — `:402-421` |
+| **Send a CO for signature** (M-31) — `sendChangeOrder` | owner, admin, project_manager | foreman, crew_member, subcontractor | **YES — route, 403** | `app/api/change-orders/[id]/send/route.ts:51` reads `profiles.role` and returns 403. Plus the underlying UPDATE is DB-floored as above. |
+| **Void a CO** (M-31) — `voidChangeOrder` | owner, admin, project_manager | foreman, crew_member, subcontractor | **YES — route, 403** | `app/api/change-orders/[id]/void/route.ts:31` — same check, 403; also 409 on a bad status |
+| **Create a punch item** (M-33) — `createPunchItem` | owner, admin, project_manager, foreman, crew_member | **subcontractor** | **NO — UI-ONLY** | `punch_list_items_insert_authenticated` requires only `company_id` + `can_view_project()` — **no role arm** (`20260704214000_module5_5c_punch_lists.sql:197-202`). **`createPunchItem` carries no role check either.** |
+| **Create a punch LIST** (M-33, when a project has none) — `createPunchList` | same five | **subcontractor** | **NO — UI-ONLY** | `punch_lists_insert_authenticated`, same two arms, no role — `:169-174`. **Closing punch items without closing lists leaves a sub a way in.** |
+| **Complete a punch item** (M-34) — `completePunchItem` | same five | **subcontractor** | **NO — UI-ONLY** | `punch_list_items_update_authenticated` — `company_id` + (`can_view_project()` OR assignee), **no role arm** (`:204-215`). **`completePunchItem` carries no role check**; it enforces only the photo gate. |
+| **Verify a punch item** (M-34) — `verifyPunchItem` | owner, admin, project_manager, foreman | **crew_member**, **subcontractor** | **NO — UI-ONLY** | Same policy as above. The **Foreman+** floor, the `requires_verification` check, the `status = 'complete'` check and the **separate-eyes** rule are **all four in `punch-client.ts:182-211`**, in TypeScript. A direct UPDATE setting `status='verified'` is accepted. |
+
+> **Two things this table makes visible that prose kept hiding.**
+>
+> **1. The change-order half is genuinely enforced and the punch half is not.** Every CO write is refused
+> by the database or by a 403 in a Route Handler. **Every punch write is refused by nothing.** The two
+> rulings read alike in D-50's summary table and are not alike at all.
+>
+> **2. `crew_member` is blocked from verify by the same nothing that blocks a sub.** D-52 grants verify to
+> "everyone except subcontractors", but `verifyPunchItem` enforces **Foreman+**, which excludes crew as
+> well. That is a **conflict between the ruling and the code**, not a gap in the code — see the note
+> under the read table.
+
+##### Detail screens (reads)
+
+| Screen | Reaches it | Hidden + blocked from | Would the DB refuse them? | The policy that does it |
+| ------ | ---------- | --------------------- | ------------------------- | ----------------------- |
+| **M-31 CO detail** — `getChangeOrder(id)` | owner, admin, project_manager, foreman, crew_member | **subcontractor** | **NO — UI-ONLY** | `change_orders_select_visible` = `company_id` + `can_view_project()`. **No role floor, no author scoping** — `:332-337`. **TECH_DEBT #117, accepted UI-only by D-56.** |
+| ↳ **the money on it** — `net_delta`, and each line row's `total`, `rate`, `unit_cost`, `amount` | owner, admin, project_manager | **foreman, crew_member** (D-51), subcontractor | **NO — UI-ONLY** | Parent as above; children `change_order_line_items_select_visible` (`:355-364`) and `change_order_line_rows_select_visible` (`:389-399`) are **also** `can_view_project()` with no role arm. **The exposure is wider than `net_delta` alone.** |
+| ↳ **signing activity** — `getCoSigningSessions` | owner, admin, project_manager | foreman, crew_member, subcontractor | **YES — DB** | `co_signing_sessions_select_manager`, `get_my_role() = ANY (owner, admin, project_manager)` — `:427-433`. **The one CO read that is floored.** |
+| **M-34 punch item** | owner, admin, project_manager, foreman, crew_member | **subcontractor** | **NO — UI-ONLY** | `punch_list_items_select_visible` = `company_id` + (`can_view_project()` OR assignee), no role arm — `:185-195` |
+| **M-35 team-member detail** — `getMember(id)` | owner, admin, project_manager, foreman, crew_member | **subcontractor** | **NO — UI-ONLY** | `company_members_select_authenticated` is `company_id = get_my_company_id()` and **nothing else** — `20260704210000_company_members_foundation.sql:81-83` |
+| **M-36 contact detail** — `getContact(id)` | owner, admin, project_manager, foreman, crew_member | **subcontractor** | **NO — UI-ONLY** | `contacts_select_authenticated` is company + `is_deleted = false`, **no role arm** — `20260101000000_baseline_schema.sql:3267` |
+| **M-16 open a file** — `getSignedUrl` | owner, admin, project_manager, foreman, crew_member | **subcontractor** | **PARTLY — DB** | `files_select_non_client` refuses `client` and floors `contracts`/`change_orders`/`invoices` to owner/admin (+PM for invoices) — `20260728000000_security_rls_96_99.sql:53-73`, mirrored on storage by `project_files_select_non_client`. **A subcontractor passes both** (they are not `client`), so **the sub exclusion specifically is UI-only**; the category floor is real. |
+| **M-9 photo viewer** (already built) | owner, admin, project_manager, foreman, crew_member | **subcontractor** | **NO for the sub exclusion — UI-ONLY** | Same two policies. Photos fall in the *not category-gated* arm, so any non-`client` role with `can_view_project()` passes — **including a sub, deliberately, per D-20/§7a**, which widened four policies *for* subs. **D-53 now excludes them from the viewer while §7a lets them upload and annotate.** See the conflict note. |
+
+##### Three conflicts this table surfaced — **none is a code defect; each is a ruling that needs finishing**
+
+1. **⚠️ D-52 grants verify to crew; the code refuses crew.** `verifyPunchItem`'s `FOREMAN_PLUS` array is
+   `['owner','admin','project_manager','foreman']` (`punch-client.ts:5`) and 5C §4 is cited in its
+   docstring as the source. So D-52's "everyone except subcontractors" and the live behaviour disagree
+   **about crew_member**, and the block list above records the code's answer, not the ruling's. **Which
+   one is right is Josh's call** — either D-52 narrows to Foreman+ for verify, or 5C §4 is being
+   reversed too. Recorded, not resolved.
+2. **⚠️ D-53 excludes subs from the photo viewer; §7a/D-20 exists to let subs use photos.** §7a widened
+   **four** policies specifically so a subcontractor can upload and annotate a photo, and called it the
+   **first build step**. D-53 now hides M-9 from them. A sub who can take and annotate a photo but cannot
+   open one is not obviously what either ruling intended. **Not resolved here.**
+3. **The sub exclusion is UI-only on every single read surface.** Not one of `change_orders`,
+   `punch_list_items`, `company_members`, `contacts` or `files` carries a `subcontractor` role arm on
+   SELECT. D-54's route guard is therefore the *entire* enforcement of D-53.
+
+##### Closing the subcontractor write gap — cost and migration shape (**NOT written**)
+
+**What is broken.** `can_view_project()` is `owner/admin OR is_assigned_to_project()`, and that second arm
+is **role-blind** (`20260704211000_module5_5a_projects.sql:248-262`) — the same property §7a relies on for
+sub photo access. So **an assigned subcontractor can insert and update punch items and punch lists
+today**, and D-52's exclusion exists in neither RLS nor the service layer.
+
+**Shape — copy `20260827000000_expenses_subcontractor_floor.sql` exactly.** That migration added
+`AND public.get_my_role() IS DISTINCT FROM 'subcontractor'::text` to an existing policy, **role arm only,
+every other arm byte-identical**, and its header explains why the author arm stays role-blind. Four
+policies need the same clause, and it must be four rather than two:
+
+| Policy | Object | Why it cannot be skipped |
+| ------ | ------ | ------------------------ |
+| `punch_list_items_insert_authenticated` | `punch_list_items` | The item itself |
+| `punch_list_items_update_authenticated` | `punch_list_items` | Complete and verify are UPDATEs |
+| `punch_lists_insert_authenticated` | `punch_lists` | Otherwise a sub creates a *list* instead — §4.11.13 already notes an item needs a parent list |
+| `punch_lists_update_authenticated` | `punch_lists` | Same reasoning, for renaming |
+
+**`IS DISTINCT FROM`, not `<> `** — `get_my_role()` can return NULL, and `NULL <> 'subcontractor'` is NULL,
+which fails the policy open. The expenses precedent uses `IS DISTINCT FROM` for exactly this reason.
+
+**What it costs.**
+
+- **Cheap in SQL, and reversible.** Four DROP/CREATE pairs, no data change, no column change, no backfill.
+  The same size as §7a's four-policy widening, in the opposite direction.
+- **It does NOT close verify.** Verify is a **column-level, actor-relative** rule — *only these columns,
+  only by not-the-completer* — and **RLS cannot express that**. A row policy that admits an UPDATE admits
+  it for every column. Closing verify properly needs a **BEFORE UPDATE trigger**, which is a materially
+  bigger change and a different decision. **This migration closes gap 2 in §4.11.14 and leaves gap 1 open.**
+- **It cannot be verified on rebuild-test as things stand.** **TECH_DEBT #127** — there is no
+  `subcontractor` profile identity, so the probe that would prove the policy works has no identity to run
+  as. **Seed first (#127), then migrate, then prove it** — migrating blind here means shipping an
+  unexercised policy on the one role the ruling is about.
+- **Check the blast radius on desktop before applying.** These are shared policies, not mobile ones. A sub
+  who legitimately updates punch items through a desktop surface today would stop being able to. Nothing
+  in this spec surveyed the desktop punch UI for sub usage, and **that survey is part of the cost**.
 
 #### 4.11.11 M-31 · Change order detail — `/m/p/[projectId]/changes/[coId]` — **[S108, D-51/D-53]**
 
@@ -1663,10 +1821,24 @@ are Owner/Admin/PM (D-51).** Read and write are separate gates on one screen and
 > that cannot be enforced by RLS (a foreman *reading* an amount), and the half that sounds dangerous
 > (a foreman *creating* a CO) is impossible regardless of what the UI does.
 >
-> **#117's open question is now due, and this pass does not answer it.** §4.11.3 said the
+> **#117 — ANSWERED [S109, Josh, D-56]: UI-ONLY IS ACCEPTED, FOR NOW.** §4.11.3 said the
 > authored-by-scope-versus-assigned-project-scope question "should be answered before the screen is
-> built, not during it." The screen is now in scope, so the debt is due. **It is still open** — see the
-> open list.
+> built, not during it." It is answered, and the answer is **neither** scoping: `change_orders_select_visible`
+> keeps **no role floor and no author scoping**, and the gate stays in the UI. **This unblocks D-51.**
+>
+> **The exposure, accepted with eyes open rather than implied away.** A foreman or a crew member who
+> reaches the row gets it **from the database** — `net_delta`, and each line row's `total`, `rate`,
+> `unit_cost` and `amount` (`change_order_line_rows_select_visible` has no role arm either, `:389-399`).
+> **Only the interface stops them seeing it**, and after D-54 that interface is a route guard rather than
+> a hidden button, which is the difference between a gate and a decoration.
+>
+> **The write side needs no migration and that is why this is tolerable.** `change_orders`,
+> `change_order_line_items` and `change_order_line_rows` all carry `owner, admin, project_manager` on
+> INSERT, UPDATE and DELETE already — see §4.11.10b. **A foreman cannot author, alter or void a CO no
+> matter what the UI does.** What is unenforced is *reading a number*, not *changing one*.
+>
+> **TECH_DEBT #117 is AMENDED, not closed** — the decision is recorded there with this exposure stated,
+> so a later reader finds an accepted risk rather than an oversight.
 
 #### 4.11.12 M-32 · Change order create and edit — `/m/p/[projectId]/changes/new` — **[S108, D-51]**
 
@@ -1695,8 +1867,12 @@ editing a `draft`, reached from M-31's Edit.
 > **must be called after every edit that affects pricing**. A build that writes rows and skips the
 > recalculation leaves `net_delta` at its default of `0` and sends a client a change order worth nothing.
 >
-> **This is a materially bigger screen than "a form with an amount box", and the estimate for D-51
-> should reflect that.** It is flagged, not scoped down — scaling it is Josh's call, not this spec's.
+> **SCOPE CORRECTION, ACCEPTED AND RECORDED [S109, Josh].** This is a materially bigger screen than
+> "a form with an amount box" — **`createChangeOrder` takes no amount, so creating a CO is a three-level
+> editor**. Recorded here as a scope fact rather than left to surprise a build: the estimate for D-51
+> must carry the CO, its line items and its line rows, plus the mandatory
+> `recalculateChangeOrderTotals()` call after every pricing edit. **It is flagged, not scoped down** —
+> scaling it is Josh's call, not this spec's, and no phased subset has been ruled.
 
 > **⚠️ A PM AUTHORING A NON-FIXED-PRICE CO HITS AN RLS FLOOR AND GETS A SILENTLY WRONG TOTAL.**
 > **Verified, pre-existing, and NOT created by this ruling — but D-51 is what puts it in front of a
@@ -1748,20 +1924,23 @@ editing a `draft`, reached from M-31's Edit.
 
 #### 4.11.14 M-34 · Punch item — complete and verify — `/m/p/[projectId]/punch/[itemId]`
 
-> **⚠️ THIS ROUTE IS PROPOSED, NOT RULED.** D-52 grants complete and verify; **D-53's detail-view list
-> does not name punch items**, so no surface was ruled to host them. It is proposed rather than assumed
-> because the two actions cannot honestly live on a list row: **completing** may require a photo
+> **✅ RULED A PAGE [S109, Josh, D-55].** _The S108 text, quoted:_ _"⚠️ THIS ROUTE IS PROPOSED, NOT
+> RULED … **Alternative:** both actions as a bottom sheet over M-14 — cheaper, but D-28 ruled pages over
+> sheets for the capture screens and this is the same class of surface. **Josh's call.**"_
+>
+> **The sheet alternative is withdrawn.** D-55 makes pages the general rule for **every** detail screen,
+> so M-34 never needed a separate call — D-28 had already answered it, and re-opening the question is
+> precisely the loop D-55 exists to close. The reasons the proposal gave still hold, but they are now the
+> rule's illustration rather than its argument: **completing** may require a photo
 > (`requires_completion_photo` blocks the write without one), and **verifying** must show who completed
 > the item so the separate-eyes rule is visible before the tap rather than as an error after it.
-> **Alternative:** both actions as a bottom sheet over M-14 — cheaper, but D-28 ruled pages over sheets
-> for the capture screens and this is the same class of surface. **Josh's call.**
 
-- **Source: NO SERVICE FUNCTION EXISTS.** Verified against `punch.ts`'s four exports — there is
-  **`getPunchLists(projectId)` and no `getPunchItem(id)`**. Stated rather than assumed: this is the D-19
-  precedent and the D-44 precedent, where the spec names the gap instead of binding to something
-  approximate. Either add `getPunchItem(id)`, or pass the item through from M-14's already-loaded set and
-  accept that the route is then not deep-linkable — **which contradicts D-28's deep-linkability rule**,
-  so the function is the better answer.
+- **Source: NO SERVICE FUNCTION EXISTS — and D-55 makes writing one MANDATORY rather than preferable.**
+  Verified against `punch.ts`'s four exports: there is `getPunchLists(projectId)` and **no
+  `getPunchItem(id)`**. Stated rather than assumed — the D-19 and D-44 precedent, where the spec names
+  the gap instead of binding to something approximate. **The workaround is now foreclosed:** passing the
+  item through from M-14's already-loaded set makes the route un-deep-linkable, and **D-55 forbids that
+  outcome, not merely the sheet**. `getPunchItem(id)` is owed.
 - **Complete:** `completePunchItem(item, completionPhotoFileId?)` (`punch-client.ts:146`). It enforces the
   photo gate itself and returns a plain message. Capturing the photo is §6's existing camera path.
 - **Verify:** `verifyPunchItem(item, userRole)` (`punch-client.ts:182`). It enforces **Foreman+**,
@@ -3990,7 +4169,7 @@ shell checks. Two of these deserve their mechanism spelled out because the asser
 
 **House rule.** Every fix still needs a failing-then-passing assertion. Under D-18 that rule is now
 satisfiable for every criterion in §10 except A-26, which is manual by nature.
-## §11 — Decision register (D-1…D-54; **five new [S108]**, seven items open — see the fourteenth pass)
+## §11 — Decision register (D-1…D-56; **five new [S108], three [S109]**; seven items open — fifteenth pass)
 
 > **[S108] Fourteenth ruling pass — D-50…D-54, the read-only reversal.** The header below counted
 > "twenty-nine ruled [S98–S99]; one open, out of scope" and had already fallen behind by four passes
@@ -4436,19 +4615,16 @@ rather than bound to something approximate — the D-19 and D-44 precedent:
 | A privileged CO totals path | A PM recalculating a `cost_plus` / `time_and_materials` CO | **Owed as TECH_DEBT.** Fix shape exists: `invoice-derivation-server.ts` |
 | A `subcontractor` role floor on punch | D-52's exclusion | **Migration owed.** Precedent: `20260827000000_expenses_subcontractor_floor.sql` |
 
-#### Still open after the fourteenth pass — **these need a ruling before build**
+#### Still open after the fourteenth pass — **as amended by the fifteenth [S109]**
 
-1. **⚠️ What a gated screen does for a role that lacks access — D-54, the largest open item.** Three
-   options in §4.11.10a with a recommendation (**A**, hidden control over a real route guard).
-   **Subcontractors are the harder half** and are not covered by the recommendation: D-52/D-53 exclude
-   them from whole *screens*, not merely from controls.
-2. **⚠️ TECH_DEBT #117's scoping question is now DUE.** §4.11.3 said it "should be answered before the
-   screen is built, not during it" — the screen is now in scope and the question is still open:
-   **authored-by scope versus assigned-project scope** on `change_orders`. D-51 is its second consumer.
-   **Do not "finish" #117 by flooring `change_orders` SELECT** without reading it: the obvious fix breaks
-   CO authoring for PMs, which D-51 has just made a mobile requirement.
-3. **Is M-34 a page, a sheet, or neither?** The route is **proposed, not ruled** — D-53's detail list does
-   not name punch items, so D-52's complete and verify were granted with no surface to host them.
+1. ~~**What a gated screen does for a role that lacks access — D-54.**~~ **CLOSED [S109, D-54]: hide AND
+   block.** Option A adopted, with the route guard as the real gate. Subcontractors extend it by hiding
+   the **tile** rather than a control. §4.11.10a; block list in §4.11.10b.
+2. ~~**TECH_DEBT #117's scoping question is now DUE.**~~ **CLOSED [S109, D-56]: UI-only accepted, for
+   now.** Neither authored-by nor assigned-project scoping is adopted; `change_orders_select_visible` is
+   unchanged and the gate stays in the UI, with the exposure stated in §4.11.11 and in #117.
+3. ~~**Is M-34 a page, a sheet, or neither?**~~ **CLOSED [S109, D-55]: a page**, by the general rule —
+   and the question should not have been reopened, since D-28 had already answered it.
 4. **Should M-32 offer `fixed_price` only** until the PM/`instrument_rates` collision is resolved?
    Proposed in §4.11.12; not ruled.
 5. **Which punch list does a mobile-created item land in** when a project has none, or has several?
@@ -4457,16 +4633,64 @@ rather than bound to something approximate — the D-19 and D-44 precedent:
    roles reach" is no longer the rule — but **removing a reason is not making a decision**, and it stays
    cut until ruled.
 7. **Does the verify column-rule get a DB floor?** Separate from and larger than gap 2 in §4.11.14: RLS
-   cannot express "only these columns, only by not-the-completer" without a trigger.
+   cannot express "only these columns, only by not-the-completer" without a trigger. **The §4.11.10b
+   migration does NOT close this** — it closes the row-level sub gap and leaves this one open.
+8. **⚠️ NEW [S109] — D-52 says crew may verify; the code says Foreman+.** `verifyPunchItem`'s
+   `FOREMAN_PLUS` array excludes `crew_member`, citing 5C §4. Either D-52 narrows to Foreman+ for verify,
+   or 5C §4 is being reversed too. **§4.11.10b records the code's answer, not the ruling's**, because
+   guessing between them in a spec is worse than naming the conflict.
+9. **⚠️ NEW [S109] — D-53 hides the photo viewer from subcontractors; §7a/D-20 exists to give subs
+   photos.** §7a widened four policies as the **first build step** so a sub could upload and annotate.
+   D-53 now excludes them from M-9. **Which ruling gives way is not obvious and is not decided here.**
+10. **NEW [S109] — A-12's "exactly nine tiles" needs a subcontractor carve-out written into it.** D-54
+    hides tiles rather than controls for subs, so the M-3 grid is role-dependent for exactly one role.
+    The criterion currently tolerates no such variance and would fail a correct build.
 
-#### Owed to TECH_DEBT by this pass — raised here, filed separately
+#### Owed to TECH_DEBT by this pass — **FILED [S109]**
 
-- **A PM recalculating a non-fixed-price CO reads `instrument_rates` and gets zero rows, silently.**
-  Pre-existing and true of desktop; D-51 puts it on a phone. §4.11.12.
-- **`/api/files/signed-url` answers 500 where CLAUDE.md requires 401/403, and logs nothing.**
+- **#117 AMENDED** — D-56 accepts UI-only for `change_orders.net_delta` on mobile, with the exposure
+  stated: a foreman gets the row from the database and only the interface stops them seeing the value.
+  The write side needs no migration. §4.11.10b, §4.11.11.
+- **#140** — a PM recalculating a non-fixed-price CO reads `instrument_rates` and gets **zero rows with
+  no error**, landing a silently wrong total. Pre-existing and true of desktop; D-51 puts it in a PM's
+  hand on a phone. Fix shape already exists: `invoice-derivation-server.ts`. §4.11.12.
+- **#141** — `punch_list_items` and `punch_lists` carry **no role floor at all**, so D-52's subcontractor
+  exclusion exists in neither RLS nor the service layer. Migration shape in §4.11.10b; **not written**.
+- **#142** — `/api/files/signed-url` answers 500 where CLAUDE.md requires 401/403, and logs nothing.
   Pre-existing; D-53 makes it mobile's file-open path. §4.11.16.
-- **`punch_list_items` and `punch_lists` have no role floor at all**, so D-52's subcontractor exclusion
-  exists nowhere. §4.11.14.
+
+---
+
+### Fifteenth ruling pass [S109, Josh] — pages, the block list, and #117 accepted
+
+**Three rulings, and the closure of three of the fourteenth pass's seven open items.**
+
+| # | Question | **Ruling** | Applied in |
+| - | -------- | ---------- | ---------- |
+| 33 | Detail screens: pages or sheets? | **PAGES — a GENERAL RULE, not a per-screen call.** Every list row opens its own route. **D-28 generalised**, recorded so the next detail screen does not re-litigate it. **M-34 is no longer PROPOSED.** | **D-55**; §1; §4.11.14 |
+| 34 | What does a gated screen do? | **HIDE _AND_ ACTUALLY BLOCK.** Option A, both steps. **The route guard is the gate; hiding the control is cosmetic on top of it.** Subs get the **tile** hidden, not a control. | **D-54** resolved; §4.11.10a; **block list §4.11.10b**; A-65–A-66 |
+| 35 | TECH_DEBT #117 on mobile? | **UI-ONLY ACCEPTED, FOR NOW.** No role floor, no author scoping. Exposure stated plainly; **write side needs no migration**. | **D-56**; §4.11.11; #117 amended |
+
+**The block list (§4.11.10b) is the substantive output of this pass**, and deriving it from the policies
+rather than from the previous pass's prose changed the picture in three ways worth naming:
+
+1. **The CO half is enforced; the punch half is enforced by nothing.** Every CO write is refused by the
+   database or by a 403 in a Route Handler. **Every punch write is refused by nothing at all.** D-50's
+   summary table presents the two rulings as alike; they are not.
+2. **The #117 exposure is wider than `net_delta`.** `change_order_line_items_select_visible` and
+   `change_order_line_rows_select_visible` are **also** `can_view_project()` with no role arm, and the
+   rows carry `total`, `rate`, `unit_cost` and `amount`. D-56 accepts that, now stated.
+3. **The subcontractor exclusion is UI-only on _every_ read surface** — `change_orders`,
+   `punch_list_items`, `company_members`, `contacts` and `files` all lack a `subcontractor` arm on
+   SELECT. **D-54's route guard is the entire enforcement of D-53.**
+
+**Two new conflicts surfaced by building the table, and neither is a code defect:**
+
+- **⚠️ D-52 grants verify to crew; `verifyPunchItem` refuses crew** (`FOREMAN_PLUS`, citing 5C §4). The
+  ruling and the code disagree about `crew_member`. **Open item 8.**
+- **⚠️ D-53 hides M-9 from subcontractors while §7a/D-20 exists to let subs upload and annotate photos** —
+  four policies were widened as the **first build step** for exactly that. A sub who can take and
+  annotate a photo but cannot open one is unlikely to be what either ruling intended. **Open item 9.**
 
 #### Testing note — **do not read a green suite as verification of D-52**
 
