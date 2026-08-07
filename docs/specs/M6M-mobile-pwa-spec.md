@@ -1,5 +1,21 @@
 # M6M — Mobile PWA Spec
 
+> ## ⚠️ SCOPE EXPANDED [S108, Josh] — §4.11's read-only rule is REVERSED
+>
+> **Ruled from a real-device test.** Josh used `/m` on a phone and found the section screens are lists
+> with no detail views and no write actions. **§4.11 specified exactly that, so this is a reversal of a
+> ruling, not a defect report** — the build did as it was told.
+>
+> **D-50…D-54**, applied in **§4.11 common rules** (the superseded clause is quoted there), **§4.11.10a**
+> (D-11 amended; gated-screen behaviour **proposed, not decided**), **§4.11.11–§4.11.16** (six new
+> screens, M-31…M-36), **§1** (routes), and **§10** (**A-30c rewritten, not satisfied**; A-51–A-66 new).
+> Full pass notes and the open list: **§11, fourteenth ruling pass**.
+>
+> **Not build-ready for the new scope.** Seven items need a ruling, three items are owed to TECH_DEBT,
+> a **migration is owed** for D-52's subcontractor exclusion, and **TECH_DEBT #127 gates verification** —
+> rebuild-test has no subcontractor identity, so every criterion asserting a sub is refused will skip
+> rather than pass. The build-ready status below applies to the pre-S108 scope.
+
 > **Status:** **BUILD-READY [S99]. GAP-8 IS CLOSED.**
 >
 > _Superseded, quoted rather than rewritten:_ _"DRAFT — **not build-ready end to end.** The shell, photos,
@@ -154,7 +170,7 @@
 | D-8  | Camera                        | **Camera-first, gallery fallback.**                                                                                                                                                                                                                                                                                                                                   |
 | D-9  | Nav scope                     | **NARROWED BY D-37 [S100, Josh] — not reversed.** _Original text, quoted not rewritten:_ _"Contacts, Subs & Vendors, Team **stay** in the hamburger. Finance (Budget, Invoices, Payments, Contracts) is **absent from mobile entirely**."_ The first sentence stands. The second is narrowed: **Expenses is in scope for mobile**; Budget, Invoices, Payments and Contracts remain absent, deferred to v2. Everywhere this spec cites "D-9" to justify cutting a figure, read it as the narrowed rule — see D-37 and §4.13.3. |
 | D-10 | Notifications                 | **Out of scope here.** Web Push on iOS requires an installed PWA, so manifest + icons + service worker are prerequisites. GATED.md Gate 4.                                                                                                                                                                                                                            |
-| D-11 | Who gets mobile               | **All roles.** No role gate on `/m`.                                                                                                                                                                                                                                                                                                                                  |
+| D-11 | Who gets mobile               | **AMENDED BY D-54 [S108] — first clause stands, second does not.** _Original text, quoted not rewritten:_ _"**All roles.** No role gate on `/m`."_ Every role still **gets** mobile — nobody is bounced from `/m`. But D-51 (CO authoring, Owner/Admin/PM) and D-52/D-53 (everything else, minus subcontractors) mean roles **no longer all see the same screens**, which is the stronger reading D-26 and §4.11.1 had both relied on. See **D-54** and §4.11.10a. |
 | D-12 | Landing                       | **Sign-in lands on `/m/timeclock`.** On a successful clock-in, **the redirect follows the segment type the user chose** [restated S98, D-27]: a type that carries a project (`work`, `material_run`, `warranty`) → that project's hub; a type that cannot (`travel`, `shop`, `break`) → the dashboard. _(Original second clause, quoted: "if no project was selected, redirect to the dashboard" — written before D-27 and describing an accident rather than a rule.)_ |
 | D-13 | Timeclock / Logs / Field tabs | **Real mobile screens**, built in this pass (§4.5–§4.7). Not links to desktop pages.                                                                                                                                                                                                                                                                                  |
 | D-14 | Photos badge                  | **Total count only. AMENDED [S98, Josh]: the unseen dot is DEFERRED TO V2.** The number is every photo on the project. _Superseded clause, quoted not rewritten: "with an unseen indicator… an amber dot marks that unseen photos exist for this user."_ No view-tracking table is built. The intended v2 shape is recorded in §9 so it can be added without rework. |
@@ -168,7 +184,7 @@
 | D-22 | Pin shape / schema v2         | **Add a `pin` shape type; `MARKUP_SCHEMA_VERSION` → 2.** [S98, Josh] Composing a pin from circle + text would make one pin two undo steps, contradicting §4.10's per-mark Undo/Redo; dropping Pin would remove what punch and incident work needs most. Additive, and `MarkupViewer` has no consumers. **The pin number is STORED, so deletes leave gaps and `next = max + 1`.** Contract, read/forward compatibility and blast radius in **§4.10a** — the first ruling this session to touch shared code desktop imports. |
 | D-23 | `{m} estimating` count        | **Dropped.** [S98, Josh] The M-2 header shows the active count only. There is no `estimating` project status — `projects_status_check` permits `active, on_hold, complete, archived, cancelled` — and none is added. §4.2; §8a; A-10c. _(Renumbered [S98]: this ruling was previously cited as "D-4", which is the list-screen pattern.)_ |
 | D-25 | ~~Segment type on clock-in~~  | **SUPERSEDED by D-27 [S98, Josh].** _Original text, quoted not deleted:_ _"**Default `work`, switch afterwards.** Clock-in writes `segment_type = 'work'` with no prompt — one tap to start a shift. Changing it is a separate action that closes the open segment and opens a new one, because that is the only shape RLS permits a crew member."_ Withdrawn because `work` requires a project while D-12 and §4.5 contemplate clocking in without one — a collision D-27 dissolves rather than works around. |
-| D-26 | CO value on mobile            | **CUT, for every role including Owner and Admin.** [S98, Josh] `change_orders.net_delta` and every derived money figure stay off M-13. Two reasons, both kept: showing it would introduce the **first role-gated figure anywhere on `/m`**, a pattern this spec has deliberately never had (D-11 puts every role on the same screens); and the column is **UI-gated only, with no DB floor behind it** (TECH_DEBT #117), so a mobile leak would not be caught by RLS. §4.11.3; A-33, A-33c. |
+| D-26 | CO value on mobile            | **SCOPE NARROWED BY D-51 [S108] — the ruling stands, ON THE LIST.** **CUT from M-13 for every role including Owner and Admin** [S98, Josh]: `change_orders.net_delta` and every derived money figure stay off the list, and **A-33/A-33b/A-33c are unchanged**. What no longer holds is the *first* of its two reasons — _"showing it would introduce the **first role-gated figure anywhere on `/m`**, a pattern this spec has deliberately never had (D-11 puts every role on the same screens)"_ — because **D-54 amends D-11** and role-gated figures now exist on M-31/M-32. **The second reason is untouched and is now the sharper one:** the column is **UI-gated only, with no DB floor behind it** (TECH_DEBT #117), so a leak on the *author's* screens would not be caught by RLS either. §4.11.3, §4.11.11's amendment block; A-33, A-33c, A-51, A-53. |
 | D-27 | Segment type on clock-in      | **The user selects the type as part of clocking in.** [S98, Josh] No default, no skippable prompt, no post-hoc switch on the clock-in path — a required choice from whatever `time_segments_type_check` permits. **The project requirement then follows from the type**, which is what dissolves D-25's collision. §4.5, §4.5a. _(Scope note [S99]: D-27 governs the **type**. It says nothing about whether the project row may arrive pre-selected — see §11's open questions.)_ |
 | D-28 | Field-capture screens: route or sheet? | **PAGES.** [S99, Josh] 7b, 7c, 7d and 7e each get a real route under `/m/`. The handoff draws them with ✕ chrome; **that is styling and does not imply a sheet.** Decided once for all four rather than per screen. Routes in §1; screens in §4.12. |
 | D-29 | Hazard → incident escalation  | **CONTEXT ONLY.** [S99, Josh] 7c's hazard toggle offers "File an incident report", which opens a **blank** 7e pre-filled with project and date. **No draft row is written. Nothing persists unless the user submits.** A hazard flag is not an incident. §4.12.3, §4.12.5. |
@@ -190,9 +206,14 @@
 | D-47 | `expenses_select_scoped` is WIDENED | **crew_member and subcontractor JOIN THE ROLE ARRAY.** [S102, Josh] Closes D-43's "everyone views" clause at the database instead of leaving it as intent. **Role array only — every other arm of the policy is byte-identical.** This is a **widening**, so nothing in the Financial Visibility Floor blocks it: an expense is *actual cost*, which the Floor makes visible to every role by design. **What each role gains sight of is stated plainly in §4.13.3** — this is the one ruling in this pass that exposes rows a role could not previously read. Migration `20260825000000`. |
 | D-48 | Location — the D-40 walk-back | **OWNER/ADMIN RESTRICTION SKIPPED. RETENTION DEFERRED.** [S102, Josh] Supersedes **both** halves of D-40. Coordinates stay on `time_clock_sessions_select_scoped`'s **existing rank ladder**, so **a foreman reads a crew member's location** and a PM reads a foreman's — narrower protection than D-40 promised, and §4.12.1a now says so outright rather than implying it. Retention is deferred with its dependency named: **`pg_cron` is not used anywhere in this repo**, so 30-day expiry is a new operational dependency, not a line of SQL. **No migration, and none owed until it is un-deferred.** |
 | D-44 | 7a fallback order with no GPS fix | **RECENTLY-USED.** [S101, Josh] Closes the D-33 open item. **There is no source function for it today** — stated plainly rather than bound to something approximate. The data exists on `time_segments`; the function does not. §4.12.1; A-7l2 rewritten. |
-| D-45 | Change orders on mobile — full lifecycle | **INTENT RECORDED, SCREEN DEFERRED.** [S101, Josh] Owner/Admin/PM will eventually author a CO on mobile end-to-end, creation through send-for-signature. **Not in scope now, and M-13 must not be built in a way that forecloses it.** **Does NOT reverse D-26**, which governs *display on the read-only list*. §4.11.3. |
+| D-45 | Change orders on mobile — full lifecycle | **ACTIVATED BY D-51 [S108] — the deferral is spent.** _Original ruling, quoted:_ _"**INTENT RECORDED, SCREEN DEFERRED.** [S101, Josh] Owner/Admin/PM will eventually author a CO on mobile end-to-end, creation through send-for-signature. **Not in scope now, and M-13 must not be built in a way that forecloses it.**"_ It is in scope now. **Its three prohibitions were honoured**, so the activation is clean and nothing built for M-13 is unpicked. §4.11.3, §4.11.11, §4.11.12. |
 | D-46 | Money format on `/m`           | **ONE FORMAT, FIXED AS A §2 TOKEN.** [S101] `$1,234.56` / `-$1,234.56` / `—` for null. Matches the 15 desktop `style: 'currency'` call sites and the PDF templates' hand-rolled formatter, which agree on every case. Written into **§2** rather than §4.13.3 so the next money screen inherits it. A-50. |
 | D-37 | Expenses on mobile            | **IN SCOPE. D-9 is NARROWED, NOT REVERSED.** [S100, Josh] Expenses gets a real mobile screen (§4.13.3, M-26). **Budget, Invoices, Payments and Contracts stay absent and are deferred to v2** — the exclusion list loses exactly one member and gains nothing. This is the first currency on `/m`, and §4.13.3 states in full what that forces and what it does **not**: unlike D-26's `net_delta`, `expenses_select_scoped` is a **real DB row floor**, and an expense amount is *actual cost*, which the Financial Visibility Floor explicitly makes visible to every role. **The open role question inside that is NOT decided here** — see §4.13.3's "What this forces" and §11's open list. §4.13.3; A-44–A-44f. |
+| D-50 | §4.11's read-only-in-v1 rule  | **REVERSED [S108, Josh] — ruled from a real-device test.** _Superseded clause, quoted not rewritten:_ _"These are **read-only** surfaces in v1 — none is in D-6's offline-write set."_ **The offline half stands; the read-only half does not.** Josh used `/m` on a phone and found the section screens are lists with no detail views and no write actions. **That is exactly what §4.11 specified, so this is a reversal of a ruling, not a defect report.** D-51…D-54 are its four parts. **A-30c is REWRITTEN, not satisfied.** §4.11 common rules; A-30c. |
+| D-51 | Change orders on mobile       | **FULL LIFECYCLE, OWNER/ADMIN/PM ONLY — creation through send-for-signature.** [S108, Josh] **Activates D-45's recorded intent rather than introducing it.** **D-26 is AMENDED, not reversed:** M-13's *list* still renders no `net_delta` for any role, and the author-facing surfaces (M-31, M-32) show the value the author is entering. The write side is already DB-floored to exactly these three roles (`change_orders_insert_authorized` / `_update_authorized`), so unlike the read side this ruling does **not** depend on UI discipline. §4.11.3, §4.11.11, §4.11.12; A-51–A-55. |
+| D-52 | Punch list on mobile          | **CREATE, COMPLETE AND VERIFY — everyone except subcontractors.** [S108, Josh] **Does not change D-16's counter**: verification moves `complete → verified`, and neither state is in `('open','in_progress')`. `punch_list_items` RLS carries **no role floor at all** — the exclusion is service-layer only today, and for `subcontractor` it does not exist anywhere. **A migration is owed and is NOT written here.** §4.11.4, §4.11.13, §4.11.14; A-56–A-59. |
+| D-53 | Detail views                  | **CHANGE ORDERS, TEAM MEMBERS, CONTACTS, FILES AND PHOTOS — everyone except subcontractors.** [S108, Josh] Files means **actually opening the document**; M-16's rows are not tappable today and `getSignedUrl` has **zero call sites under `/m`**. Contacts means **the whole row opens the contact**, not only the `tel:`/`mailto:` buttons. **Photos is already satisfied** — M-9 is the photo detail view and is built. §4.11.6, §4.11.7, §4.11.8, §4.11.11, §4.11.15, §4.11.16; A-60–A-64. |
+| D-54 | Role-gated access on `/m`     | **D-11 IS AMENDED — recorded as a decision, not allowed to arrive silently.** [S108, Josh] _D-11's text, quoted:_ _"**All roles.** No role gate on `/m`."_ **The first clause stands and the second does not:** every role still *gets* mobile, but D-51 and D-53 mean roles no longer all see the same screens. **What a gated screen does for a role that lacks access is PROPOSED here and NOT decided** — three options with a recommendation in §4.11.10a. §4.11.10a; A-65–A-66. |
 
 ---
 
@@ -220,12 +241,20 @@ app/m/
   subs/page.tsx                     M-27  subs & vendors directory
   team/page.tsx                     M-28  company team roster
   contacts/page.tsx                 M-29  company contacts directory
+  contacts/[contactId]/page.tsx     M-36  contact detail        [S108, D-53]
   settings/page.tsx                 M-30  settings — READ-ONLY (§4.13.7)
+  team/[memberId]/page.tsx          M-35  team-member detail    [S108, D-53]
+                                          reached from BOTH M-28 and M-18 — one route, see §4.11.15
   p/[projectId]/page.tsx            M-3   project sections hub
   p/[projectId]/overview/page.tsx   M-11  overview — dates, scope, schedule stepper, status
   p/[projectId]/schedule/page.tsx   M-12  schedule — the project's calendar events
-  p/[projectId]/changes/page.tsx    M-13  change orders — NO MONEY (§4.11.3)
+  p/[projectId]/changes/page.tsx    M-13  change orders — list stays NO MONEY (§4.11.3, D-26)
+  p/[projectId]/changes/new/page.tsx          M-32  CO create+edit   [S108, D-51] OWNER/ADMIN/PM
+  p/[projectId]/changes/[coId]/page.tsx       M-31  CO detail + send [S108, D-51/D-53]
   p/[projectId]/punch/page.tsx      M-14  punch list
+  p/[projectId]/punch/new/page.tsx            M-33  punch item create  [S108, D-52]
+  p/[projectId]/punch/[itemId]/page.tsx       M-34  punch item — complete / verify
+                                          ⚠️ PROPOSED, not ruled — see §4.11.14
   p/[projectId]/deliveries/page.tsx M-15  deliveries  (M-7's Deliveries tile shares this)
   p/[projectId]/deliveries/check-in/page.tsx  M-22  7d  delivery check-in  [S99, D-28]
                                           ONLINE-ONLY (D-6) — never queues; see §4.12.4
@@ -267,6 +296,21 @@ see the note at the end of §3.3.
 **Twelve tiles, nine new routes [S98].** Every tile on M-3 and M-7 resolves to a real mobile screen
 (§4.11). Three tiles reuse a route rather than getting their own — stated in §4.11.10 — and **no tile is
 cut, disabled, or pointed at a desktop page**; D-13 forbids the last of those one layer up.
+
+**Six new routes, and one deliberate non-route [S108, D-50…D-53].** M-31…M-36 are the write and detail
+surfaces the read-only reversal requires. Three things about the shape of this list are decisions, not
+conveniences:
+
+- **`changes/new` and `changes/[coId]` sit beside `changes/`, exactly as D-45 demanded.** §4.11.3 warned
+  "do not build the route as a leaf" for precisely this moment; the warning was honoured and no
+  restructure is owed.
+- **There is ONE member-detail route and ONE contact-detail route**, not one per entry point. M-18
+  (project team) and M-28 (company team) both list `company_members` rows, so both resolve to
+  `/m/team/[memberId]`; M-17 and M-29 both resolve to a `contacts.id`, so both resolve to
+  `/m/contacts/[contactId]`. A project-scoped duplicate would be §4.11.10's mistake repeated.
+- **Opening a file gets NO route.** M-16 tapping a row resolves to a signed storage URL, not to a mobile
+  document viewer — see §4.11.16. A `files/[fileId]` route would imply a rendering surface this spec has
+  not designed and cannot design for arbitrary MIME types.
 
 **Entry.** A viewport or user-agent check is **not** the router. Mobile is entered by URL (`/m`) and by
 the installed PWA's `start_url`. A desktop browser opening `/m` gets the mobile shell; that is intended
@@ -1281,12 +1325,45 @@ opens a desktop page. Common rules, stated once so the nine subsections below st
   **mono-for-every-number** rule apply unchanged.
 - **App bar** on every screen: back chevron (never a hamburger — §3.1), the section name, and a mono
   sub-line `PRJ-### · {client}`. The tab bar stays (§3.2), Projects active.
-- **Offline (§5.4).** These are **read-only** surfaces in v1 — none is in D-6's offline-write set. Each
-  renders the app-wide offline strip plus **its own empty state**; none spins indefinitely, and none shows
-  stale data without the strip. Where a screen offers a write, that write is **disabled offline with a
-  plain message**, exactly as delivery check-in is (D-6) — it does **not** silently queue.
+- **Offline (§5.4).** Each screen renders the app-wide offline strip plus **its own empty state**; none
+  spins indefinitely, and none shows stale data without the strip. Where a screen offers a write, that
+  write is **disabled offline with a plain message**, exactly as delivery check-in is (D-6) — it does
+  **not** silently queue.
 - **Every figure below is bound to a named service function, or CUT.** Nothing is derived to fill a gap;
   the D-19 precedent applies throughout.
+
+> ### ⚠️ READ-ONLY-IN-V1 IS REVERSED — **[S108, Josh, D-50]**
+>
+> _The clause that used to open the Offline bullet above, quoted rather than silently rewritten:_
+>
+> > _"**Offline (§5.4).** These are **read-only** surfaces in v1 — none is in D-6's offline-write set."_
+>
+> **The offline half of that sentence stands and the read-only half does not.** None of these screens is
+> in D-6's offline-write set, and D-51…D-53 do not add one — every write introduced by this pass is
+> **online-only**, in delivery check-in's shape (D-6), and the "disabled offline with a plain message"
+> rule above is now load-bearing rather than hypothetical.
+>
+> **Why this is a reversal and not a bug report.** Josh used `/m` on a phone and found the section
+> screens are lists with no detail views and no write actions. **That is what §4.11 specified.** The
+> screens implement the spec correctly; the spec was wrong about what a field app needs, and the
+> reversal is recorded here rather than filed as a defect against a build that did as it was told.
+>
+> **What is now writable, and by whom** — each is ruled separately, and the roles are NOT uniform:
+>
+> | Surface | Action | Who | Ruling |
+> | ------- | ------ | --- | ------ |
+> | M-13 / M-31 / M-32 | Change orders: create → edit → **send for signature** | **Owner, Admin, PM** | D-51 |
+> | M-14 / M-33 / M-34 | Punch items: create, complete, **verify** | **Everyone except subcontractors** | D-52 |
+> | M-31, M-35, M-36, M-16, M-9 | Detail views (read) | **Everyone except subcontractors** | D-53 |
+>
+> **Everything not in that table stays read-only.** M-11's status control is still not offered
+> (§4.11.1), M-15 still offers no check-in (§4.11.5, D-6), M-18 still offers no assign/unassign
+> (§4.11.8), M-19 still offers no incident reporting on the list (§4.11.9 — M-23 owns that), and M-12
+> offers nothing. **A screen not named above has not been un-ruled**, and a build that adds a write to
+> one has exceeded D-50.
+>
+> **D-11 no longer holds unqualified** — see **§4.11.10a**, which records the amendment and proposes,
+> without deciding, what a gated screen does for a role that lacks access.
 
 #### 4.11.1 M-11 · Overview — `/m/p/[projectId]/overview`
 
@@ -1299,7 +1376,7 @@ next" card. M-11 deliberately carries **none of those again** and holds what M-3
 - **Scope** — `scope_summary` and `scope_sections` (`:109-110`).
 - **CUT: every money KPI.** The desktop Overview's Revised Contract, Cost to Date and Projected Margin are all absent. Contract value is Owner/Admin-only under the Financial Visibility Floor, and D-9 keeps finance off mobile entirely.
 - **CUT: `internal_notes`.** No mobile requirement was stated for it and it is not field-facing. Not a data gap — a scope decision, recorded so nobody "restores" it.
-- **Status change is NOT offered here.** The desktop `StatusControl` is Owner/Admin/PM; putting a lifecycle transition on a phone that all six roles reach (D-11) is a permission surface this spec has not designed. Read-only.
+- **Status change is NOT offered here.** The desktop `StatusControl` is Owner/Admin/PM; putting a lifecycle transition on a phone that all six roles reach (D-11) is a permission surface this spec has not designed. Read-only. **[S108] The stated reason is gone — D-54 amends D-11, and §4.11.10a designs exactly that permission surface for M-31/M-32. The cut STANDS anyway: removing a reason is not making a decision.** Listed as open item 6 in §11's fourteenth pass.
 
 #### 4.11.2 M-12 · Schedule — `/m/p/[projectId]/schedule`
 
@@ -1311,11 +1388,11 @@ The project's calendar, as a list — not a grid. A month grid at 402px cannot c
 - **Inherits `schedule_entries_select_scoped`** (`20260704213000_module5_5b_tasks_scheduling.sql:406-414`): crew and subcontractors see only their **own** general entries, while tasks and inspections are project-scoped for everyone. Same caveat as §4.3, same reason, and M-12 must not work around it.
 - **CUT: a Gantt or dependency view.** `getDependencies` (`tasks.ts:45`) exists, but nothing in the handoffs specced a mobile dependency visualisation and it is not derivable from the locked patterns.
 
-#### 4.11.3 M-13 · Change Orders — `/m/p/[projectId]/changes` — **NO MONEY**
+#### 4.11.3 M-13 · Change Orders — `/m/p/[projectId]/changes` — **THE LIST: NO MONEY** _(unchanged by D-51; the author's screens are §4.11.11–§4.11.12)_
 
 - **Source:** `getChangeOrders(projectId)` (`change-orders.ts:61`), which returns `ChangeOrderWithAuthor`.
 - Rows use the project-card geometry: `co_number` mono, `title` 17px/700, a **status pill carrying text** (`CO_STATUS_LABELS`, `change-orders.ts:49`, over `draft | sent | signed | voided`), the author's `display_name`, and mono `sent_at` / `signed_at` where set.
-- **`net_delta` and every dollar figure are CUT from mobile.**
+- **`net_delta` and every dollar figure are CUT from M-13.** _(**[S108] "from mobile" narrowed to "from M-13" by D-51.** The list is unchanged; the author's M-31/M-32 show the value, Owner/Admin/PM only. The reasoning block below keeps its original wording — see §4.11.11's amendment for which of its two arguments survived.)_
 
 > **Why this is not a stop, and the call I made inside it.** The audit flagged a possible collision with
 > D-9. There isn't one: **a change order is perfectly meaningful without its value** — number, title,
@@ -1330,6 +1407,22 @@ The project's calendar, as a list — not a grid. A month grid at 402px cannot c
 > **Reversible by ruling** — if Owner/Admin should see CO values on mobile, that is a role-gating decision
 > for Josh, not a build detail.
 
+> ### ✅ ACTIVATED [S108, D-51] — the deferral below is spent
+>
+> **D-45's intent is now in scope.** Owner, Admin and PM author a change order on mobile end-to-end,
+> creation through send-for-signature: **M-32** (`changes/new`, §4.11.12) and **M-31**
+> (`changes/[coId]`, §4.11.11). **This activates a recorded intent rather than introducing one** — the
+> three "must not do" warnings below were written for this moment and were honoured, so nothing built
+> for M-13 has to be unpicked.
+>
+> **D-26 is AMENDED, not reversed. M-13's list is unchanged.** See the amendment block that follows
+> §4.11.11 for exactly what the author sees and what the list still hides.
+>
+> _The S101 deferral is kept below verbatim, because its three prohibitions are the reason this is a
+> clean activation and a later reader should be able to see that they were met._
+>
+> ---
+>
 > **INTENT RECORDED [S101, D-45] — full CO lifecycle on mobile, LATER. The screen is DEFERRED and is not
 > in scope now.** Josh's direction: **Owner, Admin and PM will eventually author a change order on
 > mobile end-to-end — creation through send-for-signature.**
@@ -1368,6 +1461,12 @@ The project's calendar, as a list — not a grid. A month grid at 402px cannot c
 - Rows: `title` 17px/700, mono `location · trade` where set, a status pill with text (`PUNCH_STATUS_LABELS`, `punch.ts:24`), a priority chip where `priority` is set, and the assignee's `display_name`.
 - **The D-16 divergence is inherited, not re-decided.** An item at `complete` awaiting verification appears under **All** and under neither **Open** nor any closed filter — because `isItemClosed()` (`punch.ts:36`) and D-16's "open" are not complements (§4.3). M-14 must not invent a third definition to tidy this up.
 - Photo links: `reference_photo_file_id` / `completion_photo_file_id` open M-9 (D-15, read-only join).
+- **WRITES ADDED [S108, D-52] — everyone except subcontractors.** M-14 gains a primary **New item**
+  control (→ **M-33**, §4.11.13), and each row opens **M-34** (§4.11.14) for complete and verify.
+  **The chips, the counts and the D-16 divergence above are unchanged** — see §4.11.14's D-16 check,
+  which confirms verification touches no counter because `complete → verified` leaves the
+  `('open','in_progress')` set on both sides. **`punch_list_items` carries no DB role floor and a
+  migration is owed** — §4.11.14 states the gap in full and it is not restated here.
 
 #### 4.11.5 M-15 · Deliveries — `/m/p/[projectId]/deliveries`
 
@@ -1382,6 +1481,11 @@ The project's calendar, as a list — not a grid. A month grid at 402px cannot c
 - **Source:** `getFiles({ projectId })` (`files.ts:29`), which filters `is_deleted = false` by default.
 - **Photos are excluded** — `category = 'photos'` belongs to M-8. M-16 lists the document categories: `plans`, `permits`, `contracts`, `daily_logs`, `receipts`, `other`, plus `invoices` and `change_orders` where RLS returns them.
 - Rows: `file_name` 17px/700, a mono category label, mono `created_at`, and a mono file size. Tapping opens the signed URL (`getSignedUrl`, `files.ts:70`).
+- **⚠️ THE PRECEDING SENTENCE WAS NEVER TRUE OF THE BUILD, and D-53 is what makes it true [S108].**
+  `getSignedUrl` has **zero call sites under `app/m/`** and M-16's rows are non-tappable `ListRow`s.
+  The open path — a Route Handler rather than a render-time link, inline rather than `?download=`, and
+  RLS as the only gate — is specified in **§4.11.16**, together with a flagged pre-existing defect in
+  `/api/files/signed-url`'s error contract. **Readable by everyone except subcontractors (D-53).**
 - **RLS does the gating, not the UI.** `files_select_non_client` (`20260728000000_security_rls_96_99.sql:53-75`) already restricts `contracts`, `change_orders` and `invoices` to Owner/Admin plus the PM-invoices carve-out. M-16 renders what it is given and **must not add a second role check** — a UI filter that disagrees with RLS is how a "missing file" bug that is really a permission becomes unexplainable.
 - **CUT: upload.** Camera capture is §6's job and files to `photos`. General document upload from a phone was never specced.
 
@@ -1391,6 +1495,10 @@ The project's calendar, as a list — not a grid. A month grid at 402px cannot c
 - 58px rows: `first_name last_name` (or `company_name`), a mono `contact_type` label, and the role on this project from the junction row.
 - **`phone` and `email` are tap-to-act** — `tel:` and `mailto:`. This is the screen's whole reason to exist on a phone; a list that only displays a number wastes the device.
 - Contacts and Subs & Vendors stay distinct (D-9 keeps both in the hamburger at company scope); M-17 is the **project-scoped** view and does not duplicate them.
+- **THE ROW NOW OPENS THE CONTACT [S108, D-53]** — **M-36**, `/m/contacts/[contactId]` (§4.11.16), the
+  same route M-29's rows use. **The `tel:`/`mailto:` circles stay** (A-37 is not weakened): the row gains
+  a navigation target *around* two existing buttons, and all three must clear §2's 44px floor without
+  swallowing one another. **Everyone except subcontractors.**
 
 #### 4.11.8 M-18 · Team — `/m/p/[projectId]/team`
 
@@ -1398,6 +1506,11 @@ The project's calendar, as a list — not a grid. A month grid at 402px cannot c
 - 58px rows: initials avatar tinted with `schedule_color` (falling back to §2's amber when null), `display_name`, and a mono `member_type` label — `crew` or `subcontractor`.
 - **CUT: pay rates, cost rates, burden.** `instrument_rates` is DB-enforced Owner/Admin (`20260806000000_financial_rls_floor.sql` §1). Not a UI decision — the rows are not readable.
 - **CUT: assign/unassign.** Managing assignments is not a field task and no handoff specced it.
+- **THE ROW NOW OPENS THE MEMBER [S108, D-53]** — **M-35**, `/m/team/[memberId]` (§4.11.15), the same
+  route M-28's rows use, because both screens list `company_members` rows. **The cuts above survive on
+  the detail screen** — no rates, no management controls, no `profiles.role` — and the "which projects
+  is this member on" content a detail screen invites is **CUT**, because no member-first assignment
+  function exists. **Everyone except subcontractors.**
 
 #### 4.11.9 M-19 · Safety — `/m/p/[projectId]/safety`
 
@@ -1420,6 +1533,364 @@ that already exist. **They do not get their own screens**, and building duplicat
 
 **M-3's Photos tile and M-7's Photos tile are the same screen.** Confirmed rather than assumed: both are
 project-scoped, both bind to `getFiles({ projectId, category: 'photos' })`, and §4.7a governs both.
+
+#### 4.11.10a Role-gated access on `/m` — **D-11 AMENDED [S108, D-54]; the behaviour is PROPOSED, not decided**
+
+_D-11's text, quoted rather than rewritten:_ **_"Who gets mobile — All roles. No role gate on `/m`."_**
+
+**The first clause stands. The second does not.** Every role still gets mobile: nobody is bounced from
+`/m`, no role lands somewhere else, and the shell, the tab bar and the twelve section screens are
+unchanged for everybody. What breaks is the stronger reading D-11 had acquired — *every role sees the
+same screens* — which D-26 cited as a reason to cut CO value (§4.11.3) and §4.11.1 cited as a reason not
+to offer a status control. **D-51 restricts CO authoring to Owner/Admin/PM and D-52/D-53 exclude
+subcontractors, so that reading is now false.** Recording it here is the point: the amendment would
+otherwise arrive as an emergent property of two unrelated rulings, and the next reader would find
+§4.11.1 and §4.11.3 citing a principle the build had quietly abandoned.
+
+**What this does NOT license.** It is not a general permission to gate. Three surfaces are gated, named
+in D-50's table, and **nothing else** — a build that gates a fourth because "there is a pattern now" has
+exceeded D-54. §4.11.1's status control in particular is still not offered; D-54 removes its stated
+reason but does not decide it (see the open list).
+
+##### How a gated screen behaves for a role that lacks access — **THREE OPTIONS, RECOMMENDATION, NOT RULED**
+
+This is the part that needs Josh. The options are not interchangeable and the difference is visible to a
+crew member every day.
+
+| | Option | What a crew member sees on M-13 | Cost |
+| - | ------ | ------------------------------- | ---- |
+| **A** | **Hidden control** — the surface exists, the affordance does not. M-13 renders its list with no "New CO" button; `/m/p/{id}/changes/new` typed directly redirects to M-13. | A list, exactly as today. No indication authoring exists. | Cheapest. **Two places to keep in sync** — the hidden button and the route guard — and forgetting the guard is a silent hole. |
+| **B** | **Visible but refused** — the control renders, tapping it explains the refusal. | A "New CO" button that says *"Change orders are created by Owners, Admins and Project Managers."* | Honest about the system's shape; discoverable when a role changes. **Advertises a wall** on a screen a crew member cannot act on, every time they open it. |
+| **C** | **Hidden tile** — the whole M-13 tile leaves M-3's grid for ungated roles. | No Change Orders tile at all; M-3's grid is eight tiles for crew, nine for Owner/Admin/PM. | **Breaks A-12's "exactly nine tiles" and D-50's promise that reading a CO stays open to everyone.** Also makes the grid role-dependent, which no criterion currently tolerates. |
+
+**Recommendation: A, with the route guard treated as the real gate and the hidden control as cosmetic.**
+Reasons, in order of weight:
+
+1. **Only the guard is enforcement.** Hiding a button is not a permission — the route is reachable by
+   typing a URL, from a stale PWA cache, or from a link in a shared screenshot. Whatever is ruled, the
+   route must check; if the route checks, hiding the button is a UX choice on top of a real gate rather
+   than the gate itself.
+2. **B's honesty is worth less on `/m` than on desktop.** A crew member opens the field app on a phone
+   many times a day and cannot act on the message; the same message on a desktop screen an office user
+   visits occasionally reads as information rather than as friction.
+3. **C is the only one that changes what a role can READ**, and D-53 explicitly keeps CO reading open to
+   everyone but subcontractors. It is listed because it is the option a build reaches for by instinct,
+   and it contradicts a ruling in the same pass.
+
+**Subcontractors are a separate case and A does not cover them.** D-52 and D-53 exclude subs from screens
+the other five roles read, not merely from a control. Whether a sub gets Option A's redirect, Option B's
+message, or something else is **part of the same open question** and is called out again in the open list
+— it is the harder half, because a sub who taps a Punch tile and lands back on the hub with no
+explanation has been given a bug, not a permission.
+
+**How the role is read, whichever option is ruled.** `getMyProfile()` (`profiles.ts:35`) returns
+`{ id, role, first_name, last_name }` server-side and is **already the pattern on `/m`** — M-30 uses it
+and **A-48e** exists to keep it a service call rather than an inline query. No new function is needed and
+no new query belongs in a page. **Do not read the role from `getMyMember()`**: `company_members` carries
+`member_type` (`crew` | `subcontractor`) and **no role at all** — the distinction A-47 already guards.
+
+> **⚠️ `member_type` AND `profiles.role` ARE NOT THE SAME AXIS, and "except subcontractors" straddles
+> both.** `profiles_role_check` permits **seven** roles — `owner, admin, project_manager, foreman,
+> crew_member, client, subcontractor` — so `subcontractor` **is** a `get_my_role()` value (this is what
+> §7a's four widened policies key on). Separately, `company_members.member_type` permits **two** values,
+> `crew` and `subcontractor`, and TECH_DEBT #127 records that rebuild-test holds **32 rows with
+> `member_type = 'subcontractor'` and ZERO profiles with `role = 'subcontractor'`** — roster rows, not
+> auth identities. **D-52 and D-53's "except subcontractors" is a `get_my_role()` test**, because only a
+> role can be checked at sign-in. A build that tests `member_type` instead will exclude 32 roster
+> members who are not the signed-in user and gate nothing.
+
+#### 4.11.11 M-31 · Change order detail — `/m/p/[projectId]/changes/[coId]` — **[S108, D-51/D-53]**
+
+Reached by tapping an M-13 row. **Readable by everyone except subcontractors (D-53); the write controls
+are Owner/Admin/PM (D-51).** Read and write are separate gates on one screen and must not be collapsed.
+
+- **Source:** `getChangeOrder(id)` (`change-orders.ts:80`) → `ChangeOrderWithChildren`, which is
+  `ChangeOrderWithAuthor` plus `line_items`, each carrying its `rows`. One call; no second fetch.
+- **Header** — `co_number` mono, `title` 17px/700, status pill with text (`CO_STATUS_LABELS`,
+  `change-orders-client.ts:45`), author `display_name`, mono `sent_at` / `signed_at` where set. Identical
+  to the M-13 row so the two never disagree.
+- **Body** — `description`, `reason_category`, and mono `schedule_impact_days` where set.
+- **Signing activity** — `getCoSigningSessions(changeOrderId)` (`change-orders.ts:140`). Renders that a
+  session exists and its dates. **CUT: the tokenised signing URL is not rendered on mobile** — it is a
+  bearer credential for the client's signature and a phone screen is where it gets photographed.
+  `sendChangeOrder()` returns it to the caller; M-31 must discard it rather than display it (§4.11.12).
+- **CUT: the CO PDF.** `generateChangeOrderPDF` runs inside the send route against the admin client and
+  has no mobile-reachable read path. No preview, no download link.
+- **CUT: line-item editing.** M-31 is detail + lifecycle. Editing lines is M-32's job even for an
+  existing draft, so there is exactly one line editor.
+- **Write controls, Owner/Admin/PM only** — **Edit** (→ M-32 for a `draft`), **Send for signature**
+  (`sendChangeOrder(id, {...})`, `change-orders-client.ts:198`), **Void**
+  (`voidChangeOrder(id)`, `:224`). All three are **online-only** and disabled offline with a plain
+  message (D-6's shape). None queues.
+- **The lifecycle rules are the desktop rules and are not restated as mobile rules.** Send applies to a
+  `draft`; void applies to a `draft` or an unsigned `sent`; a `signed` CO offers neither. Revising means
+  void plus a new CO — `voidChangeOrder`'s own contract. **M-31 must not invent a mobile edit path for a
+  sent CO.**
+
+> ##### D-26 AMENDED — what the author sees versus what M-13 still hides **[S108, D-51]**
+>
+> **M-13's list is untouched. A-33, A-33b and A-33c stand unchanged**, for every role including Owner:
+> the list renders no `net_delta`, no line total and no sum derived from one. D-26's cut was scoped to
+> the list and it stays scoped to the list.
+>
+> **What changes is that `net_delta` now reaches `/m` at the point of entry**, which §4.11.3 predicted in
+> terms and flagged as the thing to resolve first:
+>
+> | Surface | `net_delta` and derived money | Who reaches it |
+> | ------- | ----------------------------- | -------------- |
+> | **M-13** (list) | **Absent.** Unchanged by this pass. | Everyone but subs |
+> | **M-31** (detail) | **PRESENT** — the CO's own total and its line totals. | **Owner/Admin/PM only** |
+> | **M-32** (create/edit) | **PRESENT** — the author is typing it. | **Owner/Admin/PM only** |
+>
+> **Why the detail screen shows it at all**, rather than staying blank like the list: a CO the author is
+> about to *send to a client for signature* is an offer of a dollar amount. Sending one whose value you
+> cannot see is not a read-only inconvenience, it is a way to send the wrong number. The list has no such
+> need — §4.11.3's "a change order is perfectly meaningful without its value" is still true there.
+>
+> **⚠️ #117 APPLIES AND RLS WILL NOT CATCH A LEAK. Say it plainly rather than implying enforcement.**
+> `change_orders_select_visible` is `company_id = get_my_company_id() AND can_view_project(project_id)` —
+> **no role floor, no author scoping** (`20260704215000_module5_5d_change_orders.sql:332-337`). So on
+> M-31 and M-32 the Owner/Admin/PM restriction is **UI-only**. A foreman who reaches
+> `/m/p/{id}/changes/{coId}` gets the row from the database; the only thing between them and the amount
+> is the route guard §4.11.10a is still choosing. **This is the single largest new risk in this pass**,
+> and it is the reason D-54's guard must be real rather than a hidden button.
+>
+> **The asymmetry that makes this tolerable, and it is worth stating because it is not obvious.**
+> **Writing is DB-enforced; reading is not.** `change_orders_insert_authorized` and
+> `change_orders_update_authorized` both carry
+> `get_my_role() = ANY (ARRAY['owner','admin','project_manager'])` (`:339-351`) — **exactly D-51's three
+> roles, already in the database, with no migration owed.** So the dangerous half of D-51 is the half
+> that cannot be enforced by RLS (a foreman *reading* an amount), and the half that sounds dangerous
+> (a foreman *creating* a CO) is impossible regardless of what the UI does.
+>
+> **#117's open question is now due, and this pass does not answer it.** §4.11.3 said the
+> authored-by-scope-versus-assigned-project-scope question "should be answered before the screen is
+> built, not during it." The screen is now in scope, so the debt is due. **It is still open** — see the
+> open list.
+
+#### 4.11.12 M-32 · Change order create and edit — `/m/p/[projectId]/changes/new` — **[S108, D-51]**
+
+**Owner/Admin/PM only, and this one IS DB-enforced** (`change_orders_insert_authorized`). Also serves
+editing a `draft`, reached from M-31's Edit.
+
+- **Create:** `createChangeOrder({ project_id, title, description?, co_type?, reason_category?,
+  schedule_impact_days? })` (`change-orders-client.ts:84`). It reserves the number via the
+  `next_co_number` RPC (row-locked) and copies pricing context from the project's source estimate.
+  **`company_id`, `author_member_id` and `created_by` come from column defaults** — the page must not set
+  them.
+- **Edit:** `updateChangeOrder(id, input)` (`:155`), over `title | description | reason_category |
+  schedule_impact_days`.
+
+> **⚠️ THE VALUE IS NOT A FIELD, AND THIS IS THE BIGGEST SCOPE FACT IN D-51.** `createChangeOrder` takes
+> **no amount**. `change_orders.net_delta` is a stored `numeric DEFAULT 0`
+> (`20260704215000_module5_5d_change_orders.sql:60`) computed by
+> `recalculateChangeOrderTotals(changeOrderId)` (`change-orders-client.ts:431`) from
+> **line items → line rows**. So "create a CO with a value" on a phone is a **three-level editor**:
+> the CO, its `change_order_line_items`, and each item's `change_order_line_rows` — where a row carries
+> `row_type` (`labor | material | subcontractor | other`), quantity, unit cost, markup and tax.
+>
+> **Six client functions already exist and none needs writing:** `createCoLineItem` (`:245`),
+> `updateCoLineItem` (`:258`), `deleteCoLineItem` (`:279`), `createCoLineRow` (`:374`),
+> `updateCoLineRow` (`:387`), `deleteCoLineRow` (`:405`) — plus `recalculateChangeOrderTotals`, which
+> **must be called after every edit that affects pricing**. A build that writes rows and skips the
+> recalculation leaves `net_delta` at its default of `0` and sends a client a change order worth nothing.
+>
+> **This is a materially bigger screen than "a form with an amount box", and the estimate for D-51
+> should reflect that.** It is flagged, not scoped down — scaling it is Josh's call, not this spec's.
+
+> **⚠️ A PM AUTHORING A NON-FIXED-PRICE CO HITS AN RLS FLOOR AND GETS A SILENTLY WRONG TOTAL.**
+> **Verified, pre-existing, and NOT created by this ruling — but D-51 is what puts it in front of a
+> phone.** `recalculateChangeOrderTotals` calls `loadInstrumentPricingContext`
+> (`estimate-items-client.ts:30`), which for a `cost_plus` or `time_and_materials` CO reads
+> **`instrument_rates`** — a table whose SELECT is **DB-floored to Owner/Admin**
+> (`instrument_rates_select_owner_admin`, `20260806000000_financial_rls_floor.sql:66`). RLS filters
+> rather than errors, so a PM's query returns **zero rows, no error**, the rates resolve to null, and the
+> total is computed wrong with no failure anywhere.
+>
+> - **`fixed_price` COs are unaffected** — `loadInstrumentPricingContext` returns early before the query,
+>   and `createChangeOrder` defaults `co_type` to the project's type, falling back to `fixed_price`.
+> - **It is a desktop defect too.** `change_orders_insert_authorized` already admits PMs, so a PM can
+>   author a cost-plus CO on desktop today and hit the same thing. **This spec does not fix it and must
+>   not be read as having fixed it.**
+> - **The fix shape already exists in this repo:** `lib/services/invoice-derivation-server.ts` was built
+>   for exactly this collision (7D1 RULING B) — a privileged server-side module that reads the rates
+>   under the service role and **returns no rate value to the caller**. A CO equivalent is the obvious
+>   path and is **not designed here**.
+> - **Owed as TECH_DEBT.** Not in the register today; verified absent.
+>
+> **Until it is resolved, M-32 should offer `fixed_price` only** — proposed, not ruled, and listed in the
+> open items.
+
+- **CUT: `co_type` selection beyond the default**, for the reason directly above.
+- **CUT: attachments.** No file picker; `/m` has no document-upload path (§4.11.6's cut stands).
+- **Online-only.** Disabled offline with a plain message. Does not queue — a CO is not in D-6's set.
+- **Send is not on this screen.** Create lands on M-31, and sending is an explicit second action there,
+  so "save a draft" and "commit to a number in front of a client" are never one tap.
+
+#### 4.11.13 M-33 · Punch item create — `/m/p/[projectId]/punch/new` — **[S108, D-52]**
+
+**Everyone except subcontractors.** Reached from a primary control on M-14.
+
+- **Write:** `createPunchItem({...})` (`punch-client.ts:70`).
+- **A punch item needs a parent list.** `punch_list_items.punch_list_id` is required, and a project may
+  have none. `createPunchList(projectId, name)` (`punch-client.ts:34`) exists and RLS admits every role
+  (`punch_lists_insert_authenticated`). **Which list a mobile-created item lands in is an open item** —
+  auto-create a default, or make the user pick when more than one exists. Not ruled here.
+- Fields: `title` (required), `location`, `trade`, `priority`, `assignee_id`, `reference_photo_file_id`.
+- **`assignee_id` is a `company_members` id, never a user id or a `profiles.id`** — the same trap
+  §4.3/GAP-1b names for D-16's "mine". Bind the picker to `getMembers()` (`members.ts:14`).
+- **CUT: `requires_verification` and `requires_completion_photo`.** `setRequirementToggles`
+  (`punch-client.ts:125`) exists but is **Foreman+ by the service layer**, and putting a Foreman-only
+  control on a screen D-52 opens to crew would need a fourth role gate this pass has not ruled. Items
+  created on mobile take the table's defaults.
+- **Online-only**, disabled offline with a plain message. **Not in D-6's set** — A-18's count of three
+  offline actions is unchanged, and a build that queues punch creation breaks §5's contract.
+
+#### 4.11.14 M-34 · Punch item — complete and verify — `/m/p/[projectId]/punch/[itemId]`
+
+> **⚠️ THIS ROUTE IS PROPOSED, NOT RULED.** D-52 grants complete and verify; **D-53's detail-view list
+> does not name punch items**, so no surface was ruled to host them. It is proposed rather than assumed
+> because the two actions cannot honestly live on a list row: **completing** may require a photo
+> (`requires_completion_photo` blocks the write without one), and **verifying** must show who completed
+> the item so the separate-eyes rule is visible before the tap rather than as an error after it.
+> **Alternative:** both actions as a bottom sheet over M-14 — cheaper, but D-28 ruled pages over sheets
+> for the capture screens and this is the same class of surface. **Josh's call.**
+
+- **Source: NO SERVICE FUNCTION EXISTS.** Verified against `punch.ts`'s four exports — there is
+  **`getPunchLists(projectId)` and no `getPunchItem(id)`**. Stated rather than assumed: this is the D-19
+  precedent and the D-44 precedent, where the spec names the gap instead of binding to something
+  approximate. Either add `getPunchItem(id)`, or pass the item through from M-14's already-loaded set and
+  accept that the route is then not deep-linkable — **which contradicts D-28's deep-linkability rule**,
+  so the function is the better answer.
+- **Complete:** `completePunchItem(item, completionPhotoFileId?)` (`punch-client.ts:146`). It enforces the
+  photo gate itself and returns a plain message. Capturing the photo is §6's existing camera path.
+- **Verify:** `verifyPunchItem(item, userRole)` (`punch-client.ts:182`). It enforces **Foreman+**,
+  requires `requires_verification`, requires `status = 'complete'`, and **refuses the completer**.
+- Renders `completer.display_name` and `verifier.display_name` — already joined by `getPunchLists`.
+- **CUT: delete.** `deletePunchItem` (`:216`) is Foreman+ and destructive; no field need was stated.
+- **Online-only**, disabled offline with a plain message.
+
+> ##### ⚠️ D-52 versus the live RLS — a real gap, in TECH_DEBT #117's class
+>
+> **`punch_list_items` has NO role floor in the database, at all.** Verified verbatim
+> (`20260704214000_module5_5c_punch_lists.sql:197-215`): both
+> `punch_list_items_insert_authenticated` and `punch_list_items_update_authenticated` require only
+> `company_id = get_my_company_id()` plus `can_view_project(project_id)` (UPDATE also admits the
+> assignee). The migration's own comment says so outright: _"Column-level rules (toggles Foreman+;
+> verify not-completer; photo gate) and soft-delete restriction (Foreman+) are **service-layer**."_
+>
+> Two distinct gaps follow, and only one of them is new:
+>
+> | # | Gap | New? | Consequence |
+> | - | --- | ---- | ----------- |
+> | 1 | **Verify is Foreman+ in TypeScript only.** `verifyPunchItem`'s `FOREMAN_PLUS` check, the `requires_verification` check, the `status = 'complete'` check and the separate-eyes rule are **all** in `punch-client.ts`. A direct UPDATE setting `status='verified'`, `verified_by`, `verified_at` is accepted by RLS. | **No** — pre-existing, and true of desktop. | D-52 puts the verify control on a phone, widening who meets it. |
+> | 2 | **`can_view_project()` admits an assigned subcontractor**, because it is `owner/admin OR is_assigned_to_project()` and that arm is **role-blind** (`20260704211000_module5_5a_projects.sql:248-262`) — the same property §7a relies on for sub photo access. So **an assigned sub can insert and update punch items today**, and D-52 says they must not. | **Yes** — created by this ruling. | The exclusion exists **nowhere**: not in RLS, and not in the service layer either (`createPunchItem` and `completePunchItem` carry **no role check at all**). |
+>
+> **A migration is owed and is NOT written here.** The precedent to copy is exact:
+> `20260827000000_expenses_subcontractor_floor.sql` adds `public.get_my_role() IS DISTINCT FROM
+> 'subcontractor'::text` to an existing policy, **role array only, every other arm byte-identical** —
+> the same discipline §7a applied to its four policies. Two policies need it:
+> `punch_list_items_insert_authenticated` and `punch_list_items_update_authenticated`.
+> **`punch_lists` needs the same treatment** or a sub simply creates a list instead.
+> Whether verify should also gain a DB floor is a **separate, larger question** — it is a column-level
+> rule, not a row-level one, and RLS cannot express "only these columns, only by not-the-completer"
+> without a trigger. **Not designed here.**
+>
+> **This cannot be tested live today.** **TECH_DEBT #127** — rebuild-test holds **no `subcontractor`
+> profile identity** (verified S100; `subcontractor` and `client` profile counts are both 0). Every
+> criterion below that asserts a sub is refused is `[live — BLOCKED on #127]`, exactly as
+> `m-sections.spec.ts`'s existing sub case already is (`test.skip`, "blocked on #127"). **Do not mark
+> D-52 verified on a green suite that skipped the only role the ruling excludes.**
+
+> ##### D-16 is UNCHANGED by D-52 — checked, not assumed
+>
+> **M-3's badge counts nothing differently.** `getOpenPunchCounts` (`punch.ts:102`) filters
+> `.in('status', ['open','in_progress'])`, and D-16 fixes "open" as exactly those two states.
+> Verification moves an item **`complete` → `verified`** — **neither state is in the set**, so a verify
+> performed on mobile changes no count on M-3, M-2 or M-14's chips. The `complete`-awaiting-verification
+> divergence §4.11.4 inherits is likewise untouched, and **A-34b still holds verbatim**.
+>
+> **The other two actions do move the badge, correctly and by the existing definition:** creating an item
+> writes `status = 'open'` (+1 to `total`, and +1 to `mine` when the author assigns it to themselves),
+> and completing one moves it out of the open set (−1). **No counter definition changes, no new
+> expression is introduced, and `isItemClosed()` is still not used for these figures.**
+
+#### 4.11.15 M-35 · Team-member detail — `/m/team/[memberId]` — **[S108, D-53]**
+
+**Everyone except subcontractors. Read-only.** One route, reached from **both** M-18 (project team) and
+M-28 (company roster) — both list `company_members` rows, so both already hold the id this route needs.
+
+- **Source:** `getMember(id)` (`members.ts:34`) → `CompanyMember`. **Not `getTeamMember()`**
+  (`team.ts:33`), which reads **`profiles`** by profile id — the same trap **A-47** already guards on
+  M-28, and it drops every subcontractor roster member, of which rebuild-test has 32 (#127).
+- Renders: initials avatar tinted with `schedule_color` (amber fallback when null, per A-47e),
+  `display_name`, mono `member_type` label, and contact affordances via the existing `ContactActions`
+  (`mobile-ui.tsx`) — `tel:` and `mailto:`, mobile winning over phone.
+- **CUT: every rate.** No pay, cost or burden figure. `instrument_rates` is DB-enforced Owner/Admin, so
+  the rows are not readable — §4.11.8's cut, on a screen that would be the natural place to leak it.
+- **CUT: every management control** — no invite, deactivate, role change or password reset. A-47c's cut
+  list, inherited. `updateTeamMember`, `softDeleteTeamMember` and `resetTeamMemberPassword` all exist in
+  `team.ts` and **none is called from `/m`**.
+- **CUT: `profiles.role`.** M-28 already does not render it (A-47) and the detail must not reintroduce it.
+- **NO SERVICE FUNCTION EXISTS for "which projects is this member on".** Verified: `project-assignments.ts`
+  exports `getProjectAssignments(projectId)` and `getMyAssignedProjectIds()` — both project-first. There
+  is **no member-first lookup**, so the obvious detail-screen content is **CUT rather than derived**
+  (D-19 precedent). If it is wanted, it is a named new function, not a page-level query.
+
+#### 4.11.16 M-36 · Contact detail — `/m/contacts/[contactId]` — and opening a file from M-16 — **[S108, D-53]**
+
+##### M-36 — the whole row opens the contact
+
+**Everyone except subcontractors. Read-only.** One route, reached from **both** M-17 (project contacts)
+and M-29 (company directory) — `getProjectContacts` joins the Module 2 contact, so both hold a
+`contacts.id`.
+
+- **Source:** `getContact(id)` (`contacts.ts:40`) → `Contact`.
+- **This is a change to how the row behaves, not an addition beside it.** Today `ListRow`
+  (`mobile-ui.tsx:278`) is a plain `<li>` with **no `href`** and the only tappable things are
+  `ContactActions`' 44px `tel:`/`mailto:` circles (`:305`). D-53 makes the **row itself** the target.
+  **The action circles stay** — A-37 and A-46c require them, and one-tap calling from a list is the
+  screen's reason to exist (§4.11.7). So the row gains a navigation target **around** two existing
+  buttons: the affordances must not swallow each other, and §2's 44px floor applies to all three.
+- Renders: name (or `company_name` per A-49b's fallback), `contact_type` via `CONTACT_TYPE_LABELS`
+  (never the raw enum — A-49c), phone, mobile, email, and address where set.
+- **CUT: `notes` and `tags`** — **A-49d's cut, and it matters more here.** `getContacts()` and
+  `getContact()` both `select('*')`, so both arrive in the payload for every caller; the cut is UI-only
+  on the list and it is UI-only on the detail. A detail screen is exactly where a build "fills the space"
+  with notes.
+- **CUT: every write.** No edit, no create, no delete. D-53 grants detail *views*.
+
+##### Opening a file from M-16 — **the tap that does not exist today**
+
+§4.11.6 already says "Tapping opens the signed URL (`getSignedUrl`, `files.ts:70`)". **That sentence has
+never been true of the build**: `getSignedUrl` has **zero call sites anywhere under `app/m/`** (verified —
+the callers are two desktop pages, the API route, `photos.ts` and `ai-tagging.ts`), and M-16's rows are
+`ListRow`s with no `href`. D-53 makes it real.
+
+- **Path:** tap → `GET /api/files/signed-url?path={file_path}` → open the returned URL. **A Route
+  Handler, not a server-rendered link** — a signed URL minted at render time starts expiring when the
+  page renders, and a mobile list is exactly the surface a user leaves open.
+- **RLS is the gate and there is no second check.** `getSignedUrl` uses the **user's** RLS-scoped server
+  client (`files.ts:70` → `supabase-server`), so `createSignedUrl` on `project-files` is bound by
+  `project_files_select_non_client`. §4.11.6's "RLS does the gating, not the UI — must not add a second
+  role check" applies unchanged to the open path.
+- **`?download={filename}` is required for a download and is NOT the default.** A Supabase signed URL
+  serves `Content-Disposition: inline` — a PDF previews, it does not save (CLAUDE.md, Codespaces
+  gotchas). **Ruled here: `/m` opens inline and does not append `?download=`.** Previewing a plan on site
+  is the field need; downloading to a phone's filesystem is not.
+- **CUT: an in-app document viewer.** The browser handles the MIME type or it does not. `files` permits
+  arbitrary uploads and this spec designs no fallback — a format the phone cannot render is the
+  platform's behaviour, not a screen.
+
+> **⚠️ `/api/files/signed-url` returns 500 where it should return 403 — flagged, not fixed.** The route
+> (`app/api/files/signed-url/route.ts`) performs **no auth check of its own**: it signs whatever `path`
+> it is given. That is **not a hole** — storage RLS refuses a path the caller cannot read — but the
+> refusal surfaces as `getSignedUrl` returning `null` and the route answering
+> **`{ error: 'Could not sign URL' }` with status 500**. CLAUDE.md's API rule is explicit: _"Auth and
+> permission failures return 401/403 with their own message — never fall through to a 'not found'
+> path"_, and _"every error response logs the real cause server-side"_ — this route does neither.
+> **Pre-existing; D-53 makes it mobile's file-open path, which is why it is raised here.** Owed as
+> TECH_DEBT. Not fixed in this pass, and **not** a reason to add a UI role check (§4.11.6).
 
 ---
 
@@ -1813,6 +2284,10 @@ cannot carry over and one that is new**:
   Each renders the app-wide offline strip **plus its own empty state**; none spins indefinitely and none
   shows stale data without the strip. The empty state is per-screen and says what is missing, never a
   generic spinner.
+  **[S108] D-50 does NOT reverse this for the six.** No write is ruled onto any of them — D-51 and D-52
+  touch M-13/M-14 only. What D-53 changes is that **M-28's and M-29's rows become tappable**, opening
+  M-35 and M-36 (§4.11.15, §4.11.16). Those are **detail views, which are reads** — so "read-only"
+  stands verbatim and only "not tappable" stops being true.
 - **Every figure below is bound to a named service function, or CUT.** Nothing is derived to fill a gap;
   the D-19 precedent applies throughout. Where a screen wants a figure no existing function returns,
   this section says so and cuts it rather than inventing a derivation or a new query.
@@ -1877,6 +2352,13 @@ not carry, and the difference is specific:
 **So M-26 introduces currency but not a role-gated figure**, and D-11's "every role sees the same
 screens" survives intact: the screen is identical for all roles; the **row set** differs, and it differs
 at the database. Concretely, from the policy above:
+
+> **[S108] D-11 no longer survives intact in general — but this paragraph's claim about M-26 does, and
+> the distinction is the whole point.** **D-54** amends D-11 because D-51/D-53 gate *screens* by role.
+> **M-26 is still not one of them:** the screen is identical for everyone and only the row set differs,
+> **at the database**. That is exactly the property M-31/M-32 lack — `change_orders_select_visible` has
+> no role floor, so their gate is UI-only (§4.11.11). **M-26 remains the good precedent and the CO
+> screens are the cautionary one**; do not read D-54 as licence to gate M-26.
 
 - **crew_member and subcontractor** — see **only expenses they authored**. Not a teammate's, not their
   project's. (Neither role appears in the policy's role array.)
@@ -3163,7 +3645,15 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 
 - A-30 Every `/m/p/[projectId]/*` section screen renders the back chevron and **no hamburger**, and keeps the tab bar with Projects active. `[Playwright]` _(§4.11 common rules + §3.1.)_
 - A-30b Every section screen renders the app-wide offline strip **and its own empty state** when offline — none spins indefinitely, none shows stale data without the strip. `[Playwright]` _(§4.11 against §5.4. Nine new read surfaces is nine new chances to get this wrong.)_
-- A-30c No section screen queues a write offline. Where a screen offers a write, it is **disabled with a plain message**, as delivery check-in is. `[Playwright]` _(§4.11. D-6's offline-write set is closed at three actions; a tenth screen quietly queueing would break A-18's count and §5's whole contract.)_
+- A-30c **REWRITTEN [S108, D-50] — the write-control half is REVERSED, the offline half STANDS.** No section screen **queues** a write offline; every write introduced by D-51/D-52 is **online-only and disabled with a plain message**, as delivery check-in is. `[Playwright]` _(**Rewritten, not satisfied.** §4.11. D-6's offline-write set is closed at three actions; a tenth screen quietly queueing would break A-18's count and §5's whole contract — **that reason is untouched by D-50 and is why half this criterion survives verbatim**.)_
+
+  > **What A-30c used to assert, and what the build implemented — both quoted, because they differ.**
+  >
+  > _Spec text, superseded:_ _"No section screen queues a write offline. Where a screen offers a write, it is **disabled with a plain message**, as delivery check-in is."_
+  >
+  > _The implemented test went considerably further than the spec text_ (`e2e/m-sections.spec.ts`, `A-30c · ${s} offers no write control`) — asserting **zero** buttons and **zero** `input, select, textarea` inside `m-content` on all twelve screens, with the comment: _"These are read-only surfaces in v1 … The assertion is that no write is offered at all."_
+  >
+  > **That assertion is now wrong on M-13 and M-14 and must FAIL until it is rewritten.** It is the criterion D-50 reverses, and the divergence is worth naming: the spec said *do not queue*, the test said *do not offer* — a build reading only the test would have concluded more than the spec ever ruled. **A-30c's blanket sweep is replaced by A-51…A-59, which name which screens may offer which controls to which roles.** The ten screens with no write ruled (M-11, M-12, M-15, M-16, M-17, M-18, M-19 and the three shared routes) keep the old assertion — see **A-59b**.
 - A-30d Every number on every section screen renders in IBM Plex Mono. `[Playwright]` _(§2, extended over nine new screens — A-10 covered M-2 only.)_
 - A-30e Every interactive element on every section screen measures ≥44px in its smallest dimension. `[Playwright]` _(§2, extended over nine new screens — A-5's sweep must include them.)_
 - A-31 **M-11 renders none of M-3's four figures again** — no status pill, no days-left, no punch count, no "Up next". `[Playwright]` _(§4.11.1. The audit's duplicate-screen concern; without this M-11 drifts into a second copy of the hub.)_
@@ -3404,6 +3894,41 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 
 - A-50 Every currency figure anywhere on `/m` renders as **`$1,234.56`** — leading `$`, comma thousands separators, **exactly two decimals** — with negatives as **`-$1,234.56`** (minus before the symbol) and a **null amount as the em-dash `—`, never `$0.00`**. `[Playwright]` _(**New [S101], D-46.** §2's money token. Written against the **rendered output** rather than a function name on purpose: §2 leaves the formatter's home open (mobile one-liner now, `packages/shared/utils/` eventually), so a criterion naming a function would break on the move while a criterion naming the string survives it. The null case is the one a naive `toLocaleString` gets wrong — `Number(null ?? 0)` renders `$0.00`, and on a field screen that is a different fact from "not recorded".)_
 
+**The read-only reversal (§4.11 as amended) — all new [S108, D-50…D-54]**
+
+Every criterion here is written against **a sentence in §4.11, not a summary of it**. Where a criterion
+cannot run today, the blocker is named in the criterion rather than left for the runner to discover.
+
+_Change orders — D-51_
+
+- A-51 **M-13's list still renders no currency, for every role including Owner** — the D-51 activation changes the detail and create screens and **not** the list. `[live + Playwright]` _(§4.11.3 as amended. **This is A-33/A-33c restated as a regression guard at the moment they are most likely to break**: a build adding money to M-31 has the formatter, the binding and the component in hand, and reusing the row component on the list is one import away.)_
+- A-52 **M-31 renders the CO's own `net_delta` and its line totals to Owner, Admin and PM** — the author of a CO about to be sent can see the amount they are sending. `[Playwright]` _(§4.11.11. The positive half of the D-26 amendment. Without it a build "safely" cuts money from the detail screen too and reproduces the defect D-51 exists to fix — a CO sent blind.)_
+- A-53 **M-31 and M-32 render no money to a foreman or a crew member**, and the route itself refuses them rather than merely hiding the figure. `[live + Playwright]` _(§4.11.11's #117 block. **`change_orders_select_visible` has no role floor**, so the row IS returned by the database to both roles — this criterion is the only thing standing between a foreman and a CO amount. Assert the refusal at the route, not the absence of a string: a build that renders the screen with the amount blanked still leaks it to anyone who reads the payload.)_
+- A-54 **A foreman's and a crew member's INSERT into `change_orders` is refused by the database**, not by the UI. `[live]` _(§4.11.11's asymmetry table. `change_orders_insert_authorized` already carries exactly D-51's three roles, so this passes today — the criterion exists so a later "convenience" widening of that policy fails loudly. **This is the one D-51 guarantee that does not depend on UI discipline.**)_
+- A-55 **A CO created on M-32 with line rows has a `net_delta` matching the sum of those rows** — not `0`. `[live]` _(§4.11.12. `net_delta` defaults to `0` and is only ever set by `recalculateChangeOrderTotals()`; a build that writes rows and skips the recalculation sends a client a change order worth nothing, and every screen-level assertion passes while it does.)_
+- A-55b **M-31 never renders the tokenised signing URL**, in the DOM, in a link, or in a copy-to-clipboard control. `[Playwright]` _(§4.11.11's cut. `sendChangeOrder()` **returns `signingUrl` to its caller**, so the value is in the page's hands by construction — this is an absence assertion in A-10d's shape, guarding a bearer credential on the device most likely to photograph it.)_
+
+_Punch list — D-52_
+
+- A-56 **M-14 offers a create control and each row opens M-34**, for owner, admin, project_manager, foreman and crew_member. `[Playwright]` _(§4.11.4 as amended. The positive half of D-52, walked across the five roles that have it — a single-role check passes on a build that gates crew out by accident, which is the exact failure D-52 reverses.)_
+- A-57 **Completing an item on M-34 moves M-3's Punch badge down by one; verifying an item moves it by nothing at all.** `[live]` _(§4.11.14's D-16 check. **Written as one criterion on purpose**: the two halves are the whole claim that D-52 does not disturb D-16, and asserting them separately invites a build to satisfy the easy half. `getOpenPunchCounts` filters `('open','in_progress')`, so `complete → verified` must be invisible to it.)_
+- A-58 **`verifyPunchItem` refuses the member who completed the item**, on mobile as on desktop. `[live]` _(§4.11.14. The separate-eyes rule is service-layer only — **RLS accepts the UPDATE** — so a mobile path that calls the table directly instead of the function silently defeats it.)_
+- A-59 **An assigned subcontractor is refused punch create, complete and verify.** `[live — BLOCKED on TECH_DEBT #127]` _(§4.11.14's gap table, row 2. **This criterion CANNOT RUN TODAY and must not be marked passing.** rebuild-test holds zero `profiles.role = 'subcontractor'` identities, and the exclusion exists in neither RLS nor the service layer — `createPunchItem` and `completePunchItem` carry no role check at all, and `can_view_project()` admits an assigned sub. **A green suite here means the case was skipped**, exactly as `m-sections.spec.ts`'s existing sub case is. Unblocked by seeding the identity (#127) **and** by the owed migration.)_
+- A-59b **The ten section screens with no ruled write still offer none** — M-11, M-12, M-15, M-16, M-17, M-18, M-19 and the three shared routes render no button, input, select or textarea that mutates. `[Playwright]` _(**This is what survives of A-30c's blanket sweep**, narrowed from twelve screens to ten rather than deleted. D-50 reversed the rule for two screens and explicitly did not reverse it for the rest; without this, "read-only" quietly stops meaning anything. Note M-16's row tap and M-17's row tap are **navigation**, not writes, and must not trip it.)_
+
+_Detail views — D-53_
+
+- A-60 **M-16's rows are tappable and open the document**, via `/api/files/signed-url`, with no second role check in the UI. `[Playwright]` _(§4.11.6 as amended + §4.11.16. The sentence "tapping opens the signed URL" has been in the spec since S98 and **has never been true of the build** — `getSignedUrl` has zero call sites under `app/m/`. This criterion is what makes the spec's own claim testable.)_
+- A-61 **A signed URL opened from `/m` serves inline and carries no `?download=` parameter.** `[Playwright]` _(§4.11.16's ruling. Supabase defaults to `Content-Disposition: inline` and `?download=` is the opt-in — so this is an assertion that a build did **not** add the parameter while "fixing" what looked like a broken download.)_
+- A-62 **M-17 and M-29 rows open M-36, and the `tel:`/`mailto:` circles still work and are still ≥44px.** `[Playwright]` _(§4.11.16. Three targets in one 58px row is the geometry this ruling creates, and the failure is a row-level link swallowing the two buttons — which would satisfy "the row opens the contact" while **breaking A-37**, the older criterion.)_
+- A-63 **M-35 binds to `getMember()` (`company_members`), not `getTeamMember()` (`profiles`)**, and renders no rate, no management control and no `profiles.role`. `[live + Playwright]` _(§4.11.15. **A-47's trap, one screen further in.** The two functions take an id and return a person, so the wrong one type-checks, renders, and silently drops every subcontractor member — 32 of them on rebuild-test.)_
+- A-64 **M-36 renders no `notes` and no `tags`.** `[Playwright]` _(§4.11.16's cut. `getContact()` does `select('*')`, so both are in the payload — and a detail screen is the surface that "fills the space" with them. A-49d's cut, extended to where it is most tempting to undo.)_
+
+_Role gating — D-54_
+
+- A-65 **Every gated route refuses at the route, not only by hiding its control** — typing `/m/p/{id}/changes/new` as a foreman does not render the form. `[Playwright]` _(§4.11.10a's recommendation, and **the half that is enforcement rather than cosmetics**. A hidden button is not a permission: the URL survives a shared screenshot, a stale PWA cache and a bookmark. Whatever Josh rules for the visible behaviour, this criterion holds.)_
+- A-66 **A role that lacks access lands somewhere that explains itself** — never a blank screen, never a silent bounce to the hub with no message. `[Playwright]` _(§4.11.10a. **Deliberately written to be satisfiable by whichever of options A/B/C is ruled**, because the option is Josh's and the criterion is not waiting on it. The failure it forbids is the one all three options can produce by accident: a sub taps a Punch tile, arrives back at M-3, and has been given a bug rather than a permission.)_
+
 **Regression**
 
 - A-28 `apps/web/app/dashboard/**` is unchanged by this work — `git diff --stat` against the merge base shows no desktop route files. `[shell]`
@@ -3465,7 +3990,13 @@ shell checks. Two of these deserve their mechanism spelled out because the asser
 
 **House rule.** Every fix still needs a failing-then-passing assertion. Under D-18 that rule is now
 satisfiable for every criterion in §10 except A-26, which is manual by nature.
-## §11 — Decision register (twenty-nine ruled [S98–S99, Josh]; one open, out of scope)
+## §11 — Decision register (D-1…D-54; **five new [S108]**, seven items open — see the fourteenth pass)
+
+> **[S108] Fourteenth ruling pass — D-50…D-54, the read-only reversal.** The header below counted
+> "twenty-nine ruled [S98–S99]; one open, out of scope" and had already fallen behind by four passes
+> (S100–S103, D-36…D-49). It is corrected to the D-range rather than a count, which stops drifting.
+> **Seven items are open and are NOT out of scope** — they gate the build of D-51…D-54. The largest is
+> D-54's own gated-screen behaviour, which is proposed with a recommendation and not decided.
 
 > **[S99, first pass]** Five rulings — **D-28…D-32** — closed GAP-8 and reversed the markup display rule
 > (**seventh ruling pass**). The S98 header read _"twenty-one ruled; nothing open"_.
@@ -3564,7 +4095,7 @@ see CO values on mobile, that is a ruling, not a build detail.
 | Item | **Ruling** | Applied in |
 | ---- | ---------- | ---------- |
 | Segment type | **The user selects it as part of clocking in.** No default, no skippable prompt, no post-hoc switch on the clock-in path. | **D-27** (D-25 superseded, quoted not deleted); §4.5, **§4.5a**; D-12 restated; A-7b–A-7j |
-| CO value | **Cut for every role, Owner and Admin included.** | **D-26**; §4.11.3; A-33, A-33c |
+| CO value | **Cut for every role, Owner and Admin included.** _(**Narrowed to the LIST by D-51 [S108]** — still cut on M-13, present on the author's M-31/M-32 for Owner/Admin/PM.)_ | **D-26** as narrowed by **D-51**; §4.11.3, §4.11.11; A-33, A-33c, A-51, A-53 |
 
 **Why the collision dissolved.** D-25 defaulted the type, so the app committed to `work` — and its project
 requirement — before knowing whether a project existed. Under D-27 the user names the type first, so the
@@ -3873,3 +4404,73 @@ surface rather than add or narrow one, and a removal leaves more loose ends than
 **What the cut did NOT touch, deliberately.** `getDashboardData()` and the desktop dashboard are
 untouched — D-38 is a mobile scope ruling, not a judgement on the desktop screen, which keeps every
 figure listed above and is the right place for all of them. **A-28 is unaffected.**
+
+---
+
+### Fourteenth ruling pass [S108, Josh] — the read-only reversal
+
+**Ruled from a real-device test, and it is a reversal rather than a defect report.** Josh used `/m` on a
+phone and found the section screens are lists with no detail views and no write actions. §4.11 specified
+exactly that, so the screens are correct and the spec was wrong. **D-50…D-54.**
+
+| # | Question | **Ruling** | Applied in |
+| - | -------- | ---------- | ---------- |
+| 28 | Are §4.11's screens read-only in v1? | **NO — REVERSED.** The offline half of the rule stands; the read-only half does not. Every new write is still online-only. | **D-50**; §4.11 common rules; **A-30c rewritten** |
+| 29 | Change orders on mobile? | **FULL LIFECYCLE, Owner/Admin/PM — create → send for signature.** Activates D-45. **D-26 amended, not reversed**: the list still shows no money; the author's screens do. | **D-51**; §4.11.3, §4.11.11, §4.11.12; A-51–A-55b |
+| 30 | Punch list on mobile? | **CREATE, COMPLETE, VERIFY — everyone except subcontractors.** D-16's counters are unchanged. | **D-52**; §4.11.4, §4.11.13, §4.11.14; A-56–A-59b |
+| 31 | Detail views? | **CO, team member, contact, file, photo — everyone except subcontractors.** Photos already satisfied by M-9. | **D-53**; §4.11.6–§4.11.8, §4.11.11, §4.11.15, §4.11.16; A-60–A-64 |
+| 32 | Role-gated write access? | **D-11 AMENDED — recorded, not left to arrive silently. The gated-screen behaviour is PROPOSED, not decided.** | **D-54**; §4.11.10a; A-65–A-66 |
+
+**Six new screens, one non-screen.** M-31 (CO detail), M-32 (CO create/edit), M-33 (punch create),
+**M-34 (punch item — PROPOSED, see below)**, M-35 (member detail), M-36 (contact detail). Opening a file
+gets **no route** — §4.11.16.
+
+**What this pass verified in code rather than assumed.** Every service function named in §4.11.11–§4.11.16
+was checked to exist, with its file and line. Four things were found **missing** and are stated as gaps
+rather than bound to something approximate — the D-19 and D-44 precedent:
+
+| Missing | Where it would be needed | Status |
+| ------- | ------------------------ | ------ |
+| `getPunchItem(id)` | M-34's source — `punch.ts` has `getPunchLists(projectId)` and nothing single-row | **Named, not written.** Without it M-34 is not deep-linkable, contradicting D-28 |
+| A member-first assignment lookup | M-35's "which projects is this member on" | **Content CUT**, not derived. `project-assignments.ts` is project-first only |
+| A privileged CO totals path | A PM recalculating a `cost_plus` / `time_and_materials` CO | **Owed as TECH_DEBT.** Fix shape exists: `invoice-derivation-server.ts` |
+| A `subcontractor` role floor on punch | D-52's exclusion | **Migration owed.** Precedent: `20260827000000_expenses_subcontractor_floor.sql` |
+
+#### Still open after the fourteenth pass — **these need a ruling before build**
+
+1. **⚠️ What a gated screen does for a role that lacks access — D-54, the largest open item.** Three
+   options in §4.11.10a with a recommendation (**A**, hidden control over a real route guard).
+   **Subcontractors are the harder half** and are not covered by the recommendation: D-52/D-53 exclude
+   them from whole *screens*, not merely from controls.
+2. **⚠️ TECH_DEBT #117's scoping question is now DUE.** §4.11.3 said it "should be answered before the
+   screen is built, not during it" — the screen is now in scope and the question is still open:
+   **authored-by scope versus assigned-project scope** on `change_orders`. D-51 is its second consumer.
+   **Do not "finish" #117 by flooring `change_orders` SELECT** without reading it: the obvious fix breaks
+   CO authoring for PMs, which D-51 has just made a mobile requirement.
+3. **Is M-34 a page, a sheet, or neither?** The route is **proposed, not ruled** — D-53's detail list does
+   not name punch items, so D-52's complete and verify were granted with no surface to host them.
+4. **Should M-32 offer `fixed_price` only** until the PM/`instrument_rates` collision is resolved?
+   Proposed in §4.11.12; not ruled.
+5. **Which punch list does a mobile-created item land in** when a project has none, or has several?
+   §4.11.13. Auto-create a default, or make the user choose.
+6. **§4.11.1's status control.** D-54 removed its stated reason for being cut — "a phone that all six
+   roles reach" is no longer the rule — but **removing a reason is not making a decision**, and it stays
+   cut until ruled.
+7. **Does the verify column-rule get a DB floor?** Separate from and larger than gap 2 in §4.11.14: RLS
+   cannot express "only these columns, only by not-the-completer" without a trigger.
+
+#### Owed to TECH_DEBT by this pass — raised here, filed separately
+
+- **A PM recalculating a non-fixed-price CO reads `instrument_rates` and gets zero rows, silently.**
+  Pre-existing and true of desktop; D-51 puts it on a phone. §4.11.12.
+- **`/api/files/signed-url` answers 500 where CLAUDE.md requires 401/403, and logs nothing.**
+  Pre-existing; D-53 makes it mobile's file-open path. §4.11.16.
+- **`punch_list_items` and `punch_lists` have no role floor at all**, so D-52's subcontractor exclusion
+  exists nowhere. §4.11.14.
+
+#### Testing note — **do not read a green suite as verification of D-52**
+
+**TECH_DEBT #127 blocks A-59 outright.** rebuild-test has no `subcontractor` (or `client`) profile
+identity, so every criterion asserting a sub is refused will **skip**, not pass —
+`m-sections.spec.ts` already carries one such skip ("blocked on #127"). D-52 and D-53 both turn on
+excluding subcontractors, which makes #127 a **gate on this pass**, not background debt.
