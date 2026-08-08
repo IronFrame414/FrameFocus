@@ -198,3 +198,73 @@ test.describe('A-12d / A-12e · M-7 Daily logs reaches M-6, not a fifth screen',
     expect(href).not.toMatch(/\/m\/p\//);
   });
 });
+
+// ===========================================================================
+// M-37 — THE ROW OPENS THE LOG (D-55) [S121]
+// ===========================================================================
+// Reported from a device [S120, Josh]: "a log can be created but not opened."
+// M-6 shipped with rows that render an EXCERPT of `work_performed` and open
+// nothing, so a log written on M-21 could never be read back on the phone that
+// wrote it. Same gap punch, CO, team and contact each had; D-55 already rules
+// the answer generally — "every list row opens its own page with its own route"
+// — so this is the fifth instance of a settled rule, not a new decision.
+//
+// The queued half is asserted as the DELIBERATE non-link. A queued log exists
+// only in this browser's IndexedDB, so `/m/logs/{id}` would 404 on an id the
+// server has never seen; a build that linked every row uniformly would look
+// right on a synced list and strand the user on the one row they just created.
+test.describe('M-37 · daily log detail', () => {
+  test('the row opens its own page, and the page renders the log', async ({ page }) => {
+    await page.goto('/m/logs');
+    const rows = page.locator('[data-testid="m-log-row"][data-queued="false"]');
+    if ((await rows.count()) === 0) test.skip(true, 'no synced logs visible to this identity');
+
+    const date = (await rows.first().innerText()).match(/\d{4}-\d{2}-\d{2}/)?.[0];
+    await rows.first().getByTestId('m-row-link').click();
+
+    await expect(page).toHaveURL(/\/m\/logs\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+    await expect(page.getByTestId('m-log-detail')).toBeVisible();
+    // The date the row carried is the date the detail shows — proof the route
+    // resolved THAT log rather than any log.
+    if (date) await expect(page.getByTestId('m-log-date')).toContainText(date);
+  });
+
+  test('a way back — the chevron, and NOT the hamburger (A-30f)', async ({ page }) => {
+    await page.goto('/m/logs');
+    const rows = page.locator('[data-testid="m-log-row"][data-queued="false"]');
+    if ((await rows.count()) === 0) test.skip(true, 'no synced logs visible to this identity');
+    await rows.first().getByTestId('m-row-link').click();
+    await expect(page).toHaveURL(/\/m\/logs\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+
+    await expect(page.getByTestId('m-back')).toBeVisible();
+    await expect(page.getByTestId('m-hamburger')).toHaveCount(0);
+    // Logs is a TAB, so unlike M-35/M-36 the tab stays lit — the section is
+    // still where you are. A-42's "no tab active" belongs to the company-scoped
+    // family and must not be copied here.
+    await expect(page.getByTestId('m-tab-logs')).toHaveAttribute('aria-current', 'page');
+  });
+
+  test('M-21 keeps its own chrome — the capture screen is NOT a detail view', async ({ page }) => {
+    // The exclusion `/m/logs/new` needs from the new `/m/logs/` depth rule. A
+    // prefix test without it would hand the capture screen a second exit that
+    // competes with the form's own, which §4.12 ruled against.
+    await page.goto('/m/logs/new');
+    await expect(page.getByTestId('m-work-performed')).toBeVisible();
+    await expect(page.getByTestId('m-back')).toHaveCount(0);
+  });
+
+  test('the LIST still carries the hamburger — the chevron is DEPTH, not prefix', async ({
+    page,
+  }) => {
+    await page.goto('/m/logs');
+    await expect(page.getByTestId('m-hamburger')).toBeVisible();
+    await expect(page.getByTestId('m-back')).toHaveCount(0);
+  });
+
+  test('a log id that does not exist 404s rather than rendering an empty shell', async ({
+    page,
+  }) => {
+    const resp = await page.goto('/m/logs/11111111-1111-1111-1111-111111111111');
+    expect(resp?.status()).toBe(404);
+  });
+});

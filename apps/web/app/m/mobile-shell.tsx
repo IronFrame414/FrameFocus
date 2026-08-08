@@ -116,7 +116,29 @@ export function activeTabHref(pathname: string): string | null {
  * (`/m/logs/new`, `/m/timeclock/switch`) are the same shape and are NOT detail
  * views — they own their own chrome and their own exits.
  */
-const COMPANY_DETAIL_PREFIXES = ['/m/contacts/', '/m/team/'];
+const COMPANY_DETAIL_PREFIXES = ['/m/contacts/', '/m/team/', '/m/subs/', '/m/logs/'];
+
+/**
+ * The capture screens, which live at the SAME depth and are NOT detail views.
+ *
+ * `/m/logs/new` is why this list exists rather than being a comment. Adding
+ * '/m/logs/' above to give M-37 (`/m/logs/{logId}`) its chevron would otherwise
+ * catch M-21 too, and §4.12's capture screens were ruled to own their own
+ * chrome and their own exits — a chevron there would be a second exit competing
+ * with the form's own.
+ *
+ * `/m/timeclock/switch` matches no prefix above and so needs no exclusion. It
+ * is listed anyway, because the RULE is "capture screens are not detail views"
+ * and a reader adding '/m/timeclock/' later must find the exception already
+ * stated rather than rediscover it from a bug.
+ *
+ * ⚠️ FLAGGED, NOT FIXED [S121]: `/m/logs/new` has no exit at all before it is
+ * submitted — no chevron by this rule, and the form offers no cancel. That is
+ * the same class of defect 295c6b5 fixed for the detail views, on a screen that
+ * ruling did not cover. It is left alone here because it is a capture-chrome
+ * question, not a detail-view one, and inventing an answer would pre-empt it.
+ */
+const CAPTURE_SCREENS = ['/m/logs/new', '/m/timeclock/switch'];
 
 /**
  * §3.1 — "Inside a project, the hamburger is replaced by a back chevron."
@@ -140,6 +162,11 @@ const COMPANY_DETAIL_PREFIXES = ['/m/contacts/', '/m/team/'];
  * outside `/m/p/` has an obvious place to declare itself.
  */
 export function showsBackChevron(pathname: string): boolean {
+  // The capture screens first, because they sit at detail depth and the depth
+  // test below would otherwise claim them. Checked before the project branch
+  // too, so a future capture screen under /m/p/ is covered by adding one entry.
+  if (CAPTURE_SCREENS.includes(pathname)) return false;
+
   // Everything inside a project — §3.1's original case, unchanged.
   if (pathname.startsWith('/m/p/')) return true;
 

@@ -382,6 +382,7 @@ export function ListRowLink({
   trailing,
   testId,
   label,
+  dataAttrs,
 }: {
   href: string;
   children: React.ReactNode;
@@ -390,10 +391,22 @@ export function ListRowLink({
   testId?: string;
   /** Accessible name for the row link when the visible content is a fragment. */
   label?: string;
+  /**
+   * Extra `data-*` attributes on the row — NOT a props spread [S121].
+   *
+   * The key type forces the `data-` prefix, so this cannot become a back door
+   * for `onClick`, `href` or a className override; the component keeps owning
+   * its behaviour and its geometry. Added for M-6, whose rows carry
+   * `data-queued` to separate the synced branch from the queued one — A-13d's
+   * mirror-image pair locates rows by that attribute, and reusing this
+   * component must not cost an assertion.
+   */
+  dataAttrs?: Record<`data-${string}`, string>;
 }) {
   return (
     <li
       data-testid={testId}
+      {...dataAttrs}
       className="relative flex min-h-[58px] items-center gap-[10px] border-b border-m6m-border px-[2px] py-[10px] last:border-b-0"
     >
       <Link

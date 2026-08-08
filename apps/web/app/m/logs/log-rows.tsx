@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import type { MobileLogRow } from '@/lib/services/daily-logs';
-import { EmptyState } from '../mobile-ui';
+import { EmptyState, ListRowLink } from '../mobile-ui';
 import { useOfflineSync } from '../offline-sync';
 
 // M6M §4.6 — M-6's rows, and the one thing that has to be a client component.
@@ -94,31 +94,41 @@ export function LogRows({ rows, projectId }: { rows: MobileLogRow[]; projectId: 
             </li>
           ))}
 
+          {/* D-55 — THE ROW OPENS THE LOG [S121]. `ListRowLink`, the same
+              component M-36 and M-27 use, so the fifth detail view is not a
+              fifth way of doing it. The photo count rides in `trailing`, which
+              renders OUTSIDE the link: it is not a control, but keeping it out
+              of the anchor is what stops a future tappable count from becoming
+              a nested interactive element — the invalid-HTML trap §4.11.16
+              documents for ContactActions.
+              The queued branch above deliberately does NOT link: `/m/logs/{id}`
+              would 404 on an id the server has never seen. */}
           {rows.map((r) => (
-            <li
+            <ListRowLink
               key={r.id}
-              data-testid="m-log-row"
-              data-queued="false"
-              className="flex min-h-[58px] items-center gap-[10px] border-b border-m6m-border py-[10px] last:border-b-0"
+              href={`/m/logs/${r.id}`}
+              testId="m-log-row"
+              dataAttrs={{ 'data-queued': 'false' }}
+              label={`Daily log ${r.log_date}`}
+              trailing={
+                <span
+                  data-testid="m-log-photo-count"
+                  className="font-mono text-[13px] text-m6m-muted"
+                >
+                  {r.photo_count}
+                </span>
+              }
             >
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[17px] font-bold leading-tight text-m6m-navy">
-                  {r.log_date}
-                </p>
-                <p className="mt-[2px] truncate font-mono text-[11px] text-m6m-muted">
-                  {[r.project_number ?? r.project_name, r.author_name].filter(Boolean).join(' · ')}
-                </p>
-                <p className="mt-[3px] truncate text-[13px] text-m6m-muted">
-                  {excerpt(r.work_performed)}
-                </p>
-              </div>
-              <span
-                data-testid="m-log-photo-count"
-                className="shrink-0 font-mono text-[13px] text-m6m-muted"
-              >
-                {r.photo_count}
-              </span>
-            </li>
+              <p className="truncate text-[17px] font-bold leading-tight text-m6m-navy">
+                {r.log_date}
+              </p>
+              <p className="mt-[2px] truncate font-mono text-[11px] text-m6m-muted">
+                {[r.project_number ?? r.project_name, r.author_name].filter(Boolean).join(' · ')}
+              </p>
+              <p className="mt-[3px] truncate text-[13px] text-m6m-muted">
+                {excerpt(r.work_performed)}
+              </p>
+            </ListRowLink>
           ))}
         </ul>
       )}
