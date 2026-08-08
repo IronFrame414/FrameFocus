@@ -789,3 +789,70 @@ test.describe('A-50 · money format', () => {
     }
   });
 });
+
+// ===========================================================================
+// M-27 DETAIL — the whole row opens the sub (D-55) [S121]
+// ===========================================================================
+// Reported from a device [S120, Josh]: no detail view exists for subs and
+// vendors. Same D-55 instance as M-37, M-36 and M-35 — "every list row opens
+// its own page with its own route" — and the same structural care M-36 needed:
+// the tap-to-act circles are SIBLINGS of the row link, never nested inside it.
+//
+// The leak check is repeated on the detail SURFACE deliberately. A-46 above
+// passes on the list, and a detail screen is exactly where a build fills the
+// space with the three cut columns — `getSubcontractor()` is `select('*')` and
+// `subcontractors_select_authenticated` carries no role floor, so nothing but
+// the page file keeps `default_markup_percent` out of the DOM.
+test.describe('M-27 detail · /m/subs/[subId]', () => {
+  test('the row opens the sub, and the tap-to-act circles still dial', async ({ page }) => {
+    await page.goto('/m/subs');
+    const rows = page.getByTestId('m-sub-row');
+    if ((await rows.count()) === 0) test.skip(true, 'no subs on rebuild-test');
+
+    // ⚠️ ASSERTED SEPARATELY FROM THE ROW HREF, and that is the point: a "does
+    // the row navigate" test cannot see that a nested anchor has silently
+    // become a navigation. The tel: link must still be a tel: link.
+    const tel = rows.first().getByTestId('m-tel');
+    if ((await tel.count()) > 0) await expect(tel).toHaveAttribute('href', /^tel:/);
+
+    await rows.first().getByTestId('m-row-link').click();
+    await expect(page).toHaveURL(/\/m\/subs\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+    await expect(page.getByTestId('m-sub-detail')).toBeVisible();
+    await expect(page.getByTestId('m-sub-name')).not.toBeEmpty();
+  });
+
+  test('a way back — the chevron, and the LIST keeps its hamburger', async ({ page }) => {
+    await page.goto('/m/subs');
+    const rows = page.getByTestId('m-sub-row');
+    if ((await rows.count()) === 0) test.skip(true, 'no subs on rebuild-test');
+
+    // The list is a sheet destination: hamburger, no chevron (A-42b).
+    await expect(page.getByTestId('m-hamburger')).toBeVisible();
+
+    await rows.first().getByTestId('m-row-link').click();
+    await expect(page).toHaveURL(/\/m\/subs\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+    await expect(page.getByTestId('m-back')).toBeVisible();
+    await expect(page.getByTestId('m-hamburger')).toHaveCount(0);
+    // Company-scoped, so NO tab is active — the A-42 family, not M-37's.
+    expect(await page.locator('[data-testid^="m-tab-"][aria-current="page"]').count()).toBe(0);
+  });
+
+  test('A-46 on the DETAIL surface · still no rate, markup or EIN', async ({ page }) => {
+    await page.goto('/m/subs');
+    const rows = page.getByTestId('m-sub-row');
+    if ((await rows.count()) === 0) test.skip(true, 'no subs on rebuild-test');
+    await rows.first().getByTestId('m-row-link').click();
+    await expect(page.getByTestId('m-sub-detail')).toBeVisible();
+
+    const body = (await page.getByTestId('m-content').textContent()) ?? '';
+    expect(body).not.toMatch(/markup/i);
+    expect(body).not.toMatch(/\bEIN\b/i);
+    expect(body).not.toMatch(/\/\s*hr|per hour|hourly/i);
+    expect(body).not.toMatch(/\$\d/);
+  });
+
+  test('an id that does not exist 404s rather than rendering an empty shell', async ({ page }) => {
+    const resp = await page.goto('/m/subs/11111111-1111-1111-1111-111111111111');
+    expect(resp?.status()).toBe(404);
+  });
+});

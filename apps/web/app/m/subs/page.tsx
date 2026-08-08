@@ -7,7 +7,7 @@ import {
   ContactActions,
   EmptyState,
   FilterChips,
-  ListRow,
+  ListRowLink,
   StatusPill,
   type Chip,
 } from '../mobile-ui';
@@ -87,7 +87,26 @@ export default async function MobileSubsPage({
             const expired = s.insurance_expiry != null && s.insurance_expiry < today;
             const name = s.company_name ?? 'Unnamed';
             return (
-              <ListRow key={s.id} testId="m-sub-row">
+              // D-55 — THE WHOLE ROW OPENS THE SUB [S121]. `ListRowLink`, the
+              // same component M-36 uses, and for the same structural reason:
+              // the tap-to-act circles must stay SIBLINGS of the link, never
+              // nested inside it. Nesting is invalid HTML — the browser closes
+              // the outer anchor early and what ships is a call button that
+              // navigates to the detail instead of dialling.
+              <ListRowLink
+                key={s.id}
+                href={`/m/subs/${s.id}`}
+                testId="m-sub-row"
+                label={name}
+                trailing={
+                  <ContactActions
+                    phone={s.phone}
+                    mobile={s.mobile}
+                    email={s.email}
+                    name={name}
+                  />
+                }
+              >
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[17px] font-bold leading-tight text-m6m-navy">
                     {name}
@@ -133,15 +152,7 @@ export default async function MobileSubsPage({
                     </p>
                   ) : null}
                 </div>
-
-                {/* §4.13.4 — the screen's reason to exist on a phone (A-46c). */}
-                <ContactActions
-                  phone={s.phone}
-                  mobile={s.mobile}
-                  email={s.email}
-                  name={name}
-                />
-              </ListRow>
+              </ListRowLink>
             );
           })}
         </ul>
