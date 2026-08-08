@@ -31,8 +31,13 @@ export default async function SwitchSegmentPage() {
         >
           Not clocked in — there is no segment to switch.
         </p>
+        {/* This branch ALREADY owned its exit — the gap [S121] was in the
+            clocked-in branch, which had none. Given a testid so the "every
+            capture screen offers a way out" criterion can assert BOTH branches
+            rather than only the one the test identity happens to be in. */}
         <Link
           href="/m/timeclock"
+          data-testid="m-switch-cancel"
           className="mt-[14px] flex min-h-[52px] w-full items-center justify-center rounded-[14px] border border-m6m-border bg-m6m-card text-[15px] font-semibold text-m6m-navy"
         >
           Go to Timeclock

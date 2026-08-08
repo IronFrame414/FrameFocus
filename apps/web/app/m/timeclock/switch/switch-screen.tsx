@@ -338,6 +338,29 @@ export function SwitchScreen({
       >
         {busy ? 'Switching…' : 'Start segment'}
       </button>
+
+      {/* ⚠️ THE CAPTURE SCREEN'S OWN EXIT [S121].
+          §4.12's rule is that a capture screen owns its chrome and its exits,
+          which is why `CAPTURE_SCREENS` in mobile-shell.tsx withholds the back
+          chevron here. **It owned neither.** Before submitting there was no way
+          off this screen at all: no chevron by that rule, no cancel in the form,
+          and a standalone-display PWA has no browser back gesture — the same
+          class of defect 295c6b5 fixed for the detail views, on a screen that
+          ruling did not cover.
+          Surveyed before fixing: `/m/capture` already carries Back and Discard
+          (capture-screen.tsx), so the gap was exactly this screen and
+          `/m/timeclock/switch`. Both are fixed; nothing else was missing one.
+          `router.back()` and not a hard-coded route: this screen is reached from
+          M-5's switch control, and returning somewhere the user did
+          not come from is its own small defect. */}
+      <button
+        type="button"
+        data-testid="m-switch-cancel"
+        onClick={() => router.back()}
+        className="mt-[10px] flex h-[52px] w-full items-center justify-center rounded-[14px] border border-m6m-border bg-m6m-card text-[15px] font-semibold text-m6m-navy"
+      >
+        Cancel
+      </button>
     </div>
   );
 }

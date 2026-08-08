@@ -878,3 +878,58 @@ test.describe('A-7l2 · recently-used order (foreman identity)', () => {
     }
   });
 });
+
+// ===========================================================================
+// EVERY CAPTURE SCREEN OWNS AN EXIT [S121]
+// ===========================================================================
+// §4.12's rule — a capture screen owns its own chrome and its own exits — is
+// why `CAPTURE_SCREENS` in mobile-shell.tsx withholds the back chevron from
+// `/m/logs/new` and `/m/timeclock/switch`. **Two of the three owned neither**:
+// no chevron by that rule and no cancel in the form, and a standalone-display
+// PWA has no browser back gesture. Same class as the defect 295c6b5 fixed for
+// the detail views, on screens that ruling did not cover.
+//
+// Surveyed before fixing rather than after: `/m/capture` already carried Back
+// and Discard, so the gap was exactly the other two. This asserts all three, so
+// a fourth capture screen added later fails here rather than shipping stranded.
+test.describe('a capture screen is never a dead end', () => {
+  for (const [label, route, exitTestId] of [
+    ['M-21 · daily log', '/m/logs/new', 'm-log-cancel'],
+    ['M-20 · timeclock switch', '/m/timeclock/switch', 'm-switch-cancel'],
+  ] as const) {
+    test(`${label} offers a way out before submitting`, async ({ page }) => {
+      await page.goto(route);
+
+      // The rule these screens live under: no chevron, by design.
+      await expect(page.getByTestId('m-back')).toHaveCount(0);
+      // ...which is only acceptable because they carry their own exit.
+      //
+      // ⚠️ M-20 HAS TWO BRANCHES and the criterion covers both. When the user
+      // is not clocked in the screen renders "Not clocked in — there is no
+      // segment to switch" and already carried an exit; the GAP was in the
+      // clocked-in branch, which had none. The suite's crew identity is not
+      // clocked in, so a test that only checked the form branch would have
+      // asserted nothing here — both now carry the same testid.
+      await expect(page.getByTestId(exitTestId)).toBeVisible();
+    });
+  }
+
+  test('/m/capture already had one — the control case', async ({ page }) => {
+    // ⚠️ NOT REDUNDANT. Without it, a "fix" that added an exit to two screens
+    // and removed the one that worked would pass both tests above.
+    await page.goto('/m/capture');
+    await expect(page.getByTestId('m-capture-back')).toBeVisible();
+  });
+
+  test('the exit RETURNS, rather than navigating somewhere fixed', async ({ page }) => {
+    // `router.back()` and not a hard-coded route: M-21 is reached from M-6 AND
+    // from M-3's "Log the day", so a fixed destination would drop the user
+    // somewhere they never were.
+    await page.goto('/m/logs');
+    await page.getByTestId('m-log-the-day').click();
+    await expect(page).toHaveURL(/\/m\/logs\/new/, { timeout: 20_000 });
+
+    await page.getByTestId('m-log-cancel').click();
+    await expect(page).toHaveURL(/\/m\/logs$/, { timeout: 20_000 });
+  });
+});
