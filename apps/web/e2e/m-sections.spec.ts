@@ -266,27 +266,56 @@ test.describe('A-33c · no money on M-13 under ANY role', () => {
   }
 
   // -------------------------------------------------------------------------
-  // THE NON-VACUITY GUARD [S114] — read this before touching the loop above.
+  // ⚠️ THE NON-VACUITY GUARD IS INVERTED BY THE #117 FLOOR [S121]. READ THIS.
   // -------------------------------------------------------------------------
-  // Every assertion in the loop is an ABSENCE ("no currency"), and an absence
-  // is trivially true of an empty screen. That is not a theoretical worry for
-  // the subcontractor arm specifically: a sub reaches M-13 only through
-  // `can_view_project()`, which needs a `project_assignments` row that
-  // scripts/seed-test-identities.mjs creates. Lose that row and the sub arm
-  // goes green while asserting nothing at all.
+  // _Superseded test, quoted rather than deleted:_
   //
-  // So this test pins the precondition the loop depends on: the sub really is
-  // looking at a POPULATED change-order list. It is the difference between
-  // "the UI withheld the money" and "there was no money to withhold".
-  test('the subcontractor arm is not vacuous — a sub genuinely reaches a populated M-13', async ({
+  //   _"the subcontractor arm is not vacuous — a sub genuinely reaches a
+  //    populated M-13 ... So this test pins the precondition the loop depends
+  //    on: the sub really is looking at a POPULATED change-order list. It is
+  //    the difference between 'the UI withheld the money' and 'there was no
+  //    money to withhold'."_
+  //
+  // That guard was exactly right for a world where `change_orders_select_visible`
+  // had no role floor. **Migration 20260830000000 gave it one**: Owner/Admin see
+  // every CO, a PM sees the ones they authored, and foreman, crew and
+  // subcontractor see NONE. So a populated M-13 for a sub is now impossible by
+  // design, and the old test asserts a precondition the database has removed.
+  //
+  // The distinction it protected has not gone away — it has MOVED. For a sub,
+  // "there was no money to withhold" is now the CORRECT and stronger state, and
+  // what must be pinned is that the emptiness is caused by the FLOOR rather than
+  // by a lost `project_assignments` row. Those two look identical on M-13 and
+  // are not: one is a policy working, the other is a fixture rotting.
+  //
+  // So the guard now asserts BOTH halves — the sub reaches the project (their
+  // assignment is intact, proven on a screen the floor does not touch) AND
+  // reads no change orders. A missing seed row fails the first half; a
+  // regressed floor fails the second.
+  test('the subcontractor arm is not vacuous — the sub reaches the PROJECT and the CO list is floored', async ({
     page,
   }) => {
     await signInAs(page, 'josh+qa-sub@worthprop.com');
+
+    // Half 1 — the assignment is alive. THE PROJECT HUB, not M-14: a first
+    // draft used the punch list and failed, because **D-57 narrows
+    // punch_list_items for subs to assignee-or-author**, so an unassigned sub
+    // sees an empty punch list on a project they genuinely reach. The hub is
+    // gated by `can_view_project()` and nothing else, which is exactly the
+    // predicate the seed row exists to satisfy.
+    const hub = await page.goto(`/m/p/${PROJECT_ID}`);
+    expect(
+      hub?.status(),
+      'the sub cannot reach the project at all — the seed assignment is missing, not the CO floor working'
+    ).toBe(200);
+    await expect(page.getByTestId('m-content')).toBeVisible();
+
+    // Half 2 — and the change orders are gone, which is the floor.
     await page.goto(routeFor('changes'));
     await expect(
       page.getByTestId('m-co-row'),
-      'the sub sees no CO rows — the seed assignment is missing, so A-33c above is passing on an empty page'
-    ).not.toHaveCount(0);
+      'the sub still reads change orders — the #117 floor has regressed'
+    ).toHaveCount(0);
   });
 });
 

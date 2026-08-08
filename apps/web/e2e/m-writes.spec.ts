@@ -280,13 +280,28 @@ test.describe('D-54 step 1 · the CO create control is hidden from the roles the
     // crew, because the foreman saw no rows at all and the second assertion
     // below would have passed for the wrong reason.
     await signInAs(page, FOREMAN);
-    await page.goto(`/m/p/${PROJECT}/changes`);
+    const resp = await page.goto(`/m/p/${PROJECT}/changes`);
+    expect(resp?.status(), 'the foreman was bounced off M-13 — the LIST is not gated').toBe(200);
 
     await expect(page.getByTestId('m-co-new')).toHaveCount(0);
+
     // §4.11.10b — "changes → M-13: Gets the list." The list is NOT gated; only
     // the write route and the detail route are. A build that hid the whole
-    // screen would pass the line above and be wrong.
-    await expect(page.getByTestId('m-co-row').first()).toBeVisible();
+    // SCREEN would pass the line above and be wrong, and that half of the
+    // criterion is still live.
+    //
+    // ⚠️ THE PROOF CHANGED WITH THE #117 FLOOR [S121]. It used to be "a row is
+    // visible", which the floor makes impossible — a foreman now reads no
+    // change orders at all (20260830000000). So the screen proves itself by
+    // RENDERING: its chips are present and it shows an empty state rather than
+    // a redirect, a 404 or a blank. A hidden screen still fails.
+    // M-13 carries no filter chips and its title lives in the shell's app bar
+    // (outside `m-content`), so the EMPTY STATE is the screen's own evidence
+    // that it rendered — "No change orders." is a screen; a 404 or a redirect
+    // is not.
+    await expect(page.getByTestId('m-empty')).toBeVisible();
+    await expect(page.getByTestId('m-empty')).toContainText(/no change orders/i);
+    await expect(page.getByTestId('m-co-row')).toHaveCount(0);
   });
 
   test('an owner gets the create control', async ({ page }) => {
@@ -415,25 +430,39 @@ test.describe('M-31 · write controls are Owner/Admin/PM, on a screen foreman an
     if (!hasControls) await expect(page.getByTestId('m-co-terminal')).toBeVisible();
   });
 
-  test('a foreman READS the change order and gets no write controls at all', async ({
-    page,
-  }) => {
-    // FOREMAN, restored [S119, #143]. This is the pairing D-53/D-51 actually
-    // describe — a foreman is admitted to the READ and refused the WRITES — and
-    // asserting it under crew was a workaround, not the criterion.
+  test('⚠️ SUPERSEDED BY THE #117 FLOOR — a foreman now READS NOTHING', async ({ page }) => {
+    // _Superseded test, quoted rather than deleted:_
+    //
+    //   _"a foreman READS the change order and gets no write controls at all.
+    //    FOREMAN, restored [S119, #143]. This is the pairing D-53/D-51 actually
+    //    describe — a foreman is admitted to the READ and refused the WRITES."_
+    //
+    // **That pairing no longer exists.** D-53 granted CO detail reads to
+    // "everyone except subcontractors"; migration 20260830000000 (#117, ruled
+    // S121) floors `change_orders_select_visible` to Owner/Admin plus the
+    // authoring PM. A foreman is refused the READ as well as the writes, so
+    // there is no screen on which to check for absent controls.
+    //
+    // **This is a NARROWING OF D-53, recorded here and in the spec's D-53 row.**
+    // The old test would now pass vacuously — a 404 renders no send button, no
+    // void button and no money either.
     await signInAs(page, FOREMAN);
     await page.goto(`/m/p/${PROJECT}/changes`);
-    await page.getByTestId('m-co-row').first().getByTestId('m-row-link').click();
-    await expect(page).toHaveURL(/\/changes\/[0-9a-f-]{36}$/, { timeout: 30_000 });
 
-    // D-53 keeps CO READING open to everyone but subcontractors — the screen
-    // renders. D-51 keeps the writes to three roles.
-    await expect(page.getByTestId('m-co-detail')).toBeVisible();
-    await expect(page.getByTestId('m-co-actions')).toHaveCount(0);
-    await expect(page.getByTestId('m-co-send')).toHaveCount(0);
-    await expect(page.getByTestId('m-co-void')).toHaveCount(0);
-    // And still no money — D-51's other half, unchanged by Part C.
-    await expect(page.getByTestId('m-co-net-delta')).toHaveCount(0);
+    // The list is reachable and empty — not a bounce, and not an error.
+    await expect(page.getByTestId('m-co-row')).toHaveCount(0);
+
+    // And the detail is unreachable by URL, which is the half a hidden row
+    // never proves.
+    const { data: cos } = await adminClient()
+      .from('change_orders')
+      .select('id')
+      .eq('project_id', PROJECT)
+      .eq('is_deleted', false)
+      .limit(1);
+    if (!cos?.length) return;
+    const resp = await page.goto(`/m/p/${PROJECT}/changes/${cos[0].id}`);
+    expect(resp?.status(), 'a foreman still reached a change order after the floor').toBe(404);
   });
 
   test('send demands a printed name on the first send', async ({ page }) => {

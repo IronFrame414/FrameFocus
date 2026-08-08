@@ -74,10 +74,16 @@ function numericOccurrences(html: string, key: string): string[] {
 }
 
 test.describe('#117 · the CO list ships no money to a role that may not see it', () => {
+  // ⚠️ THE PM IS NOT IN THIS LOOP ANY MORE [S121]. After the authored-by
+  // ruling a PM legitimately receives net_delta for change orders they wrote,
+  // so "no numeric net_delta" is the WRONG assertion for them — it would fail
+  // on correct behaviour. Their case is asserted separately below, in both
+  // directions. Crew and foreman receive no CO rows at all after the floor, so
+  // the absence here is now doubly guaranteed: nothing to redact, and nothing
+  // to send.
   for (const [role, email] of [
     ['crew_member', CREW],
     ['foreman', FOREMAN],
-    ['project_manager', PM],
   ] as const) {
     test(`${role} — no net_delta, no markup, no tax_rate in the payload`, async ({ page }) => {
       await signIn(page, email);
@@ -119,6 +125,56 @@ test.describe('#117 · the CO list ships no money to a role that may not see it'
       'the owner received no net_delta — the fixture or the page is broken, not the floor'
     ).toBeGreaterThan(0);
   });
+
+  test('a PM receives figures for their OWN change orders and no others', async ({ page }) => {
+    // The ruling, through the payload, in BOTH directions — and both projects
+    // are DISCOVERED, not hard-coded. A first draft asserted on the fixture
+    // project and failed correctly: this PM's only authored CO is on PRJ-100,
+    // so on the fixture project they legitimately see nothing. Hard-coding a
+    // project is how an authored-by test becomes a coin flip.
+    const db = adminClient();
+    const { data: pmProfile } = await db
+      .from('profiles')
+      .select('user_id')
+      .eq('email', PM)
+      .single();
+    const pmUser = pmProfile!.user_id as string;
+
+    const { data: cos } = await db
+      .from('change_orders')
+      .select('id, project_id, created_by')
+      .eq('is_deleted', false);
+
+    const mine = (cos ?? []).filter((c) => c.created_by === pmUser);
+    expect(mine.length, 'the PM authored no CO — the widening cannot be tested').toBeGreaterThan(0);
+    const myProject = mine[0].project_id as string;
+    const myCountThere = mine.filter((c) => c.project_id === myProject).length;
+
+    // ── HALF 1: the WIDENING. On a project where the PM authored a CO they now
+    //    receive its figures — access desktop denied them entirely before S121.
+    await signIn(page, PM);
+    await page.goto(`/dashboard/projects/${myProject}/changes`);
+    await expect(page.locator('body')).toContainText(/Awaiting Signature/i, { timeout: 20_000 });
+    const own = numericOccurrences(await page.content(), 'net_delta').length;
+    expect(own, 'the PM received no figures on a CO they authored — the widening did not land').toBe(
+      myCountThere
+    );
+
+    // ── HALF 2: the FLOOR. On a project with change orders they did NOT author,
+    //    they receive none. The fixture project carries COs and none are theirs.
+    const othersThere = (cos ?? []).filter(
+      (c) => c.project_id === PROJECT && c.created_by !== pmUser
+    ).length;
+    expect(othersThere, 'the fixture project has no foreign-authored CO to test with').toBeGreaterThan(0);
+
+    await page.goto(`/dashboard/projects/${PROJECT}/changes`);
+    await expect(page.locator('body')).toContainText(/Awaiting Signature/i, { timeout: 20_000 });
+    expect(
+      numericOccurrences(await page.content(), 'net_delta'),
+      "the PM received figures for change orders they did not author"
+    ).toEqual([]);
+  });
+
 });
 
 test.describe('#117 · the CO DETAIL ships no line-level cost or margin', () => {

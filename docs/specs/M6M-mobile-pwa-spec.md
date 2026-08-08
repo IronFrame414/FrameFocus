@@ -1435,7 +1435,7 @@ opens a desktop page. Common rules, stated once so the nine subsections below st
 > | M-14 / M-33 / M-34 | Punch items: **create and complete** | **EVERY role, subcontractors included** _(corrected S110)_ | D-52 |
 > | M-34 | Punch items: **verify** | **Foreman+** — crew and subs excluded, as on desktop _(corrected S110)_ | D-52 |
 > | M-14 / M-34 | Punch items: **what a SUBCONTRACTOR sees** | **Assignee or author only** — narrower than today | **D-57** |
-> | M-31, M-35, M-36, M-16 | Detail views (read) | Everyone **except subcontractors** | D-53 |
+> | M-31, M-35, M-36, M-16 | Detail views (read) | Everyone **except subcontractors** | D-53 — **⚠️ NARROWED FOR M-31 ONLY [S121]: `change_orders` now carries a DB read floor (`20260830000000`, #117 closed). Owner/Admin see all; a PM sees change orders they AUTHORED; foreman, crew and subcontractor see none. D-53's grant stands unchanged for M-35, M-36 and M-16.** |
 > | M-8 / M-9 / M-10 | Photos: view, capture, annotate | **EVERY role, subcontractors included** _(corrected S110)_ | D-53 / §7a |
 >
 > **⚠️ THREE ROWS ABOVE WERE CORRECTED AT [S110] and the original ruling text is superseded** — see

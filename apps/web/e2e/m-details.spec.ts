@@ -75,11 +75,36 @@ async function signInAs(page: Page, email: string) {
   await expect(page).toHaveURL(/\/dashboard/, { timeout: 30_000 });
 }
 
+/**
+ * A readable CO url — AS OWNER, since the #117 floor [S121].
+ *
+ * Every caller used to rely on the suite's default crew session finding a
+ * row. `change_orders_select_visible` now returns none to crew, so the url
+ * has to be obtained by an identity that can see one. Callers that then test
+ * a DIFFERENT role sign in again afterwards; the url itself is role-free.
+ */
+async function firstCoUrlAsOwner(page: Page): Promise<string> {
+  await signInAs(page, OWNER);
+  await page.goto(`/m/p/${PROJECT}/changes`);
+  const href = await page
+    .getByTestId('m-co-row')
+    .first()
+    .getByTestId('m-row-link')
+    .getAttribute('href');
+  return href!;
+}
+
 // ===========================================================================
 // D-55 — every list row opens its own page
 // ===========================================================================
 test.describe('D-55 · the row opens the detail page', () => {
   test('M-13 → M-31 · a change-order row opens the change order', async ({ page }) => {
+    // ⚠️ AS OWNER SINCE THE #117 FLOOR [S121]. The suite's default identity is
+    // CREW, and `change_orders_select_visible` now returns nothing to crew — so
+    // M-13 is legitimately empty for them and this row could not exist. D-55 is
+    // about the row OPENING its page, not about who may see the row, so the
+    // criterion is unchanged; only the identity that can exercise it is.
+    await signInAs(page, OWNER);
     await page.goto(`/m/p/${PROJECT}/changes`);
     const row = page.getByTestId('m-co-row').first();
     await expect(row).toBeVisible();
@@ -176,29 +201,40 @@ test.describe('§4.11.16 · the row and the call button do not swallow each othe
 // M-31 — the money gate. UI-ONLY, and that is the point.
 // ===========================================================================
 test.describe('M-31 · net_delta is Owner/Admin/PM only (D-51), and it is UI-only (#117)', () => {
-  async function firstCoUrl(page: Page): Promise<string> {
-    await page.goto(`/m/p/${PROJECT}/changes`);
-    const href = await page.getByTestId('m-co-row').first().getByTestId('m-row-link').getAttribute('href');
-    return href!;
-  }
+
 
   test('an owner sees the net delta', async ({ page }) => {
     await signInAs(page, OWNER);
-    await page.goto(await firstCoUrl(page));
+    await page.goto(await firstCoUrlAsOwner(page));
     await expect(page.getByTestId('m-co-net-delta')).toBeVisible();
   });
 
-  test('a crew member reaches the SCREEN but sees no money anywhere on it', async ({ page }) => {
-    // Reaching it is correct — D-53 keeps CO reading open to everyone but subs,
-    // and bouncing crew would be Option C, rejected in §4.11.10a.
-    const url = await firstCoUrl(page);
-    await page.goto(url);
-    await expect(page.getByTestId('m-co-detail')).toBeVisible();
-    await expect(page.getByTestId('m-co-net-delta')).toHaveCount(0);
-    await expect(page.getByTestId('m-co-line-total')).toHaveCount(0);
-    // Belt and braces: no currency string anywhere in the content.
-    const body = (await page.getByTestId('m-content').textContent()) ?? '';
-    expect(body).not.toMatch(/[$£€]\s?\d/);
+  test('⚠️ SUPERSEDED BY THE #117 FLOOR — a crew member now reaches NOTHING', async ({
+    page,
+  }) => {
+    // _Superseded assertion, quoted rather than deleted:_ _"a crew member
+    // reaches the SCREEN but sees no money anywhere on it ... Reaching it is
+    // correct — D-53 keeps CO reading open to everyone but subs, and bouncing
+    // crew would be Option C, rejected in §4.11.10a."_
+    //
+    // That was the UI-ONLY guarantee, and this describe block's own title still
+    // says "#117 ... it is UI-only". **It is not, as of migration
+    // 20260830000000.** `change_orders_select_visible` now floors the ROW:
+    // Owner/Admin see all, a PM sees what they authored, foreman/crew/sub see
+    // none. Crew does not reach M-31 to be shown no money — there is no row.
+    //
+    // This is STRICTLY STRONGER than what it replaces, and it is asserted as
+    // such rather than removed: the old test would now pass vacuously against a
+    // 404 page that renders no currency because it renders nothing.
+    const url = await firstCoUrlAsOwner(page);
+
+    await signInAs(page, CREW);
+    const resp = await page.goto(url);
+    expect(resp?.status(), 'crew still reached a change order after the floor').toBe(404);
+
+    // And the list it would have come from is empty for them.
+    await page.goto(`/m/p/${PROJECT}/changes`);
+    await expect(page.getByTestId('m-co-row')).toHaveCount(0);
   });
 
   test('the signing token is never rendered', async ({ page }) => {
@@ -206,7 +242,7 @@ test.describe('M-31 · net_delta is Owner/Admin/PM only (D-51), and it is UI-onl
     // signature and arrives in the payload (getCoSigningSessions select('*')).
     // A phone screen is where it gets photographed.
     await signInAs(page, OWNER);
-    await page.goto(await firstCoUrl(page));
+    await page.goto(await firstCoUrlAsOwner(page));
     const html = await page.content();
     // Tokens are long opaque strings; assert none of the signing-session
     // secrets leaked into the markup.
@@ -223,8 +259,13 @@ test.describe('D-54 · a subcontractor is blocked from the four gated detail rou
   test('M-31 · typing the URL redirects, and the destination explains itself', async ({ page }) => {
     // Typed, not clicked. A hidden row is not a permission — this is what a
     // screenshot, a bookmark or a stale PWA cache would do.
-    await page.goto(`/m/p/${PROJECT}/changes`);
-    const href = await page.getByTestId('m-co-row').first().getByTestId('m-row-link').getAttribute('href');
+    //
+    // ⚠️ THE URL IS OBTAINED AS OWNER SINCE THE #117 FLOOR [S121]: crew (the
+    // suite's default identity) reads no change orders, so the list this used
+    // to scrape is empty. The criterion is unchanged — D-54's guard runs BEFORE
+    // `getChangeOrder`, so the sub still meets the explanation rather than a
+    // 404, which is what A-66 requires and what a bare RLS floor would not give.
+    const href = await firstCoUrlAsOwner(page);
 
     await signInAs(page, SUB);
     await page.goto(href!);
@@ -396,6 +437,9 @@ test.describe('A-30f · every detail view offers a way back', () => {
     // ⚠️ NOT REDUNDANT. Without the project-scoped pair, a "fix" that swapped
     // the branches — chevron for company-scoped, hamburger for project-scoped —
     // would satisfy the two tests above and break the two screens that worked.
+    //
+    // As OWNER since the #117 floor — crew reads no change orders [S121].
+    await signInAs(page, OWNER);
     await page.goto(`/m/p/${PROJECT}/changes`);
     await page.getByTestId('m-co-row').first().getByTestId('m-row-link').click();
     await expect(page).toHaveURL(new RegExp(`/m/p/${PROJECT}/changes/[0-9a-f-]{36}$`), NAV);

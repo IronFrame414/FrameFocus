@@ -53,8 +53,20 @@ interface ChangesPanelProps {
   signedDelta: number | null;
   canManage: boolean;
   canDelete: boolean;
-  /** Financial floor (ui-01 §11): CO dollar amounts are Owner/Admin only. */
+  /**
+   * The money COLUMN is present. Owner/Admin, and a PM — who may see figures on
+   * change orders they authored (S121). Per-row values are null for the ones
+   * they may not, so the cell renders empty rather than lying.
+   */
   canSeeFinancials: boolean;
+  /**
+   * The two summary SUMS. Owner/Admin only, and deliberately narrower than the
+   * column: `sentSum` and `signedDelta` aggregate ACROSS authors, so handing
+   * them to a PM would encode other people's figures in one number — exactly
+   * what the authored-by ruling withholds. A partial sum captioned "pending"
+   * would be worse than no caption.
+   */
+  canSeeSums: boolean;
 }
 
 export function ChangesPanel({
@@ -65,6 +77,7 @@ export function ChangesPanel({
   canManage,
   canDelete,
   canSeeFinancials,
+  canSeeSums,
 }: ChangesPanelProps) {
   const router = useRouter();
   const [formOpen, setFormOpen] = useState(false);
@@ -135,7 +148,7 @@ export function ChangesPanel({
       label: 'Awaiting Signature',
       value: sent.length,
       valueColor: color.warning,
-      caption: canSeeFinancials
+      caption: canSeeSums
         ? `${sentSum < 0 ? '−' : ''}${money(sentSum)} pending`
         : 'sent to clients',
     },
@@ -143,7 +156,7 @@ export function ChangesPanel({
       label: 'Signed',
       value: signed.length,
       valueColor: color.success,
-      caption: canSeeFinancials
+      caption: canSeeSums
         ? `${signedSum < 0 ? '−' : ''}${money(signedSum)} added`
         : 'signed by clients',
     },

@@ -39,7 +39,14 @@ export default async function ChangeOrderPage({
   // §7.3 S-5 as amended by RULING A [S97, 2026-08-02]: CO instrument rates are
   // Owner/Admin only and a PM sees NO rate values — the section is not mounted
   // below Owner/Admin rather than rendered read-only.
-  const canSeeRates = ['owner', 'admin'].includes(profile.role);
+  // AUTHORED-BY [Josh, S121] — the same widening as the list, and the same
+  // mirror of `change_orders_select_visible`. A PM reaching this page at all
+  // means RLS returned them the row, which after 20260830000000 means they
+  // authored it; the check is restated rather than assumed so the UI does not
+  // depend on a policy staying exactly as it is.
+  const canSeeRates =
+    ['owner', 'admin'].includes(profile.role) ||
+    (profile.role === 'project_manager' && changeOrder.created_by === user.id);
 
   // Company name (printed-name prefill) + whether a saved signature image is on
   // file (gates the 'saved_image' send mode). contractor_signature_path is a new
