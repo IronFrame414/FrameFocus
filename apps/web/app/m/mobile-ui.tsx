@@ -45,7 +45,13 @@ export function FilterChips({
     >
       {chips.map((chip) => {
         const isActive = chip.value === active;
-        const href = chip.value === null ? basePath : `${basePath}?${param}=${chip.value}`;
+        // ⚠️ THE SEPARATOR IS DERIVED, NOT ASSUMED [S120]. Every caller before
+        // M-6 passed a bare path, so `?` was always right. M-6 carries
+        // `?project=` forward (it is what produces the "This project" chip at
+        // all), and a hardcoded `?` there would emit `/m/logs?project=X?filter=mine`
+        // — a URL whose second param is silently part of the first's value.
+        const sep = basePath.includes('?') ? '&' : '?';
+        const href = chip.value === null ? basePath : `${basePath}${sep}${param}=${chip.value}`;
         return (
           <Link
             key={chip.label}
