@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { createPunchItem, createPunchList } from '@/lib/services/punch-client';
+import { useAssigneePicker } from '@/lib/assignee-picker';
 import type { PunchItemPriority } from '@/lib/services/punch-client';
 import { SetMobileHeader } from '../../../../mobile-header';
 import {
@@ -106,7 +107,12 @@ export function PunchItemForm({
   const [location, setLocation] = useState('');
   const [trade, setTrade] = useState('');
   const [priority, setPriority] = useState<PunchItemPriority | null>(null);
-  const [assignee, setAssignee] = useState<string | null>(null);
+
+  // D-65's two steps, SHARED WITH DESKTOP — lib/assignee-picker.ts. The
+  // partition and the switch-clears-the-pick rule live there so /dashboard's
+  // punch panel cannot drift from this one; only the RENDERING is per-surface,
+  // because §2's 52px touch floor and a desktop <select> are not reconcilable.
+  const picker = useAssigneePicker(members);
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -116,9 +122,6 @@ export function PunchItemForm({
   // navigate, so without it a successful save and a dead button look identical.
   const [savedCount, setSavedCount] = useState(0);
 
-  // D-65 — which SIDE of the assignee picker is open. `null` until the author
-  // picks one, so neither list is shown before the question is answered.
-  const [assigneeSide, setAssigneeSide] = useState<'crew' | 'subcontractor' | null>(null);
 
   const listChosen = listId !== null && (listId !== NEW_LIST || newListName.trim().length > 0);
   const ready = listChosen && title.trim().length > 0;
@@ -177,7 +180,7 @@ export function PunchItemForm({
       priority,
       location: location.trim() || null,
       trade: trade.trim() || null,
-      assignee_id: assignee,
+      assignee_id: picker.assignee,
     });
 
     if (!result.success) {
@@ -241,11 +244,6 @@ export function PunchItemForm({
     router.push(`/m/p/${projectId}/punch`);
     router.refresh();
   }
-
-  // D-65's two sides. `member_type` is CHECK-constrained to exactly these two
-  // values, so the pair partitions the roster and nothing falls between them.
-  const crewMembers = members.filter((m) => m.member_type !== 'subcontractor');
-  const subMembers = members.filter((m) => m.member_type === 'subcontractor');
 
   // The picker's options. "New list…" is one of them rather than a separate
   // control, so "where does this go" is a single question with a single answer.
@@ -374,44 +372,41 @@ export function PunchItemForm({
               and answering it for the user is how the flat list happened. */}
           <OptionStack
             options={[
-              { value: 'crew' as const, label: 'Team', sub: `${crewMembers.length}` },
+              { value: 'crew' as const, label: 'Team', sub: `${picker.crew.length}` },
               {
                 value: 'subcontractor' as const,
                 label: 'Sub / Vendor',
-                sub: `${subMembers.length}`,
+                sub: `${picker.subs.length}`,
               },
             ]}
-            value={assigneeSide}
-            onChange={(side) => {
-              setAssigneeSide(side);
-              // Changing sides drops a selection made on the other one —
-              // otherwise the form would carry an assignee the visible list
-              // does not contain, which reads as nothing being selected.
-              setAssignee(null);
-            }}
+            value={picker.side}
+            // The switch-clears-the-pick rule is INSIDE `chooseSide`, shared
+            // with desktop. It was inline here and is not any more, precisely
+            // so the two surfaces cannot disagree about it.
+            onChange={picker.chooseSide}
             testIdPrefix="m-punch-assignee-side"
           />
 
           {/* STEP 2 — only after step 1. */}
-          {assigneeSide !== null ? (
+          {picker.side !== null ? (
             <div className="mt-[10px]">
-              {(assigneeSide === 'crew' ? crewMembers : subMembers).length === 0 ? (
+              {picker.visible.length === 0 ? (
                 <p
                   data-testid="m-punch-assignee-empty"
                   className="text-[14px] text-m6m-muted"
                 >
-                  {assigneeSide === 'crew'
+                  {picker.side === 'crew'
                     ? 'No team members on the roster.'
                     : 'No subs or vendors on the roster.'}
                 </p>
               ) : (
                 <OptionStack
-                  options={(assigneeSide === 'crew' ? crewMembers : subMembers).map((m) => ({
+                  options={picker.visible.map((m) => ({
                     value: m.id,
                     label: m.display_name,
                   }))}
-                  value={assignee}
-                  onChange={setAssignee}
+                  value={picker.assignee}
+                  onChange={picker.chooseAssignee}
                   testIdPrefix="m-punch-assignee"
                 />
               )}

@@ -273,7 +273,7 @@
 | D-62 | CO types on mobile           | **#140 IS FIXED FIRST, THEN ALL THREE TYPES SHIP. No `fixed_price`-only restriction.** [S115, Josh] **Rejects the interim §4.11.12 proposed** (*"until it is resolved, M-32 should offer `fixed_price` only"*) — that was proposed, never ruled, and is now withdrawn rather than adopted. The ordering is the ruling: the rate-visibility collision is closed **before** M-32 offers `cost_plus` or `time_and_materials`, so mobile never ships the defect. **The fix is not mobile-scoped** — it is desktop and shared code, and A-28 does not shield it. §4.11.12, §4.11.12a; A-68–A-68d; TECH_DEBT #140. |
 | D-63 | Punch lists are standalone   | **A LIST EXISTS IN ITS OWN RIGHT AND HOLDS UNLIMITED ITEMS.** [S121, Josh] Amends D-60, which let a list exist only as a side effect of creating an item — M-14's sole control read *New punch item* and the list option was buried in that form's picker. M-14 gains a second control; **M-41** (`/m/p/[projectId]/punch/lists/new`) is the route. **The inline path stays** (A-67b unchanged). Not a role surface: `punch_lists_insert_authenticated` admits every role. §4.11.4, §4.11.13; A-75, A-75c. |
 | D-64 | Save and add another (M-33)  | **AFTER SUBMIT THE FORM STAYS PUT, THE LIST STAYS SELECTED, THE ITEM FIELDS CLEAR.** [S121, Josh] Submit-and-return is kept — a punch walk is batch work but a single correction is not. **The remembered list is NOT a D-60 preselection**: D-60 governs arrival (nothing chosen), D-64 governs continuation (what the user chose stays chosen). Both are asserted so neither can be "fixed" away. §4.11.13; A-75a, A-75b. |
-| D-65 | The assignee picker (M-33)   | **TWO STEPS — Team or Sub/Vendor first, then the respective list.** [S121, Josh] `member_type` is CHECK-constrained to two values, so the sides partition the roster. **THE PROJECT-SCOPING HALF IS RULED BUT HELD**: rebuild-test carries 19 `project_assignments` rows against 39 members (2 of them subs), so scoping would empty the Sub/Vendor side on 6 of 8 projects and make 2 of 11 existing assignments unreproducible — the outcome the ruling itself called worse than the flat picker. Unblocking is a DATA question. §4.11.13; A-75d, A-75e. |
+| D-65 | The assignee picker (M-33)   | **TWO STEPS — Team or Sub/Vendor first, then the respective list.** [S121, Josh] `member_type` is CHECK-constrained to two values, so the sides partition the roster. **PART 3 REMAINS HELD AFTER THE S121 RULING — see `docs/specs/113c-award-assignment-spec.md` §7.** Josh ruled award-auto-assigns (part 1) + manual assignment stays (part 2) + scope on `project_assignments` (part 3), with part 3 conditional on part 1 making the data safe to depend on. It does not yet: the trigger fires on INSERT only, so all **5 existing (project, sub) contract pairs stay unassigned** and the sub side is empty on the same 6 of 8 projects until a backfill runs. Even after one, 3 of 8 projects have no sub at all. **The two-step SPLIT is built and now shared with desktop** (`lib/assignee-picker.ts`); the scope is one filter in that module when the data lands. Original measurement: : rebuild-test carries 19 `project_assignments` rows against 39 members (2 of them subs), so scoping would empty the Sub/Vendor side on 6 of 8 projects and make 2 of 11 existing assignments unreproducible — the outcome the ruling itself called worse than the flat picker. Unblocking is a DATA question. §4.11.13; A-75d, A-75e. |
 | D-56 | TECH_DEBT #117 on mobile      | **UI-ONLY IS ACCEPTED, FOR NOW.** [S109, Josh] `change_orders_select_visible` keeps **no role floor and no author scoping**; the Owner/Admin/PM gate on M-31/M-32 lives in the interface. **The exposure, stated plainly rather than implied away: a foreman gets the row from the database — `net_delta`, and the line rows' `total`, `rate`, `unit_cost` and `amount` — and only the interface stops them seeing it.** **The write side needs no migration**: `change_orders_insert_authorized` / `_update_authorized` and both child tables' INSERT/UPDATE/DELETE already carry exactly `owner, admin, project_manager`. **TECH_DEBT #117 amended, not closed.** §4.11.10b, §4.11.11. |
 
 ---
@@ -4707,6 +4707,57 @@ _Role gating — D-54_
 - A-68d **NEW [S115, D-62]** — **the route refuses before the privilege.** Unauthenticated → 401; foreman/crew/subcontractor → 403; a CO outside the caller's company or unassigned project → 404, and none of the three falls through to another. `[live]` _(§4.11.12a. The service role bypasses RLS entirely, so the route's own checks are the only protection — the `record_client_payment` trap the S97 isolation proof caught. 403 and 404 stay distinct per CLAUDE.md's error contract.)_
 
 **Regression**
+
+> ### ⚠️ A-28 — AMENDED [S121]. IT DOES NOT HOLD, AND IT HAD ALREADY STOPPED HOLDING.
+>
+> **Stated plainly rather than left to erode.** A-28 as written is below, unchanged.
+>
+> **First, the record is not what it was believed to be.** A-28 was thought to have held on every
+> commit of this branch. It has not, since **S106**, and the check the criterion itself names says so:
+>
+> ```
+> git diff --stat $(git merge-base origin/main HEAD) HEAD -- apps/web/app/dashboard/
+>   dashboard/field-ops/[projectId]/daily-logs/log-form.tsx     e760e62  #133, work_performed required
+>   dashboard/timeclock/timeclock-client.tsx                    5a81cd1  the two missed gps_in readers
+>   dashboard/timeclock/timesheets/[sessionId]/page.tsx         5a81cd1
+>   dashboard/timeclock/timesheets/live-board.tsx               5a81cd1
+> ```
+>
+> Both S106 commits were desktop DEFECTS surfaced by mobile work — the same shape as what follows, and
+> neither was recorded here. That is the erosion this amendment exists to stop.
+>
+> **Second, D-62 already ruled the principle**, and it is quoted rather than re-derived: *"The fix is
+> not mobile-scoped — it is desktop and shared code, **and A-28 does not shield it**."* A-28 protects
+> against mobile work rewriting desktop screens **as a side effect**. It was never a claim that a
+> defect found from mobile must be left unfixed on desktop.
+>
+> **Third, what this pass changes and why each file had to move:**
+>
+> | File | Why it HAD to move |
+> | ---- | ------------------ |
+> | `app/dashboard/projects/[id]/punch/page.tsx` | It projected `{ id, display_name }` and **dropped `member_type`**. The two-step split partitions on that column, so no picker change was possible without it. One line. |
+> | `app/dashboard/projects/[id]/punch/punch-panel.tsx` | The picker itself — one flat `<select>` over all 39 members, no split, no `(Sub)` label. This is the **BY CHOICE** break: nothing in M6M required it. It was done because leaving it meant the desktop screen was **worse than the mobile one D-65 replaced**, and because a second copy of the two-step rule is exactly the drift the ruling forbade. |
+>
+> **`lib/assignee-picker.ts` is new and is shared by both surfaces**, which is what makes the desktop
+> change a de-duplication rather than a second implementation. A-28b — *"No `lib/services/*` file is
+> duplicated for mobile"* — is untouched and is arguably better served than before: the two-step rule
+> now exists once instead of once per surface.
+>
+> **What is NOT shared, deliberately:** the rendering. `/m` uses `OptionStack` (52px tap targets, §2's
+> floor); `/dashboard` uses a `<select>`. A shared component would impose one on the other — a 33-item
+> stack of 52px buttons is ~1700px of desktop form. The shared module holds the partition and the
+> selection state machine, which are what can drift and matter; both suites assert them through their
+> own markup so a surface that wires the shared state up wrongly still fails.
+>
+> **Fourth, a prospective break, recorded now so it is not a surprise:** D-65's award auto-assign
+> (`docs/specs/113c-award-assignment-spec.md`) is **desktop and database work by necessity** — award
+> lives in `convert_estimate_to_project()` and the Contracts tab. It is SPEC ONLY this pass and moves
+> no file yet. When built it will move desktop files, and A-28 will not shield it either.
+>
+> **A-28's replacement, in force from [S121]:** desktop files are not changed by mobile work as a side
+> effect. Where a defect or a shared rule genuinely spans both, the change is made **and recorded here
+> with the reason per file**. The `git diff --stat` check stays useful as a prompt to write that
+> record, not as a gate.
 
 - A-28 `apps/web/app/dashboard/**` is unchanged by this work — `git diff --stat` against the merge base shows no desktop route files. `[shell]`
 - A-28b No `lib/services/*` file is duplicated for mobile — the mobile tree imports the existing service functions. _(§1 "The service layer is shared… No duplicate data access is written for mobile" was normative and untested. Assertable by grep over the diff.)_ `[shell]`

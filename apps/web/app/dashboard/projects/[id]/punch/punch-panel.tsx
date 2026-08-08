@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useAssigneePicker } from '@/lib/assignee-picker';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import type { PunchItem, PunchList } from '@/lib/services/punch-client';
@@ -18,7 +19,7 @@ import {
 interface PunchPanelProps {
   projectId: string;
   lists: PunchList[];
-  members: { id: string; display_name: string }[];
+  members: { id: string; display_name: string; member_type: string }[];
   photos: { id: string; name: string }[];
   role: string;
 }
@@ -76,7 +77,10 @@ export function PunchPanel({ projectId, lists, members, photos, role }: PunchPan
   const [itemTitle, setItemTitle] = useState('');
   const [itemLocation, setItemLocation] = useState('');
   const [itemTrade, setItemTrade] = useState('');
-  const [itemAssignee, setItemAssignee] = useState('');
+  // D-65 [S121] — the two-step picker, SHARED WITH /m via lib/assignee-picker.
+  // `itemAssignee` is gone: the selection now lives in the shared hook, so the
+  // partition and the switch-clears-the-pick rule cannot drift from mobile's.
+  const picker = useAssigneePicker(members);
   const [itemRefPhoto, setItemRefPhoto] = useState('');
   const [itemNeedsPhoto, setItemNeedsPhoto] = useState(true);
   const [itemNeedsVerify, setItemNeedsVerify] = useState(true);
@@ -111,7 +115,7 @@ export function PunchPanel({ projectId, lists, members, photos, role }: PunchPan
         title: itemTitle.trim(),
         location: itemLocation.trim() || null,
         trade: itemTrade.trim() || null,
-        assignee_id: itemAssignee || null,
+        assignee_id: picker.assignee || null,
         reference_photo_file_id: itemRefPhoto || null,
         // Toggles are set at list-build; only Foreman+ may uncheck them
         requires_completion_photo: canForeman ? itemNeedsPhoto : true,
@@ -121,7 +125,10 @@ export function PunchPanel({ projectId, lists, members, photos, role }: PunchPan
         setItemTitle('');
         setItemLocation('');
         setItemTrade('');
-        setItemAssignee('');
+        // Both steps, not just the pick — the next item on this list is a
+        // fresh question. `reset()` is on the shared hook so /m gets the same
+        // semantics the day its form needs them.
+        picker.reset();
         setItemRefPhoto('');
         setItemNeedsPhoto(true);
         setItemNeedsVerify(true);
@@ -269,9 +276,63 @@ export function PunchPanel({ projectId, lists, members, photos, role }: PunchPan
                   />
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                  <select value={itemAssignee} onChange={(e) => setItemAssignee(e.target.value)} style={inputStyle}>
-                    <option value="">Assignee…</option>
-                    {members.map((m) => (
+                  {/* D-65 — TWO STEPS. Was one flat <select> over all 39
+                      members (33 of them subcontractors) with no split and no
+                      type label at all: worse than what /m had before D-65.
+                      The logic is shared with mobile; only this markup is
+                      local, because a 52px tap-target stack is right for a
+                      thumb and wrong for a 33-item desktop form. */}
+                  <div style={{ display: 'flex', gap: '0.375rem' }}>
+                    {(
+                      [
+                        ['crew', 'Team', picker.crew.length],
+                        ['subcontractor', 'Sub / Vendor', picker.subs.length],
+                      ] as const
+                    ).map(([value, label, count]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        data-testid={`punch-assignee-side-${value}`}
+                        data-active={picker.side === value ? 'true' : 'false'}
+                        aria-pressed={picker.side === value}
+                        onClick={() => picker.chooseSide(value)}
+                        style={{
+                          flex: 1,
+                          padding: '0.5rem',
+                          fontSize: '0.8125rem',
+                          fontWeight: 600,
+                          borderRadius: '0.375rem',
+                          cursor: 'pointer',
+                          border:
+                            picker.side === value ? '1px solid #2563eb' : '1px solid #d1d5db',
+                          backgroundColor: picker.side === value ? '#eff6ff' : '#fff',
+                          color: picker.side === value ? '#1d4ed8' : '#374151',
+                        }}
+                      >
+                        {label} ({count})
+                      </button>
+                    ))}
+                  </div>
+                  <select
+                    data-testid="punch-assignee"
+                    value={picker.assignee ?? ''}
+                    onChange={(e) => picker.chooseAssignee(e.target.value || null)}
+                    // Disabled rather than hidden before step 1: the field keeps
+                    // its place in the grid, so choosing a side does not reflow
+                    // the form under the cursor.
+                    disabled={picker.side === null}
+                    style={{ ...inputStyle, opacity: picker.side === null ? 0.5 : 1 }}
+                  >
+                    <option value="">
+                      {picker.side === null
+                        ? 'Pick Team or Sub / Vendor first…'
+                        : picker.visible.length === 0
+                          ? picker.side === 'crew'
+                            ? 'No team members on the roster'
+                            : 'No subs or vendors on the roster'
+                          : 'Assignee…'}
+                    </option>
+                    {picker.visible.map((m) => (
                       <option key={m.id} value={m.id}>
                         {m.display_name}
                       </option>
