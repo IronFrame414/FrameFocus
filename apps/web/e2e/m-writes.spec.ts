@@ -829,3 +829,243 @@ test.describe('M-34 · verify is Foreman+, enforced in TypeScript and nowhere el
     await expect(page.getByTestId('m-punch-verify')).toBeDisabled();
   });
 });
+
+// ===========================================================================
+// D-63 — PUNCH LISTS ARE STANDALONE [S121, Josh]
+// ===========================================================================
+// Reported from a device: "I can only create one item at a time and cannot
+// create a list." The build was correct to D-60 and the tests were not weaker
+// than the ruling — the ruling itself only ever let a list exist as a SIDE
+// EFFECT of creating an item, and the sole control on M-14 said "New punch
+// item". D-63 gives a list its own front door without closing the inline one.
+test.describe('D-63 · a punch list exists in its own right', () => {
+  test('M-14 offers BOTH controls, and the list one points at M-41', async ({ page }) => {
+    await signInAs(page, CREW);
+    await page.goto(`/m/p/${PROJECT}/punch`);
+
+    await expect(page.getByTestId('m-punch-new')).toBeVisible();
+    await expect(page.getByTestId('m-punch-list-new')).toBeVisible();
+    await expect(page.getByTestId('m-punch-list-new')).toHaveAttribute(
+      'href',
+      `/m/p/${PROJECT}/punch/lists/new`
+    );
+  });
+
+  test('a SUBCONTRACTOR reaches it — punch_lists_insert_authenticated has no role arm', async ({
+    page,
+  }) => {
+    // The same asymmetry M-33 documents: D-52 as corrected opens punch to every
+    // role, and §4.11.10a forecloses gating a further surface "because there is
+    // a pattern now". A build that guarded this by analogy with
+    // `deletePunchList` (which IS Foreman+) would reverse a ruling.
+    await signInAs(page, SUB);
+    await page.goto(`/m/p/${PROJECT}/punch/lists/new`);
+    await expect(page.getByTestId('m-punch-list-name')).toBeVisible();
+    await expect(page.getByTestId('m-denied')).toHaveCount(0);
+  });
+
+  test('a list created here exists WITHOUT any item, and is targetable from M-33', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await signInAs(page, CREW);
+    const listName = `E2E Standalone ${stamp()}`;
+
+    await page.goto(`/m/p/${PROJECT}/punch/lists/new`);
+    await page.getByTestId('m-punch-list-name').fill(listName);
+    await page.getByTestId('m-punch-list-create').click();
+    await expect(page).toHaveURL(new RegExp(`/m/p/${PROJECT}/punch$`), { timeout: 30_000 });
+
+    // THE WHOLE POINT: it exists with no item in it. D-61 already requires an
+    // empty list to stay visible, and D-63 makes an empty list the NORMAL first
+    // state rather than an edge case — so it must be pickable on M-33.
+    await page.goto(`/m/p/${PROJECT}/punch/new`);
+    const option = page
+      .locator('[data-testid^="m-punch-list-"][data-active]')
+      .filter({ hasText: listName });
+    await expect(option).toHaveCount(1);
+    // And D-60 is untouched: arriving on M-33 still preselects nothing.
+    await expect(page.locator('[data-testid^="m-punch-list-"][data-active="true"]')).toHaveCount(0);
+  });
+});
+
+// ===========================================================================
+// D-64 — SAVE AND ADD ANOTHER [S121, Josh]
+// ===========================================================================
+test.describe('D-64 · a punch walk is batch work', () => {
+  test('the form stays put, the list stays selected, and the title clears', async ({ page }) => {
+    test.setTimeout(120_000);
+    await signInAs(page, CREW);
+    const id = stamp();
+    const listName = `E2E BatchList ${id}`;
+
+    await page.goto(`/m/p/${PROJECT}/punch/new`);
+    await page.getByTestId('m-punch-list-__new__').click();
+    await page.getByTestId('m-punch-new-list-name').fill(listName);
+    await page.getByTestId('m-punch-title').fill(`E2E Batch A ${id}`);
+    await page.getByTestId('m-punch-description').fill('first');
+    await page.getByTestId('m-punch-create-again').click();
+
+    // 1. IT DID NOT NAVIGATE.
+    await expect(page.getByTestId('m-punch-saved-count')).toBeVisible({ timeout: 30_000 });
+    await expect(page).toHaveURL(new RegExp(`/m/p/${PROJECT}/punch/new$`));
+
+    // 2. THE LIST IS STILL SELECTED — and visibly so. The inline-created list
+    //    has to be an OPTION, not merely a value: before S121 it was only a
+    //    value, so the picker rendered with nothing active over a form that
+    //    considered a list chosen.
+    const active = page.locator('[data-testid^="m-punch-list-"][data-active="true"]');
+    await expect(active).toHaveCount(1);
+    await expect(active).toContainText(listName);
+    await expect(active).not.toHaveAttribute('data-testid', 'm-punch-list-__new__');
+
+    // 3. THE ITEM FIELDS CLEARED.
+    await expect(page.getByTestId('m-punch-title')).toHaveValue('');
+    await expect(page.getByTestId('m-punch-description')).toHaveValue('');
+
+    // 4. A SECOND ITEM NEEDS NO LIST DECISION, and both land in the same list.
+    await page.getByTestId('m-punch-title').fill(`E2E Batch B ${id}`);
+    await page.getByTestId('m-punch-create').click();
+    await expect(page).toHaveURL(new RegExp(`/m/p/${PROJECT}/punch$`), { timeout: 30_000 });
+
+    for (const t of [`E2E Batch A ${id}`, `E2E Batch B ${id}`]) {
+      const row = page.getByTestId('m-punch-row').filter({ hasText: t });
+      await expect(row).toHaveCount(1);
+      await expect(row).toContainText(listName);
+    }
+  });
+
+  test('⚠️ THE REMEMBERED LIST IS NOT A D-60 PRESELECTION — a FRESH load still asks', async ({
+    page,
+  }) => {
+    // This test exists so nobody "fixes" D-64 by clearing the list, and so
+    // nobody "fixes" D-60 by noticing the list survives a save.
+    //
+    // D-60 governs ARRIVAL: the form must not open with a list chosen, because
+    // the user has then targeted nothing. D-64 governs CONTINUATION: a list the
+    // user picked by hand, this session, seconds ago, stays picked. The two are
+    // about different moments and are both asserted here, in one test, so the
+    // distinction cannot be lost by deleting one of them.
+    await signInAs(page, CREW);
+    const id = stamp();
+
+    await page.goto(`/m/p/${PROJECT}/punch/new`);
+    await page.getByTestId('m-punch-list-__new__').click();
+    await page.getByTestId('m-punch-new-list-name').fill(`E2E FreshList ${id}`);
+    await page.getByTestId('m-punch-title').fill(`E2E Fresh ${id}`);
+    await page.getByTestId('m-punch-create-again').click();
+    await expect(page.getByTestId('m-punch-saved-count')).toBeVisible({ timeout: 30_000 });
+    await expect(page.locator('[data-testid^="m-punch-list-"][data-active="true"]')).toHaveCount(1);
+
+    // A fresh arrival at the same URL. Nothing is chosen — including the list
+    // that was just created and used, which now EXISTS on the project and would
+    // be the obvious thing for a "helpful" build to preselect.
+    await page.goto(`/m/p/${PROJECT}/punch/new`);
+    await expect(page.getByTestId('m-punch-list-target')).toBeVisible();
+    await expect(page.locator('[data-testid^="m-punch-list-"][data-active="true"]')).toHaveCount(0);
+  });
+});
+
+// ===========================================================================
+// D-65 — THE ASSIGNEE PICKER IS TWO-STEP [S121, Josh]
+// ===========================================================================
+// ⚠️ THE PROJECT-SCOPING HALF OF D-65 IS NOT BUILT AND NOT ASSERTED. Measured
+// on rebuild-test before building: 19 project_assignments rows against 39
+// members (33 of them subcontractors); only 2 of 8 assigned projects have BOTH
+// a crew and a sub; and 2 of the 11 existing punch assignments are to members
+// with no assignment row for that project. Scoping would empty the Sub/Vendor
+// side on six of eight projects and make two live assignments unreproducible —
+// the outcome the ruling itself called worse than the flat picker. Held for
+// Josh. These tests cover the SPLIT, which the data fully supports.
+test.describe('D-65 · Team or Sub/Vendor first, then the list', () => {
+  test('neither side is preselected, and no member is offered until one is', async ({ page }) => {
+    await signInAs(page, CREW);
+    await page.goto(`/m/p/${PROJECT}/punch/new`);
+
+    await expect(page.getByTestId('m-punch-assignee-side-crew')).toBeVisible();
+    await expect(page.getByTestId('m-punch-assignee-side-subcontractor')).toBeVisible();
+    await expect(
+      page.locator('[data-testid^="m-punch-assignee-side-"][data-active="true"]')
+    ).toHaveCount(0);
+
+    // THE CRITERION: the flat list is gone. A build that rendered every member
+    // and merely added a filter above it would pass a "the toggle exists" test
+    // and fail this one.
+    await expect(page.locator('[data-testid^="m-punch-assignee-"]')).toHaveCount(2);
+  });
+
+  test('each side offers only its own members, and switching drops the other selection', async ({
+    page,
+  }) => {
+    await signInAs(page, CREW);
+    await page.goto(`/m/p/${PROJECT}/punch/new`);
+
+    const memberOptions = () =>
+      page.locator('[data-testid^="m-punch-assignee-"]:not([data-testid^="m-punch-assignee-side-"])');
+
+    await page.getByTestId('m-punch-assignee-side-crew').click();
+    const crewCount = await memberOptions().count();
+    expect(crewCount).toBeGreaterThan(0);
+
+    await memberOptions().first().click();
+    await expect(
+      page.locator(
+        '[data-testid^="m-punch-assignee-"]:not([data-testid^="m-punch-assignee-side-"])[data-active="true"]'
+      )
+    ).toHaveCount(1);
+
+    await page.getByTestId('m-punch-assignee-side-subcontractor').click();
+    const subCount = await memberOptions().count();
+    expect(subCount).toBeGreaterThan(0);
+
+    // The crew pick must NOT survive the switch — the form would otherwise
+    // carry an assignee the visible list does not contain, which reads to the
+    // user as nothing being selected while the payload says otherwise.
+    await expect(
+      page.locator(
+        '[data-testid^="m-punch-assignee-"]:not([data-testid^="m-punch-assignee-side-"])[data-active="true"]'
+      )
+    ).toHaveCount(0);
+
+    // THE TWO SIDES PARTITION THE ROSTER — asserted as disjointness, not as a
+    // count. `member_type` is CHECK-constrained to exactly two values, so a
+    // member appearing on both sides means the filter is testing the wrong
+    // column (the §4.11.10a trap: `member_type` is not `profiles.role`).
+    const subIds = await memberOptions().evaluateAll((els) =>
+      els.map((e) => e.getAttribute('data-testid'))
+    );
+    await page.getByTestId('m-punch-assignee-side-crew').click();
+    const crewIds = await memberOptions().evaluateAll((els) =>
+      els.map((e) => e.getAttribute('data-testid'))
+    );
+    const overlap = crewIds.filter((x) => subIds.includes(x));
+    expect(overlap, 'a member appears on BOTH sides of the picker').toEqual([]);
+  });
+
+  test('an assignee chosen through the two steps actually lands on the item', async ({ page }) => {
+    test.setTimeout(120_000);
+    await signInAs(page, CREW);
+    const id = stamp();
+
+    await page.goto(`/m/p/${PROJECT}/punch/new`);
+    await page.getByTestId('m-punch-list-__new__').click();
+    await page.getByTestId('m-punch-new-list-name').fill(`E2E AssignList ${id}`);
+    await page.getByTestId('m-punch-title').fill(`E2E Assigned ${id}`);
+    await page.getByTestId('m-punch-assignee-side-crew').click();
+
+    const first = page
+      .locator('[data-testid^="m-punch-assignee-"]:not([data-testid^="m-punch-assignee-side-"])')
+      .first();
+    const who = (await first.innerText()).trim().split('\n')[0];
+    await first.click();
+    await page.getByTestId('m-punch-create').click();
+    await expect(page).toHaveURL(new RegExp(`/m/p/${PROJECT}/punch$`), { timeout: 30_000 });
+
+    // Open the item and confirm the assignee is the one picked — proof the
+    // two-step wrote `assignee_id` and did not merely look right.
+    await page.getByTestId('m-punch-row').filter({ hasText: `E2E Assigned ${id}` })
+      .getByTestId('m-row-link').click();
+    await expect(page).toHaveURL(/\/punch\/[0-9a-f-]{36}$/, { timeout: 20_000 });
+    await expect(page.getByTestId('m-content')).toContainText(who);
+  });
+});

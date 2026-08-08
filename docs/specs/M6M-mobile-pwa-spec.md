@@ -271,6 +271,9 @@
 | D-60 | Which list an M-33 item lands in | **THE AUTHOR TARGETS A LIST EXPLICITLY — pick an existing one OR create a new one. NO DEFAULT AND NO AUTO-TARGET.** [S115, Josh] Closes the open item §4.11.13 recorded as *"auto-create a default, or make the user pick when more than one exists — not ruled here."* **Both halves of that proposal are rejected**: no silent default list, and no "only ask when ambiguous" — the picker is unconditional, because a rule that asks only sometimes is a rule a field user cannot predict. Every item lands in a list the author chose. **M-14's shape does NOT change** — see D-61. §4.11.13, §4.11.4; A-67, A-67b, A-67c. |
 | D-61 | M-14's shape under D-60      | **M-14 STAYS A FLAT ITEM LIST. It does not become a list of lists.** [S115, Josh] Ruled explicitly because D-60 invites the opposite inference and the build would otherwise have to guess. The parent list becomes a **label on the row**, not a level of hierarchy. **Three things break if M-14 nests:** the Mine/Open/All chips filter ITEMS and have no meaning over lists; **D-16's counters would stop agreeing with M-3's badge**, which is the one guarantee §4.11.4 makes; and **A-34b** asserts a flat count relationship (`open ≤ all`) that a grouped list cannot express. **A punch list with no items stays visible** — a real state under D-57, already owed empty-state copy. §4.11.4; A-67c. |
 | D-62 | CO types on mobile           | **#140 IS FIXED FIRST, THEN ALL THREE TYPES SHIP. No `fixed_price`-only restriction.** [S115, Josh] **Rejects the interim §4.11.12 proposed** (*"until it is resolved, M-32 should offer `fixed_price` only"*) — that was proposed, never ruled, and is now withdrawn rather than adopted. The ordering is the ruling: the rate-visibility collision is closed **before** M-32 offers `cost_plus` or `time_and_materials`, so mobile never ships the defect. **The fix is not mobile-scoped** — it is desktop and shared code, and A-28 does not shield it. §4.11.12, §4.11.12a; A-68–A-68d; TECH_DEBT #140. |
+| D-63 | Punch lists are standalone   | **A LIST EXISTS IN ITS OWN RIGHT AND HOLDS UNLIMITED ITEMS.** [S121, Josh] Amends D-60, which let a list exist only as a side effect of creating an item — M-14's sole control read *New punch item* and the list option was buried in that form's picker. M-14 gains a second control; **M-41** (`/m/p/[projectId]/punch/lists/new`) is the route. **The inline path stays** (A-67b unchanged). Not a role surface: `punch_lists_insert_authenticated` admits every role. §4.11.4, §4.11.13; A-75, A-75c. |
+| D-64 | Save and add another (M-33)  | **AFTER SUBMIT THE FORM STAYS PUT, THE LIST STAYS SELECTED, THE ITEM FIELDS CLEAR.** [S121, Josh] Submit-and-return is kept — a punch walk is batch work but a single correction is not. **The remembered list is NOT a D-60 preselection**: D-60 governs arrival (nothing chosen), D-64 governs continuation (what the user chose stays chosen). Both are asserted so neither can be "fixed" away. §4.11.13; A-75a, A-75b. |
+| D-65 | The assignee picker (M-33)   | **TWO STEPS — Team or Sub/Vendor first, then the respective list.** [S121, Josh] `member_type` is CHECK-constrained to two values, so the sides partition the roster. **THE PROJECT-SCOPING HALF IS RULED BUT HELD**: rebuild-test carries 19 `project_assignments` rows against 39 members (2 of them subs), so scoping would empty the Sub/Vendor side on 6 of 8 projects and make 2 of 11 existing assignments unreproducible — the outcome the ruling itself called worse than the flat picker. Unblocking is a DATA question. §4.11.13; A-75d, A-75e. |
 | D-56 | TECH_DEBT #117 on mobile      | **UI-ONLY IS ACCEPTED, FOR NOW.** [S109, Josh] `change_orders_select_visible` keeps **no role floor and no author scoping**; the Owner/Admin/PM gate on M-31/M-32 lives in the interface. **The exposure, stated plainly rather than implied away: a foreman gets the row from the database — `net_delta`, and the line rows' `total`, `rate`, `unit_cost` and `amount` — and only the interface stops them seeing it.** **The write side needs no migration**: `change_orders_insert_authorized` / `_update_authorized` and both child tables' INSERT/UPDATE/DELETE already carry exactly `owner, admin, project_manager`. **TECH_DEBT #117 amended, not closed.** §4.11.10b, §4.11.11. |
 
 ---
@@ -2167,6 +2170,58 @@ is unchanged**, so no call site moved.
   (`punch_lists_insert_authenticated`).
   _Superseded clause, quoted:_ _"**Which list a mobile-created item lands in is an open item** —
   auto-create a default, or make the user pick when more than one exists. Not ruled here."_
+
+> ##### ⚠️ AMENDED [S121, Josh, D-63/D-64/D-65] — READ THIS BEFORE THE D-60 BLOCK BELOW
+>
+> **Three rulings amend what follows. D-60's core survives all three: the author still targets a list
+> explicitly, and there is still no default and no auto-target.** What changed is that a list no longer
+> has to be born from an item, that filing many items no longer costs many round trips, and that the
+> assignee picker is no longer one flat roster.
+>
+> **D-63 — PUNCH LISTS ARE STANDALONE.** _Superseded clause, quoted rather than rewritten:_
+> _"**Creating a list inline** calls `createPunchList(projectId, name)` … It is a second write, not a
+> nested one"_ — that was the **only** way a list could come into existence, and the only control on
+> M-14 read **New punch item**. Reported from a device [S120, Josh]: *"I can only create one item at a
+> time and cannot create a list."* **A list now exists in its own right and holds unlimited items.**
+> M-14 gains a second control beside the first, and **M-41** (`/m/p/[projectId]/punch/lists/new`) is
+> its route. **The inline path is NOT removed** — creating a list while filing the first item into it
+> is still right for "I found something and there is nowhere to put it", and A-67b still asserts it end
+> to end. The item control stays primary; list creation is the rarer act.
+>
+> **D-64 — SAVE AND ADD ANOTHER.** M-33 gains a second commit control. After it, the form stays put
+> with the list still selected and the item's own fields cleared. **The submit-and-return control
+> stays** — a punch walk is batch work but a single correction is not.
+>
+> > **⚠️ THE REMEMBERED LIST IS NOT A D-60 PRESELECTION. Stated explicitly because someone will
+> > otherwise "fix" it.** D-60 forbids a **default**: the form must not *arrive* with a list chosen,
+> > because the user has then targeted nothing. D-64 governs **continuation**: a list the user picked
+> > by hand, this session, on this screen, seconds ago, stays picked. The two rules are about different
+> > moments and are both live. A-67 (nothing active on arrival) and A-75b (nothing active on a FRESH
+> > load *after* a save-and-add) pin both, in one test each, so neither can be "corrected" away.
+>
+> **D-65 — THE ASSIGNEE PICKER IS SCOPED AND TWO-STEP.** Pick **Team** or **Sub / Vendor** first, then
+> the respective list. `assignee_id` FKs `company_members(id)` and `member_type` is CHECK-constrained to
+> exactly two values, so the split partitions the roster with nothing between the sides.
+>
+> > **⚠️ THE PROJECT-SCOPING HALF IS RULED BUT NOT BUILT — the data does not carry it.** D-65 also
+> > limits each side to members assigned to the project. Measured on rebuild-test **before** building,
+> > as the ruling required:
+> >
+> > | | |
+> > |---|---|
+> > | `project_assignments` rows (live) | **19** — crew 17, subcontractor **2** |
+> > | `company_members` (live) | **39** — crew 6, subcontractor **33** |
+> > | projects with any assignment | 8 of 9 |
+> > | …with **both** a crew and a sub assigned | **2 of 8** |
+> > | punch items carrying an assignee | 11 of 11 |
+> > | …whose assignee has **no** assignment row for that project | **2** |
+> >
+> > So scoping would empty the **Sub / Vendor** side on **six of eight** projects, and would make **two
+> > of the eleven assignments that already exist** impossible to re-create through the UI that wrote
+> > them. That is precisely the outcome the ruling named as *"worse than the flat one"*. **The split is
+> > built; the scope is held.** Adding it later is a filter over two arrays and creates no rework.
+> > **Unblocking it is a DATA question, not a code one** — subs need `project_assignments` rows before
+> > a scoped picker can serve them.
 
 > ##### ✅ RULED [S115, Josh, D-60] — the author targets a list, always
 >
@@ -4635,6 +4690,13 @@ _Role gating — D-54_
 
 - A-67 **NEW [S115, D-60]** — **M-33 does not submit without a list target.** With no list chosen the create control is refused, and the refusal names the missing list rather than failing on `title`. `[Playwright]` _(§4.11.13. The criterion is the ABSENCE of a default: a build that auto-created "Punch List" or silently used the project's only list satisfies every other assertion on that screen and violates D-60. Assert that a project **with exactly one list still asks** — that is the case a "pick when ambiguous" implementation gets wrong, and the case a user meets first.)_ **✅ [S117] SATISFIED**, `e2e/m-writes.spec.ts`, on the specified `[Playwright]` harness. Two assertions, and the pair is the criterion: the picker **renders**, and **no option carries `data-active="true"` on load** — nothing is preselected. The refusal is asserted to name the **list** and explicitly **not** the title, with a title already filled, so a build validating in field order fails. **On "exactly one list", stated honestly:** the fixture project's list count is not pinned by this test. The no-preselection assertion still catches the implementation the criterion targets — a "pick only when ambiguous" build renders **no picker at all** on a one-list project, and the visibility assertion fails — but a build that preselects only when there is exactly one would need a one-list fixture to catch. **Owed if that is wanted:** a project seeded with exactly one list.
 - A-67b **NEW [S115, D-60]** — **a list can be created from M-33 and the item lands in it.** The new list is the one the item's `punch_list_id` points at, and it appears in M-14 afterwards. `[live]` _(§4.11.13. Two writes, not one — `createPunchList` then `createPunchItem`. **A failed item insert leaves the new list behind**, which is accepted (D-60) and must not be "fixed" with a cleanup that deletes a list a user may have meant to keep; an empty list is a legal state.)_ **[S117] PARTIALLY SATISFIED — through the UI, not through the database.** `e2e/m-writes.spec.ts` creates a list inline from M-33, files an item into it, and asserts the item **appears in M-14 carrying that list's name as its row label** — which is the second sentence of the criterion. **`punch_list_id` itself is never read**, so "the new list is the one the item's `punch_list_id` points at" is inferred from the rendered label rather than asserted; the label is derived from that column (`listNameByItemId`, built from `getPunchLists`), so the inference is sound but it is an inference. Harness is **Playwright, not `[live]`**. **The two-writes shape is built as specified** — `createPunchList` then `createPunchItem`, no transaction, no compensating delete, and the new list stays selected on a failed item insert so a retry does not create a second one. ~~**Not asserted:** the failed-insert path itself.~~ **✅ [S118] CLOSED — the COLUMN is now read.** `test/s118-m6m-write-criteria.live.ts` takes the newest M-33-created list, extracts its stamp, and asserts the item titled `E2E Item <stamp>` has `punch_list_id` equal to **that list's id**. **Stamp-matched on purpose:** it proves the item landed in the list the author created rather than in some other list that happened to exist, which a name-only check could not distinguish. A second test asserts an empty list survives un-deleted — D-60's "an empty list is a legal state", expressed as the absence of a cleanup.
+- A-75 **NEW [S121, D-63]** — **M-14 carries a second control that creates a punch list on its own**, and the list it creates is targetable from M-33 **with no item in it**. `[Playwright]` _(§4.11.4. The criterion is that a list can exist unjustified by an item — D-61 already requires an empty list to stay visible, and D-63 makes "empty" the normal FIRST state rather than an edge case.)_ **✅ [S121] SATISFIED**, `e2e/m-writes.spec.ts`.
+- A-75c **NEW [S121, D-63]** — **a SUBCONTRACTOR reaches M-41.** `[Playwright]` _(`punch_lists_insert_authenticated` has no role arm and D-52 as corrected opens punch to every role. Written because the neighbouring `deletePunchList` IS Foreman+, and a build that gated create by analogy would reverse a ruling.)_ **✅ [S121] SATISFIED**.
+- A-75a **NEW [S121, D-64]** — **"save and add another" does not navigate, keeps the list SELECTED and VISIBLY so, and clears the item fields.** Two items filed in one visit both land in the same list. `[Playwright]` _(§4.11.13. "Visibly so" is load-bearing: a list created through the inline `__new__` option was previously set as a VALUE with no matching OPTION, so the picker rendered with nothing active over a form that considered a list chosen. D-64 turns that from a rare retry path into the normal one.)_ **✅ [S121] SATISFIED**.
+- A-75b **NEW [S121, D-64/D-60]** — **a FRESH load of M-33 still preselects nothing, including the list just created and used.** `[Playwright]` _(The other half of A-75a, in the same test file and deliberately not merged with A-67: A-67 asserts arrival on a project whose lists predate the visit; A-75b asserts arrival right after a save-and-add, which is when a "helpful" build is most tempted to remember. Together they are what stops D-60 and D-64 being "reconciled" in either direction.)_ **✅ [S121] SATISFIED**.
+- A-75d **NEW [S121, D-65]** — **the assignee picker offers exactly two options on load — Team and Sub/Vendor — and no member until one is chosen.** `[Playwright]` _(§4.11.13. The count assertion is the criterion: a build that rendered the flat roster and added a filter above it passes "the toggle exists" and fails this.)_ **✅ [S121] SATISFIED**.
+- A-75e **NEW [S121, D-65]** — **the two sides are disjoint, switching sides drops the other side's selection, and an assignee picked through both steps lands on the item.** `[Playwright]` _(Disjointness rather than a count, because a member on both sides means the filter is reading the wrong column — `member_type` is not `profiles.role`, the §4.11.10a trap. The landed-assignee half is asserted by opening M-34 and reading the name back, so a picker that looks right but writes nothing fails.)_ **✅ [S121] SATISFIED**.
+- **⚠️ NOT A CRITERION — D-65's project scoping is NOT asserted, because it is not built.** See D-65's row and the §4.11.13 amendment for the measured reason. **Do not add a scoping criterion until `project_assignments` carries the subs**; a green test over an empty picker would be the worst possible outcome here.
 - A-67c **NEW [S115, D-61]** — **M-14 renders a FLAT item list, not a list of lists**, and the Mine/Open/All chips still filter items. The parent list appears as a row label. `[Playwright]` _(§4.11.4. Written because D-60 invites the opposite build. The cheap check is that `m-punch-row` count still equals the project's visible item count rather than its list count — a grouped screen fails it immediately, and so does one that renders list headers as rows.)_ **✅ [S117] SATISFIED**, `e2e/m-writes.spec.ts`, on the specified `[Playwright]` harness — and asserted more strongly than the "cheap check" the criterion proposes. Rather than compare two counts, **every `m-punch-row` is required to carry a link matching `/punch/<uuid>`**: a list header rendered as a row has no item route and fails, and so does a grouped screen. The chips are then asserted to still filter items (`open <= all`), which is D-61's first breakage if M-14 ever nested. The **row label** half is covered by A-67b's assertion that the row contains the parent list's name.
 
 **D-62 / TECH_DEBT #140 — a PM recalculates a non-fixed CO**

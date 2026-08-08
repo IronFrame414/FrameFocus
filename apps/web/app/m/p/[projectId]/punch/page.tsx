@@ -83,17 +83,38 @@ export default async function ProjectPunchPage({
         param="filter"
       />
 
-      {/* A-56 — the create control, for EVERY role including subcontractors.
+      {/* A-56 — the create controls, for EVERY role including subcontractors.
           No `canReachDetail` here and no role prop: D-52 as corrected opens
-          M-33 to all six roles, and gating this link would be the hidden half
-          of a permission that does not exist. */}
-      <Link
-        href={`/m/p/${params.projectId}/punch/new`}
-        data-testid="m-punch-new"
-        className="mt-[14px] flex min-h-[52px] w-full items-center justify-center rounded-[14px] bg-m6m-blue text-[15px] font-bold text-white"
-      >
-        New punch item
-      </Link>
+          M-33 to all six roles, and gating these links would be the hidden half
+          of a permission that does not exist. `punch_lists_insert_authenticated`
+          admits every role too, so the second control carries no gate either.
+
+          TWO CONTROLS AS OF D-63 [S121, Josh] — "punch lists are standalone".
+          Reported from a device: the only control here said **New punch item**,
+          and the sole way to bring a list into existence was an option buried in
+          that form's picker. A list now exists in its own right and holds
+          unlimited items, so it gets its own front door.
+
+          THE ITEM STAYS PRIMARY. Item creation is the frequent act — a punch
+          walk files many items into few lists — so it keeps the full-width blue
+          treatment and the list control is the secondary beside it. Equal weight
+          would misstate how often each is used. */}
+      <div className="mt-[14px] flex items-stretch gap-[8px]">
+        <Link
+          href={`/m/p/${params.projectId}/punch/new`}
+          data-testid="m-punch-new"
+          className="flex min-h-[52px] flex-1 items-center justify-center rounded-[14px] bg-m6m-blue text-[15px] font-bold text-white"
+        >
+          New punch item
+        </Link>
+        <Link
+          href={`/m/p/${params.projectId}/punch/lists/new`}
+          data-testid="m-punch-list-new"
+          className="flex min-h-[52px] shrink-0 items-center justify-center rounded-[14px] border border-m6m-blue px-[14px] text-[15px] font-bold text-m6m-blue"
+        >
+          New list
+        </Link>
+      </div>
 
       {items.length === 0 ? (
         <div className="pt-[18px]">

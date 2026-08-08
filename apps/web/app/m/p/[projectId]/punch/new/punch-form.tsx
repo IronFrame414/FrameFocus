@@ -11,6 +11,7 @@ import {
   OfflineNotice,
   OptionStack,
   PrimaryButton,
+  SecondaryButton,
   TextAreaField,
   TextField,
   useOnline,
@@ -84,6 +85,22 @@ export function PunchItemForm({
   const [listId, setListId] = useState<string | null>(null);
   const [newListName, setNewListName] = useState('');
 
+  // Lists created INLINE during this visit [S121].
+  //
+  // ⚠️ THIS FIXES A LATENT BUG, not only a D-64 need. `lists` is a server prop
+  // fixed at page load, so a list created by the `__new__` option was never an
+  // OPTION — only a value. The existing code already relied on it being one:
+  //
+  //   "Keep the created list selected. If WRITE 2 fails below, the retry files
+  //    into THIS list rather than creating a second one."
+  //
+  // `setListId(created.id)` did set the state, but no option carried that id,
+  // so the picker rendered with NOTHING active and the `newListName` field gone
+  // — the user saw an unselected picker over a form that considered a list
+  // chosen. D-64 turns that from a rare retry path into the normal one, since
+  // "save and add another" lands there every time.
+  const [createdLists, setCreatedLists] = useState<ListOption[]>([]);
+
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('');
@@ -94,10 +111,19 @@ export function PunchItemForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // D-64 — how many items this visit has filed. Drives the confirmation line,
+  // which is not decoration: on "save and add another" the screen does not
+  // navigate, so without it a successful save and a dead button look identical.
+  const [savedCount, setSavedCount] = useState(0);
+
+  // D-65 — which SIDE of the assignee picker is open. `null` until the author
+  // picks one, so neither list is shown before the question is answered.
+  const [assigneeSide, setAssigneeSide] = useState<'crew' | 'subcontractor' | null>(null);
+
   const listChosen = listId !== null && (listId !== NEW_LIST || newListName.trim().length > 0);
   const ready = listChosen && title.trim().length > 0;
 
-  async function submit() {
+  async function submit(mode: 'return' | 'again' = 'return') {
     if (!online) return;
 
     // A-67 — the refusal NAMES THE MISSING LIST rather than failing on title.
@@ -125,11 +151,21 @@ export function PunchItemForm({
         setError(created.error ?? 'The list could not be created.');
         return;
       }
-      targetListId = created.id;
+      // A const, so the narrowing above survives into the setState closure.
+      const newId = created.id;
+      targetListId = newId;
       // Keep the created list selected. If WRITE 2 fails below, the retry
       // files into THIS list rather than creating a second one — the list
-      // itself is deliberately not cleaned up (A-67b).
-      setListId(created.id);
+      // itself is deliberately not cleaned up (A-67b). It is added to the
+      // OPTIONS as well as the value, or "selected" would be invisible: see
+      // the note on `createdLists`.
+      setCreatedLists((cur) =>
+        cur.some((l) => l.id === newId)
+          ? cur
+          : [...cur, { id: newId, name: newListName.trim() }]
+      );
+      setListId(newId);
+      setNewListName('');
     }
 
     // WRITE 2 — the item.
@@ -151,14 +187,76 @@ export function PunchItemForm({
     }
 
     setBusy(false);
+
+    // =====================================================================
+    // D-64 [S121, Josh] — SAVE AND ADD ANOTHER
+    // =====================================================================
+    // "After submit, stay on the form with the list still selected and the
+    // description cleared. Keep the existing submit-and-return as well; a punch
+    // walk is batch work but a single correction is not."
+    //
+    // ⚠️⚠️ THE LIST SURVIVING THIS IS **NOT** A D-60 PRESELECTION. READ THIS
+    // BEFORE "FIXING" IT.
+    //
+    // D-60 forbids a DEFAULT: the form must not arrive with a list already
+    // chosen, because the user has then made no decision and cannot be said to
+    // have targeted anything. A-67 asserts exactly that — on load, no option
+    // carries `data-active="true"`.
+    //
+    // **The list here is not defaulted, it is REMEMBERED.** The user chose it
+    // by hand, this session, on this screen, seconds ago, and every item in a
+    // batch is going to the same place — that is what makes it batch work.
+    // Clearing it would re-ask a question already answered and would make
+    // "add another" cost exactly as much as starting over, which is the whole
+    // friction D-64 exists to remove.
+    //
+    // The two rules are compatible because they are about different moments:
+    // D-60 governs ARRIVAL (nothing chosen), D-64 governs CONTINUATION (what
+    // the user chose stays chosen). A build that cleared the list here would
+    // satisfy neither — it would not be more D-60-compliant, it would just be
+    // a worse form. `e2e/m-writes.spec.ts` pins both halves so this cannot be
+    // "corrected" in either direction without a red test.
+    if (mode === 'again') {
+      // ⛔ RULED HERE, NOT BY D-64 [S121] — the ruling names the list (keep)
+      // and the description (clear) and is silent on the other four fields.
+      // The line drawn: fields that IDENTIFY this defect clear; fields that
+      // describe the BATCH the user is working through stay.
+      //
+      //   CLEARED   title, description   — they name one defect and no other
+      //   KEPT      list, location, trade, priority, assignee
+      //
+      // Reasoning, so the next reader can disagree with the argument rather
+      // than guess at it: a punch walk stays in one place, on one trade, at
+      // one urgency, for a run of items. A kept value is visible and one tap
+      // from being changed; a cleared value costs re-entry every single time.
+      // The asymmetry favours keeping. Title is required and cleared, so the
+      // form cannot re-submit the same item by a double tap.
+      setTitle('');
+      setDescription('');
+      setSavedCount((n) => n + 1);
+      // The list stays SELECTED, so the next item needs no decision at all.
+      return;
+    }
+
     router.push(`/m/p/${projectId}/punch`);
     router.refresh();
   }
 
+  // D-65's two sides. `member_type` is CHECK-constrained to exactly these two
+  // values, so the pair partitions the roster and nothing falls between them.
+  const crewMembers = members.filter((m) => m.member_type !== 'subcontractor');
+  const subMembers = members.filter((m) => m.member_type === 'subcontractor');
+
   // The picker's options. "New list…" is one of them rather than a separate
   // control, so "where does this go" is a single question with a single answer.
+  //
+  // D-63 [S121] ADDS A FRONT DOOR AND DOES NOT CLOSE THIS ONE. Lists are now
+  // standalone (M-41, `/punch/lists/new`), but creating one while filing the
+  // first item into it is still the right flow for "I found something and there
+  // is nowhere to put it" — and A-67b asserts it end to end.
   const listOptions = [
     ...lists.map((l) => ({ value: l.id, label: l.name })),
+    ...createdLists.map((l) => ({ value: l.id, label: l.name })),
     { value: NEW_LIST, label: 'New list…' },
   ];
 
@@ -235,21 +333,105 @@ export function PunchItemForm({
         />
       </div>
 
-      {/* ASSIGNEE — company_members ids. See the page's note on the trap. */}
+      {/* ==================================================================
+          ASSIGNEE — TWO STEPS, D-65 [S121, Josh]
+
+          "Pick Team or Sub/Vendor first, then the respective list."
+
+          The old build rendered ALL members in one flat stack at the bottom of
+          the screen — 39 of them on rebuild-test, of which 33 are
+          subcontractors — so the crew member you wanted was six taps of
+          scrolling past a supplier directory. The split is expressible because
+          `company_members.member_type` is exactly two values and
+          `assignee_id` FKs to that table, so both sides carry the id the
+          column needs.
+
+          ⚠️ THE PROJECT SCOPING IS **NOT** BUILT, AND THAT IS DELIBERATE.
+          D-65 also asks for the list to be limited to members assigned to the
+          project. Measured on rebuild-test before building it:
+
+            project_assignments rows           19  (crew 17, subcontractor 2)
+            company_members                    39  (crew  6, subcontractor 33)
+            projects with an assignment         8 of 9
+            …with BOTH a crew and a sub         2 of 8
+            punch items with an assignee       11 of 11
+            …whose assignee has NO assignment
+               row for that project             2
+
+          So scoping would empty the Sub/Vendor side on SIX of eight projects,
+          and would make two of the eleven assignments that already exist in
+          the data impossible to re-create. That is the outcome the ruling
+          itself named as worse than the flat picker, so the scoping half is
+          held pending Josh, and only the split — which the data fully supports
+          — is built. Adding the scope later is a filter on these two arrays
+          and nothing else; no rework is created by shipping the split first.
+          ================================================================== */}
       {members.length > 0 ? (
         <div className="mt-[14px]">
           <FieldLabel>Assign to</FieldLabel>
+
+          {/* STEP 1. Not preselected: which side you want is a real question,
+              and answering it for the user is how the flat list happened. */}
           <OptionStack
-            options={members.map((m) => ({
-              value: m.id,
-              label: m.display_name,
-              sub: m.member_type,
-            }))}
-            value={assignee}
-            onChange={setAssignee}
-            testIdPrefix="m-punch-assignee"
+            options={[
+              { value: 'crew' as const, label: 'Team', sub: `${crewMembers.length}` },
+              {
+                value: 'subcontractor' as const,
+                label: 'Sub / Vendor',
+                sub: `${subMembers.length}`,
+              },
+            ]}
+            value={assigneeSide}
+            onChange={(side) => {
+              setAssigneeSide(side);
+              // Changing sides drops a selection made on the other one —
+              // otherwise the form would carry an assignee the visible list
+              // does not contain, which reads as nothing being selected.
+              setAssignee(null);
+            }}
+            testIdPrefix="m-punch-assignee-side"
           />
+
+          {/* STEP 2 — only after step 1. */}
+          {assigneeSide !== null ? (
+            <div className="mt-[10px]">
+              {(assigneeSide === 'crew' ? crewMembers : subMembers).length === 0 ? (
+                <p
+                  data-testid="m-punch-assignee-empty"
+                  className="text-[14px] text-m6m-muted"
+                >
+                  {assigneeSide === 'crew'
+                    ? 'No team members on the roster.'
+                    : 'No subs or vendors on the roster.'}
+                </p>
+              ) : (
+                <OptionStack
+                  options={(assigneeSide === 'crew' ? crewMembers : subMembers).map((m) => ({
+                    value: m.id,
+                    label: m.display_name,
+                  }))}
+                  value={assignee}
+                  onChange={setAssignee}
+                  testIdPrefix="m-punch-assignee"
+                />
+              )}
+            </div>
+          ) : null}
         </div>
+      ) : null}
+
+      {/* D-64 — the screen does not navigate on "save and add another", so
+          this line is the only evidence the save happened. A count rather than
+          a bare "Saved": on a walk the useful fact is how many are in. */}
+      {savedCount > 0 ? (
+        <p
+          data-testid="m-punch-saved-count"
+          role="status"
+          className="mt-[14px] rounded-[10px] border border-m6m-border bg-m6m-card px-[12px] py-[8px] text-center text-[13px] text-m6m-navy"
+        >
+          {savedCount} item{savedCount === 1 ? '' : 's'} filed to this list. Add another, or use
+          Create item to finish.
+        </p>
       ) : null}
 
       {error ? <ErrorNotice message={error} testId="m-punch-create-error" /> : null}
@@ -257,7 +439,7 @@ export function PunchItemForm({
       <PrimaryButton
         label="Create item"
         busyLabel="Creating…"
-        onClick={submit}
+        onClick={() => submit('return')}
         // NOT disabled on a missing list — A-67 wants the refusal to SAY what
         // is missing, and a disabled button says nothing. Only the offline gate
         // disables, because there the message is already on screen.
@@ -265,6 +447,17 @@ export function PunchItemForm({
         busy={busy}
         testId="m-punch-create"
       />
+
+      {/* D-64 — the batch control, SECONDARY to the one above. A punch walk is
+          batch work but a single correction is not, and the ruling keeps both;
+          the outlined treatment says which one ends the task. */}
+      <SecondaryButton
+        label="Save and add another"
+        onClick={() => submit('again')}
+        disabled={!online || busy}
+        testId="m-punch-create-again"
+      />
+
       {!ready ? (
         <p className="mt-[8px] text-center text-[12px] text-m6m-muted">
           A list and a title are required.
