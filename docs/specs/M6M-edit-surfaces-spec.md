@@ -79,7 +79,21 @@ hidden button has shipped no permission at all.
 
 ## 3. FINDINGS — three need a ruling before any code is written
 
-### Finding 1 ⛔ **The ruling grants PM; the database refuses PM — team members only**
+### Finding 1 ✅ **CLOSED [S121, Josh] — team edit narrows to Owner/Admin. No migration.**
+
+> **RULED:** _"TEAM EDIT NARROWS TO OWNER/ADMIN. `company_members`' UPDATE policy already enforces exactly
+> that; the ruling changes, not the policy. No migration."_
+>
+> Option **(a)** below is taken. `EDIT_ROLES` is therefore **per-surface**, not one shared constant:
+> subs, vendors and contacts carry `['owner','admin','project_manager']` (mirroring their policies), and
+> team carries `['owner','admin']` (mirroring its own). A single shared list would have to be wrong for
+> one of them, and the whole point of this audit is that the three policies are not identical.
+>
+> **This closes the ruling half of the blocker and nothing else. Finding 2 still blocks the build** —
+> see below.
+
+#### The original finding, retained
+
 
 `company_members_update_authorized` is `company_id = get_my_company_id() AND get_my_role() = ANY
 (ARRAY['owner','admin'])`. There is no `project_manager` arm. A PM who is shown an Edit button on M-35
@@ -98,9 +112,8 @@ policy rather than by trusting the pattern that held for the other two tables.
   not mobile-specific — so it is a platform ruling, not a mobile one, and it needs its own reasoning
   about why a PM may rename a crew member.
 
-**Do not build the team edit surface under either assumption.** Shipping (a) silently makes mobile
-narrower than the ask without saying so; shipping the UI on the assumption of (b) ships a Save button
-that fails.
+~~**Do not build the team edit surface under either assumption.**~~ **(a) is now ruled** — mobile is
+deliberately narrower than the original ask for team, and it says so here rather than silently.
 
 ### Finding 2 ⛔ **There is no update function for the table M-35 reads, and the desktop one edits a different entity**
 
@@ -114,6 +127,13 @@ writes **`profiles`**, by profile id. Those are different tables holding differe
 This is the **A-47 trap** the codebase already documents: `profiles` drops every subcontractor roster
 member, of which rebuild-test holds 32 with no profile at all. So `updateTeamMember` cannot edit most of
 the rows M-35 can display.
+
+> **⚠️ STILL OPEN AND STILL BLOCKING [S121]. Finding 1 being closed does not close this one.**
+> Ruling 4 settled WHO may edit a team member. It did not settle WHAT a team member is, and the build
+> cannot start without that: `updateTeamMember` writes **`profiles`**, which is **A-47's trap** — it
+> resolves by profile id and drops every roster member without one, of which rebuild-test holds **32 of
+> 33 subcontractors**. M-35 reads `company_members`. A build that called the existing function would
+> edit a different entity from the one on screen and silently fail for most of the roster.
 
 **The ruling needed: what does "edit a team member" mean?** Renaming the roster entry
 (`company_members.display_name`) and renaming the person (`profiles.first_name`) are different actions
@@ -221,12 +241,12 @@ they just wrote. Not back to the list — the detail is what they were reading.
 
 ## 6. Open items — REQUIRING A RULING
 
-1. **Finding 1** — team edit: narrow the ruling to Owner/Admin, or migrate `company_members_update_authorized`?
+1. ~~**Finding 1** — team edit: narrow the ruling to Owner/Admin, or migrate?~~ **✅ CLOSED [S121, Josh] — narrowed to Owner/Admin. No migration.**
 2. **Finding 2** — does "edit a team member" mean `company_members` or `profiles`?
-3. **Finding 3** — is the contact address in or out of v1? (Recommendation: out, until it has a policy.)
+3. ~~**Finding 3** — is the contact address in or out of v1?~~ **✅ CLOSED [S121, Josh] — `contact_addresses` gains a role floor by migration; see `20260829000000_contact_addresses_role_floor.sql`. The address is a WRITE surface question separately from the floor, and stays out of v1's edit form (§4).**
 4. **Finding 4** — raise a TECH_DEBT entry for the three missing `WITH CHECK` clauses? (Recommendation: yes;
    it is pre-existing and platform-wide, so it should not be fixed inside an M6M slice.)
 
-**Items 1 and 2 block the team surface entirely. Subs, vendors and contacts are unblocked** and could be
+**Item 2 blocks the team surface entirely — item 1 is now closed and item 2 alone is enough. Subs, vendors and contacts are unblocked** and could be
 built against §4 as written — which is the recommended split, rather than holding all three behind a
 ruling that only affects the fourth.
