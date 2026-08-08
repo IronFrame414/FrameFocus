@@ -87,6 +87,108 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
   **The residual, precisely.** Today `change_orders_select_visible` is `company_id = get_my_company_id() AND can_view_project(project_id)` — no role floor and **no author scoping**. So a PM can read `net_delta` on **ANY change order they can see, not only ones they authored**: every CO on every project they are assigned to, including COs written by the Owner. **The ruling is satisfied by intent but not by enforcement.** The UI gate (ui-01 §11) is the only thing standing between a PM and other people's CO dollar figures, and a direct API/query walks around it.
 
+  ---
+
+  ### ⚠️ [S121] SCOPED FOR CLOSURE — MEASURED, AND **BIGGER THAN A MIGRATION**. NOT STARTED.
+
+  Asked to close #117 as the blocker on D-65's award auto-assign. Investigated under the S90 harness
+  (`apps/web/test/s121-co-floor-audit.live.ts`, read-only) and **stopped before writing anything**,
+  because the fix needs a ruling #117 itself says must not be inferred.
+
+  **1. THE COLUMN SET IS WIDER THAN THIS ITEM RECORDED.** #117 named `net_delta` on the parent and
+  `total, rate, unit_cost, amount` on `change_order_line_rows`. The full set is:
+
+  | Table | Money / margin columns | Named in #117 before? |
+  | ----- | ---------------------- | --------------------- |
+  | `change_orders` | `net_delta` | yes |
+  | `change_orders` | **`labor_markup_percent`, `material_markup_percent`, `subcontractor_markup_percent`** | **NO** |
+  | `change_orders` | `tax_rate` | no (pricing input) |
+  | `change_order_line_items` | **`total_price`** | table named, column not |
+  | `change_order_line_rows` | `total`, `rate`, `unit_cost`, `amount` | yes |
+  | `change_order_line_rows` | **`markup_percent`** | **NO** |
+
+  **The four markup columns are the sharpest addition and they are the same figure #132 calls "the
+  company's margin ... precisely the class the Financial Visibility Floor keeps from PM, foreman and
+  crew everywhere else."** Three of them sit on the parent row.
+
+  **2. THE EXPOSURE IS NOT LATENT. MEASURED ON REBUILD-TEST, REAL JWTs:**
+
+  ```
+  role              change_orders          line_items      line_rows
+  owner/admin/PM    20 rows, 20 net_delta  28 total_price  83 rows, 30 cost/rate, 79 markup
+  foreman            2 rows                 2               3
+  crew_member       13 rows, 13 net_delta  19 total_price  61 rows, 22 cost/rate, 59 markup
+  subcontractor      2 rows                 2               3
+
+  crew_member net_delta values include 211563.12, 197227.74*, 75996.90, 39116.67
+    (*owner-visible set; crew's own max is 211563.12)
+  crew_member line_rows sample: unit_cost 235, markup 20, total 1410
+  ```
+
+  **`crew_member` reads thirteen change orders, with cost, margin AND price** — the complete pricing
+  picture. The "latent because 32 of 33 subs have no login" framing is true of subcontractors and
+  **false of crew**: `josh+crew@` is a real seeded login reading real figures today. Crew sees MORE
+  than foreman (13 vs 2) because crew holds more project assignments.
+
+  **3. COLUMN-LEVEL `GRANT` CANNOT EXPRESS THIS FLOOR — not "costly", INAPPLICABLE.** Every app role
+  signs in as the same Postgres role, `authenticated`; `get_my_role()` reads `profiles`, not
+  `current_user`. A column `REVOKE` therefore applies to owner and crew identically. Making it work
+  would mean one Postgres role per app role and a session-level role swap — an authentication
+  architecture change, not a migration. (Measured separately: `select('*')` succeeds for all six roles
+  on all three tables today, so a revoke would also turn `change-orders.ts:93,102` into hard `42501`s
+  for whoever it applied to.)
+
+  **4. THE 1:1 SIDE-TABLE SPLIT STILL FAILS, FOR THE REASON ALREADY RECORDED** — the money sits on rows
+  a PM must INSERT and UPDATE, so a split yields either "PM loses CO authoring" or "a table a PM can
+  write but not read". The three markup columns make it worse, not better: they are *inputs* the
+  authoring UI must round-trip.
+
+  **5. WHAT THE FINANCIAL VISIBILITY FLOOR GIVES, AND WHERE IT RUNS OUT.** It answers the easy part:
+  CO dollar amounts and margin are **Owner/Admin**, explicitly including PM. It does **not** answer:
+  - **the PM carve-out's scope** — Josh's S97 ruling ("a PM may see the value of the COs they write")
+    is a carve-out the Floor's own table does not express. #117's owed decision — authored-by vs
+    assigned-project — is still owed, and this item already says: *"Do not pick one at implementation
+    time by inference; ask."*
+  - **`unit_cost` / `rate` on a CO line.** The Floor says **actual and committed cost is visible to all
+    roles**. A CO line's `unit_cost` is a *quoted pricing input*, not `project_budget_items.actual_amount`.
+    The Floor was written about the latter. Genuinely ambiguous; needs a ruling.
+
+  **6. WHAT A ROW-LEVEL FLOOR WOULD TAKE AWAY** (the only shape RLS can express — SELECT scoped to
+  owner/admin/PM, mirroring the WRITE policies these tables already carry):
+  - **Desktop `/dashboard/projects/[id]/changes`** — foreman/crew lose the CO list entirely. Note the
+    money is *already* hidden there: `canSeeFinancials = ['owner','admin']` (`page.tsx:37`), so desktop
+    is **stricter than the S97 ruling** and denies PM today.
+  - **⚠️ NEW, #136's class on a new table:** that page passes `changeOrders={changeOrders}` to a client
+    component **unconditionally** (`page.tsx:~44`). `canSeeFinancials` gates *rendering only*, so
+    `net_delta` and all three markup percents ship in the **RSC payload** to PM, foreman and crew.
+    Render-deep, not payload-deep — the same defect as #136.
+  - **Mobile M-13 / M-31** — foreman/crew/sub lose them. D-26 already cuts every CO dollar from `/m`
+    for every role, so nothing *rendered* is lost, but A-33c would start passing **vacuously** over an
+    empty page — the exact failure the seed script's step 5b comment exists to prevent.
+  - **`budget.ts:132`** reads `change_orders` for the signed-CO list, selecting `id, co_number, title,
+    status` — **no money**. A row floor would empty that list for foreman/crew and silently change the
+    budget screen. This is the one place the change reaches beyond COs; it does **not** otherwise reach
+    7C (`expenses`, `subcontractor_contracts` carry no CO money).
+
+  **7. THE FOUR OPTIONS, FOR A RULING.**
+  - **(a) Row floor to Owner/Admin/PM** on all three SELECTs, mirroring the writes. One migration.
+    Closes crew/foreman/sub completely. **Does not close the PM half** — a PM still reads every CO on
+    every assigned project, which is what S97 said Josh does *not* want. Costs the enumerated screens.
+  - **(b) (a) + author scoping for PM** (`created_by = auth.uid()` OR owner/admin). Closes #117 fully
+    as worded. Needs the owed ruling, and PM's own CO list becomes narrower than the desktop UI implies.
+  - **(c) A view layer** — read through a view that NULLs the floored columns per `get_my_role()`.
+    The only shape that gives per-column granularity. Costs a **service-layer refactor**: every reader
+    in `change-orders.ts`, `change-orders-client.ts` and `change-order-totals-server.ts` retargeted,
+    and writes still go to the tables.
+  - **(d) Keep the read gap, close the PAYLOAD leak.** One conditional in the desktop page, mirroring
+    the tab gate already there. Cheap, real, and does not pretend to be the floor.
+
+  **RECOMMENDED SEQUENCE:** (d) now — it is a genuine defect independent of the ruling and costs one
+  line. Then rule the PM scope, then (b). (c) only if `unit_cost` must stay readable by field roles.
+
+  **NOTHING WAS CHANGED.** No migration written, no policy altered, no service touched. The audit
+  harness is committed because the measurements are the evidence and would otherwise be lost.
+
   **The decision owed before anyone builds this:** what "COs they write" actually means — **authored-by** scope (`created_by = auth.uid()`, narrow, matches the words of the ruling) or **assigned-project** scope (what the policy accidentally implements today, wider). These are materially different floors and the answer changes the fix. Do not pick one at implementation time by inference; ask.
 
   Note there is no `change_order_amounts` split table — nothing has been half-built toward either answer. Cross-ref: CLAUDE.md → **Financial Visibility Floor** → "Current enforcement status" (that table cites this item, and the two must be updated together). Related: #115 (same posture — a capture/authoring model Josh wants revisited rather than patched). **#132 is the same class on a different table.** Raised Session 97.
