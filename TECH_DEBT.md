@@ -360,6 +360,62 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
 - **#145** ~~**The Codespace runs out of memory during a full Playwright chunk, and Chromium's renderer is OOM-killed mid-navigation.**~~ — **FIXED S120, AND THE DIAGNOSIS ABOVE WAS WRONG.** The symptom was real and is gone; the cause named for it never happened. Kept in full rather than rewritten, because the way this was misdiagnosed is the useful part.
 
+  ### ⚠️ [S121] INVESTIGATED AGAIN — AND THE `/safety` FRAMING IS A RED HERRING
+
+  Asked to explain the `page.goto: Page crashed` seen on a long combined run, or to establish it only
+  happens under memory pressure with evidence. **Neither, honestly. Here is what is and is not proven.**
+
+  **1. `/m/p/{id}/safety` IS NOT INVOLVED.** The item was filed against that page because A-39 does not
+  run. A-39 does not run because it **skips on a DATA condition** — `test.skip(true, 'no incidents on
+  this project')`, the fixture project has none — and **A-39b navigates the same route in every run and
+  passes**. The route was never crashing. Anyone chasing "the /safety crash" is chasing a skip.
+
+  **2. Nothing is being OOM-killed, and that is now checked in both places.**
+  `/proc/vmstat` → `oom_kill 0`; every cgroup's `memory.events` → `oom_kill 0`. The corrected S120
+  diagnosis stands: this is not the kernel reaping processes.
+
+  **3. `/dev/shm` is still 64 MB and the fix for it is in force.** `--disable-dev-shm-usage`
+  (`playwright.config.ts:83`) moves renderer shared memory to disk-backed `/tmp`, so the 64 MB ceiling
+  is bypassed rather than raised.
+
+  **4. THE REAL RESOURCE STORY, MEASURED — `next-server` grows to ~1.4 GB inside a single run.**
+  Sampled every 10s across a 7.5-minute three-file run:
+
+  ```
+  t=  50s  free= 364MB  available=2848MB  next-server= 777MB
+  t= 170s  free= 198MB  available=2582MB  next-server=1073MB
+  t= 290s  free= 161MB  available=2246MB  next-server=1218MB
+  t= 410s  free= 473MB  available=2307MB  next-server=1372MB
+  ```
+
+  Monotonic growth, and it matches the 1.4 GB S120 recorded. But **`available` never dropped below
+  ~2.2 GB** — `free` is low because buff/cache holds the rest, and that is reclaimable. The box is
+  under pressure and is not out of memory.
+
+  **5. Dev servers do NOT accumulate between invocations.** Checked: no listener on :3000 and no
+  orphaned `next-server` between runs — Playwright's `webServer` tears its own down. A plausible theory
+  ("each invocation leaks a server, so failures appear mid-session") is therefore dead.
+
+  **6. ⚠️ IT DID NOT REPRODUCE.** Four consecutive long combined runs, including **the exact four-file
+  combination that failed twice earlier in S121** (m-shell + m-hydration + m-logs + m-sections) and a
+  heavier five-file run (173 tests, 7.9 minutes). All passed. The two S121 incidents showed the
+  documented signature — a different test each time, each passing alone — but the error text was not
+  captured at the time and cannot be now.
+
+  **CONCLUSION, stated at the strength the evidence supports:** the failure is **intermittent and
+  load-correlated**, it is **not** an OOM kill, it is **not** `/dev/shm` (that cause is fixed), and it
+  is **not** specific to any route. What it actually is remains **unproven** — dressing "I could not
+  reproduce it" as "environmental" would be the same mistake the original entry made with "OOM".
+
+  **What would settle it:** capture `error-context.md` and a trace from the next occurrence rather than
+  re-running afterwards (`trace: 'on-first-retry'` only helps with `retries > 0`, which is CI-only —
+  locally the artifact is gone by the time anyone looks). **#135's `next build && next start` remains
+  the recommended structural fix**: it removes the 1.4 GB dev server, which is the only measured
+  resource growth in the loop, whether or not it is the cause.
+
+  **The four-process split stays**, on the evidence that long runs are where this appears — not because
+  the cause is known.
+
   **What it actually was: `/dev/shm` is 64 MB.** That is the Docker default, and Chromium puts renderer shared memory there. When it fills, the renderer dies instantly — surfacing to Playwright as `Page crashed`, on whichever test happened to be navigating. Fixed by `--disable-dev-shm-usage` in `apps/web/playwright.config.ts`, which moves that allocation to disk-backed `/tmp`.
 
   **The evidence that killed the memory theory** — the kernel's own counters, which were never checked when this was filed:
