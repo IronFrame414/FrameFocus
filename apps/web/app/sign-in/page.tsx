@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase-browser';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { brand } from '@/lib/brand';
+import { safeNextPath } from '@/lib/safe-next';
 
 export default function SignInPage() {
   const [email, setEmail] = useState('');
@@ -26,7 +27,19 @@ export default function SignInPage() {
       setLoading(false);
       return;
     }
-    router.push('/dashboard');
+    // WHERE THIS LANDS IS `?next=`, DEFAULTING TO '/dashboard' [S121].
+    //
+    // Hard-coding '/dashboard' here was the last link in the chain that made
+    // the field app unreachable from a phone: a lapsed session on /m redirects
+    // here, and this line then dropped the user into the DESKTOP app — inside
+    // an installed PWA, with no address bar to escape it. lib/safe-next.ts has
+    // the whole chain written out.
+    //
+    // READ FROM window.location, NOT useSearchParams(). The hook would force
+    // this page under a Suspense boundary (Next bails out of prerendering
+    // without one) for a value that is only needed at click time anyway. This
+    // handler only ever runs in the browser.
+    router.push(safeNextPath(new URLSearchParams(window.location.search).get('next')));
     router.refresh();
   }
 

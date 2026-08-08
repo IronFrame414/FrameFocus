@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import { billingEnforcementEnabled } from '@/lib/billing-flag';
+import { safeNextPath } from '@/lib/safe-next';
 
 type CookieEntry = { name: string; value: string; options?: Record<string, unknown> };
 
@@ -43,10 +44,24 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Redirect authenticated users away from auth pages
+  // Redirect authenticated users away from auth pages.
+  //
+  // THE DESTINATION IS `?next=`, NOT ALWAYS '/dashboard' [S121]. This branch
+  // is the second half of the chain that made /m unreachable from a phone: the
+  // mobile layout sends an unauthenticated field user to /sign-in, and if the
+  // session turns out to be valid after all, this line used to deposit them in
+  // the DESKTOP app. `safeNextPath` keeps '/dashboard' as the default, so every
+  // existing caller behaves exactly as before; only a request that ASKED for
+  // somewhere else goes somewhere else. See lib/safe-next.ts for the full chain
+  // and for why the value must be validated rather than used as given.
   if (user && (pathname === '/sign-in' || pathname === '/sign-up')) {
+    const dest = safeNextPath(request.nextUrl.searchParams.get('next'));
+    // Split rather than `new URL(dest, origin)`: cloning keeps the request's
+    // real origin, which behind Vercel's proxy is not always nextUrl.origin.
+    const cut = dest.indexOf('?');
     const url = request.nextUrl.clone();
-    url.pathname = '/dashboard';
+    url.pathname = cut === -1 ? dest : dest.slice(0, cut);
+    url.search = cut === -1 ? '' : dest.slice(cut);
     return NextResponse.redirect(url);
   }
 

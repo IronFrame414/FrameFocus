@@ -37,7 +37,32 @@ import { RegisterSw } from './register-sw';
 //   - Nothing in M6M rules on what an expired SUBSCRIPTION should do to a
 //     phone. That question is still open — it is simply not answered by the
 //     matcher, which was the confusion.
+//
 // ---------------------------------------------------------------------------
+// AND THE GATE MUST SAY WHERE IT CAME FROM — `?next=/m` [S121]
+// ---------------------------------------------------------------------------
+// The redirects below used to target a bare '/sign-in', which threw the
+// destination away. That made the phone symptom that looked like a second
+// matcher bug and was not one:
+//
+//     GET /m -> (session lapsed) -> '/sign-in' -> user signs in
+//            -> app/sign-in/page.tsx pushed '/dashboard'
+//            -> the desktop app, on a handset
+//
+// cf1fe8a fixed a stale token being unable to REFRESH. It could not fix a
+// refresh token that has genuinely expired, which is the ordinary state of a
+// phone left alone for a week — and that is why a desktop, whose session
+// refreshes constantly and so never touches /sign-in, "works fine".
+//
+// `?next=/m` and nothing deeper: a layout has no access to the request
+// pathname in the App Router, so the specific screen the user asked for is not
+// recoverable here without middleware growing a header for it. Returning to
+// the field app's front door is the whole of the reported defect; the deep
+// link is not, and is flagged rather than half-built. /m then continues to
+// /m/timeclock (D-12) as it does for any other visit.
+// ---------------------------------------------------------------------------
+
+const SIGN_IN_BACK_TO_M = '/sign-in?next=%2Fm';
 
 export default async function MobileLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -47,7 +72,7 @@ export default async function MobileLayout({ children }: { children: React.React
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect('/sign-in');
+    redirect(SIGN_IN_BACK_TO_M);
   }
 
   // `first_name, last_name` were selected here for the app-bar avatar and are
@@ -60,7 +85,7 @@ export default async function MobileLayout({ children }: { children: React.React
     .single();
 
   if (!profile) {
-    redirect('/sign-in');
+    redirect(SIGN_IN_BACK_TO_M);
   }
 
   const [companyResult, members] = await Promise.all([
