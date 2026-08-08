@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase-server';
 import { notFound, redirect } from 'next/navigation';
 import { getChangeOrder, getCoSigningSessions } from '@/lib/services/change-orders';
 import { getSubcontractors } from '@/lib/services/subcontractors';
+import { redactCoDetail } from '@/lib/co-redaction';
 import { CoBuilder } from './co-builder';
 
 // 5D — CO detail / builder. Written identically to an estimate (D-1):
@@ -77,7 +78,10 @@ export default async function ChangeOrderPage({
   return (
     <CoBuilder
       projectId={params.id}
-      changeOrder={changeOrder}
+      // Redacted at the boundary — the CO plus every line item and line row.
+      // `canSeeRates` gated rendering only, so unit_cost, rate, markup_percent,
+      // total and amount rode the payload for every role that reached the page.
+      changeOrder={redactCoDetail(changeOrder, canSeeRates)}
       subcontractors={subcontractors.map((s) => ({ id: s.id, name: s.company_name }))}
       canManage={canManage}
       canSeeRates={canSeeRates}

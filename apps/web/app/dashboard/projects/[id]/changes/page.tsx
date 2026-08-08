@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
+import { redactCo } from '@/lib/co-redaction';
 import { getChangeOrders } from '@/lib/services/change-orders';
 import { getRevisedContract } from '@/lib/services/contract-value';
 import { getProject } from '@/lib/services/projects';
@@ -36,12 +37,20 @@ export default async function ProjectChangesPage({ params }: { params: { id: str
   // Financial floor (ui-01 §11): CO dollar amounts are Owner/Admin only.
   const canSeeFinancials = ['owner', 'admin'].includes(profile.role);
 
+  // ⚠️ REDACTED AT THE BOUNDARY, NOT AT RENDER [S121]. `canSeeFinancials` used
+  // to gate only what the panel DREW, while the rows travelled whole — so
+  // net_delta, all three markup percents and tax_rate were in the RSC payload
+  // for PM, foreman and crew. #136's shape on a third table. The rows still
+  // travel (the Floor makes CO counts and statuses visible to every role); the
+  // figures do not.
   return (
     <ChangesPanel
       projectId={params.id}
       projectType={project?.project_type ?? 'fixed_price'}
-      changeOrders={changeOrders}
-      signedDelta={contract.signedDelta}
+      changeOrders={changeOrders.map((co) => redactCo(co, canSeeFinancials))}
+      // A bare money scalar with no gate of its own — it left the server for
+      // every role and was drawn for two.
+      signedDelta={canSeeFinancials ? contract.signedDelta : null}
       canManage={canManage}
       canDelete={canDelete}
       canSeeFinancials={canSeeFinancials}

@@ -86,6 +86,11 @@ export function ExpensesPageClient({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // ⚠️ #136 [S121] — this set is now BELT to the server's BRACES, not the only
+  // guard. The page strips payable rows from `expenses` before they leave the
+  // server for a role without Bills access, so for crew this set is empty AND
+  // there is nothing for it to hide. For Owner/Admin/PM/Foreman both arrive and
+  // this keeps payables off the Receipts tab, which is its original job.
   const payableIds = useMemo(() => new Set(billRows.map((b) => b.id)), [billRows]);
 
   const pendingCount = useMemo(

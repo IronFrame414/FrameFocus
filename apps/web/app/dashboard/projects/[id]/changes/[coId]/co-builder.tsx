@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import type { RedactedCoDetail } from '@/lib/co-redaction';
 import {
   CO_STATUS_LABELS,
   createCoLineItem,
@@ -56,6 +57,19 @@ const UNIT_OF_MEASURE_OPTIONS = [
   'allowance',
   'other',
 ] as const;
+
+/**
+ * A figure the caller may not be permitted to see renders as an em-dash.
+ *
+ * ⚠️ THE CO TOTAL WAS UNGATED ON THIS SCREEN. `canSeeRates` covers the line-level
+ * rates and never covered `net_delta`, so the CO total was DRAWN — not merely
+ * shipped — to every role that could reach the page, foreman and crew included.
+ * Redaction nulls it, and null renders as '—' rather than crashing `money()` or
+ * printing "$0.00", which would be a different lie. [S121]
+ */
+function moneyOrDash(value: number | null | undefined): string {
+  return value === null || value === undefined ? '—' : money(value);
+}
 
 function money(value: number): string {
   return value.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
@@ -127,7 +141,8 @@ const sigPillStyle = (active: boolean, disabled: boolean): React.CSSProperties =
 
 interface CoBuilderProps {
   projectId: string;
-  changeOrder: ChangeOrderWithChildren;
+  /** Money nullable — redacted at the page boundary (lib/co-redaction.ts). */
+  changeOrder: RedactedCoDetail;
   subcontractors: Array<{ id: string; name: string }>;
   canManage: boolean;
   /** Owner/Admin only. RULING A [S97]: a PM sees NO rate values anywhere, so
@@ -345,10 +360,10 @@ export function CoBuilder({
               style={{
                 fontSize: '1.375rem',
                 fontWeight: 700,
-                color: co.net_delta < 0 ? '#166534' : '#111827',
+                color: (co.net_delta ?? 0) < 0 ? '#166534' : '#111827',
               }}
             >
-              {money(co.net_delta)}
+              {moneyOrDash(co.net_delta)}
             </div>
             {canManage && (
               <div
@@ -571,7 +586,7 @@ export function CoBuilder({
                   color: item.total_price < 0 ? '#166534' : undefined,
                 }}
               >
-                {money(item.total_price)}
+                {moneyOrDash(item.total_price)}
               </span>
               {editable && (
                 <button
@@ -673,7 +688,9 @@ function HeaderDetails({
   co,
   onSave,
 }: {
-  co: ChangeOrderWithChildren;
+  // Redacted shape — this sub-form edits title/description/dates and reads no
+  // figure, so widening it costs nothing and keeps one type through the tree.
+  co: RedactedCoDetail;
   onSave: (input: {
     title?: string;
     description?: string | null;
@@ -800,7 +817,7 @@ function RowLine({
           fontWeight: 600,
         }}
       >
-        {money(row.total)}
+        {moneyOrDash(row.total)}
       </td>
       <td style={{ padding: '0.375rem 0.5rem', textAlign: 'right', whiteSpace: 'nowrap' }}>
         {editable && (
