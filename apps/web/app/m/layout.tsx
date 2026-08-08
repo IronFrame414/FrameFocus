@@ -34,6 +34,10 @@ import { RegisterSw } from './register-sw';
 //   - §1: "A desktop browser opening /m gets the mobile shell; that is intended
 //     and is how it gets tested." There is no viewport or user-agent check here,
 //     deliberately — "a viewport or user-agent check is NOT the router."
+//     ⚠️ §1 AMENDED [S121] for the SIGN-IN LANDING only (lib/device.ts): a
+//     phone signing in defaults to /m. That decides a DESTINATION, never a
+//     route's ownership — this layout still has no device check, and a desktop
+//     opening /m still gets the mobile shell.
 //   - Nothing in M6M rules on what an expired SUBSCRIPTION should do to a
 //     phone. That question is still open — it is simply not answered by the
 //     matcher, which was the confusion.

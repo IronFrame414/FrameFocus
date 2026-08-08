@@ -391,9 +391,35 @@ conveniences:
   document viewer — see §4.11.16. A `files/[fileId]` route would imply a rendering surface this spec has
   not designed and cannot design for arbitrary MIME types.
 
-**Entry.** A viewport or user-agent check is **not** the router. Mobile is entered by URL (`/m`) and by
-the installed PWA's `start_url`. A desktop browser opening `/m` gets the mobile shell; that is intended
-and is how it gets tested.
+**Entry.** _Superseded in part, quoted rather than rewritten:_ _"A viewport or user-agent check is
+**not** the router."_ Mobile is entered by URL (`/m`) and by the installed PWA's `start_url`. A desktop
+browser opening `/m` gets the mobile shell; that is intended and is how it gets tested.
+
+> #### ⚠️ AMENDED [S121, Josh] — the SIGN-IN LANDING is user-agent decided
+>
+> **A phone signing in lands on `/m`.** The decision is made from the request's user-agent, on the
+> server, in `lib/device.ts`, and reaches the form as a prop — so a phone never renders `/dashboard` on
+> its way to `/m`.
+>
+> **Why this is an amendment and not a violation.** The quoted rule was written when `/m` had **no
+> other entry** — the concern it encodes is that a device check must not decide *which app a URL
+> belongs to*. That concern is untouched. **D-12 has always wanted the landing itself** ("a field
+> user's first screen is the clock"), and hard-coding `/dashboard` was what made the PWA's own
+> `start_url` the only way a phone reached the field app.
+>
+> **What survives, in full:**
+> - **URL entry and the PWA `start_url` still work, for every device, and remain the primary paths.**
+> - **No route is gated on device class.** A phone may open `/dashboard`; a laptop may open `/m` and
+>   still gets the mobile shell, which is how the suite tests it.
+> - The check runs at exactly one moment — the instant after a successful sign-in, when nobody has
+>   said where they want to go — and `?next=` overrides it (`safeNextPath`'s fallback parameter, so
+>   there is one mechanism and not two).
+>
+> **Two wrong answers accepted on purpose**, recorded so they read as decisions: a phone-sized browser
+> window on a laptop gets `/dashboard` (the UA says desktop), and an **iPad gets `/dashboard`** (iPadOS
+> reports a Macintosh UA by default). Both are defensible — the target is the phone in a pocket — and
+> neither is to be "fixed" with a client-side viewport check, which would reintroduce the sign-in
+> flicker the server-side decision exists to avoid.
 
 **The service layer is shared.** Mobile routes call the same `lib/services/*` functions as desktop. No
 duplicate data access is written for mobile.

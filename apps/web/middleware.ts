@@ -2,6 +2,7 @@ import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import { billingEnforcementEnabled } from '@/lib/billing-flag';
 import { safeNextPath } from '@/lib/safe-next';
+import { defaultSignedInPath } from '@/lib/device';
 
 type CookieEntry = { name: string; value: string; options?: Record<string, unknown> };
 
@@ -55,7 +56,14 @@ export async function middleware(request: NextRequest) {
   // somewhere else goes somewhere else. See lib/safe-next.ts for the full chain
   // and for why the value must be validated rather than used as given.
   if (user && (pathname === '/sign-in' || pathname === '/sign-up')) {
-    const dest = safeNextPath(request.nextUrl.searchParams.get('next'));
+    // D-12 [S121] — the DEFAULT is device-dependent: a phone that lands on an
+    // auth page while already signed in goes to /m, not the desktop app. Same
+    // helper as the sign-in page, passed as safeNextPath's fallback so there is
+    // one mechanism rather than two. `?next=` still wins over both.
+    const dest = safeNextPath(
+      request.nextUrl.searchParams.get('next'),
+      defaultSignedInPath(request.headers.get('user-agent'))
+    );
     // Split rather than `new URL(dest, origin)`: cloning keeps the request's
     // real origin, which behind Vercel's proxy is not always nextUrl.origin.
     const cut = dest.indexOf('?');

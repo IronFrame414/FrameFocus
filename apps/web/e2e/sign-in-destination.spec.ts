@@ -72,3 +72,53 @@ test('a sign-in with no stated destination still lands on the desktop dashboard'
   await page.getByRole('button', { name: /sign in/i }).click();
   await expect(page).toHaveURL(/\/dashboard/, { timeout: 30_000 });
 });
+
+// ===========================================================================
+// D-12's SIGN-IN LANDING — a phone signs in to /m [S121, Josh]
+// ===========================================================================
+// The unit tests (test/device.test.ts) pin the UA predicate against real
+// strings. These pin the CONSEQUENCE end to end, because the predicate being
+// right and the page using it are different claims — the whole point of the
+// server-side split is that the decision reaches the form as a prop, and a prop
+// that is never read would pass every unit test.
+test.describe('D-12 · the sign-in landing follows the device', () => {
+  test.use({
+    userAgent:
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+  });
+
+  test('a phone lands on /m, with no /dashboard render on the way', async ({ page }) => {
+    const seen: string[] = [];
+    page.on('framenavigated', (f) => {
+      if (f === page.mainFrame()) seen.push(new URL(f.url()).pathname);
+    });
+
+    await page.goto('/sign-in');
+    await page.locator('#email').fill(EMAIL);
+    await page.locator('#password').fill(PASSWORD);
+    await page.getByRole('button', { name: /sign in/i }).click();
+
+    await expect(page).toHaveURL(/\/m(\/|$)/, { timeout: 30_000 });
+    await expect(page.getByTestId('m-tabbar')).toBeVisible();
+
+    // ⚠️ THE FLICKER IS THE POINT. A viewport-based fix would land on
+    // /dashboard and bounce; this asserts the dashboard was never navigated to
+    // at all, which is the difference the server-side decision buys.
+    expect(
+      seen.filter((p) => p.startsWith('/dashboard')),
+      'the phone rendered /dashboard on its way to /m — the decision moved client-side'
+    ).toEqual([]);
+  });
+});
+
+test.describe('D-12 · a desktop is unaffected', () => {
+  test('a desktop UA still lands on /dashboard', async ({ page }) => {
+    // The non-change half. Without it, a helper that returned '/m' for every
+    // caller would pass the test above.
+    await page.goto('/sign-in');
+    await page.locator('#email').fill(EMAIL);
+    await page.locator('#password').fill(PASSWORD);
+    await page.getByRole('button', { name: /sign in/i }).click();
+    await expect(page).toHaveURL(/\/dashboard/, { timeout: 30_000 });
+  });
+});
