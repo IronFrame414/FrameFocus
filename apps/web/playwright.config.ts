@@ -58,6 +58,29 @@ export default defineConfig({
     // Only kept for a test that already failed once — cheap, and the trace is
     // the difference between "it flaked" and knowing why.
     trace: 'on-first-retry',
+
+    // -------------------------------------------------------------------------
+    // --disable-dev-shm-usage — TECH_DEBT #145, and #145's DIAGNOSIS WAS WRONG
+    // -------------------------------------------------------------------------
+    // #145 recorded long runs dying with `Page crashed` on a different test each
+    // time, and attributed it to the box running out of memory (7944 MB total,
+    // ~130 MB free, no swap). **That was the wrong cause.** The kernel's own
+    // counters say nothing was ever OOM-killed:
+    //
+    //     /proc/vmstat            oom_kill 0
+    //     /sys/fs/cgroup/…events  oom_kill 0   (root and every child cgroup)
+    //
+    // What is actually true of this container is `df /dev/shm` → **64 MB**, the
+    // Docker default. Chromium puts renderer shared memory there, and when it
+    // runs out the renderer dies instantly — surfacing to Playwright as exactly
+    // `Page crashed`, on whichever test happened to be running. This flag moves
+    // that allocation to /tmp, which is disk-backed and not capped at 64 MB.
+    //
+    // Why the memory theory looked right: free memory WAS low, and splitting the
+    // suite into smaller processes DID help — but only because a shorter run
+    // opens fewer pages before /dev/shm fills, not because it used less RAM.
+    // The split was treating a symptom.
+    launchOptions: { args: ['--disable-dev-shm-usage'] },
   },
 
   // ---------------------------------------------------------------------------
