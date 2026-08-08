@@ -9,6 +9,7 @@ import {
   ClipboardList,
   Contact,
   Folder,
+  Images,
   HardHat,
   Receipt,
   Settings,
@@ -21,6 +22,7 @@ import {
 import { createClient } from '@/lib/supabase-browser';
 import { MobileHeaderProvider, useMobileHeader } from './mobile-header';
 import { OfflineSyncProvider, useOfflineSync } from './offline-sync';
+import { CaptureStoreProvider, projectInContext, useCaptureStore } from './capture-store';
 
 // M6M §3 — THE MOBILE SHELL.
 //
@@ -202,7 +204,11 @@ export function MobileShell(props: MobileShellProps) {
       {/* §5 — one queue per tab, hosted above every mobile screen so the
           strip's pill, M-4's list and the capture screens share one truth. */}
       <OfflineSyncProvider>
-        <MobileShellInner {...props} />
+        {/* §6 — the shot is held here between the shutter and /m/capture.
+            Above the shell because the tab bar writes it and a page reads it. */}
+        <CaptureStoreProvider>
+          <MobileShellInner {...props} />
+        </CaptureStoreProvider>
       </OfflineSyncProvider>
     </MobileHeaderProvider>
   );
@@ -213,6 +219,32 @@ function MobileShellInner({ children, companyName, teamCount }: MobileShellProps
   const router = useRouter();
   const [sheetOpen, setSheetOpen] = useState(false);
   const declared = useMobileHeader();
+  const capture = useCaptureStore();
+
+  /**
+   * §6 — everything AFTER the shutter. Runs only once a file exists, which is
+   * what keeps A-21c2 true: no navigation happens on the tap itself.
+   *
+   * The project in context is read HERE, at capture time, from the screen the
+   * user was on. Reading it later on /m/capture would be wrong — by then the
+   * pathname is `/m/capture` and the context is gone.
+   */
+  const onShot = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      // Allows re-picking the same file twice; without it the second change
+      // event never fires.
+      e.target.value = '';
+      if (!file || !capture) return;
+
+      const search = new URLSearchParams(
+        typeof window === 'undefined' ? '' : window.location.search
+      );
+      capture.hold(file, projectInContext(pathname, search));
+      router.push('/m/capture');
+    },
+    [capture, pathname, router]
+  );
 
   const insideProject = showsBackChevron(pathname);
   const activeHref = activeTabHref(pathname);
@@ -357,24 +389,55 @@ function MobileShellInner({ children, companyName, teamCount }: MobileShellProps
         <TabItem {...TABS[0]} active={activeHref === TABS[0].href} />
         <TabItem {...TABS[1]} active={activeHref === TABS[1].href} />
 
-        {/* §3.2 — the centre camera action. 66px amber circle, margin-top:-26px
-            so it breaks the bar's top edge, 4px border IN THE BAR'S OWN
-            BACKGROUND COLOUR (so the circle reads as punched through the bar,
-            not ringed in white by accident), amber shadow, 30px navy glyph.
+        {/* §3.2 — the centre camera action, and §6's camera-first rule.
 
-            It is a <button> and not a Link: §6's capture handling is explicitly
-            not this slice, and /m/capture is not built. A link to a route that
-            404s would be worse than a control that is present, correctly sized
-            (A-5) and not yet wired. Flagged. */}
-        <button
-          type="button"
-          data-testid="m-camera"
-          aria-label="Camera"
-          className="-mt-[26px] flex h-[66px] w-[66px] shrink-0 items-center justify-center rounded-full border-4 border-m6m-card bg-m6m-amber transition-transform duration-150 ease-out active:scale-95"
-          style={{ boxShadow: '0 8px 20px rgba(245,158,11,.4)' }}
-        >
-          <Camera size={30} strokeWidth={2} className="text-m6m-navy" aria-hidden />
-        </button>
+            ⚠️ IT IS A FILE INPUT, NOT A LINK, AND THAT IS A-21c2.
+            "The tab-bar camera control navigates nowhere — it is a file input,
+            and /m/capture is entered only AFTER the shutter." A build that
+            routes to /m/capture first puts a navigation between the tap and the
+            camera, which breaks A-20's "opens the camera directly". The label
+            keeps the 66px amber circle exactly as §3.2 specifies; the input
+            inside it is hidden and carries `capture="environment"`, which is
+            what makes the phone open the CAMERA rather than a picker.
+
+            The library control beside it is §6's "small secondary control to
+            switch to the photo library" — the same input WITHOUT `capture`.
+            Both live in this one flex slot so the bar keeps its five
+            justify-between children and the circle keeps its measured geometry
+            (66px, breaking the bar's top edge — asserted by m-shell). */}
+        <div className="flex shrink-0 items-start gap-[6px]">
+          <label
+            data-testid="m-camera"
+            aria-label="Camera"
+            className="-mt-[26px] flex h-[66px] w-[66px] shrink-0 cursor-pointer items-center justify-center rounded-full border-4 border-m6m-card bg-m6m-amber transition-transform duration-150 ease-out active:scale-95"
+            style={{ boxShadow: '0 8px 20px rgba(245,158,11,.4)' }}
+          >
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              data-testid="m-camera-input"
+              className="hidden"
+              onChange={onShot}
+            />
+            <Camera size={30} strokeWidth={2} className="text-m6m-navy" aria-hidden />
+          </label>
+
+          <label
+            data-testid="m-camera-library"
+            aria-label="Photo library"
+            className="mt-[2px] flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-[11px] border border-m6m-border bg-m6m-card"
+          >
+            <input
+              type="file"
+              accept="image/*"
+              data-testid="m-camera-library-input"
+              className="hidden"
+              onChange={onShot}
+            />
+            <Images size={18} strokeWidth={2} className="text-m6m-muted" aria-hidden />
+          </label>
+        </div>
 
         <TabItem {...TABS[2]} active={activeHref === TABS[2].href} />
         <TabItem {...TABS[3]} active={activeHref === TABS[3].href} />

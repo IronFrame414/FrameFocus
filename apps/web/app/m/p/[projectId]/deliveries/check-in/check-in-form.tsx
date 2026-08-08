@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { Image as ImageIcon } from 'lucide-react';
 import { checkInDelivery } from '@/lib/services/deliveries-client';
 import { uploadFile } from '@/lib/services/files-client';
 import { SetMobileHeader } from '../../../../mobile-header';
@@ -326,27 +327,55 @@ export function CheckInForm({
                       <p className="text-[13px] font-semibold text-m6m-danger">
                         Photo required for damage · {line.photos.length}
                       </p>
-                      <label className="mt-[6px] flex min-h-[44px] cursor-pointer items-center justify-center rounded-[10px] border border-dashed border-m6m-danger-border text-[14px] font-semibold text-m6m-danger">
-                        Add damage photo
-                        <input
-                          type="file"
-                          accept="image/*"
-                          capture="environment"
-                          data-testid={`m-damage-photo-${i}`}
-                          className="hidden"
-                          onChange={(e) => {
-                            const f = e.target.files?.[0];
-                            if (f) {
-                              setLines((cur) =>
-                                cur.map((l, j) =>
-                                  j === i ? { ...l, photos: [...l.photos, f] } : l
-                                )
-                              );
-                            }
-                            e.target.value = '';
-                          }}
-                        />
-                      </label>
+                      <div className="mt-[6px] flex items-stretch gap-[8px]">
+                        <label className="flex min-h-[44px] flex-1 cursor-pointer items-center justify-center rounded-[10px] border border-dashed border-m6m-danger-border text-[14px] font-semibold text-m6m-danger">
+                          Add damage photo
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            data-testid={`m-damage-photo-${i}`}
+                            className="hidden"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) {
+                                setLines((cur) =>
+                                  cur.map((l, j) =>
+                                    j === i ? { ...l, photos: [...l.photos, f] } : l
+                                  )
+                                );
+                              }
+                              e.target.value = '';
+                            }}
+                          />
+                        </label>
+                        {/* §6 / A-20b — the gallery as the SECONDARY control.
+                            Damage evidence is the one place a field user is
+                            most likely to have shot it already. */}
+                        <label
+                          data-testid={`m-damage-photo-library-${i}`}
+                          aria-label="Choose from library"
+                          className="flex min-h-[44px] w-11 shrink-0 cursor-pointer items-center justify-center rounded-[10px] border border-m6m-danger-border text-m6m-danger"
+                        >
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0];
+                              if (f) {
+                                setLines((cur) =>
+                                  cur.map((l, j) =>
+                                    j === i ? { ...l, photos: [...l.photos, f] } : l
+                                  )
+                                );
+                              }
+                              e.target.value = '';
+                            }}
+                          />
+                          <ImageIcon size={18} aria-hidden />
+                        </label>
+                      </div>
                     </div>
                   ) : null}
                 </section>

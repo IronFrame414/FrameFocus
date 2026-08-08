@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { Image as ImageIcon } from 'lucide-react';
 import {
   createDailyLog,
   listProjectDayPresence,
@@ -313,23 +314,45 @@ export function LogForm({
         <h2 className="mb-[8px] font-mono text-[11px] font-medium uppercase tracking-wide text-m6m-muted">
           PHOTOS{photos.length > 0 ? ` · ${photos.length}` : ''}
         </h2>
-        <label
-          data-testid="m-log-photo-input"
-          className="flex min-h-[56px] cursor-pointer items-center justify-center rounded-[14px] border border-dashed border-m6m-border bg-m6m-card text-[15px] font-semibold text-m6m-blue"
-        >
-          Add photo
-          <input
-            type="file"
-            accept="image/*"
-            capture="environment"
-            className="hidden"
-            onChange={(e) => {
-              const f = e.target.files?.[0];
-              if (f) setPhotos((cur) => [...cur, f]);
-              e.target.value = '';
-            }}
-          />
-        </label>
+        <div className="flex items-stretch gap-[8px]">
+          <label
+            data-testid="m-log-photo-input"
+            className="flex min-h-[56px] flex-1 cursor-pointer items-center justify-center rounded-[14px] border border-dashed border-m6m-border bg-m6m-card text-[15px] font-semibold text-m6m-blue"
+          >
+            Add photo
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) setPhotos((cur) => [...cur, f]);
+                e.target.value = '';
+              }}
+            />
+          </label>
+          {/* §6 / A-20b — "the gallery as the SECONDARY control". Camera-first is
+                the default above; this is the fallback, and it is the same
+                input WITHOUT `capture`, which is the whole difference. */}
+          <label
+            data-testid="m-log-photo-library"
+            aria-label="Choose from library"
+            className="flex min-h-[56px] w-11 shrink-0 cursor-pointer items-center justify-center rounded-[14px] border border-m6m-border bg-m6m-card text-[13px] font-semibold text-m6m-muted"
+          >
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) setPhotos((cur) => [...cur, f]);
+                e.target.value = '';
+              }}
+            />
+            <ImageIcon size={18} aria-hidden />
+          </label>
+        </div>
       </section>
 
       {/* The three disclosure rows (§4.12.3). */}

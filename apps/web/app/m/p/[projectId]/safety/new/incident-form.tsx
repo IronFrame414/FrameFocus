@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { Image as ImageIcon } from 'lucide-react';
 import {
   INCIDENT_TYPES,
   INCIDENT_TYPE_LABELS,
@@ -318,21 +319,42 @@ export function IncidentForm({
           </Row>
           <Row id="photos" label="Photos" open={openRow} onToggle={setOpenRow}
             badge={photos.length > 0 ? String(photos.length) : null}>
-            <label className="flex min-h-[52px] cursor-pointer items-center justify-center rounded-[10px] border border-dashed border-m6m-border text-[14px] font-semibold text-m6m-blue">
-              Add photo
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                data-testid="m-incident-photo-input"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) setPhotos((cur) => [...cur, f]);
-                  e.target.value = '';
-                }}
-              />
-            </label>
+            <div className="flex items-stretch gap-[8px]">
+              <label className="flex min-h-[52px] flex-1 cursor-pointer items-center justify-center rounded-[10px] border border-dashed border-m6m-border text-[14px] font-semibold text-m6m-blue">
+                Add photo
+                <input
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  data-testid="m-incident-photo-input"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) setPhotos((cur) => [...cur, f]);
+                    e.target.value = '';
+                  }}
+                />
+              </label>
+              {/* §6 / A-20b — the gallery as the SECONDARY control: the same input
+                WITHOUT `capture`, which is the entire difference. */}
+              <label
+                data-testid="m-incident-photo-library"
+                aria-label="Choose from library"
+                className="flex min-h-[52px] w-11 shrink-0 cursor-pointer items-center justify-center rounded-[10px] border border-m6m-border text-m6m-muted"
+              >
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    if (f) setPhotos((cur) => [...cur, f]);
+                    e.target.value = '';
+                  }}
+                />
+                <ImageIcon size={18} aria-hidden />
+              </label>
+            </div>
           </Row>
         </section>
 
