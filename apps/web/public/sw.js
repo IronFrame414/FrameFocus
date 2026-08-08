@@ -27,15 +27,54 @@
 //     to no-SW; a successful navigation is cached as it happens. Offline, the
 //     cached copy of that page serves — else the cached M-4 (/m/offline), so
 //     the offline screen §4.4 specifies is reachable even on a cold route.
-//   · /_next/static + the app icons: stale-while-revalidate, NOT cache-first.
-//     Hashed production assets are immutable so SWR equals cache-first there;
-//     dev-server chunks are NOT immutable, and cache-first would serve stale
-//     code across edits. SWR is at most one reload behind.
+//   · /_next/static + the app icons: stale-while-revalidate, and ONLY for
+//     responses the ORIGIN declares immutable. See the block below — the
+//     "SWR is at most one reload behind" reasoning this line used to carry was
+//     wrong, and being one reload behind is not a small thing.
 //   · Everything else (Supabase, API routes, non-/m pages): untouched — the
 //     handler returns without respondWith and the browser does its default.
 //     Data freshness stays the app's problem, never this file's.
 
-const VERSION = 'm6m-sw-v1';
+// ---------------------------------------------------------------------------
+// THE STATIC CACHE STORES ONLY WHAT THE ORIGIN CALLS `immutable` [S121]
+// ---------------------------------------------------------------------------
+// THE DEFECT THIS FIXES, because the old comment argued the opposite and would
+// otherwise talk the next reader back into it:
+//
+//   The header above used to say "dev-server chunks are NOT immutable, and
+//   cache-first would serve stale code across edits. SWR is at most one reload
+//   behind." Both sentences are true. The conclusion drawn from them was not.
+//   Stale-while-revalidate SERVES THE CACHED COPY FIRST and refreshes behind
+//   it, so "one reload behind" means: on the first load after any code change,
+//   the phone runs the PREVIOUS build's JavaScript against the CURRENT build's
+//   server-rendered HTML. React hydrates the new DOM with the old component
+//   tree and reports, from a device [S120, Josh]:
+//
+//       Expected server HTML to contain a matching <button> in <nav>
+//
+//   — the tab bar's centre control, which was a <button> before 4b5f84d and is
+//   a <label> wrapping a file input after it. The server was emitting the
+//   <label>; the cached bundle still expected the <button>.
+//
+//   `/_next/static/chunks/app/m/layout.js` and `main-app.js` carry NO CONTENT
+//   HASH on the dev server, so the new build reuses the same URL and the cache
+//   answers with yesterday's code. Production hashes those filenames, which is
+//   why this was invisible there and fired on every markup change against the
+//   Codespace — which is what a phone actually tests against.
+//
+// THE RULE: `Cache-Control: immutable` is the origin PROMISING the bytes at a
+// URL will never change. Next.js sends it for content-hashed assets and sends
+// `no-store, must-revalidate` for dev chunks. Storing a `no-store` response
+// was always a violation of what the server asked for; keying on the header
+// makes the cache correct in both environments with no build-time flag and no
+// hostname sniffing to get wrong. Dev keeps its hashed fonts; production keeps
+// every hashed chunk, which is the whole benefit §7.2 wanted.
+//
+// VERSION IS BUMPED TO v2 ON PURPOSE. `activate` deletes every cache whose
+// name does not start with VERSION, so the bump is what evicts the poisoned
+// `m6m-sw-v1-static` from handsets that already have one. Without it the fix
+// ships and the affected phone keeps serving the same stale chunk forever.
+const VERSION = 'm6m-sw-v2';
 const SHELL_CACHE = `${VERSION}-shell`;
 const STATIC_CACHE = `${VERSION}-static`;
 const OFFLINE_FALLBACK = '/m/offline';
@@ -123,8 +162,7 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Static assets: stale-while-revalidate (see the header for why not
-  // cache-first).
+  // Static assets: stale-while-revalidate, over immutable responses only.
   const isStatic =
     url.pathname.startsWith('/_next/static/') ||
     url.pathname === '/icon-192.png' ||
@@ -138,7 +176,15 @@ self.addEventListener('fetch', (event) => {
         const cached = await cache.match(request);
         const network = fetch(request)
           .then((resp) => {
-            if (resp.ok) cache.put(request, resp.clone());
+            // THE ONE-LINE GUARD THIS WHOLE COMMENT BLOCK IS ABOUT: store only
+            // what the origin promises will never change at this URL. A dev
+            // chunk answers `no-store, must-revalidate` and is therefore never
+            // written, so the cache can never hand back code from a previous
+            // build. Nothing is served from here that was not immutable when
+            // it went in.
+            if (resp.ok && (resp.headers.get('cache-control') || '').includes('immutable')) {
+              cache.put(request, resp.clone());
+            }
             return resp;
           })
           .catch(() => null);
