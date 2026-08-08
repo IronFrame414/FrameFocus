@@ -26,6 +26,14 @@ export default async function NewDailyLogPage({
     .filter((m) => m.member_type === 'subcontractor')
     .map((m) => ({ id: m.id, display_name: m.display_name }));
 
+  // The whole roster by id, so the read-only CREW pills can name the person
+  // whose hours they show [S121]. The presence RPC returns member_id only; this
+  // is the lookup that turns `8h` back into `Dana Ortiz · 8h`. Built from the
+  // same `members` fetch the sub picker already needed — no extra query.
+  const memberNames: Record<string, string> = Object.fromEntries(
+    (members ?? []).map((m) => [m.id, m.display_name])
+  );
+
   const initial = projects.find((p) => p.id === searchParams.project)?.id ?? null;
 
   return (
@@ -37,6 +45,7 @@ export default async function NewDailyLogPage({
       }))}
       initialProjectId={initial}
       subs={subs}
+      memberNames={memberNames}
       // log_date is a CALENDAR DATE — resolved server-side in the company's
       // zone [S106]. The form is a client component and must not re-derive it
       // from the handset clock, which is neither the company's zone nor UTC.

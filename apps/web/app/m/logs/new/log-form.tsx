@@ -41,11 +41,26 @@ export function LogForm({
   projects,
   initialProjectId,
   subs,
+  memberNames,
   today,
 }: {
   projects: Project[];
   initialProjectId: string | null;
   subs: SubMember[];
+  /**
+   * `company_members.id` -> display name, for the CREW pills [S121].
+   *
+   * `get_project_day_presence` returns `member_id`, `hours` and
+   * `warranty_only` — no name — so the pills had no way to say whose hours
+   * they were showing. The roster is already loaded by this route's page for
+   * the sub picker, so naming the crew costs a map rather than a query, and
+   * deliberately does NOT change the RPC: presence is a time-domain read and
+   * names are a roster fact.
+   *
+   * Covers every member, not only subs, because a crew pill is by definition
+   * not a sub.
+   */
+  memberNames: Record<string, string>;
   /**
    * The company's calendar day, resolved SERVER-SIDE [S106]. `log_date` is a
    * calendar date, and this form must not derive it from the handset — that is
@@ -297,12 +312,30 @@ export function LogForm({
         ) : (
           <div data-testid="m-presence-pills" className="flex flex-wrap gap-[6px]">
             {presence.map((p) => (
+              // EACH PILL NAMES ITS MEMBER [S121]. It rendered a bare `{hours}h`
+              // and nothing else, so a row of them read `8h 6.5h 8h` — three
+              // anonymous numbers on a screen that carries TWO kinds of hours.
+              // Reported from a device as "subcontractor hours are unlabeled"
+              // [S120, Josh]; it is the other one. These are CREW hours, derived
+              // read-only from 6A presence, and the sub hours are the manual
+              // ones inside the "Subs on site" row below — the distinction
+              // §4.12.3 and the 7c handoff both draw ("employee hours are
+              // read-only/derived; sub hours are manual"), and which an
+              // unlabelled figure erased at exactly the point it matters.
+              //
+              // The handoff spells the fix out: "Crew present (auto-filled, each
+              // with read-only employee hours from 6A)" — EACH, i.e. per person.
+              // The name comes from the roster the page already loads, because
+              // `get_project_day_presence` returns `member_id` and no name; that
+              // is a lookup, not a new query.
               <span
                 key={p.member_id}
                 data-testid="m-presence-pill"
-                className="rounded-full border border-m6m-border bg-m6m-card px-[10px] py-[6px] font-mono text-[12px] text-m6m-navy"
+                className="rounded-full border border-m6m-border bg-m6m-card px-[10px] py-[6px] text-[12px] text-m6m-navy"
               >
-                {p.hours}h
+                {memberNames[p.member_id] ?? 'Crew member'}
+                {/* §2 — every number is mono, including this one. */}
+                <span className="ml-[6px] font-mono font-semibold">{p.hours}h</span>
               </span>
             ))}
           </div>
@@ -392,6 +425,21 @@ export function LogForm({
             <p className="text-[14px] text-m6m-muted">No subcontractors on the roster.</p>
           ) : (
             <div className="flex flex-col gap-[8px]">
+              {/* THE COLUMN LABELS [S121]. The hours box carried an aria-label
+                  and nothing a sighted user could read, so the manual figure
+                  beside a sub's name could as easily have been a quantity or an
+                  amount. The two spans mirror the control widths below exactly
+                  — flex-1 over the select, 76px over the input — so the caption
+                  sits on its column rather than near it. Rendered once above the
+                  rows, not per row, so adding a third sub does not repeat it. */}
+              <div
+                data-testid="m-sub-hours-header"
+                aria-hidden
+                className="flex items-center gap-[8px] font-mono text-[10px] font-medium uppercase tracking-wide text-m6m-muted"
+              >
+                <span className="min-w-0 flex-1">Subcontractor</span>
+                <span className="w-[76px] text-right">Hours</span>
+              </div>
               {subEntries.map((entry, i) => (
                 <div key={i} className="flex items-center gap-[8px]">
                   <select
@@ -414,7 +462,12 @@ export function LogForm({
                     min={0}
                     step={0.5}
                     value={entry.hours}
-                    aria-label="Hours"
+                    // Names the sub as well as the unit: the visible caption
+                    // above is one column header over a repeating list, which a
+                    // screen reader cannot tie to the third row's box.
+                    aria-label={`Hours for ${
+                      subs.find((s) => s.id === entry.member_id)?.display_name ?? 'subcontractor'
+                    }`}
                     onChange={(e) =>
                       setSubEntries((cur) =>
                         cur.map((s, j) => (j === i ? { ...s, hours: Number(e.target.value) } : s))
