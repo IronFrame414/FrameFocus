@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import { getProject } from '@/lib/services/projects';
 import { getPunchLists } from '@/lib/services/punch';
 import { getMembers } from '@/lib/services/members';
+import { getProjectAssignments } from '@/lib/services/project-assignments';
 import { PunchItemForm, type ListOption, type MemberOption } from './punch-form';
 
 // M6M §4.11.13 — M-33 · Punch item create.
@@ -49,13 +50,15 @@ export default async function NewPunchItemPage({
 }: {
   params: { projectId: string };
 }) {
-  const [project, lists, members] = await Promise.all([
+  const [project, lists, members, assignments] = await Promise.all([
     getProject(params.projectId),
     // §4.11.13: the existing lists come from `getPunchLists(projectId)` — the
     // same function M-14 uses. No new service function, per §1's shared-service
     // rule and A-28b.
     getPunchLists(params.projectId),
     getMembers().catch(() => []),
+    // D-65 part 3 [S121] — the picker is scoped to this project's roster.
+    getProjectAssignments(params.projectId).catch(() => []),
   ]);
   if (!project) notFound();
 
@@ -76,6 +79,7 @@ export default async function NewPunchItemPage({
       projectName={project.name}
       lists={listOptions}
       members={memberOptions}
+      assignedMemberIds={assignments.map((a) => a.member_id)}
     />
   );
 }

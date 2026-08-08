@@ -40,19 +40,36 @@ import { useCallback, useMemo, useState } from 'react';
 // Both surfaces import both. Neither reimplements either.
 //
 // ===========================================================================
-// ⚠️ PROJECT SCOPING IS **NOT** HERE, AND ITS ABSENCE IS A DECISION
+// ✅ PROJECT SCOPING IS NOW HERE — D-65 part 3, unheld [S121]
 // ===========================================================================
-// D-65 also limits each side to members assigned to the project. **HELD** —
-// see docs/specs/113c-award-assignment-spec.md §7. Measured: 1 of 33
-// subcontractor members carries any `project_assignments` row, and that one is
-// a seed fixture. Scoping now would empty the Sub/Vendor side on six of eight
-// projects and make existing punch assignments unreproducible, which the ruling
-// itself called worse than the flat picker.
+// It was held because the data could not carry it: 1 of 33 subcontractor
+// members had any `project_assignments` row, so scoping would have emptied the
+// Sub/Vendor side on SIX of eight projects — the outcome the ruling itself
+// called worse than the flat picker.
 //
-// When it lands it belongs HERE — one filter, applied before `partitionMembers`,
-// so both surfaces gain it in one edit. That is the second reason this file is
-// logic-only: a shared component would have made the scoping a shared prop
-// drilling exercise; a shared function makes it one line.
+// Three things landed since, in this order and for this reason:
+//   1. #117's read floor (20260830000000) — because an assignment is a
+//      data-access grant, and before the floor it handed a sub every change
+//      order at full net_delta.
+//   2. Award auto-assign (20260831000000) — assignment stops being data
+//      someone must remember to enter.
+//   3. The backfill (20260901000000) — +5 rows for contracts awarded earlier.
+//
+// RE-MEASURED AFTER, against the bar the hold set:
+//
+//     project_assignments      19 -> 24     (subcontractor rows 2 -> 7)
+//     projects with BOTH sides  2 -> 5 of 8
+//     sub side empty on         6 -> 3 of 8
+//
+// **And the three that remain empty are TRUTHFULLY empty** — PRJ-100, 103 and
+// 104 have no subcontract and no manual assignment, so there is genuinely no
+// sub on them. That is the distinction the hold was about: the side used to be
+// empty because the fact was never recorded, and is now empty only where the
+// fact is that there is nobody.
+//
+// ONE FILTER, APPLIED BEFORE `partitionMembers`, so both surfaces gain it in
+// one edit — which is the second reason this file is logic-only. A shared
+// component would have made this a prop-drilling exercise.
 
 export type AssigneeSide = 'crew' | 'subcontractor';
 
@@ -103,13 +120,27 @@ export interface AssigneePicker<T extends AssigneeMember> {
   reset: () => void;
 }
 
+/**
+ * @param members             the company roster, unscoped.
+ * @param assignedMemberIds   `company_members.id` for everyone assigned to the
+ *   project this picker files into. **Required, not optional** — an optional
+ *   scope is one a caller forgets, and the two call sites are few enough that
+ *   making it explicit costs nothing. Pass every member's id to opt out
+ *   deliberately.
+ */
 export function useAssigneePicker<T extends AssigneeMember>(
-  members: readonly T[]
+  members: readonly T[],
+  assignedMemberIds: readonly string[]
 ): AssigneePicker<T> {
   const [side, setSide] = useState<AssigneeSide | null>(null);
   const [assignee, setAssignee] = useState<string | null>(null);
 
-  const { crew, subs } = useMemo(() => partitionMembers(members), [members]);
+  const { crew, subs } = useMemo(() => {
+    // D-65's scope. Applied BEFORE the partition so both sides narrow together
+    // and neither can drift from the other.
+    const onProject = new Set(assignedMemberIds);
+    return partitionMembers(members.filter((m) => onProject.has(m.id)));
+  }, [members, assignedMemberIds]);
 
   const chooseSide = useCallback((next: AssigneeSide) => {
     setSide(next);

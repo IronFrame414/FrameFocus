@@ -20,6 +20,8 @@ interface PunchPanelProps {
   projectId: string;
   lists: PunchList[];
   members: { id: string; display_name: string; member_type: string }[];
+  /** D-65 part 3 — `company_members.id` for this project's roster. */
+  assignedMemberIds: string[];
   photos: { id: string; name: string }[];
   role: string;
 }
@@ -63,7 +65,14 @@ const STATUS_COLORS: Record<string, { bg: string; fg: string }> = {
   verified: { bg: '#dcfce7', fg: '#166534' },
 };
 
-export function PunchPanel({ projectId, lists, members, photos, role }: PunchPanelProps) {
+export function PunchPanel({
+  projectId,
+  lists,
+  members,
+  assignedMemberIds,
+  photos,
+  role,
+}: PunchPanelProps) {
   const router = useRouter();
   const canForeman = FOREMAN_PLUS.includes(role);
   const [busy, setBusy] = useState(false);
@@ -80,7 +89,7 @@ export function PunchPanel({ projectId, lists, members, photos, role }: PunchPan
   // D-65 [S121] — the two-step picker, SHARED WITH /m via lib/assignee-picker.
   // `itemAssignee` is gone: the selection now lives in the shared hook, so the
   // partition and the switch-clears-the-pick rule cannot drift from mobile's.
-  const picker = useAssigneePicker(members);
+  const picker = useAssigneePicker(members, assignedMemberIds);
   const [itemRefPhoto, setItemRefPhoto] = useState('');
   const [itemNeedsPhoto, setItemNeedsPhoto] = useState(true);
   const [itemNeedsVerify, setItemNeedsVerify] = useState(true);
@@ -328,8 +337,8 @@ export function PunchPanel({ projectId, lists, members, photos, role }: PunchPan
                         ? 'Pick Team or Sub / Vendor first…'
                         : picker.visible.length === 0
                           ? picker.side === 'crew'
-                            ? 'No team members on the roster'
-                            : 'No subs or vendors on the roster'
+                            ? 'Nobody assigned to this project — see the Team tab'
+                            : 'No subs on this project — award a subcontract or use the Team tab'
                           : 'Assignee…'}
                     </option>
                     {picker.visible.map((m) => (

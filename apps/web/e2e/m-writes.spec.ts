@@ -998,14 +998,13 @@ test.describe('D-64 · a punch walk is batch work', () => {
 // ===========================================================================
 // D-65 — THE ASSIGNEE PICKER IS TWO-STEP [S121, Josh]
 // ===========================================================================
-// ⚠️ THE PROJECT-SCOPING HALF OF D-65 IS NOT BUILT AND NOT ASSERTED. Measured
-// on rebuild-test before building: 19 project_assignments rows against 39
-// members (33 of them subcontractors); only 2 of 8 assigned projects have BOTH
-// a crew and a sub; and 2 of the 11 existing punch assignments are to members
-// with no assignment row for that project. Scoping would empty the Sub/Vendor
-// side on six of eight projects and make two live assignments unreproducible —
-// the outcome the ruling itself called worse than the flat picker. Held for
-// Josh. These tests cover the SPLIT, which the data fully supports.
+// ✅ THE PROJECT-SCOPING HALF IS NOW BUILT [S121]. It was held at first build
+// (19 assignment rows, 2 of them subcontractor; the sub side would have been
+// empty on six of eight projects). The floor, the award trigger and the
+// backfill moved it to 24 rows / 7 subcontractor / both sides on 5 of 8, and
+// the three projects still without a sub genuinely have none. The scoping
+// CRITERION lives in e2e/desktop-punch.spec.ts, which can compare the picker
+// against `project_assignments` directly; the test below is mobile's half.
 test.describe('D-65 · Team or Sub/Vendor first, then the list', () => {
   test('neither side is preselected, and no member is offered until one is', async ({ page }) => {
     await signInAs(page, CREW);
@@ -1069,6 +1068,42 @@ test.describe('D-65 · Team or Sub/Vendor first, then the list', () => {
     );
     const overlap = crewIds.filter((x) => subIds.includes(x));
     expect(overlap, 'a member appears on BOTH sides of the picker').toEqual([]);
+  });
+
+  test('the sides are SCOPED to the project — fewer than the roster, and not zero', async ({
+    page,
+  }) => {
+    // Mobile's half of D-65 part 3. The full criterion (exact counts against
+    // `project_assignments`, plus the exclusion) is on desktop, where the same
+    // shared hook is exercised; this asserts the scope reached /m too, since a
+    // filter applied in only one surface is the drift the shared module exists
+    // to prevent.
+    await signInAs(page, CREW);
+    await page.goto(`/m/p/${PROJECT}/punch/new`);
+
+    const memberOptions = () =>
+      page.locator('[data-testid^="m-punch-assignee-"]:not([data-testid^="m-punch-assignee-side-"])');
+
+    const admin = adminClient();
+    const { data: roster } = await admin
+      .from('company_members')
+      .select('id')
+      .eq('is_deleted', false);
+
+    let offered = 0;
+    for (const side of ['crew', 'subcontractor'] as const) {
+      await page.getByTestId(`m-punch-assignee-side-${side}`).click();
+      offered += await memberOptions().count();
+    }
+
+    // NON-VACUITY: not zero — an empty picker is the outcome the hold existed
+    // to avoid, and a scoped picker that offered nobody would pass a naive
+    // "fewer than the roster" assertion trivially.
+    expect(offered, 'the scoped picker offers nobody at all').toBeGreaterThan(0);
+    expect(
+      offered,
+      'the picker still offers the whole company roster — the scope did not reach /m'
+    ).toBeLessThan((roster ?? []).length);
   });
 
   test('an assignee chosen through the two steps actually lands on the item', async ({ page }) => {

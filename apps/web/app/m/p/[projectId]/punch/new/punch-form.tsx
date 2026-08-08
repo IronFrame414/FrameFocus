@@ -71,11 +71,14 @@ export function PunchItemForm({
   projectName,
   lists,
   members,
+  assignedMemberIds,
 }: {
   projectId: string;
   projectName: string;
   lists: ListOption[];
   members: MemberOption[];
+  /** D-65 part 3 — `company_members.id` for this project's roster. */
+  assignedMemberIds: string[];
 }) {
   const router = useRouter();
   const online = useOnline();
@@ -112,7 +115,7 @@ export function PunchItemForm({
   // partition and the switch-clears-the-pick rule live there so /dashboard's
   // punch panel cannot drift from this one; only the RENDERING is per-surface,
   // because §2's 52px touch floor and a desktop <select> are not reconcilable.
-  const picker = useAssigneePicker(members);
+  const picker = useAssigneePicker(members, assignedMemberIds);
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -395,9 +398,22 @@ export function PunchItemForm({
                   data-testid="m-punch-assignee-empty"
                   className="text-[14px] text-m6m-muted"
                 >
+                  {/* D-65 part 3 — the empty state is about THIS PROJECT, not
+                      the company. "on the roster" was true of an unscoped
+                      picker and is a lie now: the company may have 33 subs and
+                      this project none. Measured: 3 of 8 projects legitimately
+                      have no sub, so this is a NORMAL state, not an edge case,
+                      and it says what to do about it.
+
+                      ⚠️ NO IN-APP EXIT ON MOBILE, stated rather than hidden.
+                      §4.11.8 cut assign/unassign from M-18, so /m has no
+                      surface that adds a member to a project. The two real
+                      routes are the desktop Team tab and awarding a
+                      subcontract, and the copy names them instead of offering a
+                      link that goes nowhere. Flagged for the next M-18 pass. */}
                   {picker.side === 'crew'
-                    ? 'No team members on the roster.'
-                    : 'No subs or vendors on the roster.'}
+                    ? 'Nobody from the team is assigned to this project yet. Assign them from the project’s Team tab on desktop.'
+                    : 'No subs or vendors are assigned to this project yet. Awarding a subcontract assigns them automatically, or add one from the Team tab on desktop.'}
                 </p>
               ) : (
                 <OptionStack

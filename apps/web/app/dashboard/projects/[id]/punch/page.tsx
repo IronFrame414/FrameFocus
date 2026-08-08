@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getPunchLists } from '@/lib/services/punch';
 import { getMembers } from '@/lib/services/members';
+import { getProjectAssignments } from '@/lib/services/project-assignments';
 import { getFiles } from '@/lib/services/files';
 import { PunchPanel } from './punch-panel';
 
@@ -21,12 +22,15 @@ export default async function ProjectPunchPage({ params }: { params: { id: strin
     .single();
   if (!profile) redirect('/dashboard');
 
-  const [lists, members, photos] = await Promise.all([
+  const [lists, members, photos, assignments] = await Promise.all([
     getPunchLists(params.id),
     getMembers(),
     // Project photos (Module 3 reuse) for reference/completion picks — one
     // file, no duplicate: the same row shows in project photos and on the item.
     getFiles({ project_id: params.id, category: 'photos' }),
+    // D-65 part 3 [S121] — the picker is scoped to this project's roster, the
+    // same filter mobile applies, through the same shared hook.
+    getProjectAssignments(params.id).catch(() => []),
   ]);
 
   return (
@@ -43,6 +47,7 @@ export default async function ProjectPunchPage({ params }: { params: { id: strin
         display_name: m.display_name,
         member_type: m.member_type,
       }))}
+      assignedMemberIds={assignments.map((a) => a.member_id)}
       photos={photos.map((f) => ({ id: f.id, name: f.file_name }))}
       role={profile.role}
     />
