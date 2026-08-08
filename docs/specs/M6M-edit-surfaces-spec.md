@@ -115,7 +115,45 @@ policy rather than by trusting the pattern that held for the other two tables.
 ~~**Do not build the team edit surface under either assumption.**~~ **(a) is now ruled** — mobile is
 deliberately narrower than the original ask for team, and it says so here rather than silently.
 
-### Finding 2 ⛔ **There is no update function for the table M-35 reads, and the desktop one edits a different entity**
+### Finding 2 ✅ **CLOSED [S121, Josh] — it is BOTH tables. M-40 is built.**
+
+> **RULED:** _"editing a team member means BOTH `company_members` (member type, schedule color, active
+> status) and `profiles` (name, email, phone)."_ Not one or the other.
+>
+> Built as `/m/team/[memberId]/edit` with `lib/services/members-client.ts` — a NEW named function per
+> table, because the desktop `updateTeamMember` writes `profiles` by profile id and cannot serve the
+> `company_members` half at all.
+>
+> **THE COMBINED PERMISSION IS NOT "OWNER/ADMIN", and that is the finding inside the finding:**
+>
+> | | who may write it |
+> | --- | --- |
+> | `company_members` | owner, admin — **any** member |
+> | `profiles` (owner) | owner — anyone (the WITH CHECK only stops self-demotion) |
+> | `profiles` (admin) | admin — but **not** an owner/admin target, and **not** their own row |
+>
+> So **an Admin editing another Admin, the Owner, or themselves gets the roster half and a refused
+> profiles half.** Ordinary, not an edge case.
+>
+> **⚠️ A REFUSED UPDATE DOES NOT ERROR — it affects zero rows.** Both writes therefore `.select()` and
+> check the row count; without that the screen would report "Saved" while half the form was dropped.
+>
+> **PARTIAL FAILURE FOLLOWS A-67b**: two writes, no transaction, and whatever landed stays landed. The
+> screen reports **per half** and names the permission reason. A compensating rollback would be a third
+> write that can itself fail, on a screen whose whole problem is that writes fail — and it would discard
+> an edit the user meant, since the refusal is usually a permission rather than a mistake.
+>
+> **A-47's trap is a first-class state, not an error**: 32 of 33 subcontractor members have no
+> `profile_id`, so the profile inputs are ABSENT and the screen says why, rather than rendering four
+> fields that write nowhere.
+>
+> **⚠️ FLAGGED — `profiles.email` IS NOT THE SIGN-IN ADDRESS.** The credential is `auth.users.email`,
+> changed through Supabase Auth, which this does not touch. In scope by ruling; the form says so on the
+> field, because the alternative is a user who "changed their email" and cannot sign in.
+
+#### The original finding, retained
+
+**There is no update function for the table M-35 reads, and the desktop one edits a different entity**
 
 M-35 renders `company_members` via `getMember(id)` (`members.ts:34`). `team.ts`'s `updateTeamMember`
 writes **`profiles`**, by profile id. Those are different tables holding different columns:
@@ -242,11 +280,19 @@ they just wrote. Not back to the list — the detail is what they were reading.
 ## 6. Open items — REQUIRING A RULING
 
 1. ~~**Finding 1** — team edit: narrow the ruling to Owner/Admin, or migrate?~~ **✅ CLOSED [S121, Josh] — narrowed to Owner/Admin. No migration.**
-2. **Finding 2** — does "edit a team member" mean `company_members` or `profiles`?
+2. ~~**Finding 2** — does "edit a team member" mean `company_members` or `profiles`?~~ **✅ CLOSED [S121, Josh] — BOTH.**
 3. ~~**Finding 3** — is the contact address in or out of v1?~~ **✅ CLOSED [S121, Josh] — `contact_addresses` gains a role floor by migration; see `20260829000000_contact_addresses_role_floor.sql`. The address is a WRITE surface question separately from the floor, and stays out of v1's edit form (§4).**
 4. **Finding 4** — raise a TECH_DEBT entry for the three missing `WITH CHECK` clauses? (Recommendation: yes;
    it is pre-existing and platform-wide, so it should not be fixed inside an M6M slice.)
 
-**Item 2 blocks the team surface entirely — item 1 is now closed and item 2 alone is enough. Subs, vendors and contacts are unblocked** and could be
-built against §4 as written — which is the recommended split, rather than holding all three behind a
-ruling that only affects the fourth.
+~~**Item 2 blocks the team surface entirely**~~ **✅ ALL FOUR SURFACES ARE NOW BUILT [S121]** — subs,
+vendors and contacts at `3912794`, team (M-40) at `/m/team/[memberId]/edit`. Findings 1, 2 and 3 are
+closed.
+
+**Finding 4 remains open, and it is deliberately NOT fixed here**: the three UPDATE policies missing a
+`WITH CHECK` clause are pre-existing and platform-wide, so the fix does not belong inside an M6M slice.
+It needs a TECH_DEBT entry rather than a migration in this branch.
+
+_(The recommended split this section originally argued for — build subs, vendors and contacts against §4
+rather than holding all three behind a ruling that only affected the fourth — was followed, and the
+fourth has since caught up.)_

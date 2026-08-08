@@ -71,3 +71,31 @@ export async function getMyMember(): Promise<CompanyMember | null> {
 
   return (data as CompanyMember | null) ?? null;
 }
+
+/**
+ * The `profiles` row behind a member, for the M-40 edit form. [S121]
+ *
+ * ⚠️ BY PROFILE ID, and only ever called with `company_members.profile_id` —
+ * never with a member id. That confusion is A-47's trap, and it is why this
+ * takes a distinctly named parameter rather than `id`.
+ *
+ * Returns null when the member has no profile, which for most of the roster is
+ * the ordinary state: 32 of rebuild-test's 33 subcontractor members are
+ * directory rows with `profile_id` null.
+ */
+export async function getTeamMemberProfile(profileId: string): Promise<{
+  id: string;
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string | null;
+  role: string;
+} | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from('profiles')
+    .select('id, first_name, last_name, email, phone, role')
+    .eq('id', profileId)
+    .maybeSingle();
+  return data ?? null;
+}

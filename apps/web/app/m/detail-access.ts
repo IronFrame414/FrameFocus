@@ -220,15 +220,27 @@ export function canWriteCo(role: string | null | undefined): boolean {
 // policy. No migration." So `team` carries two roles and the others carry
 // three, and each mirrors its own policy rather than a house style.
 //
-// ⚠️ `team` IS DEFINED HERE AND HAS NO ROUTE YET, DELIBERATELY. The team edit
-// surface is still BLOCKED on a second question the ruling did not settle:
-// M-35 reads `company_members`, while `updateTeamMember` (team.ts:44) writes
-// **profiles** by profile id — A-47's trap, which drops every roster member
-// without a profile, 32 of rebuild-test's 33 subcontractors among them. What
-// "edit a team member" means has to be ruled before it can be built. The entry
-// exists so the ROLES are recorded where the other two live; adding a route
-// that calls the existing function would edit a different entity from the one
-// on screen.
+// ⚠️ `team` GATES A ROUTE THAT WRITES **TWO** TABLES, which the other two do not.
+// The second question the role ruling did not settle is now closed: RULED
+// [S121, Josh] that "edit a team member" means BOTH `company_members` (member
+// type, schedule colour, active status) AND `profiles` (name, email, phone).
+// `/m/team/[memberId]/edit` is built against that.
+//
+// This guard covers only the FIRST half. `EDIT_ROLES.team` mirrors
+// `company_members_update_authorized` (owner, admin) and nothing more — the
+// `profiles` half carries its own, NARROWER policy that this cannot express:
+// `profiles_update_admin` refuses an admin editing an owner, another admin, or
+// their own row. So a user this guard ADMITS can still have the profiles half
+// refused, which is ordinary rather than exceptional. That refusal is detected
+// at the write (zero rows affected, not an error) and reported per half — see
+// lib/services/members-client.ts. Do not "tighten" this constant to compensate:
+// it would lock an admin out of the roster half they are genuinely allowed to
+// edit, for every member.
+//
+// A-47's trap is why the route reads `profile_id` rather than reusing the
+// desktop `updateTeamMember` (team.ts:44), which writes `profiles` BY PROFILE
+// ID and resolves nothing for the 32 of rebuild-test's 33 subcontractor members
+// that have no profile at all.
 export type EditSurface = 'sub' | 'contact' | 'team';
 
 const EDIT_ROLES: Record<EditSurface, readonly string[]> = {

@@ -1,7 +1,9 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getMember } from '@/lib/services/members';
-import { requireDetailAccess } from '@/app/m/detail-access';
-import { DetailCard, DetailField } from '../../mobile-ui';
+import { getMyProfile } from '@/lib/services/profiles';
+import { canEdit, requireDetailAccess } from '@/app/m/detail-access';
+import { DeniedNotice, DetailCard, DetailField } from '../../mobile-ui';
 
 // M6M §4.11.15 — M-35 · Team-member detail. Everyone except subcontractors.
 //
@@ -47,19 +49,27 @@ function initials(name: string): string {
 
 export default async function MemberDetailPage({
   params,
+  searchParams,
 }: {
   params: { memberId: string };
+  /** A-66 — `requireEditAccess` bounces here with `?denied=team-edit`. */
+  searchParams: { denied?: string };
 }) {
   // Back to the COMPANY roster. M-18 is the other entry point, but it needs a
   // projectId this route does not carry, and A-66 wants a destination that
   // works rather than one that is contextually perfect.
   await requireDetailAccess('member', '/m/team');
 
-  const member = await getMember(params.memberId);
+  const [member, profile] = await Promise.all([
+    getMember(params.memberId),
+    getMyProfile(),
+  ]);
   if (!member) notFound();
 
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
+      <DeniedNotice kind={searchParams.denied} />
+
       <header className="mb-[14px] flex items-center gap-[12px]">
         {/* schedule_color tint with §2's amber as the null fallback — the same
             rule M-18 and M-28 use, so the three agree by construction (A-47e). */}
@@ -83,6 +93,19 @@ export default async function MemberDetailPage({
           </p>
         </div>
       </header>
+
+      {/* D-54 step 1 — hidden here, refused at the route. Team is OWNER/ADMIN
+          only, narrower than the other two edit surfaces, because
+          `company_members_update_authorized` is (dd30968). */}
+      {canEdit('team', profile?.role) ? (
+        <Link
+          href={`/m/team/${member.id}/edit`}
+          data-testid="m-member-edit"
+          className="mb-[14px] flex min-h-[52px] w-full items-center justify-center rounded-[14px] border border-m6m-blue text-[15px] font-bold text-m6m-blue"
+        >
+          Edit
+        </Link>
+      ) : null}
 
       <DetailCard testId="m-member-detail">
         <DetailField label="Name" value={member.display_name} />

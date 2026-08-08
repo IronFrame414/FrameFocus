@@ -460,9 +460,9 @@ export const DENIED_COPY: Record<string, string> = {
   // "not available to subcontractors" would read to a foreman as a broken app.
   'sub-edit': 'Only an owner, admin or project manager can edit subs and vendors.',
   'contact-edit': 'Only an owner, admin or project manager can edit contacts.',
-  // Defined although the route is not built — the team edit surface is blocked
-  // on what "edit a team member" means (company_members vs profiles). Narrower
-  // by ruling [S121, Josh]: Owner/Admin only, mirroring the live policy.
+  // Narrower than the two above by ruling [S121, Josh]: Owner/Admin only, with
+  // no PM arm, mirroring `company_members_update_authorized`. The route exists
+  // (`/m/team/[memberId]/edit`) and this is the copy a refused PM lands on.
   'team-edit': 'Only an owner or admin can edit team members.',
 };
 

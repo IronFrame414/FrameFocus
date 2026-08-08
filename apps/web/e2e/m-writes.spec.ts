@@ -1137,9 +1137,11 @@ test.describe('D-65 · Team or Sub/Vendor first, then the list', () => {
 // ===========================================================================
 // M-38 / M-39 — THE EDIT SURFACES. A-68 … A-74 [S121]
 // ===========================================================================
-// docs/specs/M6M-edit-surfaces-spec.md §5. Three routes, not four: subs and
-// vendors are one table with one policy and one function. TEAM IS HELD — still
-// blocked on what "edit a team member" means (company_members vs profiles).
+// docs/specs/M6M-edit-surfaces-spec.md §5. Three routes for four surfaces: subs
+// and vendors are one table with one policy and one function. TEAM IS NO LONGER
+// HELD — finding 2 closed [S121, Josh]: "edit a team member" means BOTH tables.
+// Its own assertions are in the M-40 block at the end of this file, because the
+// two-table shape gives it failure modes these three do not have.
 //
 // ⚠️ The guards here are NOT the enforcement, and that shapes what is worth
 // asserting. `subcontractors_update_authorized` and `contacts_update_authorized`
@@ -1364,5 +1366,136 @@ test.describe('A-74 · the edit routes carry the back chevron', () => {
     await page.goto(`${href}/edit`);
     await expect(page.getByTestId('m-back')).toBeVisible();
     await expect(page.getByTestId('m-hamburger')).toHaveCount(0);
+  });
+
+  // M-40 joins the same rule. Asserted rather than assumed: the header is set
+  // by the FORM (`SetMobileHeader`), so a screen that renders its own layout
+  // would lose the chevron without failing anything above.
+  test('a way back from the team edit screen too', async ({ page }) => {
+    const db = adminClient();
+    const { data: member } = await db
+      .from('company_members')
+      .select('id')
+      .eq('is_deleted', false)
+      .limit(1)
+      .single();
+    expect(member, 'no members on rebuild-test').toBeTruthy();
+
+    await signInAs(page, OWNER);
+    await page.goto(`/m/team/${member!.id}/edit`);
+    await expect(page.getByTestId('m-back')).toBeVisible();
+    await expect(page.getByTestId('m-hamburger')).toHaveCount(0);
+  });
+});
+
+// ===========================================================================
+// M-40 — TEAM EDIT, BOTH TABLES [S121, Josh]
+// ===========================================================================
+// Ruled: editing a team member means BOTH `company_members` (member type,
+// schedule colour, active status) AND `profiles` (name, email, phone). That
+// resolved the blocker the edit spec's finding 2 recorded.
+//
+// ⚠️ THE COMBINED PERMISSION IS NOT "OWNER/ADMIN". The two tables disagree:
+//   company_members_update_authorized  owner, admin — any member
+//   profiles_update_admin              admin, but NOT an owner/admin target
+//                                      and NOT the caller's own row
+//   profiles_update_owner              owner — anyone
+// So an ADMIN editing another admin, the owner, or themselves gets the roster
+// half and a REFUSED profiles half. Ordinary, not an edge case, and asserted.
+test.describe('M-40 · team edit writes both tables', () => {
+  test('an OWNER edits both halves, and both land', async ({ page }) => {
+    test.setTimeout(120_000);
+    const db = adminClient();
+    const { data: target } = await db
+      .from('company_members')
+      .select('id, display_name, profile_id')
+      .not('profile_id', 'is', null)
+      .eq('is_deleted', false)
+      .limit(1)
+      .single();
+    expect(target, 'no member with a profile to edit').toBeTruthy();
+
+    const before = { ...target! };
+    const stamp = String(Date.now()).slice(-6);
+
+    try {
+      await signInAs(page, OWNER);
+      await page.goto(`/m/team/${target!.id}/edit`);
+      await expect(page.getByTestId('m-team-edit-save')).toBeVisible();
+
+      await page.getByTestId('m-team-edit-display-name').fill(`E2E Member ${stamp}`);
+      await page.getByTestId('m-team-edit-phone').fill(`555${stamp}`);
+      await page.getByTestId('m-team-edit-save').click();
+
+      await expect(page).toHaveURL(new RegExp(`/m/team/${target!.id}$`), { timeout: 30_000 });
+
+      // BOTH TABLES, read back with the service role — the screen showing a
+      // success is not evidence that two writes landed.
+      const { data: m } = await db
+        .from('company_members')
+        .select('display_name')
+        .eq('id', target!.id)
+        .single();
+      expect(m!.display_name).toBe(`E2E Member ${stamp}`);
+
+      const { data: p } = await db
+        .from('profiles')
+        .select('phone')
+        .eq('id', target!.profile_id!)
+        .single();
+      expect(p!.phone, 'the profiles half did not land').toBe(`555${stamp}`);
+    } finally {
+      await db
+        .from('company_members')
+        .update({ display_name: before.display_name })
+        .eq('id', before.id);
+    }
+  });
+
+  test('⚠️ a member with NO profile edits the roster half only, and is told why', async ({
+    page,
+  }) => {
+    // A-47's trap as a first-class state: 32 of rebuild-test's 33 subcontractor
+    // members are directory rows with `profile_id` null. The desktop
+    // `updateTeamMember` writes profiles BY PROFILE ID and would resolve nothing
+    // for any of them, so this screen must not render four inputs that silently
+    // write nowhere.
+    const db = adminClient();
+    const { data: noProfile } = await db
+      .from('company_members')
+      .select('id')
+      .is('profile_id', null)
+      .eq('is_deleted', false)
+      .limit(1)
+      .single();
+    expect(noProfile, 'every member has a profile — A-47 s trap cannot be tested').toBeTruthy();
+
+    await signInAs(page, OWNER);
+    await page.goto(`/m/team/${noProfile!.id}/edit`);
+
+    await expect(page.getByTestId('m-team-edit-no-profile')).toBeVisible();
+    // The roster half is still editable...
+    await expect(page.getByTestId('m-team-edit-display-name')).toBeVisible();
+    // ...and the profile inputs are ABSENT rather than present-and-inert.
+    await expect(page.getByTestId('m-team-edit-email')).toHaveCount(0);
+    await expect(page.getByTestId('m-team-edit-phone')).toHaveCount(0);
+  });
+
+  test('the route is OWNER/ADMIN — narrower than subs and contacts', async ({ page }) => {
+    const db = adminClient();
+    const { data: any1 } = await db
+      .from('company_members')
+      .select('id')
+      .eq('is_deleted', false)
+      .limit(1)
+      .single();
+
+    await signInAs(page, PM);
+    await page.goto(`/m/team/${any1!.id}/edit`);
+    // PM is admitted to sub and contact edit and refused here, which is the
+    // per-surface EDIT_ROLES ruling made visible.
+    await expect(page).toHaveURL(/\?denied=team-edit$/);
+    await expect(page.getByTestId('m-denied')).toContainText(/owner or admin/i);
+    await expect(page.getByTestId('m-team-edit-save')).toHaveCount(0);
   });
 });
