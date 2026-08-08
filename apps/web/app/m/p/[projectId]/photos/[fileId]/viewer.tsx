@@ -6,6 +6,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import { ChevronLeft, ChevronRight, X, MoreVertical } from 'lucide-react';
 import { softDeleteFile } from '@/lib/services/files-client';
 import { shareTargetFor } from '@framefocus/shared/utils/markup';
+import { shareFailureNote, shareImages } from '@/lib/share-image';
 
 // M6M §4.9 — M-9 · Photo viewer. Dark canvas #0d1220.
 //
@@ -126,11 +127,62 @@ export function PhotoViewer({
   // -------------------------------------------------------------------------
   const drag = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null);
 
+  // -------------------------------------------------------------------------
+  // PINCH [S121] — the gesture the comment above always promised.
+  //
+  // ⚠️ ZOOM ITSELF WAS NEVER MISSING. `zoom`, `pan`, the clamps and the −/+/fit
+  // controls all shipped [S98]; what did not was the two-finger GESTURE, so
+  // A-25's "every gesture has a visible equivalent" held only in the direction
+  // nobody complains about — the equivalent existed and the gesture did not.
+  //
+  // Pointer Events rather than Touch Events, because the single-finger drag
+  // above is already a PointerEvent handler and running two event models over
+  // one element is how gesture code becomes unfixable.
+  //
+  // THE ORDERING RULE: a second pointer CANCELS the drag. Without that, lifting
+  // out of a pinch runs `onPointerUp`'s page/close logic with a 200px dx and
+  // the photo jumps to the next one — the classic pinch-to-page bug.
+  // -------------------------------------------------------------------------
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ distance: number; zoom: number } | null>(null);
+
+  function pinchDistance(): number | null {
+    const pts = [...pointers.current.values()];
+    if (pts.length < 2) return null;
+    return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+  }
+
   function onPointerDown(e: React.PointerEvent) {
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.current.size >= 2) {
+      // Second finger down: this is a pinch, not a swipe. Kill the drag so the
+      // lift cannot page or close.
+      drag.current = null;
+      const d = pinchDistance();
+      if (d) pinch.current = { distance: d, zoom };
+      return;
+    }
     drag.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
   }
 
   function onPointerMove(e: React.PointerEvent) {
+    if (pointers.current.has(e.pointerId)) {
+      pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+
+    if (pinch.current) {
+      const d = pinchDistance();
+      if (!d) return;
+      // Clamped to the SAME bounds the buttons use, so the two routes to zoom
+      // cannot disagree about how far in is too far.
+      const next = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, pinch.current.zoom * (d / pinch.current.distance)));
+      setZoom(next);
+      // Pinching back out to 1 re-centres, matching what the fit button does —
+      // otherwise the photo settles off-centre with no way to tell why.
+      if (next === MIN_ZOOM) setPan({ x: 0, y: 0 });
+      return;
+    }
+
     if (!drag.current) return;
     if (zoom > MIN_ZOOM) {
       setPan({
@@ -141,6 +193,15 @@ export function PhotoViewer({
   }
 
   function onPointerUp(e: React.PointerEvent) {
+    pointers.current.delete(e.pointerId);
+    if (pinch.current) {
+      // Stay in "pinch" until BOTH fingers are up. Releasing one and continuing
+      // to move the other must not become a page swipe mid-gesture.
+      if (pointers.current.size === 0) pinch.current = null;
+      drag.current = null;
+      return;
+    }
+
     const start = drag.current;
     drag.current = null;
     if (!start) return;
@@ -171,15 +232,17 @@ export function PhotoViewer({
     const target = shareTargetFor(photo);
     if (target.warning) setNote(target.warning);
 
-    const nav = navigator as Navigator & { share?: (d: ShareData) => Promise<void> };
-    if (!nav.share) {
-      setNote('Sharing is not available in this browser.');
-      return;
-    }
-    try {
-      await nav.share({ title: photo.file_name, text: photo.file_name });
-    } catch {
-      /* dismissed share sheet is a cancel */
+    // ⚠️ THE BYTES, NOT A CAPTION [S121]. `target.url` was computed here and
+    // then DISCARDED — the sheet opened and transmitted the filename, so
+    // A-23t's whole marked-vs-original decision could not matter. See
+    // lib/share-image.ts, including why there is deliberately no fall back to
+    // sharing the signed URL.
+    const outcome = await shareImages([{ url: target.url, fileName: photo.file_name }]);
+    if (!outcome.ok) {
+      const note = shareFailureNote(outcome.reason);
+      // A degrade warning already on screen outranks nothing; only overwrite it
+      // when there is something to say.
+      if (note) setNote(note);
     }
   }
 
@@ -297,7 +360,14 @@ export function PhotoViewer({
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
-        onPointerCancel={() => (drag.current = null)}
+        // Cancel clears the PINCH state too, or a browser-interrupted gesture
+        // (a system sheet, an incoming call) leaves the viewer believing two
+        // fingers are still down and swipes stop working entirely [S121].
+        onPointerCancel={(e) => {
+          pointers.current.delete(e.pointerId);
+          if (pointers.current.size === 0) pinch.current = null;
+          drag.current = null;
+        }}
       >
         {/* A-23s — the placeholder holds until THIS src has loaded. Keyed on
             src so a toggle re-arms it and never reveals the previous file. */}

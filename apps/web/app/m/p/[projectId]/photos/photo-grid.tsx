@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { softDeleteFile } from '@/lib/services/files-client';
+import { shareFailureNote, shareImages } from '@/lib/share-image';
 
 // M6M §4.8 — M-8's body: day sections over a 3-column grid.
 //
@@ -387,19 +388,23 @@ function SelectionBar({
     setBusy(true);
     // The Web Share API is the only share surface a PWA has. Where it is
     // absent the action says so rather than failing silently.
-    const nav = navigator as Navigator & { share?: (d: ShareData) => Promise<void> };
-    if (!nav.share) {
-      setNote('Sharing is not available in this browser.');
-      setBusy(false);
-      return;
-    }
-    try {
-      await nav.share({
-        title: `${chosen.length} photos`,
-        text: chosen.map((p) => p.file_name).join(', '),
-      });
-    } catch {
-      // A dismissed share sheet is a cancel, not an error.
+    // ⚠️ THE BYTES, NOT A LIST OF NAMES [S121]. This sent
+    // `text: names.join(', ')` — the sheet opened, the send succeeded, and what
+    // arrived was a comma-separated list of filenames. See lib/share-image.ts.
+    //
+    // `displayUrl` is already the right file per this file's own header: the
+    // annotated derivative where one exists, the original otherwise. The
+    // viewer's `shareTargetFor` degrade WARNING has no equivalent here because
+    // the grid has no per-photo place to put it; a multi-select share of a
+    // photo whose derivative is missing sends the original silently, which is
+    // the one thing A-23t forbids on the VIEWER. Flagged rather than
+    // half-solved — the honest fix is a per-photo notice this bar cannot host.
+    const outcome = await shareImages(
+      chosen.map((p) => ({ url: p.displayUrl, fileName: p.file_name }))
+    );
+    if (!outcome.ok) {
+      const note = shareFailureNote(outcome.reason);
+      if (note) setNote(note);
     }
     setBusy(false);
   }

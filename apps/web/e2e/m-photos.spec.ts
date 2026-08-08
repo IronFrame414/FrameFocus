@@ -1018,3 +1018,96 @@ test.describe('A-12c / A-12d · every tile now reaches a screen', () => {
     }
   });
 });
+
+// ===========================================================================
+// SHARE TRANSMITS THE IMAGE, AND PINCH ZOOMS [S121]
+// ===========================================================================
+test.describe('the photo gaps', () => {
+  test('share sends FILES, not a filename', async ({ page, context }) => {
+    // ⚠️ THE OLD BUG WAS INVISIBLE FROM THE DOM. `shareTargetFor` computed the
+    // right url and `nav.share({ title, text })` discarded it — the sheet
+    // opened, the send succeeded, and what arrived was "IMG_4471.jpg". So this
+    // asserts the ARGUMENT the page passes to the Web Share API, which is the
+    // only place the defect was ever visible.
+    await context.addInitScript(() => {
+      const w = window as unknown as { __shared?: unknown[] };
+      w.__shared = [];
+      Object.defineProperty(navigator, 'canShare', { value: () => true, configurable: true });
+      Object.defineProperty(navigator, 'share', {
+        value: async (data: ShareData) => {
+          w.__shared!.push({
+            files: (data.files ?? []).map((f) => ({ name: f.name, size: f.size, type: f.type })),
+            hasUrl: 'url' in data,
+          });
+        },
+        configurable: true,
+      });
+    });
+
+    await page.goto(gallery());
+    const first = page.getByTestId('m-photo-tile').first();
+    if ((await first.count()) === 0) test.skip(true, 'no photos on the fixture project');
+    await first.click();
+    await expect(page).toHaveURL(/\/photos\/[0-9a-f-]{36}/, { timeout: 20_000 });
+
+    await page.getByTestId('m-action-share').click();
+    await expect
+      .poll(async () => (await page.evaluate(() => (window as never as { __shared: unknown[] }).__shared)).length)
+      .toBeGreaterThan(0);
+
+    const [call] = (await page.evaluate(
+      () => (window as never as { __shared: { files: { size: number }[]; hasUrl: boolean }[] }).__shared
+    )) as { files: { name: string; size: number; type: string }[]; hasUrl: boolean }[];
+
+    expect(call.files.length, 'share was called with no files — the image did not travel').toBe(1);
+    expect(call.files[0].size, 'the shared file is empty').toBeGreaterThan(0);
+    expect(call.files[0].type).toMatch(/^image\//);
+
+    // ⚠️ AND NEVER A URL. Those are Supabase SIGNED urls — time-limited bearer
+    // credentials to a private project file. A share sheet is exactly where a
+    // link gets forwarded, so falling back to `share({ url })` is forbidden
+    // rather than merely unpreferred (lib/share-image.ts).
+    expect(call.hasUrl, 'a signed URL was put in the share sheet').toBe(false);
+  });
+
+  test('pinch zooms, and lifting out of it does not page to the next photo', async ({ page }) => {
+    await page.goto(gallery());
+    const first = page.getByTestId('m-photo-tile').first();
+    if ((await first.count()) === 0) test.skip(true, 'no photos on the fixture project');
+    await first.click();
+    await expect(page).toHaveURL(/\/photos\/[0-9a-f-]{36}/, { timeout: 20_000 });
+    const startUrl = page.url();
+
+    // Two pointers, spreading apart. `m-zoom-fit` only exists above MIN_ZOOM,
+    // so its appearance IS the zoom assertion — no computed-style guessing.
+    await expect(page.getByTestId('m-zoom-fit')).toHaveCount(0);
+
+    const box = (await page.getByTestId('m-viewer-stage').boundingBox())!;
+    const cx = box.x + box.width / 2;
+    const cy = box.y + box.height / 2;
+
+    const a = await page.context().newCDPSession(page);
+    await a.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [
+        { x: cx - 40, y: cy, id: 1 },
+        { x: cx + 40, y: cy, id: 2 },
+      ],
+    });
+    await a.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [
+        { x: cx - 160, y: cy, id: 1 },
+        { x: cx + 160, y: cy, id: 2 },
+      ],
+    });
+    await a.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+
+    await expect(page.getByTestId('m-zoom-fit')).toBeVisible();
+
+    // THE ORDERING RULE: a pinch that ends with a big horizontal delta must not
+    // be read as a swipe. This is the classic pinch-to-page bug and the reason
+    // the second pointer cancels the drag.
+    expect(page.url(), 'lifting out of a pinch paged to another photo').toBe(startUrl);
+  });
+});
