@@ -193,3 +193,75 @@ export function canWriteCo(role: string | null | undefined): boolean {
 //
 // A mobile path that called the table directly instead of verifyPunchItem
 // would silently defeat the separate-eyes rule — which is A-58's whole point.
+
+// ===========================================================================
+// D-53's EDIT surfaces — `requireEditAccess` [S121]
+// ===========================================================================
+// docs/specs/M6M-edit-surfaces-spec.md §2. This belongs in THIS file, and the
+// distinction matters given how much of the text above argues against adding
+// guards: those arguments are about READ surfaces with no DB role arm, where a
+// new guard invents a permission that does not exist. **These are write
+// surfaces where the database is already refusing these roles**, so the guard
+// is the `requireCoWriteAccess` case — it makes the refusal arrive as a screen
+// that explains itself (A-66) instead of an RLS error under a Save button.
+//
+// ---------------------------------------------------------------------------
+// THE ROLES ARE PER-SURFACE, AND THAT IS NOT AN OVERSIGHT
+// ---------------------------------------------------------------------------
+// One shared constant would have to be wrong for one of the tables. Read from
+// the migrations, these three policies genuinely differ:
+//
+//   subcontractors_update_authorized   owner, admin, project_manager   baseline:3758
+//   contacts_update_authorized         owner, admin, project_manager   baseline:3277
+//   company_members_update_authorized  owner, admin                    20260704210000:92
+//
+// RULED [S121, Josh]: "TEAM EDIT NARROWS TO OWNER/ADMIN. company_members'
+// UPDATE policy already enforces exactly that; the ruling changes, not the
+// policy. No migration." So `team` carries two roles and the others carry
+// three, and each mirrors its own policy rather than a house style.
+//
+// ⚠️ `team` IS DEFINED HERE AND HAS NO ROUTE YET, DELIBERATELY. The team edit
+// surface is still BLOCKED on a second question the ruling did not settle:
+// M-35 reads `company_members`, while `updateTeamMember` (team.ts:44) writes
+// **profiles** by profile id — A-47's trap, which drops every roster member
+// without a profile, 32 of rebuild-test's 33 subcontractors among them. What
+// "edit a team member" means has to be ruled before it can be built. The entry
+// exists so the ROLES are recorded where the other two live; adding a route
+// that calls the existing function would edit a different entity from the one
+// on screen.
+export type EditSurface = 'sub' | 'contact' | 'team';
+
+const EDIT_ROLES: Record<EditSurface, readonly string[]> = {
+  sub: ['owner', 'admin', 'project_manager'],
+  contact: ['owner', 'admin', 'project_manager'],
+  team: ['owner', 'admin'],
+};
+
+/** D-54 step 1 — for HIDING the Edit affordance on a detail screen. */
+export function canEdit(surface: EditSurface, role: string | null | undefined): boolean {
+  return EDIT_ROLES[surface].includes(role ?? '');
+}
+
+/**
+ * D-54 step 2 — refuse at the ROUTE, before render.
+ *
+ * A hidden button is not a permission: the URL survives a shared screenshot, a
+ * bookmark and a stale PWA cache. A build that ships only `canEdit` has shipped
+ * no permission at all — which is the same sentence the CO write surface
+ * carries, and it is not a coincidence.
+ */
+export async function requireEditAccess(
+  surface: EditSurface,
+  backTo: string
+): Promise<void> {
+  const profile = await getMyProfile();
+
+  // As with the guards above: app/m/layout.tsx owns the auth gate. Refusing a
+  // signed-out user here would turn a 302-to-sign-in into a confusing "only an
+  // owner can do this" message.
+  if (!profile) return;
+
+  if (!canEdit(surface, profile.role)) {
+    redirect(`${backTo}?denied=${surface}-edit`);
+  }
+}

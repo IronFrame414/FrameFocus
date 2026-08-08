@@ -455,6 +455,15 @@ export const DENIED_COPY: Record<string, string> = {
   // subcontractors" on a screen they were just bounced from would reasonably
   // conclude the app was broken.
   'co-write': 'Only an owner, admin or project manager can write change orders.',
+  // S121's edit surfaces. Worded BY ROLE for the same reason 'co-write' is:
+  // these refuse foreman, crew and subcontractor — three roles, not one — and
+  // "not available to subcontractors" would read to a foreman as a broken app.
+  'sub-edit': 'Only an owner, admin or project manager can edit subs and vendors.',
+  'contact-edit': 'Only an owner, admin or project manager can edit contacts.',
+  // Defined although the route is not built — the team edit surface is blocked
+  // on what "edit a team member" means (company_members vs profiles). Narrower
+  // by ruling [S121, Josh]: Owner/Admin only, mirroring the live policy.
+  'team-edit': 'Only an owner or admin can edit team members.',
 };
 
 export function DeniedNotice({ kind }: { kind: string | undefined }) {

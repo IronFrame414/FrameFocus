@@ -1,9 +1,12 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getSubcontractor } from '@/lib/services/subcontractors';
+import { getMyProfile } from '@/lib/services/profiles';
+import { canEdit } from '@/app/m/detail-access';
 import { getCompanyTimeSettings } from '@/lib/services/company';
 import { companyToday } from '@framefocus/shared/utils/dates';
 import { SetMobileHeader } from '../../mobile-header';
-import { ContactActions, DetailCard, DetailField, StatusPill } from '../../mobile-ui';
+import { ContactActions, DeniedNotice, DetailCard, DetailField, StatusPill } from '../../mobile-ui';
 
 // M6M §4.13.4 — M-27 · SUB & VENDOR DETAIL · `/m/subs/[subId]`. Read-only.
 //
@@ -48,9 +51,13 @@ import { ContactActions, DetailCard, DetailField, StatusPill } from '../../mobil
 // surface 'because there is a pattern now' has exceeded D-54"). So the reuse
 // here is the DECISION PROCEDURE and the cut list, not a call to the guard.
 //
-// CUT: every write — no create, edit or rate. §4.13.4's cut; `rating` and
-// `rating_notes` are a management judgement recorded on desktop, and
-// `subcontractors-client.ts`'s writes are the Module 2 flow.
+// ⚠️ "CUT: every write" IS SUPERSEDED IN PART [S121]. Quoted, not deleted:
+//   _"CUT: every write — no create, edit or rate. §4.13.4's cut; `rating` and
+//    `rating_notes` are a management judgement recorded on desktop"_
+// EDIT now exists (M-38, `/m/subs/[subId]/edit`), Owner/Admin/PM, mirroring
+// `subcontractors_update_authorized`. CREATE and RATE are still cut, and for
+// their original reasons: create needs required columns a mobile form does not
+// collect, and rating stays a desktop management judgement.
 //
 // NOT CUT: the address. §4.13.4 cuts it from the ROW and gives the reason —
 // "a directory row does not need it and D-4's geometry has no room ... a layout
@@ -64,10 +71,23 @@ const STATUS_LABEL: Record<string, string> = {
   archived: 'Archived',
 };
 
-export default async function SubDetailPage({ params }: { params: { subId: string } }) {
-  const [sub, timeSettings] = await Promise.all([
+export default async function SubDetailPage({
+  params,
+  searchParams,
+}: {
+  params: { subId: string };
+  // A-66 — `requireEditAccess` bounces here with `?denied=sub-edit`, so this
+  // screen has to be able to EXPLAIN itself. The existing read guards bounce to
+  // the LIST and the list hosts the notice; the edit guard bounces to the
+  // DETAIL, because that is the screen the user tapped Edit on and returning
+  // them to the list would lose their place as well as refusing them. The cost
+  // is that the notice needs a second host, which is here.
+  searchParams: { denied?: string };
+}) {
+  const [sub, timeSettings, profile] = await Promise.all([
     getSubcontractor(params.subId),
     getCompanyTimeSettings(),
+    getMyProfile(),
   ]);
 
   // `getSubcontractor` already filters is_deleted, so a soft-deleted row
@@ -97,6 +117,8 @@ export default async function SubDetailPage({ params }: { params: { subId: strin
   return (
     <div className="px-[18px] pb-[18px] pt-[14px]">
       <SetMobileHeader title={name} sub={sub.sub_type === 'vendor' ? 'Vendor' : 'Sub'} />
+
+      <DeniedNotice kind={searchParams.denied} />
 
       <header className="mb-[14px]">
         <h1
@@ -142,6 +164,21 @@ export default async function SubDetailPage({ params }: { params: { subId: strin
       <div className="mb-[14px] flex items-center gap-[10px]">
         <ContactActions phone={sub.phone} mobile={sub.mobile} email={sub.email} name={name} />
       </div>
+
+      {/* D-54 step 1 — HIDE the affordance. Step 2 (refusing the ROUTE) lives
+          in the edit page's `requireEditAccess`, and both are required: a
+          hidden button is not a permission, because the URL survives a shared
+          screenshot, a bookmark and a stale PWA cache. A build with only this
+          link-hiding has shipped no permission at all. */}
+      {canEdit('sub', profile?.role) ? (
+        <Link
+          href={`/m/subs/${sub.id}/edit`}
+          data-testid="m-sub-edit"
+          className="mb-[14px] flex min-h-[52px] w-full items-center justify-center rounded-[14px] border border-m6m-blue text-[15px] font-bold text-m6m-blue"
+        >
+          Edit
+        </Link>
+      ) : null}
 
       <DetailCard testId="m-sub-detail">
         <DetailField label="Company" value={name} />

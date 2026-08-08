@@ -1,9 +1,11 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { CONTACT_TYPE_LABELS } from '@framefocus/shared/constants';
 import { getContact } from '@/lib/services/contacts';
 import { getPrimaryAddress } from '@/lib/services/contact-addresses';
-import { requireDetailAccess } from '@/app/m/detail-access';
-import { ContactActions, DetailCard, DetailField } from '../../mobile-ui';
+import { getMyProfile } from '@/lib/services/profiles';
+import { canEdit, requireDetailAccess } from '@/app/m/detail-access';
+import { ContactActions, DeniedNotice, DetailCard, DetailField } from '../../mobile-ui';
 
 // M6M §4.11.16 — M-36 · Contact detail. Everyone except subcontractors.
 //
@@ -22,12 +24,28 @@ import { ContactActions, DetailCard, DetailField } from '../../mobile-ui';
 // it is UI-only here. A detail screen is exactly where a build "fills the
 // space" with notes, which on a client contact can be commercially sensitive.
 //
-// CUT: every write. No edit, no create, no delete. D-53 grants detail VIEWS.
+// ⚠️ "CUT: every write" IS SUPERSEDED IN PART [S121]. Quoted, not deleted:
+//   _"CUT: every write. No edit, no create, no delete. D-53 grants detail VIEWS."_
+// EDIT now exists (M-39, `/m/contacts/[contactId]/edit`), Owner/Admin/PM,
+// mirroring `contacts_update_authorized`. Create and delete are still cut.
+//
+// THE ADDRESS IS NOT EDITABLE, even though this screen renders it — it is a
+// different table (`contact_addresses`), it has no write service function, and
+// a contact may have many addresses with an `is_primary` flag, so "edit the
+// address" is a screen question that has not been ruled. Its WRITE role floor
+// landed separately (20260829000000) because it was a live hole regardless:
+// every role could rewrite or permanently delete any address.
 
 export default async function ContactDetailPage({
   params,
+  searchParams,
 }: {
   params: { contactId: string };
+  // A-66 — `requireEditAccess` bounces here with `?denied=contact-edit`. The
+  // READ guard above still bounces to the LIST (D-54's original destination);
+  // the EDIT guard bounces here, because the user tapped Edit on this screen
+  // and sending them to the list would lose their place as well as refuse them.
+  searchParams: { denied?: string };
 }) {
   await requireDetailAccess('contact', '/m/contacts');
 
@@ -38,9 +56,10 @@ export default async function ContactDetailPage({
   // is not §4.11.15's derive-or-cut case: nothing is being reconstructed from
   // an approximate source. M-31's "one call, no second fetch" rule is that
   // screen's, and it is about `getChangeOrder` already returning its children.
-  const [contact, address] = await Promise.all([
+  const [contact, address, profile] = await Promise.all([
     getContact(params.contactId),
     getPrimaryAddress(params.contactId),
+    getMyProfile(),
   ]);
   if (!contact) notFound();
 
@@ -84,6 +103,23 @@ export default async function ContactDetailPage({
           name={name}
         />
       </header>
+
+      <DeniedNotice kind={searchParams.denied} />
+
+      {/* D-54 step 1 — hide the affordance; step 2 refuses the ROUTE in the
+          edit page. Both, because a hidden link is not a permission. Note this
+          is a NARROWER test than the read guard above: `requireDetailAccess`
+          excludes subcontractors only, `canEdit` also excludes foreman and
+          crew. */}
+      {canEdit('contact', profile?.role) ? (
+        <Link
+          href={`/m/contacts/${contact.id}/edit`}
+          data-testid="m-contact-edit"
+          className="mb-[14px] flex min-h-[52px] w-full items-center justify-center rounded-[14px] border border-m6m-blue text-[15px] font-bold text-m6m-blue"
+        >
+          Edit
+        </Link>
+      ) : null}
 
       <DetailCard testId="m-contact-detail">
         {/* Company name renders as its own field only when it is NOT already

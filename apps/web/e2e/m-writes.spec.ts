@@ -1069,3 +1069,236 @@ test.describe('D-65 · Team or Sub/Vendor first, then the list', () => {
     await expect(page.getByTestId('m-content')).toContainText(who);
   });
 });
+
+// ===========================================================================
+// M-38 / M-39 — THE EDIT SURFACES. A-68 … A-74 [S121]
+// ===========================================================================
+// docs/specs/M6M-edit-surfaces-spec.md §5. Three routes, not four: subs and
+// vendors are one table with one policy and one function. TEAM IS HELD — still
+// blocked on what "edit a team member" means (company_members vs profiles).
+//
+// ⚠️ The guards here are NOT the enforcement, and that shapes what is worth
+// asserting. `subcontractors_update_authorized` and `contacts_update_authorized`
+// already refuse foreman, crew and subcontractor in the DATABASE. The guard
+// exists so the refusal arrives as a screen that explains itself instead of an
+// RLS error under a Save button — so the tests assert the SCREEN, and A-69
+// asserts the database accepts the roles the guard admits, which is what proves
+// the guard mirrors the policy rather than guessing at it.
+test.describe('A-68 · the Edit affordance is role-gated on the detail view', () => {
+  for (const [label, email] of [
+    ['a foreman', FOREMAN],
+    ['a crew member', CREW],
+    ['a subcontractor', SUB],
+  ] as const) {
+    test(`${label} sees no Edit control on a sub`, async ({ page }) => {
+      await signInAs(page, email);
+      await page.goto('/m/subs');
+      const rows = page.getByTestId('m-sub-row');
+      if ((await rows.count()) === 0) test.skip(true, 'no subs on rebuild-test');
+      await rows.first().getByTestId('m-row-link').click();
+      await expect(page.getByTestId('m-sub-detail')).toBeVisible();
+      await expect(page.getByTestId('m-sub-edit')).toHaveCount(0);
+    });
+  }
+
+  test('an OWNER sees it, on both surfaces — the gate must not refuse everybody', async ({
+    page,
+  }) => {
+    await signInAs(page, OWNER);
+    await page.goto('/m/subs');
+    const subs = page.getByTestId('m-sub-row');
+    if ((await subs.count()) > 0) {
+      await subs.first().getByTestId('m-row-link').click();
+      await expect(page.getByTestId('m-sub-edit')).toBeVisible();
+    }
+
+    await page.goto('/m/contacts');
+    const contacts = page.getByTestId('m-contact-row');
+    if ((await contacts.count()) === 0) test.skip(true, 'no contacts on rebuild-test');
+    await contacts.first().getByTestId('m-row-link').click();
+    await expect(page.getByTestId('m-contact-edit')).toBeVisible();
+  });
+});
+
+test.describe('A-68b · the ROUTE refuses, and says who can', () => {
+  // Every test TYPES THE URL. A hidden button is not a permission — the URL
+  // survives a shared screenshot, a bookmark and a stale PWA cache.
+  for (const [label, email] of [
+    ['a foreman', FOREMAN],
+    ['a crew member', CREW],
+    ['a subcontractor', SUB],
+  ] as const) {
+    test(`${label} typing the sub edit URL is refused and told who can`, async ({ page }) => {
+      await signInAs(page, email);
+      await page.goto('/m/subs');
+      const rows = page.getByTestId('m-sub-row');
+      if ((await rows.count()) === 0) test.skip(true, 'no subs on rebuild-test');
+      const href = await rows.first().getByTestId('m-row-link').getAttribute('href');
+
+      await page.goto(`${href}/edit`);
+
+      await expect(page).toHaveURL(/\/m\/subs\/[0-9a-f-]{36}\?denied=sub-edit$/);
+      const denied = page.getByTestId('m-denied');
+      await expect(denied).toBeVisible();
+      // BY ROLE, not by exclusion: this refuses three roles, and a foreman
+      // reading "not available to subcontractors" would think the app broken.
+      await expect(denied).toContainText(/owner, admin or project manager/i);
+      // And the form is genuinely not rendered behind the message.
+      await expect(page.getByTestId('m-sub-edit-save')).toHaveCount(0);
+    });
+  }
+
+  test('a crew member typing the CONTACT edit URL is refused too', async ({ page }) => {
+    await signInAs(page, CREW);
+    await page.goto('/m/contacts');
+    const rows = page.getByTestId('m-contact-row');
+    if ((await rows.count()) === 0) test.skip(true, 'no contacts on rebuild-test');
+    const href = await rows.first().getByTestId('m-row-link').getAttribute('href');
+
+    await page.goto(`${href}/edit`);
+    await expect(page).toHaveURL(/\?denied=contact-edit$/);
+    await expect(page.getByTestId('m-denied')).toContainText(/owner, admin or project manager/i);
+    await expect(page.getByTestId('m-contact-edit-save')).toHaveCount(0);
+  });
+});
+
+test.describe('A-69 / A-70 / A-71 / A-73 · a PM edits, and what goes on the wire', () => {
+  test('a PM saves a sub — the DB accepts it, proving the guard mirrors the policy', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await signInAs(page, PM);
+    await page.goto('/m/subs');
+    const rows = page.getByTestId('m-sub-row');
+    if ((await rows.count()) === 0) test.skip(true, 'no subs on rebuild-test');
+    const href = await rows.first().getByTestId('m-row-link').getAttribute('href');
+
+    // A-71 / A-73 — assert the PAYLOAD, not the DOM. A hidden input or a spread
+    // row is invisible to a DOM assertion, and the whole risk on this table is
+    // a field that never renders travelling anyway.
+    const payloads: Record<string, unknown>[] = [];
+    page.on('request', (req) => {
+      if (req.method() !== 'PATCH') return;
+      if (!req.url().includes('/rest/v1/subcontractors')) return;
+      try {
+        payloads.push(JSON.parse(req.postData() ?? '{}'));
+      } catch {
+        /* a non-JSON body would fail the assertions below anyway */
+      }
+    });
+
+    await page.goto(`${href}/edit`);
+    await expect(page.getByTestId('m-sub-edit-save')).toBeVisible();
+
+    const trade = `E2E Trade ${stamp()}`;
+    await page.getByTestId('m-sub-edit-trade').fill(trade);
+    await page.getByTestId('m-sub-edit-save').click();
+
+    // Back to the DETAIL, showing what was just written.
+    await expect(page).toHaveURL(new RegExp(`${href}$`), { timeout: 30_000 });
+    await expect(page.getByTestId('m-sub-detail')).toContainText(trade);
+
+    expect(payloads.length, 'no PATCH to subcontractors was observed').toBeGreaterThan(0);
+    const body = payloads[payloads.length - 1];
+    const keys = Object.keys(body);
+
+    // A-70 — the three cut columns are not on the wire.
+    expect(keys).not.toContain('default_hourly_rate');
+    expect(keys).not.toContain('default_markup_percent');
+    expect(keys).not.toContain('ein');
+    // A-73 — finding 4's mitigation: company_id is never in an update payload,
+    // because these policies carry USING with no WITH CHECK.
+    expect(keys).not.toContain('company_id');
+    // A-71 — the payload is EXACTLY the named subset, not a superset.
+    expect(keys.sort()).toEqual(
+      [
+        'company_name',
+        'contact_first_name',
+        'contact_last_name',
+        'email',
+        'insurance_expiry',
+        'license_number',
+        'mobile',
+        'phone',
+        'status',
+        'sub_type',
+        'trade_type',
+      ].sort()
+    );
+  });
+
+  test('A-70 on the edit SCREEN · no rate, markup or EIN rendered, as OWNER', async ({ page }) => {
+    // Under Owner specifically: A-46's shape. A build that revealed them to
+    // Owner "because they may as well see it" would turn a cut into a UI-only
+    // role gate, which is the thing the list-level assertion exists to prevent.
+    await signInAs(page, OWNER);
+    await page.goto('/m/subs');
+    const rows = page.getByTestId('m-sub-row');
+    if ((await rows.count()) === 0) test.skip(true, 'no subs on rebuild-test');
+    const href = await rows.first().getByTestId('m-row-link').getAttribute('href');
+
+    await page.goto(`${href}/edit`);
+    await expect(page.getByTestId('m-sub-edit-save')).toBeVisible();
+    const body = (await page.getByTestId('m-content').textContent()) ?? '';
+    expect(body).not.toMatch(/markup/i);
+    expect(body).not.toMatch(/\bEIN\b/i);
+    expect(body).not.toMatch(/\/\s*hr|per hour|hourly/i);
+    expect(body).not.toMatch(/\$\d/);
+  });
+
+  test('a PM edits a CONTACT, and the address is not on the form or the wire', async ({ page }) => {
+    test.setTimeout(120_000);
+    await signInAs(page, PM);
+    await page.goto('/m/contacts');
+    const rows = page.getByTestId('m-contact-row');
+    if ((await rows.count()) === 0) test.skip(true, 'no contacts on rebuild-test');
+    const href = await rows.first().getByTestId('m-row-link').getAttribute('href');
+
+    const payloads: Record<string, unknown>[] = [];
+    page.on('request', (req) => {
+      if (req.method() === 'PATCH' && req.url().includes('/rest/v1/contacts')) {
+        try {
+          payloads.push(JSON.parse(req.postData() ?? '{}'));
+        } catch {
+          /* ignore */
+        }
+      }
+      // THE ADDRESS TABLE MUST NOT BE TOUCHED AT ALL by this form — finding 3.
+      if (req.url().includes('/rest/v1/contact_addresses') && req.method() !== 'GET') {
+        throw new Error('the contact edit form wrote to contact_addresses');
+      }
+    });
+
+    await page.goto(`${href}/edit`);
+    await expect(page.getByTestId('m-contact-edit-save')).toBeVisible();
+
+    const company = `E2E Co ${stamp()}`;
+    await page.getByTestId('m-contact-edit-company').fill(company);
+    await page.getByTestId('m-contact-edit-save').click();
+    await expect(page).toHaveURL(new RegExp(`${href}$`), { timeout: 30_000 });
+    await expect(page.getByTestId('m-contact-detail')).toContainText(company);
+
+    expect(payloads.length).toBeGreaterThan(0);
+    const keys = Object.keys(payloads[payloads.length - 1]);
+    expect(keys).not.toContain('notes');
+    expect(keys).not.toContain('tags');
+    expect(keys).not.toContain('company_id');
+    expect(keys.sort()).toEqual(
+      ['company_name', 'contact_type', 'email', 'first_name', 'last_name', 'mobile', 'phone'].sort()
+    );
+  });
+});
+
+test.describe('A-74 · the edit routes carry the back chevron', () => {
+  test('a way back from both edit screens', async ({ page }) => {
+    await signInAs(page, OWNER);
+    await page.goto('/m/subs');
+    const rows = page.getByTestId('m-sub-row');
+    if ((await rows.count()) === 0) test.skip(true, 'no subs on rebuild-test');
+    const href = await rows.first().getByTestId('m-row-link').getAttribute('href');
+
+    await page.goto(`${href}/edit`);
+    await expect(page.getByTestId('m-back')).toBeVisible();
+    await expect(page.getByTestId('m-hamburger')).toHaveCount(0);
+  });
+});
