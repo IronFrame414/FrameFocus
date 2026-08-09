@@ -1,5 +1,3 @@
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import {
@@ -8,6 +6,7 @@ import {
   COMPANY_A,
   type HubFixture,
 } from './hub-fixture';
+import { requireTestEnv } from './env';
 
 /**
  * A REAL member JWT on the anon key — RLS and the column-scope triggers apply
@@ -17,15 +16,15 @@ import {
  * Mirrors test/live-session.ts.
  */
 async function memberClient(email: string): Promise<SupabaseClient> {
-  const raw = readFileSync(path.join(__dirname, '..', '.env.local'), 'utf8');
-  const env: Record<string, string> = {};
-  for (const line of raw.split('\n')) {
-    const m = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line);
-    if (m) env[m[1]] = m[2].trim().replace(/^(['"])(.*)\1$/, '$2');
-  }
-  const client = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
+  // [S123] Was a SECOND hand-rolled copy of the .env.local parser, with the
+  // same file-only lookup that made hub-fixture.ts red in CI — and it would
+  // have thrown here immediately after that one was fixed. One resolver, in
+  // ./env, for both.
+  const client = createClient(
+    requireTestEnv('NEXT_PUBLIC_SUPABASE_URL'),
+    requireTestEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY'),
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
   const { error } = await client.auth.signInWithPassword({
     email,
     password: process.env.E2E_PASSWORD ?? 'FrameFocusTest!2026',

@@ -17,14 +17,26 @@ import { defineConfig } from 'vitest/config';
 //
 // .env.local is read directly rather than via dotenv — dotenv is only present
 // transitively here, and a committed harness should not depend on hoisting.
+// [S123] ENV FIRST, FILE SECOND — the ordering the loop below already had for
+// VALUES (`if (process.env[k] === undefined)`), now extended to the file's own
+// absence. The old version threw on a missing file even when the environment
+// already carried every variable, which is the same defect that made
+// e2e/hub-fixture.ts red in CI. These harnesses are excluded from CI by their
+// `.live.ts` suffix and are meant to stay that way, so this is not a live
+// failure — it is the trap removed from the one copy of it that is left.
 function loadEnvLocal(): void {
   let raw: string;
   try {
     raw = readFileSync(fileURLToPath(new URL('../.env.local', import.meta.url)), 'utf8');
   } catch {
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) return;
     throw new Error(
-      'apps/web/.env.local not found — it is gitignored and does not survive a Codespace ' +
-        'rebuild. Recreate it from the Vercel env vars before running the live click-test.'
+      'apps/web/.env.local not found, and NEXT_PUBLIC_SUPABASE_URL / ' +
+        'SUPABASE_SERVICE_ROLE_KEY are not in the environment either.\n' +
+        '  Codespace / local: the file is gitignored and does not survive a rebuild — ' +
+        'recreate it from the Vercel env vars (STATE.md → Environment Variables).\n' +
+        '  Any other environment: export both variables before running the live ' +
+        'click-test. These harnesses hit a REAL database and never run in CI.'
     );
   }
   for (const line of raw.split('\n')) {
