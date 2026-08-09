@@ -45,6 +45,7 @@ repo would make every cross-document citation ambiguous. `ND-` reads as
 | ND-15 | Subcontractors | **Email always; in-app as well when they have an account.** [S123, Josh] Scoped to three events: contract signed, chat @mention, punch item assigned. **Reachability is not assumed** — §13 establishes it and specs the unreachable case. |
 | ND-16 | Low-stock (M8) | **CUT from v1 traces; the type is RESERVED.** [S123] M8 has **zero tables**. Every figure in S89 §3d (`"4 left (threshold 10)"`) is unbindable, and the house rule is: bound to a named verified function, or cut. The `low_stock` enum value is reserved so M8 lands as a consumer with no schema change. |
 | ND-17 | Still-clocked-in | **An existing consumer, added to §3 and §4.** [S123] TECH_DEBT #91: 6A already emits 4 PM / 5 PM still-clocked-in events and defers delivery to this module. It was absent from S89 entirely. |
+| ND-18 | §3b's write path | **SERVER ROUTES for both assignment writes.** [S123, Josh] Punch item creation and project membership move from client-direct Supabase writes to `/api/punch-items` and `/api/project-assignments`, so `notify()` has a server path. **The write still runs as the CALLER — the routes never reach for the service role.** DB trigger and post-write ping both rejected. Full reasoning, caller audit and the RLS statement in §16. |
 
 ---
 
@@ -1148,3 +1149,113 @@ resolution is `assignee_id → company_members.profile_id → profiles` for the 
   system. It was never listed, despite S89 §1 describing it as one.
 - **`module8-architecture.md` §OQ3** — the flag-back S89 R8 promised: low-stock repeats
   **weekly** while below threshold. Marked ANSWERED.
+
+---
+
+## §16 — ND-18: the two assignment writes move to server routes
+
+**Ruled [S123, Josh].** §3b was the only trace with no server path. Punch item creation and
+project membership were **client-direct Supabase writes** — a browser calling
+`supabase.from(...).insert(...)` — and `notify()` is `server-only` and needs the service
+role, so there was nowhere for it to run. Slice 3 stopped on this rather than guessing.
+
+### 16.1 What was chosen
+
+Both writes move behind API routes:
+
+| Write | Route | Client function |
+| --- | --- | --- |
+| Punch item (carries `assignee_id`) | `POST /api/punch-items` | `createPunchItem()` — signature unchanged, now a `fetch` |
+| Project membership | `POST /api/project-assignments` | `assignMember()` / `reassignMember()` |
+
+### 16.2 What was rejected, and why
+
+**A database trigger — REJECTED.** It cannot send push or email; it can only write a row, so
+half of §3b would still have needed a server path and the module would have had two delivery
+mechanisms for one event. It is also the shape that produced the defect found this same
+session: *a trigger that outlived its columns.* Logic that fires without a caller is logic
+nobody re-reads when the schema moves.
+
+**A post-write ping — REJECTED.** The client writes directly as today, then calls an endpoint
+to announce it. A closed tab, a dropped connection or a failed ping loses the notification
+**silently** — the write succeeded, so nothing looks wrong. §3b is the worst possible trace to
+accept that on: a missed assignment notification means somebody does not know they have work.
+It also invites the write and the announcement to disagree about what happened.
+
+### 16.3 The caller audit, run before anything moved
+
+Because `punch-client.ts` is shared between surfaces, every caller was enumerated first.
+
+| Caller | Write | Notifies? |
+| --- | --- | --- |
+| `punch-panel.tsx:121` (desktop create) | `createPunchItem`, sets `assignee_id` | **Yes** |
+| `punch-form.tsx:178` (mobile create) | `createPunchItem`, sets `assignee_id` | **Yes** |
+| `punch-panel.tsx:426` | `updatePunchItemFields(id, {status})` | No — never touches `assignee_id` |
+| `s118-m6m-write-criteria.live.ts:387` | `createPunchItem` imported directly | **Must NOT** — harness |
+| `team-panel.tsx:28` | `reassignMember` | **Yes** |
+| `team-panel.tsx:41` | `unassignMember` | **Must NOT** — removal is not an assignment |
+| `hub-fixture.ts:197`, `m-capture.spec.ts:78`, `desktop-punch.spec.ts:153` | `project_assignments` via **service role**, never the client helper | **Must NOT** — already structurally excluded |
+| `/m/p/[projectId]/team` | — | Read-only; assign/unassign deliberately cut (M6M) |
+
+**How a non-notifying caller is distinguished: it does not use the route.** Each write is
+split into a server function that inserts (`insertPunchItemAsCaller`,
+`upsertProjectAssignmentAsCaller`) and a route that inserts **and** notifies. Fixtures and
+harnesses call the write half or the service role directly.
+
+**There is deliberately no `notify: false` parameter.** A public endpoint that accepts "do not
+tell anyone" is a suppression switch on the one trace where silence means somebody does not
+know they have work. The cost of the split is that a NEW UI path calling the write half
+directly would lose its notification — which is why the functions are named `…AsCaller` and
+carry a banner saying the route is what UI wants.
+
+The s118 substitution has direct precedent in that file: A-55 already calls
+`recalculateChangeOrderTotalsPrivileged()` because `recalculateChangeOrderTotals()` posts to a
+route whose relative URL node cannot resolve. Same problem, same answer.
+
+**`unassignMember()` stays client-direct.** It notifies nobody — there is no removal trace —
+so moving it would be churn on a working path. The asymmetry is deliberate.
+
+**`reassignMember()` no longer does its own un-delete.** That branch moved into the server
+function. A client-direct revive is still a real assignment, and leaving it behind would have
+made re-assigning somebody after an unassign the one assignment that notifies nobody — exactly
+the silent gap the post-write ping was rejected for.
+
+### 16.4 The routes do not weaken RLS — what still applies
+
+**The write runs under the caller's session. The routes use `createClient()` from
+`@/lib/supabase-server`, never `getSupabaseAdmin()`.** Moving a write to a server route changes
+the transport and nothing about the authorisation. Concretely, still in force and unchanged:
+
+| Table | Policy | Still decides |
+| --- | --- | --- |
+| `punch_list_items` | `punch_list_items_insert_authenticated` | `company_id = get_my_company_id() AND can_view_project(project_id)` |
+| `project_assignments` | `project_assignments_insert_authorized` | company scope **AND** (`owner`/`admin`) **OR** (`project_manager` **AND** (assigned to the project **OR** assigning themselves to a project they created)) |
+| `project_assignments` | `project_assignments_update_authorized` | the un-delete branch: company scope **AND** (`owner`/`admin`) **OR** (`project_manager` **AND** assigned) |
+
+A foreman or crew member who could not assign a project member before still cannot. A refusal
+surfaces as **403 with its own message** and is logged server-side with the route and the
+failing check — it never falls through to a "not found" path (CLAUDE.md, API/Data Layer).
+
+**The notification is the one thing that runs as the service role, and it must.**
+`notifications` has **no INSERT policy at all**, so no authenticated role can write a row.
+That is what stops a caller forging a notification addressed to somebody else: the row is
+written *for* the assignee, *by* the platform, never by a peer.
+
+### 16.5 §13.2's three states, reported not swallowed
+
+`resolveMemberReachability()` returns which of §13.2's three states an assignee is in, and the
+routes return it to the surface:
+
+- **profile** — in-app row written.
+- **email-only** — a sub with an address but no login. **No row** (ND-2 forbids one) and the
+  caller is told, so the surface can say so.
+- **unreachable** — no channel. Recorded, non-blocking, never a throw.
+
+**Not built in this slice: the actual email to a state-2 subcontractor.** The route reports
+`emailOnly` and the notification half is complete; the send is a new template on the email
+side and is owed. Recorded here rather than left looking finished.
+
+**Self-assignment is silent** on both traces. `project_assignments_insert_authorized`
+explicitly permits a PM to add themselves to a project they created, so it is a normal path,
+not an edge one — without the check it would be the most common notification the platform
+sends and every one of them useless.
