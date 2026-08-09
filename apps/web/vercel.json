@@ -15,6 +15,10 @@
     {
       "path": "/api/cron/daily-log-missing",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/still-clocked-in",
+      "schedule": "0 * * * *"
     }
   ]
 }
