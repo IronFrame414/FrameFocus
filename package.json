@@ -14,7 +14,7 @@
     "test": "turbo run test",
     "clean": "turbo run clean",
     "db:push": "supabase db push && npm run db:types && npm run type-check",
-    "db:types": "supabase gen types typescript --linked 2>/dev/null > packages/shared/types/database.ts"
+    "db:types": "bash scripts/db-types.sh"
   },
   "devDependencies": {
     "prettier": "^3.4.0",

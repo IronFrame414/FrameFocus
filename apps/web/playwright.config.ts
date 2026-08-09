@@ -135,15 +135,44 @@ export default defineConfig({
   // for the port. In CI there is never a server to reuse, and reusing a stale
   // one would silently test the wrong build, so CI always starts its own.
   //
-  // `next dev` rather than `next build && next start`: no build step, and the
-  // env it needs is already in .env.local. The tradeoff is real — the dev
-  // server compiles routes on first request, which is why the timeout is 120s
-  // rather than the default 60s. If e2e ever gates a merge, switch this to a
-  // production build so CI tests what ships.
+  // ---------------------------------------------------------------------------
+  // #135 [S122] — CI SERVES A PRODUCTION BUILD; LOCAL STAYS ON `next dev`.
+  // ---------------------------------------------------------------------------
+  // The old comment here said: "If e2e ever gates a merge, switch this to a
+  // production build so CI tests what ships." That is now done, and the reason
+  // was never only fidelity — it was that `next dev` compiles routes on first
+  // request, so CI paid a cold compile inside `webServer.timeout` and a slow
+  // runner could blow the 120s budget BEFORE A SINGLE TEST RAN. The failure
+  // then names the web server rather than the app, which is #135's real sting.
+  //
+  // ⚠️ IN CI THE BUILD IS A SEPARATE WORKFLOW STEP, NOT PART OF THIS COMMAND.
+  // `command: 'npm run build && npm run start'` would work but would fold a
+  // BUILD failure into a webServer TIMEOUT — reintroducing the exact
+  // misreporting this item is about. `.github/workflows/ci.yml` runs
+  // `npm run build` as its own step, so a broken build fails there with the
+  // compiler's own output, and by the time Playwright starts there is nothing
+  // left to compile.
+  //
+  // MEASURED [S122], this box, rebuild-test:
+  //   cold `next build`      175s   (a one-off, paid once per CI run)
+  //   `next start` to serving  2s   (vs. dev's per-route compile-on-request)
+  //   e2e/m-writes.spec.ts   2.8m   against production
+  //                          5.0m   against `next dev` — the same 53 tests
+  //   next-server RSS         320MB after that suite
+  //                         ~1400MB for the dev server, growing monotonically
+  //                                 (the figure #145 measured)
+  // So the build pays for itself on any suite of meaningful size, and it
+  // removes the only resource growth #145 ever managed to measure.
+  //
+  // LOCAL STAYS ON `next dev` deliberately: the 175s build on every iteration
+  // would be a bad trade while writing tests, and `reuseExistingServer` lets a
+  // dev server you already have open be attached to. Run
+  // `scripts/e2e-preflight.sh` first (#138) to guarantee it is the RIGHT one.
   webServer: {
-    command: 'npm run dev',
+    command: process.env.CI ? 'npm run start' : 'npm run dev',
     url: 'http://localhost:3000',
-    timeout: 120 * 1000,
+    // Production `start` boots in ~2s; dev still needs room to compile.
+    timeout: (process.env.CI ? 60 : 120) * 1000,
     reuseExistingServer: !process.env.CI,
   },
 });

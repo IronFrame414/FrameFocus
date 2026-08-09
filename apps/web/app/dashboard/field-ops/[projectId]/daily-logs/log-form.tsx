@@ -130,7 +130,16 @@ export function LogForm({
     const payload: DailyLogFields = {
       ...fields,
       weather: fields.weather?.trim() || null,
-      work_performed: fields.work_performed?.trim() || null,
+      // #133 CLOSED [S122] — NOT `|| null` like its neighbours, and that is the
+      // point. Every other field here is genuinely optional, so coercing blank
+      // to NULL is right for them. `work_performed` is NOT NULL-and-non-blank in
+      // the database (20260824000000), so the same expression could only ever
+      // produce a row Postgres refuses with a raw 23514 naming a constraint
+      // instead of a field. The guard above already returned on a blank value,
+      // so `.trim()` here is the same string by construction — this line exists
+      // so the payload cannot express the invalid state at all, rather than
+      // relying on a check twenty lines away staying put.
+      work_performed: fields.work_performed.trim(),
       material_used: fields.material_used?.trim() || null,
       material_needed: fields.material_needed?.trim() || null,
       equipment_used: fields.equipment_used?.trim() || null,

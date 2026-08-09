@@ -45,12 +45,72 @@ export async function deleteSubcontractor(
 }
 
 
+// ---------------------------------------------------------------------------
+// TECH_DEBT #132 [S122] — writing the Owner/Admin half.
+// ---------------------------------------------------------------------------
+// The three figures moved to `subcontractor_financials` (migration
+// 20260903000000), whose INSERT/UPDATE are Owner/Admin. This is a separate
+// call from the sub itself because it is a separate table with a separate
+// policy — the same two-writes-two-policies shape as the team edit surface.
+//
+// ⚠️ A REFUSED WRITE AFFECTS ZERO ROWS RATHER THAN ERRORING, so this selects
+// back and reports the refusal. Without that, a non-Owner/Admin who somehow
+// reached this call would be told "saved".
+//
+// The write is an UPSERT on `subcontractor_id` because the row is created
+// lazily: a sub that never had any of the three has no row at all.
+
+export interface SubcontractorFinancialsInput {
+  default_hourly_rate: number | null;
+  default_markup_percent: number | null;
+  ein: string | null;
+}
+
+export async function saveSubcontractorFinancials(
+  subcontractorId: string,
+  values: SubcontractorFinancialsInput
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = createClient();
+
+  // All three null means there is nothing to record. Don't mint an empty row —
+  // "no row" is the table's own representation of "nothing set", and an empty
+  // row would make the lazy-creation contract untrue for every future reader.
+  const allEmpty =
+    values.default_hourly_rate === null &&
+    values.default_markup_percent === null &&
+    values.ein === null;
+
+  const { data: existing } = await supabase
+    .from('subcontractor_financials')
+    .select('id')
+    .eq('subcontractor_id', subcontractorId)
+    .maybeSingle();
+
+  if (allEmpty && !existing) return { success: true };
+
+  const { data, error } = await supabase
+    .from('subcontractor_financials')
+    .upsert({ subcontractor_id: subcontractorId, ...values }, { onConflict: 'subcontractor_id' })
+    .select('id');
+
+  if (error) return { success: false, error: error.message };
+  if ((data ?? []).length === 0) {
+    return { success: false, error: 'Only an owner or admin can set sub rates, markup or EIN.' };
+  }
+  return { success: true };
+}
+
 // ── Picker options (4D bidding tab) ──
 
+// ⚠️ `default_markup_percent` WAS FETCHED HERE AND NEVER USED [#132, S122].
+// The picker renders `company_name` only — verified by grep before removing it:
+// zero references to `.default_markup_percent` anywhere in the bidding tab.
+// It was dead payload shipping the company's margin to every role that can
+// open an estimate, which is exactly the leak #132 is about. Removed rather
+// than retargeted: nothing needs it here.
 export interface SubcontractorOption {
   id: string;
   company_name: string;
-  default_markup_percent: number | null;
 }
 
 export async function listSubcontractorOptions(): Promise<SubcontractorOption[]> {
@@ -58,7 +118,7 @@ export async function listSubcontractorOptions(): Promise<SubcontractorOption[]>
 
   const { data, error } = await supabase
     .from('subcontractors')
-    .select('id, company_name, default_markup_percent')
+    .select('id, company_name')
     .eq('is_deleted', false)
     .order('company_name', { ascending: true });
 

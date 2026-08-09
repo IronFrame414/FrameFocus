@@ -2,12 +2,9 @@
 
 import * as React from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  createEmptyMarkup,
-  type MarkupData,
-  type MarkupShape,
-} from '@framefocus/shared/types/markup';
-import { updateFile } from '@/lib/services/files-client';
+import { type MarkupData, type MarkupShape } from '@framefocus/shared/types/markup';
+import { saveMarkup, type MarkupSaveResult } from '@/lib/services/photos-client';
+import { drawShapes } from '@/lib/markup/flatten-shapes';
 
 type Tool = 'arrow' | 'circle' | 'rectangle' | 'pen' | 'text' | 'select';
 
@@ -26,11 +23,18 @@ const STROKE_WIDTHS = [10, 20, 30, 50];
 
 interface MarkupEditorProps {
   fileId: string;
+  /** Storage path of the ORIGINAL — `derivativePathFor()` derives from it (#129). */
+  filePath: string;
   imageUrl: string;
   initialMarkup: MarkupData | null;
 }
 
-export default function MarkupEditor({ fileId, imageUrl, initialMarkup }: MarkupEditorProps) {
+export default function MarkupEditor({
+  fileId,
+  filePath,
+  imageUrl,
+  initialMarkup,
+}: MarkupEditorProps) {
   const router = useRouter();
   const svgRef = React.useRef<SVGSVGElement | null>(null);
 
@@ -231,29 +235,58 @@ export default function MarkupEditor({ fileId, imageUrl, initialMarkup }: Markup
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId]);
 
+  // =========================================================================
+  // ⚠️ TECH_DEBT #129 [S122] — DESKTOP WRITES THE DERIVATIVE, SAME AS MOBILE
+  // =========================================================================
+  // This used to save exactly one thing: `updateFile(fileId, { markup_data })`.
+  // No canvas export, no flattened image. That was correct while the OVERLAY
+  // was the display mechanism — but M6M D-31 reversed it, making the flattened
+  // derivative the display source. **D-31 stands**, so the editor that does not
+  // write one is the side that was wrong: a photo annotated on desktop rendered
+  // on mobile as an UNANNOTATED ORIGINAL with no indication the markup existed.
+  // Silent loss, not an error — the worst shape a bug can take.
+  //
+  // The fix is not a desktop-specific export. It is `saveMarkup()` — the exact
+  // function the mobile canvas calls — with `drawShapes`, the exact rasteriser
+  // it draws with. Both moved to `lib/` so neither surface owns the format.
+  // A second desktop-only flattener would have reintroduced the divergence in
+  // a form that looks like agreement.
+  //
+  // THE THREE-STATE RESULT MATTERS AND MUST NOT BE COLLAPSED. `markup_data` is
+  // written FIRST because it is the source of truth and cannot be regenerated;
+  // the derivative can always be rebuilt from it. So `derivative_failed` means
+  // the marks are SAFE but every surface will show the photo unmarked — which
+  // is emphatically not "saved". Reporting it as success is the A-23j failure
+  // this comment exists to prevent.
   async function handleSave() {
     if (!imageDims) return;
     setSaving(true);
     setSaveError(null);
 
-    const data: MarkupData = {
-      ...createEmptyMarkup(imageDims.w, imageDims.h),
+    const result: MarkupSaveResult = await saveMarkup(
+      fileId,
+      filePath,
+      imageUrl,
       shapes,
-    };
-
-    const result = await updateFile(fileId, {
-      // updateFile types markup_data as Record<string, unknown> | null —
-      // MarkupData is a structurally compatible plain object.
-      markup_data: data as unknown as Record<string, unknown>,
-    });
+      imageDims,
+      drawShapes
+    );
 
     setSaving(false);
-    if (!result.success) {
-      setSaveError(result.error ?? 'Save failed');
+
+    if (result.status === 'saved') {
+      setDirty(false);
+      router.refresh();
       return;
     }
-    setDirty(false);
-    router.refresh();
+
+    // Both failure states keep `dirty` set — the editor still holds the only
+    // complete picture, so the user must not be told they can leave.
+    setSaveError(
+      result.status === 'derivative_failed'
+        ? `Marks saved, but the flattened image could not be written — the photo will still appear unmarked elsewhere. ${result.error ?? ''}`.trim()
+        : (result.error ?? 'Save failed')
+    );
   }
 
   // Image not yet measured — render the <img> off-screen to get natural dimensions,

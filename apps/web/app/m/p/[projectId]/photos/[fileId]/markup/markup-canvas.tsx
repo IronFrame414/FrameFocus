@@ -6,7 +6,10 @@ import { MarkupShapes } from '@framefocus/shared/components/MarkupViewer';
 import type { MarkupShape } from '@framefocus/shared/types/markup';
 import { nextPinNumber } from '@framefocus/shared/utils/markup';
 import { saveMarkup, type MarkupSaveResult } from '@/lib/services/photos-client';
-import { drawShapes } from './flatten-shapes';
+// Moved out of this route folder for #129 [S122] — the desktop editor now
+// writes the SAME derivative from the SAME rasteriser. A flattener living under
+// /m implied mobile owned the format; it does not.
+import { drawShapes } from '@/lib/markup/flatten-shapes';
 
 // M6M §4.10 — M-10 · Photo markup. Dark chrome #0d1220, inset 14px.
 //

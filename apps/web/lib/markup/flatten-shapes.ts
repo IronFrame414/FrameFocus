@@ -4,6 +4,16 @@ import { PIN_IMAGE_DIAMETER } from '@framefocus/shared/utils/markup';
 // M6M §4.10 — DRAWING THE MARKS ONTO A 2D CANVAS, for the flattened derivative.
 //
 // ---------------------------------------------------------------------------
+// ⚠️ ONE RASTERISER, BOTH SURFACES — TECH_DEBT #129 [S122]
+// ---------------------------------------------------------------------------
+// This lived under `app/m/p/[projectId]/photos/[fileId]/markup/` while mobile
+// was the only editor that produced a derivative. It is in `lib/` now because
+// the DESKTOP editor writes the same derivative through the same function
+// (#129, D-31 upheld). Its location used to imply mobile owned the flattened
+// format; it does not, and a second copy under /dashboard would have been the
+// drift this file's own note warns about.
+//
+// ---------------------------------------------------------------------------
 // WHY THIS EXISTS SEPARATELY FROM MarkupViewer, AND WHAT KEEPS THEM HONEST.
 // ---------------------------------------------------------------------------
 // The authoring canvas draws SVG; the derivative is produced by a 2D canvas

@@ -6,6 +6,29 @@ on:
   pull_request:
     branches: [main, dev]
 
+# ⚠️ TECH_DEBT #137 [S122] — EVERY `run:` STEP GETS `pipefail`.
+#
+# GitHub's default shell for `run:` is `bash -e {0}`: NO `pipefail`. So any step
+# that pipes — `npx next build | tail -20` is the instance that actually shipped
+# — is judged by the LAST command's status. `tail` always exits 0, so a failed
+# build reports success and the job goes GREEN. Locally that costs a re-run; in
+# CI it ships red as green, the branch looks mergeable, and nothing downstream
+# re-checks.
+#
+# `-o pipefail` makes a pipeline fail if ANY stage fails. `-u` fails on an unset
+# variable rather than silently substituting empty — the same class of defect
+# (a typo'd secret name becoming ""). `{0}` is the script path GitHub
+# substitutes; it must be kept.
+#
+# This closes the PIPE half of #137 workflow-wide. It does NOT close the
+# trailing-command half — `cmd; echo "exit: $?"` still reports the echo's
+# status, and nothing but not writing it fixes that. See CLAUDE.md → "Reading
+# the exit status of a command" for the rules that apply to every command run
+# in this repo, CI or not.
+defaults:
+  run:
+    shell: bash -euo pipefail {0}
+
 jobs:
   check:
     name: Lint & Type Check
@@ -78,15 +101,31 @@ jobs:
         run: npx playwright install --with-deps chromium
         working-directory: apps/web
 
-      # The dev server is started BY Playwright (webServer in
-      # playwright.config.ts), so there is no separate "start the app" step and
-      # nothing to tear down. reuseExistingServer is false under CI, so this
-      # always gets a fresh server rather than silently testing a stale one.
+      # #135 — BUILD IS ITS OWN STEP, AND THAT SEPARATION IS THE POINT.
       #
-      # SECRETS ARE REQUIRED. `next dev` boots middleware, which constructs a
-      # Supabase client from these two vars; without them every route 500s and
-      # every test fails on navigation rather than on its assertion. Set both as
-      # repository secrets before making this job a required check.
+      # CI serves a PRODUCTION build (playwright.config.ts picks `npm run start`
+      # when process.env.CI is set). The build could have been folded into that
+      # webServer command as `npm run build && npm run start`, and that would
+      # have been the wrong shape: a compile error would then surface as
+      # `Timed out waiting 60000ms from config.webServer`, naming the web server
+      # instead of the broken file. That misreporting IS #135. Here, a broken
+      # build fails this step with the compiler's own output.
+      #
+      # SECRETS ARE REQUIRED HERE TOO. `next build` prerenders static routes and
+      # evaluates middleware, both of which construct a Supabase client from
+      # these vars — see #131 for what their absence does to the whole suite.
+      - name: Build (production)
+        run: npm run build
+        working-directory: apps/web
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+
+      # Playwright starts `next start` (webServer). Nothing is compiled on
+      # demand, so the 60s webServer budget is generous rather than tight —
+      # production boots in ~2s locally. reuseExistingServer is false under CI,
+      # so this always gets a fresh server rather than silently testing a stale
+      # one.
       - name: Run Playwright tests
         run: npx playwright test
         working-directory: apps/web

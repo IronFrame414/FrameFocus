@@ -72,6 +72,35 @@ and retained only as a record of the abandoned direction. Anything a spec previo
 dashboard shell** or a **separate route tree for phones**. TECH_DEBT #101 assumed repair. That is
 Josh's next decision and is recorded as OPEN in #101.
 
+### PARITY: ONE FEATURE, BOTH SURFACES, SAME BEHAVIOUR — **RULED [Josh, S122]**
+
+**Everything viewable from both desktop and mobile behaves the same way on both.**
+
+A feature that exists on both surfaces is ONE feature with two presentations. Layout, spacing and
+input affordances may differ — a phone is not a desktop. **What must not differ is behaviour:** what
+gets written, what the rules are, what an error means, and what the user ends up with.
+
+**Why this is a rule and not a preference.** It was ruled after TECH_DEBT #129, where the two
+markup editors quietly disagreed about what a save produces. Mobile wrote a flattened derivative;
+desktop wrote only `markup_data`. Both "worked". The result was that a photo annotated on desktop
+displayed on mobile as an **unannotated original with no indication the markup existed** — silent
+loss, discovered by reading the save path rather than by anything failing. Divergent behaviour
+between surfaces does not announce itself; it presents as data that is simply wrong somewhere else.
+
+**In practice, when building or reviewing anything that both surfaces reach:**
+
+- **Share the mechanism, not just the intent.** #129's fix was to call the SAME `saveMarkup()` with
+  the SAME `drawShapes()` rasteriser, moved to `lib/` so neither surface owns the format. A second
+  implementation that "does the same thing" is the divergence, written in a form that looks like
+  agreement.
+- **A helper under `app/m/` or `app/dashboard/` implies that surface owns it.** If both need it, it
+  belongs in `lib/`. Location is a claim about ownership.
+- **The rules live below the UI** — in RLS, a service function, or a shared util — so neither
+  surface can enforce a different version of them.
+- **When the surfaces must genuinely differ, say so where the code is** and give the reason. The
+  ruled exceptions are recorded, e.g. `/m` opens files INLINE while desktop appends `?download=`
+  (M6M §4.11.16) — a deliberate difference in a delivery affordance, not in what is stored.
+
 ---
 
 ## Monorepo Structure
@@ -188,6 +217,33 @@ Phase 2 — QUESTIONS: surface ALL questions / ambiguities / spec↔schema confl
 at once, then STOP and wait. If none, say so and continue.
 Phase 3 — BUILD: perform all reads/edits/creates autonomously; show diffs at the
 end; never commit — Josh commits manually.
+
+### Reading the exit status of a command — **MANDATORY [moved from TECH_DEBT #137, S122]**
+
+**A status is only evidence if it belongs to the process being judged.** Five instances in two
+sessions (S106–S107) all had one root cause: the status read belonged to a *different* process than
+the one under test. A build that failed lint was reported clean and **committed on that basis**; two
+Playwright runs reported `0` while 89 and 91 tests had actually failed.
+
+1. **Never judge a command through a pipe.** `npx next build | tail -20` reports **`tail`'s** status,
+   which is always `0`. Redirect to a file and inspect that instead:
+   `cmd > log 2>&1; echo $?` — **immediately**, before anything else runs. If a pipe is unavoidable,
+   `set -o pipefail` first, or read `${PIPESTATUS[0]}` rather than `$?`.
+2. **Print the real code into the output and read *that line*.** Not a wrapper's status, not a
+   summary. `cmd; echo "exit: $?"` is itself the trap — the compound command's status is the
+   **`echo`'s**, so the shell *and* any task-notification summary report `0` over a run that exited
+   `1`. Print the code and read the printed line.
+3. **Corroborate with an independent signal.** A `✘` count, a test tally, a connection-error count.
+   A status can be masked; a tally cannot.
+4. **Never `pkill -f <pattern>`.** It matches **any** process whose command line contains the
+   string — **including the shell running the pkill**, which is why such commands return exit `144`
+   and why servers appear to die for no reason. List the processes and `kill <PID>`, excluding `$$`.
+   Reference: `scripts/e2e-preflight.sh` (#138).
+
+**In CI this is worse, not equal.** Locally a masked failure costs a re-run; in
+`.github/workflows/ci.yml` it **ships red as green**. The workflow sets
+`defaults.run.shell: bash -euo pipefail {0}`, which closes the pipe case for every `run:` step —
+but **nothing closes the trailing-command case except not writing it**.
 
 ## Generated Types Workflow
 

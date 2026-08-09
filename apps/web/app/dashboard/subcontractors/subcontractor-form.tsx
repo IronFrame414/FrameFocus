@@ -2,16 +2,31 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createSubcontractor, updateSubcontractor } from '@/lib/services/subcontractors-client';
-import type { Subcontractor } from '@/lib/services/subcontractors';
+import {
+  createSubcontractor,
+  updateSubcontractor,
+  saveSubcontractorFinancials,
+} from '@/lib/services/subcontractors-client';
+import type { Subcontractor, SubcontractorFinancials } from '@/lib/services/subcontractors';
 
 import { TRADE_TYPES, US_STATES } from '@framefocus/shared/constants';
 
 interface SubcontractorFormProps {
   existing?: Subcontractor;
+  /** #132 — the Owner/Admin half, read server-side from
+   *  `subcontractor_financials`. Null for a sub with nothing set. */
+  financials?: SubcontractorFinancials | null;
+  /** #132 — owner/admin. The route also admits PM, who must not see the three
+   *  figures at all. Defaults to false so a caller that forgets to pass it
+   *  hides the fields rather than showing them. */
+  canEditFinancials?: boolean;
 }
 
-export function SubcontractorForm({ existing }: SubcontractorFormProps) {
+export function SubcontractorForm({
+  existing,
+  financials,
+  canEditFinancials = false,
+}: SubcontractorFormProps) {
   const router = useRouter();
   const isEdit = !!existing;
 
@@ -34,9 +49,11 @@ export function SubcontractorForm({ existing }: SubcontractorFormProps) {
     insurance_expiry: existing?.insurance_expiry || '',
     rating: existing?.rating ?? 0,
     rating_notes: existing?.rating_notes || '',
-    ein: existing?.ein || '',
-    default_hourly_rate: existing?.default_hourly_rate ?? '',
-    default_markup_percent: existing?.default_markup_percent ?? '',
+    // #132 — these three come from `financials`, not from the sub row. They
+    // are no longer columns on `subcontractors`.
+    ein: financials?.ein || '',
+    default_hourly_rate: financials?.default_hourly_rate ?? '',
+    default_markup_percent: financials?.default_markup_percent ?? '',
     preferred: existing?.preferred ?? false,
     notes: existing?.notes || '',
   });
@@ -83,30 +100,56 @@ export function SubcontractorForm({ existing }: SubcontractorFormProps) {
       insurance_expiry: form.insurance_expiry || null,
       rating: form.rating > 0 ? form.rating : null,
       rating_notes: form.rating_notes.trim() || null,
+      preferred: form.preferred,
+      notes: form.notes.trim() || null,
+    };
+
+    // TECH_DEBT #132 [S122] — THE THREE OWNER/ADMIN FIGURES ARE A SECOND WRITE,
+    // TO A SECOND TABLE, UNDER A SECOND POLICY. `ein`, `default_hourly_rate`
+    // and `default_markup_percent` are deliberately absent from the payload
+    // above: those columns no longer exist on `subcontractors`.
+    const financials = {
       ein: form.ein.trim() || null,
       default_hourly_rate:
         form.default_hourly_rate !== '' ? Number(form.default_hourly_rate) : null,
       default_markup_percent:
         form.default_markup_percent !== '' ? Number(form.default_markup_percent) : null,
-      preferred: form.preferred,
-      notes: form.notes.trim() || null,
     };
 
     let result;
+    let subId = existing?.id;
     if (isEdit && existing) {
       result = await updateSubcontractor(existing.id, payload);
     } else {
       result = await createSubcontractor(payload);
+      subId = result.success ? (result as { id?: string }).id : undefined;
     }
+
+    // The sub itself is the parent record; if it did not save there is nothing
+    // to attach financials to, so this returns rather than writing an orphan.
+    if (!result.success || !subId) {
+      setSaving(false);
+      setError(result.error || 'Failed to save.');
+      return;
+    }
+
+    // Two tables, no transaction — the A-67b precedent. The sub is already
+    // saved and STAYS saved; a refused financials write is reported as itself
+    // rather than as a failure of the whole form, because the two halves have
+    // different policies and the user needs to know which one refused.
+    const fin = await saveSubcontractorFinancials(subId, financials);
 
     setSaving(false);
 
-    if (result.success) {
-      router.push('/dashboard/subcontractors');
-      router.refresh();
-    } else {
-      setError(result.error || 'Failed to save.');
+    if (!fin.success) {
+      setError(
+        `The subcontractor was saved. The rate, markup and EIN were not: ${fin.error ?? 'refused'}`
+      );
+      return;
     }
+
+    router.push('/dashboard/subcontractors');
+    router.refresh();
   }
 
   const inputStyle: React.CSSProperties = {
@@ -244,48 +287,61 @@ export function SubcontractorForm({ existing }: SubcontractorFormProps) {
             style={inputStyle}
           />
         </div>
-        <div style={gridTwoCol}>
-          <div>
-            <label style={labelStyle}>EIN (Tax ID)</label>
-            <input
-              name="ein"
-              value={form.ein}
-              onChange={handleChange}
-              style={inputStyle}
-              placeholder="XX-XXXXXXX"
-            />
-          </div>
-          <div>
-            <label style={labelStyle}>Default Hourly Rate</label>
-            <input
-              name="default_hourly_rate"
-              type="number"
-              step="0.01"
-              value={form.default_hourly_rate}
-              onChange={handleChange}
-              style={inputStyle}
-              placeholder="0.00"
-            />
-          </div>
-        </div>
-        <div style={gridTwoCol}>
-          <div>
-            <label style={labelStyle}>Standard Markup %</label>
-            <input
-              name="default_markup_percent"
-              type="number"
-              step="0.5"
-              value={form.default_markup_percent}
-              onChange={handleChange}
-              style={inputStyle}
-              placeholder="e.g. 20"
-            />
-            <p style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.25rem' }}>
-              Auto-applied when this vendor is used in estimates
-            </p>
-          </div>
-          <div></div>
-        </div>
+        {/* TECH_DEBT #132 [S122] — OWNER/ADMIN ONLY, AND HIDDEN RATHER THAN
+            DISABLED FOR EVERYONE ELSE.
+            A PM can reach this page (the route admits owner/admin/PM) but
+            cannot read or write `subcontractor_financials`. Rendering these
+            three inputs to them would show BLANK fields — the RLS-refused read
+            returns null — which reads as "this sub has no rate" rather than
+            "you may not see it", and any edit would be refused on save. The
+            hiding is cosmetic on top of the real floor, exactly as it is on
+            mobile's M-27; the database is what refuses. */}
+        {canEditFinancials ? (
+          <>
+            <div style={gridTwoCol}>
+              <div>
+                <label style={labelStyle}>EIN (Tax ID)</label>
+                <input
+                  name="ein"
+                  value={form.ein}
+                  onChange={handleChange}
+                  style={inputStyle}
+                  placeholder="XX-XXXXXXX"
+                />
+              </div>
+              <div>
+                <label style={labelStyle}>Default Hourly Rate</label>
+                <input
+                  name="default_hourly_rate"
+                  type="number"
+                  step="0.01"
+                  value={form.default_hourly_rate}
+                  onChange={handleChange}
+                  style={inputStyle}
+                  placeholder="0.00"
+                />
+              </div>
+            </div>
+            <div style={gridTwoCol}>
+              <div>
+                <label style={labelStyle}>Standard Markup %</label>
+                <input
+                  name="default_markup_percent"
+                  type="number"
+                  step="0.5"
+                  value={form.default_markup_percent}
+                  onChange={handleChange}
+                  style={inputStyle}
+                  placeholder="e.g. 20"
+                />
+                <p style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.25rem' }}>
+                  Auto-applied when this vendor is used in estimates
+                </p>
+              </div>
+              <div></div>
+            </div>
+          </>
+        ) : null}
         <div style={{ marginTop: '1rem' }}>
           <label
             style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}

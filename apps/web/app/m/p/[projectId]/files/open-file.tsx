@@ -42,13 +42,17 @@ import { useState } from 'react';
 // CUT: an in-app document viewer. The browser handles the MIME type or it does
 // not — `files` permits arbitrary uploads and this spec designs no fallback.
 //
-// ⚠️ TECH_DEBT #142 IS VISIBLE FROM HERE, and is flagged rather than fixed.
-// /api/files/signed-url performs no auth check of its own and answers 500 when
-// RLS refuses — where CLAUDE.md requires 403 with its own message. Not a hole
-// (storage RLS still refuses the path), but it means the copy below cannot
-// honestly distinguish "you may not open this" from "storage is down", so it
-// says neither. Fixing the route's error contract is #142's job, not this
-// component's.
+// ✅ TECH_DEBT #142 CLOSED [S122] — AND THE COPY BELOW CHANGED BECAUSE OF IT.
+// /api/files/signed-url used to answer 500 for everything, because
+// `getSignedUrl` discarded Storage's error before the route ever saw it. The
+// cause is now preserved (`signedUrlFor`) and the route answers 403 when
+// Storage refuses the path, 500 only for a genuine failure. So this component
+// can finally say which — and does, below.
+//
+// It still adds NO role logic to decide that. It reports the STATUS THE SERVER
+// RETURNED. That distinction is the whole of §4.11.6: a UI that infers a
+// permission is a second gate that can disagree with RLS; a UI that renders the
+// answer RLS already gave cannot.
 
 export function OpenFileButton({
   path,
@@ -61,7 +65,7 @@ export function OpenFileButton({
   children: React.ReactNode;
   className?: string;
 }) {
-  const [state, setState] = useState<'idle' | 'opening' | 'error'>('idle');
+  const [state, setState] = useState<'idle' | 'opening' | 'error' | 'denied'>('idle');
 
   async function open() {
     if (state === 'opening') return;
@@ -69,7 +73,10 @@ export function OpenFileButton({
     try {
       const response = await fetch(`/api/files/signed-url?path=${encodeURIComponent(path)}`);
       if (!response.ok) {
-        setState('error');
+        // 403 is the server saying RLS refused this path (#142). Anything else
+        // is a failure, and the two must not read the same to a field user
+        // standing in front of a file they cannot open.
+        setState(response.status === 403 ? 'denied' : 'error');
         return;
       }
       const body = (await response.json()) as { url?: string };
@@ -99,10 +106,17 @@ export function OpenFileButton({
       {state === 'opening' ? (
         <span className="shrink-0 font-mono text-[11px] text-m6m-muted">opening…</span>
       ) : null}
+      {state === 'denied' ? (
+        // Storage refused the path. It does NOT distinguish "you may not read
+        // this" from "it is not there" — that conflation is deliberate on
+        // Storage's side (anti-enumeration), so the copy covers both rather
+        // than naming the one we cannot verify.
+        <span data-testid="m-file-denied" className="shrink-0 text-[12px] text-m6m-danger">
+          No access
+        </span>
+      ) : null}
       {state === 'error' ? (
-        // Deliberately does not name a cause. See #142 above: the route cannot
-        // tell us whether this was a permission or a failure, and CLAUDE.md's
-        // rule is that an error never names a cause that has not been verified.
+        // A genuine failure, now that a refusal has its own branch above.
         <span data-testid="m-file-error" className="shrink-0 text-[12px] text-m6m-danger">
           Could not open
         </span>
