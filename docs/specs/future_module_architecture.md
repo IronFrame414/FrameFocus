@@ -185,7 +185,24 @@ Both tables offline-ready (client-generated UUIDs, device timestamps).
 
 Formal incident form, separate from the daily-log hazard flag; OSHA fields; auto-PDF to M3; company-wide incident log.
 
-- **Who can file:** any assigned member. **Notifications:** Owner, Admin, assigned PM, **and Foreman**. **Project link:** optional (`project_id` nullable) — shop/yard incidents allowed.
+- **Who can file:** any assigned member. **Notifications: SUPERSEDED — see below.** **Project link:** optional (`project_id` nullable) — shop/yard incidents allowed.
+
+> **AMENDED by `docs/specs/notifications-architecture.md` (ND-6), Session 123 — that spec wins.**
+> _Original clause, quoted not rewritten:_ _"**Notifications:** Owner, Admin, assigned PM, **and
+> Foreman**."_
+>
+> That flat list was a **third** statement of one rule — it matched neither the S89 notifications
+> architecture (which scoped recipients to the project) nor the code that actually shipped at S87.
+> **The shipped rule wins [Josh, S123]:** every profile whose role ranks **strictly above the
+> submitter's** within `owner, admin, project_manager, foreman` — **company-wide and
+> assignment-independent** — with an **Owner→Admin floor** so an Owner-filed incident is never
+> silent. Implementation: `computeIncidentRecipients()`, `apps/web/lib/services/incident-notify.ts:32`.
+>
+> **Why company-wide and not "assigned PM"** — the reason is the nullable `project_id` on the very
+> next line of this section: an incident in the shop or yard has no project, so an assignment-scoped
+> recipient rule **silences exactly the case this section deliberately allows**. The shipped comment
+> puts it directly: _"notification, not the log listing, is what reaches leadership about an
+> off-project injury."_
 
 ### 7.4 Material deliveries
 
@@ -243,6 +260,14 @@ Each gets its own interview (§2) before any spec. At architecture time, flag th
 
 - [ ] AI Layer (pgvector for estimating; GPT-4o drafting for M9 client summaries, M10 reporting insights, M11 marketing)
 - [ ] Workflow Automation Engine (Supabase DB webhooks → Edge Functions; built P2, extended P3)
+- [ ] **Notifications & Chat** — spec: [`notifications-architecture.md`](notifications-architecture.md).
+      Owns storage, the notification surfaces, the unread badge, retention, notify-hours, and
+      delivery (in-app + Web Push + internal email) through a single `notify()` entry point.
+      **Modules are consumers and never write notification rows directly.** Project chat rides the
+      same system (@mention is its only trigger). **GATES M8 launch.**
+      _(Registered [S123]. It had described itself as a §9 cross-cutting system since S89 and was
+      never listed here — so the one document that enumerates cross-cutting systems omitted the one
+      that gates a module.)_
 
 ---
 
