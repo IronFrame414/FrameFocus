@@ -29,7 +29,7 @@ repo would make every cross-document citation ambiguous. `ND-` reads as
 | # | Decision | Ruling |
 | --- | --- | --- |
 | ND-1 | Module scope | **Notifications core + chat. The PWA leg is DONE.** [S123, Josh] M6M shipped the manifest, icon set, service worker, offline fallback and the entire `/m` tree. §1 and §6 are rewritten to record that rather than to spec it. Chat stays in scope by Josh's S89 ruling; **§7.2's severability escape hatch stands** — if chat slips, the M8 gate is satisfied by notifications core alone. |
-| ND-2 | Recipient identity | **`profiles`, never `company_members`.** [S123, Josh] Forced by the schema: `company_members.member_type` ∈ `{crew, subcontractor}` only, Owner/Admin/PM have **no row at all**, and **34 of 41 live rows have `profile_id IS NULL`** (no login). Follow the shipped precedent — `computeIncidentRecipients` queries `profiles` (`incident-notify.ts:41-47`). |
+| ND-2 | Recipient identity | **`profiles`, never `company_members`.** [S123, Josh] Follow the shipped precedent — `computeIncidentRecipients` queries `profiles` (`incident-notify.ts:41-47`). Reasons corrected at build time, see the ⚠ below. |
 | ND-3 | Chat access + @mention list | **Also `profiles`, gated by `can_view_project()`.** [S123, Josh] Owner/Admin reach every project **by role**; PM reaches assigned projects. _S89 §4's rule, quoted not rewritten: **"`chat_messages`… RLS: project assignees only."** Superseded_ — `project_assignments.member_id` points at `company_members`, so "assignees" both **misses Owner and Admin entirely** (they are not assignment rows) and **includes 34 people who cannot sign in**. |
 | ND-4 | Desktop push | **A second, push-ONLY service worker at `/dashboard`.** [S123, Josh] Not a scope widening of `public/sw.js`. Push handlers only — no `fetch` handler, no caching, nothing that can go stale. Rationale in §5.3. |
 | ND-5 | Incident override | **ALL incident types override notify-hours.** [S123, Josh] No severity column exists on `safety_incidents` and **none is added**. R5's serious/not-serious distinction **disappears** rather than acquiring a field. |
@@ -393,6 +393,31 @@ Casey is still clocked in at 4:00 PM; still clocked in at 5:00 PM (overtime).
 ## §4 — Data model
 
 Four new tables. **Every `*_profile_id` below is `profiles.id` per ND-2.**
+
+> **⚠ ND-2's REASONING WAS CORRECTED AT BUILD TIME [S123, slice 1]. The ruling is unchanged.**
+>
+> _The original justification, quoted not deleted because it was wrong and a reader must be able to
+> see that it was:_ _"`company_members.member_type` ∈ `crew`, `subcontractor` only… **Owner, Admin
+> and PM have no row at all**… so an FK to `company_members` **cannot address the Owner**."_
+>
+> **False.** `member_type` is a **staff-vs-subcontractor discriminator, not a role**: `owner`,
+> `admin`, `project_manager`, `foreman` and `crew_member` **all map to `member_type = 'crew'`**. The
+> Owner does have a member row. A live harness caught this on the first run after the migration —
+> the assertion had been written to pin the ruling's premise, and it pinned a false one.
+>
+> **The three reasons that are true, verified S123:**
+>
+> 1. **34 of 41 member rows have `profile_id IS NULL`** — non-login labour records for time tracking
+>    and punch assignment. A member-keyed recipient addresses people who can read nothing.
+> 2. **`client` has no member row at all** — 7 of 8 profiles have one, and the client is the
+>    exception. A member-keyed table cannot address a client, which Module 9's portal will need.
+> 3. **`company_members` carries no role — this is the strongest reason and was under-weighted.**
+>    R7's floor is applied per recipient at write time and keys on `profiles.role`. `member_type`
+>    cannot tell an Owner from a crew member, so a member-keyed recipient has to join to `profiles`
+>    to be rendered at all, at which point the member row is doing no work.
+>
+> **The one place `company_members` remains correct** is punch assignment —
+> `punch_list_items.assignee_id` references it, and subcontractors genuinely live there (§13).
 
 ### 4.1 `notifications`
 

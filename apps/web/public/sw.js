@@ -193,3 +193,120 @@ self.addEventListener('fetch', (event) => {
     );
   }
 });
+
+// ---------------------------------------------------------------------------
+// WEB PUSH [S123] — notifications slice 1. ND-4, spec §5.3.
+// ---------------------------------------------------------------------------
+// PURELY ADDITIVE. Nothing above this line changed. The queue's retry hook, the
+// navigation fallback chain and the immutable-only static cache are untouched —
+// this worker gained three listeners and no new responsibilities.
+//
+// VERSION IS DELIBERATELY NOT BUMPED. `activate` deletes every cache whose name
+// does not start with VERSION, so a bump would evict every phone's warm shell to
+// ship a change that touches no cached bytes. The S121 bump was needed because
+// the cache CONTENTS were poisoned; this is not that.
+//
+// ⚠️ THE SAME THREE HANDLERS EXIST IN public/sw-dashboard.js, DUPLICATED ON
+//    PURPOSE. A worker in public/ is plain JS and cannot import from TypeScript
+//    or from another worker — the identical tax that makes 'm6m-queue-sync' a
+//    duplicated string literal asserted in two files. The unit suite asserts
+//    both workers carry all three listeners rather than pretending they share
+//    code. Do not "fix" this by widening this worker's scope to '/' — that is
+//    exactly what ND-4 ruled against, because it would put /dashboard behind
+//    the static-cache policy above, which produced a real hydration failure on
+//    a real handset at S121.
+
+self.addEventListener('push', (event) => {
+  // ⚠️ A PUSH MUST ALWAYS RESULT IN A SHOWN NOTIFICATION. Chrome tracks a
+  // "budget" for pushes that display nothing and will eventually revoke the
+  // subscription. So every branch below — including a malformed payload —
+  // shows something.
+  event.waitUntil(
+    (async () => {
+      let payload = {};
+      try {
+        payload = event.data ? event.data.json() : {};
+      } catch {
+        // Non-JSON payload. Still show a notification.
+      }
+
+      const title = payload.title || 'FrameFocus';
+      await self.registration.showNotification(title, {
+        body: payload.body || '',
+        icon: '/icon-192.png',
+        badge: '/icon-192.png',
+        // ND-11: the SENDER resolved this for THIS subscription's surface.
+        // This worker holds no link table and needs none.
+        data: { url: payload.url || '/m/notifications', id: payload.notificationId },
+        tag: payload.tag || undefined,
+      });
+    })()
+  );
+});
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || '/m/notifications';
+
+  event.waitUntil(
+    (async () => {
+      const clients = await self.clients.matchAll({
+        type: 'window',
+        includeUncontrolled: true,
+      });
+      // Focus an open window on this origin and navigate it, rather than
+      // opening a second copy of an installed PWA — which on iOS looks to the
+      // user like the app restarting.
+      for (const client of clients) {
+        if ('focus' in client) {
+          await client.focus();
+          if ('navigate' in client) {
+            try {
+              await client.navigate(url);
+            } catch {
+              // Cross-origin or otherwise refused: the focus still happened.
+            }
+          }
+          return;
+        }
+      }
+      if (self.clients.openWindow) await self.clients.openWindow(url);
+    })()
+  );
+});
+
+self.addEventListener('pushsubscriptionchange', (event) => {
+  // Browsers rotate endpoints without warning and without telling the user.
+  // Omitting this handler is how push dies quietly weeks after it shipped: the
+  // stored endpoint 410s on the next send, gets pruned, and nothing re-registers.
+  event.waitUntil(
+    (async () => {
+      try {
+        const applicationServerKey =
+          (event.oldSubscription && event.oldSubscription.options
+            ? event.oldSubscription.options.applicationServerKey
+            : null) || null;
+        if (!applicationServerKey) return;
+
+        const fresh = await self.registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey,
+        });
+
+        await fetch('/api/push/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            subscription: fresh.toJSON(),
+            surface: 'mobile',
+            previousEndpoint:
+              event.oldSubscription ? event.oldSubscription.endpoint : null,
+          }),
+        });
+      } catch {
+        // Nothing useful to do here — the next enrolment check in the page
+        // re-subscribes.
+      }
+    })()
+  );
+});

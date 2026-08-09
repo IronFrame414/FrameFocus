@@ -875,6 +875,8 @@ export type Database = {
           license_number: string | null
           logo_url: string | null
           name: string
+          notify_hours_end: string
+          notify_hours_start: string
           ot_threshold_hours: number
           paid_break_cap_minutes: number
           phone: string | null
@@ -933,6 +935,8 @@ export type Database = {
           license_number?: string | null
           logo_url?: string | null
           name: string
+          notify_hours_end?: string
+          notify_hours_start?: string
           ot_threshold_hours?: number
           paid_break_cap_minutes?: number
           phone?: string | null
@@ -991,6 +995,8 @@ export type Database = {
           license_number?: string | null
           logo_url?: string | null
           name?: string
+          notify_hours_end?: string
+          notify_hours_start?: string
           ot_threshold_hours?: number
           paid_break_cap_minutes?: number
           phone?: string | null
@@ -3712,6 +3718,85 @@ export type Database = {
           },
         ]
       }
+      notifications: {
+        Row: {
+          body: string | null
+          company_id: string
+          created_at: string | null
+          expires_at: string | null
+          id: string
+          link_key: string | null
+          link_params: Json
+          project_id: string | null
+          read_at: string | null
+          recipient_profile_id: string
+          source_id: string | null
+          source_table: string | null
+          starred: boolean
+          title: string
+          type: string
+          updated_at: string | null
+        }
+        Insert: {
+          body?: string | null
+          company_id: string
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          link_key?: string | null
+          link_params?: Json
+          project_id?: string | null
+          read_at?: string | null
+          recipient_profile_id: string
+          source_id?: string | null
+          source_table?: string | null
+          starred?: boolean
+          title: string
+          type: string
+          updated_at?: string | null
+        }
+        Update: {
+          body?: string | null
+          company_id?: string
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          link_key?: string | null
+          link_params?: Json
+          project_id?: string | null
+          read_at?: string | null
+          recipient_profile_id?: string
+          source_id?: string | null
+          source_table?: string | null
+          starred?: boolean
+          title?: string
+          type?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_recipient_profile_id_fkey"
+            columns: ["recipient_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       phases: {
         Row: {
           company_id: string
@@ -4649,6 +4734,75 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          device_label: string | null
+          endpoint: string
+          id: string
+          is_deleted: boolean | null
+          last_seen_at: string | null
+          p256dh: string
+          profile_id: string
+          surface: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          auth: string
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          device_label?: string | null
+          endpoint: string
+          id?: string
+          is_deleted?: boolean | null
+          last_seen_at?: string | null
+          p256dh: string
+          profile_id: string
+          surface: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          auth?: string
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          device_label?: string | null
+          endpoint?: string
+          id?: string
+          is_deleted?: boolean | null
+          last_seen_at?: string | null
+          p256dh?: string
+          profile_id?: string
+          surface?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_subscriptions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "push_subscriptions_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -6255,6 +6409,7 @@ export type Database = {
       }
       get_my_company_id: { Args: never; Returns: string }
       get_my_member_id: { Args: never; Returns: string }
+      get_my_profile_id: { Args: never; Returns: string }
       get_my_role: { Args: never; Returns: string }
       get_or_create_misc_budget_item: {
         Args: { p_project_id: string }

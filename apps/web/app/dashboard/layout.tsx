@@ -4,6 +4,7 @@ import { getOpenSession } from '@/lib/services/time-tracking';
 import { getMyMember } from '@/lib/services/members';
 import { getCompanyTimeSettings } from '@/lib/services/company';
 import { DashboardShell } from './dashboard-shell';
+import { RegisterPushSw } from './register-push-sw';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -47,6 +48,9 @@ export default async function DashboardLayout({ children }: { children: React.Re
       timeZone={timeSettings.timezone}
       gpsMode={timeSettings.gpsClockMode}
     >
+      {/* ND-4 — registers the push-only desktop worker. Renders nothing, and
+          registering is not subscribing: no prompt fires from here. */}
+      <RegisterPushSw />
       {children}
     </DashboardShell>
   );
