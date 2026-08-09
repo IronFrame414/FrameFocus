@@ -11,6 +11,12 @@ import {
 } from '@/lib/services/email-service';
 import { generateChangeOrderPDF, storeSignedCoPDF } from '@/lib/services/co-pdf-service';
 import { ChangeOrderEmail } from '@/lib/email/templates/change-order-email';
+import { notify } from '@/lib/notify/notify';
+import {
+  getManagerNotifyRecipients,
+  getProjectPmNotifyRecipients,
+  profileForUserId,
+} from '@/lib/notify/recipients';
 
 // 5D §6 — CO signing-session lifecycle, mirroring the M4 pattern
 // (signing-service.ts): all functions take the service-role client
@@ -195,6 +201,24 @@ export async function completeCoSignature(
     );
   }
 
+  // §3e in-app + push. Ordered BEFORE the email for the same reason slice 3
+  // ordered the incident that way: this is the channel that reaches a phone in
+  // seconds, and notifyCoSigned() below makes a Resend round trip per recipient
+  // inside this request. Wrapped because the signature is already binding —
+  // notify() does not throw for a delivery failure, but a bug inside it must not
+  // cost the client their signed-PDF email.
+  try {
+    await notifyCoSignedInApp(admin, {
+      changeOrderId: co.id,
+      signerName: params.signerName,
+    });
+  } catch (err) {
+    console.error(
+      `notifyCoSignedInApp failed for CO ${co.co_number} (${co.id}):`,
+      err instanceof Error ? err.message : 'unknown'
+    );
+  }
+
   // Email v2 to both parties (spec §7.2). Best-effort — a failed notification
   // must not roll back the binding signature (mirrors notifyManagers).
   await notifyCoSigned(admin, {
@@ -208,6 +232,99 @@ export async function completeCoSignature(
   });
 
   return { success: true };
+}
+
+/**
+ * §3e — in-app rows + push for a signed CO. THE CANONICAL R7 CASE.
+ *
+ * ===========================================================================
+ * THREE AUDIENCES, AND THE THIRD ONE GETS NO LINK ON PURPOSE
+ * ===========================================================================
+ *   Owner / Admin        "Alvarez CO #3 signed by Ruiz — $4,200"   linked
+ *   The CO's author      same, INCLUDING the amount                linked
+ *   Other project PMs    "Alvarez CO #3 signed by Ruiz"            NO LINK
+ *
+ * The no-link row looks like a product choice and is not one. The S121 read
+ * floor on `change_orders` is "Owner/Admin see all; a PM sees only change orders
+ * they created". A PM who did not author CO #3 CANNOT SELECT THE ROW, so a link
+ * would open a 404 or an empty screen — the notification would be an invitation
+ * to a dead end. Text-only is what the floor leaves available, not what anyone
+ * preferred. §10.1 renders a null-link row as a <div>, not a <button>, so it
+ * does not even look tappable.
+ *
+ * ⚠️ IF PROJECT PMs EVER NEED TO OPEN OTHER PEOPLE'S COs, THE THING THAT CHANGES
+ * IS THE FLOOR — TECH_DEBT #117 — NOT THIS FUNCTION. Do not "fix" the missing
+ * link by widening it here. CLAUDE.md's own warning applies: the obvious fix
+ * breaks CO authoring for PMs.
+ *
+ * Foreman, crew and subcontractors receive nothing: they cannot see the row, and
+ * ND-15 does not scope subs to client COs. That is expressed by the recipient
+ * set simply not containing them, rather than by a filter someone could relax.
+ */
+export async function notifyCoSignedInApp(
+  admin: SupabaseClient<Database>,
+  params: { changeOrderId: string; signerName: string | null }
+): Promise<void> {
+  const { data: co } = await admin
+    .from('change_orders')
+    .select('id, co_number, net_delta, project_id, company_id, created_by, project:projects(name)')
+    .eq('id', params.changeOrderId)
+    .single();
+  if (!co) return;
+
+  const projectName = (co as unknown as { project: { name: string } | null }).project?.name ?? 'project';
+  const signer = params.signerName ?? 'the client';
+
+  const author = await profileForUserId(admin, co.created_by);
+  const managers = await getManagerNotifyRecipients(admin, co.company_id);
+  const projectPms = co.project_id
+    ? await getProjectPmNotifyRecipients(admin, co.project_id)
+    : [];
+
+  // ORDER MATTERS AND IS LOAD-BEARING. notify() de-duplicates by profile id and
+  // keeps the FIRST occurrence, so an author who is also a project PM must
+  // appear in the author slot — otherwise the PM entry wins and the author loses
+  // the amount and the link to their own change order.
+  const recipients = [...managers, ...(author ? [author] : []), ...projectPms];
+
+  const authorProfileId = author?.profileId ?? null;
+  const amount =
+    co.net_delta === null
+      ? null
+      : Math.abs(Number(co.net_delta)).toLocaleString('en-US', {
+          style: 'currency',
+          currency: 'USD',
+        });
+
+  await notify({
+    admin,
+    companyId: co.company_id,
+    type: 'signed',
+    recipients,
+    render: (recipient) => {
+      // R7, applied at WRITE time and per recipient. The two audiences get
+      // genuinely different STORED BYTES — not one row rendered two ways, which
+      // is the UI-layer enforcement #117 exists to record as insufficient.
+      const maySeeMoney =
+        recipient.role === 'owner' ||
+        recipient.role === 'admin' ||
+        recipient.profileId === authorProfileId;
+
+      const base = `${projectName} ${co.co_number} signed by ${signer}`;
+      if (maySeeMoney && amount) {
+        return { title: `${base} — ${amount}` };
+      }
+      // linkKey null — see the read-floor note above. `undefined` would fall
+      // back to the call-level key and hand a PM a link to a row they cannot
+      // read, which is the whole failure this branch exists to prevent.
+      return { title: base, linkKey: null };
+    },
+    linkKey: 'co',
+    linkParams: { id: co.id, projectId: co.project_id ?? undefined },
+    projectId: co.project_id,
+    source: { table: 'change_orders', id: co.id },
+    tag: `co-signed-${co.id}`,
+  });
 }
 
 /**
