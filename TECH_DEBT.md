@@ -1,6 +1,7 @@
 # TECH_DEBT.md — FrameFocus
 
-> **Last updated:** August 8, 2026 — S120 (**#145 FIXED, and its diagnosis was WRONG.** Not memory: `/dev/shm` is **64 MB**, the Docker default, and Chromium's renderer dies when it fills. `oom_kill` is **0** in `/proc/vmstat` and in every cgroup — nothing on this box was ever OOM-killed. One flag, `--disable-dev-shm-usage`, took the same 217-test group from **53 failures to 2** in a single unsplit process, and made it faster. **The four-process split is retired.** Also: M6M §6 camera capture + M-22, and §4.6's M-6 daily-logs screen, replacing a placeholder that had let A-12d/A-12e pass on a stub)
+> **Last updated:** August 9, 2026 — S123 (**#145 CLOSED as MITIGATED — and the `oom_kill 0` argument that made its cause "unknown" was INVALID.** The kernel is not the only thing that can kill a renderer: V8 aborts it itself on allocation failure, leaving `oom_kill` at 0 in exactly the case being excluded. Reproduced the signature on demand — `V8 javascript OOM (Reached heap limit)` on stderr, then **`page.goto: Page crashed` on the NEXT navigation**, which is why the report always named a bystander test. Also established: **no crash dump was ever possible** (`chrome-headless-shell` ships no crashpad handler; `--enable-crash-reporter` is fatal at launch) and **no local trace was ever captured** (`retries: 0` + `on-first-retry`). Measured for the first time: fds **3.9k/524k**, pids **396/9.5k**, Chromium RSS **flat**, `next-server` the only thing that grows. Still did NOT reproduce naturally in ~347 executions. **Do not move local e2e to a production build** — it does not build on this box. Residue filed as **#147**. Also: **#132 fallout** — a trigger outlived its columns and no PM could edit any sub or vendor)
+> **Previously:** August 8, 2026 — S120 (**#145 FIXED, and its diagnosis was WRONG.** Not memory: `/dev/shm` is **64 MB**, the Docker default, and Chromium's renderer dies when it fills. `oom_kill` is **0** in `/proc/vmstat` and in every cgroup — nothing on this box was ever OOM-killed. One flag, `--disable-dev-shm-usage`, took the same 217-test group from **53 failures to 2** in a single unsplit process, and made it faster. **The four-process split is retired.** Also: M6M §6 camera capture + M-22, and §4.6's M-6 daily-logs screen, replacing a placeholder that had let A-12d/A-12e pass on a stub)
 > **Previously:** August 7, 2026 — S120 (**#145 RAISED** — the Codespace OOMs during a full Playwright chunk and Chromium's renderer is killed mid-navigation: 7.9 GB total, **130 MB free**, no swap, `next-server` at **1.4 GB RSS**. Presents as `Page crashed` on a different test each run, which reads as a flake and is a resource ceiling. Worked around by splitting the e2e gate into **four** processes with a server restart; **#135's `next build && next start` would remove the cause instead**. Also: **A-30f** — the detail views had no back chevron, found on a phone)
 > **Previously:** August 7, 2026 — S119 (**#143 AND #144 BOTH CLOSED.** #143: the seed now assigns PM/foreman/crew to the m-sections project — it created exactly one row, the foreman's, confirming the diagnosis — and the crew-for-foreman substitutions are reverted. **The reachability guard needed a new negative**: with every company-A identity reaching every company-A project, the table no longer contained a `false`, so it now asserts the cross-tenant refusal against company B as well. #144 below)
 > **Previously:** August 7, 2026 — S119 (**#144 CLOSED** — the Part C suite cleans up at both ends and the live harnesses now create their own data, so they run standalone. **Proven by two back-to-back runs**: run 2's pre-clean sweep removed ZERO, and the row counts after each run were identical at the fixture baseline. A side-effect closed a separate owed item — the project now starts each run with **exactly one punch list**, which is A-67's case, asserted rather than hoped for)
@@ -345,15 +346,54 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
 - **#142 (original entry)** **`/api/files/signed-url` answers 500 where a permission failure should answer 403, and logs nothing.** `app/api/files/signed-url/route.ts` performs **no auth check of its own** — it signs whatever `path` it is given. **That is not a hole:** `getSignedUrl` (`files.ts:70`) uses the **user's** RLS-scoped server client, so `createSignedUrl` on `project-files` is bound by `project_files_select_non_client` and a caller cannot sign a path they cannot read. **The defect is the error contract.** RLS refusal surfaces as `getSignedUrl` returning `null`, and the route answers `{ error: 'Could not sign URL' }` with **status 500**. CLAUDE.md is explicit: *"Auth and permission failures return 401/403 with their own message — never fall through to a 'not found' path"* and *"every error response logs the real cause server-side with the route and the failing check"* — this route does neither, so a permission denial is indistinguishable from a storage outage in both the client response and the logs. Pre-existing; **M6M D-53 makes this mobile's file-open path** (M-16 rows become tappable), which is why it is filed now. **Not a reason to add a UI role check** — M6M §4.11.6's "RLS does the gating, not the UI" rule stands. Observed Session 108.
 
-- **#145 — ⚠️ STAYS OPEN [S122]. Closing it was considered and REFUSED; here is why.** #135 has landed (`f393a71`), and this entry's own recommendation was that #135 was the structural fix. Two facts block the closure, and the second is decisive:
+- **#145 — ✅ CLOSED [S123] as MITIGATED, not fixed. The MECHANISM is now demonstrated; the exclusion that made it "unknown" was WRONG.** Closed on evidence, not on the CI result — the CI result only retired the easier of the two conditions.
 
-  **1. #135 changed CI ONLY. Local still runs `next dev`.** `playwright.config.ts:172` is `command: process.env.CI ? 'npm run start' : 'npm run dev'`, and that is deliberate — #135 argues a 175s build on every local iteration is a bad trade. But **every incident this item records happened LOCALLY in the Codespace**, not in CI. So the 1.4 GB dev server — the only resource growth ever measured here — is still in the loop for exactly the environment where the symptom appears. Closing on #135 would claim a fix for the case that is unchanged.
+  **1. THE `oom_kill 0` ARGUMENT WAS INVALID, AND IT IS WHY THIS SAT UNSOLVED.** S120/S121 read `/proc/vmstat oom_kill 0` and every cgroup's `memory.events oom_kill 0` and concluded "not memory". That inference only holds if **the kernel is the only thing that can kill a renderer**. It is not. V8 and Chromium abort a renderer themselves on allocation failure, and the kernel never participates, so the counters stay at **0** in exactly the case being excluded. **The counters were right and the conclusion drawn from them was wrong.**
 
-  **2. #135's CI change has never actually run in CI.** `feature/m6m-mobile` **is not pushed** — verified S122, `git branch -r` has no `m6m` ref. So the workflow edit has not executed once. #135's own commit message set the condition in as many words: _"which is why #145 stays open only until this has run in CI."_ **That condition is not met.**
+  **2. THE SIGNATURE, REPRODUCED ON DEMAND.** Forced with `--js-flags=--max-old-space-size=48`, on this box, against this app:
 
-  Closing it now would repeat this entry's original sin in a new form — the first version confidently named OOM as the cause and was wrong, and "closed because a related fix landed" would be the same unearned confidence. The cause remains **unproven** (§6: it did not reproduce across four long runs). **What closes this:** push the branch, let CI run the production-build path green at least once, and confirm the local symptom either recurs or does not now that `#138`'s preflight and the four-process split are both in force. Until then it is open on the evidence, not on suspicion.
+  ```
+  [ERROR:v8_initializer.cc:969] V8 javascript OOM (Reached heap limit).
+  page.evaluate: Target crashed
+  page.goto: Page crashed          <- #145's exact error text
+  isClosed: false   crash event: fired
+  <process did exit: exitCode=0, signal=null>   <- the browser exits CLEANLY
+  ```
 
-  _Original S120/S121 entry retained in full below — the way this was misdiagnosed is the useful part._
+  Every recorded observation falls out of this at once:
+  - **`Page crashed` is reported on the NEXT navigation**, not the one that exhausted memory. That IS the "different test each time, each passing alone" signature the entry called a resource ceiling. The test named in the report is a **bystander**.
+  - **`oom_kill` stays 0** (point 1).
+  - **The browser exits 0** — nothing looks wrong from outside.
+  - The only evidence is one stderr line, visible **only** under `DEBUG=pw:browser`.
+
+  **3. WHY NO ARTEFACT WAS EVER RECOVERABLE — both halves, settled.** S121 asked for "a trace and an `error-context.md` from the next occurrence". Neither was ever obtainable here:
+  - **No crash dump can exist on this browser.** Playwright launches `chrome-headless-shell`, whose build ships **no `chrome_crashpad_handler` binary** (the full `chromium-1234` build does have one), and Playwright passes **`--disable-breakpad`** in its own default args. Passing `--enable-crash-reporter` is **fatal at launch**: `posix_spawn … chrome_crashpad_handler: No such file or directory`, then SIGTRAP. Verified S123.
+  - **No trace is ever captured locally.** `trace: 'on-first-retry'` with `retries: process.env.CI ? 2 : 0` means the local value is **retries 0**, so there is never a first retry and never a trace. The artefact prior sessions kept asking for could not be produced by the config asking for it.
+
+  So: **nothing was written, and nobody looked in the one place that had it** (`DEBUG=pw:browser`). Both, not either.
+
+  **4. WHAT WAS MEASURED THIS TIME AND HAD NEVER BEEN.**
+
+  | | |
+  | --- | --- |
+  | fds in use / limit | **~3,900 / 524,288** — not binding |
+  | pids in use / cgroup max | **396 / 9,524** — not binding |
+  | Chromium processes across a long run | **6, flat** |
+  | Chromium total RSS across a long run | **365–541 MB, flat — does NOT accumulate** |
+  | `next-server` RSS | **grows to ~1.4 GB** — still the only thing that grows |
+  | CPUs | **2** (so local `workers: undefined` already resolves to 1) |
+
+  Contexts and pages do **not** leak. The browser side is flat. The dev server is the entire growth story, which is what makes this load-correlated.
+
+  **5. IT STILL DID NOT REPRODUCE NATURALLY.** ~347 test executions across two long instrumented runs this session, **zero** `Page crashed`. Combined with S121's four clean long runs, that is nine long runs without a natural occurrence. **So the mechanism is demonstrated and the specific historical incidents are still not proven to be it.** That distinction is deliberate: this entry has already named a cause too confidently twice (OOM, then `/dev/shm`), and "I reproduced a matching signature" is not "I reproduced the incident".
+
+  **6. ⚠️ DO NOT SWITCH LOCAL e2e TO `next build && next start`.** The obvious reading of #135 is that it removes the 1.4 GB dev server and therefore the cause. Two problems:
+  - It would remove the **largest contributor to pressure**, not the mechanism. A renderer can still exhaust its heap on a 320 MB server; it just becomes far less likely.
+  - **The production build does not currently complete on this box.** `npm run build` was killed twice with `Next.js build worker exited with code: null and signal: SIGTERM` at ~1.8 GB available, with ~2.3 GB held by VS Code extension hosts. Adopting it locally trades an intermittent, re-runnable test crash for a build that does not finish. **Local stays on `next dev`; CI owns the production path** (green on `9a2be5e`, full suite, 432 tests).
+
+  **WHY CLOSED RATHER THAN LEFT OPEN.** The symptom is local-only, load-correlated, recovers on re-run, and cannot reach `main` — CI runs the production path at `workers: 1` with `retries: 2` and is green. The diagnostic question that kept it open ("what is it?") is answered at the mechanism level, and the reasoning error that blocked it is corrected. What remains is an **instrumentation** gap, which is a different item and is filed as **#147** rather than kept here as an open question with no action attached.
+
+  _Original S120/S121 entry retained in full below — the way this was misdiagnosed is still the useful part, and point 1 above is now a second instance of the same lesson._
 
 - **#145 (original entry)** ~~**The Codespace runs out of memory during a full Playwright chunk, and Chromium's renderer is OOM-killed mid-navigation.**~~ — **FIXED S120, AND THE DIAGNOSIS ABOVE WAS WRONG.** The symptom was real and is gone; the cause named for it never happened. Kept in full rather than rewritten, because the way this was misdiagnosed is the useful part.
 
@@ -611,6 +651,24 @@ non-role portal identity; then build the sub-facing surface that issues these in
   **This matches **#82** exactly** — the punch-complete project gate, also service-layer-only, also ruled deliberate, also documented as such in CLAUDE.md rather than left implicit. Treat the two together: **if a trigger is ever built for one, build it for both**, because they are the same decision about the same table family and splitting them is how one silently becomes the exception.
 
   **What would reopen this:** a UI or API path that reaches the transition without going through `punch-client.ts`, or verify acquiring a financial or client-facing consequence. Pre-existing and desktop-wide; observed S108, ruled S122.
+
+- **#147** **PARTLY CLOSED [S123] — (a) is fixed, (b) STAYS OPEN.** Filed S123 as the actionable residue of **#145**, which closed as mitigated. Two separate things, kept together because both are about the local e2e loop telling the truth about itself.
+
+  **(a) ✅ CLOSED [S123] — the local run is no longer blind.** `playwright.config.ts` is now `retries: process.env.CI ? 2 : 1` (CI's 2 unchanged), so `trace: 'on-first-retry'` finally has a first retry to attach to and a local failure writes a trace instead of nothing.
+
+  **What was wrong:** locally `retries` was **0**, so there was never a first retry and **no trace was ever written**. The artefact S121 explicitly asked the next investigator to capture could not be produced by the config that asked for it. #145 sat undiagnosed for four sessions substantially because of this.
+
+  **Two costs, recorded in the config comment rather than left to be discovered:**
+  1. **A flaky test can now pass on retry and hide locally**, where before it failed loudly. Playwright's `flaky` line in the run summary is the only place it surfaces — read it. The same trade is already accepted in CI at `retries: 2`.
+  2. **`retries` and `trace` are coupled, and the coupling is invisible from either line.** Setting `retries` back to 0 deletes the evidence **without touching `trace:` at all** — which is precisely how this gap arose. Anyone wanting no local retries must switch `trace` to `retain-on-failure` in the same edit.
+
+  **Still owed, and deliberately not done here:** `DEBUG=pw:browser` is the ONLY channel carrying the cause of a renderer death (S123 — it is where `V8 javascript OOM (Reached heap limit)` appears), and nothing documents or sets it. A line in `scripts/e2e-preflight.sh`'s recommended invocation or an e2e README would close that; it is documentation, not config, so it did not belong in this change. **Do not enable crash dumps** — established S123 that `chrome-headless-shell` ships no `chrome_crashpad_handler` and `--enable-crash-reporter` is fatal at launch.
+
+  **(b) ⚠️ STAYS OPEN — a dev server died mid-run, silently, and the suite kept going.** S123, during a 236-test instrumented run: `next-server` vanished at ~13:20:12 with **no error in its log** — the log ends on a successful `Compiled /m/p/[projectId]/files in 1068ms` followed by a bare cursor-restore escape (`ESC[?25h`), the signature of a clean signal-triggered exit, not a crash. No kernel `oom_kill` (still 0 everywhere), no `JavaScript heap out of memory`. Playwright then ran **~80 more tests against a dead origin**, failing each in ~1.3s. The server was started by `scripts/e2e-preflight.sh`, so `reuseExistingServer` means Playwright did not own its lifecycle and should not have torn it down. **What sent the signal is not established.**
+
+  **Why it matters independently of #145:** a suite that keeps running after its origin disappears converts one infrastructure fault into a wall of unrelated red, which is the same misreporting class as **#135** and **#138**. Note this is NOT #145's mechanism — verified S123 by controlled experiment: a page whose server is killed reports **`net::ERR_CONNECTION_REFUSED`**, fires **no** crash event, and never says `Page crashed`.
+
+  **Fix shape:** a cheap origin liveness check in the Playwright global setup or a `webServer` health assertion, so a vanished server fails the run **once, naming itself**, rather than 80 times naming the tests. Observed S123.
 
 ## Closed Tech Debt
 
