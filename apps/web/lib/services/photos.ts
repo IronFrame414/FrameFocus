@@ -183,12 +183,27 @@ export async function getPhoto(fileId: string, projectId: string): Promise<Photo
     // rather than the route means the markup screen cannot be handed a
     // non-photo by any caller, present or future.
     //
-    // KNOWN, NOT FIXED HERE: this still does not verify the file belongs to
-    // `projectId` — a file from another project of the same company resolves
-    // under this project's URL. Pre-existing and RLS-bounded (company scope
-    // plus can_view_project still apply). Filed in TECH_DEBT rather than
-    // widened into this change.
+    // ✅ #139 CLOSED [S122] — THE FILE MUST BELONG TO THE PROJECT IN THE URL.
+    // Without the `project_id` clause below, `projectId` was used ONLY to fetch
+    // the punch-photo id set for the source badge, so
+    // /m/p/{projectA}/photos/{fileFromProjectB}/markup resolved file B under
+    // project A and wrote its markup there. RLS bounded the blast radius to the
+    // caller's own company (`files_select_*` + `can_view_project`), which made
+    // it a wrong-CONTEXT bug rather than a disclosure — but wrong context is
+    // still wrong, and the markup write made it durable.
+    //
+    // The pause noted when this was filed was that scoping 404s a URL that used
+    // to resolve. Checked before applying: the ONLY caller is M-10's
+    // markup/page.tsx, and the only link into it is viewer.tsx's
+    // `/m/p/${projectId}/photos/${photo.id}/markup`, built from the gallery of
+    // the project you are already in. Nothing links cross-project on purpose,
+    // so the 404 can only be reached by hand-typing — which is the intent.
+    //
+    // Same clause, same position as `getReceiptFile()` below: the two photo
+    // resolvers now scope identically, and neither can be handed a file from
+    // another project by any caller, present or future.
     .eq('category', 'photos')
+    .eq('project_id', projectId)
     .eq('is_deleted', false)
     .maybeSingle();
 
