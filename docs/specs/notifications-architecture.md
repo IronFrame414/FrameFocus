@@ -40,8 +40,8 @@ repo would make every cross-document citation ambiguous. `ND-` reads as
 | ND-10 | `week_starts_on` | **Widened to all 7 days, in this module.** [S123, Josh] The DB already permits it; the constraint is one UI array. Cost analysis in §12. |
 | ND-11 | Notification links | **Surface-agnostic keys, resolved per surface.** [S123, Josh] **One row, two destinations. Not two rows.** |
 | ND-12 | Nav — desktop | **A Notifications item in the left sidebar.** [S123, Josh] _S89 R1, quoted not rewritten: **"Notifications tab is the 13th sidebar item."** The ordinal is superseded_ — `dashboard-shell.tsx:52-80` already carries **13** items, so this is the **14th**. Final position remains owed to the deferred FFNav reindex (`dashboard-shell.tsx:45-46`). |
-| ND-13 | Nav — mobile | **The bottom bar goes to SIX slots, amending M6M D-3.** [S123, Josh] _M6M D-3, quoted: "**Persistent 5-slot bottom tab bar** + hamburger sheet."_ **The geometry is NOT resolved by this ruling** and is deliberately not picked here — see **ND-14**. |
-| ND-14 | Six-slot geometry | **OPEN — flagged for Josh, not decided.** [S123] Six slots cost 20% of every side item's width envelope and leave the camera without a true centre. Three options, each with a named casualty, in §10.4. **No build proceeds on the mobile bar until this is ruled.** |
+| ND-13 | Nav — mobile | **AMENDED [S123, Josh] — OPTION C: an app-bar bell. The bottom bar stays at FIVE slots and M6M D-3 is NOT amended.** _Original ruling, quoted not rewritten:_ _"**The bottom bar goes to SIX slots, amending M6M D-3.** [S123, Josh] The geometry is NOT resolved by this ruling and is deliberately not picked here — see **ND-14**."_ A 44px **bell with an unread badge** takes the app bar's **right slot — the one M6M D-36 emptied**. Reasoning in §10.4. |
+| ND-14 | Six-slot geometry | **CLOSED [S123, Josh] — the reversal, decided on the arithmetic.** Six slots cut each side item's envelope **77.0px → 61.6px** while "Notifications" needs ~70px at 11px Barlow, and five side items plus a camera has **no true centre**, so the `-26px` break reads as a mistake. **Option C gives what the bottom bar was wanted for — always visible, one tap, permanently in view — without either cost.** M6M **A-40 rewritten, A-40b rewritten, A-40c added** (§10.4). |
 | ND-15 | Subcontractors | **Email always; in-app as well when they have an account.** [S123, Josh] Scoped to three events: contract signed, chat @mention, punch item assigned. **Reachability is not assumed** — §13 establishes it and specs the unreachable case. |
 | ND-16 | Low-stock (M8) | **CUT from v1 traces; the type is RESERVED.** [S123] M8 has **zero tables**. Every figure in S89 §3d (`"4 left (threshold 10)"`) is unbindable, and the house rule is: bound to a named verified function, or cut. The `low_stock` enum value is reserved so M8 lands as a consumer with no schema change. |
 | ND-17 | Still-clocked-in | **An existing consumer, added to §3 and §4.** [S123] TECH_DEBT #91: 6A already emits 4 PM / 5 PM still-clocked-in events and defers delivery to this module. It was absent from S89 entirely. |
@@ -784,14 +784,50 @@ must be re-enabled in browser settings. **No re-prompt** — the API will not sh
 
 ### 10.3 Mobile — the Notifications surface
 
-- **Placement:** ND-13 (six slots), **geometry blocked on ND-14**.
+- **Placement: the app-bar bell** (ND-13 as amended). **Not a tab.** The bottom bar is untouched.
+- **The bell:** 44px target in the app bar's right slot, navy bar, white glyph. **Unread badge** —
+  a count pill when ≥1, nothing at 0 (an always-present "0" is noise). Caps at `9+`.
+- **One action:** opens `/m/notifications`. It is not a menu, not a popover, not an avatar.
+  M6M **A-40b** asserts an exact count of two app-bar controls precisely to catch a bell that
+  quietly becomes a menu.
+- **Route:** `/m/notifications`, a real screen (M6M **D-28**'s precedent: pages, not sheets).
 - **List:** reuses M6M **D-4**'s project-card geometry — *"The project card (§4.2) is the one
   list pattern. Every other mobile list reuses its geometry."* No new list pattern.
 - **Bindable in M-30 without reopening its read-only ruling:** push enrolment state and the
   enable/instructions control. **Notify-hours stays Owner/Admin on desktop** — it is a
   company setting, and M-30 is read-only for every role.
 
-### 10.4 The six-slot problem — ND-14, flagged for Josh
+### 10.4 The six-slot problem — RULED [S123, Josh]: Option C, the app-bar bell
+
+> **THE RULING, AND THAT IT IS A REVERSAL.** Josh first ruled the bottom bar to six slots
+> (ND-13, original text quoted in §0) and then **reversed it on the arithmetic below**. The bar
+> **stays at five**; **M6M D-3 is not amended**; the bell goes in the app bar's right slot.
+>
+> **Why the reversal, in Josh's terms:** Option C *"gives what the bottom bar was wanted for —
+> always visible, one tap, permanently in view — without either cost."* The bottom bar was never
+> wanted for its own sake; it was wanted for permanent visibility, and a badged bell in a bar that
+> is also on every screen delivers exactly that.
+>
+> **The two costs it avoids are both below and both real:** a label that does not fit its slot, and
+> a centre item with no centre.
+>
+> **The arithmetic is kept, not summarised.** It is the reason the ruling went the way it did, and a
+> later reader proposing a sixth tab needs to meet it rather than rediscover it.
+
+**What the ruling lands on: the slot M6M D-36 emptied.** D-36 cut the 38px avatar from the app
+bar's right, on two grounds — *it had no action*, and *38px is under §2's 44px floor*. **The bell
+fails neither**: one unambiguous action, specified at 44px. D-36 ruled out a control with no action
+and a sub-floor target; it did not rule out the slot.
+
+**Two M6M criteria assert that slot is empty, so both are rewritten rather than satisfied:**
+
+| Criterion | Now |
+| --- | --- |
+| **A-40** | *"no right-hand element"* → **"no right-hand element other than the bell"**, plus the bell **≥44px**. Rewritten because a correct build would otherwise **fail** it, and the only way to pass would be to omit the bell. |
+| **A-40b** | *"The only interactive control… is the hamburger"* → **exactly two**: one left (hamburger XOR chevron, unchanged) and the bell right. **The left-slot exclusivity is untouched.** The edit D-36 feared — "restore the avatar as a menu button" — now reappears as a **third** control or as **a bell that is secretly a menu**, and an exact count of two catches both. |
+| **A-40c** *(new)* | The bottom bar still renders **exactly five slots** with the camera at centre. Added because the reversal is what a later reader undoes by accident, and the reversal's entire justification was protecting this bar. |
+
+**The arithmetic that decided it**
 
 **The geometry, computed rather than asserted.** From M6M §2 and §3.2:
 
@@ -821,18 +857,19 @@ tap target is fine.
    or 3|cam|2. The camera's −26px break and 4px ring are a *centre* affordance; off-centre,
    they read as a mistake rather than a feature.
 
-**Three options, each with its named casualty. Not picked here.**
+**The three options as they were put, with the ruling marked.**
 
-| | Shape | Casualty |
-| --- | --- | --- |
-| **A** | 5 side + camera, asymmetric (2 \| cam \| 3) | The visual centre. Cheapest to build; the bar looks wrong to anyone who notices. |
-| **B** | Camera leaves the bar (app-bar action or FAB); 6 true side items at 374/6 = **62.3px** | **M6M A-20** — *"Tapping the tab-bar camera opens the camera directly, not a picker"* — and **A-20b** over all four capture call sites. D-3's camera-as-centre-action is load-bearing in `mobile-shell.tsx:436-466`. |
-| **C** | Bar stays at 5; Notifications becomes an **app-bar bell with the badge** | **Contradicts ND-13.** Listed because it is the only option that costs nothing, and because M6M **D-36** cut the app bar's only right-hand control, so the slot is empty. Requires Josh to reverse ND-13. |
+| | Shape | Casualty | Outcome |
+| --- | --- | --- | --- |
+| **A** | 5 side + camera, asymmetric (2 \| cam \| 3) | The visual centre. Cheapest to build; the bar looks wrong to anyone who notices. | Rejected |
+| **B** | Camera leaves the bar (app-bar action or FAB); 6 true side items at 374/6 = **62.3px** | **M6M A-20** — *"Tapping the tab-bar camera opens the camera directly, not a picker"* — and **A-20b** over all four capture call sites. D-3's camera-as-centre-action is load-bearing in `mobile-shell.tsx:436-466`. | Rejected |
+| **C** | Bar stays at 5; Notifications becomes an **app-bar bell with the badge** | None to the bar. Costs the reversal of ND-13's first form, and the rewriting of A-40/A-40b. | **RULED [Josh, S123]** |
 
-**Recommendation, stated as one:** **C**, if ND-13 is open to reconsideration — the badge
-belongs where a badge is looked for, the bar keeps a geometry that took two sessions to
-settle, and D-36 left the exact slot free. If ND-13 is firm, **A** — because B trades a
-ruled, tested capture affordance for symmetry.
+**Why C won, beyond costing nothing.** The bell is where a badge is *looked for*; the bottom bar
+keeps a geometry that took two sessions and three rulings to settle; and D-36 had already emptied
+the exact slot the bell needs. B was the most tempting wrong answer — it buys symmetry by trading
+away a **ruled and Playwright-tested** capture affordance (A-20, A-20b), which is a worse deal than
+it looks on a diagram.
 
 ### 10.5 Chat
 
@@ -915,6 +952,13 @@ ruled, tested capture affordance for symmetry.
 - **A-N36** A sub with an email and no profile gets email and **no** row. `[live]`
 - **A-N37** A sub with neither is recorded as unreachable and **does not throw**. `[live]` *(§13 — one live row already has no email.)*
 - **A-N38** A sub receives nothing for events outside the three scoped types. `[live]`
+
+**The app-bar bell (ND-13 as amended)**
+- **A-N41** The bell renders in the app bar's right slot on every `/m/**` route and measures ≥44px. `[Playwright]` *(M6M A-40 as rewritten — 44px is the exact test the cut avatar failed at 38px.)*
+- **A-N42** The app bar carries exactly two interactive controls — one left, the bell right — and never hamburger and chevron together. `[Playwright]` *(M6M A-40b as rewritten. Catches both a restored avatar and a third control.)*
+- **A-N43** The bottom tab bar still renders exactly five slots with the camera at centre. `[Playwright]` *(M6M A-40c. The reversal is what a later reader undoes by accident.)*
+- **A-N44** The badge shows a count at ≥1 unread, renders nothing at 0, and caps at `9+`. `[Playwright]` *(An always-present "0" is the likeliest wrong build and passes any "badge exists" assertion.)*
+- **A-N45** Tapping the bell navigates to `/m/notifications` and opens no menu or popover. `[Playwright]` *(A bell that becomes a menu is the D-36 edit in new clothing.)*
 
 **Retention**
 - **A-N39** An unstarred row past 30 days is deleted by the expiry cron; a starred one is not. `[live]`
@@ -1059,7 +1103,8 @@ resolution is `assignee_id → company_members.profile_id → profiles` for the 
 
 ## §14 — Still open
 
-1. **ND-14 — six-slot geometry.** §10.4. **Blocks the mobile nav build.**
+1. ~~**ND-14 — six-slot geometry.**~~ **CLOSED [S123, Josh]** — Option C, the app-bar bell; the
+   bottom bar stays at five and D-3 is not amended (§10.4). The mobile nav build is **unblocked**.
 2. **FFNav position** for the desktop item — owned by the deferred reindex, not by this spec.
 3. **Realtime enablement** — a decision to spend the migration, or accept a
    navigation-refreshed badge and a poll-based chat (§5.1).
