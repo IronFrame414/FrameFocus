@@ -13,6 +13,9 @@ import {
 } from '@/lib/services/email-service';
 import { notifyManagers } from '@/lib/services/signing-service';
 import { ReminderEmail } from '@/lib/email/templates/reminder-email';
+import { notify } from '@/lib/notify/notify';
+import { getManagerNotifyRecipients } from '@/lib/notify/recipients';
+import { isFinalReminderStep } from '@framefocus/shared/utils/reminders';
 
 // Spec 2 (4J) — daily Vercel Cron. Two passes:
 //   1. Reminders: fire step N when reminder_count = N-1 AND
@@ -209,6 +212,56 @@ export async function GET(request: NextRequest) {
       continue;
     }
     remindersSent++;
+
+    // ── §3f — reminders exhausted [S123 slice 5] ──
+    //
+    // ONE ROW WHEN THE LAST REMINDER GOES OUT, NOT ONE PER REMINDER. Option B,
+    // founder-decided at S89: the useful signal is "we have run out of
+    // reminders and they still have not signed", which happens exactly once.
+    // A row per send would put three notifications in front of an Owner for one
+    // estimate and train them to ignore the fourth.
+    //
+    // The count was just advanced, so `reminder_count + 1` is the number of
+    // reminders now sent. The predicate lives in the shared package because
+    // this route cannot be driven from a test without mailing a fabricated
+    // client through Resend — see reminders.ts for the two off-by-ones it
+    // exists to pin. Re-entry for the same estimate is separately impossible:
+    // line ~117 (`reminder_count >= schedule.length`) already `continue`s past
+    // any estimate that is out of steps.
+    if (isFinalReminderStep(estimate.reminder_count, schedule.length)) {
+      try {
+        const managers = await getManagerNotifyRecipients(admin, estimate.company_id);
+        await notify({
+          admin,
+          companyId: estimate.company_id,
+          type: 'reminders_exhausted',
+          recipients: managers,
+          // No money in this text, so every manager gets the same bytes — but
+          // the estimate's VALUE is deliberately absent rather than incidental:
+          // R7 would have to gate it, and the notification's job is to say the
+          // client has gone quiet, not to restate the number.
+          render: () => ({
+            title: `${estimate.name}: all reminders sent, still unsigned.`,
+            body: `${estimate.estimate_number} — ${schedule.length} reminder${
+              schedule.length === 1 ? '' : 's'
+            } sent since ${new Date(estimate.sent_at!).toLocaleDateString('en-US')}.`,
+          }),
+          linkKey: 'estimate',
+          linkParams: { id: estimate.id },
+          source: { table: 'estimates', id: estimate.id },
+          tag: `reminders-exhausted-${estimate.id}`,
+        });
+      } catch (err) {
+        // A cron that throws here would abandon every estimate after this one
+        // in the loop. The reminder itself already went out and its count is
+        // committed; the notification is the least important thing in scope.
+        errors.push(
+          `reminders-exhausted ${estimate.estimate_number}: ${
+            err instanceof Error ? err.message : 'unknown'
+          }`
+        );
+      }
+    }
   }
 
   return NextResponse.json({
