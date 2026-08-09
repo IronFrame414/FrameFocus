@@ -11,6 +11,11 @@ import {
   sendEmail,
 } from '@/lib/services/email-service';
 import { NotificationEmail } from '@/lib/email/templates/notification-email';
+import { notify } from '@/lib/notify/notify';
+import {
+  getManagerNotifyRecipients,
+  getProjectPmNotifyRecipients,
+} from '@/lib/notify/recipients';
 
 // 6D §7 — delivery check-in. Inserts run under the CALLER's RLS (any member
 // on a visible project may check in — §3 amendment). The DB trigger chain
@@ -262,6 +267,71 @@ export async function POST(request: NextRequest) {
 
       const recipients = new Map<string, string>();
       for (const r of [...managers, ...pms]) recipients.set(r.email, r.first_name);
+
+      // ── §3g — delivery DISCREPANCY, in-app + push [S123 slice 6] ──
+      //
+      // ONLY ON EXCEPTIONS. The email above goes out for clean deliveries too
+      // ("[Clean] Delivery — …"), and that is right for a record; a
+      // notification for every clean truck is noise that buries the one that
+      // matters. §3g is the discrepancy trace, and `has_exceptions` is the
+      // signal it names.
+      //
+      // The audience is the same Owner/Admin + assigned-PM set the email uses,
+      // resolved through the shared notify helpers rather than the inline
+      // profile join above, because notify() needs profile ids and roles
+      // (ND-2, R7) and the email needs addresses. Two shapes of the same
+      // question — but only ONE definition of "who", which is why the helpers
+      // exist. The inline join above is the email's and predates them.
+      if (hasExceptions) {
+        try {
+          const [notifyManagerRecipients, notifyPmRecipients] = await Promise.all([
+            getManagerNotifyRecipients(admin, project.company_id),
+            getProjectPmNotifyRecipients(admin, project.id),
+          ]);
+
+          const damagedItems = input.items.filter((i) => i.qty_damaged > 0);
+          const totalDamaged = damagedItems.reduce((sum, i) => sum + i.qty_damaged, 0);
+          const totalReceived = input.items.reduce((sum, i) => sum + i.qty_received, 0);
+          // "3 of 20 windows damaged" when one line is at fault, which is the
+          // §3g example and the common case. With several, naming one of them
+          // would be actively misleading, so the count carries it.
+          const what =
+            damagedItems.length === 1
+              ? damagedItems[0].description
+              : `items across ${damagedItems.length} lines`;
+          // A delivery can have exceptions with nothing damaged — an issue_note
+          // alone sets the flag. Saying "0 of 20 damaged" would misdescribe it.
+          const detail =
+            totalDamaged > 0
+              ? `${totalDamaged} of ${totalReceived} ${what} damaged`
+              : 'issues noted on check-in';
+
+          await notify({
+            admin,
+            companyId: project.company_id,
+            type: 'discrepancy',
+            recipients: [...notifyManagerRecipients, ...notifyPmRecipients],
+            render: () => ({
+              title: `Delivery discrepancy (${project.name}): ${detail} — ${receiverName}`,
+              body: `${vendorName}, ${input.delivery_date}.`,
+            }),
+            linkKey: 'delivery',
+            // The `delivery` resolver was one of the four slice-1 keys pointing
+            // at a route that does not exist; slice 3 corrected it to
+            // /dashboard/field-ops/[projectId]/deliveries/d/[deliveryId], the
+            // same path the email below builds.
+            linkParams: { id: delivery.id, projectId: project.id },
+            projectId: project.id,
+            source: { table: 'deliveries', id: delivery.id },
+            tag: `delivery-${delivery.id}`,
+          });
+        } catch (err) {
+          console.error(
+            `[deliveries/check-in] in-app notify failed for ${delivery.id}:`,
+            err instanceof Error ? err.message : 'unknown'
+          );
+        }
+      }
 
       const sender = buildSenderAddress(company);
       const subject = `[${hasExceptions ? 'EXCEPTIONS' : 'Clean'}] Delivery — ${vendorName} · ${project.name}`;
