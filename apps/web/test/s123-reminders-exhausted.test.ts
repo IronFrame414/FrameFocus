@@ -9,10 +9,14 @@ import { resolveLink } from '@/lib/notify/links';
 // Spec: docs/specs/notifications-architecture.md §3f.
 // ============================================================================
 //
-// The cron this fires from cannot be driven from a test: each pass sends a real
-// reminder through Resend to whatever address a fixture invented. So what is
-// tested is the part that was extracted precisely so it COULD be — the trigger
-// arithmetic — plus the destination the row points at.
+// This file is the UNIT half: the trigger arithmetic and the destination.
+//
+// [S123 coverage pass] The claim that used to stand here — "the cron cannot be
+// driven from a test: each pass sends a real reminder" — is SUPERSEDED. The
+// loop now takes an injected sender, and s123-reminders-loop.live.ts drives it
+// end to end with a recorder. These assertions stay because they pin the
+// boundaries (opted-out, single-step, over-count) that one live fixture cannot
+// cover at once.
 
 describe('§3f — one row when the LAST reminder goes out', () => {
   const schedule = [3, 7, 14];
@@ -59,7 +63,7 @@ describe('the exhausted notification points somewhere real', () => {
 
 describe('the cron wires it to the shared predicate', () => {
   const source = readFileSync(
-    fileURLToPath(new URL('../app/api/cron/estimate-reminders/route.ts', import.meta.url)),
+    fileURLToPath(new URL('../lib/notify/crons/estimate-reminders.ts', import.meta.url)),
     'utf8'
   );
   const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');

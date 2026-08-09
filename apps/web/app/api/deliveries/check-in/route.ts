@@ -11,11 +11,7 @@ import {
   sendEmail,
 } from '@/lib/services/email-service';
 import { NotificationEmail } from '@/lib/email/templates/notification-email';
-import { notify } from '@/lib/notify/notify';
-import {
-  getManagerNotifyRecipients,
-  getProjectPmNotifyRecipients,
-} from '@/lib/notify/recipients';
+import { notifyDeliveryDiscrepancy } from '@/lib/notify/delivery-notify';
 
 // 6D §7 — delivery check-in. Inserts run under the CALLER's RLS (any member
 // on a visible project may check in — §3 amendment). The DB trigger chain
@@ -282,48 +278,29 @@ export async function POST(request: NextRequest) {
       // (ND-2, R7) and the email needs addresses. Two shapes of the same
       // question — but only ONE definition of "who", which is why the helpers
       // exist. The inline join above is the email's and predates them.
+      // ── §3g — delivery DISCREPANCY, in-app + push [S123 slice 6] ──
+      //
+      // ONLY ON EXCEPTIONS, AND THE GUARD LIVES HERE. The email above goes out
+      // for clean deliveries too ("[Clean] Delivery — …"), which is right for a
+      // record; a notification for every clean truck is noise that buries the
+      // one that matters. `hasExceptions` is derived from the row just written,
+      // so the condition belongs to the route — notifyDeliveryDiscrepancy()
+      // would otherwise happily describe a clean delivery as a discrepancy.
+      //
+      // The BODY moved to lib/notify/delivery-notify.ts in the coverage pass so
+      // it can be driven from a harness: this route emails every manager
+      // through Resend on the way past, so nothing here could be tested live.
       if (hasExceptions) {
         try {
-          const [notifyManagerRecipients, notifyPmRecipients] = await Promise.all([
-            getManagerNotifyRecipients(admin, project.company_id),
-            getProjectPmNotifyRecipients(admin, project.id),
-          ]);
-
-          const damagedItems = input.items.filter((i) => i.qty_damaged > 0);
-          const totalDamaged = damagedItems.reduce((sum, i) => sum + i.qty_damaged, 0);
-          const totalReceived = input.items.reduce((sum, i) => sum + i.qty_received, 0);
-          // "3 of 20 windows damaged" when one line is at fault, which is the
-          // §3g example and the common case. With several, naming one of them
-          // would be actively misleading, so the count carries it.
-          const what =
-            damagedItems.length === 1
-              ? damagedItems[0].description
-              : `items across ${damagedItems.length} lines`;
-          // A delivery can have exceptions with nothing damaged — an issue_note
-          // alone sets the flag. Saying "0 of 20 damaged" would misdescribe it.
-          const detail =
-            totalDamaged > 0
-              ? `${totalDamaged} of ${totalReceived} ${what} damaged`
-              : 'issues noted on check-in';
-
-          await notify({
-            admin,
+          await notifyDeliveryDiscrepancy(admin, {
             companyId: project.company_id,
-            type: 'discrepancy',
-            recipients: [...notifyManagerRecipients, ...notifyPmRecipients],
-            render: () => ({
-              title: `Delivery discrepancy (${project.name}): ${detail} — ${receiverName}`,
-              body: `${vendorName}, ${input.delivery_date}.`,
-            }),
-            linkKey: 'delivery',
-            // The `delivery` resolver was one of the four slice-1 keys pointing
-            // at a route that does not exist; slice 3 corrected it to
-            // /dashboard/field-ops/[projectId]/deliveries/d/[deliveryId], the
-            // same path the email below builds.
-            linkParams: { id: delivery.id, projectId: project.id },
             projectId: project.id,
-            source: { table: 'deliveries', id: delivery.id },
-            tag: `delivery-${delivery.id}`,
+            projectName: project.name,
+            deliveryId: delivery.id,
+            vendorName,
+            receiverName,
+            deliveryDate: input.delivery_date,
+            items: input.items,
           });
         } catch (err) {
           console.error(

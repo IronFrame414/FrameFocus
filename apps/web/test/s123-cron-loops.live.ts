@@ -77,6 +77,9 @@ let ownerProfileId: string;
 let adminProfileId: string;
 
 const madeNotifications: string[] = [];
+/** Everything this file can write, for the run-window sweep in afterAll. */
+const MY_TYPES = ['timesheet_ready', 'daily_log_missing', 'still_clocked_in'];
+const runStart = new Date().toISOString();
 const madeSessions: string[] = [];
 const madeSegments: string[] = [];
 
@@ -200,10 +203,28 @@ beforeAll(async () => {
   altProjectId = projects![1].id;
 });
 
+
+/**
+ * A run-window sweep, in ADDITION to the id list.
+ *
+ * The id list only contains rows a test managed to READ BACK before it
+ * asserted. A test that fails mid-way — which is exactly what the
+ * break-and-restore proofs do on purpose — aborts before registering the rows
+ * it just caused, and those rows survive teardown. Twenty-four of them did.
+ *
+ * So teardown also deletes, by TYPE and by this run's start time, everything
+ * these harnesses can possibly have written. Scoped to the types this file
+ * produces so it can never touch anything else.
+ */
 afterAll(async () => {
   if (madeNotifications.length) {
     await admin.from('notifications').delete().in('id', madeNotifications);
   }
+  await admin
+    .from('notifications')
+    .delete()
+    .in('type', MY_TYPES)
+    .gte('created_at', runStart);
   if (madeSegments.length) await admin.from('time_segments').delete().in('id', madeSegments);
   if (madeSessions.length) {
     await admin.from('time_clock_sessions').delete().in('id', madeSessions);

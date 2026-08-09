@@ -8,16 +8,31 @@ import { resolveLink } from '@/lib/notify/links';
 // Spec: docs/specs/notifications-architecture.md §3g.
 // ============================================================================
 //
-// Like §3f's cron, this route cannot be driven end to end from a harness: a
-// check-in emails every Owner, Admin and assigned PM through Resend. So the
-// assertions are over the wiring and the destination, and they are chosen for
-// the two things that would actually go wrong.
+// The ROUTE still cannot be driven end to end from a harness: a check-in emails
+// every Owner, Admin and assigned PM through Resend, and unlike the reminders
+// cron its sender is not injected. So these assertions cover the wiring — the
+// guard, the ordering, the destination.
+//
+// [S123 coverage pass] What the notification WRITES is no longer only asserted
+// here: the body moved to lib/notify/delivery-notify.ts and
+// s123-delivery-discrepancy.live.ts drives it against the real database.
 
+// THE SPLIT: the GUARD lives in the route (hasExceptions is a fact the route
+// derives from the row it just wrote), the BODY lives in lib/ so it can be
+// driven from a harness. Both halves are read, because asserting only one would
+// let the other lose its half silently.
 const source = readFileSync(
   fileURLToPath(new URL('../app/api/deliveries/check-in/route.ts', import.meta.url)),
   'utf8'
 );
-const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+const libSource = readFileSync(
+  fileURLToPath(new URL('../lib/notify/delivery-notify.ts', import.meta.url)),
+  'utf8'
+);
+const strip = (s: string) =>
+  s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+const code = strip(source);
+const libCode = strip(libSource);
 
 describe('§3g — the notification fires only on exceptions', () => {
   it('is guarded by hasExceptions', () => {
@@ -26,14 +41,16 @@ describe('§3g — the notification fires only on exceptions', () => {
     // that buries the one that matters.
     expect(code).toContain('if (hasExceptions) {');
     const block = code.slice(code.indexOf('if (hasExceptions) {'));
-    expect(block).toContain("type: 'discrepancy'");
+    expect(block).toContain('notifyDeliveryDiscrepancy');
+    // …and the notification it reaches really is the discrepancy one.
+    expect(libCode).toContain("type: 'discrepancy'");
   });
 
   it('the notify call is INSIDE that guard, not merely after it', () => {
     // A `notify(` that sits after the closing brace still runs for every
     // delivery, and reads as guarded to anyone skimming.
     const guardStart = code.indexOf('if (hasExceptions) {');
-    const notifyCall = code.indexOf("type: 'discrepancy'");
+    const notifyCall = code.indexOf('await notifyDeliveryDiscrepancy(');
     const emailLoop = code.indexOf('for (const [email] of recipients)');
     expect(guardStart).toBeGreaterThan(-1);
     expect(notifyCall).toBeGreaterThan(guardStart);
@@ -64,8 +81,8 @@ describe('§3g — the destination', () => {
     // Two channels about one truck opening two different screens is drift
     // nobody reports; they just stop trusting one of them.
     expect(code).toContain('/deliveries/${');
-    expect(code).toContain("linkKey: 'delivery'");
-    expect(code).toContain('linkParams: { id: delivery.id, projectId: project.id }');
+    expect(libCode).toContain("linkKey: 'delivery'");
+    expect(libCode).toContain('linkParams: { id: params.deliveryId, projectId: params.projectId }');
   });
 
   it('mobile lands on the project deliveries list — no detail screen exists', () => {
@@ -81,8 +98,8 @@ describe('§3g — the recipient set comes from the shared helpers', () => {
     // EMAIL audience. Copying it for notify() would be two definitions of "who
     // is a project PM" in one file — the divergence CLAUDE.md's parity rule
     // describes, written in the form that looks most like agreement.
-    expect(code).toContain('getManagerNotifyRecipients(admin, project.company_id)');
-    expect(code).toContain('getProjectPmNotifyRecipients(admin, project.id)');
+    expect(libCode).toContain('getManagerNotifyRecipients(admin, params.companyId)');
+    expect(libCode).toContain('getProjectPmNotifyRecipients(admin, params.projectId)');
   });
 
   it('a notify failure does not cost the delivery its email', () => {
