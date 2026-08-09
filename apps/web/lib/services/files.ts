@@ -67,10 +67,54 @@ export async function getFile(id: string): Promise<FileRecord | null> {
   return (data as FileRecord | null) ?? null;
 }
 
-export async function getSignedUrl(
+/**
+ * What Storage said when it refused to sign. Structural on purpose: this is
+ * `StorageError`'s shape, but that class is exported by `@supabase/storage-js`
+ * — a TRANSITIVE dependency we do not declare — and `@supabase/supabase-js`
+ * does not re-export it. Naming the four fields we actually read keeps the
+ * contract honest without adding a package.json entry for a package we do not
+ * own the version of.
+ */
+export interface SignedUrlFailure {
+  message: string;
+  /** HTTP status, when Storage answered at all. Absent on network failures. */
+  status?: number;
+  /** Storage's own code. Absent on network failures. */
+  statusCode?: string;
+  name?: string;
+}
+
+export type SignedUrlResult =
+  | { url: string; error: null }
+  | { url: null; error: SignedUrlFailure };
+
+/**
+ * Sign a path, KEEPING THE REASON IT FAILED — TECH_DEBT #142 [S122].
+ *
+ * ===========================================================================
+ * ⚠️ THE SWALLOWED CAUSE WAS THE DEFECT, NOT THE STATUS CODE
+ * ===========================================================================
+ * `getSignedUrl()` below returned `string | null` and did `if (error) return
+ * null`, discarding the only object that knew WHY. Every caller downstream —
+ * `/api/files/signed-url` most visibly — was then structurally incapable of
+ * telling an RLS refusal from a storage outage, so it answered 500 for both
+ * and logged neither. Fixing the route's status code alone would have been
+ * guessing: the information had already been destroyed one layer down. So the
+ * cause is preserved HERE, and the route decides what to say with it.
+ *
+ * ⚠️ WHY `getSignedUrl()` SURVIVES RATHER THAN BEING REPLACED. A null return
+ * is CORRECT for one caller: `resolveUrls()` in photos.ts probes for a
+ * `.markup.jpg` derivative that is legitimately absent most of the time, and
+ * turns the null into `derivativeMissing`. That is an expected answer, not a
+ * failure, and making it throw or carry an error object would turn a normal
+ * path into an exceptional one. So the null-returning wrapper stays for the
+ * callers that genuinely want "no url", and this result-returning form is for
+ * the callers that must report why.
+ */
+export async function signedUrlFor(
   filePath: string,
   expiresIn: number = 3600
-): Promise<string | null> {
+): Promise<SignedUrlResult> {
   const supabase = await createClient();
 
   const { data, error } = await supabase
@@ -78,6 +122,25 @@ export async function getSignedUrl(
     .from('project-files')
     .createSignedUrl(filePath, expiresIn);
 
-  if (error) return null;
-  return data?.signedUrl ?? null;
+  if (error) return { url: null, error };
+  if (!data?.signedUrl) {
+    // No error and no URL should not happen; if it does, it is not a refusal,
+    // and saying so beats reporting a permission problem that did not occur.
+    return {
+      url: null,
+      error: { message: 'Storage returned no error and no signed URL', name: 'EmptySignedUrl' },
+    };
+  }
+  return { url: data.signedUrl, error: null };
+}
+
+/**
+ * The null-returning form. Use when "no url" is an acceptable answer and the
+ * reason does not need reporting — see `signedUrlFor` above for when it does.
+ */
+export async function getSignedUrl(
+  filePath: string,
+  expiresIn: number = 3600
+): Promise<string | null> {
+  return (await signedUrlFor(filePath, expiresIn)).url;
 }
