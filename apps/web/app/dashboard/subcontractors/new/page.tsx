@@ -29,7 +29,8 @@ export default async function NewSubcontractorPage() {
       <p style={{ color: '#6b7280', marginBottom: '2rem', fontSize: '0.875rem' }}>
         Create a new subcontractor or vendor record
       </p>
-      <SubcontractorForm />
+      {/* #132 — a PM may create a sub but not set its rate, markup or EIN. */}
+      <SubcontractorForm canEditFinancials={['owner', 'admin'].includes(profile.role)} />
     </div>
   );
 }

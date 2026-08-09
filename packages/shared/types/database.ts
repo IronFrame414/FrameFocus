@@ -1519,6 +1519,8 @@ export type Database = {
       }
       deliveries: {
         Row: {
+          checked_in_at: string | null
+          checked_in_by: string | null
           company_id: string
           created_at: string | null
           created_by: string | null
@@ -1537,6 +1539,8 @@ export type Database = {
           vendor_name: string
         }
         Insert: {
+          checked_in_at?: string | null
+          checked_in_by?: string | null
           company_id?: string
           created_at?: string | null
           created_by?: string | null
@@ -1555,6 +1559,8 @@ export type Database = {
           vendor_name: string
         }
         Update: {
+          checked_in_at?: string | null
+          checked_in_by?: string | null
           company_id?: string
           created_at?: string | null
           created_by?: string | null
@@ -1573,6 +1579,13 @@ export type Database = {
           vendor_name?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "deliveries_checked_in_by_fkey"
+            columns: ["checked_in_by"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "deliveries_company_id_fkey"
             columns: ["company_id"]
@@ -5265,6 +5278,60 @@ export type Database = {
           },
         ]
       }
+      subcontractor_financials: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          default_hourly_rate: number | null
+          default_markup_percent: number | null
+          ein: string | null
+          id: string
+          subcontractor_id: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          default_hourly_rate?: number | null
+          default_markup_percent?: number | null
+          ein?: string | null
+          id?: string
+          subcontractor_id: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          default_hourly_rate?: number | null
+          default_markup_percent?: number | null
+          ein?: string | null
+          id?: string
+          subcontractor_id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subcontractor_financials_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subcontractor_financials_subcontractor_id_fkey"
+            columns: ["subcontractor_id"]
+            isOneToOne: true
+            referencedRelation: "subcontractors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subcontractors: {
         Row: {
           address_line1: string | null
@@ -5276,11 +5343,8 @@ export type Database = {
           contact_last_name: string | null
           created_at: string | null
           created_by: string | null
-          default_hourly_rate: number | null
-          default_markup_percent: number | null
           deleted_at: string | null
           did_not_finish: boolean
-          ein: string | null
           email: string | null
           id: string
           insurance_expiry: string | null
@@ -5312,11 +5376,8 @@ export type Database = {
           contact_last_name?: string | null
           created_at?: string | null
           created_by?: string | null
-          default_hourly_rate?: number | null
-          default_markup_percent?: number | null
           deleted_at?: string | null
           did_not_finish?: boolean
-          ein?: string | null
           email?: string | null
           id?: string
           insurance_expiry?: string | null
@@ -5348,11 +5409,8 @@ export type Database = {
           contact_last_name?: string | null
           created_at?: string | null
           created_by?: string | null
-          default_hourly_rate?: number | null
-          default_markup_percent?: number | null
           deleted_at?: string | null
           did_not_finish?: boolean
-          ein?: string | null
           email?: string | null
           id?: string
           insurance_expiry?: string | null
