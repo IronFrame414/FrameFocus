@@ -60,7 +60,15 @@ export default async function MarkupPage({
       <h1 style={{ fontSize: '1.5rem', fontWeight: 600, margin: '0 0 1rem 0' }}>
         Markup: {file.file_name}
       </h1>
-      <MarkupEditor fileId={fileId} imageUrl={imageUrl} initialMarkup={initialMarkup} />
+      {/* filePath is passed for #129 [S122]: the editor writes the flattened
+          derivative beside the original, and derivativePathFor() needs the
+          storage path — the signed imageUrl cannot be turned back into one. */}
+      <MarkupEditor
+        fileId={fileId}
+        filePath={file.file_path}
+        imageUrl={imageUrl}
+        initialMarkup={initialMarkup}
+      />
     </div>
   );
 }
