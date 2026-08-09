@@ -218,6 +218,33 @@ at once, then STOP and wait. If none, say so and continue.
 Phase 3 — BUILD: perform all reads/edits/creates autonomously; show diffs at the
 end; never commit — Josh commits manually.
 
+### Reading the exit status of a command — **MANDATORY [moved from TECH_DEBT #137, S122]**
+
+**A status is only evidence if it belongs to the process being judged.** Five instances in two
+sessions (S106–S107) all had one root cause: the status read belonged to a *different* process than
+the one under test. A build that failed lint was reported clean and **committed on that basis**; two
+Playwright runs reported `0` while 89 and 91 tests had actually failed.
+
+1. **Never judge a command through a pipe.** `npx next build | tail -20` reports **`tail`'s** status,
+   which is always `0`. Redirect to a file and inspect that instead:
+   `cmd > log 2>&1; echo $?` — **immediately**, before anything else runs. If a pipe is unavoidable,
+   `set -o pipefail` first, or read `${PIPESTATUS[0]}` rather than `$?`.
+2. **Print the real code into the output and read *that line*.** Not a wrapper's status, not a
+   summary. `cmd; echo "exit: $?"` is itself the trap — the compound command's status is the
+   **`echo`'s**, so the shell *and* any task-notification summary report `0` over a run that exited
+   `1`. Print the code and read the printed line.
+3. **Corroborate with an independent signal.** A `✘` count, a test tally, a connection-error count.
+   A status can be masked; a tally cannot.
+4. **Never `pkill -f <pattern>`.** It matches **any** process whose command line contains the
+   string — **including the shell running the pkill**, which is why such commands return exit `144`
+   and why servers appear to die for no reason. List the processes and `kill <PID>`, excluding `$$`.
+   Reference: `scripts/e2e-preflight.sh` (#138).
+
+**In CI this is worse, not equal.** Locally a masked failure costs a re-run; in
+`.github/workflows/ci.yml` it **ships red as green**. The workflow sets
+`defaults.run.shell: bash -euo pipefail {0}`, which closes the pipe case for every `run:` step —
+but **nothing closes the trailing-command case except not writing it**.
+
 ## Generated Types Workflow
 
 `packages/shared/types/database.ts` is auto-generated from the live Supabase schema. All service files import from this — never hand-write database type shapes. After every migration that adds, removes, or renames a column or table, run:

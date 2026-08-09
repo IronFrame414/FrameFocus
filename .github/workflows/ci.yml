@@ -6,6 +6,29 @@ on:
   pull_request:
     branches: [main, dev]
 
+# ⚠️ TECH_DEBT #137 [S122] — EVERY `run:` STEP GETS `pipefail`.
+#
+# GitHub's default shell for `run:` is `bash -e {0}`: NO `pipefail`. So any step
+# that pipes — `npx next build | tail -20` is the instance that actually shipped
+# — is judged by the LAST command's status. `tail` always exits 0, so a failed
+# build reports success and the job goes GREEN. Locally that costs a re-run; in
+# CI it ships red as green, the branch looks mergeable, and nothing downstream
+# re-checks.
+#
+# `-o pipefail` makes a pipeline fail if ANY stage fails. `-u` fails on an unset
+# variable rather than silently substituting empty — the same class of defect
+# (a typo'd secret name becoming ""). `{0}` is the script path GitHub
+# substitutes; it must be kept.
+#
+# This closes the PIPE half of #137 workflow-wide. It does NOT close the
+# trailing-command half — `cmd; echo "exit: $?"` still reports the echo's
+# status, and nothing but not writing it fixes that. See CLAUDE.md → "Reading
+# the exit status of a command" for the rules that apply to every command run
+# in this repo, CI or not.
+defaults:
+  run:
+    shell: bash -euo pipefail {0}
+
 jobs:
   check:
     name: Lint & Type Check
