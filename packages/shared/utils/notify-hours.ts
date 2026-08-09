@@ -163,6 +163,70 @@ export function isBoundaryHour(
  * (`time-tracking.ts`) so §3h can ask "is today the day this company's week
  * begins?" without the two disagreeing about what day 0 is.
  */
+/**
+ * The UTC instant of local midnight on `ymd` (YYYY-MM-DD) in `timeZone`.
+ *
+ * ⚠️ WRITTEN BECAUSE A NAIVE STRING IS NOT A LOCAL DAY. Filtering a `timestamptz`
+ * column with `` `${logDate}T00:00:00` `` looks like "that calendar day" and is
+ * not: Postgres reads an offset-less literal in the SESSION timezone, which for
+ * these service-role connections is UTC. For a New York company that window is
+ * shifted four hours — it misses the last four hours of the local day and picks
+ * up the first four of the previous one. §3i counts crew from that window, so
+ * the head count would be quietly wrong and the check would miss an evening
+ * crew entirely.
+ *
+ * Same guess-and-correct shape as `zonedMidnightUtc` in time-tracking.ts, which
+ * is private to that module; duplicated rather than exported across a package
+ * boundary that does not exist yet.
+ */
+export function zonedDayStartUtc(ymd: string, timeZone: string): Date {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd);
+  if (!m) return new Date(NaN);
+  const [y, mo, d] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  const target = Date.UTC(y, mo - 1, d);
+
+  let guess = target;
+  for (let i = 0; i < 2; i++) {
+    const dtf = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    });
+    const p: Record<string, string> = {};
+    for (const part of dtf.formatToParts(new Date(guess))) p[part.type] = part.value;
+    const asUtc = Date.UTC(
+      Number(p.year),
+      Number(p.month) - 1,
+      Number(p.day),
+      Number(p.hour) % 24,
+      Number(p.minute),
+      Number(p.second)
+    );
+    guess += target - asUtc;
+  }
+  return new Date(guess);
+}
+
+/** The half-open [start, end) UTC range covering one local calendar day. */
+export function zonedDayRangeUtc(ymd: string, timeZone: string): { start: Date; end: Date } {
+  const start = zonedDayStartUtc(ymd, timeZone);
+  // Built from the NEXT calendar date rather than start + 24h, so a DST day
+  // that is 23 or 25 hours long still covers exactly itself.
+  const next = new Date(Date.UTC(0, 0, 0));
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(ymd);
+  if (!m) return { start, end: start };
+  next.setTime(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]) + 1));
+  const nextYmd = `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, '0')}-${String(
+    next.getUTCDate()
+  ).padStart(2, '0')}`;
+  return { start, end: zonedDayStartUtc(nextYmd, timeZone) };
+}
+
 export function zonedWeekday(instant: Date, timeZone: string): number {
   const short = new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short' })
     .formatToParts(instant)

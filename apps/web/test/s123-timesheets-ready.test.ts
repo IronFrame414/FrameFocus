@@ -125,15 +125,23 @@ describe('§3h — the destination', () => {
 
 describe('the cron wiring', () => {
   const source = readFileSync(
-    fileURLToPath(new URL('../app/api/cron/timesheets-ready/route.ts', import.meta.url)),
+    fileURLToPath(new URL('../lib/notify/crons/timesheets-ready.ts', import.meta.url)),
     'utf8'
   );
-  const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+  const routeSource = readFileSync(
+  fileURLToPath(new URL('../app/api/cron/timesheets-ready/route.ts', import.meta.url)),
+  'utf8'
+);
+const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
 
-  it('is secured by CRON_SECRET before it reads anything', () => {
-    expect(code).toContain('CRON_SECRET');
-    expect(code.indexOf('CRON_SECRET')).toBeLessThan(code.indexOf("from('companies')"));
-    expect(code).toContain('status: 401');
+  it('the ROUTE is secured, and the loop only runs after the gate', () => {
+    // The gate lives in route.ts and the loop in lib/ — so this asserts across
+    // the split. Reading only one file would let the other lose its half.
+    expect(routeSource).toContain('CRON_SECRET');
+    expect(routeSource).toContain('status: 401');
+    expect(routeSource.indexOf('CRON_SECRET')).toBeLessThan(routeSource.indexOf('runTimesheetsReady('));
+    // And the loop must NOT carry its own gate — a second, divergent check.
+    expect(code).not.toContain('CRON_SECRET');
   });
 
   it('gates on BOTH the weekday and the hour', () => {

@@ -11,6 +11,10 @@ import { resolveLink } from '@/lib/notify/links';
 // ============================================================================
 
 const source = readFileSync(
+  fileURLToPath(new URL('../lib/notify/crons/still-clocked-in.ts', import.meta.url)),
+  'utf8'
+);
+const routeSource = readFileSync(
   fileURLToPath(new URL('../app/api/cron/still-clocked-in/route.ts', import.meta.url)),
   'utf8'
 );
@@ -130,9 +134,14 @@ describe('§3j — the destination and the project', () => {
 });
 
 describe('the cron wiring', () => {
-  it('is secured before it reads anything', () => {
-    expect(code).toContain('CRON_SECRET');
-    expect(code.indexOf('CRON_SECRET')).toBeLessThan(code.indexOf("from('companies')"));
+  it('the ROUTE is secured, and the loop only runs after the gate', () => {
+    // The gate lives in route.ts and the loop in lib/ — so this asserts across
+    // the split. Reading only one file would let the other lose its half.
+    expect(routeSource).toContain('CRON_SECRET');
+    expect(routeSource).toContain('status: 401');
+    expect(routeSource.indexOf('CRON_SECRET')).toBeLessThan(routeSource.indexOf('runStillClockedIn('));
+    // And the loop must NOT carry its own gate — a second, divergent check.
+    expect(code).not.toContain('CRON_SECRET');
   });
 
   it('one company failing does not abandon the rest', () => {
