@@ -56,10 +56,13 @@ export const metadata: Metadata = {
     title: brand.shortName,
     // 'black', deliberately, and NOT 'black-translucent': translucent makes
     // content render UNDER the status bar, which needs safe-area-inset padding
-    // in the mobile shell. That shell is not built (§3), so translucent would
-    // ship a layout bug today. 'black' does not overlay and sits closer to the
-    // navy app bar than 'default' (a white strip) would. Revisit when §3.1
-    // lands and safe-area handling exists.
+    // at the TOP of the shell. The shell is built now [S105] but pads the
+    // safe area at the bottom only (the tab bar) — the app bar does not, so
+    // translucent would still ship an overlap. 'black' does not overlay and
+    // sits closer to the navy app bar than 'default' (a white strip) would.
+    // Revisit only with top safe-area padding in hand, and check A-26e still
+    // holds — this pair of metas is the iOS Web Push precondition (D-10);
+    // losing them silently blocks Gate 4.
     statusBarStyle: 'black',
   },
 };

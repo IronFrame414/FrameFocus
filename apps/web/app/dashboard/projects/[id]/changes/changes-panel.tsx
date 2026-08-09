@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import type { RedactedCo } from '@/lib/co-redaction';
 import {
   createChangeOrder,
   softDeleteChangeOrder,
@@ -45,14 +46,27 @@ function money(value: number): string {
 interface ChangesPanelProps {
   projectId: string;
   projectType: string;
-  changeOrders: ChangeOrderWithAuthor[];
+  /** Money nullable — redacted at the page boundary, not here. */
+  changeOrders: RedactedCo<ChangeOrderWithAuthor>[];
   /** 7B: Σ signed net_delta from getRevisedContract() — server-computed, the
    *  single legal derivation. The panel never re-sums its listed rows. */
-  signedDelta: number;
+  signedDelta: number | null;
   canManage: boolean;
   canDelete: boolean;
-  /** Financial floor (ui-01 §11): CO dollar amounts are Owner/Admin only. */
+  /**
+   * The money COLUMN is present. Owner/Admin, and a PM — who may see figures on
+   * change orders they authored (S121). Per-row values are null for the ones
+   * they may not, so the cell renders empty rather than lying.
+   */
   canSeeFinancials: boolean;
+  /**
+   * The two summary SUMS. Owner/Admin only, and deliberately narrower than the
+   * column: `sentSum` and `signedDelta` aggregate ACROSS authors, so handing
+   * them to a PM would encode other people's figures in one number — exactly
+   * what the authored-by ruling withholds. A partial sum captioned "pending"
+   * would be worse than no caption.
+   */
+  canSeeSums: boolean;
 }
 
 export function ChangesPanel({
@@ -63,6 +77,7 @@ export function ChangesPanel({
   canManage,
   canDelete,
   canSeeFinancials,
+  canSeeSums,
 }: ChangesPanelProps) {
   const router = useRouter();
   const [formOpen, setFormOpen] = useState(false);
@@ -105,7 +120,7 @@ export function ChangesPanel({
     router.push(`/dashboard/projects/${projectId}/changes/${result.id}`);
   }
 
-  async function handleDelete(co: ChangeOrderWithAuthor) {
+  async function handleDelete(co: RedactedCo<ChangeOrderWithAuthor>) {
     if (!window.confirm(`Move ${co.co_number} to trash?`)) return;
     const result = await softDeleteChangeOrder(co.id);
     if (!result.success) {
@@ -119,17 +134,21 @@ export function ChangesPanel({
   const sent = changeOrders.filter((co) => co.status === 'sent');
   const signed = changeOrders.filter((co) => co.status === 'signed');
   const drafts = changeOrders.filter((co) => co.status === 'draft');
-  const sentSum = sent.reduce((sum, co) => sum + co.net_delta, 0);
+  // `?? 0` is safe ONLY because the sum is rendered under canSeeFinancials,
+  // and net_delta is null exactly when that is false — so the zero can never
+  // reach a screen. Kept as a total rather than hoisted into the branch so the
+  // card list below stays one shape.
+  const sentSum = sent.reduce((sum, co) => sum + (co.net_delta ?? 0), 0);
   // 7B: signed $ comes from the server-passed derivation, not a re-sum here
   // ("awaiting" sentSum is not contract value and stays local).
-  const signedSum = signedDelta;
+  const signedSum = signedDelta ?? 0;
 
   const summaryCards: { label: string; value: number; valueColor: string; caption: string }[] = [
     {
       label: 'Awaiting Signature',
       value: sent.length,
       valueColor: color.warning,
-      caption: canSeeFinancials
+      caption: canSeeSums
         ? `${sentSum < 0 ? '−' : ''}${money(sentSum)} pending`
         : 'sent to clients',
     },
@@ -137,7 +156,7 @@ export function ChangesPanel({
       label: 'Signed',
       value: signed.length,
       valueColor: color.success,
-      caption: canSeeFinancials
+      caption: canSeeSums
         ? `${signedSum < 0 ? '−' : ''}${money(signedSum)} added`
         : 'signed by clients',
     },
@@ -315,7 +334,12 @@ export function ChangesPanel({
                 <span style={{ fontFamily: font.sans, fontSize: '14px', fontWeight: 600, color: color.navy }}>
                   {co.title}
                 </span>
-                {canSeeFinancials && (
+                {/* `net_delta !== null` is NOT belt-and-braces — it is what
+                    makes the compiler prove the figure exists here. It is null
+                    for exactly the roles `canSeeFinancials` is false for, so
+                    the two conditions agree by construction; the second one is
+                    the machine-checkable half. */}
+                {canSeeFinancials && co.net_delta !== null && (
                   <span
                     style={{
                       fontFamily: font.mono,

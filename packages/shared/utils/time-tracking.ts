@@ -117,6 +117,40 @@ export const DEFAULT_TIME_SETTINGS: TimeSettings = {
 export const GPS_CLOCK_MODES = ['off', 'capture', 'enforce'] as const;
 export type GpsClockMode = (typeof GPS_CLOCK_MODES)[number];
 
+/**
+ * A-7k5 / D-34 — "on site" is a statement about COORDINATES, never about
+ * `gps_in` being non-null.
+ *
+ * The column is three-state (see `GpsRecord` in `lib/services/time-tracking-client.ts`):
+ *
+ *   coordinates   a fix was obtained
+ *   a reason      capture was ATTEMPTED AND FAILED — `{reason, error_code}`,
+ *                 e.g. permission_denied on a crew member's handset
+ *   NULL          nothing was recorded at all: a legacy row, or a write path
+ *                 that never attempted capture (`gps_clock_mode = 'off'`)
+ *
+ * A nullity test conflates the first two, so a DENIED-GPS session renders as
+ * verified on site — the exact inversion A-7k5 exists to prevent, on the
+ * timesheet surfaces a supervisor approves from.
+ *
+ * MOVED HERE [S106] from `app/m/timeclock/capture-gps.ts`. It was written as
+ * "one predicate, shared, so no surface re-derives it wrongly" and then had
+ * **no consumers at all**, while three desktop surfaces re-derived it — one
+ * inline and two not at all, which is the defect Ruling 3 fixed. It could not
+ * be shared from where it lived: `/dashboard` must not import from the mobile
+ * tree. This module is dependency-free and reachable from server components,
+ * client components and `/m` alike, so it is the only home that lets the
+ * comment be true. `capture-gps.ts` re-exports it for the mobile callers.
+ */
+export function hasCoordinates(gps: unknown): gps is { lat: number; lng: number } {
+  return (
+    typeof gps === 'object' &&
+    gps !== null &&
+    typeof (gps as { lat?: unknown }).lat === 'number' &&
+    typeof (gps as { lng?: unknown }).lng === 'number'
+  );
+}
+
 const MS_PER_HOUR = 3_600_000;
 
 function toMs(value: string | Date): number {

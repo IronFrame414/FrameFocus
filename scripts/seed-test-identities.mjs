@@ -236,9 +236,20 @@ async function seedIsolationFixtures(company, tag, ownerMemberId) {
   // Invoice: created as a draft then sent, so the numbering trigger runs for real.
   let invoiceId;
   {
-    const { data: found } = await db
+    // ⚠️ NOT `.maybeSingle()` — it was, and the script was NOT idempotent [S113].
+    // `maybeSingle()` treats "more than one row" as an ERROR and returns
+    // `data: null`. This destructure ignores `error`, so the moment a second
+    // fixture invoice existed the lookup reported "none found" and created a
+    // THIRD — then a fourth, compounding on every run. Four surplus invoices
+    // (INV-0178…0181) were created before this was noticed and have been
+    // soft-deleted. `limit(1)` + `[0]` is stable whatever the row count.
+    const { data: rows } = await db
       .from('invoices').select('id, status, invoice_number')
-      .eq('company_id', company.id).eq('project_id', projectId).maybeSingle();
+      .eq('company_id', company.id).eq('project_id', projectId)
+      .eq('is_deleted', false)
+      .order('created_at', { ascending: true })
+      .limit(1);
+    const found = rows?.[0] ?? null;
     if (found) {
       invoiceId = found.id;
       note(`invoice ${tag}`, 'exists', `${found.id} (${found.invoice_number ?? found.status})`);
@@ -334,10 +345,249 @@ for (const { email, role } of COMPANY_A_IDENTITIES) {
   );
 }
 
+// ── #127 — the two identities rebuild-test never had [S113] ─────────────────
+//
+// WHY THESE TWO ARE NOT IN COMPANY_A_IDENTITIES ABOVE. `create_member_for_new_profile()`
+// (20260704210000) SKIPS both roles:
+//
+//     IF NEW.role IN ('client', 'subcontractor') THEN RETURN NEW; END IF;
+//
+// so neither gets an auto-created company_members row, and ensureIdentity()
+// alone would leave a subcontractor with no member id — which is the id
+// `assignee_id`, `completed_by` and `get_my_member_id()` all speak in. A sub
+// seeded that way looks fine in `profiles` and is invisible to every punch
+// query, which is a worse fixture than none.
+//
+// ⚠️ DO NOT REACH FOR THE 32 EXISTING SUBCONTRACTOR MEMBER ROWS. They are
+// ROSTER entries — `profile_id IS NULL`, no auth user, cannot sign in
+// (TECH_DEBT #127 says this explicitly and it is the trap this block avoids).
+// A member row is not an identity.
+//
+// The path below is the PRODUCTION path, not a shortcut: handle_new_user()'s
+// invite branch inserts the profile and then links it to an existing member row
+// with `UPDATE company_members SET profile_id = ... WHERE id = <invite.member_id>
+// AND profile_id IS NULL`. We do the same two steps with the service role,
+// against a member row created the same way production creates one — by
+// inserting a `subcontractors` row and letting `subcontractors_create_member`
+// fire. Seeding a member row directly would test a shape production never makes.
+console.log('\n#127 — subcontractor and client identities:');
+
+const SUB_EMAIL = 'josh+qa-sub@worthprop.com';
+const CLIENT_EMAIL = 'josh+qa-client@worthprop.com';
+const SUB_COMPANY_NAME = 'QA Subcontractor Co (TEST IDENTITY)';
+
+// 1. The Module 2 subcontractor, which the trigger turns into a member row.
+const subVendorId = await ensureRow(
+  'subcontractor record', 'subcontractors',
+  { company_id: companyA.id, company_name: SUB_COMPANY_NAME },
+  {
+    company_id: companyA.id,
+    company_name: SUB_COMPANY_NAME,
+    sub_type: 'subcontractor',
+    status: 'active',
+    trade_type: 'Framing',
+    email: SUB_EMAIL,
+  }
+);
+
+// 2. Its member row — created by `subcontractors_create_member`, not by us.
+const { data: subMember } = await db
+  .from('company_members')
+  .select('id, profile_id, display_name')
+  .eq('company_id', companyA.id)
+  .eq('member_type', 'subcontractor')
+  .eq('display_name', SUB_COMPANY_NAME)
+  .maybeSingle();
+if (!subMember) {
+  throw new Error(
+    `subcontractors_create_member did not fire for ${SUB_COMPANY_NAME} (subcontractors.id=${subVendorId}) — ` +
+      'no company_members row to link an identity to.'
+  );
+}
+note('subcontractor member row', 'exists', `${subMember.id} (via trigger)`);
+
+// 3. The auth user + profile. ensureIdentity() creates no member row for this
+//    role, which is why step 4 exists.
+const subProfile = await ensureIdentity(
+  { email: SUB_EMAIL, role: 'subcontractor', first: 'QA', last: 'Sub A' },
+  companyA.id
+);
+
+// 4. The link — handle_new_user()'s invite branch, done by hand.
+if (subMember.profile_id === subProfile.id) {
+  note('sub profile ↔ member link', 'exists', subMember.id);
+} else if (subMember.profile_id) {
+  throw new Error(
+    `member ${subMember.id} is already linked to a DIFFERENT profile (${subMember.profile_id}); refusing to steal it.`
+  );
+} else {
+  must('link sub member', (await db.from('company_members')
+    .update({ profile_id: subProfile.id })
+    .eq('id', subMember.id)
+    .is('profile_id', null)).error);
+  note('sub profile ↔ member link', 'CREATED', `${subMember.id} -> ${subProfile.id}`);
+}
+
+// 5. Assign the sub to the fixture project.
+//    THIS IS WHAT MAKES D-57 A NARROWING RATHER THAN A NO-OP. `can_view_project()`
+//    is `owner/admin OR is_assigned_to_project()`, and that second arm is
+//    ROLE-BLIND — so an assigned sub currently satisfies the FIRST arm of
+//    `punch_list_items_select_visible` and sees every punch item on the project.
+//    Without this row the sub sees nothing either way and the migration would
+//    prove nothing.
+await ensureRow(
+  'assignment subcontractor', 'project_assignments',
+  { project_id: aProjectId, member_id: subMember.id },
+  {
+    company_id: companyA.id, project_id: aProjectId,
+    member_id: subMember.id, role_on_project: 'subcontractor',
+  }
+);
+
+// 5b. Assign the sub to the project the BROWSER suite drives [S114].
+//
+//     A-33c ("no money on M-13 under ANY role") walks all six roles against
+//     e2e/m-sections.spec.ts's PROJECT_ID, which is NOT the isolation fixture
+//     above. The subcontractor arm of that criterion was skipped on #127
+//     grounds; #127 is closed, but simply unskipping it would have produced a
+//     VACUOUS PASS — an unassigned sub fails `can_view_project()`, reaches the
+//     screen with nothing on it, and "renders no currency" is then true of an
+//     empty page.
+//
+//     ⚠️ A-33c IS THE CRITERION THAT MOST NEEDS A REAL ROW SET. TECH_DEBT #117
+//     rules `change_orders_select_visible` UI-only — company + can_view_project,
+//     no role floor — so RLS hands a sub every CO on a project they are on, at
+//     full `net_delta`. Nothing but the UI keeps those dollars off the screen.
+//     The assertion is therefore only worth running against a sub who can
+//     actually read the change orders, and this row is what makes that true.
+//     That project carries 2 non-deleted COs; the isolation fixture carries 0,
+//     which is why the fixture project could not be used instead.
+const SECTIONS_PROJECT_ID = 'eaf0e25b-d60e-49c0-89b2-5612118d94b4';
+{
+  const { data: sectionsProject } = await db
+    .from('projects').select('id, company_id').eq('id', SECTIONS_PROJECT_ID).maybeSingle();
+  if (!sectionsProject) {
+    note('assignment sub → m-sections project', 'WARN',
+      `${SECTIONS_PROJECT_ID} not found — e2e/m-sections.spec.ts PROJECT_ID has moved; A-33c's sub arm will be vacuous`);
+  } else if (sectionsProject.company_id !== companyA.id) {
+    throw new Error(
+      `m-sections PROJECT_ID ${SECTIONS_PROJECT_ID} belongs to company ${sectionsProject.company_id}, not company A — refusing to cross tenants.`
+    );
+  } else {
+    await ensureRow(
+      'assignment sub → m-sections project', 'project_assignments',
+      { project_id: SECTIONS_PROJECT_ID, member_id: subMember.id },
+      {
+        company_id: companyA.id, project_id: SECTIONS_PROJECT_ID,
+        member_id: subMember.id, role_on_project: 'subcontractor',
+      }
+    );
+
+    // ── TECH_DEBT #143 [S119] — EVERY FIELD ROLE, NOT JUST THE SUB ─────────
+    //
+    // The sub got its row at S114 for A-33c; PM and crew already had one from
+    // the project's own assignments. **The foreman never did**, and because
+    // `can_view_project()` is what gates `change_orders_select_visible` and
+    // `getProject()`, that identity saw an EMPTY M-13 and got a 404 on M-33.
+    //
+    // ⚠️ THE COST WAS NOT THE 404. It was that every assertion of the form
+    // "the foreman does NOT see X" passed VACUOUSLY — for the wrong reason,
+    // silently. #127 was the same class of gap and at least failed loudly.
+    // Found only because M6M Part C's suite failed 5/21 on it [S117].
+    //
+    // Seeded for ALL THREE rather than just the foreman, so the set is uniform
+    // and the next identity added here does not inherit the same silent hole.
+    // `ensureRow` matches on (project_id, member_id), so the two that already
+    // have rows are left exactly as they are.
+    for (const { email, role } of COMPANY_A_IDENTITIES) {
+      if (role === 'owner' || role === 'admin') continue; // reach every project already
+      const { data: p } = await db.from('profiles').select('id').eq('email', email).single();
+      const memberId = await memberIdFor(p.id);
+      await ensureRow(
+        `assignment ${role} → m-sections project`, 'project_assignments',
+        { project_id: SECTIONS_PROJECT_ID, member_id: memberId },
+        {
+          company_id: companyA.id, project_id: SECTIONS_PROJECT_ID,
+          member_id: memberId, role_on_project: role,
+        }
+      );
+    }
+  }
+}
+
+// 6. The client. NO member row, deliberately — `create_member_for_new_profile()`
+//    skips 'client' because a client is not assignable to work, and a client
+//    identity exists to exercise the `get_my_role() <> 'client'` arms that
+//    `files_select_non_client` and its three siblings are built on.
+await ensureIdentity(
+  { email: CLIENT_EMAIL, role: 'client', first: 'QA', last: 'Client A' },
+  companyA.id
+);
+{
+  const { data: strayMember } = await db
+    .from('company_members').select('id')
+    .eq('company_id', companyA.id).eq('display_name', 'QA Client A').maybeSingle();
+  note(
+    'client has no member row (correct)',
+    strayMember ? 'WARN' : 'exists',
+    strayMember ? `unexpected member ${strayMember.id}` : 'as create_member_for_new_profile intends'
+  );
+}
+
+// ── D-57 / D-58 punch fixtures — the three items the proof needs ────────────
+//
+// Permanent and idempotent so the migration proof is REPRODUCIBLE by anyone,
+// rather than depending on rows a one-off script made and threw away. The three
+// cover both arms of the rule and the case it must exclude:
+//
+//   ASSIGNED   assignee_id = the sub's member id      -> visible after D-57
+//   AUTHORED   created_by  = the sub's auth user id   -> visible after D-57
+//   NEITHER    assigned to the crew member, authored by owner -> NOT visible
+//
+// ⚠️ THE TWO ARMS SIT ON DIFFERENT IDENTITY AXES and the fixtures must too, or
+// the proof passes for the wrong reason: `assignee_id` FKs to company_members,
+// `created_by` FKs to auth.users. A fixture that put the same id in both would
+// not distinguish a correct predicate from one that reads the wrong column.
+console.log('\nD-57 punch fixtures on the company A fixture project:');
+
+const punchListId = await ensureRow(
+  'punch list', 'punch_lists',
+  { company_id: companyA.id, project_id: aProjectId, name: 'QA — D-57 fixtures' },
+  { company_id: companyA.id, project_id: aProjectId, name: 'QA — D-57 fixtures' }
+);
+
+const { data: subUser } = await db.from('profiles').select('user_id').eq('id', subProfile.id).single();
+const { data: crewProfile } = await db.from('profiles').select('id').eq('email', 'josh+crew@worthprop.com').single();
+const crewMemberId = await memberIdFor(crewProfile.id);
+const { data: ownerUser } = await db.from('profiles').select('user_id').eq('email', COMPANY_A_IDENTITIES[0].email).single();
+
+const punchItem = (title, extra) => ({
+  label: `punch item — ${title}`,
+  match: { company_id: companyA.id, project_id: aProjectId, title },
+  insert: {
+    company_id: companyA.id, project_id: aProjectId, punch_list_id: punchListId,
+    title, status: 'open',
+    // Both default to auth.uid(), which is NULL under the service role — so
+    // every one of these is set EXPLICITLY or the AUTHORED arm proves nothing.
+    created_by: ownerUser.user_id, updated_by: ownerUser.user_id,
+    ...extra,
+  },
+});
+
+for (const spec of [
+  punchItem('QA D-57 ASSIGNED to the sub', { assignee_id: subMember.id }),
+  punchItem('QA D-57 AUTHORED by the sub', { created_by: subUser.user_id, assignee_id: crewMemberId }),
+  punchItem('QA D-57 NEITHER — sub must not see this', { assignee_id: crewMemberId }),
+]) {
+  await ensureRow(spec.label, 'punch_list_items', spec.match, spec.insert);
+}
+
 // ── summary ─────────────────────────────────────────────────────────────────
 const created = log.filter((l) => l.status === 'CREATED').length;
 console.log(`\n${created} created, ${log.length - created} already present.\n`);
 console.log(`Company A: ${companyA.id}`);
 console.log(`Company B: ${companyB.id}`);
+console.log(`Subcontractor identity: ${SUB_EMAIL}  (member ${subMember.id})`);
+console.log(`Client identity:        ${CLIENT_EMAIL}  (no member row, by design)`);
 console.log(`Shared password for all test identities: ${TEST_PASSWORD}`);
 console.log('(documented in STATE.md → Test Data; rebuild-test only, never production)\n');

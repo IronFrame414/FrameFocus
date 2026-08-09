@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics="">
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&amp;family=Barlow+Semi+Condensed:wght@500;600;700&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#e9e7e1;font-family:'Barlow',system-ui,sans-serif}
+  a{color:#2f49d1;text-decoration:none}a:hover{color:#1f33a8}
+  .dv-turn{padding:48px 52px 40px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}
+  .dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 26px}
+  .dv-tid{font:700 10px 'IBM Plex Mono',monospace;padding:4px 8px;background:#17181b;color:#fff;border-radius:5px;text-decoration:none}
+  .dv-tname{font:600 13px/1.2 'Barlow',sans-serif;color:#1a1a1a}
+  .dv-opts{display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start}
+  .dv-opt{flex:none;display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px}
+  .dv-oid{font:700 10.5px 'IBM Plex Mono',monospace;padding:3px 7px;background:rgba(0,0,0,.09);color:#1a1a1a;border-radius:5px;text-decoration:none}
+  .dv-olabel{display:flex;align-items:baseline;gap:8px;font:500 12px/1.3 'Barlow',sans-serif;color:rgba(0,0,0,.55)}
+  .dv-card{max-width:100%;border-radius:16px;overflow:hidden;box-shadow:0 12px 34px rgba(20,30,55,.16)}
+  .dv-opt:target .dv-oid{background:#2f49d1;color:#fff}
+  .dv-next{margin:26px 0 0;font:14px/1.6 'Barlow',sans-serif;color:rgba(0,0,0,.55)}
+  .intro{max-width:940px;margin:0 auto;padding:56px 52px 8px}
+  .intro h1{font:800 30px/1.1 'Barlow',sans-serif;color:#14213d;margin:0 0 6px;letter-spacing:-.01em}
+  .intro .sub{font:500 15px 'IBM Plex Mono',monospace;color:#6b7280;margin:0 0 26px}
+  .intro p{font:400 15px/1.65 'Barlow',sans-serif;color:#33383f;margin:0 0 14px}
+  .intro h3{font:700 13px 'IBM Plex Mono',monospace;letter-spacing:.06em;text-transform:uppercase;color:#14213d;margin:26px 0 10px}
+  .intro li{font:400 15px/1.6 'Barlow',sans-serif;color:#33383f;margin:0 0 7px}
+  .intro strong{color:#14213d;font-weight:700}
+</style>
+</helmet>
+
+<div class="intro">
+  <h1>FrameFocus — Mobile Photos</h1>
+  <p class="sub">Project gallery · Photo viewer · Photo markup</p>
+  <p>Three mobile photo screens in the approved <strong>Refined Navy (1a)</strong> language. Photo documentation is the highest-volume field activity, so these are built for one hand, gloves, and sunlight. Shown in an iPhone frame at 402×874.</p>
+</div>
+
+<section class="dv-turn" id="t1">
+  <div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Mobile photos — 3 screens</span></div>
+  <div class="dv-opts">
+
+    <div class="dv-opt" id="6j">
+      <div class="dv-olabel"><a class="dv-oid" href="#6j">6j</a>Mobile photos — project gallery</div>
+      <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" hint-size="402px,874px">
+        <div style="height:100%;background:#f4f6f9;font-family:'Barlow',sans-serif;display:flex;flex-direction:column">
+          <div style="background:#14213d;padding:58px 18px 16px;display:flex;align-items:center;gap:12px">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8fa0c4" stroke-width="2.2" style="flex:none"><path d="M15 19l-7-7 7-7"/></svg>
+            <div style="flex:1"><div style="font:800 20px 'Barlow';color:#fff;letter-spacing:-.01em">Photos</div><div style="font:500 11px 'IBM Plex Mono';color:#8fa0c4">Willow Ridge · 34 photos</div></div>
+            <div style="width:38px;height:38px;border-radius:10px;background:rgba(255,255,255,.13);display:flex;align-items:center;justify-content:center;flex:none"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg></div>
+          </div>
+          <div style="padding:13px 18px 0;display:flex;gap:8px;overflow:hidden;flex:none">
+            <span style="font:700 13px 'Barlow';padding:9px 16px;border-radius:20px;background:#14213d;color:#fff;white-space:nowrap">All</span>
+            <span style="font:600 13px 'Barlow';padding:9px 16px;border-radius:20px;background:#fff;border:1px solid #e0e4ea;color:#4b5563;white-space:nowrap">Daily logs</span>
+            <span style="font:600 13px 'Barlow';padding:9px 16px;border-radius:20px;background:#fff;border:1px solid #e0e4ea;color:#4b5563;white-space:nowrap">Deliveries</span>
+            <span style="font:600 13px 'Barlow';padding:9px 16px;border-radius:20px;background:#fff;border:1px solid #e0e4ea;color:#4b5563;white-space:nowrap">Punch</span>
+          </div>
+          <div style="flex:1;padding:16px 18px 0;overflow:hidden">
+            <div style="font:600 11px 'IBM Plex Mono';text-transform:uppercase;letter-spacing:.05em;color:#8a919c;margin-bottom:9px">Today · Jul 8 · 8</div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:18px">
+              <div style="aspect-ratio:1;border-radius:11px;background:linear-gradient(135deg,#dce3ee,#b9c4d6);position:relative;overflow:hidden"><span style="position:absolute;left:6px;bottom:6px;font:600 9px 'Barlow';background:rgba(20,33,61,.72);color:#fff;padding:3px 6px;border-radius:4px">Log</span></div>
+              <div style="aspect-ratio:1;border-radius:11px;background:linear-gradient(135deg,#e0d8cc,#c4b39a)"></div>
+              <div style="aspect-ratio:1;border-radius:11px;background:linear-gradient(135deg,#d3ddd6,#aabfb1);position:relative;overflow:hidden"><span style="position:absolute;left:6px;bottom:6px;font:600 9px 'Barlow';background:rgba(192,54,44,.85);color:#fff;padding:3px 6px;border-radius:4px">Safety</span></div>
+              <div style="aspect-ratio:1;border-radius:11px;background:linear-gradient(135deg,#d8dce6,#b3bacb);position:relative;overflow:hidden"><span style="position:absolute;left:6px;bottom:6px;font:600 9px 'Barlow';background:rgba(20,33,61,.72);color:#fff;padding:3px 6px;border-radius:4px">Delivery</span></div>
+              <div style="aspect-ratio:1;border-radius:11px;background:linear-gradient(135deg,#e4ddd2,#c6b8a2)"></div>
+              <div style="aspect-ratio:1;border-radius:11px;background:linear-gradient(135deg,#dfe4ea,#bcc4cf);position:relative;overflow:hidden"><span style="position:absolute;left:6px;bottom:6px;font:600 9px 'Barlow';background:rgba(180,83,9,.85);color:#fff;padding:3px 6px;border-radius:4px">Punch</span></div>
+            </div>
+            <div style="font:600 11px 'IBM Plex Mono';text-transform:uppercase;letter-spacing:.05em;color:#8a919c;margin-bottom:9px">Jul 7 · 6</div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-bottom:18px">
+              <div style="aspect-ratio:1;border-radius:11px;background:linear-gradient(135deg,#d6dde8,#b0bacb)"></div>
+              <div style="aspect-ratio:1;border-radius:11px;background:linear-gradient(135deg,#e2dacd,#c2b19a);position:relative;overflow:hidden"><span style="position:absolute;left:6px;bottom:6px;font:600 9px 'Barlow';background:rgba(20,33,61,.72);color:#fff;padding:3px 6px;border-radius:4px">Delivery</span></div>
+              <div style="aspect-ratio:1;border-radius:11px;background:linear-gradient(135deg,#d0dad3,#a7bcae)"></div>
+              <div style="aspect-ratio:1;border-radius:11px;background:linear-gradient(135deg,#dde1e9,#b7bfcd)"></div>
+              <div style="aspect-ratio:1;border-radius:11px;background:linear-gradient(135deg,#e6dfd4,#c8bba6)"></div>
+              <div style="aspect-ratio:1;border-radius:11px;background:linear-gradient(135deg,#d9dee7,#b4bcca)"></div>
+            </div>
+            <div style="font:600 11px 'IBM Plex Mono';text-transform:uppercase;letter-spacing:.05em;color:#8a919c;margin-bottom:9px">Jul 3 · 5</div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px">
+              <div style="aspect-ratio:1;border-radius:11px;background:linear-gradient(135deg,#dae0e9,#b2bbc9)"></div>
+              <div style="aspect-ratio:1;border-radius:11px;background:linear-gradient(135deg,#e3dcd1,#c5b7a1)"></div>
+              <div style="aspect-ratio:1;border-radius:11px;background:linear-gradient(135deg,#d2dbd4,#a9bdaf)"></div>
+            </div>
+          </div>
+          <div style="background:#fff;border-top:1px solid #e6e9ef;padding:10px 14px 14px;display:flex;align-items:flex-end;justify-content:space-between;flex:none">
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;min-height:56px;justify-content:center"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="#2f49d1" stroke-width="2"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/></svg><span style="font:700 11px 'Barlow';color:#2f49d1">Projects</span></div>
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;min-height:56px;justify-content:center"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="#8a919c" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg><span style="font:600 11px 'Barlow';color:#8a919c">Timeclock</span></div>
+            <div style="flex:1;display:flex;justify-content:center"><div style="width:66px;height:66px;border-radius:50%;background:#f59e0b;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 20px rgba(245,158,11,.4);margin-top:-26px;border:4px solid #fff"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#14213d" stroke-width="2"><path d="M4 8.5h2.4l1.3-2.2h8.6l1.3 2.2H20a1.5 1.5 0 011.5 1.5v8A1.5 1.5 0 0120 19.5H4A1.5 1.5 0 012.5 18v-8A1.5 1.5 0 014 8.5z"/><circle cx="12" cy="14" r="3.6"/></svg></div></div>
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;min-height:56px;justify-content:center"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="#8a919c" stroke-width="2"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></svg><span style="font:600 11px 'Barlow';color:#8a919c">Logs</span></div>
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;min-height:56px;justify-content:center"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="#8a919c" stroke-width="2"><path d="M12 3a5 5 0 00-5 5v2h10V8a5 5 0 00-5-5z"/><path d="M4 12h16v2a2 2 0 01-2 2H6a2 2 0 01-2-2z"/></svg><span style="font:600 11px 'Barlow';color:#8a919c">Field</span></div>
+          </div>
+        </div>
+      </x-import>
+    </div>
+
+    <div class="dv-opt" id="6k">
+      <div class="dv-olabel"><a class="dv-oid" href="#6k">6k</a>Mobile photo viewer</div>
+      <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" dark="{{ true }}" hint-size="402px,874px">
+        <div style="height:100%;background:#0d1220;font-family:'Barlow',sans-serif;display:flex;flex-direction:column">
+          <div style="padding:56px 18px 12px;display:flex;align-items:center;gap:13px">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8fa0c4" stroke-width="2.2" style="flex:none"><path d="M6 6l12 12M18 6L6 18"/></svg>
+            <div style="flex:1"><div style="font:700 15px 'Barlow';color:#fff">IMG_2841.jpg</div><div style="font:500 11px 'IBM Plex Mono';color:#6c7789">3 of 34</div></div>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#8fa0c4" stroke-width="2" style="flex:none"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
+          </div>
+          <div style="height:330px;flex:none;margin:0 0 14px;background:linear-gradient(135deg,#59677f,#2c3547);position:relative;display:flex;align-items:center;justify-content:center">
+            <div style="position:absolute;left:14px;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2"><path d="M15 19l-7-7 7-7"/></svg></div>
+            <div style="position:absolute;right:14px;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.14);display:flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2"><path d="M9 5l7 7-7 7"/></svg></div>
+          </div>
+          <div style="padding:0 18px;display:flex;gap:7px;margin-bottom:16px;flex:none">
+            <div style="width:52px;height:52px;border-radius:9px;background:linear-gradient(135deg,#dce3ee,#b9c4d6);opacity:.45"></div>
+            <div style="width:52px;height:52px;border-radius:9px;background:linear-gradient(135deg,#e0d8cc,#c4b39a);opacity:.45"></div>
+            <div style="width:52px;height:52px;border-radius:9px;background:linear-gradient(135deg,#59677f,#2c3547);box-shadow:0 0 0 2px #f59e0b"></div>
+            <div style="width:52px;height:52px;border-radius:9px;background:linear-gradient(135deg,#d8dce6,#b3bacb);opacity:.45"></div>
+            <div style="width:52px;height:52px;border-radius:9px;background:linear-gradient(135deg,#e4ddd2,#c6b8a2);opacity:.45"></div>
+            <div style="width:52px;height:52px;border-radius:9px;background:linear-gradient(135deg,#dfe4ea,#bcc4cf);opacity:.45"></div>
+          </div>
+          <div style="flex:1;padding:0 18px;overflow:hidden">
+            <div style="font:400 14px/1.5 'Barlow';color:#cdd6e8;margin-bottom:14px">Headers set over both openings, blocking in for cabinet backing.</div>
+            <div style="display:flex;gap:7px;margin-bottom:16px">
+              <span style="font:600 12px 'Barlow';background:rgba(47,73,209,.22);color:#9fb0f5;padding:6px 12px;border-radius:20px">Framing</span>
+              <span style="font:600 12px 'Barlow';background:rgba(47,73,209,.22);color:#9fb0f5;padding:6px 12px;border-radius:20px">East wall</span>
+              <span style="font:600 12px 'Barlow';background:rgba(255,255,255,.07);color:#8fa0c4;padding:6px 12px;border-radius:20px;border:1px dashed rgba(255,255,255,.18)">+ Tag</span>
+            </div>
+            <div style="border-top:1px solid rgba(255,255,255,.08);padding-top:13px">
+              <div style="display:flex;justify-content:space-between;padding:7px 0"><span style="font-size:13px;color:#8fa0c4">Taken</span><span style="font:500 12px 'IBM Plex Mono';color:#fff">Jul 8, 2:14 PM</span></div>
+              <div style="display:flex;justify-content:space-between;padding:7px 0"><span style="font-size:13px;color:#8fa0c4">By</span><span style="font:500 13px 'Barlow';color:#fff">Carl Chen</span></div>
+              <div style="display:flex;justify-content:space-between;padding:7px 0"><span style="font-size:13px;color:#8fa0c4">Source</span><span style="font:500 13px 'Barlow';color:#fff">Daily log · Jul 8</span></div>
+            </div>
+          </div>
+          <div style="padding:12px 18px 20px;display:flex;gap:10px;flex:none">
+            <div style="flex:1;min-height:56px;border-radius:14px;background:rgba(255,255,255,.09);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#cdd6e8" stroke-width="2"><path d="M12 15V3m0 12l-4-4m4 4l4-4"/><path d="M4 17v3h16v-3"/></svg><span style="font:600 11px 'Barlow';color:#cdd6e8">Save</span></div>
+            <div style="flex:1;min-height:56px;border-radius:14px;background:rgba(255,255,255,.09);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#cdd6e8" stroke-width="2"><path d="M4 12v7h16v-7"/><path d="M12 3v11m0-11l4 4m-4-4l-4 4"/></svg><span style="font:600 11px 'Barlow';color:#cdd6e8">Share</span></div>
+            <div style="flex:1;min-height:56px;border-radius:14px;background:rgba(255,255,255,.09);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#cdd6e8" stroke-width="2"><path d="M21 15V6a2 2 0 00-2-2H5a2 2 0 00-2 2v13l4-4h12a2 2 0 002-2z"/></svg><span style="font:600 11px 'Barlow';color:#cdd6e8">Comment</span></div>
+            <div style="flex:1;min-height:56px;border-radius:14px;background:rgba(192,54,44,.16);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f0908a" stroke-width="2"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg><span style="font:600 11px 'Barlow';color:#f0908a">Delete</span></div>
+          </div>
+        </div>
+      </x-import>
+    </div>
+
+    <div class="dv-opt" id="6l">
+      <div class="dv-olabel"><a class="dv-oid" href="#6l">6l</a>Mobile photo markup — annotate</div>
+      <x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" dark="{{ true }}" hint-size="402px,874px">
+        <div style="height:100%;background:#0d1220;font-family:'Barlow',sans-serif;display:flex;flex-direction:column">
+          <div style="padding:56px 18px 14px;display:flex;align-items:center;gap:13px;flex:none">
+            <span style="font:600 15px 'Barlow';color:#8fa0c4">Cancel</span>
+            <div style="flex:1;text-align:center"><div style="font:700 15px 'Barlow';color:#fff">Markup</div><div style="font:500 11px 'IBM Plex Mono';color:#6c7789">IMG_2841.jpg</div></div>
+            <span style="font:700 15px 'Barlow';color:#f59e0b">Save</span>
+          </div>
+
+          <div style="flex:1;margin:0 14px;border-radius:14px;background:linear-gradient(135deg,#59677f,#2c3547);position:relative;overflow:hidden">
+            <div style="position:absolute;left:38px;top:52px;width:132px;height:96px;border:3px solid #f2453d;border-radius:4px"></div>
+            <svg viewBox="0 0 340 460" style="position:absolute;inset:0;width:100%;height:100%" fill="none">
+              <path d="M196 92c34-6 58 10 66 40" stroke="#f2453d" stroke-width="5" stroke-linecap="round"/>
+              <path d="M262 132l1-22-19 12z" fill="#f2453d"/>
+              <path d="M64 300c22-26 40 18 62-8s30 26 56 6" stroke="#ffd400" stroke-width="6" stroke-linecap="round"/>
+            </svg>
+            <div style="position:absolute;left:186px;top:206px;background:rgba(20,33,61,.86);border:1.5px solid #f59e0b;border-radius:9px;padding:8px 11px;max-width:150px">
+              <div style="font:600 12px/1.35 'Barlow';color:#fff">Blocking is 2x8 here</div>
+            </div>
+            <div style="position:absolute;left:30px;bottom:26px;width:34px;height:34px;border-radius:50%;background:#f2453d;color:#fff;font:700 15px 'IBM Plex Mono';display:flex;align-items:center;justify-content:center;border:2px solid rgba(255,255,255,.85)">1</div>
+            <div style="position:absolute;left:74px;bottom:26px;width:34px;height:34px;border-radius:50%;background:#f2453d;color:#fff;font:700 15px 'IBM Plex Mono';display:flex;align-items:center;justify-content:center;border:2px solid rgba(255,255,255,.85)">2</div>
+          </div>
+
+          <div style="padding:14px 14px 0;display:flex;gap:9px;flex:none">
+            <div style="flex:1;min-height:62px;border-radius:14px;background:rgba(242,69,61,.18);border:1.5px solid #f2453d;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#f2453d" stroke-width="2.2"><path d="M4 20c2-8 10-14 16-16"/><path d="M17 3l4 1-1 4"/></svg><span style="font:700 10.5px 'Barlow';color:#f2453d">Draw</span></div>
+            <div style="flex:1;min-height:62px;border-radius:14px;background:rgba(255,255,255,.09);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#cdd6e8" stroke-width="2"><path d="M5 19L19 5"/><path d="M19 12V5h-7"/></svg><span style="font:600 10.5px 'Barlow';color:#cdd6e8">Arrow</span></div>
+            <div style="flex:1;min-height:62px;border-radius:14px;background:rgba(255,255,255,.09);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#cdd6e8" stroke-width="2"><rect x="4" y="6" width="16" height="12" rx="1.5"/></svg><span style="font:600 10.5px 'Barlow';color:#cdd6e8">Box</span></div>
+            <div style="flex:1;min-height:62px;border-radius:14px;background:rgba(255,255,255,.09);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#cdd6e8" stroke-width="2"><path d="M5 6h14M12 6v13"/></svg><span style="font:600 10.5px 'Barlow';color:#cdd6e8">Text</span></div>
+            <div style="flex:1;min-height:62px;border-radius:14px;background:rgba(255,255,255,.09);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px"><svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#cdd6e8" stroke-width="2"><circle cx="12" cy="12" r="8"/><path d="M12 8.5v7M8.5 12h7"/></svg><span style="font:600 10.5px 'Barlow';color:#cdd6e8">Pin</span></div>
+          </div>
+
+          <div style="padding:14px 14px 0;display:flex;align-items:center;gap:12px;flex:none">
+            <div style="display:flex;gap:8px;flex:1">
+              <div style="width:34px;height:34px;border-radius:50%;background:#f2453d;border:2.5px solid #fff"></div>
+              <div style="width:34px;height:34px;border-radius:50%;background:#ffd400"></div>
+              <div style="width:34px;height:34px;border-radius:50%;background:#3ecf6a"></div>
+              <div style="width:34px;height:34px;border-radius:50%;background:#4f8ff7"></div>
+              <div style="width:34px;height:34px;border-radius:50%;background:#fff"></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:9px">
+              <div style="width:8px;height:8px;border-radius:50%;background:#6c7789"></div>
+              <div style="width:56px;height:4px;border-radius:20px;background:rgba(255,255,255,.16);position:relative"><div style="position:absolute;left:0;top:0;height:100%;width:58%;background:#cdd6e8;border-radius:20px"></div><div style="position:absolute;left:58%;top:-6px;width:16px;height:16px;border-radius:50%;background:#fff;transform:translateX(-8px)"></div></div>
+              <div style="width:15px;height:15px;border-radius:50%;background:#cdd6e8"></div>
+            </div>
+          </div>
+
+          <div style="padding:14px 14px 20px;display:flex;gap:9px;flex:none">
+            <div style="flex:1;min-height:56px;border-radius:14px;background:rgba(255,255,255,.09);display:flex;align-items:center;justify-content:center;gap:8px"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#cdd6e8" stroke-width="2"><path d="M9 14L4 9l5-5"/><path d="M4 9h9a7 7 0 010 14H8"/></svg><span style="font:600 14px 'Barlow';color:#cdd6e8">Undo</span></div>
+            <div style="flex:1;min-height:56px;border-radius:14px;background:rgba(255,255,255,.09);display:flex;align-items:center;justify-content:center;gap:8px"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#8fa0c4" stroke-width="2"><path d="M15 14l5-5-5-5"/><path d="M20 9h-9a7 7 0 000 14h5"/></svg><span style="font:600 14px 'Barlow';color:#8fa0c4">Redo</span></div>
+            <div style="flex:1.2;min-height:56px;border-radius:14px;background:#f59e0b;display:flex;align-items:center;justify-content:center;gap:8px"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#14213d" stroke-width="2.2"><path d="M5 12l5 5L20 6"/></svg><span style="font:700 15px 'Barlow';color:#14213d">Done</span></div>
+          </div>
+        </div>
+      </x-import>
+    </div>
+
+  </div>
+</section>

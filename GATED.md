@@ -46,18 +46,30 @@ branding, and delivery must be settled first.
 
 ---
 
-## ~~Gate 2 — Test identities~~ — **CLOSED [S97, 2026-08-02]**
+## ~~Gate 2 — Test identities~~ — **CLOSED [S97, 2026-08-02]; fully closed [S113, 2026-08-07]**
 
 **#103 (foreman test identity) and #104 (second test company) are both done.** Nothing
 is blocked behind this gate any more.
 
+> **[S113] The residual two-role gap is also closed — #127.** S97 closed this gate for the five
+> roles it named while `subcontractor` and `client` were still missing, which is what #127 was
+> raised to track. Both now exist. First use: `apps/web/test/s113-punch-sub-visibility.live.ts`
+> proves both arms of M6M D-57 by **signing in**, which is the reproducibility #127 existed to
+> demand — the S99 §7c probes it complained about minted fixtures in a transaction and rolled them
+> back, leaving nothing anyone could re-run.
+
 ### What now exists
 
-**Six persistent identities across two companies on rebuild-test** — every role the
-platform gates on, plus a genuinely separate tenant:
+**Eight persistent identities across two companies on rebuild-test [updated S113]** — **all seven
+roles** `profiles_role_check` permits, plus a genuinely separate tenant:
 
 - **Company A — Bishop Contracting:** `owner`, **`admin`** (new), `project_manager`,
-  **`foreman`** (new, #103), `crew_member`.
+  **`foreman`** (new, #103), `crew_member`, **`subcontractor`** (new S113, #127),
+  **`client`** (new S113, #127).
+  The subcontractor carries a linked `company_members` row and a `project_assignments` row on the
+  fixture project — without the assignment, D-57's narrowing would be a no-op rather than a
+  narrowing. The client deliberately has **no** member row. **The 32 `profile_id IS NULL`
+  subcontractor roster rows are not identities and were not used.**
 - **Company B — Ridgeline Builders (TEST CO 2)** (new, #104): `owner`. Carries its own
   contact, project, sent invoice, client payment + application, expense and pay rate, so
   isolation can be tested against real rows rather than an empty tenant. Company A carries

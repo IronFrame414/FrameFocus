@@ -11,7 +11,7 @@ import {
   type InstrumentPricingContext,
   type RowPricingInput,
 } from '@framefocus/shared/utils/estimate-totals';
-import { rateInForce } from '@/lib/services/instrument-rates-shared';
+import { buildInstrumentPricingContext } from '@/lib/services/instrument-rates-shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
   DiscountType,
@@ -43,29 +43,12 @@ export async function loadInstrumentPricingContext(
       : query.eq('change_order_id', ref.change_order_id);
   const { data } = await query;
 
-  // Selection is the shared rateInForce (instrument-rates-shared.ts) — the
-  // one definition, not a re-statement of it.
+  // Shaping is buildInstrumentPricingContext (instrument-rates-shared.ts) — THE
+  // one definition, shared with the privileged server path so a PM's totals and
+  // an Owner's cannot diverge in meaning (#140 / D-62). Only the QUERY above is
+  // caller-specific; everything below the fetch is not.
   const today = new Date().toISOString().slice(0, 10);
-  const rates = data ?? [];
-
-  // A-9: cost-plus reads ONLY the four new types. The legacy
-  // cost_plus_percent is read-only history — the 20260801000000 expansion
-  // copied every live legacy row into the three category markups, so
-  // pre-A-9 instruments price identically through the new types.
-  if (contractType === 'cost_plus') {
-    return {
-      contract_type: 'cost_plus',
-      cost_plus_labor_hourly: rateInForce(rates, 'cost_plus_labor_hourly', today),
-      cost_plus_material_percent: rateInForce(rates, 'cost_plus_material_percent', today),
-      cost_plus_subcontractor_percent: rateInForce(rates, 'cost_plus_subcontractor_percent', today),
-      cost_plus_other_percent: rateInForce(rates, 'cost_plus_other_percent', today),
-    };
-  }
-  return {
-    contract_type: 'time_and_materials',
-    tm_labor_hourly: rateInForce(rates, 'tm_labor_hourly', today),
-    tm_nonlabor_percent: rateInForce(rates, 'tm_nonlabor_percent', today),
-  };
+  return buildInstrumentPricingContext(data ?? [], contractType, today) as InstrumentPricingContext;
 }
 
 // Child-table writes are RLS-guarded (D4): company scope + parent

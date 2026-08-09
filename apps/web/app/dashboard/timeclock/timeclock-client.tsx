@@ -22,6 +22,7 @@ import {
   SEGMENT_FIELD_RULES,
   SEGMENT_TYPE_LABELS,
   SEGMENT_TYPES,
+  hasCoordinates,
   intervalHours,
   type GpsClockMode,
 } from '@framefocus/shared/utils/time-tracking';
@@ -406,7 +407,12 @@ export function TimeclockClient({
                       ` · ${taskTitles[currentSegment.task_id] ?? 'Task'}`}
                   </p>
                 )}
-                {!session.gps_in && (
+                {/* D-34 / A-7k5 — COORDINATES, not presence. Under the old
+                    `!session.gps_in` test a D-34 failure object is truthy, so
+                    this caption was SUPPRESSED for a denied-GPS session: the
+                    crew member was told nothing, which reads as a successful
+                    capture. Absence of a fix must be stated, not implied. */}
+                {!hasCoordinates(session.gps_in) && (
                   <p style={{ margin: '6px 0 0' }}>
                     <ReadOnlyCaption>location not captured</ReadOnlyCaption>
                   </p>

@@ -175,6 +175,31 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // ── M6M D-30 rule 4 — THE SUBMIT GATE (migration 20260824000000). ──
+  // submit_delivery_check_in() re-derives the damage-photo rule FROM THE
+  // DATABASE — every live damaged line must have a live files row linked via
+  // delivery_item_id — and recomputes has_exceptions. The zod refine and the
+  // verification pass above are form-level; this is the authoritative check,
+  // and per §4.12.4 the flow only proceeds — PDF, notification, navigation —
+  // when it returns without raising. 7d is online-only (D-6), so no queued
+  // path exists around it; putting the call HERE gates the desktop check-in
+  // form through the same RPC for free.
+  //
+  // On refusal the inserted rows stay (consistent with this route's existing
+  // "never rolls back" posture for post-insert failures) but nothing is
+  // announced: no PDF, no email. The caller gets the RPC's own message, which
+  // names the offending lines.
+  const { error: gateError } = await supabase.rpc('submit_delivery_check_in', {
+    p_delivery_id: delivery.id,
+  });
+  if (gateError) {
+    console.error(`[deliveries/check-in] submit gate refused ${delivery.id}: ${gateError.message}`);
+    return NextResponse.json(
+      { error: gateError.message, deliveryId: delivery.id },
+      { status: 400 }
+    );
+  }
+
   // ── Delivery record PDF — EVERY check-in, clean or exception (S90).
   // Best-effort: generation failure never rolls back the check-in; the PDF
   // is regenerable from the delivery detail view.

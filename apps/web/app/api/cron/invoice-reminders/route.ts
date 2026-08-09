@@ -10,6 +10,8 @@ import {
 } from '@/lib/services/email-service';
 import { InvoiceEmail } from '@/lib/email/templates/invoice-email';
 import { paymentTermsLabel } from '@/lib/services/invoices-shared';
+// [S106] was a seventh local copy of the company-tz calendar-date rule.
+import { companyToday } from '@framefocus/shared/utils/dates';
 import { remainingOnInvoice } from '@/lib/services/payments-shared';
 import {
   dueReminders,
@@ -53,16 +55,6 @@ function fmtDate(value: string): string {
     month: 'long',
     day: 'numeric',
   });
-}
-
-/** Company-timezone calendar date — the same rule 7D/7E use for every date. */
-function companyToday(timeZone: string): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
 }
 
 export async function GET(request: NextRequest) {

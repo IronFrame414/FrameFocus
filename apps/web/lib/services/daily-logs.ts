@@ -175,3 +175,115 @@ export async function getProjectLogSummaries(): Promise<Map<string, ProjectLogSu
   }
   return map;
 }
+
+// ---------------------------------------------------------------------------
+// M6M §4.6 — M-6's COMPANY-WIDE list.
+//
+// `getDailyLogs(projectId)` above is per-project and is what M-7's tile badge
+// and the desktop use. M-6 is a TAB: it spans every project the caller can
+// reach, with All / Mine / This project chips over the top. Added here rather
+// than queried inline from the page, per §1's shared-service rule and A-28b
+// ("no lib/services/* file is duplicated for mobile").
+//
+// RLS does the tenant and project scoping, as everywhere else — this function
+// adds no role logic of its own.
+// ---------------------------------------------------------------------------
+
+export interface MobileLogRow {
+  id: string;
+  log_date: string;
+  work_performed: string | null;
+  project_id: string;
+  project_name: string | null;
+  project_number: string | null;
+  author_name: string | null;
+  photo_count: number;
+}
+
+export interface MobileLogFeed {
+  rows: MobileLogRow[];
+  /** §4.6's app-bar figure — `{n} this week`. */
+  thisWeek: number;
+}
+
+/** Monday-start week containing `today`, as an ISO date string. */
+function weekStart(todayIso: string): string {
+  const d = new Date(`${todayIso}T00:00:00Z`);
+  const dow = (d.getUTCDay() + 6) % 7; // Mon = 0
+  d.setUTCDate(d.getUTCDate() - dow);
+  return d.toISOString().slice(0, 10);
+}
+
+export async function getMobileDailyLogs(filters?: {
+  /** `author_member_id = me` — the "Mine" chip. */
+  mineMemberId?: string | null;
+  /** The "This project" chip. */
+  projectId?: string | null;
+  /** Company day, so "this week" is not computed in UTC. */
+  today?: string;
+}): Promise<MobileLogFeed> {
+  const supabase = await createClient();
+
+  let query = supabase
+    .from('daily_logs')
+    .select('id, log_date, work_performed, project_id, author:company_members(display_name), project:projects(name, project_number)')
+    .eq('is_deleted', false)
+    .order('log_date', { ascending: false })
+    .order('created_at', { ascending: false });
+
+  if (filters?.mineMemberId) query = query.eq('author_member_id', filters.mineMemberId);
+  if (filters?.projectId) query = query.eq('project_id', filters.projectId);
+
+  const { data, error } = await query;
+  if (error || !data) return { rows: [], thisWeek: 0 };
+
+  type Raw = {
+    id: string;
+    log_date: string;
+    work_performed: string | null;
+    project_id: string;
+    author: { display_name: string } | null;
+    project: { name: string; project_number: string | null } | null;
+  };
+  const raw = data as unknown as Raw[];
+
+  // Photo counts in ONE query rather than N — a field user's week can carry a
+  // lot of logs, and a per-row count would be the screen's slowest part.
+  const ids = raw.map((r) => r.id);
+  const counts = new Map<string, number>();
+  if (ids.length > 0) {
+    const { data: photos } = await supabase
+      .from('files')
+      .select('daily_log_id')
+      .in('daily_log_id', ids)
+      .eq('is_deleted', false);
+    for (const p of (photos ?? []) as { daily_log_id: string | null }[]) {
+      if (!p.daily_log_id) continue;
+      counts.set(p.daily_log_id, (counts.get(p.daily_log_id) ?? 0) + 1);
+    }
+  }
+
+  const rows: MobileLogRow[] = raw.map((r) => ({
+    id: r.id,
+    log_date: r.log_date,
+    work_performed: r.work_performed,
+    project_id: r.project_id,
+    project_name: r.project?.name ?? null,
+    project_number: r.project?.project_number ?? null,
+    author_name: r.author?.display_name ?? null,
+    photo_count: counts.get(r.id) ?? 0,
+  }));
+
+  // ⚠️ `{n} this week` counts THE UNFILTERED WEEK, not the filtered rows.
+  // A user who taps "Mine" has not changed how many logs the week holds, and a
+  // figure that moved with the chips would be reporting the filter rather than
+  // the week.
+  const start = weekStart(filters?.today ?? new Date().toISOString().slice(0, 10));
+  const { count: weekCount } = await supabase
+    .from('daily_logs')
+    .select('id', { count: 'exact', head: true })
+    .eq('is_deleted', false)
+    .gte('log_date', start);
+
+  return { rows, thisWeek: weekCount ?? 0 };
+}

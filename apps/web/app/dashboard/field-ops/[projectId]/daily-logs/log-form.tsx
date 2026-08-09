@@ -98,6 +98,23 @@ export function LogForm({
   async function handleSave() {
     setError(null);
     setPdfWarning(null);
+    // #133 / D-30 — work_performed is REQUIRED by the database as of migration
+    // 20260824000000: CHECK (work_performed IS NOT NULL AND btrim(work_performed) <> '').
+    // This guard sits ahead of the create/update branch on purpose, so it covers
+    // BOTH paths: without it the payload below writes NULL on an empty textarea
+    // and Postgres answers with a raw 23514 naming a constraint rather than a
+    // field — including when someone merely re-saves a pre-constraint log.
+    //
+    // THE CLIENT CHECK IS DELIBERATELY STRICTER THAN THE DATABASE. JS .trim()
+    // removes all whitespace; Postgres btrim() with one argument removes SPACES
+    // ONLY, so a value of just a tab or newline satisfies the CHECK but is
+    // refused here. That asymmetry is the safe direction — this form can never
+    // send a row the database will reject — and it is written down so nobody
+    // "aligns" the two later and reopens the 23514 path.
+    if (!fields.work_performed?.trim()) {
+      setError('Work performed is required.');
+      return;
+    }
     if (fields.hazards_present && !fields.hazard_notes?.trim()) {
       setError('Hazard notes are required when a hazard is flagged.');
       return;
@@ -207,7 +224,7 @@ export function LogForm({
         </div>
 
         <div className={card}>
-          <label className={label}>Work performed</label>
+          <label className={label}>Work performed (required)</label>
           <textarea
             className={`${input} min-h-[96px]`}
             placeholder="What was accomplished today"

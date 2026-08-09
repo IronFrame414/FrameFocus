@@ -10,7 +10,7 @@ import {
   listOpenSessionsLive,
   type LiveSessionRow,
 } from '@/lib/services/time-tracking-client';
-import { SEGMENT_TYPE_LABELS } from '@framefocus/shared/utils/time-tracking';
+import { SEGMENT_TYPE_LABELS, hasCoordinates } from '@framefocus/shared/utils/time-tracking';
 import { ROLE_LABELS, type CompanyRole } from '@framefocus/shared';
 import { SegmentBar, ReadOnlyCaption, fmtTime, monoValue } from '@/components/time/time-ui';
 import { cardStyle, color, microLabelStyle } from '@/lib/theme';
@@ -126,7 +126,18 @@ export function LiveBoard({ timeZone }: { timeZone: string }) {
                 </p>
                 <p style={{ margin: '1px 0 0', fontSize: '11px', color: color.faint }}>
                   in {fmtTime(row.clock_in, timeZone)}
-                  {row.gps_in != null ? ' · on site' : ''}
+                  {/* M6M D-34 [S99] — "on site" is a statement about
+                      COORDINATES, never about gps_in being non-null (A-7k5).
+                      D-34 writes a failure OBJECT into gps_in when a fix was
+                      denied or unavailable; under the old non-null test a
+                      crew member whose GPS was DENIED would display as
+                      "· on site" — the exact opposite of the truth, on the
+                      board a supervisor watches. §4.12.1a names this line as
+                      D-34's own required change; A-28 does not shield it.
+                      [S106] Now resolved through the shared hasCoordinates()
+                      predicate, with the two readers this line originally
+                      missed. */}
+                  {hasCoordinates(row.gps_in) ? ' · on site' : ''}
                 </p>
               </div>
             </div>

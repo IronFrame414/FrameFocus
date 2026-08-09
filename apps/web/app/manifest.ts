@@ -45,10 +45,9 @@ export default function manifest(): MetadataRoute.Manifest {
     // The two fields M6M owns outright (§7.1).
     //
     // start_url is the mobile shell (D-12, §1) — NOT the desktop dashboard.
-    // NOTE [S99]: /m does not exist yet; the route tree is specced, not built.
-    // Until it lands, an installed PWA opens on a 404. That is the spec's
-    // intent — §7 is a PREREQUISITE built ahead of the routes — but it means
-    // this must not be advertised as installable to real users yet.
+    // [S105] The S99 note that stood here — "/m does not exist yet; an
+    // installed PWA opens on a 404" — is retired: the full /m tree is built
+    // and an install now lands on the real shell.
     start_url: '/m',
     display: 'standalone',
 

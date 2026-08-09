@@ -114,6 +114,84 @@ claude mcp list
 
 ## Codebase State
 
+> **M6M Part B — the five detail views, built S116.** `/m` now has real detail pages: **M-31**
+> `p/[projectId]/changes/[coId]`, **M-34** `p/[projectId]/punch/[itemId]`, **M-35** `team/[memberId]`,
+> **M-36** `contacts/[contactId]`, plus **M-16's file-open path** (`files/open-file.tsx` — the first
+> `getSignedUrl` consumer anywhere under `app/m/`). Seven list screens gained row navigation.
+> **Read-only; every write is Part C.**
+>
+> Two shared pieces carry the pattern: `mobile-ui.tsx`'s **`ListRowLink`** (link and tap-to-act circles
+> as SIBLINGS — nesting them is invalid HTML and silently breaks the call button) and
+> **`app/m/detail-access.ts`**, the D-54 route guard.
+>
+> **⚠️ On four of the five, the guard is the ONLY enforcement.** `change_orders`, `company_members`,
+> `contacts` and `files` carry no `subcontractor` arm on SELECT, so a subcontractor's token still reads
+> every one of those rows — measured S115 at full value (`net_delta` 1410 and 21385.91). **M-34 is the
+> exception**: D-57's migration is real, so an item a sub may not see resolves to `notFound()`.
+
+> **M6M Part C — the write paths, built S117** (`0837412`). `/m` now writes: **M-32**
+> `p/[projectId]/changes/new` (create AND edit — **one route, `?co=<id>` selects edit**, because §1's
+> table lists one), **M-31** gains Edit / Send-for-signature / Void, **M-33** `punch/new`, and **M-34**
+> gains complete and verify. New shared client module **`app/m/write-ui.tsx`** — separate from
+> `mobile-ui.tsx` on purpose, which is server-safe and must stay that way.
+>
+> **A change order has no amount field.** `createChangeOrder` takes none, so M-32 is a **three-level
+> editor** — CO → line items → line rows — and **every structural write calls
+> `recalculateChangeOrderTotals()`**. `net_delta` defaults to `0` and is set nowhere else; skipping the
+> recalculation ships a change order worth nothing while every screen assertion still passes. All six
+> existing line functions are used; no seventh was written. Send goes through the **existing** route and
+> collects the contractor signature it demands on first send — no second authorisation path.
+>
+> **⚠️ THE TWO HALVES ARE NOT EQUALLY ENFORCED, AND THE CODE SAYS SO IN BOTH PLACES.**
+>
+> | | Who is refused | By what |
+> | --- | --- | --- |
+> | **CO writes** | foreman, crew, sub | **THE DATABASE.** `change_orders_{insert,update}_authorized` + both child tables. The route guard makes the refusal *honest*; it is not the refusal. |
+> | **Punch create / complete** | **nobody** | Nothing — and that is CORRECT, not a gap (D-52 corrected, S110). **There is deliberately no punch route guard.** |
+> | **Punch verify** | crew, sub | **TypeScript only.** `verifyPunchItem`'s `FOREMAN_PLUS`. RLS accepts a direct `status='verified'` UPDATE from any role — open item 7. **No database rung at all.** |
+>
+> **Four things the build ruled for itself** — spec **§4.11.11b**: the single `changes/new` route; Void's
+> inclusion despite a narrower brief; **the punch route guard that was declined, and why** (guarding a
+> screen D-52 opened would reverse a ruling); and the crew-for-foreman test-identity substitution.
+>
+> **⚠️ Criteria status [S117]:** only A-67/A-67c cleanly satisfied, A-57 NOT satisfied, four partial.
+> **→ CLOSED [S118], see below.**
+
+> **M6M — the Part C criteria gaps closed, S118.** Two new live harnesses, and one Playwright
+> addition, written specifically against the failures S117 named:
+>
+> | Criterion | Now | Harness |
+> | --- | --- | --- |
+> | **A-55** | ✅ full | `s118-m6m-write-criteria.live.ts` — `net_delta = Σ line totals` in integer cents, **plus** an anti-vacuous guard requiring a CO with lines |
+> | **A-57** | ✅ full | `m-writes.spec.ts` — reads the **rendered** `m-stat-punch`: create **+1**, complete **−1**, verify **0** |
+> | **A-58** | ✅ full | `s118-…live.ts` — calls `verifyPunchItem`, asserts refusal **and that nothing was written**, paired with an acceptance |
+> | **A-67b** | ✅ full | `s118-…live.ts` — reads `punch_list_id`, stamp-matched to the list M-33 created |
+> | **A-56** | ✅ 4 of 6 | `m-writes.spec.ts` — owner/PM/crew/**sub**; foreman blocked by #143, admin not in the suite's identity set. Both absences named. |
+>
+> **A-58 was verified LOAD-BEARING**: deleting the separate-eyes check from `punch-client.ts` fails it
+> (exit 1); restored, exit 0. S117's disabled-button version could not produce that failure — which is
+> exactly why it was refused as "satisfied".
+>
+> **A-57 is Playwright, not the specified `[live]`, and that is the stronger choice**: a live harness
+> cannot import `getOpenPunchCounts` (it pulls `next/headers`), so it would assert its own copy of the
+> `('open','in_progress')` filter. Reading the rendered stat runs the real function.
+>
+> **✅ #143 CLOSED [S119]** — the seed assigns PM/foreman/crew to the m-sections project; running it
+> created **exactly one row, the foreman's**, confirming the diagnosis. The crew-for-foreman
+> substitutions in the role-exclusion tests are reverted, so they name the role they mean again.
+> **The guard needed a new negative:** once every company-A identity reached every company-A project
+> the declared table held no `false`, so a `can_view_project()` returning TRUE for everything would
+> have passed it — `s118-fixture-reachability.live.ts` now also asserts that **no company-A identity
+> reaches company B's project**. (`josh+qa-admin@` was suspected of the same fault and is clear.)
+>
+> **✅ #144 CLOSED [S119]** — the Part C suite cleans up at **both ends**, and the live harnesses now
+> create their own data so they run standalone. **Proven by two back-to-back runs**: the project went
+> from `{cos:15, punchLists:23, punchItems:23, files:17}` to the fixture baseline
+> `{cos:2, punchLists:1, punchItems:1, files:0}`, **run 2's pre-clean sweep removed ZERO**, and the
+> counts after each run were identical. The live harnesses then passed with the leftovers gone.
+> **Side-effect:** the project now starts every run with **exactly one punch list**, which is A-67's
+> "still asks" case — now asserted (1 list + `__new__` = 2 options, none preselected) rather than owed.
+
 ### apps/web (Next.js)
 
 ```
@@ -256,7 +334,8 @@ Vercel env vars must match `.env.local` exactly.
 
 ### Persistent test identities — rebuild-test only [S97, 2026-08-02]
 
-These close **GATED.md Gate 2** (#103 foreman identity, #104 second test company). They live
+These close **GATED.md Gate 2** (#103 foreman identity, #104 second test company) and, as of
+S113, **#127** (the missing `subcontractor` and `client` identities). They live
 **only on rebuild-test** (`nmyphyhmfttxkdoposvf`) and must **never** be created on production.
 
 Seeded and re-seeded by:
@@ -278,6 +357,32 @@ platform gates on:
 | `project_manager` | josh+pm@worthprop.com            | Pat Manager   |
 | `foreman`         | **josh+qa-foreman@worthprop.com**| QA Foreman A  |
 | `crew_member`     | josh+crew@worthprop.com          | Casey Crew    |
+| `subcontractor`   | **josh+qa-sub@worthprop.com**    | QA Sub A      |
+| `client`          | **josh+qa-client@worthprop.com** | QA Client A   |
+
+> **The two added S113 (#127) are not shaped like the other five, and the difference matters.**
+> `create_member_for_new_profile()` (`20260704210000`) returns early for both `client` and
+> `subcontractor`, so neither gets an auto-created `company_members` row.
+>
+> - The **subcontractor** needs one anyway — `assignee_id`, `completed_by` and `get_my_member_id()`
+>   all speak in member ids, and a sub without one is invisible to every punch query while looking
+>   perfectly fine in `profiles`. The seed builds it the way production does: insert a
+>   `subcontractors` row, let `subcontractors_create_member` fire, then link `profile_id` exactly as
+>   `handle_new_user()`'s invite branch does. Member id `6600b2a9-bc7d-49f7-a2d9-70a2af490cbf`,
+>   vendor row *QA Subcontractor Co (TEST IDENTITY)*, and it is **assigned to the
+>   `QA A — isolation fixture` project** — without that assignment D-57 would be a no-op rather than
+>   a narrowing. **[S114] It carries a SECOND assignment**, to the project
+>   `e2e/m-sections.spec.ts` drives (`eaf0e25b-…`), which is a different project and carries the 2
+>   change orders A-33c's subcontractor arm needs. Without it that arm passes on an empty screen —
+>   see the non-vacuity guard in that spec.
+> - The **client** deliberately has **no member row**. A client is not assignable to work; the
+>   identity exists to exercise the `get_my_role() <> 'client'` arms that `files_select_non_client`
+>   and its three siblings are built on. The seed asserts the absence rather than assuming it.
+>
+> **⚠️ Do not substitute the 32 roster rows.** `company_members` holds 33 rows with
+> `member_type = 'subcontractor'`; **32 have `profile_id IS NULL`** — domain roster entries with no
+> auth user, which cannot sign in and cannot drive an RLS probe. Exactly one is an identity: the row
+> above. A member row is not an identity.
 
 **Company B — Ridgeline Builders (TEST CO 2)** (`f079a1f4-12db-4bc8-ae95-2d647d688260`) — exists
 solely so cross-company isolation can be *proved* rather than asserted from code:
@@ -286,12 +391,12 @@ solely so cross-company isolation can be *proved* rather than asserted from code
 | ------- | -------------------------------- | ------------ |
 | `owner` | **josh+qa-b-owner@worthprop.com**| QA Owner B   |
 
-**Password (all six): `FrameFocusTest!2026`**
+**Password (all eight): `FrameFocusTest!2026`**
 
 > Committed deliberately, and only defensible because of what it protects: a disposable test
 > database with no real customer data, in a private repo. **Never reuse it anywhere else, never
 > create these identities on production, and rotate it if rebuild-test ever holds anything real.**
-> Re-running the seed **resets this password on all six**, including Josh's originals.
+> Re-running the seed **resets this password on all eight**, including Josh's originals.
 > The harnesses sign in with it too (`test/live-session.ts`), falling back to a service-role
 > magic link — password first because Supabase rate-limits OTP generation hard enough to break
 > a few harness runs in a row, and because signing in the way a human would keeps this entry
@@ -302,6 +407,22 @@ project, sent invoice, client payment + application, expense, member pay rate �
 `QA A — …` / `QA B — …` so they are obvious in the UI. Company A's set exists because the proof
 runs in *both* directions and A had no payments of its own to hide.
 
+**D-57 punch fixtures [S113].** Company A's fixture project also carries a punch list
+*QA — D-57 fixtures* with three items, seeded permanently so the D-57/D-58 proof is reproducible by
+anyone rather than depending on rows a one-off script made and threw away:
+
+| Title | Shape | Sub sees it? |
+| --- | --- | --- |
+| `QA D-57 ASSIGNED to the sub` | `assignee_id` = the sub's **member** id, authored by owner | yes — assignee arm |
+| `QA D-57 AUTHORED by the sub` | `created_by` = the sub's **auth user** id, assigned to crew | yes — author arm |
+| `QA D-57 NEITHER — sub must not see this` | assigned to crew, authored by owner | **no** |
+
+The first two are deliberately assigned-not-authored and authored-not-assigned, because the two arms
+sit on **different identity axes** (`assignee_id` → `company_members(id)`, `created_by` →
+`auth.users(id)`) and comparing either against the wrong one **returns no rows rather than erroring**
+— so a fixture that put the same id in both would not distinguish a correct predicate from a broken
+one.
+
 **Using them in a test** — role and cross-company checks are a test run, not a manual login:
 
 ```bash
@@ -309,13 +430,18 @@ cd apps/web && npx vitest run --config test/live.vitest.config.ts
 ```
 
 `apps/web/test/*.live.ts` are live harnesses against rebuild-test, **excluded from the CI suite**
-by the `.live.ts` suffix. Current coverage — **74 assertions**:
+by the `.live.ts` suffix. **This table is not exhaustive** — the directory holds more harnesses than
+are listed here (the `s97ct-*` financial-floor set among them) and the tally below covers only the
+rows shown, **109 assertions**:
 
 | Harness | Covers | Tally |
 | --- | --- | --- |
 | `s97ct-7e-clicktest.live.ts` | 7E payments, all four money paths + role gates | 34/34 |
 | `s97ct-isolation.live.ts` | cross-company isolation, both directions | 14/14 |
 | `s97ct-roles.live.ts` | the S95/7D role-gated surfaces | 21/26 — **5 open defects**, see GATED.md → Gate 2 |
+| `s113-punch-sub-visibility.live.ts` | D-57/D-58 — a sub sees and writes only their own punch items | 15/15 |
+| `s114-subcontractor-surfaces.live.ts` | A-59 sub punch create/complete, A-59e badge counts, A-45b2 expenses floor | 13/13 |
+| `s115-co-recalc-rates.live.ts` | #140/D-62 — PM-scoped client refused, privileged client prices, no rate returned | 7/7 |
 
 Session helper: `test/live-session.ts` (`sessionFor`, `admin`, `assertRebuildTest`) — copy that
 pattern for any new role check. The runner compiles JSX via `oxc`, so a harness can render a real

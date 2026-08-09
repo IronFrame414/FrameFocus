@@ -27,6 +27,33 @@ export interface GpsFix {
   captured_at?: string;
 }
 
+// ---------------------------------------------------------------------------
+// M6M D-34 [S99] — WHY A FIX IS ABSENT, recorded in the SAME jsonb column.
+//
+// Before this, a denied permission and a genuine signal failure both produced
+// NULL and were indistinguishable in the data — one is a policy question about
+// a crew member, the other is a jobsite condition. The failure object makes a
+// row three-state: coordinates | a reason | NULL (nothing recorded at all —
+// a legacy row or a pre-D-34 write path, NOT "no signal").
+//
+// The vocabulary is the browser's GeolocationPositionError, not invented:
+// 1 = permission_denied, 2 = position_unavailable, 3 = timeout. `error_code`
+// is stored ALONGSIDE `reason` deliberately — the numeric code is the API's
+// stable contract, the string is what a human reads in a query. A fourth
+// state, the API absent entirely, has no browser code: reason "unsupported",
+// error_code null (§4.12.1a, flagged in §11).
+//
+// NO NEW COLUMN — the object rides in the existing gps_in/gps_out jsonb.
+// ---------------------------------------------------------------------------
+export interface GpsFailure {
+  reason: 'permission_denied' | 'position_unavailable' | 'timeout' | 'unsupported';
+  error_code: 1 | 2 | 3 | null;
+  captured_at?: string;
+}
+
+/** What a clock event actually records: a fix, or the reason there isn't one. */
+export type GpsRecord = GpsFix | GpsFailure;
+
 /** End fields shared by switch-segment and clock-out. */
 export interface SegmentEnd {
   segment_id: string;
@@ -70,7 +97,7 @@ async function completeTaskFromSegment(
  */
 export async function clockIn(input: {
   first_segment: OpenSegmentFields;
-  gps_in?: GpsFix;
+  gps_in?: GpsRecord;
   clock_in?: string; // device timestamp; defaults to now()
   session_client_id?: string; // client-generated UUID (offline-ready)
   segment_client_id?: string;
@@ -224,7 +251,7 @@ export async function switchSegment(input: {
 export async function clockOut(input: {
   session_id: string;
   end: SegmentEnd;
-  gps_out?: GpsFix;
+  gps_out?: GpsRecord;
   clock_out?: string;
 }): Promise<Result<{ taskWarning: string }>> {
   const supabase = createClient();
@@ -259,7 +286,7 @@ export async function clockOut(input: {
 export async function closeSessionOnly(input: {
   session_id: string;
   clock_out?: string;
-  gps_out?: GpsFix;
+  gps_out?: GpsRecord;
 }): Promise<Result> {
   const supabase = createClient();
   const at = input.clock_out ?? new Date().toISOString();
@@ -592,4 +619,56 @@ export async function deleteSegment(id: string): Promise<Result> {
     .eq('id', id);
   if (error) return { success: false, error: error.message };
   return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// M6M D-44 [S101] / A-7l3 — "the projects I most recently worked, most recent
+// first". THE NAMED SERVICE FUNCTION §4.12.1 SAID DID NOT EXIST; this is it.
+//
+// 7a's project list sorts nearest-first when a GPS fix exists (D-33); with no
+// fix the fallback order is RECENTLY-USED (D-44), and §4.13's binding rule
+// applies — bound to a named function over `time_segments` or cut. The two
+// shortcuts A-7l3 forbids, and why:
+//   · a raw query in the page breaks the service-layer convention;
+//   · deriving from getSessions() client-side silently caps history at
+//     whatever page size that function returns.
+//
+// Shape: the caller's OWN segments (segments carry no member_id, so ownership
+// goes through the session join), non-null project_id, newest first, reduced
+// to distinct project ids — the FIRST occurrence of a project in descending
+// segment_start order IS its max(segment_start), so the reduction preserves
+// the recency order exactly.
+//
+// The window is bounded at 500 segments, stated rather than silent: a project
+// last worked more than ~500 segments ago falls out of the recency list and
+// sorts with the never-worked tail (alphabetical, per D-44's secondary order,
+// which the CALLER applies to the remainder). That is a bounded tail-accuracy
+// trade, not the page-size cap A-7l3 bans — the cap there hid ALL history
+// beyond one page of sessions.
+// ---------------------------------------------------------------------------
+export async function getMyRecentProjectIds(): Promise<string[]> {
+  const supabase = createClient();
+
+  const { data: myMemberId } = await supabase.rpc('get_my_member_id');
+  if (!myMemberId) return [];
+
+  const { data, error } = await supabase
+    .from('time_segments')
+    .select('project_id, segment_start, session:time_clock_sessions!inner(member_id)')
+    .eq('session.member_id', myMemberId)
+    .not('project_id', 'is', null)
+    .eq('is_deleted', false)
+    .order('segment_start', { ascending: false })
+    .limit(500);
+  if (error || !data) return [];
+
+  const seen = new Set<string>();
+  const ordered: string[] = [];
+  for (const row of data as { project_id: string | null }[]) {
+    if (row.project_id && !seen.has(row.project_id)) {
+      seen.add(row.project_id);
+      ordered.push(row.project_id);
+    }
+  }
+  return ordered;
 }

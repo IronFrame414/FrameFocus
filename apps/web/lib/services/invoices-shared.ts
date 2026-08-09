@@ -382,15 +382,13 @@ export function companyDay(timestamp: string, timeZone: string): string {
  * voided_at, deleted_at) is stored as timestamptz and is correctly written as
  * new Date().toISOString(): an instant is unambiguous and carries no timezone
  * question. Do not "fix" those.
+ *
+ * CONSOLIDATED [S106] — one implementation, in a neutral module. Re-exported
+ * here so every 7D call site keeps its import unchanged. The calendar-date /
+ * instant distinction above is carried into that module's header, because it
+ * is the guidance that stops a sweep converting timestamptz writes.
  */
-export function companyToday(timeZone: string, now: Date = new Date()): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(now);
-}
+export { companyToday } from '@framefocus/shared/utils/dates';
 
 export function hoursBetween(start: string, end: string): number {
   const ms = new Date(end).getTime() - new Date(start).getTime();

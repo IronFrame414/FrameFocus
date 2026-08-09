@@ -31,6 +31,10 @@ export default async function ExpensesPage() {
     .eq('is_deleted', false)
     .single();
   const role = profile?.role ?? '';
+
+  /** 7C §4 — the Bills & Commitments audience. Mirrors the tab gate in
+   *  expenses-page-client.tsx:77, and the pair is unit-tested equal. */
+  const SEES_BILLS = ['owner', 'admin', 'project_manager', 'foreman'];
   const isReviewer = ['owner', 'admin'].includes(role);
 
   const [expenses, billRows, activeProjects, allProjects, myMember, timeSettings] =
@@ -42,6 +46,26 @@ export default async function ExpensesPage() {
       getMyMember(),
       getCompanyTimeSettings(),
     ]);
+
+  // ── #136 CLOSED [S121] — raised S103, filed, never fixed. ──────────────
+  // Crew received every payable row RLS grants them IN THE RSC PAYLOAD,
+  // subcontractor retainage accruals included. The Bills tab gate
+  // (expenses-page-client.tsx:77) is render-deep only, and the Receipts tab
+  // hid payables by filtering CLIENT-SIDE from a list it had already been sent.
+  //
+  // ⚠️ FIXING `billRows` ALONE IS NOT ENOUGH, and the payload test caught it:
+  // the payable rows are ALSO in `expenses`, because a payable IS an expense —
+  // that is why the client had to filter them off the Receipts tab by id. Both
+  // props had to be closed, and stripping them from `expenses` on the server is
+  // what makes the client filter redundant rather than load-bearing.
+  //
+  // Nothing is taken from anyone: a role without Bills access never saw these
+  // rows on any tab. `expenses_insert_authorized` restricts `is_retainage` to
+  // Owner/Admin, and a crew receipt carries no sub-contract or PO link, so the
+  // rows removed here are rows that role could not have authored either.
+  const seesBills = SEES_BILLS.includes(role);
+  const payableIdSet = new Set(billRows.map((b) => b.id));
+  const visibleExpenses = seesBills ? expenses : expenses.filter((e) => !payableIdSet.has(e.id));
 
   const projectNames: Record<string, string> = Object.fromEntries(
     allProjects.map((p) => [p.id, p.name])
@@ -79,8 +103,8 @@ export default async function ExpensesPage() {
     <ExpensesPageClient
       role={role}
       myMemberId={myMember?.id ?? null}
-      expenses={expenses}
-      billRows={billRows}
+      expenses={visibleExpenses}
+      billRows={seesBills ? billRows : []}
       activeProjects={activeProjects.map((p) => ({ id: p.id, name: p.name }))}
       projectNames={projectNames}
       pendingReceipts={pendingReceipts}

@@ -79,20 +79,17 @@ export function latestLiveEffectiveFrom(
  *
  * `now` is injectable so the boundary is testable without touching the clock.
  *
- * Deliberately restated here rather than imported from 7D's invoices-shared
- * `companyToday`: instrument rates are UPSTREAM of invoicing and must not
- * depend on it. Same precedent as co-rate-section restating RATE_FIELDS —
- * six lines is a smaller cost than a backwards module dependency. The two
- * are pinned to the same rule by test.
+ * CONSOLIDATED [S106]. This was deliberately restated here rather than
+ * imported from 7D's `companyToday`, on the grounds that "instrument rates are
+ * UPSTREAM of invoicing and must not depend on it". That reasoning was right,
+ * and the implementation now lives in a NEUTRAL, dependency-free module that
+ * neither domain has to import the other to reach. No backwards dependency is
+ * created, the local name is preserved for every call site here, and the two
+ * are no longer merely "pinned to the same rule by test" — they are the same
+ * function. Six copies of this rule existed across the repo; see the header of
+ * `@framefocus/shared/utils/dates`.
  */
-export function todayInZone(timeZone: string, now: Date = new Date()): string {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(now);
-}
+export { companyToday as todayInZone } from '@framefocus/shared/utils/dates';
 
 export function rateInForce(
   rates: RateInForceInput[],
@@ -109,4 +106,64 @@ export function rateInForce(
     }
   }
   return best?.rate ?? null;
+}
+
+/**
+ * Build an InstrumentPricingContext from rate ROWS already in hand — the pure
+ * half of `loadInstrumentPricingContext` (estimate-items-client.ts:30).
+ *
+ * EXTRACTED [S115, D-62] rather than copied. Two callers now need this shaping
+ * and they read the rows through DIFFERENT clients:
+ *
+ *   - the caller-side path reads them through RLS (Owner/Admin only — the
+ *     20260806000000 floor), and
+ *   - `change-order-totals-server.ts` reads them with the SERVICE ROLE, so a PM
+ *     can recalculate a cost-plus CO without ever seeing a rate (#140).
+ *
+ * The QUERY differs; the shaping must not. A second copy of this mapping is how
+ * the two paths would come to disagree about what a rate means — which is the
+ * one failure that would make a PM's total differ from an Owner's rather than
+ * merely fail. It lives here because this module is deliberately bundle-neutral
+ * (see the header): a server-only module can import it without dragging in
+ * `supabase-browser`, which is exactly why the shaping could not simply be
+ * imported from the client service file.
+ *
+ * A-9: cost-plus reads ONLY the four new types. The legacy `cost_plus_percent`
+ * is read-only history — the 20260801000000 expansion copied every live legacy
+ * row into the three category markups, so pre-A-9 instruments price identically
+ * through the new types.
+ */
+export function buildInstrumentPricingContext(
+  rates: RateInForceInput[],
+  contractType: 'fixed_price' | 'cost_plus' | 'time_and_materials',
+  asOf: string // YYYY-MM-DD
+):
+  | { contract_type: 'fixed_price' }
+  | {
+      contract_type: 'cost_plus';
+      cost_plus_labor_hourly: number | null;
+      cost_plus_material_percent: number | null;
+      cost_plus_subcontractor_percent: number | null;
+      cost_plus_other_percent: number | null;
+    }
+  | {
+      contract_type: 'time_and_materials';
+      tm_labor_hourly: number | null;
+      tm_nonlabor_percent: number | null;
+    } {
+  if (contractType === 'fixed_price') return { contract_type: 'fixed_price' };
+  if (contractType === 'cost_plus') {
+    return {
+      contract_type: 'cost_plus',
+      cost_plus_labor_hourly: rateInForce(rates, 'cost_plus_labor_hourly', asOf),
+      cost_plus_material_percent: rateInForce(rates, 'cost_plus_material_percent', asOf),
+      cost_plus_subcontractor_percent: rateInForce(rates, 'cost_plus_subcontractor_percent', asOf),
+      cost_plus_other_percent: rateInForce(rates, 'cost_plus_other_percent', asOf),
+    };
+  }
+  return {
+    contract_type: 'time_and_materials',
+    tm_labor_hourly: rateInForce(rates, 'tm_labor_hourly', asOf),
+    tm_nonlabor_percent: rateInForce(rates, 'tm_nonlabor_percent', asOf),
+  };
 }

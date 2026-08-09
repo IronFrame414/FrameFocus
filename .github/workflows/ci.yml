@@ -25,3 +25,80 @@ jobs:
 
       - name: Lint web
         run: npx turbo run lint --filter=@framefocus/web
+
+      # ADDED [S99]. The committed vitest suite (297 tests) was not running in
+      # CI at all — this job did type-check and lint only. Nothing about
+      # Playwright required fixing that, but adding a second test surface while
+      # the first one never ran would have been the wrong shape. Cheap: no
+      # browser, no server, no secrets.
+      - name: Unit tests (vitest)
+        run: npx turbo run test --filter=@framefocus/web
+
+  # ---------------------------------------------------------------------------
+  # SEPARATE JOB, deliberately.
+  #
+  # e2e needs ~656 MB of browser binaries, Chromium's system libraries, and a
+  # running Next dev server. `check` needs none of that and finishes in a
+  # fraction of the time. Folding them together would make every lint failure
+  # wait on a browser download, and would let an e2e flake mask a type error.
+  # Separate jobs also run in parallel.
+  # ---------------------------------------------------------------------------
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+
+      # NO CACHE STEP ON THE BROWSER BINARIES, AND THAT IS DELIBERATE.
+      # Playwright's own CI guidance: "Caching browser binaries is not
+      # recommended, since the amount of time it takes to restore the cache is
+      # comparable to the time it takes to download the binaries. Especially
+      # under Linux, operating system dependencies need to be installed, which
+      # are not cacheable."
+      #
+      # That second sentence is the decisive one, and it is not theoretical —
+      # it is exactly what bit this repo's Codespace: the binaries downloaded
+      # fine and Chromium still would not launch (`libnspr4.so: cannot open
+      # shared object file`) until the apt packages were installed. A cache
+      # would have restored the binaries and reproduced that failure every run.
+      #
+      # `--with-deps` installs those apt packages. `chromium` only — Firefox and
+      # WebKit would roughly triple the download for browsers nothing asserts
+      # against yet. If that changes, add them to playwright.config.ts projects
+      # AND here, together.
+      - name: Install Playwright browsers + system deps
+        run: npx playwright install --with-deps chromium
+        working-directory: apps/web
+
+      # The dev server is started BY Playwright (webServer in
+      # playwright.config.ts), so there is no separate "start the app" step and
+      # nothing to tear down. reuseExistingServer is false under CI, so this
+      # always gets a fresh server rather than silently testing a stale one.
+      #
+      # SECRETS ARE REQUIRED. `next dev` boots middleware, which constructs a
+      # Supabase client from these two vars; without them every route 500s and
+      # every test fails on navigation rather than on its assertion. Set both as
+      # repository secrets before making this job a required check.
+      - name: Run Playwright tests
+        run: npx playwright test
+        working-directory: apps/web
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+
+      # Uploaded on failure only — a green run's report is noise, a red one is
+      # the trace and screenshot that explain it.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/
+          retention-days: 14

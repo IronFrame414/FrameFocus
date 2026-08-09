@@ -71,8 +71,25 @@ export function TeamPanel({ projectId, assignments, members, canManage }: TeamPa
             Assign a Member
           </div>
           <p style={{ fontSize: '0.8125rem', color: '#6b7280', marginBottom: '0.75rem' }}>
-            Assignment controls project visibility for PMs, foremen, and crew. It is not required
-            for task or punch assignment.
+            {/* ⚠️ REPLACED [S121]. _Superseded copy, quoted:_ _"Assignment controls
+                project visibility for PMs, foremen, and crew. It is not required for
+                task or punch assignment."_
+
+                BOTH halves were wrong, and only one of them was D-65's doing:
+
+                1. "for PMs, foremen, and crew" ALREADY omitted subcontractors, and
+                   assignment governs what a sub sees more sharply than any other
+                   role — it is the precondition for D-57's narrowing to mean
+                   anything, and (measured, S121) the difference between a sub
+                   reading a project's tasks, phases and daily logs and reading
+                   nothing at all.
+                2. "not required for punch assignment" stopped being true the moment
+                   D-65 part 3 shipped: the punch assignee picker is now scoped to
+                   this project's roster, so assignment IS the precondition for
+                   being assignable. */}
+            Assignment controls what a member can see on this project — every role,
+            subcontractors included — and who can be assigned punch items on it. Awarding a
+            subcontract assigns the sub automatically.
           </p>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <select

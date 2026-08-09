@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase-server';
 import { notFound, redirect } from 'next/navigation';
 import { getChangeOrder, getCoSigningSessions } from '@/lib/services/change-orders';
 import { getSubcontractors } from '@/lib/services/subcontractors';
+import { redactCoDetail } from '@/lib/co-redaction';
 import { CoBuilder } from './co-builder';
 
 // 5D — CO detail / builder. Written identically to an estimate (D-1):
@@ -38,7 +39,14 @@ export default async function ChangeOrderPage({
   // §7.3 S-5 as amended by RULING A [S97, 2026-08-02]: CO instrument rates are
   // Owner/Admin only and a PM sees NO rate values — the section is not mounted
   // below Owner/Admin rather than rendered read-only.
-  const canSeeRates = ['owner', 'admin'].includes(profile.role);
+  // AUTHORED-BY [Josh, S121] — the same widening as the list, and the same
+  // mirror of `change_orders_select_visible`. A PM reaching this page at all
+  // means RLS returned them the row, which after 20260830000000 means they
+  // authored it; the check is restated rather than assumed so the UI does not
+  // depend on a policy staying exactly as it is.
+  const canSeeRates =
+    ['owner', 'admin'].includes(profile.role) ||
+    (profile.role === 'project_manager' && changeOrder.created_by === user.id);
 
   // Company name (printed-name prefill) + whether a saved signature image is on
   // file (gates the 'saved_image' send mode). contractor_signature_path is a new
@@ -77,7 +85,10 @@ export default async function ChangeOrderPage({
   return (
     <CoBuilder
       projectId={params.id}
-      changeOrder={changeOrder}
+      // Redacted at the boundary — the CO plus every line item and line row.
+      // `canSeeRates` gated rendering only, so unit_cost, rate, markup_percent,
+      // total and amount rode the payload for every role that reached the page.
+      changeOrder={redactCoDetail(changeOrder, canSeeRates)}
       subcontractors={subcontractors.map((s) => ({ id: s.id, name: s.company_name }))}
       canManage={canManage}
       canSeeRates={canSeeRates}

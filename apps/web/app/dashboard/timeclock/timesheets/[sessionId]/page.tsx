@@ -8,6 +8,7 @@ import {
   PROJECT_BEARING_TYPES,
   canApproveByRank,
   dayWindow,
+  hasCoordinates,
   intervalHours,
   paidHours,
   paidHoursPerSession,
@@ -137,8 +138,11 @@ export default async function TimesheetDetailPage({
         clock_in: detail.clock_in,
         clock_out: detail.clock_out,
         status: detail.status,
-        hasGpsIn: detail.gps_in != null,
-        hasGpsOut: detail.gps_out != null,
+        // D-34 / A-7k5 — COORDINATES, not presence. A `!= null` test here
+        // reported a denied-GPS session as "On site · from clock-in fix" on
+        // the day-detail KPI a supervisor approves from.
+        hasGpsIn: hasCoordinates(detail.gps_in),
+        hasGpsOut: hasCoordinates(detail.gps_out),
         approverName: detail.approver?.display_name ?? null,
       }}
       segments={detail.segments}

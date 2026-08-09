@@ -1,6 +1,8 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import { billingEnforcementEnabled } from '@/lib/billing-flag';
+import { safeNextPath } from '@/lib/safe-next';
+import { defaultSignedInPath } from '@/lib/device';
 
 type CookieEntry = { name: string; value: string; options?: Record<string, unknown> };
 
@@ -43,10 +45,31 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Redirect authenticated users away from auth pages
+  // Redirect authenticated users away from auth pages.
+  //
+  // THE DESTINATION IS `?next=`, NOT ALWAYS '/dashboard' [S121]. This branch
+  // is the second half of the chain that made /m unreachable from a phone: the
+  // mobile layout sends an unauthenticated field user to /sign-in, and if the
+  // session turns out to be valid after all, this line used to deposit them in
+  // the DESKTOP app. `safeNextPath` keeps '/dashboard' as the default, so every
+  // existing caller behaves exactly as before; only a request that ASKED for
+  // somewhere else goes somewhere else. See lib/safe-next.ts for the full chain
+  // and for why the value must be validated rather than used as given.
   if (user && (pathname === '/sign-in' || pathname === '/sign-up')) {
+    // D-12 [S121] — the DEFAULT is device-dependent: a phone that lands on an
+    // auth page while already signed in goes to /m, not the desktop app. Same
+    // helper as the sign-in page, passed as safeNextPath's fallback so there is
+    // one mechanism rather than two. `?next=` still wins over both.
+    const dest = safeNextPath(
+      request.nextUrl.searchParams.get('next'),
+      defaultSignedInPath(request.headers.get('user-agent'))
+    );
+    // Split rather than `new URL(dest, origin)`: cloning keeps the request's
+    // real origin, which behind Vercel's proxy is not always nextUrl.origin.
+    const cut = dest.indexOf('?');
     const url = request.nextUrl.clone();
-    url.pathname = '/dashboard';
+    url.pathname = cut === -1 ? dest : dest.slice(0, cut);
+    url.search = cut === -1 ? '' : dest.slice(cut);
     return NextResponse.redirect(url);
   }
 
@@ -111,6 +134,27 @@ export async function middleware(request: NextRequest) {
   return supabaseResponse;
 }
 
+// ---------------------------------------------------------------------------
+// EVERY ROUTE THAT NEEDS AN AUTHENTICATED SESSION MUST BE LISTED HERE.
+// ---------------------------------------------------------------------------
+// This is not only about the redirects above — it is where the Supabase session
+// gets REFRESHED. `lib/supabase-server.ts` swallows its cookie writes ("Ignored
+// in Server Components (read-only)") because a Server Component cannot set
+// cookies. Middleware can, so it is the only place a refreshed token is
+// persisted. A route left out of this matcher works right up until the access
+// token goes stale, and then fails in a way that points nowhere near the cause.
+//
+// `/m` WAS MISSING [S107] and this is what it did: the mobile layout's
+// getUser() could not refresh, saw no user, and redirected to /sign-in — where
+// this middleware DOES run, refreshed successfully, saw a valid user, and sent
+// it to /dashboard. Net effect: /m bounced to the desktop dashboard, including
+// from the PWA's start_url, so an installed app launched into the wrong app
+// with no address bar to escape it (A-26).
+//
+// Surveyed [S107]: `/m` was the only gap. Everything else calling getUser()
+// lives under /dashboard (covered), or is an API Route Handler — where
+// cookies().set() SUCCEEDS, so those refresh themselves and need no middleware.
+// invite / sign-co / reset-password are token-based and hold no session.
 export const config = {
-  matcher: ['/dashboard/:path*', '/sign-in', '/sign-up'],
+  matcher: ['/dashboard/:path*', '/m', '/m/:path*', '/sign-in', '/sign-up'],
 };

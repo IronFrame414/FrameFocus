@@ -18,11 +18,13 @@ import {
   listActiveProjects,
   listPickerTasks,
   type Completion,
-  type GpsFix,
   type PickerTask,
   type SegmentType,
   type SessionWithSegments,
 } from '@/lib/services/time-tracking-client';
+// D-34's shared capture [S106] — see the re-export below for why this file no
+// longer defines its own.
+import { captureGps, DESKTOP_FIX_TIMEOUT_MS } from '@/lib/gps';
 import {
   SEGMENT_FIELD_RULES,
   SEGMENT_TYPE_LABELS,
@@ -72,29 +74,24 @@ export const inputStyle: React.CSSProperties = {
 };
 
 /**
- * GPS capture-if-available (§4.2 [S84]): one geolocation request; on denial,
- * timeout, or an insecure context, resolve undefined and proceed — never
- * block, never error.
+ * GPS capture-if-available (§4.2 [S84]) — now D-34's shared capture.
+ *
+ * ⚠️ CORRECTED [Josh, Ruling 3, S106]. This file used to hold its own version
+ * that resolved `undefined` on denial, timeout or an insecure context. That
+ * wrote NULL into `gps_in`/`gps_out` for a capture that WAS attempted and
+ * failed — and NULL is the value reserved for "never attempted"
+ * (`gps_clock_mode = 'off'`, or a legacy row). Desktop therefore erased the
+ * distinction D-34 exists to record, on the same column mobile was populating
+ * correctly, so the column held two dialects depending on which surface wrote.
+ *
+ * Re-exported rather than deleted: the name is part of this module's surface.
+ * DESKTOP_FIX_TIMEOUT_MS preserves the original 5s ceiling — the field app
+ * waits longer, and that difference is deliberate.
+ *
+ * NULL still happens, and still means what it should: the callers below skip
+ * this entirely when `gpsMode === 'off'`.
  */
-export function captureGps(): Promise<GpsFix | undefined> {
-  return new Promise((resolve) => {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      resolve(undefined);
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (pos) =>
-        resolve({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          accuracy: pos.coords.accuracy,
-          captured_at: new Date().toISOString(),
-        }),
-      () => resolve(undefined),
-      { timeout: 5000, maximumAge: 60000 }
-    );
-  });
-}
+export { captureGps };
 
 interface ClockModalProps {
   mode: 'clock-in' | 'clock-out';
@@ -186,7 +183,7 @@ export function ClockModal({
     }
     setBusy(true);
     setError(null);
-    const gps = gpsMode === 'off' ? undefined : await captureGps();
+    const gps = gpsMode === 'off' ? undefined : await captureGps(DESKTOP_FIX_TIMEOUT_MS);
     const res = await clockIn({
       first_segment: {
         segment_type: segType,
@@ -210,7 +207,7 @@ export function ClockModal({
     if (!currentSegment) {
       setBusy(true);
       setError(null);
-      const gps = gpsMode === 'off' ? undefined : await captureGps();
+      const gps = gpsMode === 'off' ? undefined : await captureGps(DESKTOP_FIX_TIMEOUT_MS);
       const res = await closeSessionOnly({ session_id: session.id, gps_out: gps });
       setBusy(false);
       if (!res.success) {
@@ -251,7 +248,7 @@ export function ClockModal({
     if (!session || !currentSegment) return;
     setBusy(true);
     setError(null);
-    const gps = gpsMode === 'off' ? undefined : await captureGps();
+    const gps = gpsMode === 'off' ? undefined : await captureGps(DESKTOP_FIX_TIMEOUT_MS);
     const res = await clockOut({
       session_id: session.id,
       end: {

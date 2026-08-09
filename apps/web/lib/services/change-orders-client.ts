@@ -429,121 +429,39 @@ export async function deleteCoLineRow(id: string): Promise<Result> {
  * subcontractor / other rows exactly as on an estimate (D-3).
  */
 export async function recalculateChangeOrderTotals(changeOrderId: string): Promise<Result> {
-  const supabase = createClient();
+  // ROUTED THROUGH A PRIVILEGED SERVER PATH [S115, TECH_DEBT #140 / M6M D-62].
+  //
+  // This function used to do the arithmetic here, in the browser, reading
+  // `instrument_rates` with the caller's own client. That table is floored to
+  // Owner/Admin (20260806000000), and `change_orders_insert_authorized` admits
+  // PROJECT MANAGERS — so a PM recalculating a cost-plus or T&M change order
+  // read ZERO rate rows and was refused by `assertInstrumentRatesInForce` with
+  // "set a rate before totals can recalculate", naming a cause that was false:
+  // the rate existed, the PM simply could not see it.
+  //
+  // The pricing now runs in `change-order-totals-server.ts` under the service
+  // role, behind a route that does auth + role + an RLS-scoped CO read first.
+  // NO RATE VALUE COMES BACK — the response is a success flag, and totals are
+  // re-read from the CO by the caller exactly as before.
+  //
+  // The SIGNATURE IS UNCHANGED on purpose: all three existing call sites are
+  // desktop (co-builder, correct-rates, renegotiate-rate) and none of them
+  // needed editing, which is what keeps A-28's regression assertion meaningful
+  // rather than merely satisfied.
+  const response = await fetch(`/api/change-orders/${changeOrderId}/recalculate`, {
+    method: 'POST',
+  });
 
-  const { data: co, error: coError } = await supabase
-    .from('change_orders')
-    .select(
-      'id, pricing_mode, co_type, tax_rate, subcontractor_markup_percent, material_markup_percent, labor_markup_percent'
-    )
-    .eq('id', changeOrderId)
-    .single();
-
-  if (coError || !co) return { success: false, error: 'Change order not found' };
-
-  const pricingMode = co.pricing_mode as CoPricingMode;
-  const defaults: EstimateMarkupDefaults = {
-    subcontractor_markup_percent: co.subcontractor_markup_percent,
-    material_markup_percent: co.material_markup_percent,
-    labor_markup_percent: co.labor_markup_percent,
-  };
-
-  // Money representation P4/P5: a cost-plus/T&M CO prices by its own
-  // negotiated rate(s) in force today, overriding per-row markup.
-  const rateCtx = await loadInstrumentPricingContext(
-    supabase,
-    { change_order_id: changeOrderId },
-    (co.co_type ?? 'fixed_price') as ContractType
-  );
-
-  const { data: lines, error: linesError } = await supabase
-    .from('change_order_line_items')
-    .select('id')
-    .eq('change_order_id', changeOrderId);
-
-  if (linesError) return { success: false, error: linesError.message };
-
-  const lineIds = (lines ?? []).map((l) => l.id);
-  const { data: rows } =
-    lineIds.length > 0
-      ? await supabase
-          .from('change_order_line_rows')
-          .select(
-            'id, line_item_id, row_type, markup_percent, apply_tax, rate, quantity, unit_of_measure, unit_cost, amount'
-          )
-          .in('line_item_id', lineIds)
-          .order('sort_order', { ascending: true })
-      : { data: [] };
-
-  // An instrument missing a rate its rows actually use must never price (0%
-  // would silently sell at cost). Usage-based (A-9/7d1 §6.1) — the guard
-  // needs the CO's row types, so it runs after the row fetch but still
-  // bails BEFORE any row/line/net_delta is persisted.
-  try {
-    assertInstrumentRatesInForce(
-      rateCtx,
-      (rows ?? []).map((r) => ({ row_type: r.row_type as CoRowType }))
-    );
-  } catch (e) {
-    if (e instanceof NoRateInForceError) return { success: false, error: e.message };
-    throw e;
+  if (!response.ok) {
+    // The route returns a plain message for 401/403/404/422 alike. A network or
+    // non-JSON failure must not surface as "undefined" — the caller renders
+    // this string directly.
+    const message = await response
+      .json()
+      .then((b: { error?: string }) => b?.error)
+      .catch(() => undefined);
+    return { success: false, error: message ?? `Recalculation failed (${response.status})` };
   }
 
-  type RowRec = NonNullable<typeof rows>[number];
-  const rowsByLine = new Map<string, RowRec[]>();
-  for (const r of rows ?? []) {
-    const list = rowsByLine.get(r.line_item_id) ?? [];
-    list.push(r);
-    rowsByLine.set(r.line_item_id, list);
-  }
-
-  let netDelta = 0;
-
-  for (const line of lines ?? []) {
-    const lineRows = rowsByLine.get(line.id) ?? [];
-    const rowInputs: RowPricingInput[] = lineRows.map((r) => ({
-      row_type: r.row_type as CoRowType,
-      rate: r.rate,
-      quantity: r.quantity,
-      unit_of_measure: r.unit_of_measure,
-      unit_cost: r.unit_cost,
-      amount: r.amount,
-      markup_percent: r.markup_percent,
-      apply_tax: r.apply_tax,
-    }));
-
-    const lineTotals = computeLineTotalsFromRows({
-      rows: applyInstrumentRateOverrides(rowInputs, rateCtx),
-      pricing_mode: pricingMode,
-      tax_rate: co.tax_rate,
-      defaults,
-      // S97: on non-fixed instruments labor bills flat at the ROW's rate
-      // (defaulted from the instrument labor rate at creation, editable).
-      flat_rate_labor: rateCtx.contract_type !== 'fixed_price',
-    });
-
-    for (let i = 0; i < lineRows.length; i++) {
-      const { error: rowUpdateError } = await supabase
-        .from('change_order_line_rows')
-        .update({ total: lineTotals.rowTotals[i] })
-        .eq('id', lineRows[i].id);
-      if (rowUpdateError) return { success: false, error: rowUpdateError.message };
-    }
-
-    const { error: lineUpdateError } = await supabase
-      .from('change_order_line_items')
-      .update({ total_price: lineTotals.total_price })
-      .eq('id', line.id);
-
-    if (lineUpdateError) return { success: false, error: lineUpdateError.message };
-    netDelta += lineTotals.total_price;
-  }
-
-  const { error: totalsError } = await supabase
-    .from('change_orders')
-    .update({ net_delta: roundMoney(netDelta) })
-    .eq('id', changeOrderId);
-
-  if (totalsError) return { success: false, error: totalsError.message };
   return { success: true };
 }
