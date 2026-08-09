@@ -51,15 +51,50 @@ const LINKS: Record<string, LinkDef> = {
     mobile: (p) => (p.projectId ? `/m/p/${p.projectId}/chat` : null),
     desktop: (p) => (p.projectId ? `/dashboard/projects/${p.projectId}/chat` : null),
   },
+  // ---------------------------------------------------------------------------
+  // BOTH OF THE FOLLOWING WERE WRONG WHEN FIRST WRITTEN (slice 1) AND ARE
+  // CORRECTED HERE AGAINST THE ACTUAL ROUTE TREE. The superseded paths are
+  // quoted, not deleted, because they are the paths a reader would GUESS from
+  // the key name — which is exactly how they got written.
+  //
+  //   incident  mobile  '/m/field/incidents/${id}'                    <- no such route
+  //             desktop '/dashboard/field-ops/incidents/${id}'        <- no such route
+  //   delivery  mobile  '/m/p/${projectId}/deliveries/${id}'          <- no such route
+  //             desktop '/dashboard/projects/${projectId}/deliveries/${id}'  <- no such route
+  //
+  // Every one of them resolved to a well-formed URL that 404s, and the slice-1
+  // suite passed over all four: it asserted each key resolves to SOMETHING on at
+  // least one surface, never that the something exists. `every resolved path
+  // matches a real route` in s123-incident-notify.test.ts is that missing check.
   incident: {
-    mobile: (p) => (p.id ? `/m/field/incidents/${p.id}` : null),
-    desktop: (p) => (p.id ? `/dashboard/field-ops/incidents/${p.id}` : null),
+    // No mobile incident DETAIL screen exists — `/m/p/[projectId]/safety` is a
+    // list (M6M §4.11.9, M-19), and A-39 deliberately keeps injured-person names
+    // off it. The list is still the right landing: the recipient set is
+    // Owner/Admin/PM/Foreman and Foreman is a mobile-first role.
+    //
+    // A shop/yard incident has NO project (`safety_incidents.project_id` is
+    // nullable precisely to permit that, §3c) and therefore no mobile
+    // destination at all. That null is a real answer: resolveClickTarget() puts
+    // the tap on /m/notifications, where the row is readable.
+    mobile: (p) => (p.projectId ? `/m/p/${p.projectId}/safety` : null),
+    // Project-independent, and the SAME path the incident email has always used
+    // (incident-notify.ts sendIncidentNotifications → `${origin}${...}`), so the
+    // email and the notification now land a recipient in the same place.
+    desktop: (p) => (p.id ? `/dashboard/field-ops/safety/${p.id}` : null),
   },
   delivery: {
-    mobile: (p) =>
-      p.projectId && p.id ? `/m/p/${p.projectId}/deliveries/${p.id}` : null,
+    // Mobile has a deliveries LIST and a check-in screen, no per-delivery
+    // detail — same shape as `incident` above.
+    mobile: (p) => (p.projectId ? `/m/p/${p.projectId}/deliveries` : null),
+    // Deliveries live under FIELD-OPS, not projects, and the detail route nests
+    // under `/d/` to keep orderless check-ins clear of the PO-keyed `[poId]`
+    // sibling. Both details matter: dropping `/d/` lands on the PO route, which
+    // resolves for a PO id and 404s for a delivery id — a bug that would look
+    // intermittent.
     desktop: (p) =>
-      p.projectId && p.id ? `/dashboard/projects/${p.projectId}/deliveries/${p.id}` : null,
+      p.projectId && p.id
+        ? `/dashboard/field-ops/${p.projectId}/deliveries/d/${p.id}`
+        : null,
   },
   project: {
     mobile: (p) => (p.projectId ? `/m/p/${p.projectId}` : null),

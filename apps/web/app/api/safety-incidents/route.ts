@@ -7,6 +7,7 @@ import { getIncident } from '@/lib/services/safety';
 import { regenerateIncidentPdf } from '@/lib/services/incident-pdf-service';
 import {
   computeIncidentRecipients,
+  notifyIncident,
   sendIncidentNotifications,
 } from '@/lib/services/incident-notify';
 
@@ -32,7 +33,7 @@ export async function POST(request: NextRequest) {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role, email, company_id')
+    .select('id, role, email, company_id')
     .eq('user_id', user.id)
     .eq('is_deleted', false)
     .single();
@@ -97,6 +98,17 @@ export async function POST(request: NextRequest) {
 
   // Hierarchy notification — best-effort; failures land in email_logs and
   // surface as the Owner/Admin retry banner (§4).
+  //
+  // [S123 slice 3] ONE recipient computation, THREE channels: in-app row, push,
+  // and email. The in-app/push pair goes FIRST and deliberately so — it is the
+  // channel that reaches a phone in seconds, and email is the slow one (a Resend
+  // round trip PER RECIPIENT, inside this request). Ordering it second would put
+  // the safety-critical channel behind the slow one for no benefit.
+  //
+  // Both mobile and desktop capture POST here (app/m/p/[projectId]/safety/new →
+  // /api/safety-incidents), so wiring notify() at this single point gives both
+  // surfaces identical behaviour by MECHANISM rather than by two implementations
+  // that agree today — CLAUDE.md's parity rule, and #129's lesson.
   let emailErrors: string[] = [];
   try {
     const incident = await getIncident(incidentId);
@@ -110,8 +122,22 @@ export async function POST(request: NextRequest) {
         admin,
         profile.company_id,
         profile.role as CompanyRole,
-        profile.email
+        profile.email,
+        profile.id
       );
+
+      // ND-5: pushes at ANY hour, every incident type. notify() never throws for
+      // a delivery failure, but a bug inside it must not cost the email either.
+      try {
+        await notifyIncident({ admin, recipients, incident });
+      } catch (err) {
+        console.error(
+          `[safety-incidents] in-app notify failed for ${incidentId}: ${
+            err instanceof Error ? err.message : 'unknown'
+          }`
+        );
+      }
+
       emailErrors = await sendIncidentNotifications({
         admin,
         recipients,
