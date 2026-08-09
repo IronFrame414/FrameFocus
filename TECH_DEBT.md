@@ -243,7 +243,9 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   - `Company` forward-references `SubscriptionStatus` before it's declared. Works via TS hoisting but fragile.
   - Fix: delete all inline interfaces. Consumers import from `database.ts` (auto-generated, source of truth) or per-entity service files using the existing Pick/Omit patterns. Same fix shape as old #11.
 - **#90** Crew-role RLS gates not yet verified end-to-end via UI. Session 79 verified project_manager RLS gates fully (team-detail blocked, billing/settings hidden, projects correctly scoped to assigned-only). Crew (crew_member) tier was NOT tested because no working Crew login could be established: the password-reset email link is broken (#70) and Supabase magic-link/reset hit the email rate limit. Crew is more restricted than PM, so PM passing all gates makes a Crew failure unlikely but not impossible — verify when a Crew login path exists. Blocked on #70. Observed Session 79.
-- **#128** `db:types` **silently truncates `database.ts` on failure and reports success.** The script is
+- **#128 ✅ CLOSED [S122]** — `db:types` now runs `scripts/db-types.sh`, which generates to a **temp file** and only `mv`s it into place after three gates pass: the generator exited 0, the output clears a 500-line floor, and it contains `export type Database` plus three long-standing tables. `2>/dev/null` is gone, so the generator's stderr reaches the operator. **Proven in all four directions** by shimming `npx`: a failed generation, a one-line truncation and a 900-line partial each **exit 1 and leave `database.ts` byte-identical** (md5 `359e8f4a…` before and after all three); the happy path regenerated 6479 → 6479 lines at the same md5. For the record, the old form was demonstrated destroying a file and reporting success: `( false 2>/dev/null > demo.ts )` → **0 bytes, exit 0**. _Original entry retained below._
+
+- **#128 (original entry)** `db:types` **silently truncates `database.ts` on failure and reports success.** The script is
   ```
   "db:types": "supabase gen types typescript --linked 2>/dev/null > packages/shared/types/database.ts"
   ```
