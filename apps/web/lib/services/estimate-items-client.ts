@@ -12,6 +12,7 @@ import {
   type RowPricingInput,
 } from '@framefocus/shared/utils/estimate-totals';
 import { buildInstrumentPricingContext } from '@/lib/services/instrument-rates-shared';
+import { pricingAsOfDate } from '@/lib/services/pricing-as-of';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
   DiscountType,
@@ -47,7 +48,13 @@ export async function loadInstrumentPricingContext(
   // one definition, shared with the privileged server path so a PM's totals and
   // an Owner's cannot diverge in meaning (#140 / D-62). Only the QUERY above is
   // caller-specific; everything below the fetch is not.
-  const today = new Date().toISOString().slice(0, 10);
+  //
+  // #140 residue [S122] — the as-of date is COMPANY time, not a UTC slice.
+  // `null` because this client is RLS-scoped: `companies` resolves to the
+  // caller's own row. The privileged server path passes an explicit company id
+  // for the opposite reason. BOTH PATHS MOVED IN ONE CHANGE — moving only one
+  // would make a PM's total differ from an Owner's each evening.
+  const today = await pricingAsOfDate(supabase, null);
   return buildInstrumentPricingContext(data ?? [], contractType, today) as InstrumentPricingContext;
 }
 

@@ -14,6 +14,7 @@ import {
   type RowType,
 } from '@framefocus/shared/utils/estimate-totals';
 import { buildInstrumentPricingContext } from '@/lib/services/instrument-rates-shared';
+import { pricingAsOfDate } from '@/lib/services/pricing-as-of';
 
 // TECH_DEBT #140 / M6M D-62 — PRIVILEGED change-order recalculation.
 //
@@ -127,7 +128,10 @@ export async function recalculateChangeOrderTotalsPrivileged(
   const { data: co, error: coError } = await admin
     .from('change_orders')
     .select(
-      'id, pricing_mode, co_type, tax_rate, subcontractor_markup_percent, material_markup_percent, labor_markup_percent'
+      // `company_id` is selected for the as-of date ONLY (#140 residue, S122).
+      // The service role bypasses RLS, so the timezone lookup must be told
+      // WHICH company — an unfiltered read would see every tenant.
+      'id, company_id, pricing_mode, co_type, tax_rate, subcontractor_markup_percent, material_markup_percent, labor_markup_percent'
     )
     .eq('id', changeOrderId)
     .single();
@@ -151,22 +155,25 @@ export async function recalculateChangeOrderTotalsPrivileged(
       : (buildInstrumentPricingContext(
           await loadRatesPrivileged(admin, changeOrderId),
           contractType,
-          // ⚠️ DELIBERATELY THE SAME UTC SLICE THE CALLER-SIDE PATH USES
-          // (estimate-items-client.ts), NOT companyToday().
+          // ✅ #140 RESIDUE CLOSED [S122] — COMPANY TIME, NOT A UTC SLICE, AND
+          // BOTH PATHS MOVED IN THE SAME CHANGE.
           //
-          // instrument-rates-shared.ts's own header explains why a UTC slice is
-          // wrong for `effective_from`: after ~20:00 EDT it is TOMORROW, so a
-          // rate can be read on the wrong calendar day. That defect is REAL and
-          // PRE-EXISTING on both paths.
+          // This used to be `new Date().toISOString().slice(0, 10)`, and the
+          // comment here explained at length why it could not be fixed alone:
+          // a PM's total must equal an Owner's BY CONSTRUCTION, so moving only
+          // the privileged path to company time would make the two disagree
+          // for a few hours every evening — worse than the bug, and
+          // indistinguishable from #140 to whoever hit it.
           //
-          // It is not fixed here, and the reason is the whole point of this
-          // module: a PM's total must equal an Owner's BY CONSTRUCTION. Moving
-          // only this path to company-tz would make the two disagree for a few
-          // hours each evening — a worse bug than the one being fixed, and one
-          // that would look exactly like #140 to whoever found it. Fixing it
-          // means moving BOTH paths in one change, with the company timezone
-          // loaded here, and that is a separate piece of work.
-          new Date().toISOString().slice(0, 10)
+          // `pricing-as-of.ts` is now that single definition, and
+          // `estimate-items-client.ts` moved to it in the same commit.
+          //
+          // ⚠️ THE COMPANY ID IS REQUIRED HERE and `null` on the caller side.
+          // `admin` is service-role: RLS is bypassed, so an unfiltered
+          // `companies` read would span every tenant. The browser client is
+          // RLS-scoped and resolves to its own row. Same function, opposite
+          // reasons — see pricing-as-of.ts.
+          await pricingAsOfDate(admin, (co as { company_id: string }).company_id)
         ) as InstrumentPricingContext);
 
   const { data: lines, error: linesError } = await admin
