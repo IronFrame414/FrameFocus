@@ -119,3 +119,53 @@ export function shouldPushNow(
 export function isOverrideType(type: string): boolean {
   return type === 'incident';
 }
+
+/**
+ * ---------------------------------------------------------------------------
+ * WINDOW BOUNDARIES AS CRON TRIGGERS (§3h, §3i)
+ * ---------------------------------------------------------------------------
+ * Two traces fire AT a boundary rather than inside the window: §3h at
+ * `notify_hours_start` on the day the week begins, §3i at `notify_hours_end`
+ * daily. Both are per-company — a company that briefs at 06:00 and stops at
+ * 16:00 must get its check when ITS day ends, not when a server in UTC thinks
+ * the day ended.
+ *
+ * The mechanism is an HOURLY cron that asks each company "is this your hour?".
+ * That is what makes these testable at all: the decision is a pure function of
+ * (instant, timezone, clock), and the cron is a loop around it. §3f taught this
+ * the hard way — an inline `===` inside a route that cannot be driven.
+ *
+ * ⚠️ HOUR GRANULARITY IS DELIBERATE, AND IT IS WHY THE MINUTES ARE IGNORED. A
+ * company with `notify_hours_end = 16:30` gets its §3i check during the 16:00
+ * hour, not at 16:30 — an hourly cron cannot do better, and pretending
+ * otherwise by comparing minutes would mean the check simply NEVER FIRES for
+ * every company whose boundary is not exactly on the hour. Firing early within
+ * the right hour is a real answer; silence is not.
+ */
+export function isBoundaryHour(
+  instant: Date,
+  timeZone: string,
+  clock: ClockTime | null | undefined
+): boolean {
+  const boundary = minutesFromClockTime(clock);
+  // Unparseable boundary: fail CLOSED here, unlike isInsideNotifyWindow which
+  // fails open. The directions differ on purpose — failing open there means a
+  // notification is delivered noisily, failing open HERE would mean a cron
+  // firing every hour of every day for that company.
+  if (boundary === null) return false;
+  return Math.floor(zonedMinutesOfDay(instant, timeZone) / 60) === Math.floor(boundary / 60);
+}
+
+/**
+ * Day of week at `instant` in `timeZone`, 0 = Sunday.
+ *
+ * Matches `companies.week_starts_on` and `zonedParts().weekday`
+ * (`time-tracking.ts`) so §3h can ask "is today the day this company's week
+ * begins?" without the two disagreeing about what day 0 is.
+ */
+export function zonedWeekday(instant: Date, timeZone: string): number {
+  const short = new Intl.DateTimeFormat('en-US', { timeZone, weekday: 'short' })
+    .formatToParts(instant)
+    .find((p) => p.type === 'weekday')?.value;
+  return { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }[short ?? 'Sun'] ?? 0;
+}
