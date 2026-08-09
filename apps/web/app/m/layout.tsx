@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
 import { getMembers } from '@/lib/services/members';
+import { getUnreadCount } from '@/lib/services/notifications';
 import { MobileShell } from './mobile-shell';
 import { RegisterSw } from './register-sw';
 
@@ -92,11 +93,15 @@ export default async function MobileLayout({ children }: { children: React.React
     redirect(SIGN_IN_BACK_TO_M);
   }
 
-  const [companyResult, members] = await Promise.all([
+  const [companyResult, members, unreadCount] = await Promise.all([
     supabase.from('companies').select('name').eq('id', profile.company_id).single(),
     // §3.3's Team tile carries "(count)". Through the service layer, never a
     // direct query from a component.
     getMembers().catch(() => null),
+    // ND-13 — the app-bar bell's badge. getUnreadCount() already swallows its
+    // own errors and returns 0, so a failed count hides the badge rather than
+    // breaking the shell it renders in: a wrong number is worse than none.
+    getUnreadCount(),
   ]);
 
   return (
@@ -107,6 +112,7 @@ export default async function MobileLayout({ children }: { children: React.React
       <MobileShell
         companyName={companyResult.data?.name ?? 'My Company'}
         teamCount={members?.length ?? null}
+        unreadCount={unreadCount}
       >
         {children}
       </MobileShell>

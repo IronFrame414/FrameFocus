@@ -22,5 +22,19 @@
       "mcp__supabase__generate_typescript_types"
     ],
     "deny": ["Read(./.env)", "Read(./.env.*)"]
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cwd=$(jq -r '.cwd // empty'); repo=$(basename \"${cwd:-$PWD}\"); curl -s -m 5 -H \"Title: Claude Code\" -H \"Priority: default\" -H \"Tags: white_check_mark\" -d \"Claude Code finished in $repo\" https://ntfy.sh/josh-claude-alerts-x7y9z >/dev/null 2>&1 || true",
+            "timeout": 10,
+            "statusMessage": "Pushing finish notification..."
+          }
+        ]
+      }
+    ]
   }
 }

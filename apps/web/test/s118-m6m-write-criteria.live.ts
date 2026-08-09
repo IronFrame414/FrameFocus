@@ -57,9 +57,19 @@ import { admin, assertRebuildTest, sessionFor } from './live-session';
 const state: { client: SupabaseClient | null } = { client: null };
 vi.mock('@/lib/supabase-browser', () => ({ createClient: () => state.client }));
 
-const { verifyPunchItem, createPunchList, createPunchItem } = await import(
-  '@/lib/services/punch-client'
-);
+const { verifyPunchItem, createPunchList } = await import('@/lib/services/punch-client');
+// ⚠️ [S123 / ND-18] `createPunchItem` is NO LONGER IMPORTED FROM punch-client.
+// It now POSTs to /api/punch-items so §3b can notify the assignee from a server
+// path, and a relative-URL fetch has no origin node can resolve — the SAME
+// substitution this file already documents for A-55's
+// `recalculateChangeOrderTotalsPrivileged`. The harness calls the route's WRITE
+// HALF, which runs the identical insert under the same caller session.
+//
+// That is also how the harness stays out of the notification path by
+// construction rather than by a flag: only the ROUTE notifies. This particular
+// call passes no `assignee_id`, so it would write nothing either way — but the
+// property should not depend on that.
+const { insertPunchItemAsCaller } = await import('@/lib/services/assignments-server');
 const { createChangeOrder, createCoLineItem, createCoLineRow } = await import(
   '@/lib/services/change-orders-client'
 );
@@ -384,7 +394,10 @@ describe('A-67b — read the column, not the label rendered beside it', () => {
     expect(created.success, created.error).toBe(true);
     a67bListId = created.id!;
 
-    const item = await createPunchItem({
+    // `state.client` is the CREW session the mock hands to punch-client; the
+    // write half takes it explicitly, so the insert still runs as crew under
+    // punch_list_items_insert_authenticated — which is what A-67b is about.
+    const item = await insertPunchItemAsCaller(state.client!, {
       punch_list_id: a67bListId,
       project_id: projectId,
       title: `${TAG} A-67b item`,

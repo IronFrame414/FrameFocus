@@ -100,6 +100,16 @@ Inbound (already built/specced):
 
 1. Exact M7 budget table/mechanism for M8 writes (see gap above).
 2. Vehicle locations: free text or a defined vehicle list?
-3. Low-stock notification: fire once per crossing, or repeat?
+3. ~~Low-stock notification: fire once per crossing, or repeat?~~ — **ANSWERED [S89, founder-approved; flagged back S123].**
+   **Fire on threshold crossing, then repeat WEEKLY while the item stays below threshold; reset when
+   restocked above.** Recipients: Owner, Admin, PM (§2c, unchanged).
+   Authority: [`notifications-architecture.md`](notifications-architecture.md) §2 R8.
+   _(S89 answered this and promised a flag-back to this file, which then lived on another branch;
+   the flag-back was never made and this question sat open for 12 sessions. Made S123.)_
+   **How M8 consumes it:** call `notify()` — M8 does **not** write notification rows itself. The
+   `low_stock` type is **already reserved** in that spec's §4 enum, so M8 lands as a consumer with
+   **no schema change** to the notifications tables. Note that the notifications spec **cut the
+   low-stock trace from its own v1** (ND-16) purely because M8 has no tables yet to bind a quantity
+   or threshold figure to — the decision above is unaffected and is what M8 builds against.
 4. Who may edit price after the fact (Owner/Admin only, or office role)?
 5. Misc-borrow "approval": recorded approval step, or honor-system label?

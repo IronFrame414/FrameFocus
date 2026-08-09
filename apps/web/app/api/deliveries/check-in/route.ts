@@ -11,6 +11,7 @@ import {
   sendEmail,
 } from '@/lib/services/email-service';
 import { NotificationEmail } from '@/lib/email/templates/notification-email';
+import { notifyDeliveryDiscrepancy } from '@/lib/notify/delivery-notify';
 
 // 6D §7 — delivery check-in. Inserts run under the CALLER's RLS (any member
 // on a visible project may check in — §3 amendment). The DB trigger chain
@@ -262,6 +263,52 @@ export async function POST(request: NextRequest) {
 
       const recipients = new Map<string, string>();
       for (const r of [...managers, ...pms]) recipients.set(r.email, r.first_name);
+
+      // ── §3g — delivery DISCREPANCY, in-app + push [S123 slice 6] ──
+      //
+      // ONLY ON EXCEPTIONS. The email above goes out for clean deliveries too
+      // ("[Clean] Delivery — …"), and that is right for a record; a
+      // notification for every clean truck is noise that buries the one that
+      // matters. §3g is the discrepancy trace, and `has_exceptions` is the
+      // signal it names.
+      //
+      // The audience is the same Owner/Admin + assigned-PM set the email uses,
+      // resolved through the shared notify helpers rather than the inline
+      // profile join above, because notify() needs profile ids and roles
+      // (ND-2, R7) and the email needs addresses. Two shapes of the same
+      // question — but only ONE definition of "who", which is why the helpers
+      // exist. The inline join above is the email's and predates them.
+      // ── §3g — delivery DISCREPANCY, in-app + push [S123 slice 6] ──
+      //
+      // ONLY ON EXCEPTIONS, AND THE GUARD LIVES HERE. The email above goes out
+      // for clean deliveries too ("[Clean] Delivery — …"), which is right for a
+      // record; a notification for every clean truck is noise that buries the
+      // one that matters. `hasExceptions` is derived from the row just written,
+      // so the condition belongs to the route — notifyDeliveryDiscrepancy()
+      // would otherwise happily describe a clean delivery as a discrepancy.
+      //
+      // The BODY moved to lib/notify/delivery-notify.ts in the coverage pass so
+      // it can be driven from a harness: this route emails every manager
+      // through Resend on the way past, so nothing here could be tested live.
+      if (hasExceptions) {
+        try {
+          await notifyDeliveryDiscrepancy(admin, {
+            companyId: project.company_id,
+            projectId: project.id,
+            projectName: project.name,
+            deliveryId: delivery.id,
+            vendorName,
+            receiverName,
+            deliveryDate: input.delivery_date,
+            items: input.items,
+          });
+        } catch (err) {
+          console.error(
+            `[deliveries/check-in] in-app notify failed for ${delivery.id}:`,
+            err instanceof Error ? err.message : 'unknown'
+          );
+        }
+      }
 
       const sender = buildSenderAddress(company);
       const subject = `[${hasExceptions ? 'EXCEPTIONS' : 'Clean'}] Delivery — ${vendorName} · ${project.name}`;

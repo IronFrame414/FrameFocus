@@ -499,7 +499,33 @@ dismissal fades. No decorative animation.
 
 Left: **44px hamburger** — three 18×2px white bars in an `rgba(255,255,255,.13)` 11px-radius square.
 Centre-left: title block, 18–21px/800, with an IBM Plex Mono 11px sub-line for project/company context.
-Right: **nothing.** The title block runs to the bar's right inset.
+Right: **the notifications bell** (44px). See the S123 amendment below.
+
+> **AMENDED [S123, Josh — notifications ND-13/ND-14] — the right slot is FILLED, by a bell.**
+> _Superseded line, quoted rather than deleted:_ _"Right: **nothing.** The title block runs to the
+> bar's right inset."_
+>
+> **A 44px bell with an unread badge occupies the right slot** — the slot D-36 emptied two rulings
+> ago. Spec: [`notifications-architecture.md`](notifications-architecture.md) ND-13, §10.3, §10.4.
+>
+> **This does NOT restore the avatar, and the distinction is the whole of D-36's reasoning.** D-36
+> cut the avatar on two grounds: it had **no action**, and at 38px it was **under §2's 44px floor**.
+> The bell fails neither test — it has a single unambiguous action (open the notifications list) and
+> is specified at 44px, so A-5 applies to it and passes. What D-36 ruled out was *a control with no
+> action* and *a sub-floor tap target*, not *the existence of a right-hand slot*.
+>
+> **Why the bell is here and not in the bottom tab bar.** Josh first ruled a sixth tab slot, then
+> **reversed it on the arithmetic** [S123]: at 402px the bar's inner width is 374px, and a sixth slot
+> cuts each side item's envelope from 77.0px to 61.6px — while "Notifications" needs roughly 70px at
+> 11px Barlow. Five side items plus the centre camera also has **no true centre**, so the camera's
+> `margin-top:-26px` break and 4px ring would read as a mistake rather than an affordance. **D-3 is
+> therefore NOT amended: the bottom bar stays at five slots** and the camera keeps its centre. The
+> bell delivers what the sixth slot was wanted for — always visible, one tap, permanently in view —
+> at no cost to either.
+>
+> **A-40 is rewritten, not merely satisfied** (a criterion asserting the slot is empty cannot be
+> "passed" by a build that fills it), and **A-40b's count changes from one control to two**. Both
+> below.
 
 > **AMENDED [S100, D-36] — the avatar is CUT.** _Superseded line, quoted rather than deleted:_
 > _"Right: **38px amber avatar** with the user's initials."_
@@ -4598,8 +4624,9 @@ Each criterion tests a _sentence of this spec_, not a summary of it.
 
 **The app bar after D-36**
 
-- A-40 The app bar renders **no right-hand element** — no avatar, no initials badge, no icon, no button — on every `/m/**` route, and the title block runs to the bar's right inset. `[Playwright]` _(§3.1 as amended, D-36. An absence assertion in the shape of A-10d and A-11e: the avatar was specced for the whole of this document's life, so a build that restores it satisfies every other criterion here.)_
-- A-40b The only interactive control in the app bar is the hamburger — or, inside a project, the back chevron — and **never both at once**, on every `/m/**` route. `[Playwright]` _(§3.1. A-4 tests the project case; this asserts the count company-wide, which is what stops a "restore the avatar as a menu button" edit.)_
+- A-40 **REWRITTEN [S123, ND-13].** The app bar renders **no right-hand element other than the notifications bell** — no avatar, no initials badge, no second icon, no button — on every `/m/**` route, and **the bell measures ≥44px** (A-5's floor, which the cut avatar failed at 38px). `[Playwright]` _(§3.1 as amended. **Rewritten rather than satisfied:** the old form asserted the slot was EMPTY, so a correct bell build would fail it and the only way to "pass" would be to omit the bell. The absence assertion survives in narrowed form — it still catches the avatar coming back, which is what D-36 wrote it for.)_ _Superseded text, quoted not deleted:_ _"The app bar renders **no right-hand element** — no avatar, no initials badge, no icon, no button — on every `/m/**` route, and the title block runs to the bar's right inset."_
+- A-40b **REWRITTEN [S123, ND-13].** The app bar carries **exactly two** interactive controls: **one on the left** — the hamburger, or inside a project the back chevron, **never both at once** — and **the bell on the right**, on every `/m/**` route. `[Playwright]` _(§3.1. **What changed and what did not:** the count goes from one to two, because the bell is a real second control. **The left-slot exclusivity is untouched** — hamburger XOR chevron is still the rule A-4 tests per-screen and this tests company-wide. **What it still stops:** the edit D-36 feared was "restore the avatar as a menu button"; with a right slot now legitimately occupied, that edit reappears as **a third control** or as **a bell that is secretly an avatar menu**, and an exact count of two is what catches both. A build with hamburger + chevron + bell fails; so does one with bell + avatar.)_ _Superseded text, quoted not deleted:_ _"The only interactive control in the app bar is the hamburger — or, inside a project, the back chevron — and **never both at once**, on every `/m/**` route."_
+- A-40c **NEW [S123, ND-13].** The bottom tab bar still renders **exactly five slots** — Projects · Timeclock · [camera] · Logs · Field — and the camera is still the centre item, on every `/m/**` route. `[Playwright]` _(**D-3 is NOT amended.** Josh ruled six slots and then reversed it; this criterion exists because the reversal is the kind of thing a later reader undoes by accident, and because the reversal's whole justification was that the sixth slot damaged this bar.)_
 
 **The six hamburger destinations (§4.13)**
 

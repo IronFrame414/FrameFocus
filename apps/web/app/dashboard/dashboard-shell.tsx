@@ -5,6 +5,7 @@ import Link from 'next/link';
 import {
   Calendar,
   Clock,
+  Bell,
   CreditCard,
   FileText,
   HardHat,
@@ -35,6 +36,8 @@ interface DashboardShellProps {
   timeZone: string;
   /** companies.gps_clock_mode [S86] — 'off' disables capture in ClockModal. */
   gpsMode: GpsClockMode;
+  /** ND-12 — the Notifications item's unread badge. 0 renders no badge. */
+  unreadCount: number;
 }
 
 // FFNav 12-item order locked S86 round-2 (6a-ui-build-report addendum), built
@@ -78,6 +81,18 @@ const NAV_ITEMS: {
   { href: '/dashboard/settings', label: 'Settings', icon: Settings, roles: ['owner', 'admin'] },
   { href: '/dashboard/team', label: 'Team', icon: UsersRound },
   { href: '/dashboard/billing', label: 'Billing', icon: CreditCard, roles: ['owner'] },
+  // ND-12 [S123] — Notifications. UNGATED: every role has notifications, and
+  // `notifications_select_own` is what scopes the contents, so a role gate here
+  // would have to be kept in step with every future consumer for no gain. This
+  // follows the Field Ops / Expenses precedent above, both ungated with
+  // role-scoped page content.
+  //
+  // ⚠️ POSITION IS NOT DECIDED HERE. The spec's S89 form called this "the 13th
+  // sidebar item"; there were already 13, so it is the 14th, and FINAL PLACEMENT
+  // IS STILL OWED TO THE DEFERRED FFNav REINDEX (see the header comment above).
+  // Appended rather than inserted for exactly that reason — inserting it
+  // mid-list would be a placement decision this build has no authority to make.
+  { href: '/dashboard/notifications', label: 'Notifications', icon: Bell },
 ];
 
 /** First initial of first + last word of the wired name (ui-01 §S6). */
@@ -97,6 +112,7 @@ export function DashboardShell({
   myMemberId,
   timeZone,
   gpsMode,
+  unreadCount,
 }: DashboardShellProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -183,6 +199,18 @@ export function DashboardShell({
               >
                 <Icon size={17} strokeWidth={1.9} aria-hidden />
                 {item.label}
+                {/* ND-12 — the unread badge, on the Notifications item only.
+                    Nothing at 0: an always-present "0" is noise that trains
+                    people to ignore the item, and it would pass any "the badge
+                    exists" assertion (A-N44 tests all three states). */}
+                {item.href === '/dashboard/notifications' && unreadCount > 0 && (
+                  <span
+                    data-testid="nav-unread-badge"
+                    className="ml-auto min-w-[20px] rounded-full bg-accent-500 px-1.5 text-center font-mono text-[11px] font-bold leading-5 text-brand-900"
+                  >
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
               </Link>
             );
           })}

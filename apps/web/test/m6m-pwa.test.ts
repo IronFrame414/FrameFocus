@@ -130,7 +130,30 @@ describe('§7.2 item 3 — the retry hook pair (A-26d, the wiring half)', () => 
     const register = read('app/m/register-sw.tsx');
     expect(layout).toContain('RegisterSw');
     expect(register).toContain("register('/sw.js', { scope: '/m' })");
-    // A-28 — nothing under app/dashboard/** references the worker.
+    // ------------------------------------------------------------------
+    // A-28 — NARROWED [S123, notifications ND-4]. Rewritten, not deleted.
+    // ------------------------------------------------------------------
+    // Superseded assertion, quoted rather than dropped:
+    //
+    //     for (const rel of walk('app/dashboard'))
+    //       expect(read(rel)).not.toContain('sw.js');
+    //
+    // It asserted that NOTHING under app/dashboard/** mentions a service
+    // worker. ND-4 ruled a SECOND, push-only worker registered at
+    // scope '/dashboard', so the blanket form now fails on a correct build —
+    // and the only way to "pass" it would be to abandon desktop push, which
+    // would leave traces 3d–3h (all addressed to Owner/Admin, the desktop
+    // roles) delivering to nobody.
+    //
+    // WHAT THE CRITERION WAS ACTUALLY PROTECTING, and what is preserved: the
+    // MOBILE worker — the one with the fetch handler and the static cache —
+    // must never control /dashboard. That worker's caching policy exists
+    // because of a real S121 hydration failure on a real handset, and putting
+    // the desktop app behind it would inherit that whole class of failure to
+    // gain nothing.
+    //
+    // So the narrowed rule is: the desktop tree may not REGISTER '/sw.js',
+    // and the worker it does register must have no fetch handler at all.
     const walk = (dir: string): string[] =>
       readdirSync(join(WEB_ROOT, dir)).flatMap((name) => {
         const rel = join(dir, name);
@@ -141,7 +164,16 @@ describe('§7.2 item 3 — the retry hook pair (A-26d, the wiring half)', () => 
             : [];
       });
     for (const rel of walk('app/dashboard')) {
-      expect(read(rel), `${rel} references the service worker`).not.toContain('sw.js');
+      expect(read(rel), `${rel} registers the MOBILE worker`).not.toContain("register('/sw.js'");
+      expect(read(rel), `${rel} registers the mobile worker at root scope`).not.toContain(
+        "scope: '/'"
+      );
     }
+
+    // The exception is only safe because of this: no fetch handler, no cache,
+    // so nothing the desktop worker does can ever serve a stale response.
+    const desktopWorker = read('public/sw-dashboard.js');
+    expect(desktopWorker).not.toContain("addEventListener('fetch'");
+    expect(desktopWorker).not.toContain('caches.open');
   });
 });

@@ -3,7 +3,9 @@ import { redirect } from 'next/navigation';
 import { getOpenSession } from '@/lib/services/time-tracking';
 import { getMyMember } from '@/lib/services/members';
 import { getCompanyTimeSettings } from '@/lib/services/company';
+import { getUnreadCount } from '@/lib/services/notifications';
 import { DashboardShell } from './dashboard-shell';
+import { RegisterPushSw } from './register-push-sw';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -30,11 +32,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // every dashboard page. App Router layouts don't refetch on client-side
   // navigation — freshness comes from router.refresh(), which every clock
   // mutation already triggers.
-  const [company, openSession, myMember, timeSettings] = await Promise.all([
+  const [company, openSession, myMember, timeSettings, unreadCount] = await Promise.all([
     supabase.from('companies').select('name').eq('id', profile.company_id).single(),
     getOpenSession(),
     getMyMember(),
     getCompanyTimeSettings(),
+    // ND-12 — the sidebar badge. Swallows its own errors and returns 0, so a
+    // failed count hides the badge rather than breaking the shell.
+    getUnreadCount(),
   ]);
 
   return (
@@ -46,7 +51,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
       myMemberId={myMember?.id ?? null}
       timeZone={timeSettings.timezone}
       gpsMode={timeSettings.gpsClockMode}
+      unreadCount={unreadCount}
     >
+      {/* ND-4 — registers the push-only desktop worker. Renders nothing, and
+          registering is not subscribing: no prompt fires from here. */}
+      <RegisterPushSw />
       {children}
     </DashboardShell>
   );

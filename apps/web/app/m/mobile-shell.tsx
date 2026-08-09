@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase-browser';
 import { MobileHeaderProvider, useMobileHeader } from './mobile-header';
+import { NotificationBell } from '@/components/notifications/notification-bell';
 import { OfflineSyncProvider, useOfflineSync } from './offline-sync';
 import { CaptureStoreProvider, projectInContext, useCaptureStore } from './capture-store';
 
@@ -220,6 +221,8 @@ export type MobileShellProps = {
   companyName: string;
   /** §3.3 — the Team tile's "(count)" badge. */
   teamCount: number | null;
+  /** ND-13 — the app-bar bell's unread count. 0 renders no badge (A-N44). */
+  unreadCount: number;
 };
 // `userName` was a prop here and is GONE with the avatar (D-36) — it had no
 // other consumer. The signed-in name is not lost: M-30 (§4.13.7) binds it to
@@ -241,7 +244,7 @@ export function MobileShell(props: MobileShellProps) {
   );
 }
 
-function MobileShellInner({ children, companyName, teamCount }: MobileShellProps) {
+function MobileShellInner({ children, companyName, teamCount, unreadCount }: MobileShellProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -367,15 +370,32 @@ function MobileShellInner({ children, companyName, teamCount }: MobileShellProps
             ) : null}
           </div>
 
-          {/* §3.1 as amended — THE RIGHT SIDE IS EMPTY, BY RULING.
-              D-36 [S100] CUT the 38px amber avatar outright: §3.1 gave it a size
-              and never an action, which left it either a sub-44px tap target
-              (A-5) or decoration spending the app bar's scarcest resource.
-              Identity and sign-out already have homes — §3.3's Sign out row and
-              M-30 (§4.13.7). Do NOT add anything here: A-40 asserts the app bar
-              renders no right-hand element at all, and A-40b asserts the
-              hamburger (or, inside a project, the back chevron) is its only
-              interactive control. */}
+          {/* §3.1 as amended [S123, notifications ND-13] — THE RIGHT SLOT HOLDS
+              THE NOTIFICATIONS BELL, and nothing else, ever.
+
+              _Superseded comment, quoted not deleted:_ "THE RIGHT SIDE IS EMPTY,
+              BY RULING. […] Do NOT add anything here: A-40 asserts the app bar
+              renders no right-hand element at all."
+
+              D-36 [S100] cut the 38px amber avatar for two reasons: it had NO
+              ACTION, and 38px sat under §2's 44px floor. THE BELL FAILS NEITHER
+              — one unambiguous action (open the notifications list) at 44px. So
+              this is not D-36 being reversed; D-36 ruled out a control with no
+              action and a sub-floor target, not the existence of a right slot.
+
+              WHY THE BELL IS HERE AND NOT A SIXTH TAB. Josh ruled a six-slot
+              bottom bar and then REVERSED it on the arithmetic: at 402px the
+              bar's inner width is 374px, so a sixth slot cuts each side item's
+              envelope from 77.0px to 61.6px while "Notifications" needs ~70px at
+              11px Barlow — and five side items plus the centre camera has no
+              true centre, so the camera's -26px break would read as a mistake.
+              D-3 stands; the bottom bar below is untouched (A-40c).
+
+              A-40 as rewritten: no right-hand element OTHER than the bell, and
+              the bell measures >=44px. A-40b as rewritten: exactly two
+              interactive controls, one per side — which is what catches both a
+              restored avatar and a bell that quietly becomes a menu. */}
+          <NotificationBell count={unreadCount} />
         </div>
 
         <OfflineStrip />

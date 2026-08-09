@@ -67,6 +67,23 @@ export async function deletePunchList(
 
 // ── Items ──
 
+/**
+ * ND-18 — POSTS TO A ROUTE, does not write Supabase directly.
+ *
+ * The insert moved server-side so §3b can notify the assignee from a path that
+ * cannot be lost to a closed tab. Signature and return shape are UNCHANGED, so
+ * `punch-panel.tsx` and `punch-form.tsx` did not have to change; what is added
+ * is the §13.2 reachability report, which callers may ignore.
+ *
+ * Authorisation did NOT move. The route performs the insert with the caller's
+ * own session, so `punch_list_items_insert_authenticated` applies exactly as it
+ * did here. See app/api/punch-items/route.ts.
+ *
+ * ⚠️ NOT CALLABLE FROM A NODE HARNESS — a relative-URL fetch has no origin to
+ * resolve. Harnesses call `insertPunchItemAsCaller()` (the route's write half)
+ * instead, which is also how they stay out of the notification path. Precedent:
+ * `recalculateChangeOrderTotalsPrivileged` and s118's A-55 note.
+ */
 export async function createPunchItem(item: {
   punch_list_id: string;
   project_id: string;
@@ -79,17 +96,42 @@ export async function createPunchItem(item: {
   reference_photo_file_id?: string | null;
   requires_completion_photo?: boolean;
   requires_verification?: boolean;
-}): Promise<{ success: boolean; id?: string; error?: string }> {
-  const supabase = createClient();
+}): Promise<{
+  success: boolean;
+  id?: string;
+  error?: string;
+  /** §13.2 — assignee reachable by email only; no in-app row was written. */
+  emailOnly?: string | null;
+  /** §13.2 — assignee has no channel at all. Surface it, never block on it. */
+  unreachableName?: string | null;
+}> {
+  let response: Response;
+  try {
+    response = await fetch('/api/punch-items', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(item),
+    });
+  } catch {
+    // A network failure is the one thing the client-direct write also had, and
+    // it must not read as a validation error.
+    return { success: false, error: 'Could not reach the server. Check your connection.' };
+  }
 
-  const { data, error } = await supabase
-    .from('punch_list_items')
-    .insert(item)
-    .select('id')
-    .single();
+  const body = (await response.json().catch(() => ({}))) as {
+    id?: string;
+    error?: string;
+    emailOnly?: string | null;
+    unreachableName?: string | null;
+  };
 
-  if (error) return { success: false, error: error.message };
-  return { success: true, id: data.id };
+  if (!response.ok) return { success: false, error: body.error ?? 'Could not create the item.' };
+  return {
+    success: true,
+    id: body.id,
+    emailOnly: body.emailOnly ?? null,
+    unreachableName: body.unreachableName ?? null,
+  };
 }
 
 /**

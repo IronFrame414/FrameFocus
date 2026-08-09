@@ -1,4 +1,7 @@
 import { test, expect, type Page, type Locator } from '@playwright/test';
+// Service role, carrying hub-fixture's rebuild-test guard. Used only by A-N44,
+// which needs a real unread row to prove the badge reaches the shell.
+import { adminClient } from './hub-fixture';
 
 // M6M §10 acceptance criteria that the SHELL SLICE can carry.
 //
@@ -435,31 +438,69 @@ test.describe('A-5 · tap targets', () => {
 });
 
 // ===========================================================================
-// A-40 / A-40b — the app bar after D-36 cut the avatar
+// A-40 / A-40b — the app bar after D-36 cut the avatar, AS AMENDED BY ND-14
 // ===========================================================================
-test.describe('A-40 · the app bar renders no right-hand element', () => {
+//
+// ⚠️ BOTH CRITERIA ARE REWRITTEN, NOT DELETED, AND THIS IS WHY.
+//
+// _Superseded wording, quoted not rewritten:_
+//   A-40  "the app bar renders NO right-hand element … no avatar, badge, icon
+//          or button on the right"
+//   A-40b "the app bar has EXACTLY ONE interactive control on every route"
+//
+// ND-13 as amended [S123, Josh] put a notifications bell in the app bar's right
+// slot — the slot D-36 emptied — so "no right-hand element" and "exactly one
+// control" now assert something deliberately untrue. Seven cases failed on
+// exactly that and none of them were defects.
+//
+// THE JOB THESE CRITERIA DO SURVIVES THE AMENDMENT, which is why they are
+// rewritten rather than dropped. D-36 cut the avatar for TWO reasons — it had
+// no action, and at 38px it sat under §2/A-5's 44px floor — and the empty slot
+// existed to stop both mistakes returning. Neither reason is retired by the
+// bell: it has one unambiguous action and it is 44px. So the criteria become
+// the narrowest statements that still catch the original edit:
+//
+//   A-40  no right-hand element OTHER than the bell, and the bell clears 44px.
+//         Stops the avatar coming back and stops the slot becoming a dumping
+//         ground for a second icon.
+//   A-40b exactly TWO interactive controls, one per side — the left one
+//         (hamburger XOR back) and the bell. A restored avatar is a THIRD
+//         control and fails the count.
+test.describe('A-40 · the app bar renders no right-hand element OTHER than the bell', () => {
   const ROUTES = [...SHELL_ROUTES, `/m/p/${PROJECT_ID}`];
 
   for (const route of ROUTES) {
-    test(`no avatar, badge, icon or button on the right on ${route}`, async ({ page }) => {
+    test(`only the bell on the right on ${route}`, async ({ page }) => {
       await page.goto(route);
 
-      // The element that used to be there, by its own testid. Direct and
-      // specific: this is the assertion that fails if the avatar comes back
+      // Unchanged, and still the sharpest assertion in the file: the element
+      // that used to be there, by its own testid. Fails if the avatar returns
       // exactly as it was.
       await expect(page.getByTestId('m-avatar')).toHaveCount(0);
 
-      // And the general form, because a restored avatar might be rebuilt under
-      // a different testid. The app bar's own <header> is the scope; the title
-      // block must be the last thing in the row.
+      // The general form, because a restored avatar might be rebuilt under a
+      // different testid. The app bar's own row is the scope.
       const bar = page.locator('header > div').first();
       const children = await bar.evaluate((el) =>
         Array.from(el.children).map((c) => c.getAttribute('data-testid') ?? c.tagName.toLowerCase())
       );
-      // hamburger|back  +  title block. Exactly two, in that order.
-      expect(children).toHaveLength(2);
+      // hamburger|back + title block + bell. Exactly THREE, in that order.
+      // The count is the part that matters: a fourth child is the dumping
+      // ground this criterion exists to prevent, whatever it is called.
+      expect(children).toHaveLength(3);
       expect(['m-hamburger', 'm-back']).toContain(children[0]);
       expect(children[1]).toBe('div');
+      expect(children[2]).toBe('m-bell');
+
+      // A-5's 44px floor, on the element that is only allowed in this slot
+      // because it clears it. THE AVATAR WAS 38px, and shipping a 38px bell
+      // would reinstate half of D-36's defect in the very slot D-36 emptied —
+      // with a test that passed, because "the bell is present" would still be
+      // true. Asserted as the floor rather than as `=== 44` so a future 48px
+      // target is not a failure; the component ships exactly 44.
+      const bell = (await page.getByTestId('m-bell').boundingBox())!;
+      expect(bell.width, `bell width on ${route}`).toBeGreaterThanOrEqual(44);
+      expect(bell.height, `bell height on ${route}`).toBeGreaterThanOrEqual(44);
     });
   }
 });
@@ -479,14 +520,105 @@ test.describe('A-40b · the hamburger or the back chevron, never both', () => {
     await expect(page.getByTestId('m-hamburger')).toHaveCount(0);
   });
 
-  test('the app bar has exactly one interactive control on every route', async ({ page }) => {
+  test('the app bar has exactly TWO interactive controls — one per side', async ({ page }) => {
+    // _Superseded: "exactly ONE interactive control on every route."_ The
+    // second is THE NOTIFICATIONS BELL (ND-13 as amended), and naming it is the
+    // point — a bare `toBe(2)` would be satisfied by a restored avatar sitting
+    // next to the hamburger with the bell missing entirely, which is precisely
+    // the edit D-36 was written to stop.
     for (const route of [...SHELL_ROUTES, `/m/p/${PROJECT_ID}`]) {
       await page.goto(route);
       const controls = page.locator('header').locator('a, button, [role="button"]');
       // The offline strip is inside <header> too, but only while offline; these
-      // runs are online, so one control is the whole app bar.
-      expect(await controls.count(), `on ${route}`).toBe(1);
+      // runs are online, so the app bar is the whole of it.
+      expect(await controls.count(), `on ${route}`).toBe(2);
+
+      // WHICH two, not just how many.
+      const ids = await controls.evaluateAll((els) =>
+        els.map((e) => e.getAttribute('data-testid') ?? e.tagName.toLowerCase())
+      );
+      expect(['m-hamburger', 'm-back'], `left control on ${route}`).toContain(ids[0]);
+      expect(ids[1], `right control on ${route}`).toBe('m-bell');
     }
+  });
+
+  test('A-N44 · the badge is absent at zero and shows the count when there is one', async ({
+    page,
+  }) => {
+    // A BELL THAT NEVER SHOWS A COUNT IS NOT THE FEATURE. The unit suite covers
+    // the three render states off a prop; this covers the thing only the real
+    // shell can answer — that the layout's getUnreadCount() actually reaches
+    // the badge for the signed-in user. Those are different claims, and the
+    // second one is the one that breaks when a query is scoped wrong.
+    //
+    // Seeded through the SERVICE ROLE via adminClient(), which carries the
+    // rebuild-test guard, and removed in `finally` so a mid-test failure cannot
+    // leave the crew identity with a permanent unread badge that quietly makes
+    // the zero-state half of this test unrunnable ever after.
+    const admin = adminClient();
+
+    const { data: profile } = await admin
+      .from('profiles')
+      .select('id, company_id')
+      .eq('email', 'josh+crew@worthprop.com')
+      .eq('is_deleted', false)
+      .single();
+
+    // Guard the fixture: a leftover unread row would make the zero-state
+    // assertion below fail for a reason that is not the bell's fault.
+    const { count: preexisting } = await admin
+      .from('notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('recipient_profile_id', profile!.id)
+      .is('read_at', null);
+    expect(preexisting ?? 0, 'crew must start with no unread notifications').toBe(0);
+
+    // ZERO STATE FIRST — an always-present "0" trains people to ignore the
+    // control and would pass any "the badge exists" assertion.
+    await page.goto('/m/timeclock');
+    await expect(page.getByTestId('m-bell')).toHaveCount(1);
+    await expect(page.getByTestId('m-bell-badge')).toHaveCount(0);
+
+    let seededId: string | null = null;
+    try {
+      const { data: row, error } = await admin
+        .from('notifications')
+        .insert({
+          company_id: profile!.company_id,
+          recipient_profile_id: profile!.id,
+          type: 'assignment',
+          title: 'A-N44 badge fixture',
+        })
+        .select('id')
+        .single();
+      expect(error?.message ?? null, 'badge fixture insert').toBeNull();
+      seededId = row!.id;
+
+      await page.goto('/m/timeclock');
+      const badge = page.getByTestId('m-bell-badge');
+      await expect(badge).toHaveCount(1);
+      await expect(badge).toHaveText('1');
+
+      // The badge must not push the tap target off the 44px floor — it is
+      // absolutely positioned for exactly this reason, and a layout-flow badge
+      // would shrink or stretch the bell without changing any count.
+      const bell = (await page.getByTestId('m-bell').boundingBox())!;
+      expect(bell.width).toBeGreaterThanOrEqual(44);
+      expect(bell.height).toBeGreaterThanOrEqual(44);
+    } finally {
+      if (seededId) await admin.from('notifications').delete().eq('id', seededId);
+    }
+  });
+
+  test('the bell NAVIGATES — it is a link, not a menu button', async ({ page }) => {
+    // The other shape D-36's edit could return in: keep the count at two but
+    // make the right-hand control open a popover. A menu in the app bar is the
+    // avatar's behaviour wearing a different icon, so the criterion asserts the
+    // element kind and destination rather than only the tally.
+    await page.goto('/m/timeclock');
+    const bell = page.getByTestId('m-bell');
+    await expect(bell).toHaveJSProperty('tagName', 'A');
+    await expect(bell).toHaveAttribute('href', '/m/notifications');
   });
 });
 

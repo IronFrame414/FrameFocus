@@ -61,3 +61,4 @@ apps/web/e2e/.auth/
 .claude/settings.local.json
 .serena/
 prod_backup_*.sql
+.claude/settings.json
