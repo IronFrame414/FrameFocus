@@ -1,6 +1,5 @@
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { requireTestEnv } from './env';
 
 // M6M — deterministic data for the M-2 / M-3 / M-7 criteria.
 //
@@ -40,46 +39,27 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 // SERVICE ROLE, AND ONLY EVER AGAINST rebuild-test. assertRebuildTest() below
 // refuses to run anywhere else, mirroring test/live-session.ts.
 
-const ENV_PATH = path.join(__dirname, '..', '.env.local');
-
-function loadEnv(): Record<string, string> {
-  let raw: string;
-  try {
-    raw = readFileSync(ENV_PATH, 'utf8');
-  } catch {
-    throw new Error(
-      'apps/web/.env.local not found — it is gitignored and does not survive a Codespace ' +
-        'rebuild. Recreate it from the Vercel env vars before running the e2e suite.'
-    );
-  }
-  const env: Record<string, string> = {};
-  for (const line of raw.split('\n')) {
-    const m = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line);
-    if (m) env[m[1]] = m[2].trim().replace(/^(['"])(.*)\1$/, '$2');
-  }
-  return env;
-}
-
 const REQUIRED_PROJECT_REF = 'nmyphyhmfttxkdoposvf'; // framefocus-rebuild-test
 
 /**
  * A service-role client for specs that must clean up after themselves.
  *
  * Exported [S119, TECH_DEBT #144] so `m-writes.spec.ts` can delete what it
- * created without a second copy of the .env.local parsing above — and, more
- * importantly, without a second copy of the rebuild-test guard. A cleanup
- * routine is the last thing that should be able to run against the wrong
- * database.
+ * created without a second copy of the env resolution — and, more importantly,
+ * without a second copy of the rebuild-test guard. A cleanup routine is the
+ * last thing that should be able to run against the wrong database.
+ *
+ * [S123] setupHubFixture() now calls THIS rather than repeating the same three
+ * lines. The duplicate was harmless while both copies agreed; the point of the
+ * guard is that it cannot be got wrong in one place and right in the other.
  */
 export function adminClient(): SupabaseClient {
-  const env = loadEnv();
-  const url = env.NEXT_PUBLIC_SUPABASE_URL;
-  const service = env.SUPABASE_SERVICE_ROLE_KEY;
+  const url = requireTestEnv('NEXT_PUBLIC_SUPABASE_URL');
+  const service = requireTestEnv('SUPABASE_SERVICE_ROLE_KEY');
 
-  if (!url?.includes(REQUIRED_PROJECT_REF)) {
+  if (!url.includes(REQUIRED_PROJECT_REF)) {
     throw new Error(`REFUSING TO RUN: linked project is not ${REQUIRED_PROJECT_REF}. URL=${url}`);
   }
-  if (!service) throw new Error('SUPABASE_SERVICE_ROLE_KEY missing from apps/web/.env.local');
 
   return createClient(url, service, { auth: { persistSession: false } });
 }
@@ -125,16 +105,7 @@ function isoDay(offsetDays: number): string {
 // Every file passes its own prefix; create and delete are both scoped to it.
 // ---------------------------------------------------------------------------
 export async function setupHubFixture(prefix = 'M6M'): Promise<HubFixture> {
-  const env = loadEnv();
-  const url = env.NEXT_PUBLIC_SUPABASE_URL;
-  const service = env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!url?.includes(REQUIRED_PROJECT_REF)) {
-    throw new Error(`REFUSING TO RUN: linked project is not ${REQUIRED_PROJECT_REF}. URL=${url}`);
-  }
-  if (!service) throw new Error('SUPABASE_SERVICE_ROLE_KEY missing from apps/web/.env.local');
-
-  const admin = createClient(url, service, { auth: { persistSession: false } });
+  const admin = adminClient();
 
   // Leftovers from an interrupted run would collide on project_number.
   await hardDelete(admin, prefix);

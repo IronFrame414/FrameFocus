@@ -126,12 +126,37 @@ jobs:
       # production boots in ~2s locally. reuseExistingServer is false under CI,
       # so this always gets a fresh server rather than silently testing a stale
       # one.
+      # SUPABASE_SERVICE_ROLE_KEY IS REQUIRED, AND IT SERVES TWO CONSUMERS.
+      #
+      # 1. THE FIXTURES. e2e/hub-fixture.ts builds a service-role client: it
+      #    inserts projects, punch items, schedule rows and assignments that no
+      #    member JWT could write, and hard-deletes them in teardown. Without
+      #    the key it throws in `beforeAll` and every spec that imports it dies
+      #    before its first assertion — which is what made #186 and #187 red.
+      #
+      # 2. THE SERVER UNDER TEST. Playwright's webServer inherits this step's
+      #    environment, so `next start` gets it too. Routes built on
+      #    lib/supabase-admin.ts — /api/change-orders/[id]/recalculate, which
+      #    m-co-recalc-route.spec.ts calls over real HTTP, plus the deliveries,
+      #    daily-log and safety-incident routes — construct that client at
+      #    REQUEST time. Lazy init keeps the build green without it and then
+      #    fails at the only point that matters.
+      #
+      # SCOPE: this is framefocus-rebuild-test's key, never production's. The
+      # fixture refuses outright unless NEXT_PUBLIC_SUPABASE_URL contains
+      # nmyphyhmfttxkdoposvf, so a URL/key pair from any other project fails
+      # closed rather than writing somewhere it should not.
+      #
+      # NOT ON THE BUILD STEP ABOVE, deliberately: `next build` prerenders and
+      # evaluates middleware, neither of which reaches an admin client, and a
+      # secret not handed to a step cannot leak from it.
       - name: Run Playwright tests
         run: npx playwright test
         working-directory: apps/web
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
       # Uploaded on failure only — a green run's report is noise, a red one is
       # the trace and screenshot that explain it.
