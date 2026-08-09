@@ -1228,6 +1228,69 @@ test.describe('A-68b · the ROUTE refuses, and says who can', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// A SAVE HAS TWO WAYS TO FAIL AND THE URL BAR CANNOT TELL THEM APART.
+//
+// [S123] These tests used to click Save and assert only that the URL became the
+// detail route. A REFUSED WRITE (the form stays put and renders its error) and
+// a BROKEN REDIRECT (the write landed, the navigation never fired) then present
+// as the same 30s `toHaveURL` timeout, which names neither.
+//
+// That is not hypothetical. CI on 3f9ad56 failed here with exactly that
+// timeout, and the cause was a refused write: `subcontractors_column_scope`
+// still read NEW.default_hourly_rate after #132 dropped the column, so every PM
+// update returned 42703. The report read "expected /m/subs/{id}, received
+// /m/subs/{id}/edit" and pointed at the redirect — the one part that was
+// working.
+//
+// So the outcome is read off THE RESPONSE, before any URL assertion:
+//   no PATCH at all -> the form never attempted a write
+//   PATCH >= 300    -> the database refused, and the failure carries its body
+//   PATCH 2xx       -> the write landed, so a URL failure after this is the
+//                      redirect, unambiguously
+// ---------------------------------------------------------------------------
+async function saveAndConfirmWritten(
+  page: Page,
+  table: string,
+  errorTestId: string,
+  click: () => Promise<void>
+): Promise<void> {
+  // Registered BEFORE the click, or a fast response is missed.
+  const pending = page
+    .waitForResponse(
+      (res) => res.request().method() === 'PATCH' && res.url().includes(`/rest/v1/${table}`),
+      { timeout: 20_000 }
+    )
+    .catch(() => null);
+
+  await click();
+  const res = await pending;
+
+  if (!res) {
+    const onScreen = await page
+      .getByTestId(errorTestId)
+      .textContent()
+      .catch(() => null);
+    throw new Error(
+      `No PATCH to ${table} was sent within 20s — the form never attempted the write. ` +
+        `On-screen error: ${onScreen ?? 'none'}.`
+    );
+  }
+
+  // PostgREST answers 204 on a plain update; the body only matters when it refused.
+  const status = res.status();
+  const body = status >= 300 ? await res.text().catch(() => '(unreadable)') : '';
+  expect(status, `the database REFUSED the save: ${status} ${body}`).toBeLessThan(300);
+
+  // A 2xx with an error still on screen would mean the form misread its own
+  // result — a third distinct failure, worth naming rather than folding into
+  // the URL wait below.
+  await expect(
+    page.getByTestId(errorTestId),
+    'the save returned 2xx but the form still showed an error'
+  ).toHaveCount(0);
+}
+
 test.describe('A-69 / A-70 / A-71 / A-73 · a PM edits, and what goes on the wire', () => {
   test('a PM saves a sub — the DB accepts it, proving the guard mirrors the policy', async ({
     page,
@@ -1258,9 +1321,13 @@ test.describe('A-69 / A-70 / A-71 / A-73 · a PM edits, and what goes on the wir
 
     const trade = `E2E Trade ${stamp()}`;
     await page.getByTestId('m-sub-edit-trade').fill(trade);
-    await page.getByTestId('m-sub-edit-save').click();
 
-    // Back to the DETAIL, showing what was just written.
+    await saveAndConfirmWritten(page, 'subcontractors', 'm-sub-edit-error', () =>
+      page.getByTestId('m-sub-edit-save').click()
+    );
+
+    // Back to the DETAIL, showing what was just written. The write is already
+    // known to have landed, so a timeout here means the REDIRECT and nothing else.
     await expect(page).toHaveURL(new RegExp(`${href}$`), { timeout: 30_000 });
     await expect(page.getByTestId('m-sub-detail')).toContainText(trade);
 
@@ -1340,7 +1407,13 @@ test.describe('A-69 / A-70 / A-71 / A-73 · a PM edits, and what goes on the wir
 
     const company = `E2E Co ${stamp()}`;
     await page.getByTestId('m-contact-edit-company').fill(company);
-    await page.getByTestId('m-contact-edit-save').click();
+
+    // Same shape as the sub save above, and for the same reason — this test had
+    // the identical blind spot and simply had not been the one to fail yet.
+    await saveAndConfirmWritten(page, 'contacts', 'm-contact-edit-error', () =>
+      page.getByTestId('m-contact-edit-save').click()
+    );
+
     await expect(page).toHaveURL(new RegExp(`${href}$`), { timeout: 30_000 });
     await expect(page.getByTestId('m-contact-detail')).toContainText(company);
 
