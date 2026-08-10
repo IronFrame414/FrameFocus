@@ -488,21 +488,102 @@ Reported because these pass **without exercising the sequence a human performs**
 
 ---
 
-## RESUME HERE
+### 12:16 UTC — SLICE 4 COMPLETE AND SEEN. Sub thread + ND-30's email. Pushed `4f89d22`.
 
-**Single next action:** start **slice 4** — the sub thread, both surfaces. §5.2's divergence, the
-crew-reading banner (§7.4), and **ND-30's mention email**, which is still a comment seam with no
-stub and is inherited explicitly from the CARRIED GAP entry above.
+**Both completion conditions the brief set are met:** the sub thread has been seen with the QA
+sub identity in a browser, and the mention email has been observed reaching a **sub** and **not**
+a crew member.
 
-**Slice 4 deletes one thing in slice 3's code and nothing else:** `SLICE_3_KINDS` and the
-`.filter()` beside it in `app/api/chat/threads/route.ts`. That is the whole of the crew-only
-scoping.
+| Check | Exit | Signal |
+| --- | --- | --- |
+| `supabase db push` ×2 | **0** | Verified against `schema_migrations`, not the CLI line: `20260909000000`, `20260909010000` |
+| `npm run db:types` | **0** | 6917 → **6928** lines |
+| `npx turbo run type-check --force` | **0** | 5/5, 0 cached, 0 `error TS` |
+| `npx vitest run` (`apps/web/`) | **0** | **650 passed (650)**, 45 files |
+| live `s126-chat-sub.live.ts` | **0** | **7 passed** |
+| live `s126-chat-email.live.ts` | **0** | **4 passed** |
+| Playwright `desktop-chat-sub` | **0** | **5 passed** |
+| Playwright slice-3 regression (switcher, send) | **0** | 5 + 3 passed |
 
-**Before writing sub-thread UI, read A-C2.** It fails on a build that renders no second segment
-at all, so the "one thread → no segmented control" half and the "two threads → two segments" half
-must ship together.
+**Two SQL functions, and both exist to stop the UI holding a second copy of a rule.**
+`chat_can_post()` mirrors the INSERT policy so the composer can be **absent rather than
+disabled** (D-54); `chat_sub_thread_exists()` / `chat_sub_thread_projects()` answer ND-25 before
+any thread row exists, because threads are lazily created. Probed under the S90 harness **before
+any UI depended on them**.
+
+**The agreement test is the load-bearing one.** `s126-chat-sub.live.ts` runs **eight** role/thread
+combinations, asks `chat_can_post`, then attempts a **real INSERT**, and requires the two to
+match. A mirror nobody checks is how two definitions of one rule drift; edit the policy and not
+the function and this fails.
+
+**ND-30 closed.** `lib/chat/mention-email.ts`. Subs only (ND-42) — a mentioned crew member gets
+**no email**, asserted end to end from one mention naming both. The subject comes from
+`mentionTitle()`, the same function the in-app row and push use, so three channels cannot
+describe one event three ways. Address is `profiles.email`; `subcontractors.email` is deliberately
+unused (nullable, null on one of four live rows).
+
+**Nothing was actually emailed.** The transport is stubbed and the assertions are on `email_logs`,
+following `s97ct-invoice-email.live.ts`. `RESEND_API_KEY` here is a live key, and a test that
+really sent would put mail in a person's inbox on every run. The `email_logs` row landing at all
+is what proves slice 1's `email_types.mention` row exists — the insert carries an FK to it.
+
+**Three of phase 1's five recorded-but-unimplemented findings are now closed:** ND-42's registry
+half (the `EmailType` union), ND-23's `— subs` branch, ND-31's truncation.
+
+**Two wrong tests, both established as wrong before anything was changed:**
+
+1. **A-C50 in the live file** read `sends[0].react.props.estimateUrl` and got `undefined`. The
+   template is invoked as `NotificationEmail({...})` — the house pattern — which returns rendered
+   output, so the input props are not on the returned element. The **spec marks A-C50 `[unit]`**;
+   the URL is now a named function and the criterion sits where the spec puts it.
+2. **A-C28's two assertions** pinned *where* the tab imported `ChatThreadView` from — a proxy that
+   broke the moment the tab grew a client wrapper for the segmented control. The property never
+   broke. Rewritten to assert the property.
+
+**One test-harness defect:** `signIn()` hung on `#email` until timeout when signing in as a second
+identity mid-test, because middleware redirects an authenticated request away from `/sign-in` —
+the behaviour `auth.setup.ts` already documents. It now clears cookies first.
+
+**⚠️ A new finding, outside slices 4–6, logged not fixed:** `DASHBOARD_ROLES`
+(`packages/shared/constants/roles.ts:62`) excludes subcontractor and client — and a repo-wide grep
+finds **no code consulting it**. A subcontractor can currently sign in to `/dashboard`. This is
+pre-existing and is *why* the sub-thread browser test can observe the sub at all; it is recorded
+under BLOCKED below because enforcing it is a product decision with real consequences.
+
+- **Next:** slice 5 — mobile chat, and §14's **nine** M6M edits in the same commit as the bar change.
 
 ---
+
+## RESUME HERE
+
+**Single next action:** start **slice 5** — mobile chat as an OVERLAY (ND-36/ND-37), entered from
+the bottom-bar Chat slot, with `/m/p/{id}?chat=1` opening it on mount.
+
+⚠️ **The NINE M6M edits in §14 must land in the SAME COMMIT as the bar change, or the mobile
+suite goes red.** Verified against `M6M-mobile-pwa-spec.md` as committed — the line citations
+hold:
+
+| Item | Line | Change |
+| --- | --- | --- |
+| **A-3** | 4356 | *"no tile for Projects, Timeclock, **Logs**, or Field"* — moving Logs INTO the sheet makes it false by design. The worst one. |
+| **A-3b** | 4357 | six named tiles → seven, naming Logs |
+| **A-41** | 4633 | six-route walk → seven, adding `/m/logs` |
+| **A-42** | 4635 | "all six routes" → seven |
+| **A-42b** | 4636 | "All six carry the hamburger" → seven |
+| **A-1c** | 4354 | add the Chat slot rule: lit while the overlay is open, never by the route underneath |
+| **D-3** | — | bar contents → `Projects · Timeclock · [camera] · Chat · Field` |
+| **D-39** | — | row title "App bar on the six destinations" → seven |
+| **D-4** | — | gains ND-32's named bubble exception |
+
+**Also owed in slice 5**, carried from phase 1 and slice 3:
+
+- **A-C20** — assert chat writes are **not enrolled** in `lib/offline/*`. Chat genuinely does not
+  touch the queue today, but nothing asserts the absence, so a later build that enrols it passes
+  everything. Test that the queue is **not touched**, not merely that an error shows.
+- **A-C21 / ND-24** — the unsent bubble and retry have still never rendered.
+
+---
+
 
 ## Where things stand
 
