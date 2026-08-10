@@ -535,10 +535,14 @@ budget/sell/contract figures — UI-gated per ui-01 §11 until FINANCIAL-RLS-FLO
 `NAV_ITEMS` (`apps/web/app/dashboard/dashboard-shell.tsx:42-74`, 12-item order locked S86 round-2):
 **PROPOSED — add `{ href: '/dashboard/expenses', label: 'Expenses', icon: Receipt }` immediately
 after Timeclock (`:56`), ungated** (crew capture + own list; page content is role-scoped, the
-Field Ops precedent `:51-53`). This makes item 13 of a locked 12 — the deferred FFNav reindex
-(session brief says "10-item"; the code comment says "12-item locked", discrepancy flagged §6)
-decides final order. Flagged, not resolved: the item ships appended; the reindex session
-re-sequences.
+Field Ops precedent `:51-53`). ✅ **RESEQUENCED [S130].** Expenses is **item 6**, in the top layer, between Timeclock and
+Estimates — which is where this spec proposed it and where the daily set puts it.
+_Superseded, quoted not rewritten: "This makes item 13 of a locked 12 — the deferred FFNav
+reindex (session brief says "10-item"; the code comment says "12-item locked", discrepancy
+flagged §6) decides final order. Flagged, not resolved: the item ships appended; the reindex
+session re-sequences."_ The discrepancy is resolved in
+`docs/specs/ffnav-reindex-spec.md` §0: the counts were successive snapshots and every one was
+true when written.
 
 ### 5.3 Capture screen (`/dashboard/expenses/new` + the material-run sheet) — all roles
 
@@ -647,8 +651,11 @@ approved time keeps its frozen burden." Crew/PM/foreman never see this surface
 4. **7G GL-mapping ownership** (`7G-spec.md:55-56` assigns category→account mapping to the 7C
    export path): the four `companies.gl_account_*` columns ship with 7A (locked decision 5).
    7G/7C wording to be updated when those specs are next touched.
-5. **FFNav reindex count** — session brief says "10-item," code comment says "12-item locked S86"
-   (`dashboard-shell.tsx:38`). Expenses appends as item 13; the reindex session resolves.
+5. ~~**FFNav reindex count**~~ — ✅ **RESOLVED [S130]: 14 items in three sections**
+   (`docs/specs/ffnav-reindex-spec.md`). _Superseded, quoted not rewritten: "session brief says
+   \"10-item,\" code comment says \"12-item locked S86\" (`dashboard-shell.tsx:38`). Expenses
+   appends as item 13; the reindex session resolves."_ **Neither figure was wrong** — ui-01
+   specced ten, S86 round-2 locked twelve, and the list grew twice more. Expenses is now item 6.
 
 ### Open items
 

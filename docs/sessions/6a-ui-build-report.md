@@ -168,6 +168,12 @@
 
 - **FFNav 11-item reindex** (Field Ops hub) — out of scope per instruction; interim links
   are code-commented in `dashboard-shell.tsx`.
+  > ✅ **This entry was correct, and stayed correct [annotated S130].** The **11-item** version
+  > was never built by anyone — it was superseded by S86 round-2's twelve before anyone
+  > implemented it. `6B-1-spec.md:119` says the reindex was "RESOLVED [S86/S87]", which is true
+  > of that **order** and was never true of grouping or of the two items appended later. The
+  > reindex proper happened at **S130** — `docs/specs/ffnav-reindex-spec.md` §0a records both
+  > readings rather than picking one.
 - **Mobile GPS enforcement** (block-on-denial, owner/admin override + audit) — deferred
   to the mobile build per 6A-1 §4.2 [S84].
 - **Auto-clock-out at midnight, still-clocked-in notifications, QB export** — explicitly

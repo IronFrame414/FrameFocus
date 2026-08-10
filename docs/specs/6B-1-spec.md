@@ -116,7 +116,16 @@ filters beyond the project scope, v1. Multiple logs per project-day are legal; t
 
 ## §S — Confirm live before building (CC — no names asserted)
 
-- **§S-1 — Routes + nav.** RESOLVED [S86/S87]: FFNav reindex lands with this build. Locked
+- **§S-1 — Routes + nav.** ⚠️ **"RESOLVED" WAS TRUE OF THE ORDER AND ONLY THE ORDER —
+  annotated [S130], not overwritten.** This line and `6a-ui-build-report.md:169` ("FFNav 11-item
+  reindex — out of scope per instruction") read as a flat contradiction and are not one: the
+  build report is right that the **11-item** version was never built by anyone, and this line is
+  right that the **12-item ORDER** was locked at S86 round-2 and shipped with 6B at S87. What
+  neither covered — and what left the item open for six more sessions — is that *resolved* never
+  meant **grouping**, nor the two items appended afterwards (Expenses, Notifications). A reader
+  seeing "RESOLVED" reasonably stopped looking. The reindex actually happened at **S130**:
+  `docs/specs/ffnav-reindex-spec.md`, §0a. Original text follows unchanged.
+  RESOLVED [S86/S87]: FFNav reindex lands with this build. Locked
   12-item order per docs/sessions/6a-ui-build-report.md S86 round-2 addendum: Dashboard ·
   Projects · Schedule · Field Ops · Timeclock · Contacts · Subs & Vendors · Estimates ·
   Cost Catalog · Settings · Team · Billing. Field Ops inserts after Schedule; ungated (all

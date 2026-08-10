@@ -39,7 +39,7 @@ repo would make every cross-document citation ambiguous. `ND-` reads as
 | ND-9 | Timesheets | **Weekly, Owner/Admin only, never to the worker.** [S123, Josh] Fires on the day the week begins, at the **start of the notify window**, not midnight. Keyed on `companies.week_starts_on`. |
 | ND-10 | `week_starts_on` | **Widened to all 7 days, in this module.** [S123, Josh] The DB already permits it; the constraint is one UI array. Cost analysis in §12. |
 | ND-11 | Notification links | **Surface-agnostic keys, resolved per surface.** [S123, Josh] **One row, two destinations. Not two rows.** |
-| ND-12 | Nav — desktop | **A Notifications item in the left sidebar.** [S123, Josh] _S89 R1, quoted not rewritten: **"Notifications tab is the 13th sidebar item."** The ordinal is superseded_ — `dashboard-shell.tsx:52-80` already carries **13** items, so this is the **14th**. Final position remains owed to the deferred FFNav reindex (`dashboard-shell.tsx:45-46`). |
+| ND-12 | Nav — desktop | **A Notifications item in the left sidebar.** [S123, Josh] _S89 R1, quoted not rewritten: **"Notifications tab is the 13th sidebar item."** The ordinal is superseded_ — `dashboard-shell.tsx:52-80` already carries **13** items, so this is the **14th**. ✅ **POSITION RULED [S130]: item 8, last in the TOP LAYER** — `docs/specs/ffnav-reindex-spec.md` §2a. _Superseded, quoted not rewritten: "Final position remains owed to the deferred FFNav reindex (`dashboard-shell.tsx:45-46`)."_ It is checked by BADGE rather than navigated to, so proximity to the top buys nothing the badge does not already provide. |
 | ND-13 | Nav — mobile | **AMENDED [S123, Josh] — OPTION C: an app-bar bell. The bottom bar stays at FIVE slots and M6M D-3 is NOT amended.** _Original ruling, quoted not rewritten:_ _"**The bottom bar goes to SIX slots, amending M6M D-3.** [S123, Josh] The geometry is NOT resolved by this ruling and is deliberately not picked here — see **ND-14**."_ A 44px **bell with an unread badge** takes the app bar's **right slot — the one M6M D-36 emptied**. Reasoning in §10.4. |
 | ND-14 | Six-slot geometry | **CLOSED [S123, Josh] — the reversal, decided on the arithmetic.** Six slots cut each side item's envelope **77.0px → 61.6px** while "Notifications" needs ~70px at 11px Barlow, and five side items plus a camera has **no true centre**, so the `-26px` break reads as a mistake. **Option C gives what the bottom bar was wanted for — always visible, one tap, permanently in view — without either cost.** M6M **A-40 rewritten, A-40b rewritten, A-40c added** (§10.4). |
 | ND-15 | Subcontractors | **Email always; in-app as well when they have an account.** [S123, Josh] Scoped to three events: contract signed, chat @mention, punch item assigned. **Reachability is not assumed** — §13 establishes it and specs the unreachable case. |
@@ -93,8 +93,10 @@ S89's nine rules, with each ruling applied in place.
 **R1. A Notifications surface with a live unread count.**
 _S89 text, quoted not rewritten: "Notifications tab is the **13th** sidebar item with a live
 unread count."_ **Amended by ND-12:** the desktop sidebar already holds 13 items, so this is
-the **14th**; final position is owed to the FFNav reindex, which is still deferred. The
-mobile surface is ND-13/ND-14.
+the **14th**. ✅ **The reindex has now happened [S130]** and its position is ruled: **item 8**,
+last in the top layer, in a 14-item list across three sections. _Superseded, quoted not
+rewritten: "final position is owed to the FFNav reindex, which is still deferred."_ The
+mobile surface is ND-13/ND-14 and is untouched by it.
 
 **R2. Retention — unchanged.** Notification rows expire at 30 days unless starred. Starred
 rows persist until unstarred or deleted. **The chat log NEVER expires — only the
@@ -733,9 +735,11 @@ unstarted.
    **§7.2's severability escape hatch STANDS, verbatim and by ruling (ND-1):** *"Chat is in
    scope but should not silently delay the M8 gate — if timing slips, the gate is satisfied
    by notifications core; chat completes within the module."*
-3. **FFNav / sidebar.** Placement is still owned by the deferred FFNav reindex
-   (`dashboard-shell.tsx:45-46`). **FLAGGED, not decided here** — unchanged from S89, and
-   still true two sessions later.
+3. ~~**FFNav / sidebar.**~~ ✅ **CLOSED [S130]** — the reindex happened and placed the item at
+   **8**, last in the top layer (`docs/specs/ffnav-reindex-spec.md` §2a). _Superseded, quoted not
+   rewritten: "Placement is still owned by the deferred FFNav reindex
+   (`dashboard-shell.tsx:45-46`). **FLAGGED, not decided here** — unchanged from S89, and still
+   true two sessions later."_ It stayed true for four more sessions after that line was written.
 4. **ND-14 blocks the mobile bar.** No mobile nav build proceeds until the six-slot geometry
    is ruled.
 
@@ -782,8 +786,10 @@ that section.*
 ### 10.1 Desktop — the Notifications surface
 
 - **Nav (ND-12):** a `Notifications` item in `NAV_ITEMS` (`dashboard-shell.tsx:52-80`),
-  **ungated** — every role has notifications. It is the **14th** item; **final position is
-  owed to the FFNav reindex** and this spec does not pick one.
+  **ungated** — every role has notifications. ✅ **It is item 8 [S130]**, last in the top layer
+  of a 14-item, three-section list. _Superseded, quoted not rewritten: "It is the **14th** item;
+  **final position is owed to the FFNav reindex** and this spec does not pick one."_ Being 14th
+  was an artefact of being appended, not a placement.
 - **Badge:** unread, unexpired count, beside the label. Live via Realtime (§5.1) or on
   navigation if Realtime is declined.
 - **List:** newest first — title, body, relative time, project chip, unread dot, star
@@ -1131,7 +1137,7 @@ resolution is `assignee_id → company_members.profile_id → profiles` for the 
 
 1. ~~**ND-14 — six-slot geometry.**~~ **CLOSED [S123, Josh]** — Option C, the app-bar bell; the
    bottom bar stays at five and D-3 is not amended (§10.4). The mobile nav build is **unblocked**.
-2. **FFNav position** for the desktop item — owned by the deferred reindex, not by this spec.
+2. ~~**FFNav position** for the desktop item~~ — ✅ **CLOSED [S130]:** item 8, top layer.
 3. **Realtime enablement** — a decision to spend the migration, or accept a
    navigation-refreshed badge and a poll-based chat (§5.1).
 4. **`/api/cron/invoice-reminders` has no schedule** in `apps/web/vercel.json` — pre-existing,
