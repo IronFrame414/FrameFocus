@@ -128,10 +128,83 @@ not a counterfactual.**
 All probe fixtures deleted — **0 rows** in all four chat tables. Tree clean.
 
 - **Next:** push the branch, then slice 2.
+### 03:40 UTC — SLICE 2 CORE COMMITTED (`lib/chat` + route). PARTIAL — read the split below.
+
+Two commits, grouped by concern: services, then route + tests.
+
+**Exit codes, all from the printed line:**
+
+| Step | Exit | Corroborating signal |
+| --- | --- | --- |
+| `npx turbo run type-check` | **0** | **5 successful, 5 total** |
+| `npx vitest run` (from `apps/web`, not the repo root) | **0** | **607 passed** — 592 before + 15 new |
+| `next lint --dir lib/chat --dir app/api/chat` | **0** | no warnings |
+
+**Built:** `lib/chat/mentions.ts` (pure parser, 15 tests), `lib/chat/threads.ts`
+(resolve + postable set), `lib/chat/messages.ts` (send, since-based poll, mark-read),
+`lib/chat/mention-notify.ts` (notify() + ND-31 truncation),
+`packages/shared/validation/chat.ts`, `app/api/chat/messages/route.ts`.
+
+#### Derived decisions (logged, not guessed)
+
+- **Ambiguous `@token` resolves to NOBODY and is reported back.** Two people called Chris —
+  guessing tells the wrong person they are needed on site. Derived from §5.1's premise that the
+  delivery guarantee rests on the mention being right; the composer can surface `unresolved`.
+- **`@josh.` vs `@josh.bishop`** — trailing dot stripped, internal dot kept. Without it every
+  message ending in a mention resolves to nobody.
+- **Audience resolution uses the service role; all writes use the caller.** Working out who may
+  be mentioned is not the same act as writing the message.
+- **The mention email is NOT built here.** §12 places the send path in **slice 4**; slice 1
+  already landed the `email_types` row. `mention-notify.ts` ends with a **named seam** — no stub
+  function, because an empty `sendMentionEmail()` reads as "built" to a later grep.
+  ⚠️ *The run brief listed the email under slice 2's non-negotiables; §12 places it in slice 4.
+  Read as: the brief constrains WHERE it lives when built, §12 constrains WHEN. Followed §12.*
+
+---
+
+## ⚠️ VERIFIED vs WRITTEN-BUT-UNVERIFIED — read this before trusting anything above
+
+**VERIFIED (evidence in this file):**
+
+- **Slice 1, completely.** Migration applied and confirmed against the catalog; seven RLS
+  probes run as `authenticated` with output pasted; policy inventory read from `pg_policy`.
+- **The mention parser.** 15 unit tests, exit 0.
+- **Everything type-checks and lints**, whole monorepo, 5/5.
+
+**WRITTEN BUT NOT VERIFIED — no runtime evidence exists for any of these:**
+
+- **`/api/chat/messages` has never been called.** Not once, by anything. No dev server was
+  started this run.
+- **`resolveThread`, `insertMessage`, `insertMentions`, `messagesSince`, `postableSet`,
+  `markThreadRead` have never executed against the database.** They type-check. That is all.
+- **`notifyMentions` has never fired.** No notification row has been written by chat.
+- **The 12-second poll does not exist as a loop.** `messagesSince()` is the query it will call;
+  nothing calls it on an interval yet, and A-C39 (polling stops when the thread is not open) has
+  no implementation to test.
+
+**NOT STARTED:** ND-34's switcher query and per-thread unread count — §12 assigns both to slice
+2's `lib/` core and neither is written. **Slice 3 (desktop UI) was not begun.**
+
+**So: slice 1 is done. Slice 2 is roughly two-thirds written and one-third verified.**
 
 ---
 
 ## RESUME HERE
 
-**Next action:** push `feat/chat`, then start slice 2 — `lib/chat/` core: thread resolution,
-send, mention parse, the `notify()` call, and the 12-second poll.
+**Single next action:** write a live harness — `apps/web/test/s126-chat-core.live.ts` — that
+drives `resolveThread` → `insertMessage` → `insertMentions` → `notifyMentions` against
+rebuild-test under real sessions, and run it with
+`npx vitest run --config test/live.vitest.config.ts s126-chat-core` from `apps/web`.
+
+**Nothing in slice 2 should be believed until that harness passes.** The unit tests cover the
+parser only.
+
+After that, in order:
+1. ND-34's switcher query + per-thread unread count (still slice 2, still unwritten).
+2. Slice 3 — desktop panel, switcher, composer, mention picker.
+
+**Branch:** `feat/chat`, pushed to `origin/feat/chat`. **Spec:** `spec/chat-s124` @ `4b61b9d`,
+unmerged — it is not on the build branch.
+
+**Rebuild-test state:** all four chat tables exist and are **empty** (probe fixtures removed).
+`email_types` has the `mention` row.
