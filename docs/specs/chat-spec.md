@@ -55,7 +55,7 @@
 | ND-23 | **Notification text names the thread** | **Yes.** [S124, Josh] `"Alvarez (subs)"` vs `"Alvarez"`. Amends parent §3a's output string. §6.2.                                                                                                                                                                                                                                                                                                      |
 | ND-24 | **Offline**                            | **Chat fails VISIBLY. No queue.** [S124, Josh] A deliberate divergence from M6M's offline queue, chosen at interview Q16 — _"sees it fail"_. §5.5 states why this is a choice and not an omission.                                                                                                                                                                                                     |
 | ND-25 | **Sub with no account**                | **No thread. Not an empty one.** [S124, Josh] Where a project has no assigned sub with a profile, the sub thread **does not render**. §5.3.                                                                                                                                                                                                                                                            |
-| ND-26 | **Transport — Realtime vs poll**       | **OPEN.** Not ruled. §9.1 states the cost each way. This is the one decision the interview did not reach because it is not a workflow question.                                                                                                                                                                                                                                                        |
+| ND-26 | **Transport — Realtime vs poll**       | **POLLING, every 12 seconds, WHILE A THREAD IS OPEN.** [S124c, Josh] Not Realtime. _"Real-time is not needed"_ — a 10–15s delay is invisible to a foreman, and **push already covers the away case**, so this governs only what happens with a thread open on screen. Two rules are spec-level, not build detail: **polling stops when the thread is not open**, and **the poll asks for messages SINCE the last one it has**, never a refetch. §9.1. |
 | ND-27 | **Client messaging**                   | **OUT, and STATE.md:514 is ANSWERED for internal chat.** [S124, Josh, Q9 — *"no"*, clients type into nothing.] The transport competition that entry recorded is **dissolved**, not resolved: internal chat and client messaging were never one decision. Client messaging remains a Module 9 / Pre-Module 9 gate question, untouched here. §10.                                                        |
 | ND-28 | **Photo reference target**             | **`files(id)`, `ON DELETE CASCADE`.** [S124, Josh] There is **no `photos` table** — photos are `files` rows with `category='photos'`. A deleted photo vanishes from the thread; the message keeps its text. **An FK cannot enforce `category`**, so the category check is service-layer — §4.3. `RESTRICT` rejected: it would let chat block an owner from deleting a file, which nothing else in the app does. |
 | ND-29 | **Sub thread — DEFERRED**              | **OUT of v1.** [S124, Josh] 35 subcontractor member rows exist; **one** has a profile, and it is a test account on two fixture projects. This resolves when real subs get logins, not through code. **Consequence:** `chat_messages` needs no per-role branch in v1 — `can_view_project()` and nothing else. §5.2, §5.3. |
@@ -271,9 +271,12 @@ Luis is on a roof with no signal and types the trim message.
 
 ## §4 — Data model
 
-**Design-level. Every column shape below is PROPOSED and must be reconciled against live
-schema by CC — see the §S blocks.** Standard column set and both standard triggers apply
-unless stated.
+**RECONCILED AGAINST LIVE SCHEMA [S124].** _Superseded, quoted not rewritten: "Design-level.
+Every column shape below is PROPOSED and must be reconciled against live schema by CC — see the
+§S blocks."_ **All five §S blocks are now answered or ruled**, and the one shape that was wrong
+— `chat_message_photos` pointing at a non-existent `photos` table — is corrected in §4.3.
+Standard column set and both standard triggers apply unless stated; note §4.2's warning that
+the append-only exception covers `chat_messages` **only**.
 
 ### 4.1 `chat_threads` — NEW, and new relative to the parent spec
 
@@ -986,11 +989,17 @@ criterion is A-C5b below.**
 - **A-C37** The switcher lists only `status='active'` projects, ordered by most recent message. `[live]`
 - **A-C38** Archiving a project removes it from the switcher and **leaves its thread reachable through the tab**, with history intact. `[live]` _(R2. The messages do not vanish, and this is the criterion that says so.)_
 
-**The tripwire (S124 correction)
+**Transport (ND-26)**
+
+- **A-C39** Polling **stops** when the thread is not open — closing the panel, navigating away, and the document becoming hidden each halt it; becoming visible resumes it. `[Playwright]` _(§9.1d rule 1. The expensive failure is invisible on screen, which is why it needs a criterion rather than a code comment. This is the line most likely to be "fixed" into a global interval by someone making chat feel snappier.)_
+- **A-C40** A poll requests only messages **newer than the newest the client holds**, and a thread with 500 messages polls the same payload as a thread with 5. `[unit]` _(§9.1d rule 2. **A refetch is functionally correct and invisible in the UI** — only a test that watches the request catches it, and without it an old thread silently costs more to keep open than a new one.)_
+- **A-C41** Nothing above the service function knows the transport — no component subscribes directly. `[unit]` _(§9.1c. This is the property that keeps the Realtime swap at one file plus a migration; a component that subscribes destroys it.)_
+
+**The tripwire (S124 correction)**
 
 - **A-C29** `PENDING_ROUTES` in `s123-incident-notify.test.ts` no longer contains `'chat'`, and the whole suite is green. `[unit]` _(The guard is designed to fail when chat ships. **The commit creating the chat routes must clear it in that same commit**, or it ships red.)_
 
-**Retention (parent R2)
+**Retention (parent R2)**
 
 - **A-C22** Deleting a mention notification leaves the message intact. `[live]` _(Parent A-N33.)_
 - **A-C23** No chat message has an `expires_at` and none is deleted by the expiry cron. `[live]` _(R2 — "the chat log NEVER expires.")_
@@ -999,22 +1008,90 @@ criterion is A-C5b below.**
 
 ## §9 — Open, and what each costs
 
-### 9.1 ND-26 — transport. **The one decision this spec does not make.**
+### 9.1 ND-26 — transport. **RULED [S124c, Josh]: POLLING, 12 SECONDS, WHILE OPEN.**
 
-**Verified in the parent (§5.1, S123): the `supabase_realtime` publication is EMPTY — zero
-tables.** Realtime is not enabled anywhere on this database. This is **opt-in work**, not a
-confirmation step.
+_Superseded heading, quoted not rewritten: "**The one decision this spec does not make.**"_
 
-|                   | Realtime                                                                                                                                            | Poll                                                                                                  |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| **Cost**          | A migration adding `chat_messages` (and `notifications`) to the publication, plus per-table replica identity. New infrastructure for this database. | No migration. A polling interval on an open thread.                                                   |
-| **Chat quality**  | Messages appear as sent.                                                                                                                            | Messages appear on an interval. Parent §5.1: _"Chat without Realtime is a materially worse product."_ |
-| **Badge quality** | Live.                                                                                                                                               | _"Merely less live"_ (parent §5.1).                                                                   |
-| **Risk**          | Untested on this database at any scale. First use.                                                                                                  | Battery and request volume on mobile; a thread left open all day polls all day.                       |
+**The ruling: poll every 12 seconds while a thread is open on screen. Not Realtime.**
 
-**This is a cost decision, not a workflow one, which is why the interview did not reach it.**
-It needs a ruling before the build slice that touches transport — **not** before the schema
-slice.
+#### 9.1a Why — Josh's reasoning, recorded
+
+**Real-time is not needed.** A **10–15 second delay is invisible to a foreman**; nobody is
+watching a thread waiting for a keystroke to appear. The interview's problem (§1) is a request
+being *lost*, not a request arriving twelve seconds late.
+
+**And push already covers the away case.** If someone is mentioned while the app is closed,
+they get a push regardless of transport — that path is built and shipped (parent slices 1–3).
+**So this decision governs one narrow thing: what happens with a thread open on screen.** It
+was easy to mistake for a bigger decision than it is, which is why the scope is written down.
+
+#### 9.1b Why Realtime was REJECTED, not merely not-chosen
+
+Recorded as a rejection with reasons, so it is not re-litigated as an oversight:
+
+- **`supabase_realtime`'s publication is EMPTY** — verified again at S124, zero tables. This is
+  **opt-in work per table**, not a configuration flip.
+- It is **new operational surface that nothing else in the app uses**. Every other read path on
+  this database is request/response. Realtime would be the first, and the first of anything
+  carries the cost of being the first — no precedent, no failure mode anyone has seen here.
+- **To serve three test accounts today.** The live population is what it is: one subcontractor
+  with a profile, a handful of staff identities. Standing up new infrastructure at that scale
+  is cost before evidence.
+
+_The parent's line — §5.1's "Chat without Realtime is a materially worse product" — is
+acknowledged and overruled on the ground above: it is true of a chat product, and this is a
+request-capture tool for a crew of a dozen where the alternative to a 12-second delay is a text
+message that never gets logged at all._
+
+#### 9.1c The reversal path — the reason starting simple is safe
+
+**The client calls a service function either way.** Nothing above the transport knows how a
+message arrived, so swapping is:
+
+1. **one file** — the service function that fetches new messages, and
+2. **a migration** adding `chat_messages` to the `supabase_realtime` publication (plus replica
+   identity).
+
+No component changes, no route changes, no criteria change except the transport's own. **This
+is the property that makes 12-second polling a safe starting point rather than a decision to
+regret** — and it is a property the build must preserve: if a component ever subscribes
+directly, the swap stops being one file.
+
+**⚠️ WHAT WOULD TRIGGER THE SWAP, so the next person watches for it rather than guessing:
+cost appearing on the Supabase bill as concurrent open threads grow.** The arithmetic is
+simple and worth writing down: one open thread is **5 requests/minute, 300/hour**. Ten
+simultaneous open threads is 3,000/hour; fifty is 15,000/hour. **Watch the request count on the
+Supabase usage dashboard, not the user count** — the driver is *threads left open*, not people
+employed, and one foreman who leaves the panel open all day costs the same as eight who open it
+briefly.
+
+#### 9.1d Two rules that are SPEC-LEVEL, not build detail
+
+**1. Polling STOPS when the thread is not open.**
+
+A panel that keeps polling after it closes, or a background tab that keeps asking, is the
+version of this that gets expensive — and it gets expensive invisibly, because nothing on
+screen is wrong. Polling is bound to a thread being **open and visible**:
+
+- Closing the panel stops it.
+- Navigating away from the tab stops it.
+- The document becoming hidden (`visibilitychange` — a backgrounded tab, a locked phone) stops
+  it, and it resumes on becoming visible.
+
+**Asserted by A-C39.** This is the single line item most likely to be "fixed" into a global
+interval by someone making chat feel snappier.
+
+**2. The poll asks for messages SINCE THE LAST ONE IT HAS. It never refetches the thread.**
+
+The request carries the newest message the client already holds — its `created_at` (or id) —
+and the server returns only what is newer. **A refetch grows with history**, which would make
+an old thread more expensive to keep open than a new one, and the oldest threads are exactly
+the ones on the longest-running jobs. It would also make ND-38's page size meaningless, since
+every poll would re-transmit the page.
+
+**Asserted by A-C40**, which is written to fail on a build that refetches — a refetch is
+functionally correct and invisible in the UI, so only a test that watches the payload catches
+it.
 
 ### 9.2 Carried from the parent, unchanged by this spec
 
@@ -1043,12 +1120,20 @@ slice.
 - ~~Switcher project list~~ — **active, by most recent message**, ND-34. §7.1a-i.
 - ~~History page size~~ — **50 tab / 25 panel**, ND-38. §7.2a.
 
-**Still open:**
+**Closed at S124c:**
 
-- **ND-26 transport** — Realtime vs poll. Unchanged, and **still not blocking slices 1–3**.
+- ~~**ND-26 transport.**~~ **RULED: 12-second polling while a thread is open.** §9.1.
+
+**Nothing in this spec is awaiting a ruling.**
+
+**Two things remain, and neither is a decision:**
+
 - **ND-29's revisit condition** — the sub thread returns when real subcontractors have logins.
-  Not a decision anyone makes; a fact that changes. Today: one sub with a profile, and it is a
+  Nobody decides this; it is a fact that changes. Today: one sub with a profile, and it is a
   test account.
+- **A cost signal to watch, not answer** — §9.1c: request volume on the Supabase usage
+  dashboard as concurrent open threads grow. It has a stated trigger and a documented reversal
+  path, so it is monitoring rather than an open question.
 
 ---
 
@@ -1114,10 +1199,13 @@ and Josh's mitigation is enforcement. If adoption fails, it will fail there, and
    **Stop.**
 6. **Photo reference** (ND-22, ND-28) — includes the picker, which is **new work**; no
    reusable gallery picker exists. **Stop.**
-7. **Transport** — requires ND-26 ruled first.
+7. **Transport** — **ND-26 is RULED (S124c): 12-second polling while open.** No longer gated.
+   In practice this is not a slice of its own — the poll belongs in **slice 2's service
+   function**, and A-C39/A-C40/A-C41 are asserted there. **Kept as a numbered entry only so the
+   Realtime swap has somewhere to live if the bill ever calls for it (§9.1c).**
 
-**v1 = slices 1, 2, 3, 6 plus the desktop panel (ND-33).** Slice 4 is deferred and slice 7 is
-gated on a ruling.
+**v1 = slices 1, 2, 3, 5, 6 plus the desktop panel (ND-33).** Slice 4 is deferred (ND-29);
+slice 7 is absorbed into slice 2 and is no longer gated.
 
 **§S blocks are filled by CC from live reads at the start of the slice that needs them**, not
 in advance and not by this document.
@@ -1141,8 +1229,15 @@ survives the way the parent's superseded text does.
 4. ~~**History page size.**~~ **50 in the tab, 25 in a panel** (ND-38), sized so the first
    scroll never lands on a loader on the surface it is for. §7.2a.
 
-**What remains open for the whole module: ND-26 (transport) alone**, and it does not block
-slices 1–3.
+5. ~~**ND-26 — transport.**~~ **RULED at S124c: polling, 12 seconds, while a thread is open**
+   (§9.1). Realtime rejected with reasons rather than merely not-chosen, the reversal path
+   documented with its trigger, and the two rules that are spec-level rather than build detail
+   written down: **polling stops when the thread is not open**, and **the poll asks for
+   messages since the last one it has**.
+
+**NOTHING IN THIS SPEC IS AWAITING A RULING.** §9.3 records the two items that remain, neither
+of which is a decision: ND-29's revisit condition, which is a fact that changes rather than a
+choice, and §9.1c's cost signal, which is something to watch.
 
 ---
 
