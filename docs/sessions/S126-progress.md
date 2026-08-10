@@ -191,25 +191,71 @@ Two commits, grouped by concern: services, then route + tests.
 2's `lib/` core and neither is written. **Slice 3 (desktop UI) was not begun.**
 
 **So: slice 1 is done. Slice 2 is roughly two-thirds written and one-third verified.**
+### 02:58 UTC — SLICE 2 IS NOW VERIFIED. Live harness 13/13.
+
+`apps/web/test/s126-chat-core.live.ts` drives the real service functions against rebuild-test
+with real session clients. **This is what moved slice 2 from written to verified** — the
+previous entry's unverified list is now largely discharged.
+
+```
+npx vitest run --config test/live.vitest.config.ts s126-chat-core   ->  exit 0
+Test Files  1 passed (1)
+     Tests  13 passed (13)
+```
+
+Covered, each paired so it cannot pass vacuously: `resolveThread` idempotency (one row, twice);
+sub gets NULL for the crew thread **and** resolves their own sub thread; `postableSet` excludes
+crew from sub-thread candidates and includes the Owner; crew post in crew / **refused** in sub
+with `denied: true`; forged authorship refused; `messagesSince` returns exactly the delta and a
+quiet thread polls **empty**; plain message notifies nobody (R6) while a tagged one writes the
+join row, one notification, the real text, and `link_params.threadId`; `markThreadRead` upserts
+one row and moves `updated_at`.
+
+#### ⚠️ One failure on first run — the TEST was wrong, not the code
+
+I filtered the notification query with `.gte('created_at', notifySince)` where `notifySince`
+came from `new Date()` — the **client** clock — while `notifications.created_at` defaults to
+`now()`, the **database** clock. Milliseconds of skew put the row just before the watermark;
+the query returned `[]` while `notify()` had correctly reported `written: 1`. Fixed by
+selecting on `source_id`, which is already unique to the message.
+
+**Carry this forward:** comparing a client timestamp to a server-generated one is the same
+family as reading a masked exit code — the result looks authoritative and is an artifact.
+
+#### State after this entry
+
+- **Rebuild-test:** all four chat tables **empty**, 0 mention notifications. Teardown verified.
+- **Tree clean**, branch pushed.
 
 ---
 
 ## RESUME HERE
 
-**Single next action:** write a live harness — `apps/web/test/s126-chat-core.live.ts` — that
-drives `resolveThread` → `insertMessage` → `insertMentions` → `notifyMentions` against
-rebuild-test under real sessions, and run it with
-`npx vitest run --config test/live.vitest.config.ts s126-chat-core` from `apps/web`.
+**Single next action:** write ND-34's two service functions in `lib/chat/` — the switcher query
+(active projects, ordered by most recent message) and the per-thread unread count. The spec
+names both as slice-2 `lib/` core and as **new work**; neither is written. **Watch the N+1 on
+unread** — it is one count per thread in the switcher if done naively.
 
-**Nothing in slice 2 should be believed until that harness passes.** The unit tests cover the
-parser only.
+Then slice 3 (desktop panel, switcher, composer, mention picker), which was **not started**.
 
-After that, in order:
-1. ND-34's switcher query + per-thread unread count (still slice 2, still unwritten).
-2. Slice 3 — desktop panel, switcher, composer, mention picker.
+---
 
-**Branch:** `feat/chat`, pushed to `origin/feat/chat`. **Spec:** `spec/chat-s124` @ `4b61b9d`,
-unmerged — it is not on the build branch.
+## Where slice 2 actually stands
 
-**Rebuild-test state:** all four chat tables exist and are **empty** (probe fixtures removed).
-`email_types` has the `mention` row.
+**VERIFIED:** thread resolution, message send, mention parse, mention storage, the `notify()`
+call, `messagesSince`, `markThreadRead` — all exercised live, 13/13.
+
+**WRITTEN, NOT EXERCISED:** `/api/chat/messages`. The route has still **never been called** —
+no dev server ran this session. Its pieces are all verified individually; the HTTP layer,
+its 401/403 mapping and its zod validation are not.
+
+**NOT WRITTEN:** the switcher query, the per-thread unread count, the 12-second poll **loop**
+(`messagesSince` is the query it will call; nothing calls it on an interval, so A-C39 has no
+implementation to test), and any client module.
+
+**NOT STARTED:** slice 3.
+
+## BLOCKED — NEEDS JOSH
+
+**Nothing is blocked.** No ruling was required and none was guessed. Every judgement call is
+logged above with what it was derived from.
