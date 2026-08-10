@@ -46,7 +46,18 @@ test.describe('the auth gate comes first', () => {
       data: { project_id: PROJECT, kind: 'crew', body: '   ' },
     });
     expect(res.status()).toBe(400);
-    expect((await res.json()).error).toContain('empty');
+    // ⚠️ THE WORDING CHANGED IN SLICE 6 AND THIS ASSERTION DID NOT [fixed S131].
+    // It expected 'empty', from `'A message cannot be empty'`. Slice 6 (ad0b7bb)
+    // relaxed `chatSendSchema` so a PHOTO-ONLY message is valid — §5.4 allows
+    // "text, photos, or both" — and the refusal became 'A message needs text or
+    // a photo'. The test was last touched in slice 2 and has been asserting a
+    // string the build stopped producing.
+    //
+    // Matched on the REQUIREMENT rather than the sentence, so the next rewording
+    // does not fail a route that is behaving correctly. What this test is for is
+    // that validation runs at all once the caller is known — the status code is
+    // the load-bearing half.
+    expect((await res.json()).error).toMatch(/text or a photo|empty/i);
   });
 
   test('an unknown thread kind is rejected by validation', async ({ request }) => {
