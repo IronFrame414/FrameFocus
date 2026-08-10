@@ -35,7 +35,7 @@
 
 1. **Invite create-side** (§4) — the piece the accept-side already expects.
 2. **Compliance & document tracking** (§5) — net-new.
-3. **The portal surface** (§6) — subs are excluded from `DASHBOARD_ROLES`, so they land on a distinct surface, not the dashboard.
+3. **The portal surface** (§6) — subs are excluded from `DASHBOARD_ROLES`, so they land on a distinct surface, not the dashboard. **⚠️ This sentence was FALSE when written and is TRUE now — see §6.**
 
 **[confirm-at-build]** `seats.ts` (sub seat exclusion) and `roles.ts` (`DASHBOARD_ROLES`, `INVITABLE_ROLES`, `TEAM_MANAGEMENT_ROLES`) are modified in the tree but were **not read this session** — confirm their actual contents before building §4/§6. Do **not** re-decide seat exclusion; confirm it.
 
@@ -128,6 +128,39 @@ Both paths write the same `subcontractor_compliance_documents` records.
 ---
 
 ## 6. Portal surface
+
+> ### ⚠️ AMENDMENT [S131] — THIS SECTION REASONED FROM A PREMISE THAT WAS NOT TRUE
+>
+> The sentence below is the spec's foundation, and **for as long as this spec
+> existed it was false.** `DASHBOARD_ROLES` did exclude `subcontractor`, exactly
+> as stated — but **no code consulted the constant**. A repo-wide grep found the
+> declaration and three comments and nothing else. Neither `middleware.ts` nor
+> the dashboard layout read role at all, and `defaultSignedInPath()` branched on
+> user agent only.
+>
+> **What that meant in practice**, measured on rebuild-test in S130 as the real
+> QA identities rather than inferred: a subcontractor signing in reached
+> `/dashboard` and read the company's **full contacts list, sub roster and team
+> roster — 6 / 4 / 7 rows, identical to the Owner's.** Not an empty shell. The
+> same held for `client`.
+>
+> **It is true now.** Ruling A [Josh, S131] enforces the constant in
+> `middleware.ts` and `app/dashboard/layout.tsx` through
+> `apps/web/lib/dashboard-access.ts`; a sub is redirected to `/m/projects`.
+> Ruling B closes the data half in RLS (`20260911000000_roster_visibility_floor.sql`),
+> because a redirect does not stop `/m` or an API route reading the same tables.
+>
+> **Recorded rather than silently corrected**, because the failure mode worth
+> remembering is not the gap itself — it is that a spec was written on top of it,
+> and a constant that no code consults reads exactly like a rule that is being
+> enforced. Anything else in this spec that assumed the exclusion was live
+> should be re-read with that in mind.
+>
+> **Ruling B also narrows what §6 can show a sub.** Even on their own surface a
+> sub now reads **no contacts and no subcontractor records at all**, and of the
+> team only Owner, Admin and PM (plus their own row). A "My Jobs" surface that
+> expects to list client or vendor names will get nothing back — by ruling, not
+> by defect.
 
 Subs are **not** in `DASHBOARD_ROLES`, so they land on a **distinct sub route tree**, not the dashboard. _(Claude Code derives the actual route/component structure from its own codebase analysis — no paths prescribed.)_
 
