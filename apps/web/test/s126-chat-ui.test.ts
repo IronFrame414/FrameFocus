@@ -93,6 +93,37 @@ describe('§5.1/§7.5 — the token the picker inserts', () => {
   it('a single candidate keeps the short form', () => {
     expect(insertTokenFor(joshBishop, [joshBishop])).toBe('josh');
   });
+
+  it('⚠️ never proposes a token the PARSER cannot read back', () => {
+    // Found against real rebuild-test data, not by reading the code. Two
+    // identities are "QA Admin A" and "QA Foreman A": they share the first name
+    // `qa`, and their surnames contain a SPACE. `candidateTokens` generates
+    // `admin a`, which is genuinely unique — and `MENTION_RE` stops at
+    // whitespace, so `@admin a` comes back out of the parser as `admin` and
+    // matches nothing. The picker would have inserted a mention that notified
+    // nobody, which is the exact failure insertTokenFor exists to prevent.
+    const admin: MentionCandidate = { profileId: 'p1', tokens: candidateTokens('QA', 'Admin A') };
+    const foreman: MentionCandidate = {
+      profileId: 'p2',
+      tokens: candidateTokens('QA', 'Foreman A'),
+    };
+    const all = [admin, foreman];
+
+    expect(admin.tokens).toContain('admin a'); // unique, and unusable
+    expect(insertTokenFor(admin, all)).toBeNull();
+    expect(insertTokenFor(foreman, all)).toBeNull();
+
+    // The parser agrees, which is what makes null the honest answer.
+    expect(parseMentions('@admin a', all, null).profileIds).toEqual([]);
+  });
+
+  it('a spaced surname is still fine when the FIRST name is unique', () => {
+    // The rule is "no unreadable token", not "no spaced surname" — a build that
+    // rejected the whole person would lose mentions it could have delivered.
+    const solo: MentionCandidate = { profileId: 'p3', tokens: candidateTokens('Dale', 'Van Ness') };
+    expect(insertTokenFor(solo, [solo])).toBe('dale');
+    expect(parseMentions('@dale', [solo], null).profileIds).toEqual(['p3']);
+  });
 });
 
 // ---------------------------------------------------------------------------

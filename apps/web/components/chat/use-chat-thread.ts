@@ -59,6 +59,17 @@ export function useChatThread({ projectId, surface, kind = 'crew' }: UseChatThre
   const [pending, setPending] = useState<PendingMessage[]>([]);
   const [status, setStatus] = useState<ThreadStatus>('idle');
   const [error, setError] = useState<string | null>(null);
+  /** Whether a page older than the one held could exist at all (§7.2). */
+  const [hasOlder, setHasOlder] = useState(false);
+  /**
+   * ND-38's page size for this surface, as the SERVER reported it.
+   *
+   * Not imported: `PAGE_SIZE` lives in `lib/chat/messages.ts`, which is
+   * `server-only`, and a client component importing it would break the build.
+   * Re-declaring 50/25 here would be the other failure — a second place the
+   * number lives, drifting the moment one is changed.
+   */
+  const [pageSize, setPageSize] = useState<number | null>(null);
 
   // Refs, not state, because the poll's callback is created once when the timer
   // arms. Reading state there would capture the values from that first render
@@ -105,6 +116,7 @@ export function useChatThread({ projectId, surface, kind = 'crew' }: UseChatThre
       setPending([]);
       setStatus('idle');
       setError(null);
+      setHasOlder(false);
       return;
     }
 
@@ -137,6 +149,12 @@ export function useChatThread({ projectId, surface, kind = 'crew' }: UseChatThre
         sinceRef.current = rows[rows.length - 1]?.created_at ?? null;
         setThread(json.thread);
         setMessages(rows);
+        // A page that came back SHORT is the whole thread — there is nothing
+        // older to fetch, so the load-more control must not be offered. A
+        // control that cannot do anything is worse than no control: it reads as
+        // "there is more history here" on a thread with three messages in it.
+        setPageSize(json.pageSize ?? null);
+        setHasOlder(rows.length >= (json.pageSize ?? rows.length));
         setStatus('ready');
       } catch {
         if (!cancelled) {
@@ -235,5 +253,17 @@ export function useChatThread({ projectId, surface, kind = 'crew' }: UseChatThre
     }).catch(() => {});
   }, []);
 
-  return { thread, messages, pending, status, error, send, retry, markRead };
+  return {
+    thread,
+    messages,
+    pending,
+    status,
+    error,
+    hasOlder,
+    setHasOlder,
+    pageSize,
+    send,
+    retry,
+    markRead,
+  };
 }

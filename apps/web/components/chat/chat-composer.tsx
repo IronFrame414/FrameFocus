@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AtSign, Send } from 'lucide-react';
 import { color, font } from '@/lib/theme';
 import type { ThreadKind } from '@/lib/chat/threads';
@@ -53,7 +53,38 @@ export function ChatComposer({ projectId, kind, disabled, onSend }: ChatComposer
   const [pickerOpen, setPickerOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
+  const [pendingCaret, setPendingCaret] = useState<number | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  /**
+   * ⚠️ THE CARET IS RESTORED IN useLayoutEffect, NOT requestAnimationFrame.
+   *
+   * _Superseded implementation, quoted not rewritten: `requestAnimationFrame(()
+   * => { input?.focus(); input?.setSelectionRange(pos, pos); })`._
+   *
+   * That version LOST THE FIRST CHARACTER TYPED AFTER PICKING A NAME. RAF fires
+   * after the browser has already processed pending input, so a keystroke that
+   * arrived between the click and the frame landed at caret 0 — and the rest of
+   * the sentence then landed correctly after the token. Typing "can you count"
+   * straight after choosing Casey produced:
+   *
+   *     con it — @caseyan you count what is left?
+   *
+   * Every assertion passed, because the test that checked insertion never typed
+   * afterwards. It was found by taking a screenshot and reading it.
+   *
+   * useLayoutEffect runs synchronously after the DOM update and before the
+   * browser paints or delivers further input, so there is no window to race.
+   */
+  useLayoutEffect(() => {
+    if (pendingCaret === null) return;
+    const input = inputRef.current;
+    if (input) {
+      input.focus();
+      input.setSelectionRange(pendingCaret, pendingCaret);
+    }
+    setPendingCaret(null);
+  }, [pendingCaret]);
 
   // The postable set, fetched once per thread. Not computed here: §7.5 lists
   // the POSTABLE set and `postableSet()` on the server is the only thing that
@@ -101,19 +132,20 @@ export function ChatComposer({ projectId, kind, disabled, onSend }: ChatComposer
     setBody(next);
     setQuery('');
     setPickerOpen(true);
-    requestAnimationFrame(() => {
-      const pos = caret + inserted.length;
-      input?.focus();
-      input?.setSelectionRange(pos, pos);
-    });
+    setPendingCaret(caret + inserted.length);
   }
 
   function choose(person: MentionPerson) {
     if (!person.token) {
-      // Refusing to insert is the correct behaviour, not a failure to handle a
-      // case: an ambiguous token resolves to nobody, so inserting one would
-      // send a message the sender believes notified someone.
-      setNotice(`${person.name} shares a name with someone else here — type their full name.`);
+      // Refusing to insert is the correct behaviour, not an unhandled case. A
+      // token is null when it would resolve to nobody — either because someone
+      // else here answers to the same name, or because the name itself is not
+      // something the parser can read back (a surname with a space in it).
+      // Inserting either would send a message the sender believes notified
+      // someone.
+      setNotice(
+        `${person.name} has no unique @name in this thread — nothing was inserted, so they would not be notified.`
+      );
       setPickerOpen(false);
       return;
     }
@@ -125,11 +157,8 @@ export function ChatComposer({ projectId, kind, disabled, onSend }: ChatComposer
     setBody(next);
     setPickerOpen(false);
     setNotice(null);
-    requestAnimationFrame(() => {
-      const pos = start + person.token!.length + 2;
-      input?.focus();
-      input?.setSelectionRange(pos, pos);
-    });
+    // `@` + token + the trailing space.
+    setPendingCaret(start + person.token.length + 2);
   }
 
   async function submit() {

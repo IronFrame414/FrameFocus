@@ -102,10 +102,27 @@ export function insertTokenFor(
   // `candidate.tokens` is ordered first, last, first.last, firstlast — so the
   // shortest unambiguous form wins, which is what a person would have typed.
   for (const t of candidate.tokens) {
+    if (!ADDRESSABLE.test(t)) continue;
     if (owners.get(t)?.size === 1) return t;
   }
   return null;
 }
+
+/**
+ * ⚠️ A TOKEN THE PARSER CANNOT READ BACK IS NOT A CANDIDATE TOKEN.
+ *
+ * `MENTION_RE` stops at whitespace, so a surname containing a space produces a
+ * token — `admin a` — that `candidateTokens` will happily generate, that is
+ * perfectly UNIQUE, and that comes back out of `extractTokens` as `admin`,
+ * matching nothing. Inserting `@admin a` would look correct in the composer and
+ * notify nobody.
+ *
+ * Found against real data, not by reading: two rebuild-test identities are
+ * "QA Admin A" and "QA Foreman A", which share the first name `qa` AND carry
+ * spaced surnames — so every one of their tokens is either ambiguous or
+ * unreadable, and the honest answer for them is `null`.
+ */
+const ADDRESSABLE = /^[A-Za-z0-9._-]+$/;
 
 export interface ParseResult {
   /** Unique profile ids to notify, in first-appearance order. */

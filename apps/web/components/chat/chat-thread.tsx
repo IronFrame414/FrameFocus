@@ -53,16 +53,23 @@ export function ChatThreadView({
   surface,
   kind = 'crew',
 }: ChatThreadViewProps) {
-  const { thread, messages, pending, status, error, send, retry, markRead } = useChatThread({
-    projectId,
-    surface,
-    kind,
-  });
+  const {
+    thread,
+    messages,
+    pending,
+    status,
+    error,
+    hasOlder,
+    setHasOlder,
+    pageSize,
+    send,
+    retry,
+    markRead,
+  } = useChatThread({ projectId, surface, kind });
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [older, setOlder] = useState<ChatMessageRow[]>([]);
   const [loadingOlder, setLoadingOlder] = useState(false);
-  const [exhausted, setExhausted] = useState(false);
   const lastSeenCount = useRef(0);
 
   // Older pages live beside the live list rather than inside it: the poll's
@@ -100,12 +107,13 @@ export function ChatThreadView({
       const res = await fetch(url.toString());
       const json = res.ok ? await res.json() : { messages: [] };
       const page: ChatMessageRow[] = json.messages ?? [];
-      if (page.length === 0) setExhausted(true);
-      else setOlder((current) => [...page, ...current]);
+      // Short page means we have reached the start of the thread.
+      if (pageSize !== null && page.length < pageSize) setHasOlder(false);
+      if (page.length > 0) setOlder((current) => [...page, ...current]);
     } finally {
       setLoadingOlder(false);
     }
-  }, [all, thread, loadingOlder, surface]);
+  }, [all, thread, loadingOlder, surface, pageSize, setHasOlder]);
 
   if (status === 'loading' || status === 'idle') {
     return <Centered>Opening…</Centered>;
@@ -130,8 +138,9 @@ export function ChatThreadView({
         data-testid="chat-messages"
         style={{ flex: 1, overflowY: 'auto', padding: '14px' }}
       >
-        {/* §7.2 — no infinite history in v1. */}
-        {all.length > 0 && !exhausted && (
+        {/* §7.2 — no infinite history in v1, and the control appears only when
+            a full page came back, i.e. when older messages can actually exist. */}
+        {hasOlder && (
           <button
             type="button"
             data-testid="chat-load-older"
