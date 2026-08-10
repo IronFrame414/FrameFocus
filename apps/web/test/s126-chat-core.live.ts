@@ -11,6 +11,7 @@ import {
   markThreadRead,
 } from '@/lib/chat/messages';
 import { parseMentions } from '@/lib/chat/mentions';
+import { switcherThreads, groupByProject } from '@/lib/chat/switcher';
 import { notifyMentions } from '@/lib/chat/mention-notify';
 
 // ============================================================================
@@ -298,7 +299,7 @@ describe('markThreadRead — the one UPDATE in chat', () => {
   it('creates the row on first open and moves it on the second', async () => {
     const thread = await resolveThread(crewC, PROJECT, 'crew');
 
-    await markThreadRead(crewC, thread!.id, crewProfileId);
+    await markThreadRead(crewC, thread!.id);
     const { data: first } = await admin
       .from('chat_reads')
       .select('id, last_read_at, updated_at')
@@ -308,7 +309,7 @@ describe('markThreadRead — the one UPDATE in chat', () => {
     expect(first).not.toBeNull();
 
     await new Promise((r) => setTimeout(r, 1100));
-    await markThreadRead(crewC, thread!.id, crewProfileId);
+    await markThreadRead(crewC, thread!.id);
 
     const { data: second } = await admin
       .from('chat_reads')
@@ -326,6 +327,94 @@ describe('markThreadRead — the one UPDATE in chat', () => {
     // NOT append-only.
     expect(new Date(second!.updated_at!).getTime()).toBeGreaterThan(
       new Date(first!.updated_at!).getTime()
+    );
+  });
+});
+
+describe('ND-34 — the switcher RPC, under the caller RLS', () => {
+  it('crew see BOTH threads; the subcontractor sees ONLY the sub thread', async () => {
+    // The RPC is SECURITY INVOKER precisely so this holds. Under DEFINER it
+    // would return every thread in the company and the switcher would be the
+    // one place the access model does not apply.
+    await resolveThread(crewC, PROJECT, 'crew');
+    await resolveThread(ownerC, PROJECT, 'sub');
+
+    const crewRows = (await switcherThreads(crewC)).filter((r) => r.projectId === PROJECT);
+    expect(crewRows.map((r) => r.kind).sort()).toEqual(['crew', 'sub']);
+
+    const subRows = (await switcherThreads(subC)).filter((r) => r.projectId === PROJECT);
+    expect(subRows.map((r) => r.kind)).toEqual(['sub']);
+  });
+
+  it('unread counts a message from someone else, and NOT your own', async () => {
+    const thread = await resolveThread(crewC, PROJECT, 'crew');
+    await markThreadRead(crewC, thread!.id);
+
+    // Crew's own message must not light crew's own badge — otherwise every
+    // message you send marks the thread you just typed into as unread.
+    const own = await insertMessage(crewC, {
+      threadId: thread!.id,
+      authorProfileId: crewProfileId,
+      body: 'my own message, must not count as unread for me',
+    });
+    expect(own.success, own.error).toBe(true);
+    let mine = (await switcherThreads(crewC)).find((r) => r.threadId === thread!.id);
+    expect(mine!.unreadCount).toBe(0);
+
+    // Somebody else's does.
+    const fromOwner = await insertMessage(ownerC, {
+      threadId: thread!.id,
+      authorProfileId: ownerProfileId,
+      body: 'from the owner',
+    });
+    expect(fromOwner.success, fromOwner.error).toBe(true);
+    mine = (await switcherThreads(crewC)).find((r) => r.threadId === thread!.id);
+    expect(mine!.unreadCount).toBe(1);
+
+    // …and reading clears it.
+    await markThreadRead(crewC, thread!.id);
+    mine = (await switcherThreads(crewC)).find((r) => r.threadId === thread!.id);
+    expect(mine!.unreadCount).toBe(0);
+  });
+
+  it('a thread never opened counts everything as unread', async () => {
+    // No chat_reads row at all is the first-open case, and it must not read as
+    // "nothing new".
+    //
+    // ⚠️ THE FIXTURE IS THE POINT HERE. The first version of this test asserted
+    // against the sub thread as it stood — which had NO messages, because every
+    // earlier sub-thread write in this file is a refusal. It failed with 0, and
+    // 0 was the correct answer: the test's premise was wrong, not the RPC.
+    // Establishing which one was wrong before changing either is the rule that
+    // caught the markThreadRead bug in the same run.
+    const subThread = await resolveThread(ownerC, PROJECT, 'sub');
+    const posted = await insertMessage(ownerC, {
+      threadId: subThread!.id,
+      authorProfileId: ownerProfileId,
+      body: 'a message the subcontractor has never read',
+    });
+    expect(posted.success, posted.error).toBe(true);
+
+    // The subcontractor has no chat_reads row for this thread at all.
+    const { count: readRows } = await admin
+      .from('chat_reads')
+      .select('id', { count: 'exact', head: true })
+      .eq('thread_id', subThread!.id);
+    expect(readRows ?? 0, 'fixture expects NO read row for this thread').toBe(0);
+
+    const rows = await switcherThreads(subC);
+    const seen = rows.find((r) => r.threadId === subThread!.id);
+    expect(seen, 'the sub must see their own thread').toBeDefined();
+    expect(seen!.unreadCount).toBeGreaterThan(0);
+  });
+
+  it('groups into projects with the threads adjacent', async () => {
+    const grouped = groupByProject(await switcherThreads(crewC));
+    const project = grouped.find((g) => g.projectId === PROJECT);
+    expect(project).toBeDefined();
+    expect(project!.threads.length).toBe(2);
+    expect(project!.unreadCount).toBe(
+      project!.threads.reduce((n, t) => n + t.unreadCount, 0)
     );
   });
 });
