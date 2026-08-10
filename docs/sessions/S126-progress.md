@@ -673,7 +673,11 @@ depends on it.
 
 ---
 
-## RESUME HERE
+## ~~RESUME HERE~~ — SUPERSEDED, kept as the record of where slice 6 was picked up
+
+_This was the resume point before slice 6. Slice 6 shipped (commit `640efa4`), so this is history.
+**The live `## RESUME HERE` is the last section of this file.** Retitled rather than deleted: the
+four things it said to hold on to are the reasoning slice 6 was actually built against._
 
 **Single next action:** start **slice 6** — the photo reference (ND-22, ND-28). **Not started.**
 
@@ -760,3 +764,108 @@ One line to move. Worth deciding alongside the deferred FFNav reindex rather tha
 
 **Rebuild-test:** all four chat tables, `notifications`, and `email_logs.mention` at **0 rows**.
 Tree clean, branch pushed.
+
+---
+
+# S130 — resumed after a Codespace rebuild mid-Phase 3
+
+The rebuild landed between writing the two Phase 3 files and running either of them. Both existed
+untracked and **unverified in the strict sense: written, never executed.** Nothing else was in
+flight.
+
+## Grounding, before touching anything
+
+| Check | Result |
+| ----- | ------ |
+| `pwd` | `/workspaces/FrameFocus-work` |
+| branch | `feat/chat` |
+| HEAD | `cf09474` |
+| untracked | exactly the two expected files, nothing else |
+| CLI link | `nmyphyhmfttxkdoposvf` — **framefocus-rebuild-test** |
+| `uv` | 0.11.29, present |
+| node / modules | v20.20.2; root and `apps/web` `node_modules` both intact |
+| Playwright browsers | `chromium-1234` present — the rebuild did not lose them |
+| `SUPABASE_SECRET_KEY` | in the shell environment, **zero readers in the repo** (grep over ts/tsx/js/json/sh/yml returns nothing). Still inert, still one rename from live. |
+
+**Which environment the tests actually hit, established without reading `.env.local`.**
+`.claude/settings.json:24` denies `Read(./.env.*)`, so the file was never opened. It did not need
+to be: `assertRebuildTest()` (`test/live-session.ts:34`) throws unless
+`NEXT_PUBLIC_SUPABASE_URL` contains the rebuild-test ref, and it runs in `beforeAll` of the suite
+below. **The environment check is the harness's own, executed, not a claim made about a file.**
+
+## Phase 3 — both files now RUN, and one of them was wrong
+
+### 3a — `test/s130-chat-history.live.ts`: `messagesBefore()` returns a second page
+
+```
+npx vitest run --config test/live.vitest.config.ts s130-chat-history   ->  exit 0
+```
+```
+0
+```
+**4 passed.** The gap open since slice 3 is closed: `messagesBefore()` had **never returned a
+second page** because no thread on rebuild-test exceeded one, so only its *absence* was asserted.
+30 seeded messages against a panel page size of 25 makes the boundary real rather than simulated.
+
+**Premises checked before running, because the last run's two wrong tests were both premises:**
+
+- `chat_messages.created_at` is `TIMESTAMPTZ DEFAULT now()` with **no trigger overriding it**
+  (`20260906000000_chat_core.sql:140`) — so the fixture's explicit, spaced timestamps survive the
+  insert. Had a trigger stamped `now()`, all 30 rows would share a microsecond and the page
+  boundary would have been meaningless while still passing a length assertion.
+- `thread_id` is `ON DELETE CASCADE`, so `cleanup()` deleting threads by `project_id` genuinely
+  removes the messages rather than orphaning them.
+- **No trigger fires notifications on a `chat_messages` insert** — mentions are a separate table
+  written by application code. A raw admin insert of 30 `@`-free bodies leaves no residue, which
+  is the leak slice 2 hit.
+- **The parallel-collision worry was unfounded**, and worth recording because it looked real:
+  three sibling live suites use the SAME project `4a4f8567…` and each deletes all its threads in
+  `beforeAll`. `test/live.vitest.config.ts` sets `fileParallelism: false` and
+  `sequence.concurrent: false`, so they cannot interleave.
+
+### 3b — `e2e/desktop-chat-poll.spec.ts`: A-C39's wiring, and **the test was what was wrong**
+
+`scripts/e2e-preflight.sh` -> exit `0`, one server on 3000, pid 4334.
+
+**First run — exit `1`, 2 passed / 2 failed:**
+```
+1
+```
+Both failures were `page.waitForTimeout: Test timeout of 30000ms exceeded` — **timeouts, not
+assertion failures**, and the distinction is the whole diagnosis. Playwright's per-test default is
+30s and `playwright.config.ts` sets no global override (its `timeout:` at line 175 belongs to
+`webServer`). Two of these tests need ~45s: opening the thread costs ~10-15s, then **two** full
+12-second observation windows — one to establish the poll is running, one to watch it stop.
+
+**Establishing which side was wrong came from what had already passed when the clock ran out:**
+
+- Test 2 died at line 118, so line 108 — `whileOpen >= 1` — **had passed**. The poll fires with a
+  thread open, and `countPolls`' filter (`GET` + `/api/chat/messages` + `since=`) genuinely
+  matches. That filter was the vacuous-pass risk: had it matched nothing, two of these tests would
+  have compared `0` to `0` and **passed while proving nothing.** It matches.
+- Test 3 died at line 149, so line 139 — `a hidden tab must not poll` — **had passed**.
+- Test 4 passed outright at 22s, one window rather than two.
+
+So the build was doing the right thing at every point the tests actually reached; the two
+assertions that never executed were the two that matter most for A-C39. Fixed the **budget**, at
+the describe level, with the arithmetic written down — and explicitly **not** by shortening
+`POLL_MS`, which would test a transport that does not ship (ND-26 rules twelve seconds).
+
+**Second run — exit `0`:**
+```
+0
+```
+**4 passed** (37.5s and 37.4s for the two that had been timing out at 30 — the margin was the
+whole failure).
+
+**A-C39's component wiring is now observed in a browser:** the poll fires while a thread is open,
+**stops dead** when the panel closes, halts on a hidden document and resumes on visible, and does
+not survive a return to the switcher. Its failure mode is invisible — nothing on screen is wrong
+while a backgrounded tab polls all day — which is why the unit suite over injectable timers could
+never have caught a component that failed to wire them up.
+
+**Latent, not fixed, recorded because it is a trap for the next reader:** this spec reseeds a
+SHARED project in `beforeEach`, and `playwright.config.ts` sets `workers: undefined` locally. It is
+safe here only because the Codespace has **2 cores**, so Playwright's default resolves to one
+worker. On a larger machine two workers would tear down each other's fixtures mid-test. Both runs
+above passed `--workers=1` explicitly rather than relying on the core count.
