@@ -48,7 +48,23 @@ interface LinkDef {
 
 const LINKS: Record<string, LinkDef> = {
   chat: {
-    mobile: (p) => (p.projectId ? `/m/p/${p.projectId}/chat` : null),
+    // ⚠️ A PARAM, NOT A ROUTE — CORRECTED [S126 slice 3] against ND-40/ND-37.
+    // _Superseded, quoted not rewritten: `/m/p/${p.projectId}/chat`._
+    //
+    // The Chat slot opens an OVERLAY over the current screen and owns no route
+    // (ND-37), so there is no `/m/p/{id}/chat` to land on and A-C42 requires
+    // that there never be one. The old path was written from the key name — the
+    // same way `incident` and `delivery` were wrong below — and it resolved to
+    // a 404 for every mobile mention.
+    //
+    // `mention-notify.ts` has asserted this shape in a comment since slice 2
+    // while this file still produced the other one; the comment was right and
+    // the code was not.
+    //
+    // The overlay itself is slice 5. Until then this lands on the project
+    // screen without opening chat — the correct project, one tap short — which
+    // is a soft degradation rather than a dead link.
+    mobile: (p) => (p.projectId ? `/m/p/${p.projectId}?chat=1` : null),
     desktop: (p) => (p.projectId ? `/dashboard/projects/${p.projectId}/chat` : null),
   },
   // ---------------------------------------------------------------------------
