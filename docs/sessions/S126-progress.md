@@ -554,84 +554,144 @@ under BLOCKED below because enforcing it is a product decision with real consequ
 
 ---
 
-## RESUME HERE
+### 12:44 UTC — SLICE 5 COMPLETE AND SEEN. Mobile overlay + §14's nine edits. Pushed `8c5d4c5`.
 
-**Single next action:** start **slice 5** — mobile chat as an OVERLAY (ND-36/ND-37), entered from
-the bottom-bar Chat slot, with `/m/p/{id}?chat=1` opening it on mount.
+**The bar swap, the sheet, the nine M6M spec edits and the rewritten criteria all landed in ONE
+commit** (`97dfb96`) — the hazard the brief named. All nine were verified against
+`M6M-mobile-pwa-spec.md` **as committed** before editing, and §14's own line citations hold
+(A-3 at 4356, A-42b at 4636).
 
-⚠️ **The NINE M6M edits in §14 must land in the SAME COMMIT as the bar change, or the mobile
-suite goes red.** Verified against `M6M-mobile-pwa-spec.md` as committed — the line citations
-hold:
-
-| Item | Line | Change |
+| Check | Exit | Signal |
 | --- | --- | --- |
-| **A-3** | 4356 | *"no tile for Projects, Timeclock, **Logs**, or Field"* — moving Logs INTO the sheet makes it false by design. The worst one. |
-| **A-3b** | 4357 | six named tiles → seven, naming Logs |
-| **A-41** | 4633 | six-route walk → seven, adding `/m/logs` |
-| **A-42** | 4635 | "all six routes" → seven |
-| **A-42b** | 4636 | "All six carry the hamburger" → seven |
-| **A-1c** | 4354 | add the Chat slot rule: lit while the overlay is open, never by the route underneath |
-| **D-3** | — | bar contents → `Projects · Timeclock · [camera] · Chat · Field` |
-| **D-39** | — | row title "App bar on the six destinations" → seven |
-| **D-4** | — | gains ND-32's named bubble exception |
+| `npx turbo run type-check --force` | **0** | 5/5, 0 cached, 0 `error TS` |
+| `npx vitest run` (`apps/web/`) | **0** | **653 passed (653)**, 45 files |
+| Playwright `m-chat-shell` | **0** | **10 passed** — A-C30, A-C33, A-C34, A-C35, A-C42 |
+| Playwright `m-chat-offline` | **0** | **4 passed** — A-C20, A-C21 |
+| Playwright `m-shell` regression | **0** | **54 passed** |
+| Playwright `m-destinations` regression | **0** | **74 passed**, 3 skipped |
 
-**Also owed in slice 5**, carried from phase 1 and slice 3:
+**SEEN.** The overlay was screenshotted on the project screen: five slots with **Chat where Logs
+was**, the tab bar fully visible **below** the overlay, the Crew/Subs segments, the composer and
+the `@` hint. Worth recording — **both Projects and Chat are lit at once**, and that is correct:
+§7.1d-iii keeps A-1c unchanged for the four route-owning slots and gives the Chat slot the overlay
+as its meaning.
 
-- **A-C20** — assert chat writes are **not enrolled** in `lib/offline/*`. Chat genuinely does not
-  touch the queue today, but nothing asserts the absence, so a later build that enrols it passes
-  everything. Test that the queue is **not touched**, not merely that an error shows.
-- **A-C21 / ND-24** — the unsent bubble and retry have still never rendered.
+**A-C20 and A-C21 are now MET.** They were reported unmet since slice 3 and were the sharpest of
+the sweep's sequence-blind findings: the unsent bubble and retry existed and **had never
+rendered**, because nothing took the network away. A-C20 is asserted three ways, because an error
+on screen proves the send failed and not that nothing was queued — no chat module imports
+`lib/offline`; `QueueEntity` is a closed union with no chat entity (paired with a positive
+assertion so it cannot pass vacuously); and IndexedDB is read directly after an offline send, with
+the test **failing rather than skipping** if `indexedDB.databases()` is unavailable.
+
+**Parity, done properly.** `ChatBody` now holds the whole of chat's behaviour — switcher,
+segments, thread — and the desktop panel and mobile overlay each wrap it in their own chrome. The
+alternative was a second mobile switcher, which is #129 written in the form that looks like
+agreement.
+
+**Three tests failed and ALL THREE WERE THE WRONG TEST**, each established before either side was
+touched:
+
+1. **A-40c** counted `TABS` to count slots — valid while every slot was a link. Chat owns no
+   route, so the count went 4 → 3 and the bar is still five. **Mechanism rewritten, reversal guard
+   kept**, and it now names the two non-link slots so the count cannot drift into meaning
+   something else.
+2. **A-1c** — two cases asserted `/m/logs` lights `m-tab-logs`. That slot is gone by ruling;
+   `/m/logs` is now covered by A-C33.
+3. **A-C28** pinned the panel rendering `ChatThreadView` directly, which broke when the behaviour
+   moved into `ChatBody`. The property never broke.
+
+Plus one omission of mine: `/m/logs` was added to A-41's walk but not to its tile map, so it
+expected `m-sheet-tile-undefined`. **The app was right.**
+
+- **Next:** slice 6 — the photo reference (ND-22, ND-28). **NOT STARTED.**
 
 ---
 
+## RESUME HERE
+
+**Single next action:** start **slice 6** — the photo reference (ND-22, ND-28). **Not started.**
+
+It needs a migration (`chat_message_photos`), which is the first chat migration since slice 4.
+Rebuild-test only, **verified against the catalog** — a 14-digit prefix collision reports success
+on a silent skip — then `db:types` and `wc -l`.
+
+Four things to hold on to going in:
+
+- **Reference, not upload.** A-C18 asserts chat exposes **no** file-upload path. Today that is
+  true by absence — a grep over `lib/chat/`, `app/api/chat/` and `components/chat/` returns zero
+  `upload`/`storage.from`/`FormData` hits — and **the criterion has no test**. Write it before the
+  attach button, or the build that adds an upload "because it's easier" fails nowhere.
+- **The composer's attach button opens the PROJECT GALLERY PICKER** (Josh chose this over sharing
+  from the gallery side). Reuse an existing picker if one exists; the spec says none does.
+- **Thumbnails open the EXISTING viewer via M6M D-31's `displayUrl`** (`lib/services/photos.ts`).
+  Chat must never resolve a file path itself.
+- **A-C17c is the only backstop for `category='photos'`** — the FK cannot enforce it (§4.3).
+
+---
 
 ## Where things stand
 
-**VERIFIED — slices 1, 2 and 3.**
+**VERIFIED — slices 1, 2, 3, 4 and 5.**
 
-- Slice 1: migration applied, seven RLS probes as `authenticated` with output pasted.
-- Slice 2: 17 live tests through real sessions, 25 unit tests, 8 route tests through HTTP.
-- Slice 3: **20 Playwright tests across four chunks, all run and all green**, plus 12 new unit
-  tests. The panel has been opened, the switcher ordered, a message sent and rendered, the `@`
-  picker opened over the real postable set, and unread cleared on open — **observed on screen**,
-  not inferred from a passing assertion.
+- Slice 1: migration applied, seven RLS probes as `authenticated`, output pasted.
+- Slice 2: 17 live tests, 25 unit, 8 route tests through HTTP.
+- Slice 3: 20 browser tests across four chunks, plus 12 unit. Seen on screen.
+- Slice 4: 7 live (including `chat_can_post` agreeing with a real INSERT across **eight**
+  role/thread combinations), 13 unit, 4 live email, 5 browser. **Both of the brief's completion
+  conditions met** — the sub thread seen with the QA sub identity, and the mention email observed
+  reaching a sub and **not** a crew member.
+- Slice 5: 10 browser (shell criteria) + 4 browser (offline) + 128 mobile regression, and the nine
+  M6M edits in the same commit as the bar change. Seen on screen.
 
-**WRITTEN BUT NOT VERIFIED:** two things, both named rather than implied.
+**WRITTEN BUT NOT VERIFIED:** one thing, named rather than implied.
 
-- **`messagesBefore()` / "load older messages"** — the query and the control exist and type-check,
-  but **no thread on rebuild-test has more than one page**, so the load-more path has never
-  returned a second page. Its *absence* is asserted (the control does not render on a short
-  page); its *success* is not.
-- **ND-24's failure state** — a failed send renders as a distinct unsent bubble with a retry, and
-  that path has never been exercised, because nothing here takes the network away. **A-C20/A-C21
-  are offline criteria and remain unmet**; the structure is in place, the behaviour is unproven.
+- **`messagesBefore()` / load-older** — still never exercised. **No thread on rebuild-test exceeds
+  one page**, so a second page has never been returned. Its *absence* is asserted (the control does
+  not render on a short page); its *success* is not. It was listed as closeable "if a fixture can
+  seed past `PAGE_SIZE`" — that fixture was **not** written, because slices 4 and 5 both ran long.
+  It is the cheapest remaining gap: seed 26 messages and open the panel.
 
-**NOT STARTED:** slice 4 (sub-thread UI + the ND-30 email), slices 5–6, and slice 0 (notification
-expiry), which remains owed and is unaffected by this run.
+**NOT STARTED:** slice 6 (photo reference), and slice 0 (notification expiry), which remains owed
+and untouched by this run.
 
 ## BLOCKED — NEEDS JOSH
 
-**Nothing is blocked, and nothing was guessed.** One decision the brief asked to be made and
-logged, and one thing worth a ruling later:
+Nothing blocked a slice. Two decisions are yours, **stated as options rather than as findings with
+a recommendation attached**:
 
-**1. A sub thread appearing in the switcher before slice 4 — DECIDED, not escalated.** Slice 3
-filters the switcher to `kind: 'crew'`. Reasoning, in the order it was weighed:
+### 1. `DASHBOARD_ROLES` is declared and enforced NOWHERE
 
-- It **hides nothing that exists**. Threads are created lazily (§4.1), slice 3 only ever asks for
-  `crew`, and nothing else in the app asks at all — so no sub thread can come into being before
-  slice 4 creates one. The switcher cannot lie about a row that does not exist.
-- **Rendering it dead was refused on the spec's own precedent** — §7.1e will not have "a disabled
-  second segment" in the analogous case.
-- **Letting it open the crew view was the worst option**: a composer in front of roles the policy
-  refuses, which is M6M **D-54 inverted**, and every send would 403.
+`packages/shared/constants/roles.ts:62` excludes `subcontractor` and `client` from the dashboard.
+A repo-wide grep finds **no code consulting it** — the only two references are comments written
+during this run. **A subcontractor can sign in to `/dashboard` today**, and that is why slice 4's
+browser test can observe the sub thread on desktop at all.
 
-_Residual risk, stated rather than buried:_ if a sub thread were ever created out of band, a user
-would not see it in the panel until slice 4. It would still be reachable through the project Chat
-tab.
+This is pre-existing and outside slices 4–6, so it was logged rather than fixed.
 
-**2. The Chat tab's position in the strip — appended, and that is not a ruling.** §7.1b names the
-tab and not its place; it sits last, after Team. Same reasoning the Notifications sidebar item
-carries. **If Josh wants it elsewhere in the strip, that is a one-line move** and worth deciding
-alongside the deferred FFNav reindex rather than on its own.
+- **Option A — enforce it** (middleware or the dashboard layout redirects non-dashboard roles to
+  `/m`). Consequence: the sub's only surface becomes mobile, which is what ND-42/A-C50 already
+  assume. One slice-4 browser test would start failing, and its failure would be correct.
+- **Option B — delete the constant.** If subs are meant to reach the dashboard, a constant saying
+  otherwise is a trap for the next reader.
+- **Option C — leave it and record why.** Cheapest, and it keeps a live discrepancy between a
+  named rule and the code.
 
-**Rebuild-test:** all four chat tables and `notifications` at **0 rows**. Branch pushed.
+### 2. The Chat tab's position in the desktop project strip
+
+Still appended last, after Team (slice 3's call, unchanged). §7.1b names the tab and not its place.
+One line to move. Worth deciding alongside the deferred FFNav reindex rather than on its own.
+
+## Carried gaps — recorded, not fixed, outside slices 4–6
+
+- **ND-41 / slice 0** — `/api/cron/notification-expiry` **does not exist**. Six cron routes, none
+  of it; nothing reads `notifications.expires_at`. **A-C23's second half remains UNVERIFIABLE**
+  until it is built.
+- **ND-21** — the invite cut is implemented **by geometry** (assignment is membership) and has no
+  guard, because there is no artifact to assert, only an absence with no natural test.
+- **A-C39's component wiring** — the poll controller is thoroughly unit-tested (stop, hidden
+  document, listener removal, idempotency, mid-flight drop) and **no browser test closes the panel
+  and observes that polling stopped**. The controller is proven; the thing that calls it is not.
+
+**Rebuild-test:** all four chat tables, `notifications`, and `email_logs.mention` at **0 rows**.
+Tree clean, branch pushed.
