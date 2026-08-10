@@ -4,6 +4,7 @@ import { getOpenSession } from '@/lib/services/time-tracking';
 import { getMyMember } from '@/lib/services/members';
 import { getCompanyTimeSettings } from '@/lib/services/company';
 import { getUnreadCount } from '@/lib/services/notifications';
+import { dashboardDeniedRedirect } from '@/lib/dashboard-access';
 import { DashboardShell } from './dashboard-shell';
 import { RegisterPushSw } from './register-push-sw';
 
@@ -30,6 +31,28 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   if (!profile) {
     redirect('/sign-in');
+  }
+
+  // ⚠️ RULING A [Josh, S131] — the second half of M6M D-54.
+  //
+  // `middleware.ts` guards the same rule. This is NOT a redundant copy:
+  //
+  //  · a middleware matcher is a hand-maintained list, and the S107 `/m` gap is
+  //    what one missing entry costs;
+  //  · D-54 requires role-gated surfaces to be hidden AND route-guarded, and
+  //    `dashboard-shell.tsx` only hides — its NAV_ITEMS filter drops the four
+  //    gated items for a subcontractor and leaves ten reachable by URL.
+  //
+  // Both call `dashboardDeniedRedirect()` rather than testing the role list
+  // themselves, so the two cannot come to different conclusions about who is
+  // denied or where they go.
+  //
+  // This still protects no DATA. `/m`, the API routes and any direct PostgREST
+  // call read the same tables regardless of what any layout decides — Ruling B
+  // is what closes that, in RLS.
+  const denied = dashboardDeniedRedirect(profile.role);
+  if (denied) {
+    redirect(denied);
   }
 
   // Global clock state (S85): fetched here so the header button works on

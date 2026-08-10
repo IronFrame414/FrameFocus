@@ -9,7 +9,9 @@ import {
   messagesSince,
   recentMessages,
   markThreadRead,
+  withAuthors,
 } from '@/lib/chat/messages';
+import { adminAuthorResolver } from '@/lib/chat/authors';
 import { parseMentions } from '@/lib/chat/mentions';
 import { switcherThreads, groupByProject } from '@/lib/chat/switcher';
 import { notifyMentions } from '@/lib/chat/mention-notify';
@@ -139,7 +141,21 @@ describe('the send path, end to end', () => {
 
     const rows = await recentMessages(crewC, thread!.id);
     expect(rows.map((r) => r.id)).toContain(sent.id);
-    expect(rows[rows.length - 1].author).not.toBeNull();
+
+    // ⚠️ THE NAME NO LONGER COMES OFF THIS CALL [Ruling B, S131]. `recentMessages`
+    // used to embed `author:profiles(...)`, which ran as the CALLER and so was
+    // filtered by the caller's roster floor — a subcontractor reading another
+    // sub's message got a bubble with no name and no error. Names are now a
+    // decoration resolved through the service role, so the undecorated row is
+    // `author: null` BY DESIGN and asserting otherwise here would be asserting
+    // the bug back.
+    expect(rows[rows.length - 1].author, 'undecorated rows carry no name').toBeNull();
+
+    // The criterion this test actually exists for — a name reaches the reader —
+    // asserted where it now lives.
+    const named = await withAuthors(rows, adminAuthorResolver(admin as SupabaseClient<Database>));
+    expect(named[named.length - 1].author).not.toBeNull();
+    expect(named[named.length - 1].author!.first_name.length).toBeGreaterThan(0);
   });
 
   it('⚠️ crew CANNOT post in the sub thread, and the failure is typed as denied', async () => {
@@ -213,7 +229,17 @@ describe('mentions and notify() — the whole pipeline', () => {
     const candidates = await postableSet(admin, thread!, companyId);
 
     // --- plain message first: R6 says it notifies nobody ---
-    const plainSince = new Date().toISOString();
+    // ⚠️ IDS, NOT A CLIENT CLOCK [S131] — and this file already says why, 40
+    // lines below: "Same family as comparing a client timestamp to a server one
+    // anywhere else: don't." That note was written after skew hid a row from a
+    // positive; this is the same defect pointing the other way, where skew
+    // makes an OLDER mention row look new and a "notify nobody" assertion fails
+    // on someone else's row. Measured: the database clock runs ~110ms ahead.
+    const plainBefore = new Set(
+      (
+        (await admin.from('notifications').select('id').eq('type', 'mention')).data ?? []
+      ).map((r) => r.id)
+    );
     const plain = await insertMessage(crewC, {
       threadId: thread!.id,
       authorProfileId: crewProfileId,
@@ -222,12 +248,12 @@ describe('mentions and notify() — the whole pipeline', () => {
     const plainParse = parseMentions('no tag here, nobody should be told', candidates, crewProfileId);
     expect(plainParse.profileIds).toEqual([]);
 
-    const { count: plainRows } = await admin
+    const { data: plainAll } = await admin
       .from('notifications')
-      .select('id', { count: 'exact', head: true })
-      .eq('type', 'mention')
-      .gte('created_at', plainSince);
-    expect(plainRows ?? 0, 'a plain message must notify nobody — R6').toBe(0);
+      .select('id')
+      .eq('type', 'mention');
+    const plainRows = (plainAll ?? []).filter((r) => !plainBefore.has(r.id));
+    expect(plainRows, 'a plain message must notify nobody — R6').toHaveLength(0);
 
     // --- now the tagged one ---
     const body = '@Josh running short on trim, need about 3 more sticks';

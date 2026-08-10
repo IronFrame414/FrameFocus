@@ -3,8 +3,12 @@ import { chatOpenSchema } from '@framefocus/shared/validation/chat';
 import { chatSession } from '../_session';
 import { switcherThreads, groupByProject, type SwitcherProject } from '@/lib/chat/switcher';
 import { resolveThread, canPostInThread, subThreadProjects } from '@/lib/chat/threads';
-import { recentMessages, markThreadRead, PAGE_SIZE } from '@/lib/chat/messages';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@framefocus/shared/types/database';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { recentMessages, markThreadRead, withAuthors, PAGE_SIZE } from '@/lib/chat/messages';
 import { withPhotos } from '@/lib/chat/photos';
+import { adminAuthorResolver } from '@/lib/chat/authors';
 
 /**
  * The switcher list (GET) and opening a thread (POST).
@@ -149,7 +153,7 @@ export async function POST(request: NextRequest) {
   }
 
   const limit = PAGE_SIZE[input.surface];
-  const [messages, canPost] = await Promise.all([
+  const [rawMessages, canPost] = await Promise.all([
     recentMessages(session.supabase, thread.id, limit),
     // §7.4 / D-54 — the DATABASE decides whether a composer renders. A crew
     // member opening the sub thread gets `false` here and sees the banner
@@ -160,6 +164,16 @@ export async function POST(request: NextRequest) {
   // §7.2 — "Opening a thread writes chat_reads.last_read_at for that thread."
   // Server-stamped by the RPC; see markThreadRead's note on the two clocks.
   await markThreadRead(session.supabase, thread.id);
+
+  // ⚠️ AUTHOR NAMES FROM THE SERVICE ROLE — Ruling B [S131]. The first page
+  // needs this as much as the poll does: opening a sub thread is precisely
+  // where a subcontractor meets another sub's messages, and the embedded join
+  // this replaces was filtered by the caller's own roster floor. Rationale and
+  // the reason a decoration is not a hole: `lib/chat/authors.ts`.
+  const messages = await withAuthors(
+    rawMessages,
+    adminAuthorResolver(getSupabaseAdmin() as SupabaseClient<Database>)
+  );
 
   // ND-22 — the first page carries its photo references too, so a thread that
   // opens on a photo message does not render text-only and then pop thumbnails
