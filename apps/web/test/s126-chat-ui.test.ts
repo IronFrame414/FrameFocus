@@ -313,3 +313,47 @@ describe('A-C20 (ND-24) — chat fails visibly and is never queued', () => {
     expect(union![1]).toContain('daily_log');
   });
 });
+
+// ---------------------------------------------------------------------------
+// A-C18 / ND-22 — chat exposes NO file-upload path
+// ---------------------------------------------------------------------------
+describe('A-C18 (ND-22) — reference, not upload', () => {
+  const chatFiles = [
+    '../lib/chat/photos.ts',
+    '../lib/chat/messages.ts',
+    '../components/chat/chat-composer.tsx',
+    '../components/chat/chat-thread.tsx',
+    '../app/api/chat/messages/route.ts',
+    '../app/api/chat/photos/route.ts',
+  ];
+
+  it('⚠️ nothing in chat can ingest a file', () => {
+    // "The build that adds one because it's easier fails there and nowhere
+    // else" — every other photo criterion passes just as well with an upload
+    // bolted on, which is why this asserts the ABSENCE.
+    for (const f of chatFiles) {
+      const src = codeOnly(read(f));
+      expect(src, `${f} uploads`).not.toMatch(/\.upload\(|storage\.from\(|FormData|multipart/);
+      // A file input is the other shape it would take — the composer's attach
+      // button opens the project gallery, deliberately not a picker of the
+      // device's own files.
+      expect(src, `${f} has a file input`).not.toMatch(/type="file"|accept="image/);
+    }
+  });
+
+  it('the picker reuses getProjectPhotos rather than querying files itself', () => {
+    // A-C19 comes from reuse: getProjectPhotos already filters
+    // category='photos' per project AND resolves displayUrl (D-31). A second
+    // query here would be a second definition of "a project photo", and would
+    // show the unmarked original for an annotated one.
+    const route = read('../app/api/chat/photos/route.ts');
+    expect(route).toContain('getProjectPhotos');
+    expect(codeOnly(route)).not.toMatch(/from\('files'\)/);
+  });
+
+  it('chat never resolves a file path itself (D-31)', () => {
+    for (const f of ['../lib/chat/photos.ts', '../components/chat/chat-thread.tsx']) {
+      expect(codeOnly(read(f)), f).not.toMatch(/createSignedUrl|getPublicUrl|file_path/);
+    }
+  });
+});
