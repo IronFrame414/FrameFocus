@@ -59,7 +59,7 @@
 | ND-27 | **Client messaging**                   | **OUT, and STATE.md:514 is ANSWERED for internal chat.** [S124, Josh, Q9 — *"no"*, clients type into nothing.] The transport competition that entry recorded is **dissolved**, not resolved: internal chat and client messaging were never one decision. Client messaging remains a Module 9 / Pre-Module 9 gate question, untouched here. §10.                                                        |
 | ND-28 | **Photo reference target**             | **`files(id)`, `ON DELETE CASCADE`.** [S124, Josh] There is **no `photos` table** — photos are `files` rows with `category='photos'`. A deleted photo vanishes from the thread; the message keeps its text. **An FK cannot enforce `category`**, so the category check is service-layer — §4.3. `RESTRICT` rejected: it would let chat block an owner from deleting a file, which nothing else in the app does. |
 | ND-29 | **Sub thread — ⚠️ REVERSED [S125, Josh]. IT IS BUILT, IN v1.** | **ND-19 and ND-20 return to v1** — two threads per project, crew read-only in the sub thread. _Superseded text, quoted not rewritten: "**OUT of v1.** [S124, Josh] 35 subcontractor member rows exist; **one** has a profile, and it is a test account on two fixture projects. This resolves when real subs get logins, not through code. **Consequence:** `chat_messages` needs no per-role branch in v1 — `can_view_project()` and nothing else."_ **The counts were right and did not carry it** — see §2.5 for what reversed it. |
-| ND-30 | **Mention email — DEFERRED**           | **v2. In-app + push only.** [S124, Josh] Three pieces are missing, all found by live read: the `email_types` migration the `email_logs` FK requires, a template, and a send call — because **`notify()` sends no email** and every consumer sends its own. §5.6a. |
+| ND-30 | **Mention email — ⚠️ CLOSED [S125b, Josh]. IT IS BUILT, IN v1.** | _Superseded text, quoted not rewritten: "**v2. In-app + push only.** [S124, Josh] Three pieces are missing … because `notify()` sends no email and every consumer sends its own."_ **The deferral's justification was FALSIFIED BY RULING 3, not abandoned by a change of mind** — it rested on "deferring costs subs nothing because ND-29 defers the sub thread too", and ND-29 was reversed. The three missing pieces are still the correct list; they are now in scope. Scope and reasoning: **ND-42**. §5.6a. |
 | ND-31 | **Push truncation**                    | **CHAT ONLY, inside the render function. 140 characters of body.** [S124, Josh — length confirmed S124b] The shared push path stays untouched, so **no existing notification changes behaviour**. §6.3. |
 | ND-32 | **D-4 exception, NAMED**               | **Messages render as bubbles, not card geometry.** [S124, Josh] D-4 exists to stop lists being reinvented casually; a conversation is genuinely a different thing. **Naming the exception keeps D-4 intact rather than eroding it silently.** §7.2. |
 | ND-33 | **Desktop is TWO surfaces**            | **A global floating panel AND a project Chat tab. Both, not either.** [S124, Josh] The panel is the **primary** surface and is **global** — it renders on Contacts, Estimates, Settings, everywhere — with a project switcher inside, so users move between threads without navigating away. The tab is for reading and auditing a thread properly when already inside a project. §7.1. |
@@ -71,6 +71,7 @@
 | ND-39 | **Mention storage**                    | **A join table, `chat_message_mentions`.** [S125, Josh] Not a `uuid[]` on the message. Matches the house pattern, sits beside `chat_message_photos`, keeps `chat_messages` at five columns and append-only clean, and leaves a mention-scoped read ("mentions of me") possible later with no schema change. §4.3a. |
 | ND-40 | **Where a mobile mention lands**       | **`/m/p/{id}?chat=1` — a deep-link PARAM, not a route.** [S125, Josh] **ND-37 stays literally true**: mobile chat has no address of its own, it is a state the project screen can be in. A thin route would put a chat page back in the tree and make ND-37 half-true, which is worse than either whole answer. The null-resolver arm was rejected: it is the one shape where the recipient of `@Josh needs you on Alvarez` does **not** land in the conversation. §5.6c. |
 | ND-41 | **Notification expiry — IN SCOPE**     | **Chat builds `/api/cron/notification-expiry`.** [S125, Josh] Parent R2 expires unstarred rows at 30 days and parent §5.6 specs the route; the S125 audit found **six cron routes, none of them it**, and no code reading `notifications.expires_at`. **This is notifications-core work landing in the chat module**, said plainly rather than filed under chat — chat is simply what makes it bite. §9.4, slice 0. |
+| ND-42 | **Mention email — SUBS ONLY**          | **A mentioned subcontractor with a profile gets in-app, push AND email. Everyone else gets in-app and push, and NO email.** [S125b, Josh] ND-15 scoped subs to three events precisely because **a sub may not have the app** — that reasoning applies to subs and to nobody else, since staff are in it. Emailing a foreman every time somebody tags him is volume without value. **⚠️ This is an explicit exception to parent R3** — see §5.6a-i. |
 
 ---
 
@@ -548,11 +549,33 @@ append-only would strand references to files that no longer exist.
 | Subcontractor **with profile** | ❌ **never**               | ✅ if assigned to the project | ✅ own thread only       |
 | Client                         | ❌                         | ❌                            | ❌ (ND-27)               |
 
-**The crew thread rule is the parent's, unchanged:** `can_view_project()` — Owner/Admin by
-role, others by assignment.
+**The crew thread rule is the parent's:** `can_view_project()` — Owner/Admin by role, others by
+assignment.
 
 **A subcontractor never reads the crew thread.** This is the one absolute in the table and it
 is the reason ND-19 exists.
+
+> ⚠️ **`can_view_project()` ALONE DOES NOT DELIVER THAT ABSOLUTE — CORRECTED [S125b, live
+> read].** _The earlier sentence, quoted not rewritten: "The crew thread rule is the parent's,
+> **unchanged**: `can_view_project()`."_ It is unchanged as a **membership** rule and
+> insufficient as a **crew-thread** rule.
+>
+> **`is_assigned_to_project()` is ROLE-BLIND.** Its whole body is
+> `EXISTS (SELECT 1 FROM project_assignments WHERE project_id = $1 AND member_id = get_my_member_id() AND is_deleted = false)`
+> — no role test. And subcontractors **are** in `project_assignments`: the one sub with a
+> profile is assigned to two live projects, verified. **So an assigned subcontractor passes
+> `can_view_project()`**, and a crew thread gated on it alone would be readable by exactly the
+> role the table marks ❌ **never**.
+>
+> **The crew thread's SELECT must therefore carry an explicit subcontractor exclusion**, in the
+> shape §S1 already cites for the other direction:
+> `get_my_role() IS DISTINCT FROM 'subcontractor'` — the same clause
+> `punch_list_items_select_visible` opens with, and for the same reason.
+>
+> **This is a correction to the stated mechanism, not a change to the ruling.** ND-19 and ND-20
+> always said a sub never reads the crew thread; §5.2 named a helper that does not enforce it.
+> It is exactly §0a's class of defect — a document asserting a rule the code would not have
+> produced — found in the section whose own absolute it contradicted.
 
 > ✅ **§S1 — ANSWERED [S124, CC live read]. Precedent is abundant; nothing needs inventing.**
 >
@@ -752,43 +775,111 @@ the notification chat exists to deliver. Rejected [S125, Josh].
 
 **Asserted by A-C42.**
 
-### 5.6a Email is DEFERRED to v2 (ND-30)
+### 5.6a The mention email — SUBS ONLY (ND-30 closed, ND-42) [S125b]
 
-**v1 is in-app row + push. No mention email.** Parent §5.5 says a new `email_types` row is
-required per new internal notification type, and ND-15 scopes subs to three events including
-chat @mention — **all of that stands, and none of it is v1.**
+_Superseded heading and rule, quoted not rewritten: "**Email is DEFERRED to v2 (ND-30)** — v1
+is in-app row + push. No mention email."_ **ND-30 is closed and the email is built in v1.**
 
-**Three pieces are missing, established by live read, so v2 does not rediscover them:**
+**Who gets it:**
 
-1. **An `email_types` migration.** The table exists with 13 rows and **none is `mention`**, and
-   `email_logs` **has a foreign key to `email_types`** — so a mention email log INSERT
-   **fails on the FK today**. The migration is a hard prerequisite, not a nicety.
-2. **A template.** No mention template exists under `lib/email/templates/`.
-3. **A send call.** Because `notify()` sends no email (above), chat must make its own, the way
-   `incident-notify.ts` does.
+| Mentioned recipient | In-app row | Push | Email |
+| --- | --- | --- | --- |
+| Subcontractor **with a profile** | ✅ | ✅ | **✅** |
+| Crew, foreman, PM, Admin, Owner | ✅ | ✅ | **❌** |
 
-> ⚠️ **THIS JUSTIFICATION IS SUPERSEDED [S125] AND THE CONSEQUENCE IS NOW LIVE.** _Quoted not
-> rewritten: "**Deferring it costs subs nothing in v1**, because ND-29 defers the sub thread
-> too — and a mention can only reach someone who can read the thread."_ **ND-29 is reversed**
-> (§2.5), so the sub thread ships in v1 and **a subcontractor with a profile can be mentioned
-> in v1 and will receive no email.**
+**Why subs and nobody else.** ND-15 scoped subcontractors to three events precisely because **a
+sub may not have the app** — that is the entire reason the email arm exists, and it applies to
+subs and to no one else, because staff are in the app. Emailing a foreman every time somebody
+tags him in a thread he already has open is volume without value.
 
-**What that means, stated rather than left to be discovered.** Parent **ND-15** says subs get
-email **always**, and chat @mention is one of its three scoped events. ND-30 defers the mention
-email to v2, so **v1 knowingly ships one of ND-15's three events without its email half.**
+#### 5.6a-i ⚠️ This is an explicit exception to parent R3, recorded as one
 
-**Why that is tolerable and not a silent breach:**
+**Parent R3:** *"every internal notification email is also a push, and vice versa."*
 
-- The sub who can be mentioned **has a profile by definition** (ND-25 — a sub with no account
-  has no thread), so they get the **in-app row and the push**. §13.2's state-1 channel pair is
-  in-app *and* email; v1 delivers one of the two, to someone who is signed in.
-- The population is **one identity today**, and it is a test account (§5.3).
-- The three missing pieces are enumerated above and unchanged, so v2 is a known quantity rather
-  than a rediscovery.
+**Chat mention pushes for everyone and emails only subs, so the pairing does not hold in both
+directions.** Chat mention is **the first internal type where that is true.**
 
-**It is recorded as a partial breach of ND-15 rather than as "costs subs nothing", because the
-earlier sentence is now simply untrue** and a later reader comparing ND-15 to the build would
-otherwise find an undocumented gap.
+It is written down as an exception rather than left to be discovered because **a spec that
+quietly breaks a parent rule is exactly the drift §0a warns about** — and §0a's whole lesson is
+that this document has already done it three times. The direction of the break matters and is
+narrow: **every email still has a push** (a sub gets both). What R3 loses is the converse —
+**not every push has an email**, which was already true in spirit for staff and is now true on
+the record.
+
+#### 5.6a-ii What already exists, and what is genuinely new
+
+Established by live read at S125b rather than assumed:
+
+- **No `mention` row in `email_types`.** The registry holds 13 rows and none is it, and
+  **`email_logs` has an FK to `email_types`** — so an insert of a mention email log **fails on
+  the FK today**. The migration is a hard prerequisite, not a nicety. Lands in **slice 1** with
+  the rest of the schema.
+- **No mention email path exists.** The only `'mention'` in the tree is the type union in
+  `notify.ts:77`. This is wholly new, not a modification.
+- **The functions it binds to all exist and are reused unchanged** (parent §5.5):
+  `sendEmail()`, `logEmail()`, `buildSenderAddress()`, and Reply-To via
+  `resolveCompanyReplyTo()` — resolved inside `sendEmail()` from a `replyToCompanyId`, so a
+  sender added later inherits it.
+
+#### 5.6a-iii Who sends it — the fork, decided
+
+**The chat send path fires the email alongside `notify()`. `notify()` is NOT changed.**
+
+The fork is real and the spec picks. `notify()` **sends no email today** — parent §4.6's
+responsibility 6 is false against the shipped code (§0a). So either it gains email, or the
+caller sends it. **The caller sends it**, for four reasons:
+
+1. **Every existing consumer already does exactly this.** `incident-notify.ts` computes its
+   recipient set **once** and drives two channels — in-app+push through `notify()`, email
+   through its own `sendEmail()`. `co-signing-service` and the delivery check-in are the same
+   shape. Chat would be the **fifth** to follow the pattern, not an exception to it.
+2. **Making `notify()` send email would double-send for the four consumers that already do.**
+   The only way round that is an opt-in flag per call — which is the caller deciding, just
+   further away and with a shared function carrying the risk.
+3. **ND-42's audience rule is a CHAT rule, not a platform rule.** "Subs only" is an R3
+   exception this module is taking; putting it inside `notify()` would make a shared function
+   carry a filter exactly one consumer uses.
+4. **It keeps ND-41's precedent honest.** The expiry cron genuinely *is* notifications-core —
+   parent §5.6 specs that route by name. This is not, and calling both "core work landing in
+   chat" would blur a distinction worth keeping.
+
+**⚠️ So parent §4.6's responsibility 6 remains false after this spec ships, and this spec does
+not fix it.** That is owed to a notifications-core pass, and it is said here so the next reader
+does not take a working mention email as evidence that `notify()` gained an email arm.
+
+#### 5.6a-iv Content
+
+- **Subject and body carry the real message text**, per parent **R6** — the notification shows
+  what was said, not "you were mentioned". The email is not an exception to R6 just because it
+  has more room.
+- **Thread named**, per **ND-23**: `{author} ({project} — subs): {body}`. A sub only ever
+  receives a sub-thread mention, so the `— subs` token is always present.
+- **Reply-To is the company**, per the parent's S97 platform ruling, resolved in `sendEmail()`.
+- **No dollar figures — and this is accepted, not solved.** Parent **R7** as extended keeps
+  company money away from subcontractors, but **chat text is user-authored**, so §6.4's posture
+  applies here unchanged: if someone types a figure into a sub thread and mentions the sub, the
+  email carries it. **The email is not safer than the in-app row and must not be described as
+  if it were** — the mitigation is the same one §6.4 names, that the mention picker only offers
+  people who can already read the thread.
+
+#### 5.6a-v The link — and what a subcontractor can actually open
+
+**⚠️ THE DESKTOP DESTINATION IS THE WRONG ONE FOR THIS AUDIENCE, established by live read.**
+
+- `DASHBOARD_ROLES` (`packages/shared/constants/roles.ts:62`) is `owner, admin,
+  project_manager, foreman, crew_member` — **`subcontractor` is absent.** The desktop shell is
+  not built for them. _(Honest caveat: the constant is **declared and never consumed** — no
+  redirect enforces it — so a sub is not actively bounced from `/dashboard`. It states intent,
+  not a gate.)_
+- `/m` has **no role gate**, and the mobile tree carries explicit subcontractor handling
+  (`app/m/detail-access.ts`). Subs are a field role.
+
+**So the email links to the MOBILE destination: `{origin}/m/p/{project_id}?chat=1`** (ND-40).
+Not the desktop chat tab.
+
+This is **not** ND-8's text-without-link case. ND-8 applies when the floor makes every
+destination a dead end; here a live destination exists and the email points at it. The
+precedent is cited only to be distinguished, so a later reader does not reach for it.
 
 ### 5.6b Chat calls `notify()` from a SERVER ROUTE
 
@@ -1218,7 +1309,15 @@ v1's only access criterion is A-C5b below."_
 - **A-C44** The expiry route is **registered in `vercel.json`**. `[unit]` _(A correct handler that nothing schedules never runs — the exact defect parent §5.6 flagged for `/api/cron/invoice-reminders`, which has had a handler and no schedule since before this module.)_
 - **A-C45** The route is gated by `CRON_SECRET` and answers 401 without it. `[unit]` _(Every other cron route does; a delete endpoint is the last one that should not.)_
 
-**The tripwire (S124 correction)
+**Mention email — subs only (ND-30 closed, ND-42)**
+
+- **A-C46** A mentioned **subcontractor with a profile** receives an in-app row **and** an email, and the email is logged to `email_logs` with `email_type = 'mention'`. `[live]` _(The whole of ND-42. The log assertion also proves the `email_types` migration landed — without it the insert fails on the FK.)_
+- **A-C47** A mentioned **crew member** receives an in-app row and a push and **NO email**. `[live]` _(⚠️ **The R3 exception, and the criterion that carries it.** Without this, a build that emails every mentioned recipient passes every other criterion in this block — and it is the likeliest wrong build, because emailing everyone is what R3 reads like.)_
+- **A-C48** The email's subject and body carry the **real message text** and the **sub-thread name** — `{author} ({project} — subs): {body}`. `[live]` _(R6 + ND-23. A "you were mentioned" email passes a naive "an email was sent" assertion and defeats the point.)_
+- **A-C49** A subcontractor **without a profile** does not appear in the mention picker, and no email is attempted for them. `[live]` _(§5.6a-vi — the state that never arises. Asserting it keeps a later build from "helpfully" emailing `subcontractors.email`, which is nullable.)_
+- **A-C50** The email's link is the **mobile** destination, `{origin}/m/p/{id}?chat=1`. `[unit]` _(§5.6a-v. `DASHBOARD_ROLES` excludes subcontractor, so a desktop chat link is the wrong surface for the one audience this email has.)_
+
+**The tripwire (S124 correction)**
 
 - **A-C29** `PENDING_ROUTES` in `s123-incident-notify.test.ts` no longer contains `'chat'`, and the whole suite is green. `[unit]` _(The guard is designed to fail when chat ships. **The commit creating the chat routes must clear it in that same commit**, or it ships red.)_
 
@@ -1383,6 +1482,12 @@ _Superseded at S125, quoted not rewritten: "**ND-29's revisit condition** — th
 returns when real subcontractors have logins." **ND-29 is reversed and the sub thread is
 built** (§2.5), so there is no revisit condition._
 
+**Closed at S125b:**
+
+- ~~**ND-30, the mention email.**~~ **BUILT, subs only (ND-42).** With it, **no parent rule is
+  left half-satisfied by this spec** — ND-15's three sub-scoped events all have both channels.
+  The R3 exception it creates is recorded in §5.6a-i rather than taken silently.
+
 **One thing remains, and it is not a decision:**
 
 - **A cost signal to watch, not answer** — §9.1c: request volume on the Supabase usage
@@ -1447,13 +1552,17 @@ and Josh's mitigation is enforcement. If adoption fails, it will fail there, and
    **RLS includes §S1's divergence** — ND-29 is reversed (§2.5), so the sub thread's
    read-wide/write-narrow split is built here, following `inspections`/`phases`/`tasks` and
    `punch_list_items_select_visible`. Every table carries `company_id`; the DELETE posture is
-   §4.5a's. `chat_message_photos` stays in **slice 6** with ND-22, since its FK and CASCADE
-   (ND-28) are only exercised there. Rebuild-test first, RLS probes under the impersonation
+   §4.5a's. **Plus the `email_types` row for `mention`** (ND-42) — `email_logs` has an FK to
+   that registry, so the row must exist before any mention email can be logged.
+   `chat_message_photos` stays in **slice 6** with ND-22, since its FK and CASCADE (ND-28) are
+   only exercised there. Rebuild-test first, RLS probes under the impersonation
    harness (failing-then-passing evidence, never as postgres). **Stop.**
 2. **`lib/` core** — thread resolution, send, mention parse, `notify()` call. Both surfaces
    consume it (A-C16). **Stop.**
 3. **Desktop chat** — crew thread only. Walk 3a-1 and 3a-2 against a real Bishop job. **Stop.**
-4. **Sub thread** — both surfaces, §5.2's divergence, the banner. ✅ **BACK IN v1 [S125] —
+4. **Sub thread** — both surfaces, §5.2's divergence (including the crew thread's
+   subcontractor exclusion), the banner, **and the ND-42 mention email** — its `email_types`
+   row lands with the schema in slice 1, its send path here with the audience that needs it. ✅ **BACK IN v1 [S125] —
    ND-29 reversed (§2.5).** _Superseded, quoted not rewritten: "CUT FROM v1 (ND-29) … revisit
    when real subcontractors have logins."_ The RLS half lands in slice 1; this slice is the UI
    and the banner. **Note the fixture reality: one sub with a profile, on two test projects**
@@ -1502,9 +1611,14 @@ survives the way the parent's superseded text does.
 
 **NOTHING IN THIS SPEC IS AWAITING A RULING.**
 
-**S125 closed four more**, raised by the audit rather than by the interview: mention storage
+**S125 closed four**, raised by the audit rather than by the interview: mention storage
 (ND-39), where a mobile mention lands (ND-40), the ND-29 reversal (§2.5), and notification
-expiry (ND-41). §9.3 records the one item that remains, which is a cost signal to watch rather
+expiry (ND-41).
+
+**S125b closed the fifth — ND-30, the mention email (ND-42)** — which S125 had left as a
+recorded *partial breach of ND-15*. It was not a change of mind: **Ruling 3 falsified the
+deferral's justification**, and a spec carrying a knowingly half-built parent rule is not a
+finished spec. §9.3 records the one item that remains, which is a cost signal to watch rather
 than a decision.
 
 ---
