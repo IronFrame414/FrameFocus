@@ -6543,7 +6543,18 @@ export type Database = {
         Args: { p_session_id: string }
         Returns: boolean
       }
+      chat_can_post: { Args: { p_thread_id: string }; Returns: boolean }
       chat_mark_read: { Args: { p_thread_id: string }; Returns: string }
+      chat_sub_thread_exists: {
+        Args: { p_project_id: string }
+        Returns: boolean
+      }
+      chat_sub_thread_projects: {
+        Args: never
+        Returns: {
+          project_id: string
+        }[]
+      }
       chat_switcher_threads: {
         Args: never
         Returns: {
