@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ArrowLeft, MessageSquare, X } from 'lucide-react';
 import { color, font } from '@/lib/theme';
-import type { SwitcherProject } from '@/lib/chat/switcher';
+import type { ThreadKind } from '@/lib/chat/threads';
 import { ChatThreadView } from './chat-thread';
+import { ThreadSegments, type SwitcherEntry } from './chat-segments';
 
 /**
  * The global chat panel — ND-33, §7.1a.
@@ -32,8 +33,10 @@ interface ChatPanelProps {
 
 export function ChatPanel({ myProfileId }: ChatPanelProps) {
   const [open, setOpen] = useState(false);
-  const [projects, setProjects] = useState<SwitcherProject[] | null>(null);
+  const [projects, setProjects] = useState<SwitcherEntry[] | null>(null);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  /** Which segment is open. Reset to the project's first available on switch. */
+  const [kind, setKind] = useState<ThreadKind>('crew');
   const [totalUnread, setTotalUnread] = useState(0);
 
   const loadSwitcher = useCallback(async () => {
@@ -43,7 +46,7 @@ export function ChatPanel({ myProfileId }: ChatPanelProps) {
         setProjects([]);
         return;
       }
-      const json = (await res.json()) as { projects?: SwitcherProject[] };
+      const json = (await res.json()) as { projects?: SwitcherEntry[] };
       const list = json.projects ?? [];
       setProjects(list);
       setTotalUnread(list.reduce((sum, p) => sum + p.unreadCount, 0));
@@ -204,7 +207,13 @@ export function ChatPanel({ myProfileId }: ChatPanelProps) {
                   data-unread={p.unreadCount}
                   // A-C26 — this changes state, it does not navigate. No Link,
                   // no router.push: the page underneath keeps everything.
-                  onClick={() => setActiveProjectId(p.projectId)}
+                  onClick={() => {
+                    setActiveProjectId(p.projectId);
+                    // A subcontractor's only segment is `sub`, so defaulting to
+                    // 'crew' would open a thread RLS refuses them and show the
+                    // 403 state instead of their conversation.
+                    setKind(p.kinds[0] ?? 'crew');
+                  }}
                   style={{
                     display: 'flex',
                     width: '100%',
@@ -254,12 +263,21 @@ export function ChatPanel({ myProfileId }: ChatPanelProps) {
 
           {/* ---- the thread: the SAME component the tab renders (A-C28) ---- */}
           {active && (
-            <ChatThreadView
-              key={active.projectId}
-              projectId={active.projectId}
-              myProfileId={myProfileId}
-              surface="panel"
-            />
+            <>
+              <ThreadSegments
+                kinds={active.kinds}
+                value={kind}
+                onChange={setKind}
+                threads={active.threads}
+              />
+              <ChatThreadView
+                key={`${active.projectId}:${kind}`}
+                projectId={active.projectId}
+                myProfileId={myProfileId}
+                surface="panel"
+                kind={kind}
+              />
+            </>
           )}
         </section>
       )}

@@ -62,6 +62,7 @@ export function ChatThreadView({
     hasOlder,
     setHasOlder,
     pageSize,
+    canPost,
     send,
     retry,
     markRead,
@@ -280,7 +281,75 @@ export function ChatThreadView({
         ))}
       </div>
 
-      <ChatComposer projectId={projectId} kind={kind} onSend={send} />
+      {/* ---------------------------------------------------------------------
+          §7.4 / A-C7 / M6M D-54 — THE COMPOSER IS ABSENT, NOT DISABLED.
+
+          `canPost` comes from `chat_can_post`, which mirrors the INSERT policy.
+          A disabled composer would still be in the DOM, and D-54 is explicit
+          that a hidden button is not a permission — A-C7 asserts the render
+          side ("no composer element in the DOM") and A-C6 asserts the policy
+          side, and both are required because either alone is satisfiable by a
+          build that gets the other wrong.
+          ------------------------------------------------------------------ */}
+      {canPost ? (
+        <ChatComposer projectId={projectId} kind={kind} onSend={send} />
+      ) : (
+        <ReadOnlyBanner kind={kind} />
+      )}
+    </div>
+  );
+}
+
+/**
+ * §7.4 — what a crew member sees instead of a composer in the sub thread.
+ *
+ * Josh's requirement at Q24 was *"don't post here, subs can see this"*,
+ * delivered *"cleaner and more professional."* Three constraints, and the third
+ * is the one easiest to lose:
+ *
+ *   · say they cannot post;
+ *   · say WHY — the sub audience is the reason, and a crew member who does not
+ *     know that will file it as a bug;
+ *   · do NOT scold. It is a normal thread they are welcome to read.
+ *
+ * The `sub` wording is §7.4's proposed text. The `crew` arm is the fallback for
+ * a role that cannot post in a CREW thread — no role can reach it today (the
+ * only reader excluded from posting there is a subcontractor, who cannot read
+ * it either), so it exists so the component cannot render an empty footer if
+ * that ever changes.
+ */
+function ReadOnlyBanner({ kind }: { kind: ThreadKind }) {
+  return (
+    <div
+      data-testid="chat-readonly-banner"
+      style={{
+        borderTop: `1px solid ${color.cardBorder}`,
+        backgroundColor: color.tableHeadBg,
+        padding: '12px 14px',
+      }}
+    >
+      <p
+        style={{
+          margin: 0,
+          fontFamily: font.sans,
+          fontSize: '12.5px',
+          lineHeight: 1.5,
+          color: color.bodyAlt,
+        }}
+      >
+        {kind === 'sub' ? (
+          <>
+            <strong style={{ fontWeight: 700, color: color.navy }}>Read-only</strong> — this
+            thread includes subcontractors. You can follow along here; post in the crew thread
+            instead.
+          </>
+        ) : (
+          <>
+            <strong style={{ fontWeight: 700, color: color.navy }}>Read-only</strong> — you can
+            follow this conversation but not post in it.
+          </>
+        )}
+      </p>
     </div>
   );
 }

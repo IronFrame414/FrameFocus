@@ -70,6 +70,15 @@ export function useChatThread({ projectId, surface, kind = 'crew' }: UseChatThre
    * number lives, drifting the moment one is changed.
    */
   const [pageSize, setPageSize] = useState<number | null>(null);
+  /**
+   * §7.4 / M6M D-54 — may this caller post here?
+   *
+   * ⚠️ ANSWERED BY THE DATABASE (`chat_can_post`), never inferred from the
+   * viewer's role in the browser. Starts FALSE: a composer that renders before
+   * permission is known is a composer that can render for someone who does not
+   * have it, and "not yet loaded" must not look like "allowed".
+   */
+  const [canPost, setCanPost] = useState(false);
 
   // Refs, not state, because the poll's callback is created once when the timer
   // arms. Reading state there would capture the values from that first render
@@ -117,6 +126,7 @@ export function useChatThread({ projectId, surface, kind = 'crew' }: UseChatThre
       setStatus('idle');
       setError(null);
       setHasOlder(false);
+      setCanPost(false);
       return;
     }
 
@@ -125,6 +135,7 @@ export function useChatThread({ projectId, surface, kind = 'crew' }: UseChatThre
     setError(null);
     setMessages([]);
     setPending([]);
+    setCanPost(false);
     threadRef.current = null;
     sinceRef.current = null;
 
@@ -154,6 +165,7 @@ export function useChatThread({ projectId, surface, kind = 'crew' }: UseChatThre
         // control that cannot do anything is worse than no control: it reads as
         // "there is more history here" on a thread with three messages in it.
         setPageSize(json.pageSize ?? null);
+        setCanPost(json.canPost === true);
         setHasOlder(rows.length >= (json.pageSize ?? rows.length));
         setStatus('ready');
       } catch {
@@ -262,6 +274,7 @@ export function useChatThread({ projectId, surface, kind = 'crew' }: UseChatThre
     hasOlder,
     setHasOlder,
     pageSize,
+    canPost,
     send,
     retry,
     markRead,

@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
-import { ChatThreadView } from '@/components/chat/chat-thread';
+import { ChatTab } from '@/components/chat/chat-tab';
 
 /**
  * The project Chat tab — §7.1b.
@@ -54,7 +54,7 @@ export default async function ProjectChatPage({ params }: { params: { id: string
         borderRadius: '13px',
       }}
     >
-      <ChatThreadView projectId={params.id} myProfileId={profile.id} surface="tab" />
+      <ChatTab projectId={params.id} myProfileId={profile.id} />
     </div>
   );
 }
