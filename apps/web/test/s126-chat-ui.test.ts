@@ -152,36 +152,57 @@ describe('A-C27 (ND-35) — the Chat tab is ungated', () => {
 // A-C28 — the panel and the tab render through the SAME component
 // ---------------------------------------------------------------------------
 describe('A-C28 — one thread renderer, two surfaces', () => {
-  // ⚠️ REWRITTEN [slice 4]. The previous pair asserted WHERE the tab imported
-  // ChatThreadView from, which was a proxy for the property and broke the
-  // moment the tab grew a client wrapper (ChatTab) to carry the segmented
-  // control. The property never broke — both surfaces still render exactly one
-  // thread renderer — so the TEST was what was wrong. These assert the property
-  // itself, which no longer cares how many components deep it sits.
-  it('exactly one component renders a thread, and both surfaces reach it', () => {
-    expect(read('../components/chat/chat-panel.tsx')).toContain('<ChatThreadView');
+  // ⚠️ REWRITTEN TWICE, AND BOTH TIMES THE TEST WAS WHAT WAS WRONG.
+  //
+  // Slice 4: the assertions pinned WHERE the tab imported ChatThreadView from,
+  // a proxy that broke when the tab grew a client wrapper for the segments.
+  // Slice 5: they pinned the PANEL rendering ChatThreadView directly, which
+  // broke when the panel's behaviour moved into ChatBody so the mobile overlay
+  // could share it rather than reimplement it.
+  //
+  // The property has never broken: there is exactly ONE thread renderer and
+  // every surface reaches it. These assert that, and no longer care how many
+  // components deep it sits.
+  it('exactly one component renders a thread, and all THREE surfaces reach it', () => {
+    // Two call sites, three surfaces: ChatBody serves the desktop panel AND the
+    // mobile overlay; ChatTab serves the project tab.
+    expect(read('../components/chat/chat-body.tsx')).toContain('<ChatThreadView');
     expect(read('../components/chat/chat-tab.tsx')).toContain('<ChatThreadView');
-    // The tab page delegates rather than rendering a thread of its own.
-    const page = read('../app/dashboard/projects/[id]/chat/page.tsx');
-    expect(page).toContain('<ChatTab');
-    expect(page).not.toContain('<ChatThreadView');
+
+    // Nothing else renders one — a fourth call site would be the divergence.
+    for (const f of [
+      '../components/chat/chat-panel.tsx',
+      '../components/chat/mobile-chat-overlay.tsx',
+      '../app/dashboard/projects/[id]/chat/page.tsx',
+    ]) {
+      expect(read(f), `${f} renders its own thread`).not.toContain('<ChatThreadView');
+    }
+  });
+
+  it('A-C16 — the desktop panel and the mobile overlay share ChatBody', () => {
+    // #129's precedent, applied where it actually bites: two markup editors
+    // "both worked" and disagreed about what a save produces. A second mobile
+    // switcher would be that, written in the form that looks like agreement.
+    for (const f of [
+      '../components/chat/chat-panel.tsx',
+      '../components/chat/mobile-chat-overlay.tsx',
+    ]) {
+      expect(read(f)).toContain('<ChatBody');
+      expect(read(f)).toContain("from './chat-body'");
+    }
   });
 
   it('they differ by the `surface` prop and nothing else', () => {
-    expect(read('../components/chat/chat-panel.tsx')).toContain('surface="panel"');
+    expect(read('../components/chat/chat-body.tsx')).toContain('surface="panel"');
     expect(read('../components/chat/chat-tab.tsx')).toContain('surface="tab"');
   });
 
-  it('§7.1e — the segmented control is ONE component, shared by both surfaces', () => {
-    // The parity ruling applied at the level below the thread: a second segment
-    // control per surface is how the two would come to disagree about which
-    // threads a project has.
-    for (const f of ['../components/chat/chat-panel.tsx', '../components/chat/chat-tab.tsx']) {
+  it('§7.1e — the segmented control is ONE component, shared by every surface', () => {
+    for (const f of ['../components/chat/chat-body.tsx', '../components/chat/chat-tab.tsx']) {
       expect(read(f)).toContain("from './chat-segments'");
       expect(read(f)).toContain('<ThreadSegments');
     }
   });
-
   it('ND-38 — the two page sizes come from lib, not from the components', () => {
     // 50 in the tab, 25 in a panel. A literal in a component would be a second
     // place the number lives.
