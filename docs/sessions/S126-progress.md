@@ -869,3 +869,304 @@ SHARED project in `beforeEach`, and `playwright.config.ts` sets `workers: undefi
 safe here only because the Codespace has **2 cores**, so Playwright's default resolves to one
 worker. On a larger machine two workers would tear down each other's fixtures mid-test. Both runs
 above passed `--workers=1` explicitly rather than relying on the core count.
+
+## Phase 4 — `DASHBOARD_ROLES`: measured, reported, NOT fixed
+
+**Nothing was built or changed in this phase.** The ruling is Josh's. What follows is evidence and
+three options; the options are deliberately not ranked.
+
+### 1. Zero enforcement, confirmed rather than assumed
+
+`grep -rn "DASHBOARD_ROLES"` over `.ts/.tsx/.md`, excluding `node_modules`, returns **13 hits and
+exactly one is code**: the declaration itself at `packages/shared/constants/roles.ts:62`. Every
+other hit is a comment, a doc, or a test's prose:
+
+| Where | What it is |
+| ----- | ---------- |
+| `packages/shared/constants/roles.ts:62` | **the declaration — the only code reference** |
+| `apps/web/e2e/desktop-chat-sub.spec.ts:7` | comment, written during S126 |
+| `apps/web/lib/chat/mention-email.ts:94` | comment — routes a sub's mention email to `/m` **because** subs are excluded |
+| `apps/web/test/s126-chat-email.test.ts:62` | comment on the same |
+| `docs/specs/5I-spec.md` ×4 | **a spec that depends on the exclusion holding** |
+| `docs/sessions/*` ×5 | session history |
+
+**`5I-spec.md` is the part worth Josh's attention.** §6 states subs "land on a distinct surface,
+not the dashboard" and §132 repeats it — a spec **premised** on an exclusion that nothing enforces.
+Note the direction of the dependency: `mention-email.ts` already sends subs a `/m` link rather than
+a `/dashboard` one, so the *code* honours the rule where it is cheap and the *route layer* does not
+honour it at all.
+
+### 2. What a subcontractor actually reaches — and it is NOT an empty shell
+
+**Neither gate exists.** `middleware.ts` checks authentication and subscription only; its matcher
+covers `/dashboard/:path*` but no branch reads `role`. `app/dashboard/layout.tsx` redirects on a
+missing user or missing profile and then renders — it reads `profile.role` only to pass it down as
+a prop. `defaultSignedInPath()` (`lib/device.ts:68`) picks `/m` vs `/dashboard` by **user agent**,
+never by role, so a subcontractor on a laptop is deposited in the desktop dashboard by design.
+
+**Nav:** `NAV_ITEMS` filters on `!item.roles || item.roles.includes(userRole)`. `subcontractor`
+appears in **no** `roles` list, so the four gated items hide and every ungated item renders. A
+subcontractor sees **10 of 14**: Dashboard, Projects, Schedule, Field Ops, Timeclock, Expenses,
+**Contacts**, **Subs & Vendors**, **Team**, Notifications. Hidden: Estimates, Cost Catalog,
+Settings, Billing.
+
+**The distinction that matters — measured live on rebuild-test**, signing in as the real QA
+identities and counting rows through RLS (temporary probe, run and deleted, tree clean):
+
+```
+                       owner    sub    client
+projects               10       2      0
+contacts               6        6      6      <-- sub and client read the FULL list
+subcontractors         4        4      4      <-- ditto
+profiles               7        7      7      <-- ditto: whole team, emails and roles
+files                  64       4      0
+estimates              7        0      0
+project_budget_items   55       0      0
+project_financials     6        0      0
+change_orders          20       0      0
+expenses               35       0      0
+members / time_sessions / notifications        0 / 0 / 0 for OWNER too
+```
+
+**So the answer to "empty shell or real data" is: real data.** `/dashboard/contacts`,
+`/dashboard/subcontractors` and `/dashboard/team` are ungated nav items whose pages call their
+service function **unconditionally** — `contacts/page.tsx:21` is `const contacts = await
+getContacts()`, and the role check on line 34 only hides the "+ Add Contact" button and sets
+`canEdit`. A subcontractor gets the company's leads and clients, the sub roster, and the full team
+list, **read-only and complete**.
+
+**Two honest qualifications on that table.** `members`, `time_sessions` and `notifications` read
+**0 for the owner as well**, so those rows are evidence of an empty fixture and prove nothing about
+any role floor. And the financial columns behaving (`project_financials`, `project_budget_items`,
+`change_orders`, `estimates`, `expenses` all 0) is the **Financial Visibility Floor** working as
+designed — it is not `DASHBOARD_ROLES` doing anything, because `DASHBOARD_ROLES` does nothing.
+
+### 3. `client` — the same, and worse in one respect
+
+Identical reads: contacts 6, subcontractors 4, profiles 7. It differs from the sub only in seeing
+**0 projects and 0 files**, because it is assigned to none.
+
+**The `client` case has an extra problem that the sub case does not: there is nowhere to send
+them.** CLAUDE.md gives Client "Portal only" web access, and `app/` contains **no portal route
+tree** — `api, auth, dashboard, forgot-password, invite, m, manifest, sign, sign-co, sign-in,
+sign-up`. So enforcing the constant for `client` today redirects to a surface that does not exist.
+The sub at least has `/m`, including `/m/subs`.
+
+### 4. What enforcement would touch
+
+**Both, and the reason is the failure mode of each alone.** `middleware.ts` already matches
+`/dashboard/:path*` and already fetches the profile inside the billing block, so a role branch is
+cheap there — but middleware runs on navigations and is the wrong and only place to rely on.
+`app/dashboard/layout.tsx` already loads `profile.role` for the shell, so the check costs one
+comparison — but a layout gate alone still lets a route handler under `/api` serve the same data.
+The rows above come from **RLS**, which is what actually returns them; a route redirect changes
+what is *reached*, not what is *readable*. Anything that must be truly denied to subs and clients
+belongs in policy, the way the Financial Visibility Floor did it.
+
+### 5. Three options — stated as options
+
+- **Option A — enforce it.** Middleware and layout redirect non-`DASHBOARD_ROLES` to `/m`. Makes
+  `5I-spec.md` §6 true and matches what `mention-email.ts` already assumes. **Costs:** one slice-4
+  browser test (`desktop-chat-sub.spec.ts`) starts failing, and its failure would be *correct*;
+  and `client` has no destination, so A is really "A for subs" plus a portal decision.
+- **Option B — delete the constant.** If subs and clients are meant to reach the dashboard, a
+  constant saying otherwise is a trap. **Costs:** `5I-spec.md` §6/§132 must be rewritten, and the
+  contacts/subs/team exposure above becomes a deliberate, recorded choice rather than an accident.
+- **Option C — keep it, record why.** Cheapest. **Costs:** the discrepancy stays, and it is no
+  longer merely notional now that the row counts above are known.
+
+**What is NOT an option is leaving it undecided and un-recorded**, because the exposure is real
+data and a shipped spec already depends on the opposite being true.
+
+## Phase 5a — `s97ct-floor3.live.ts`: stale against THREE migrations, not two
+
+```
+npx vitest run --config test/live.vitest.config.ts s97ct-floor3   ->  exit 1
+```
+```
+1
+```
+`Error: subcontractor: Could not find the 'default_hourly_rate' column of 'subcontractors' in the
+schema cache` — thrown in `beforeAll`, so **17 tests SKIPPED, 0 run**. That is why it presented as
+one problem: the suite never got far enough to have seventeen.
+
+### The named cause — the 20260903/20260904 pair
+
+`default_hourly_rate`, `default_markup_percent` and `ein` moved to `subcontractor_financials`
+(`20260903000000`). `20260904000000` then dropped the BEFORE UPDATE trigger that had guarded them,
+and its own header is the best account of the production defect: the trigger read
+`NEW.default_hourly_rate` at runtime, plpgsql resolves record fields at runtime rather than at
+`CREATE FUNCTION` time, so dropping the columns raised nothing and the trigger only failed when it
+fired. Two early returns (service role, owner/admin) meant the **only** caller that ever reached
+the broken line was `project_manager` — a PM could not edit any sub or vendor at all.
+
+**The assertion shape had to change with the mechanism, and this is the part worth keeping.** The
+trigger was **loud**; RLS is **silent**. `subcontractor_financials` carries owner/admin
+SELECT/INSERT/UPDATE policies, so a PM's UPDATE finds the row invisible, touches zero rows and
+returns **no error**. The old test expected a raised exception with a specific message — against
+today's database, which enforces the rule *more* strictly than the trigger did, that assertion
+fails. Rewritten to assert what is now observable: nothing came back, nothing changed, and — the
+part that is genuinely stronger — **a PM cannot even read the figures**.
+
+### The unnamed cause, found underneath it — the S121 read floor
+
+With `beforeAll` fixed, 13 passed and **four change-order tests failed**, all
+`expected null not to be null`: they expected the immutability trigger to raise and got nothing.
+Stale against a **third** migration the brief did not name — `20260830000000`, the S121 CO read
+floor.
+
+**"No error" had two possible meanings and they are not close: the write was refused, or the write
+LANDED.** The second would be a production defect — a PM re-pricing a signed change order. The
+suite's own tests could not tell the difference, because each one **restores the value before
+asserting on it**, so its "restore failed" check passes either way. Measured with a throwaway probe
+instead (run, then deleted):
+
+```
+seeded CO: {"created_by":null,"status":"sent","material_markup_percent":20}
+PM can SELECT it: []
+PM update -> error=null data=[]
+AFTER (service role read, BEFORE any restore): {"material_markup_percent":20}
+>>> the write did NOT land; it was refused silently (0 rows).
+OWNER update on the same SENT CO -> error=A sent change order is immutable — void and reissue instead.
+```
+
+**No production defect.** A service-role fixture leaves `created_by` NULL (it defaults to
+`auth.uid()`), so the CO belongs to nobody and the S121 floor — PM sees only `created_by =
+auth.uid()` — hides it. Postgres evaluates UPDATE's USING clause independently of SELECT, and
+`change_orders_update_authorized` still admits any PM, so the update was **admitted and matched
+zero rows**. The trigger never fired. The Owner control proves the trigger is alive and correct,
+and test **1b** (the same shape, run as Owner) was passing all along — the two differ only in who
+can see the row.
+
+**Fixed by seeding both COs as authored by the PM**, which restores what these tests are for: that
+a PM cannot **re-price** a sent CO, not that a PM cannot **see** one.
+
+**⚠️ And it repaired a test that was passing vacuously.** `1d — a DRAFT change order is still fully
+editable by a PM` asserts only that the update raised no error. An invisible row raises no error
+either, so 1d had been "proving" the gate does not over-reach **against a row the PM could not
+see**. It now runs against a row the PM owns.
+
+```
+npx vitest run --config test/live.vitest.config.ts s97ct-floor3   ->  exit 0
+```
+```
+0
+```
+**17 passed.** Committed path-scoped.
+
+## Phase 5b — the four cron/reminder assertions: **DIAGNOSED, NOT REPRODUCED, NOT CHANGED**
+
+**Neither suite was modified.** Both are green, and the failure the brief describes did not occur
+in this environment.
+
+| Run | Exit | Result |
+| --- | ---- | ------ |
+| `s123-cron-loops` alone | **0** | 9 passed |
+| `s123-reminders-loop` alone | **0** | 3 passed |
+| both together | **0** | 12 passed |
+| **the FULL live suite, all 46 files** | **0** | **513 passed (513)**, 46 files, no skips, 182s |
+
+```
+0
+```
+
+### It is not the cron, and ND-41 is not implicated
+
+Confirmed on two independent grounds rather than one. `lib/notify/crons/notification-expiry.ts`
+only ever **deletes** — its statements are a count, a `.delete()`, and a `spared` tally; it inserts
+no notification and cannot add a row to anything. And `s130-*` sorts **after** `s123-*`, so under
+`fileParallelism: false` it runs later in the file order and could not have polluted a suite that
+had already finished. Its own suite passes inside the full run above.
+
+### The latent cause, established from source — it will recur
+
+The four assertions are **residual-state shaped for a specific and still-live reason**: three of
+them are not "second run" tests at all but **hour-gate** tests, and all four assert a **GLOBAL**
+counter as though it were scoped to the fixture's own company.
+
+- `runTimesheetsReady` / `runDailyLogMissing` / `runStillClockedIn` select `from('companies')`
+  with **no filter** and loop every company, asking each "is this your hour?" — deliberately, and
+  the module says so: *"two companies on different coasts with different windows want different
+  absolute instants."* `outcome.fired` counts **all** of them.
+- `runEstimateReminders` selects every estimate with `status = 'sent'` across **all** companies
+  (`estimate-reminders.ts:95-100`), and the injected `recorder()` captures **every** send in the
+  run, not just the fixture's.
+
+So `expect(outcome.fired).toBe(0)` and `expect(second.calls).toHaveLength(0)` fail the moment any
+*other* company on rebuild-test has its boundary at that instant, or any other `sent` estimate
+anywhere is due a reminder. **Two of something left behind by an earlier suite reads as exactly the
+"2 rows" reported.** Nothing about the cron is wrong; the tests borrow a global number to make a
+local claim.
+
+**The asymmetry is visible in the file itself.** The POSITIVE test already defends against this and
+explains why in a comment — *"`fired > 0` alone would pass on another company's row, so the
+recipients are named"* — and then names the recipients. The paired NEGATIVES never got the same
+treatment. Each one pairs a fragile global (`outcome.fired`) with a correctly company-scoped check
+(`rowsOfType()`, which filters `.eq('company_id', company.id)`); the scoped half is the assertion
+that carries the meaning, and it is not the half that fails.
+
+### Why nothing was changed
+
+**There is no failure here to establish anything against.** Changing four green assertions on the
+strength of a failure I cannot observe is the move the standing rule exists to prevent — and the
+change would *weaken* a global assertion to a scoped one, which is exactly the shape of an
+"improvement" that quietly deletes coverage. The residue that provoked it has evidently been
+cleared between the brief being written and this run; what has NOT changed is the fragility, so it
+comes back the next time any suite leaves a company or a `sent` estimate behind.
+
+**Recommended, not done, and Josh's call:** scope each negative to the fixture's own company the
+way the positive already is. That is a real fix rather than a mask, because the global count was
+never the property under test.
+
+---
+
+## S130 — VERIFIED vs WRITTEN-BUT-UNVERIFIED
+
+Stated in those words, because the distinction is the point of this file.
+
+**VERIFIED — executed, exit code read from the printed line, corroborated by a tally:**
+
+- `s130-chat-history.live.ts` — **4 passed, exit 0.** `messagesBefore()` returns a real second page.
+- `desktop-chat-poll.spec.ts` — **4 passed, exit 0**, after the timeout budget was corrected.
+  A-C39's component wiring observed in a browser.
+- `s97ct-floor3.live.ts` — **17 passed, exit 0**, from 0-of-17 skipped.
+- **The full live suite — 46 files, 513 passed, exit 0, no skips.**
+- `DASHBOARD_ROLES` — zero enforcement, and the row counts behind it, **measured** against
+  rebuild-test as the real QA identities.
+
+**WRITTEN BUT NOT VERIFIED:** nothing from this run. Both files the run inherited in that state
+have been executed.
+
+**NOT VERIFIABLE HERE, and owed:**
+
+- **Push enrolment end to end on a real device** — install gate, permission prompt, an actual
+  notification arriving on an iPhone. Flagged in context99, still open, **not attempted**: it needs
+  a phone and a human, and a proxy for it would be worse than the gap because it would read as
+  coverage. **Chat's entire delivery guarantee rests on it** — every mention notification, every
+  §3f/§3h/§3i/§3j cron event reaches a field user through this path or not at all.
+- **ND-21** — the invite cut is implemented **by geometry** (assignment is membership) and has no
+  guard, because there is no artifact to assert, only an absence. **Permanent gap, by nature, not
+  by omission.**
+
+## BLOCKED — NEEDS JOSH
+
+1. **`DASHBOARD_ROLES`** — the ruling, with the measured evidence and three options, in the Phase 4
+   section above. **The new fact since it was last raised** is that this is not notional: a
+   subcontractor and a client each read the company's full contacts list, sub roster and team
+   roster through `/dashboard`, and `docs/specs/5I-spec.md` §6 is written on the assumption that
+   they cannot reach the dashboard at all.
+2. **The four cron/reminder negatives** — whether to scope them to their own company (Phase 5b).
+   Not blocking anything; they are green today and fragile by construction.
+3. **The Chat tab's position in the desktop project strip** — unchanged, still appended last, still
+   worth deciding alongside the deferred FFNav reindex rather than on its own.
+
+---
+
+## RESUME HERE
+
+**Single next action:** get Josh's `DASHBOARD_ROLES` ruling (Phase 4, three options, no
+recommendation attached). **Nothing in the build is waiting on anything else.**
+
+Everything the S126/S130 chat work owed is now either done and verified, or listed above as owed to
+a human. The tree is clean, the branch is pushed, and the full live suite is green — so the next
+real failure will be visible instead of buried under a red suite.
