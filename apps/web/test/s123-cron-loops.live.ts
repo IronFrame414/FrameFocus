@@ -117,6 +117,49 @@ async function rowsOfType(type: string, since: string) {
   return data ?? [];
 }
 
+/**
+ * ⚠️ THE NEGATIVES USE THIS AND NOT `rowsOfType`, BECAUSE `since` WAS A LIE.
+ * [S131 — pre-existing defect, unrelated to Rulings A and B]
+ *
+ * Every "writes nothing" test used to mint `const since = new Date()` in NODE
+ * and then filter `.gte('created_at', since)` against a stamp Postgres wrote.
+ * **Those are not the same clock.** Measured on this Codespace, five runs out
+ * of five: a row inserted BEFORE `since` came back with a `created_at` 54-118ms
+ * AFTER it, because the database clock runs about 110ms ahead. The three
+ * negatives complete in 76-98ms, so the POSITIVE test's own notifications land
+ * inside the next test's window and are counted as if the off-boundary run had
+ * written them.
+ *
+ * It is the exact defect `components/chat/use-chat-thread.ts` documents at
+ * length — "`since` IS A DATABASE TIMESTAMP. THE BROWSER NEVER MINTS ONE" —
+ * and the reason `markThreadRead` needed migration 20260908000000.
+ *
+ * The fix removes the clock rather than widening the window: take the ids of
+ * this type BEFORE the run and diff after. A tolerance would only move the
+ * threshold at which it lies, and this is strictly stronger — it catches a new
+ * row no matter when it was stamped.
+ */
+async function idsOfType(type: string): Promise<Set<string>> {
+  const { data } = await admin
+    .from('notifications')
+    .select('id')
+    .eq('company_id', company.id)
+    .eq('type', type);
+  return new Set((data ?? []).map((r) => r.id));
+}
+
+/** Rows of `type` that did not exist when `before` was taken. */
+async function rowsAddedSince(type: string, before: Set<string>) {
+  const { data } = await admin
+    .from('notifications')
+    .select('id, recipient_profile_id, type, title, body, link_key, link_params, project_id')
+    .eq('company_id', company.id)
+    .eq('type', type);
+  const fresh = (data ?? []).filter((r) => !before.has(r.id));
+  for (const r of fresh) if (!madeNotifications.includes(r.id)) madeNotifications.push(r.id);
+  return fresh;
+}
+
 async function seedSession(clockIn: Date, clockOut: Date | null): Promise<string> {
   const { data, error } = await admin
     .from('time_clock_sessions')
@@ -279,11 +322,11 @@ describe('§3h — runTimesheetsReady', () => {
     const off = new Date(
       instantAt(tz, hourOf(company.notify_hours_start, 7), weekStartsOn).getTime() + 3_600_000
     );
-    const since = new Date().toISOString();
+    const before = await idsOfType('timesheet_ready');
     const outcome = await runTimesheetsReady(admin as SupabaseClient<Database>, off);
 
     expect(outcome.fired).toBe(0);
-    expect(await rowsOfType('timesheet_ready', since)).toHaveLength(0);
+    expect(await rowsAddedSince('timesheet_ready', before)).toHaveLength(0);
   });
 });
 
@@ -378,10 +421,10 @@ describe('§3i — runDailyLogMissing', () => {
     const off = new Date(
       instantAt(tz, hourOf(company.notify_hours_end, 18), null).getTime() + 3_600_000
     );
-    const since = new Date().toISOString();
+    const before = await idsOfType('daily_log_missing');
     const outcome = await runDailyLogMissing(admin as SupabaseClient<Database>, off);
     expect(outcome.fired).toBe(0);
-    expect(await rowsOfType('daily_log_missing', since)).toHaveLength(0);
+    expect(await rowsAddedSince('daily_log_missing', before)).toHaveLength(0);
   });
 });
 
@@ -436,10 +479,10 @@ describe('§3j — runStillClockedIn', () => {
 
   it('15:00 is neither event and writes nothing', async () => {
     const now = instantAt(tz, 15, null);
-    const since = new Date().toISOString();
+    const before = await idsOfType('still_clocked_in');
     const outcome = await runStillClockedIn(admin as SupabaseClient<Database>, now);
     expect(outcome.fired).toBe(0);
-    expect(await rowsOfType('still_clocked_in', since)).toHaveLength(0);
+    expect(await rowsAddedSince('still_clocked_in', before)).toHaveLength(0);
   });
 
   it('a CLOSED session is not nudged — cancellation, for free', async () => {
