@@ -28,7 +28,21 @@ export const PROJECT_QA_A_NAME = 'QA A — isolation fixture';
 /** "test" — also assigned to crew, so a second row exists to order against. */
 export const PROJECT_TEST = 'eaf0e25b-d60e-49c0-89b2-5612118d94b4';
 
-export async function signIn(page: Page, email: string): Promise<void> {
+/**
+ * @param landing where this identity is expected to end up after sign-in.
+ *
+ * ⚠️ NOT ALWAYS `/dashboard` SINCE RULING A [S131]. `subcontractor` and
+ * `client` are refused the dashboard and redirected — a sub to `/m/projects`,
+ * a client to the placeholder — so waiting for `/dashboard` on those identities
+ * hangs until the test times out, and the timeout reads as a broken sign-in
+ * rather than a working guard. The default keeps every existing caller
+ * (owner, admin, PM, foreman, crew) behaving exactly as before.
+ */
+export async function signIn(
+  page: Page,
+  email: string,
+  landing: RegExp = /\/dashboard/
+): Promise<void> {
   // ⚠️ COOKIES CLEARED FIRST, so signing in as a SECOND identity in one test
   // works. `middleware.ts` redirects an AUTHENTICATED request away from
   // /sign-in to /dashboard — the same behaviour auth.setup.ts documents as the
@@ -40,7 +54,7 @@ export async function signIn(page: Page, email: string): Promise<void> {
   await page.locator('#email').fill(email);
   await page.locator('#password').fill(PASSWORD);
   await page.getByRole('button', { name: /sign in/i }).click();
-  await page.waitForURL(/\/dashboard/, { timeout: 30_000 });
+  await page.waitForURL(landing, { timeout: 30_000 });
 }
 
 /** Profile id for an email — messages are attributed to a PROFILE, not a user. */
