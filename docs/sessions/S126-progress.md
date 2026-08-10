@@ -226,36 +226,109 @@ family as reading a masked exit code — the result looks authoritative and is a
 
 - **Rebuild-test:** all four chat tables **empty**, 0 mention notifications. Teardown verified.
 - **Tree clean**, branch pushed.
+### 03:23 UTC — SLICE 2 IS COMPLETE. ND-34 + poll + the route, all exercised.
+
+Five commits: two migrations, services, tests, route spec.
+
+| Step | Exit | Corroborating signal |
+| --- | --- | --- |
+| `supabase db push` ×2 | **0** | Both verified applied against the catalog; `prosecdef = false` on both RPCs — SECURITY INVOKER confirmed, not assumed |
+| `npm run db:types` | **0** | 6905 → **6917** lines |
+| `npx turbo run type-check` | **0** | **5 successful, 5 total** |
+| `npx vitest run` (from `apps/web`) | **0** | **617 passed** |
+| live harness `s126-chat-core` | **0** | **17 passed** (was 13) |
+| `npx playwright test m-chat-send-route` | **0** | **8 passed** |
+| `next lint --dir lib/chat` | **0** | no warnings |
+
+**1a — ND-34.** `chat_switcher_threads()`, a SECURITY INVOKER RPC. **The N+1 and the trap
+behind it are both recorded in the migration header:** the loop is one count per thread; the
+shape that *looks* like the fix — bulk fetch, count in JS — cannot express a **per-thread**
+cutoff through PostgREST, so the nearest expressible query is "everything since my oldest
+watermark", bounded by whichever thread the user has ignored longest. Proven under impersonation
+to inherit RLS: sub sees **1** row, crew sees **2**.
+
+**1b — the poll.** `lib/chat/poll.ts`, 10 unit tests. Imports no Supabase client and is not
+`server-only` — that is A-C41. Timers and visibility are injected because **A-C39's failure is
+invisible**: nothing on screen is wrong while a backgrounded tab polls all day.
+
+**1c — the route.** Called for the first time. 401 by curl; 400/403/200 by Playwright.
+
+#### ⚠️ A REAL BUG, FOUND BY A FAILING TEST — and the diagnosis took three wrong turns
+
+`markThreadRead()` wrote `last_read_at` from `new Date()` — the **client** clock — while
+everything it is compared against (`chat_messages.created_at`) is the **database** clock. Unread
+is `created_at > last_read_at`, so the two clocks were being subtracted from each other. **When
+the client runs fast, the unread badge silently never lights again.** Nothing looks wrong.
+
+The wrong turns, each of which looked convincing:
+
+1. I "measured" skew by comparing `new Date()` in node against `now()` from a separate MCP round
+   trip. **That compares two instants, not two clocks.** It cannot show skew and nearly
+   exonerated the bug.
+2. I reproduced the comparison in one SQL batch and got `last_read_at == created_at`, because
+   `now()` is the **transaction** timestamp. My repro's artifact, not the failure.
+3. Calling the RPC directly against the exact rows the test creates settled it — **the RPC
+   returned the correct count.** The reader was right; the writer was wrong.
+
+Fixed by `chat_mark_read()` (migration `20260908000000`), so the **server** stamps it.
+
+**And in the same run, the opposite:** "a thread never opened counts everything as unread" failed
+with 0, and **0 was correct** — the sub thread had no messages, because every earlier sub-thread
+write in that file is a refusal. **The test's premise was wrong.** One failure was the code, one
+was the test, and they were indistinguishable from the console. *Establish which is wrong before
+changing either* earned its keep twice.
+
+---
+
+## CARRIED GAP — ND-30, for slice 4
+
+**ND-30 is closed in the spec and unbuilt in the code**, and the only thing standing between a
+closed ruling and a silently missing feature is a comment at the bottom of
+`lib/chat/mention-notify.ts`.
+
+- **What is owed:** the sub mention email. `email_types.mention` already exists (slice 1), so
+  the remaining work is a template and a send call.
+- **Where it goes:** the chat send path, **alongside** `notify()`, never inside it — four
+  consumers already drive their own email and moving it in would double-send.
+- **Scope:** SUBS ONLY (ND-42). A mentioned crew member, foreman, PM, Admin or Owner gets **no**
+  email. That is an explicit recorded exception to parent **R3**.
+- **Why it is flagged here:** this is the same shape as the §4.6 debt — a correct decision whose
+  only trace in the code is prose. **Slice 4 inherits it explicitly from this entry**, not from
+  anyone's memory.
 
 ---
 
 ## RESUME HERE
 
-**Single next action:** write ND-34's two service functions in `lib/chat/` — the switcher query
-(active projects, ordered by most recent message) and the per-thread unread count. The spec
-names both as slice-2 `lib/` core and as **new work**; neither is written. **Watch the N+1 on
-unread** — it is one count per thread in the switcher if done naively.
+**Single next action:** start **slice 3** — the desktop crew thread. `lib/chat/` is complete and
+verified, so this is UI only: the global panel (ND-33), the switcher wired to
+`switcherThreads()`, the composer with a **prominent** `@` affordance (§5.1), and the mention
+picker over the **postable** set. Crew thread only — sub-thread UI is slice 4.
 
-Then slice 3 (desktop panel, switcher, composer, mention picker), which was **not started**.
+Page size is ruled: **50 in the tab, 25 in a panel** (ND-38, `PAGE_SIZE` in
+`lib/chat/messages.ts`). Opening a thread calls `markThreadRead()`.
+
+**Playwright must run in four chunks** — a single run does not survive this Codespace.
 
 ---
 
-## Where slice 2 actually stands
+## Where things stand
 
-**VERIFIED:** thread resolution, message send, mention parse, mention storage, the `notify()`
-call, `messagesSince`, `markThreadRead` — all exercised live, 13/13.
+**VERIFIED — slice 1 and slice 2, both complete.**
 
-**WRITTEN, NOT EXERCISED:** `/api/chat/messages`. The route has still **never been called** —
-no dev server ran this session. Its pieces are all verified individually; the HTTP layer,
-its 401/403 mapping and its zod validation are not.
+- Slice 1: migration applied, seven RLS probes as `authenticated` with output pasted.
+- Slice 2: 17 live tests through real sessions, 25 unit tests, 8 route tests through HTTP.
+  The route has been called; the poll has been seen starting, stopping, and refusing to run
+  while hidden.
 
-**NOT WRITTEN:** the switcher query, the per-thread unread count, the 12-second poll **loop**
-(`messagesSince` is the query it will call; nothing calls it on an interval, so A-C39 has no
-implementation to test), and any client module.
+**WRITTEN BUT NOT VERIFIED:** nothing. Everything committed in slices 1–2 has been executed.
 
-**NOT STARTED:** slice 3.
+**NOT STARTED:** slice 3 (desktop UI), slice 4 (sub-thread UI + the ND-30 email), slices 5–6.
 
 ## BLOCKED — NEEDS JOSH
 
-**Nothing is blocked.** No ruling was required and none was guessed. Every judgement call is
-logged above with what it was derived from.
+**Nothing is blocked.** No ruling was required and none was guessed. Two judgement calls are
+logged with their reasoning: the switcher as an RPC (§7.1a-i left the shape open) and the `m-`
+prefix on the route spec (the config's authenticated selector).
+
+**Rebuild-test:** all four chat tables and `notifications` at **0 rows**. Port 3000 free.
