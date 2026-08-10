@@ -1,5 +1,6 @@
 import { adminClient } from './hub-fixture';
 import { test, expect, type Page } from '@playwright/test';
+import { signInAs } from './sign-in-as';
 
 // A-68d [S115, D-62] — /api/change-orders/[id]/recalculate refuses BEFORE the
 // privilege.
@@ -34,16 +35,10 @@ const PROJECT = 'eaf0e25b-d60e-49c0-89b2-5612118d94b4';
 /** Well-formed and nonexistent — must 404, never 500. */
 const ABSENT_CO = '11111111-1111-1111-1111-111111111111';
 
-const PASSWORD = process.env.E2E_PASSWORD ?? 'FrameFocusTest!2026';
 
-async function signInAs(page: Page, email: string) {
-  await page.context().clearCookies();
-  await page.goto('/sign-in');
-  await page.locator('#email').fill(email);
-  await page.locator('#password').fill(PASSWORD);
-  await page.getByRole('button', { name: /sign in/i }).click();
-  await expect(page).toHaveURL(/\/dashboard/, { timeout: 30_000 });
-}
+// signInAs now comes from `./sign-in-as` — RULING A [S131]. This file held one
+// of FIVE byte-identical copies that each waited for `/dashboard`, which a
+// subcontractor no longer reaches. The destination belongs in one place.
 
 /** POST through the PAGE, so the session cookies travel exactly as they would. */
 async function recalc(page: Page, coId: string): Promise<number> {

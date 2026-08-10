@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { signInAs } from './sign-in-as';
 
 // M6M §4.11 acceptance criteria for the nine section screens, M-11 … M-19.
 //
@@ -239,16 +240,10 @@ const ROLE_LOGINS: Array<{ role: string; email: string }> = [
   // a subcontractor is an OUTSIDE PARTY, and #117 leaves net_delta unfloored.
   { role: 'subcontractor', email: 'josh+qa-sub@worthprop.com' },
 ];
-const PASSWORD = process.env.E2E_PASSWORD ?? 'FrameFocusTest!2026';
 
-async function signInAs(page: Page, email: string) {
-  await page.context().clearCookies();
-  await page.goto('/sign-in');
-  await page.locator('#email').fill(email);
-  await page.locator('#password').fill(PASSWORD);
-  await page.getByRole('button', { name: /sign in/i }).click();
-  await expect(page).toHaveURL(/\/dashboard/, { timeout: 30_000 });
-}
+// signInAs now comes from `./sign-in-as` — RULING A [S131]. This file held one
+// of FIVE byte-identical copies that each waited for `/dashboard`, which a
+// subcontractor no longer reaches. The destination belongs in one place.
 
 test.describe('A-33c · no money on M-13 under ANY role', () => {
   for (const { role, email } of ROLE_LOGINS) {

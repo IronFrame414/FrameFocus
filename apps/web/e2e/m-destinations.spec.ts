@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { signInAs } from './sign-in-as';
 
 // M6M §4.13 acceptance criteria for ALL SIX hamburger destinations.
 // M-25/27/28/29 landed in 13b1a8e; M-26 and M-30 complete the set.
@@ -526,12 +527,10 @@ test.describe('M-26 · Expenses', () => {
   test('A-45b2 · a subcontractor sees no expense rows, and gets the ordinary empty state', async ({
     page,
   }) => {
-    await page.context().clearCookies();
-    await page.goto('/sign-in');
-    await page.locator('#email').fill('josh+qa-sub@worthprop.com');
-    await page.locator('#password').fill(process.env.E2E_PASSWORD ?? 'FrameFocusTest!2026');
-    await page.getByRole('button', { name: /sign in/i }).click();
-    await expect(page).toHaveURL(/\/dashboard/, { timeout: 30_000 });
+    // RULING A [S131] — the FIFTH copy of the sign-in wait, inlined rather than
+    // in a helper, which is why a grep for the helper would have missed it. A
+    // subcontractor lands on /m/projects now; `signInAs` derives that.
+    await signInAs(page, 'josh+qa-sub@worthprop.com');
 
     await page.goto('/m/expenses');
 
