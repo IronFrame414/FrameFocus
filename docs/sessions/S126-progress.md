@@ -421,6 +421,73 @@ counting `notifications` rather than trusting the four chat tables. The fixture 
 
 ---
 
+### 11:40 UTC — PHASE 1: RULING SWEEP. Read-only. 24 chat rulings + the parent set.
+
+**Ground truth first:** branch `feat/chat`, HEAD **`acb4f94`**, tree clean, **0/0 vs origin**,
+CLI on **`nmyphyhmfttxkdoposvf` / framefocus-rebuild-test**. All four chat tables and
+`notifications` at **0**. Spec read from `origin/spec/chat-s124` @ `4b61b9d`.
+
+**Highest ND is 42**, checked rather than assumed (`grep -oE "ND-[0-9]+" | sort -n | tail`) — 32
+distinct ND references, the chat series running ND-19…ND-42.
+
+**Method used:** for each ruling, name the artifact that makes it true and ask what would happen
+if that artifact were deleted. *"The spec says so"* was not accepted as evidence.
+
+#### RECORDED BUT UNIMPLEMENTED — listed first
+
+| # | Ruling | What is missing | Where it goes |
+| --- | --- | --- | --- |
+| 1 | **ND-41** — notification expiry | `/api/cron/notification-expiry` **does not exist**. `ls app/api/cron/` returns six routes — `co-reminders`, `daily-log-missing`, `estimate-reminders`, `invoice-reminders`, `still-clocked-in`, `timesheets-ready` — and none is it. Nothing reads `notifications.expires_at`. | **Outside 4–6.** Carried gap; slice 0, still owed. |
+| 2 | **ND-42's registry half** | `email_types.mention` landed in the DB with slice 1, but the **TypeScript `EmailType` union** (`lib/services/email-service.ts:109`) was never extended. `logEmail({ email_type: 'mention' })` does not type-check today. Half the registry landed and the half that would fail a build did not. | **Slice 4.** Folded in. |
+| 3 | **ND-23's sub-thread form** | `mentionTitle()` produces `— subs` only on the `kind === 'sub'` branch, and **that branch has never executed**. The one assertion (`s126-chat-core.live.ts:282`) pins the CREW form: `'Casey Crew (Alvarez): ' + body`. A-C12 requires **both** forms. | **Slice 4.** Folded in. |
+| 4 | **ND-31** — push truncation | `truncateBody()` exists and **no test anywhere calls it**. The live title assertion uses a short body, so truncation is a no-op there: **deleting the function entirely would fail nothing.** | **Slice 4.** Unit test folded in. |
+| 5 | **ND-24 / A-C20** — the absence of enrolment | Chat genuinely does not touch `lib/offline/*` — grep over `lib/chat/`, `app/api/chat/`, `components/chat/` returns **zero** references (the only `queue` hit is a comment in `poll.ts:84`). But **nothing asserts the absence**, so a later build that "helpfully" enrols chat writes passes every criterion. A-C20 asserts non-enrolment and has no test. | **Slice 5** (mobile is where offline happens). |
+
+#### IMPLEMENTED — artifact named
+
+| Ruling | The artifact, and what its absence would cost |
+| --- | --- |
+| **ND-19 / ND-20** | `(t.kind = 'sub' OR get_my_role() IS DISTINCT FROM 'subcontractor')` inside `chat_threads_select_visible` and `chat_messages_select_visible`, read from `pg_policy`. Probed live: the sub passes `can_view_project` = `true` and sees `crew_msgs_visible` = **0**. Delete the clause and an assigned sub reads the crew thread. |
+| **ND-21** — invite cut | Implemented **by geometry, not by code**: zero references to any chat membership/invite concept anywhere. Assignment *is* membership. ⚠️ Nothing tests this and nothing can — there is no artifact to assert, only an absence with no natural guard. |
+| **ND-22** — no ingest | Zero `upload` / `storage.from` / `FormData` / `multipart` references in chat code. A-C18's *test* is slice 6. |
+| **ND-26** | Three properties, all three present: `DEFAULT_INTERVAL_MS = 12_000`; stop / hidden-document / listener-removal / idempotency / mid-flight-drop covered by **6 unit tests**; `messagesSince` is `.gt('created_at', since)`, not a refetch. |
+| **ND-33 / 34 / 38** | `ChatPanel` mounted once in `dashboard-shell.tsx`; `chat_switcher_threads()` RPC; `PAGE_SIZE = { tab: 50, panel: 25 }`. Slice 3's 20 browser tests. |
+| **ND-37** | Verified by listing `app/m/p/[projectId]/` — **no `chat` directory**. Plus a unit assertion that the route is absent from the app tree. |
+| **ND-39** | `chat_message_mentions` with `UNIQUE (message_id, mentioned_profile_id)`. |
+| **ND-40** | `links.ts` returns `/m/p/{id}?chat=1`; two tests pin it, one asserting the forbidden route's absence. |
+| **ND-11** | The `routeExists` sweep over the real app tree, with `PENDING_ROUTES` now empty. |
+| **ND-2 / ND-3** | `mentioned_profile_id` is a profile id; owner-by-role probed live (unassigned Owner posts in both threads). |
+| **R6, clause 1** | `expect(plainRows).toBe(0)` — a plain message notifies nobody. |
+| **R7** | `render` is a per-recipient function in `notifyMentions`. |
+
+#### NOT YET DUE
+
+ND-25, ND-30, ND-42 (slice 4) · ND-36/37's bar work (slice 5) · ND-22/ND-28 photos, A-C18/19 (slice 6).
+
+#### UNVERIFIABLE
+
+- **A-C23's second half** — "running `/api/cron/notification-expiry` deletes zero chat messages"
+  cannot be settled because the route does not exist. *Would settle it:* building slice 0.
+- **ND-27** — client messaging is out of scope by ruling; there is no artifact to inspect, and
+  its correctness is the absence of a feature nobody has started.
+
+#### Sequence-blind tests — the class that produced slice 3's caret defect
+
+Reported because these pass **without exercising the sequence a human performs**:
+
+1. **A-C39** — the poll controller is unit-tested thoroughly, but **the component wiring is not**.
+   No browser test closes the panel and observes that polling stopped. The controller is proven;
+   the thing that calls it is not.
+2. **ND-23 / A-C12** — the title is asserted from a live fixture, never from a message sent
+   through the composer on a sub thread.
+3. **ND-38's load-more** — asserted only in the negative (the control is absent on a short page).
+   No thread on rebuild-test exceeds one page, so a second page has never been returned.
+4. **ND-24** — no test induces a send failure, so the unsent-bubble path has never rendered.
+
+**Nothing found makes a slice unbuildable.** Continuing to Phase 2.
+
+---
+
 ## RESUME HERE
 
 **Single next action:** start **slice 4** — the sub thread, both surfaces. §5.2's divergence, the
