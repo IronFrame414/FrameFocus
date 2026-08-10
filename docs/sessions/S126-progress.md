@@ -298,37 +298,192 @@ closed ruling and a silently missing feature is a comment at the bottom of
 
 ---
 
+### 10:31 UTC — SLICE 3 WRITTEN. Type-check 5/5, unit 633/633. Browser not yet run.
+
+**Phase 0 re-established before reading anything:** `pwd` `/workspaces/FrameFocus-work`, branch
+`feat/chat`, HEAD **`4ddc129`**, tree clean, **0/0 vs `origin/feat/chat`**. CLI linked to
+**`nmyphyhmfttxkdoposvf` / framefocus-rebuild-test**. All four chat tables **0 rows**.
+`spec/chat-s124` is now on origin at `4b61b9d` — §7 and §12 were read from `origin/`, not from
+this branch and not from memory.
+
+**Built:** the global panel (ND-33), the switcher, the shared thread view, the composer with the
+`@` affordance, the mention picker, the project Chat tab, and the four API routes the panel talks
+to. `lib/chat/` was consumed, not rewritten — the two additions to it are named below.
+
+**Four things found by building that were not in the brief:**
+
+1. **`chatPollSchema` would have rejected every real timestamp.** Slice 2 wrote
+   `since: z.string().datetime()`. Plain `.datetime()` accepts only a `Z` suffix; PostgREST
+   returns `2026-07-11T22:13:07.184263+00:00`. **Measured, not assumed** — parsed a real
+   `projects.created_at` through both forms: plain `false`, `{ offset: true }` `true`. The poll
+   would have 400'd on its second request forever. Invisible until now because slice 2 wrote the
+   schema and built no route that used it — the "written but unverified" category, caught by
+   wiring it.
+2. **The switcher cannot bootstrap.** `chat_switcher_threads()` starts `FROM chat_threads`, and
+   threads are created lazily, so a company that has never used chat gets **zero rows** — the
+   panel opens onto an empty list with no way to start a conversation anywhere. The route now
+   merges in active projects with no thread row yet. **Membership is not re-derived**, which
+   §7.1a-i explicitly forbids: it is a plain `projects` select under the caller's own RLS, and
+   `projects_select_visible` was read live and is byte-for-byte `can_view_project()`'s body.
+3. **A-C29's tripwire could not be cleared as written.** Building the desktop route made
+   `expect(routeExists(resolved)).toBe(false)` fail — the reminder firing as designed. But
+   simply emptying `PENDING_ROUTES` broke the *mobile* arm, because `links.ts` still resolved
+   mobile chat to `/m/p/{id}/chat` — **a route ND-37 says must never exist and A-C42 asserts the
+   absence of**. Neither leaving the key nor removing it could pass. Fixed at the cause:
+   `links.ts` now returns ND-40's ruled `/m/p/{id}?chat=1`. `mention-notify.ts` has asserted that
+   shape in a comment since slice 2 while this file produced the other one — the comment was
+   right and the code was not.
+4. **A second test pinned the old mobile path** (`s123-push-workers.test.ts`, A-N19). **Which was
+   wrong was established before either was touched:** that file is S123, ND-40 is S125, and what
+   A-N19 asserts — one key, two *different* destinations — is untouched by the literal. The test
+   was stale; the literal was updated and the property kept.
+
+**Two additions to `lib/chat/`, both additive, neither a second implementation:**
+
+- `insertTokenFor()` in `mentions.ts` — the inverse of `parseMentions`, in the same file so the
+  two cannot drift. The picker must not insert `@chris` where two Chrises are postable: the
+  parser resolves ambiguity to **nobody** on purpose, so that message would notify neither of
+  them while the picker had just confirmed the choice. Returns `null` when no unambiguous token
+  exists, and the composer says so rather than inserting something inert.
+- `messagesBefore()` in `messages.ts` — §7.2's load-more, which had no lib function. Without it
+  the first thread past one page silently loses its history.
+
+**The clock, checked deliberately because unread is what this slice renders.** Every `since` is
+a `created_at` Postgres stamped and the client echoes back; `markThreadRead` stays the RPC. A
+unit test asserts `new Date()` and `Date.now()` appear nowhere in `use-chat-thread.ts`.
+
+**Ruled and logged — the sub thread in the switcher.** Slice 3 filters the switcher to
+`kind: 'crew'`, in one named constant the slice-4 build deletes. Reasoning: (a) it hides nothing
+that exists, because threads are created lazily and nothing in the app asks for a sub thread
+before slice 4; (b) rendering it dead is refused on the spec's own precedent — §7.1e will not
+have "a disabled second segment" in the analogous case; (c) letting it open the crew view would
+put a composer in front of roles the policy refuses, which is M6M **D-54 inverted** and worse
+than either alternative.
+
+- **Exit codes:** `npx turbo run type-check --force` → **0**, 5/5 tasks, 0 cached, 0 `error TS`.
+  `npx vitest run` from `apps/web/` → **0**, **633 passed (633)**, 44 files.
+- **Next:** Playwright, in four chunks.
+
+---
+
+### 11:20 UTC — SLICE 3 COMPLETE AND SEEN WORKING. Playwright 20/20 across four chunks.
+
+**Four chunks, each run on its own**, after `scripts/e2e-preflight.sh` (exit **0**, one server,
+bound 3000 — no silent move to 3001):
+
+| Chunk | File | Result |
+| --- | --- | --- |
+| 1 | `desktop-chat-panel.spec.ts` | **6 passed**, exit `0` |
+| 2 | `desktop-chat-switcher.spec.ts` | **5 passed**, exit `0` |
+| 3 | `desktop-chat-send.spec.ts` | **3 passed**, exit `0` |
+| 4 | `desktop-chat-mentions.spec.ts` | **6 passed**, exit `0` |
+
+Chunks 1–3 were re-run after the fixes below and stayed green.
+
+**SEEN, not inferred.** Screenshots were taken of the panel over `/dashboard/contacts` and read.
+That is how two of the three defects below were found — every assertion was green at the time.
+
+- The panel over the Contacts table, the table still behind it, the switcher listing QA A and
+  `test` with unread badges and the threadless projects below them by name.
+- The picker showing four people with names and roles — **no subcontractor, no client** — and the
+  `Mention` button sitting beside `Send` at the same size.
+- A sent message rendering right-aligned as **You** with a timestamp, composer cleared.
+
+**THREE DEFECTS, ALL FOUND BY RUNNING IT.**
+
+1. **The picker proposed a token the parser cannot read back.** `insertTokenFor` returned the
+   first *unique* token, and `MENTION_RE` stops at whitespace — so a spaced surname produced
+   `admin a`: genuinely unique, read back as `admin`, matching nobody. Found against the real
+   roster (`QA Admin A`, `QA Foreman A`), not by reading the code. Fixed by refusing any token
+   the parser cannot re-read; for those two the honest answer is now `null` and the composer says
+   so.
+2. **The first character typed after picking a name landed at index 0.** The caret was restored
+   in a `requestAnimationFrame`, which fires after pending input is processed. Typing straight
+   after choosing Casey produced `con it — @caseyan you count what is left?`. **Every mention
+   assertion passed**, because none of them typed afterwards — it was found in a screenshot.
+   Fixed with `useLayoutEffect`; a regression test now types after inserting.
+3. **"Load older messages" offered itself on a thread with one message.** Now shown only when the
+   first page came back full, with the page size taken from the server's response rather than a
+   component literal.
+
+**One test failed and the TEST was what was wrong** — chunk 2 looked for the launcher badge after
+opening the panel, and the badge deliberately shows only while closed. Established before
+changing either side: the per-project counts either side of it were already correct.
+
+**The database is exactly as it was found.** `chat_threads`, `chat_messages`,
+`chat_message_mentions`, `chat_reads` and `notifications` all at **0**. The first teardown left a
+`notifications` row behind — a mention writes one and it is not in a `chat_*` table — caught by
+counting `notifications` rather than trusting the four chat tables. The fixture now removes it.
+
+- **Exit codes:** `npx turbo run type-check --force` → **0**, 5/5, 0 cached, 0 `error TS`.
+  `npx vitest run` from `apps/web/` → **0**, **635 passed (635)**, 44 files. Playwright as tabled
+  above.
+
+---
+
 ## RESUME HERE
 
-**Single next action:** start **slice 3** — the desktop crew thread. `lib/chat/` is complete and
-verified, so this is UI only: the global panel (ND-33), the switcher wired to
-`switcherThreads()`, the composer with a **prominent** `@` affordance (§5.1), and the mention
-picker over the **postable** set. Crew thread only — sub-thread UI is slice 4.
+**Single next action:** start **slice 4** — the sub thread, both surfaces. §5.2's divergence, the
+crew-reading banner (§7.4), and **ND-30's mention email**, which is still a comment seam with no
+stub and is inherited explicitly from the CARRIED GAP entry above.
 
-Page size is ruled: **50 in the tab, 25 in a panel** (ND-38, `PAGE_SIZE` in
-`lib/chat/messages.ts`). Opening a thread calls `markThreadRead()`.
+**Slice 4 deletes one thing in slice 3's code and nothing else:** `SLICE_3_KINDS` and the
+`.filter()` beside it in `app/api/chat/threads/route.ts`. That is the whole of the crew-only
+scoping.
 
-**Playwright must run in four chunks** — a single run does not survive this Codespace.
+**Before writing sub-thread UI, read A-C2.** It fails on a build that renders no second segment
+at all, so the "one thread → no segmented control" half and the "two threads → two segments" half
+must ship together.
 
 ---
 
 ## Where things stand
 
-**VERIFIED — slice 1 and slice 2, both complete.**
+**VERIFIED — slices 1, 2 and 3.**
 
 - Slice 1: migration applied, seven RLS probes as `authenticated` with output pasted.
 - Slice 2: 17 live tests through real sessions, 25 unit tests, 8 route tests through HTTP.
-  The route has been called; the poll has been seen starting, stopping, and refusing to run
-  while hidden.
+- Slice 3: **20 Playwright tests across four chunks, all run and all green**, plus 12 new unit
+  tests. The panel has been opened, the switcher ordered, a message sent and rendered, the `@`
+  picker opened over the real postable set, and unread cleared on open — **observed on screen**,
+  not inferred from a passing assertion.
 
-**WRITTEN BUT NOT VERIFIED:** nothing. Everything committed in slices 1–2 has been executed.
+**WRITTEN BUT NOT VERIFIED:** two things, both named rather than implied.
 
-**NOT STARTED:** slice 3 (desktop UI), slice 4 (sub-thread UI + the ND-30 email), slices 5–6.
+- **`messagesBefore()` / "load older messages"** — the query and the control exist and type-check,
+  but **no thread on rebuild-test has more than one page**, so the load-more path has never
+  returned a second page. Its *absence* is asserted (the control does not render on a short
+  page); its *success* is not.
+- **ND-24's failure state** — a failed send renders as a distinct unsent bubble with a retry, and
+  that path has never been exercised, because nothing here takes the network away. **A-C20/A-C21
+  are offline criteria and remain unmet**; the structure is in place, the behaviour is unproven.
+
+**NOT STARTED:** slice 4 (sub-thread UI + the ND-30 email), slices 5–6, and slice 0 (notification
+expiry), which remains owed and is unaffected by this run.
 
 ## BLOCKED — NEEDS JOSH
 
-**Nothing is blocked.** No ruling was required and none was guessed. Two judgement calls are
-logged with their reasoning: the switcher as an RPC (§7.1a-i left the shape open) and the `m-`
-prefix on the route spec (the config's authenticated selector).
+**Nothing is blocked, and nothing was guessed.** One decision the brief asked to be made and
+logged, and one thing worth a ruling later:
 
-**Rebuild-test:** all four chat tables and `notifications` at **0 rows**. Port 3000 free.
+**1. A sub thread appearing in the switcher before slice 4 — DECIDED, not escalated.** Slice 3
+filters the switcher to `kind: 'crew'`. Reasoning, in the order it was weighed:
+
+- It **hides nothing that exists**. Threads are created lazily (§4.1), slice 3 only ever asks for
+  `crew`, and nothing else in the app asks at all — so no sub thread can come into being before
+  slice 4 creates one. The switcher cannot lie about a row that does not exist.
+- **Rendering it dead was refused on the spec's own precedent** — §7.1e will not have "a disabled
+  second segment" in the analogous case.
+- **Letting it open the crew view was the worst option**: a composer in front of roles the policy
+  refuses, which is M6M **D-54 inverted**, and every send would 403.
+
+_Residual risk, stated rather than buried:_ if a sub thread were ever created out of band, a user
+would not see it in the panel until slice 4. It would still be reachable through the project Chat
+tab.
+
+**2. The Chat tab's position in the strip — appended, and that is not a ruling.** §7.1b names the
+tab and not its place; it sits last, after Team. Same reasoning the Notifications sidebar item
+carries. **If Josh wants it elsewhere in the strip, that is a one-line move** and worth deciding
+alongside the deferred FFNav reindex rather than on its own.
+
+**Rebuild-test:** all four chat tables and `notifications` at **0 rows**. Branch pushed.
