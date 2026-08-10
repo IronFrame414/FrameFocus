@@ -60,12 +60,14 @@
 | ND-28 | **Photo reference target**             | **`files(id)`, `ON DELETE CASCADE`.** [S124, Josh] There is **no `photos` table** — photos are `files` rows with `category='photos'`. A deleted photo vanishes from the thread; the message keeps its text. **An FK cannot enforce `category`**, so the category check is service-layer — §4.3. `RESTRICT` rejected: it would let chat block an owner from deleting a file, which nothing else in the app does. |
 | ND-29 | **Sub thread — DEFERRED**              | **OUT of v1.** [S124, Josh] 35 subcontractor member rows exist; **one** has a profile, and it is a test account on two fixture projects. This resolves when real subs get logins, not through code. **Consequence:** `chat_messages` needs no per-role branch in v1 — `can_view_project()` and nothing else. §5.2, §5.3. |
 | ND-30 | **Mention email — DEFERRED**           | **v2. In-app + push only.** [S124, Josh] Three pieces are missing, all found by live read: the `email_types` migration the `email_logs` FK requires, a template, and a send call — because **`notify()` sends no email** and every consumer sends its own. §5.6a. |
-| ND-31 | **Push truncation**                    | **CHAT ONLY, inside the render function.** [S124, Josh] The shared push path stays untouched, so **no existing notification changes behaviour**. Length proposed in §6.3. |
+| ND-31 | **Push truncation**                    | **CHAT ONLY, inside the render function. 140 characters of body.** [S124, Josh — length confirmed S124b] The shared push path stays untouched, so **no existing notification changes behaviour**. §6.3. |
 | ND-32 | **D-4 exception, NAMED**               | **Messages render as bubbles, not card geometry.** [S124, Josh] D-4 exists to stop lists being reinvented casually; a conversation is genuinely a different thing. **Naming the exception keeps D-4 intact rather than eroding it silently.** §7.2. |
 | ND-33 | **Desktop is TWO surfaces**            | **A global floating panel AND a project Chat tab. Both, not either.** [S124, Josh] The panel is the **primary** surface and is **global** — it renders on Contacts, Estimates, Settings, everywhere — with a project switcher inside, so users move between threads without navigating away. The tab is for reading and auditing a thread properly when already inside a project. §7.1. |
-| ND-34 | **Switcher project list**              | **OPEN.** Not ruled. `can_view_project()` is the obvious source, but for an Owner that is every project in the company. §7.1b states the options and their costs. |
+| ND-34 | **Switcher project list**              | **ACTIVE projects, ordered by MOST RECENT MESSAGE.** [S124b, Josh] That is what a switcher is for; archived jobs do not need to be one tap away. A thread on a project archived later is reached through the **tab**, not the switcher — the messages do not vanish. §7.1a-i. |
 | ND-35 | **Chat tab gating**                    | **UNGATED.** [S124, Josh] RLS already decides who reads what via `can_view_project()`. A role list on the tab would be a second answer to a question already answered — the pattern **§4.11.10a** warns against. §7.1c. |
-| ND-36 | **Mobile entry point**                 | **Panel SHAPE is ruled; the ENTRY POINT is OPEN.** [S124, Josh] Not a full screen. But a floating panel on a 402px canvas is tight and a bottom sheet may be the honest form — and the app bar holds the bell (ND-13) while the tab bar is full at five slots (D-3). §7.1d states the candidates and their costs. **Do not invent one.** |
+| ND-36 | **Mobile entry point**                 | **CHAT TAKES A BOTTOM-BAR SLOT. DAILY LOGS MOVES TO THE HAMBURGER.** [S124b, Josh] The bar stays at **five** and **D-3's "no destination appears in both" holds — Logs leaves as Chat arrives.** M6M **D-3 is amended; A-3b, A-41 and A-42 must be REWRITTEN, not satisfied.** The cost is stated rather than buried: §7.1d. |
+| ND-37 | **The Chat slot opens an OVERLAY**     | **Not a screen. It does not navigate.** [S124b, Josh] Tapping Chat opens a panel over the current screen, matching the desktop shape. **This breaks M6M A-1c** — "the active tab reflects the current screen" — because an overlay has no screen to reflect. A-1c is **rewritten**, not satisfied: the Chat slot is lit **while the overlay is open**. §7.1d-ii. |
+| ND-38 | **History page size**                  | **50 in the tab, 25 in a panel**, same number again per load-more. [S124b, CC's call, Josh's delegation] Sized so the first scroll never lands on a loader on the surface it is for. §7.2a. |
 
 ---
 
@@ -646,7 +648,7 @@ title. Truncating there and not in `push.ts` means **no existing notification ty
 behaviour** — incidents, signed COs, timesheets and the rest keep sending whole bodies, which
 is a property worth keeping rather than a limitation.
 
-**PROPOSED length: 140 characters of BODY**, cut at the last word boundary at or before 140 and
+**RULED [S124b, Josh]: 140 characters of BODY**, cut at the last word boundary at or before 140 and
 suffixed with `…`. The prefix — `{author} ({project}): ` — is **never** truncated (ND-23's
 thread token is the part that tells Josh whether to tap at all, so it cannot be what gets cut).
 
@@ -654,8 +656,8 @@ thread token is the part that tells Josh whether to tap at all, so it cannot be 
 Push payload has roughly 4 KB to play with, which no realistic chat message approaches, while a
 collapsed OS notification shows on the order of two to four lines. 140 keeps the whole of a
 real message in almost every case — **3a-1's actual text is 62 characters** and passes through
-untouched — and caps only the genuine outlier. It is a display budget, and it is a **proposal,
-not a ruling**: see §13 Q1.
+untouched — and caps only the genuine outlier. It is a display budget, and the reasoning — that the constraint
+is display rather than payload — is what the ruling confirmed it on.
 
 ### 6.4 The financial floor
 
@@ -699,26 +701,34 @@ _A spec without a UI section is incomplete (CLAUDE.md, S86). This is that sectio
 must mount once, above the page, on every route. A per-page mount would be a second
 implementation of the same surface — #129's shape.
 
-#### 7.1a-i The switcher's project list — OPEN (ND-34)
+#### 7.1a-i The switcher's project list — RULED (ND-34) [S124b]
 
-**What it should contain is flagged, not decided.**
+**ACTIVE projects, ordered by MOST RECENT MESSAGE.** _That is what a switcher is for; archived
+jobs do not need to be one tap away._
 
-`can_view_project()` is the obvious source and is almost certainly right for PM, foreman and
-crew, where it resolves to the handful of projects they are assigned to. **The problem is the
-Owner and Admin**, for whom it resolves by *role* to **every project in the company** — 9 live
-projects today, and a real contractor's archive will not stay at 9.
+- **Filter:** `projects.status = 'active'`, intersected with `can_view_project()`.
+- **Order:** most recent message in that project's thread, newest first. A project with no
+  messages sorts last — it has nothing to return to.
 
-Options and their costs, for §13 Q3:
+**⚠️ THE LIST IS A PRESENTATION OF `can_view_project()`, NEVER A DIFFERENT SET.** The status
+filter and the ordering are applied *on top of* the helper. A switcher that assembled its own
+membership would be a second definition of who can read a thread, and the two would drift.
 
-| Option | Cost |
-| --- | --- |
-| Every project `can_view_project()` allows | Correct and simple; unusable for an Owner once the archive grows. |
-| Active projects only (`projects.status = 'active'`) | Matches how the switcher will actually be used. Hides a thread on a completed job, which Q6's record argument says should stay reachable. |
-| Recency-ordered, with search | Best behaviour, most build. Recency needs a source — last message in that thread, or the viewer's own `chat_reads.last_read_at`. |
-| Projects with unread first | Answers "where am I needed" directly, but an empty-unread state then looks like an empty switcher. |
+**What happens to a thread when its project is archived — asked and answered, because the
+messages do not vanish (R2).** The project leaves the **switcher**; the thread stays exactly
+where it was:
 
-**Whatever is chosen, the list must not be a second definition of project membership** — it is a
-*presentation* of `can_view_project()`, filtered or ordered, never a different set.
+- **The tab is how you reach it.** `/dashboard/projects/{id}/chat` still resolves, still shows
+  the full history, still enforces the same RLS. Q6's _"where does the record live six months
+  later"_ is answered by the tab — which is precisely what §7.1b said the tab was for.
+- **Nothing is deleted and nothing is hidden.** R2 makes the log permanent, and archiving a
+  project is not a retention decision.
+- **A mention notification on an archived project still links correctly**, because the resolver
+  keys on `projectId` and never consults status.
+
+**Consequence worth naming:** the switcher is a *working set*, not an index. Finding a
+conversation on a finished job goes through the project, not the panel — and the spec would
+rather say that than quietly grow the switcher into a search surface nobody ruled.
 
 #### 7.1b (b) The project Chat tab — for reading and auditing
 
@@ -736,31 +746,86 @@ Options and their costs, for §13 Q3:
 answered** — the pattern **§4.11.10a** warns against — and the two answers would then have to
 be kept in step forever. Several existing tabs do carry `roles`; chat deliberately does not.
 
-#### 7.1d Mobile — the panel SHAPE is ruled, the ENTRY POINT is OPEN (ND-36)
+#### 7.1d Mobile — CHAT TAKES A BOTTOM-BAR SLOT (ND-36) [RULED S124b]
 
 **Ruled:** mobile keeps the **panel shape**, not a full screen. _Superseded, quoted not
 rewritten: "**Mobile:** a chat entry in the project screen → `/m/p/{id}/chat`. **A real
 screen**, per M6M **D-28** (pages, not sheets)."_
 
-**Not ruled, and deliberately not invented here:** what opens it. The geometry is genuinely
-tight and two existing rulings constrain it:
+**And the entry point is ruled: Chat takes a bottom-bar slot, and DAILY LOGS MOVES TO THE
+HAMBURGER.**
 
-- **The app bar's right slot is taken** — the notifications bell (ND-13 as amended), 44px, and
-  A-40 as rewritten asserts *no right-hand element other than the bell*.
-- **The tab bar is full** — five slots plus the centre camera, and **D-3 stands** (ND-14 closed
-  the six-slot question on the arithmetic: a sixth slot cuts each envelope 77.0px → 61.6px).
+```
+BEFORE (D-3)   Projects · Timeclock · [camera] · Logs · Field
+AFTER          Projects · Timeclock · [camera] · Chat · Field
+```
 
-**Candidates, with their costs — §13 Q2 asks Josh to pick:**
+**The bar stays at FIVE**, so ND-14's arithmetic is untouched — no envelope shrinks, the camera
+keeps a true centre, and the six-slot question stays closed. **D-3's "no destination appears in
+both" also holds**, because Logs *leaves* the bar as Chat *arrives*; the rule is preserved by
+the swap rather than excepted.
 
-| Option | What it costs |
-| --- | --- |
-| **A floating action button** above the tab bar, bottom-right | Overlaps content on every `/m` screen and competes with the 66px camera, which already breaks the bar's top edge. |
-| **A bottom sheet** raised from a control inside the project screen | Honest to the 402px canvas and to M6M's existing sheet pattern, but chat then exists only *inside* a project — it loses the global reach that makes 7.1a the primary desktop surface. |
-| **An app-bar slot on project routes only** | The left slot holds the back chevron on `/m/p/*` (A-40b) and the right holds the bell. There is no third slot without amending A-40 again, one session after it was rewritten. |
-| **A row in the existing sheet** (§3.3's tile grid) | Cheapest and breaks nothing, but buries the primary surface two taps down — the opposite of what 7.1a is for. |
+##### 7.1d-i What this costs, stated plainly rather than buried
 
-**A floating panel on 402px is tight and a bottom sheet may be the honest form** — that is
-Josh's call, not this document's.
+**"Log the day" is the end-of-shift action, and several screens carry it as their primary amber
+button.** Those buttons route to **`/m/logs/new`** and **keep working exactly as they do
+today** — the capture path is untouched, and the action that matters most at the end of a shift
+is not behind one more tap.
+
+**What moves is the LIST at `/m/logs`.** Reviewing what was logged now costs **an extra tap**:
+hamburger → Logs, instead of a bar slot. That is the whole of the regression and it is a
+review-path cost, not a capture-path one.
+
+##### 7.1d-ii Four M6M criteria are BROKEN by this and must be REWRITTEN, not satisfied
+
+**The sheet goes from six tiles to seven.**
+
+- **A-3b** — asserts the sheet contains **exactly** the six tiles *named*: Schedule, Expenses,
+  Subs & Vendors, Team, Contacts, Settings. It is a named list, so a seventh tile fails it by
+  design. _It was already rewritten once, at S100/D-38, when the set went from seven to six._
+  **Rewrite to seven, naming Logs.**
+- **A-41** — walks `/m/schedule`, `/m/expenses`, `/m/subs`, `/m/team`, `/m/contacts`,
+  `/m/settings` and asserts exactly one tile carries the blue border and label. **Add
+  `/m/logs`** to the walk. The criterion's own note says walking all of them is deliberate
+  because "a build can get the highlight right for one tile and wrong for the rest".
+- **A-42** — "On **all six routes** the tab bar renders and **no tab** carries the active
+  state." **Seven routes now**, and the assertion still holds for `/m/logs` because the Logs
+  slot no longer exists to light. **CC found this one; it is not in the ruling's list and it
+  would have failed silently as an off-by-one.**
+- **A-1c** — "the active tab reflects the current screen on every `/m/**` route." **The Chat
+  slot has no screen to reflect** (ND-37). See below.
+
+**And one M6M ruling is inherited rather than broken:** **D-39** gives the hamburger
+destinations the **hamburger**, not a back chevron, because A-3c can only be observed by
+opening the sheet while standing on one of them. `/m/logs` joins that set and **must keep the
+hamburger** — giving it a chevron would strand A-3c for the third time.
+
+##### 7.1d-iii A-1c rewritten (ND-37) — the Chat slot opens an overlay
+
+**Tapping Chat opens a panel over the current screen. It does not navigate**, matching the
+desktop shape (7.1a).
+
+_A-1c as written, quoted not rewritten: "The active tab reflects the current screen on every
+`/m/**` route — arriving at `/m/p/{id}` by any path leaves Projects active."_ That sentence
+assumes every slot owns a route. **The Chat slot owns none.**
+
+**Rewrite:** the four route-owning slots keep A-1c unchanged. **The Chat slot's active state
+means the overlay is open** — lit while it is, unlit the moment it closes, and **never lit by
+the route underneath**. A build that lights Chat because the user happens to be on a project
+misstates where they are, which is the same defect A-42 exists to prevent one level up.
+
+**A-1 and A-1b, checked as instructed:**
+
+- **A-1** — "the tab bar renders on every `/m/**` route except M-9 and M-10, and does not
+  scroll out of view." **Unaffected in principle, but it constrains the overlay's geometry:**
+  the panel **must not unmount the tab bar**, and the Chat slot must stay **reachable while the
+  overlay is open** — it is how the overlay is closed. A panel that covers the bar fails A-1
+  and traps the user in one move. **This is a design constraint the ruling implies and the
+  spec states.**
+- **A-1b** — "on M-9 and M-10 the tab bar is replaced by that screen's own action row." **Not
+  affected.** There is no tab bar on the photo viewer or the markup editor, so there is no Chat
+  slot there and chat is simply unreachable from those two screens — the same as every other
+  destination, and not a new exception.
 
 #### 7.1e Thread selection within a surface
 
@@ -797,6 +862,23 @@ Josh's call, not this document's.
 - Opening a thread writes `chat_reads.last_read_at` for that thread.
 - **No infinite history load in v1** — a page of recent messages with load-more. R2 makes the
   log permanent and therefore eventually large.
+
+##### 7.2a Page size — RULED (ND-38) [S124b]
+
+**50 in the tab. 25 in a panel.** The same number again per load-more.
+
+**Why two numbers, and why these.** The page size has one job: **the first scroll must not land
+on a loader.** That is a function of how much the surface shows, and the two surfaces show very
+different amounts — a full-height tab holds roughly 15–20 messages, a panel corner perhaps
+8–10. Both numbers are therefore about **two and a half screenfuls**, which absorbs the first
+scroll and leaves the loader for someone genuinely reading back.
+
+**The mobile panel uses the panel number (25), not a third one.** It is the same component and
+a smaller canvas; inventing a mobile-specific size would be a third constant to keep in step
+for no observable gain.
+
+Chat messages are small rows, so neither number is a payload concern — this is a scroll-feel
+decision, and it is cheap to revisit once there is a thread long enough to judge it on.
 
 ### 7.3 Composer
 
@@ -889,7 +971,22 @@ criterion is A-C5b below.**
 - **A-C27** The `Chat` tab carries **no** `roles` entry in `TABS`. `[unit]` _(ND-35 — asserting the absence, because adding one would look like a safety improvement.)_
 - **A-C28** The panel and the tab render messages through the **same** `lib/` component. `[unit]` _(A-C16's rule applied to the two desktop surfaces; #129 is what two implementations cost.)_
 
-**The tripwire (S124 correction)**
+**Mobile navigation (ND-36, ND-37) — all four rewrite an M6M criterion rather than satisfying it**
+
+- **A-C30** The bottom bar renders **five** slots: Projects · Timeclock · [camera] · Chat · Field. **No Logs slot.** `[Playwright]` _(ND-36. Asserting the absence matters as much as the presence — a build that adds Chat without removing Logs is six slots and reopens ND-14's arithmetic.)_
+- **A-C31** The hamburger sheet contains **exactly seven** tiles, Logs among them. `[Playwright]` _(**M6M A-3b rewritten** — it names six by name, so a seventh fails it by design. A-3b was already rewritten once, at S100/D-38.)_
+- **A-C32** Opening the sheet on `/m/logs` lights the **Logs** tile and no other. `[Playwright]` _(**M6M A-41 extended** to a seventh route; and **M6M D-39** — `/m/logs` keeps the hamburger, not a back chevron, or A-3c is stranded again.)_
+- **A-C33** On `/m/logs` the tab bar renders and **no** slot carries the active state. `[Playwright]` _(**M6M A-42 rewritten** from six routes to seven. Found by CC, not in the ruling — it would have failed as a silent off-by-one.)_
+- **A-C34** Tapping Chat opens the overlay and **does not change the route**; the Chat slot is lit **only while the overlay is open**, and never by the route underneath. `[Playwright]` _(**M6M A-1c rewritten**, ND-37. A slot that opens an overlay has no screen to reflect.)_
+- **A-C35** With the overlay open, the tab bar is **still in the DOM and the Chat slot is still tappable**. `[Playwright]` _(M6M **A-1** constrains the overlay's geometry: a panel that covers the bar both fails A-1 and traps the user, since the slot is how the overlay closes.)_
+- **A-C36** The primary "Log the day" buttons still route to `/m/logs/new` and are unchanged. `[Playwright]` _(§7.1d-i — the capture path must not pay for the nav swap. Only the review path moves.)_
+
+**Switcher (ND-34)**
+
+- **A-C37** The switcher lists only `status='active'` projects, ordered by most recent message. `[live]`
+- **A-C38** Archiving a project removes it from the switcher and **leaves its thread reachable through the tab**, with history intact. `[live]` _(R2. The messages do not vanish, and this is the criterion that says so.)_
+
+**The tripwire (S124 correction)
 
 - **A-C29** `PENDING_ROUTES` in `s123-incident-notify.test.ts` no longer contains `'chat'`, and the whole suite is green. `[unit]` _(The guard is designed to fail when chat ships. **The commit creating the chat routes must clear it in that same commit**, or it ships red.)_
 
@@ -939,14 +1036,19 @@ slice.
 - ~~**§S2**~~ — `project_assignments → company_members → profiles`. One sub has a profile.
 - ~~**§S3**~~ — one file, `lib/notify/links.ts`. The workers are insulated.
 
-**Still open — see §13:**
+**Closed at S124b — all four of §13's questions are ruled:**
 
-- **Push truncation length** (§6.3) — 140 proposed, not ruled. §13 Q1.
-- **Mobile entry point** (ND-36) — shape ruled, entry point open. §13 Q2.
-- **Switcher project list** (ND-34) — §13 Q3.
-- **History pagination size** (§7.2) — R2 makes the log permanent; v1 needs a page size.
-  §13 Q4.
-- **ND-26 transport** — unchanged, and still not blocking slices 1–3.
+- ~~Push truncation length~~ — **140**, ND-31. §6.3.
+- ~~Mobile entry point~~ — **a bottom-bar slot; Logs moves to the hamburger**, ND-36. §7.1d.
+- ~~Switcher project list~~ — **active, by most recent message**, ND-34. §7.1a-i.
+- ~~History page size~~ — **50 tab / 25 panel**, ND-38. §7.2a.
+
+**Still open:**
+
+- **ND-26 transport** — Realtime vs poll. Unchanged, and **still not blocking slices 1–3**.
+- **ND-29's revisit condition** — the sub thread returns when real subcontractors have logins.
+  Not a decision anyone makes; a fact that changes. Today: one sub with a profile, and it is a
+  test account.
 
 ---
 
@@ -1006,7 +1108,10 @@ and Josh's mitigation is enforcement. If adoption fails, it will fail there, and
    Retained as the numbering so later slices are not renumbered, and because §5.2/§5.3 keep the
    full specification it will build from. Revisit when real subcontractors have logins — today
    there is exactly one, and it is a test account.
-5. **Mobile chat** — panel shape (ND-36). **Blocked on §13 Q2: the entry point.** **Stop.**
+5. **Mobile chat** — panel shape, entered from the **bottom-bar Chat slot** (ND-36, ND-37).
+   **Unblocked at S124b.** This slice also carries the M6M edits in §14 — the bar swap, the
+   seventh tile, and the four rewritten criteria — because the bar changes here or nowhere.
+   **Stop.**
 6. **Photo reference** (ND-22, ND-28) — includes the picker, which is **new work**; no
    reusable gallery picker exists. **Stop.**
 7. **Transport** — requires ND-26 ruled first.
@@ -1019,27 +1124,42 @@ in advance and not by this document.
 
 ---
 
-## §13 — Open questions after the S124 edit pass
+## §13 — Open questions: CLOSED at S124b
 
-Four. Everything else the §S blocks asked has been answered by live read or ruled.
+**All four are ruled.** Recorded with their answers rather than deleted, so the reasoning
+survives the way the parent's superseded text does.
 
-1. **Push truncation length (§6.3, ND-31).** Chat truncates in its own render function; the
-   shared path is untouched and no existing notification changes. **140 characters of body** is
-   proposed — a display budget rather than a payload one, since 4 KB is not the constraint and
-   two-to-four collapsed lines is. 3a-1's real message is 62 characters and passes through
-   whole. **Confirm 140, or name another number.**
+1. ~~**Push truncation length.**~~ **140 characters of body** (ND-31). Confirmed on the
+   reasoning that the constraint is display, not payload. §6.3.
+2. ~~**Mobile entry point.**~~ **Chat takes a bottom-bar slot; Daily Logs moves to the
+   hamburger** (ND-36). The bar stays at five, D-3's "no destination appears in both" holds
+   because Logs leaves as Chat arrives, and the cost — one extra tap to *review* logs, with the
+   *capture* path untouched — is stated in §7.1d-i. **Four M6M criteria are rewritten, not
+   satisfied:** A-3b, A-41, A-42 and A-1c. §7.1d.
+3. ~~**Switcher project list.**~~ **Active projects, ordered by most recent message** (ND-34),
+   with archived threads reachable through the tab. §7.1a-i.
+4. ~~**History page size.**~~ **50 in the tab, 25 in a panel** (ND-38), sized so the first
+   scroll never lands on a loader on the surface it is for. §7.2a.
 
-2. **Mobile entry point (§7.1d, ND-36).** The panel *shape* is ruled. What opens it is not, and
-   it is genuinely constrained: the app bar's right slot is the bell (A-40 as rewritten) and the
-   tab bar is full at five under D-3. Four candidates with their costs are in §7.1d — a
-   floating action button, a bottom sheet, an app-bar slot on project routes only, or a row in
-   the existing sheet. **The bottom sheet is the honest form for 402px but loses the global
-   reach that makes the desktop panel primary**, which is the trade to rule on.
+**What remains open for the whole module: ND-26 (transport) alone**, and it does not block
+slices 1–3.
 
-3. **Switcher project list (§7.1a-i, ND-34).** `can_view_project()` is right for PM/foreman/crew
-   and resolves to **every project in the company** for an Owner — 9 today, more later. Options
-   and costs in §7.1a-i: all, active-only, recency-with-search, or unread-first.
+---
 
-4. **History page size (§7.2).** R2 makes the log permanent and therefore eventually large. v1
-   needs a number for the initial load and the load-more increment. Not asked before; it
-   becomes concrete once the panel exists, because a panel shows fewer messages than a tab.
+## §14 — What this spec now owes M6M
+
+Chat cannot ship without editing `M6M-mobile-pwa-spec.md`, and this is the list, so it is not
+discovered mid-slice:
+
+| M6M item | Change |
+| --- | --- |
+| **D-3** | Bar contents amended: `Projects · Timeclock · [camera] · Chat · Field`. Still five, still "no destination appears in both". |
+| **A-3b** | Six named tiles → **seven**, naming Logs. |
+| **A-41** | Six-route walk → **seven**, adding `/m/logs`. |
+| **A-42** | "all six routes" → **seven**. |
+| **A-1c** | Add the Chat slot's rule: lit while the overlay is open, never by the route underneath. |
+| **D-39** | Inherited, not changed — `/m/logs` joins the hamburger destinations and keeps the hamburger. |
+| **D-4** | Gains a **named exception** (ND-32): the chat message list renders as bubbles. |
+
+**These are edits to another spec and are deliberately not made here.** They belong in the M6M
+document, in the same commit as the slice that changes the bar.
