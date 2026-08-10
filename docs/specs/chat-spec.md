@@ -1,0 +1,1045 @@
+# Project Chat — Build Spec
+
+> **Status:** SPEC [S124]. The last unbuilt leg of the Notifications & Chat module.
+> Written from the **first interview chat has ever had** (S124, Josh). Chat was ruled in
+> scope at S89 (Option B) and **described rather than explored** — §3a and §10.5 of
+> `notifications-architecture.md` are six bullets and five bullets of _rulings_, with no
+> workflow trace behind them. Two Module 4 failures traced to exactly that gap.
+>
+> **Footprint before this spec — CORRECTED [S124, CC live read].** _Original claim, quoted not
+> rewritten: "zero. No table, no route, no code, no mention anywhere outside
+> `notifications-architecture.md` across ~300 commits."_ **The schema half is true; the code half
+> is not.** Live schema has no `chat*` table and there is no `/chat` route directory, but three
+> things ship today:
+>
+> - **`apps/web/lib/notify/links.ts:50–53`** — a live `chat` entry in the shared resolver,
+>   already mapping `/m/p/{projectId}/chat` and `/dashboard/projects/{projectId}/chat`.
+> - **`apps/web/test/s123-push-workers.test.ts:102,103,138`** — three assertions exercising
+>   `resolveLink('chat', …)`.
+> - **`apps/web/test/s123-incident-notify.test.ts:95,120`** —
+>   `const PENDING_ROUTES = new Set(['chat'])`, a guard asserting the chat routes do **not**
+>   exist, carrying the comment _"Fails when chat ships — remove the key, and this line,
+>   together."_
+>
+> ⚠️ **That last one is a deliberate tripwire and it is a build instruction: the commit that
+> creates the chat routes MUST clear `PENDING_ROUTES` in the same commit, or it ships red.**
+>
+> **Parent document:** `docs/specs/notifications-architecture.md`. That document's rulings
+> hold except where amended below, **and amendments are quoted in place, never deleted**, on
+> the M6M convention.
+>
+> **Severability (§7.2, standing):** the M8 gate is satisfied by notifications core alone,
+> which is **built and deployed**. Chat is **wanted, not needed**. Every scope decision below
+> was taken with that in mind — see §11.
+
+---
+
+## §0 — Decision register
+
+**Continues the parent's `ND-` series, which ends at ND-18.** Verified against
+`notifications-architecture.md` §0 before numbering. Do not restart at 1; do not use `D-`
+(M6M owns D-1…D-65).
+
+> ⚠ **Known numbering drift.** `docs/sessions/context99.md` lists an ND series that is
+> **off by one** from ND-3 onward (context99's ND-3 is the second service worker, which the
+> architecture register calls ND-4). **`notifications-architecture.md` §0 is the register of
+> record.** context99 is a retrospective, not a register. Do not renumber either — record the
+> drift and cite the architecture doc.
+
+| #     | Decision                               | Ruling                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ----- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| ND-19 | **Threads per project**                | **TWO: a crew thread and a sub thread.** [S124, Josh] Not one thread with a permission layer. _§4.2's shape, quoted not rewritten: `chat_messages` keyed on `project_id` with no thread concept — **one thread per project**. Superseded._ Reasoning in §2.1.                                                                                                                                          |
+| ND-20 | **Sub-thread rights**                  | **POST and READ diverge.** [S124, Josh] Post: Owner, Admin, the project's PM, and that project's assigned subs **who have a profile**. Read: all of the above **plus crew who pass `can_view_project()`**, who see a banner and **no composer**. §5.2.                                                                                                                                                 |
+| ND-21 | **Invite**                             | **CUT. There is no invite step.** [S124, Josh] _Josh at interview Q8: "invite only… even if they are assigned to a project, they shouldn't automatically be in the chat." Reconciled at Q19:_ invite-only was **about keeping subs out of the crew thread**. Once the sub thread is separate, there is nothing to invite into — **assignment is membership**. A permission problem solved by geometry. |
+| ND-22 | **Photos**                             | **Reference, not upload.** [S124, Josh] A composer attach button opens the **project photo gallery picker**; the message carries a reference to an existing photo row. Chat never ingests a file. §5.4. _Amended by **ND-28**: the row is a **`files`** row with `category='photos'` — there is no `photos` table._                                                                                                                                                                                             |
+| ND-23 | **Notification text names the thread** | **Yes.** [S124, Josh] `"Alvarez (subs)"` vs `"Alvarez"`. Amends parent §3a's output string. §6.2.                                                                                                                                                                                                                                                                                                      |
+| ND-24 | **Offline**                            | **Chat fails VISIBLY. No queue.** [S124, Josh] A deliberate divergence from M6M's offline queue, chosen at interview Q16 — _"sees it fail"_. §5.5 states why this is a choice and not an omission.                                                                                                                                                                                                     |
+| ND-25 | **Sub with no account**                | **No thread. Not an empty one.** [S124, Josh] Where a project has no assigned sub with a profile, the sub thread **does not render**. §5.3.                                                                                                                                                                                                                                                            |
+| ND-26 | **Transport — Realtime vs poll**       | **OPEN.** Not ruled. §9.1 states the cost each way. This is the one decision the interview did not reach because it is not a workflow question.                                                                                                                                                                                                                                                        |
+| ND-27 | **Client messaging**                   | **OUT, and STATE.md:514 is ANSWERED for internal chat.** [S124, Josh, Q9 — *"no"*, clients type into nothing.] The transport competition that entry recorded is **dissolved**, not resolved: internal chat and client messaging were never one decision. Client messaging remains a Module 9 / Pre-Module 9 gate question, untouched here. §10.                                                        |
+| ND-28 | **Photo reference target**             | **`files(id)`, `ON DELETE CASCADE`.** [S124, Josh] There is **no `photos` table** — photos are `files` rows with `category='photos'`. A deleted photo vanishes from the thread; the message keeps its text. **An FK cannot enforce `category`**, so the category check is service-layer — §4.3. `RESTRICT` rejected: it would let chat block an owner from deleting a file, which nothing else in the app does. |
+| ND-29 | **Sub thread — DEFERRED**              | **OUT of v1.** [S124, Josh] 35 subcontractor member rows exist; **one** has a profile, and it is a test account on two fixture projects. This resolves when real subs get logins, not through code. **Consequence:** `chat_messages` needs no per-role branch in v1 — `can_view_project()` and nothing else. §5.2, §5.3. |
+| ND-30 | **Mention email — DEFERRED**           | **v2. In-app + push only.** [S124, Josh] Three pieces are missing, all found by live read: the `email_types` migration the `email_logs` FK requires, a template, and a send call — because **`notify()` sends no email** and every consumer sends its own. §5.6a. |
+| ND-31 | **Push truncation**                    | **CHAT ONLY, inside the render function.** [S124, Josh] The shared push path stays untouched, so **no existing notification changes behaviour**. Length proposed in §6.3. |
+| ND-32 | **D-4 exception, NAMED**               | **Messages render as bubbles, not card geometry.** [S124, Josh] D-4 exists to stop lists being reinvented casually; a conversation is genuinely a different thing. **Naming the exception keeps D-4 intact rather than eroding it silently.** §7.2. |
+| ND-33 | **Desktop is TWO surfaces**            | **A global floating panel AND a project Chat tab. Both, not either.** [S124, Josh] The panel is the **primary** surface and is **global** — it renders on Contacts, Estimates, Settings, everywhere — with a project switcher inside, so users move between threads without navigating away. The tab is for reading and auditing a thread properly when already inside a project. §7.1. |
+| ND-34 | **Switcher project list**              | **OPEN.** Not ruled. `can_view_project()` is the obvious source, but for an Owner that is every project in the company. §7.1b states the options and their costs. |
+| ND-35 | **Chat tab gating**                    | **UNGATED.** [S124, Josh] RLS already decides who reads what via `can_view_project()`. A role list on the tab would be a second answer to a question already answered — the pattern **§4.11.10a** warns against. §7.1c. |
+| ND-36 | **Mobile entry point**                 | **Panel SHAPE is ruled; the ENTRY POINT is OPEN.** [S124, Josh] Not a full screen. But a floating panel on a 402px canvas is tight and a bottom sheet may be the honest form — and the app bar holds the bell (ND-13) while the tab bar is full at five slots (D-3). §7.1d states the candidates and their costs. **Do not invent one.** |
+
+---
+
+## §1 — What the interview found that the spec did not have
+
+Recorded because the parent document's chat sections contain **no workflow trace at all**,
+and this is the material they were missing.
+
+**The real job is request capture, not coordination.** Both real cases Josh gave are the same
+shape: **crew → Josh, material shortage, incomplete on first contact.**
+
+|           | What happened                                          | Channel                                | Failure                                                                                                                 |
+| --------- | ------------------------------------------------------ | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| **Trim**  | Crew member: more trim needed                          | Text, Josh's personal number, no group | Nobody else knew. Other crew could not plan the next day.                                                               |
+| **Paint** | Crew member told Josh **in person**: more paint needed | In person, then a text round-trip      | Josh had to text back for **quantity and type**. A photo of the can and the wall would have ended it in one round (Q2). |
+
+**What happens when Josh is unreachable (Q4):** _"text just sits. they usually take a guess
+and sometimes mess things up."_
+
+**How often a request is lost (Q5):** _"countless times."_
+
+**Where the record lives six months later (Q6):** _"nowhere."_
+
+**Who talks to whom (Q7):** all staff assigned to a project. Not crew→Josh only.
+
+**Subs (Q8):** they reach Josh by email, text or call. Sub conversation is **independent of
+crew** — this is what became ND-19.
+
+**Clients (Q9):** no. Never type into anything.
+
+**Adoption (Q10, Q17):** _"it will be mandatory for staff"_, and mandatory means **Josh
+enforcing it**, not the app. He will not turn off his personal number.
+
+---
+
+## §2 — Scope
+
+### 2.1 Why two threads (ND-19)
+
+The parent spec's `chat_messages` keys on `project_id` alone. That admits exactly one thread
+per project, which cannot hold what the interview described:
+
+- Subs must not see crew conversation (Q8).
+- Crew **must** be able to read sub conversation (Q15) — read, not post.
+- A sub thread exists per project and is populated by **assignment**, not by invitation (Q19).
+
+A single thread with row-level filtering would mean a crew member and a sub reading the same
+thread and seeing different messages in it. That is a thread that lies about its own contents
+— and it makes "who said what on this job" unanswerable, which is Q6's whole complaint.
+**Two threads, each honest about its membership.**
+
+### 2.2 In scope
+
+1. **Crew thread** — one per project. Membership `can_view_project()`.
+2. **Sub thread** — one per project, **conditional on ND-25**. Divergent post/read (ND-20).
+3. **@mention → notification**, via the parent's `notify()`. Chat writes no notification rows
+   directly.
+4. **Photo reference** in the composer (ND-22).
+5. **Per-thread unread state**, separate from the notifications badge (parent R6).
+6. **Both surfaces** — `/dashboard/projects/{id}/chat` and `/m/p/{id}/chat`, one `lib/`
+   implementation (parent §10.5's parity rule, and #129's precedent).
+
+### 2.3 Out of scope, v1
+
+Unchanged from parent §1 except where noted:
+
+- **Threading, DMs, reactions, edit, delete.**
+- **File attachments.** ND-22's photo _reference_ is not an attachment — chat ingests nothing.
+- **Client participation** (ND-27).
+- **Offline write queue for chat** (ND-24) — and note this is now a **ruling**, where the
+  parent had it as an inherited omission.
+- **Typing indicators, presence, read receipts.**
+- **Cross-project or company-wide chat.** Every thread is project-scoped.
+
+### 2.4 The R6 risk, stated rather than designed around
+
+**Parent R6 holds unchanged and Josh re-affirmed it** at Q11 — a plain message notifies
+**no one**; only `@Josh` buzzes.
+
+**The risk this creates, stated because it is the direct opposite of the problem chat is being
+built to solve:**
+
+> Q5 says material requests get lost _"countless times."_ Under R6, `need more trim` typed
+> without a tag is **silent** — quieter than the text message it replaces, which at least
+> buzzed Josh's phone.
+
+**Josh closed this with enforcement, not with a feature** (Q17: _"me enforcing it"_). That is
+a legitimate founder decision and it is recorded as one. **It is not a gap for a later reader
+to "fix" by making plain messages notify.** Q12 was asked directly — would notifying on every
+message be better than losing them — and the answer was **no**.
+
+**What this spec owes as a consequence:** the composer must make `@` **easy and obvious**
+(§5.1), because the entire delivery guarantee rests on a human remembering to type it.
+
+---
+
+## §3 — Traces (PROPOSED acceptance examples)
+
+**These are PROPOSED, not approved.** House rule: an acceptance example is approved once
+walked against a real Bishop job with real numbers. T1 and T2 are built from the two real
+cases Josh gave, but the _outputs_ below are this spec's construction and have not been walked
+back to him.
+
+### 3a-1. The trim message — plain, silent, and found later
+
+Crew member Luis, assigned to Alvarez, opens the Alvarez crew thread and types
+`running short on trim, need about 3 more sticks of the 3¼ colonial`.
+
+- **Store:** message row in the Alvarez **crew** thread. **No notification row, for anyone**
+  (R6).
+- **Output:** Josh's notifications badge does **not** move. The Alvarez crew thread shows
+  unread state for every other member via `chat_reads` (parent §4.3), which is a **separate**
+  signal from the badge.
+- **What this fixes vs. today:** not the buzz — the buzz is unchanged from a text. It fixes
+  **Q6** (there is now a record) and **Q3** (the other crew on Alvarez can see it and plan for
+  the next day, which the one-to-one text could not do).
+- **What it does not fix:** if Josh does not open the thread, this sits exactly as the text sat
+  (Q4). §2.4.
+
+### 3a-2. The same message, tagged
+
+Luis types `@Josh running short on trim, need about 3 more sticks of the 3¼ colonial`.
+
+- **Store:** message row **plus** one notification row for Josh (`type: mention`).
+- **Output:** badge +1. Tab and push both read
+  **`Luis (Alvarez): running short on trim, need about 3 more sticks of the 3¼ colonial`** —
+  the real message text, per parent R6.
+- **Link:** `chat:{project_id}#{message_id}` (parent ND-11), resolving to `/m/p/{id}/chat` or
+  `/dashboard/projects/{id}/chat`.
+- **Nobody else is notified**, including other Alvarez crew who can read it.
+- **Mentionable set:** profiles passing `can_view_project(project_id)` (parent ND-3) — **not**
+  `project_assignments`.
+
+### 3b. The paint message — one round instead of two (ND-22)
+
+Luis needs paint. He photographs the can and the wall.
+
+- He posts the photos to the **project gallery** (the existing M6M capture path — chat does
+  not ingest them).
+- In the Alvarez crew thread he taps **attach**, picks those two photos from the gallery
+  picker, and types `@Josh need more of this, about a gallon, wall behind the stair`.
+- **Store:** one message row carrying references to two **`files` rows** (`category='photos'`
+  — there is no `photos` table, ND-28); one notification row for Josh.
+- **Output:** Josh's notification carries the message text (R6). The thread renders the
+  message with **thumbnails** that open the existing photo viewer.
+- **What this fixes:** the round-trip. Q2 — _"yes"_, a photo would have ended it in one round.
+- **Note the ordering Josh described (Q18):** _"post pictures and notifies in chat. a reference
+  would be helpful."_ The photo exists **first**; chat points at it. Chat is never the ingest
+  path.
+
+### 3c. Sub thread — mention across the boundary
+
+Alvarez has one assigned sub with a login (the drywall contractor). Josh opens the Alvarez
+**sub** thread and types `@Miguel can you be on site Thursday instead of Wednesday`.
+
+- **Store:** message in the Alvarez **sub** thread; notification row for Miguel.
+- **Output text (ND-23):** **`Josh (Alvarez — subs): can you be on site Thursday instead of
+Wednesday`**. The thread is named because two threads on one project would otherwise produce
+  two identical-looking notifications.
+- **Channels (parent ND-15):** Miguel has a profile → **in-app row and email**. Chat @mention
+  is one of the three sub-scoped events, so this is in scope and unchanged.
+- **Crew on Alvarez are not notified** and did not need to be — but they **can read this**
+  (§5.2).
+
+### 3d. Crew reading the sub thread
+
+Luis, crew on Alvarez, opens the Alvarez sub thread.
+
+- **Renders:** the full message history.
+- **No composer.** Not a disabled composer — **absent**.
+- **A banner**, in place of the composer: wording in §7.4. Q24's requirement is _"don't post
+  here, subs can see this"_, delivered _"cleaner and more professional"_ than that phrasing.
+- Luis is **not** in the sub thread's mention picker (he cannot post; being mentionable in a
+  thread he cannot reply in is a dead end).
+
+### 3e. A project with no sub who has an account (ND-25)
+
+Alvarez's four assigned subs include three with no profile.
+
+- The sub thread renders **only** because one of the four (Miguel) has a login.
+- **On a project where none do:** there is **no sub thread**. No tab, no empty state, no
+  "invite a sub" affordance. Q25 — _"when sub doesn't have account, chat doesn't exist."_
+- The other three subs are **unaffected and unreachable by chat**. Josh keeps texting them.
+  Q25: _"the subs who have accounts, and the rest keep texting."_
+- **This is not the parent §13.2 three-state contract.** That contract governs `notify()`
+  delivery to a sub. This governs whether a **thread exists at all**. A sub with an email and
+  no profile gets notification email under §13.2 for contract-signed and punch-assigned —
+  **but cannot be mentioned**, because mention requires a profile (parent §13.3), and cannot
+  read a thread.
+
+### 3f. Offline (ND-24)
+
+Luis is on a roof with no signal and types the trim message.
+
+- **Send fails, visibly.** An error state on that message with a manual retry.
+- **Nothing is queued.** The message is **not** handed to M6M's offline queue.
+- Luis sees it fail and falls back to text (Q16 — _"sees it fail"_).
+- §5.5 states why this diverges from the offline queue deliberately.
+
+---
+
+## §4 — Data model
+
+**Design-level. Every column shape below is PROPOSED and must be reconciled against live
+schema by CC — see the §S blocks.** Standard column set and both standard triggers apply
+unless stated.
+
+### 4.1 `chat_threads` — NEW, and new relative to the parent spec
+
+```
+id
+project_id    → projects(id)
+kind          enum: 'crew' | 'sub'
+created_at, updated_at, company_id  (standard set)
+UNIQUE (project_id, kind)
+```
+
+**Why a table and not a `kind` column on messages.** Unread state is per person **per
+thread**, and a thread must be addressable when it has zero messages. A `kind` discriminator
+on `chat_messages` gives no row to key `chat_reads` against and no row to say "this project
+has a sub thread" (ND-25) before anyone has spoken.
+
+**Creation:** lazily, on first open or first message. Not backfilled across existing projects.
+
+### 4.2 `chat_messages` — AMENDED from parent §4.2
+
+```
+id
+thread_id         → chat_threads(id)     -- REPLACES project_id
+author_profile_id → profiles(id)         -- unchanged (parent ND-2/ND-3)
+body              text                   -- unchanged
+created_at        timestamptz
+```
+
+_Parent §4.2's shape, quoted not rewritten: `project_id → projects(id)` directly on the
+message. **Superseded by ND-19** — the message belongs to a thread, and the thread belongs to
+a project._
+
+**Append-only and permanent** — parent R2, unchanged. **Only the notification row expires.**
+CLAUDE.md's append-only exception **does** apply here (no `read_at`, no `starred`, nothing
+UPDATEd after insert), which is the opposite of `notifications` (parent §4.1).
+
+⚠️ **The exception applies to THIS TABLE ONLY.** `chat_reads` is UPDATEd on every thread open,
+so it is an ordinary per-tenant table and carries the **full standard column set and BOTH
+standard triggers** — see §4.4. `chat_threads` likewise. Reading the exception as covering
+"the chat tables" would ship two tables whose `updated_at` never advances.
+
+### 4.3 `chat_message_photos` — NEW (ND-22, ND-28)
+
+```
+message_id → chat_messages(id)  ON DELETE CASCADE
+file_id    → files(id)          ON DELETE CASCADE
+sort_order int
+```
+
+A join table, not a column. A message may reference more than one photo (3b references two).
+**No file column, no storage path** — chat holds a reference to a row the gallery already owns.
+
+> ⚠️ **§S4 — ANSWERED AND RULED [S124]. The earlier shape was wrong.**
+> _Superseded, quoted not rewritten: `photo_id → photos(id)`._
+> **THERE IS NO `photos` TABLE.** Live read: `information_schema` returns zero. Photos are
+> **`files` rows with `category = 'photos'`** and a `project_id`. The FK is re-pointed to
+> `files(id)` (ND-28).
+
+**`ON DELETE CASCADE`, and deletion is genuinely destructive — this is not a soft-delete
+table.** `files-client.ts:286` soft-deletes (`is_deleted: true`), but `files-client.ts:334`
+**hard-deletes the row** after removing the storage blob, restricted by RLS to owner/admin. So
+a chat message can outlive its photo's row entirely, not merely a flagged one. Under CASCADE
+the reference vanishes and **the message keeps its text**.
+
+_`RESTRICT` was considered and rejected [S124, Josh]: it would let a chat message block an
+owner from deleting a file, and nothing else in the app can do that._
+
+⚠️ **AN FK CANNOT ENFORCE `category = 'photos'`, AND THE SPEC SAYS SO RATHER THAN LETTING THE
+FK IMPLY IT.** `files` holds receipts, contracts, invoices and change-order PDFs alongside
+photos. `file_id → files(id)` permits a chat message to reference **any** of them. Restricting
+it to photos is a **service-layer check** in chat's send path and in the picker's query
+(`category = 'photos' AND project_id = …`), and it is the only thing standing between the
+composer and a contract PDF appearing as a chat thumbnail. Treat it as a rule with no database
+backstop — the same posture CLAUDE.md records for punch VERIFY (#146) and the project gate
+(#82).
+
+### 4.4 `chat_reads` — AMENDED from parent §4.3
+
+```
+profile_id → profiles(id)
+thread_id  → chat_threads(id)            -- REPLACES project_id
+last_read_at timestamptz
+UNIQUE (profile_id, thread_id)
+```
+
+_Parent §4.3 keyed on `project_id`. **Superseded by ND-19** — a person has separate unread
+state in the crew and sub threads of the same project._
+
+Drives chat's own unread state, **separate from the notifications badge** (parent R6,
+unchanged).
+
+**Standard column set and BOTH standard triggers apply** — `chat_reads` is UPDATEd every time
+a thread is opened, so CLAUDE.md's append-only exception explicitly does **not** cover it
+(§4.2). It needs `company_id`, `created_at`, `updated_at`, `created_by`, `updated_by`,
+`is_deleted`, `deleted_at`, the three column defaults, and both `chat_reads_updated_at` and
+`chat_reads_set_updated_by`.
+
+### 4.5 What is NOT added
+
+- **No `chat_thread_members` table.** ND-21 cut invite; membership is derived from
+  `can_view_project()` and project assignment. A membership table would be a second source of
+  truth for something the existing helpers already answer.
+- **No `notifications` change.** `mention` already exists in the parent's type enum.
+- **No new company setting.** Notify-hours and timezone are the parent's.
+
+---
+
+## §5 — Behaviour
+
+### 5.1 Composer and mentions
+
+- `@` opens a mention picker over the **thread's postable set** (§5.2) — not the readable set.
+- The picker is **prominent**, not a hidden keyboard shortcut. §2.4: the whole delivery
+  guarantee rests on a human typing `@`, so the affordance carries weight it would not
+  otherwise deserve. An `@` button adjacent to send on mobile.
+- Mentions are parsed **at write time** and resolved to profile ids, stored so a later display-
+  name change does not break the link.
+- **Multiple mentions in one message → one notification each, one row each.** No dedupe across
+  recipients; dedupe **within** a message per recipient (`@Josh … @Josh` is one row).
+- **Self-mention notifies nobody.** Precedent: parent §16.5's self-assignment rule, same
+  reasoning — it would be the most common notification the platform sends and every one useless.
+
+### 5.2 Access — the two threads (ND-20)
+
+> **ND-29 [S124, Josh]: the sub-thread columns below are v2.** v1 ships the **crew thread
+> only**. The table is kept whole rather than trimmed, because it is the specification slice 4
+> builds from — but nothing in the `Sub thread` columns is in v1 scope.
+
+|                                | Crew thread                | Sub thread — POST             | Sub thread — READ        |
+| ------------------------------ | -------------------------- | ----------------------------- | ------------------------ |
+| Owner                          | ✅ by role                 | ✅                            | ✅                       |
+| Admin                          | ✅ by role                 | ✅                            | ✅                       |
+| PM                             | ✅ if `can_view_project()` | ✅ if assigned                | ✅                       |
+| Foreman                        | ✅ if `can_view_project()` | ❌                            | ✅                       |
+| Crew                           | ✅ if `can_view_project()` | ❌                            | ✅ (banner, no composer) |
+| Subcontractor **with profile** | ❌ **never**               | ✅ if assigned to the project | ✅ own thread only       |
+| Client                         | ❌                         | ❌                            | ❌ (ND-27)               |
+
+**The crew thread rule is the parent's, unchanged:** `can_view_project()` — Owner/Admin by
+role, others by assignment.
+
+**A subcontractor never reads the crew thread.** This is the one absolute in the table and it
+is the reason ND-19 exists.
+
+> ✅ **§S1 — ANSWERED [S124, CC live read]. Precedent is abundant; nothing needs inventing.**
+>
+> **32 tables** on this database already resolve SELECT and INSERT to different role sets. The
+> established shape is **two separate policies, one per command** — never a helper function,
+> and never a `USING`/`WITH CHECK` split on a single policy.
+>
+> **The read-wide / write-narrow template** (what the sub thread needs) is `inspections`,
+> `phases` and `tasks`, all identical in shape:
+> `*_select_visible` = `company_id = get_my_company_id() AND can_view_project(project_id)`
+> against
+> `*_insert_authorized` = `company_id = get_my_company_id() AND get_my_role() = ANY(<list>) AND can_view_project(project_id)`.
+>
+> **The subcontractor-branch template** is `punch_list_items_select_visible`:
+> `((get_my_role() IS DISTINCT FROM 'subcontractor' AND (can_view_project(project_id) OR assignee_id = get_my_member_id())) OR (get_my_role() = 'subcontractor' AND (assignee_id = get_my_member_id() OR created_by = auth.uid())))`
+> — a per-role branch *inside* SELECT, which is the shape "a sub sees only their own thread"
+> will need.
+>
+> **Also established:** a subcontractor currently has INSERT on exactly two things —
+> `files_insert_non_client` and the storage `objects` policy. A sub-thread INSERT would be the
+> third place a sub can write anything.
+>
+> **⚠️ BUT ND-29 DEFERS THE SUB THREAD OUT OF v1, SO v1 NEEDS NONE OF IT.** With one thread,
+> `chat_messages` RLS is `company_id = get_my_company_id() AND can_view_project(thread's project)`
+> for both SELECT and INSERT — no role branch at all. **The two templates above are recorded
+> here deliberately so slice 4 does not re-derive them**, not because v1 uses them.
+>
+> M6M **D-54** still governs whenever the divergence is built: _a hidden button is not a
+> permission._ The composer's absence must be a policy, not CSS.
+
+### 5.3 Sub thread existence (ND-25)
+
+The sub thread renders **only when** the project has ≥1 assigned subcontractor whose
+`company_members.profile_id IS NOT NULL`.
+
+- Where that count is 0: **no tab, no empty state, no create affordance.**
+- The evaluation is **live**, not a stored flag: assigning a sub with a login makes the thread
+  appear; it does not disappear when they are unassigned if messages exist (a thread with
+  history is never hidden — Q6's record must survive).
+
+> ✅ **§S2 — ANSWERED [S124, CC live read], and the data is why ND-29 defers this.**
+>
+> **The table is `project_assignments`.** Subs appear in it through their member row; there is
+> **no separate 6-series sub-assignment table**. The chain is
+> **`project_assignments.member_id → company_members.id → profiles.id` (via
+> `company_members.profile_id`)**.
+>
+> _One arrow in the guess above was backwards, quoted not rewritten:_
+> _`… → subcontractors.member_id → company_members.profile_id`._ **`subcontractors.member_id`
+> points AT `company_members.id`**; it is not a step between assignment and profile. The
+> subcontractor record hangs off the member row rather than sitting in the path.
+>
+> **There is a live precedent for the exact join** — the storage policy
+> `project_files_insert_non_client` walks
+> `project_assignments pa JOIN company_members m ON m.id = pa.member_id JOIN profiles p ON p.id = m.profile_id`.
+>
+> **The counts, and they are the reason for ND-29:**
+>
+> | | |
+> | --- | --- |
+> | Subcontractor member rows, company-wide | **35** |
+> | …with a `profile_id` | **1** |
+> | That one | `josh+qa-sub@worthprop.com` — display name **"QA Subcontractor Co (TEST IDENTITY)"** |
+> | Projects it is assigned to | `test`, `QA A — isolation fixture` — **both fixtures** |
+>
+> Bishop's other projects: `test4` 3 subs / 0 with profile, `Copy of test4` 1/0, `kitchen test`
+> 0/0, `test5` 0/0. **On real Bishop jobs the sub thread would render nowhere.** It is
+> buildable and testable, and it has no user. ND-29 defers it until real subs have logins.
+
+### 5.4 Photo reference (ND-22)
+
+- **Entry point:** an attach button **in the composer**, opening the project gallery picker
+  (Q23 — Josh chose this over "share to chat" from the gallery side).
+- The picker shows that project's photos only — `files` filtered to
+  `project_id = … AND category = 'photos' AND is_deleted = false`. **The category filter is the
+  only thing keeping contracts and receipts out of the picker; the FK cannot do it** (ND-28,
+  §4.3).
+- **No reusable gallery picker component exists** — established by live read; the only
+  "picker" components in the tree are the expenses and time ones, which are unrelated. The
+  composer's picker is **new work**, not a reuse.
+- Selection attaches references; the message can carry text, photos, or both.
+- Rendered as thumbnails opening the **existing** photo viewer — no chat-specific viewer.
+- **Notification text is the message body only.** A message with photos and no text produces
+  `"Luis (Alvarez): [photo]"` — **PROPOSED wording, not approved.**
+
+### 5.5 Offline (ND-24) — why this diverges deliberately
+
+M6M shipped an offline queue with Background Sync and server-side conflict holding
+(`sync_conflicts`, M6M D-17). Chat **does not use it**.
+
+**Why, and this is a ruling not an omission:** a queued message is a message whose author
+believes it was sent. Q4 already describes the failure mode of a message the sender assumes
+landed — _"they usually take a guess and sometimes mess things up."_ A message that silently
+sends forty minutes later, after the decision has been made and the wrong trim already cut, is
+worse than a message that visibly failed and sent the sender to SMS.
+
+**Josh's answer at Q16 was `sees it fail`** — asked directly against the alternative.
+
+**What the UI owes:** a failure that is unmistakable and a **manual** retry. Not a spinner, not
+a silent grey tick. §7.3.
+
+### 5.6 Notification integration
+
+Chat writes **no notification rows directly**. It calls the parent's `notify()`.
+
+> ⚠️ **CORRECTED [S124, CC read of the SHIPPED function].** _Superseded, quoted not rewritten:_
+> _"It calls the parent's `notify()` (parent §4.6), which owns recipient resolution,
+> per-recipient rendering (R7's floor), notify-hours, push **and email**."_ and
+> _"one recipient, the message body **as text**"._ Parent §4.6 was written **before slices 1–3
+> built it**, and the signature drifted. Three corrections, all load-bearing for chat:
+>
+> 1. **`notify()` SENDS NO EMAIL.** There is no email call in `notify.ts` at all — it writes
+>    the row and pushes. Every existing consumer (`incident-notify`, `co-signing-service`,
+>    the delivery check-in) makes its **own** separate `sendEmail()`. See §5.6a.
+> 2. **`render` is a REQUIRED per-recipient FUNCTION**, not a text field:
+>    `render: (recipient: NotifyRecipient) => { title: string; body?: string | null; linkKey?: string | null }`.
+>    It is called once per recipient — R7's enforcement point. Chat's text is user-authored and
+>    identical for every recipient, and **the interface tolerates that**: slice 3's incident
+>    consumer already passes `render: () => ({ … })` ignoring the argument. Chat does the same.
+> 3. **There is no `override` parameter.** Parent §4.6 lists one; the shipped signature has
+>    none. The notify-hours override is internal, via `isOverrideType(type)`.
+>
+> **The live signature**, as chat must call it:
+>
+> ```
+> notify({
+>   admin,        // SupabaseClient — SERVICE ROLE. See §5.6b.
+>   companyId,
+>   type,         // 'mention' — confirmed present in the live notifications type CHECK
+>   recipients,   // NotifyRecipient[] = { profileId, role, email?, firstName? }
+>   render,       // (recipient) => { title, body?, linkKey? }   ← required
+>   linkKey?, linkParams?, projectId?, source?, tag?, now?
+> })
+> ```
+>
+> `notify()` de-duplicates by `profileId` internally, so A-C14's within-message dedupe is
+> already covered by the platform; A-C15's self-mention exclusion is the **caller's** job
+> (parent §16.5's self-assignment rule is the precedent).
+
+**Chat's contribution is:** `type: 'mention'`, one recipient, a `render` function returning the
+truncated message body (§6.3), `linkKey: 'chat'` and `linkParams` carrying the thread.
+
+> ✅ **§S3 — ANSWERED [S124, CC live read]. It is ONE FILE, not several.**
+>
+> The map is **`apps/web/lib/notify/links.ts`** — shared `lib/`, confirmed, not per surface.
+> `LinkParams` is **`Record<string, string | undefined>`** (`links.ts:36`), so adding
+> `threadId` (or `kind`) needs **no type change**, and `notifications.link_params` is **jsonb**,
+> so it is a data change rather than a schema change.
+>
+> **The service workers are already insulated and do not need touching.** The **sender**
+> resolves the URL — `push.ts:105` calls `resolveClickTarget(...)` and writes the finished
+> string into `payload.url` — and both workers only read it back:
+> `sw.js:249` and `sw-dashboard.js:97` are `data.url || '<notifications home>'`. Neither holds
+> a link table.
+>
+> _The earlier estimate, quoted not rewritten: "a change to a **shared** `lib/` map, not a
+> per-surface fix" — correct, and the Phase 1 worry that it might be "the map plus both service
+> workers plus the stored `link_params` shape" is **retired**._
+>
+> The second consumer to keep in step is the **in-app list**, which resolves through the same
+> `resolveLink()`. One function, two callers.
+>
+> **v1 note:** with ND-29 deferring the sub thread, a project has one thread and the existing
+> `chat` key already resolves correctly. **Carrying the thread is a v2 requirement**, and the
+> key must gain it *before* slice 4, not with it.
+
+### 5.6a Email is DEFERRED to v2 (ND-30)
+
+**v1 is in-app row + push. No mention email.** Parent §5.5 says a new `email_types` row is
+required per new internal notification type, and ND-15 scopes subs to three events including
+chat @mention — **all of that stands, and none of it is v1.**
+
+**Three pieces are missing, established by live read, so v2 does not rediscover them:**
+
+1. **An `email_types` migration.** The table exists with 13 rows and **none is `mention`**, and
+   `email_logs` **has a foreign key to `email_types`** — so a mention email log INSERT
+   **fails on the FK today**. The migration is a hard prerequisite, not a nicety.
+2. **A template.** No mention template exists under `lib/email/templates/`.
+3. **A send call.** Because `notify()` sends no email (above), chat must make its own, the way
+   `incident-notify.ts` does.
+
+**Deferring it costs subs nothing in v1**, because ND-29 defers the sub thread too — and a
+mention can only reach someone who can read the thread.
+
+### 5.6b Chat calls `notify()` from a SERVER ROUTE
+
+`notify()` takes a service-role client, and `notifications` has **no INSERT policy at all** —
+which is precisely what stops one user forging a notification addressed to another. So chat
+cannot call it from the browser.
+
+**The pattern to copy is parent §16 / ND-18's assignment routes** (`/api/punch-items`,
+`/api/project-assignments`): the **write runs as the caller** through `createClient()` so RLS
+still decides, and **only the notify call** uses `getSupabaseAdmin()`. Chat's send route is the
+same shape — insert the message as the caller, notify as the platform.
+
+---
+
+## §6 — Notification text (ND-23)
+
+### 6.1 Format
+
+| Thread | Text                                          |
+| ------ | --------------------------------------------- |
+| Crew   | `{author} ({project}): {message body}`        |
+| Sub    | `{author} ({project} — subs): {message body}` |
+
+**Parent §3a's string is amended** — it reads `"Pat (Alvarez): …"` with no thread token,
+written when one thread per project was the shape.
+
+### 6.2 Why the thread is named
+
+Q22, asked directly: does the notification need to say which thread. **Yes.** With two threads
+per project, `Josh (Alvarez): …` is ambiguous, and the ambiguity matters most in the case that
+motivated the split — Josh needs to know whether he is being pulled into a sub conversation or
+a crew one before he taps.
+
+### 6.3 Truncation
+
+**RULED [S124, Josh] — ND-31: chat truncates, in its own render function. The shared push path
+is not touched.**
+
+> ⚠️ **There was nothing to match.** _The instruction here, quoted not rewritten: "CC should
+> match whatever the parent's push send path already does, if it does anything."_ **It does
+> nothing** — `lib/notify/push.ts` contains no `slice`, no `substring`, no length logic
+> anywhere. Bodies are sent whole today.
+
+**Where:** inside chat's `render(recipient)` (§5.6), which is the function that builds the
+title. Truncating there and not in `push.ts` means **no existing notification type changes
+behaviour** — incidents, signed COs, timesheets and the rest keep sending whole bodies, which
+is a property worth keeping rather than a limitation.
+
+**PROPOSED length: 140 characters of BODY**, cut at the last word boundary at or before 140 and
+suffixed with `…`. The prefix — `{author} ({project}): ` — is **never** truncated (ND-23's
+thread token is the part that tells Josh whether to tap at all, so it cannot be what gets cut).
+
+**Why 140 and not a payload figure.** The binding constraint is **display, not bytes**: a Web
+Push payload has roughly 4 KB to play with, which no realistic chat message approaches, while a
+collapsed OS notification shows on the order of two to four lines. 140 keeps the whole of a
+real message in almost every case — **3a-1's actual text is 62 characters** and passes through
+untouched — and caps only the genuine outlier. It is a display budget, and it is a **proposal,
+not a ruling**: see §13 Q1.
+
+### 6.4 The financial floor
+
+Parent **R7** applies to notification text and chat is no exception — but chat text is
+**user-authored**, so the floor cannot be enforced by rendering.
+
+**Stated plainly:** if a PM types a dollar figure into chat and mentions a foreman, the
+notification carries it. **This is accepted, not solved.** The floor governs what _the platform_
+renders per recipient; it has never governed what one human tells another, and chat does not
+change that. The mitigation is that the mention picker only offers people who can already read
+the thread — nobody receives chat text they could not have read by opening the thread.
+
+---
+
+## §7 — UI
+
+_A spec without a UI section is incomplete (CLAUDE.md, S86). This is that section._
+
+### 7.1 Entry — DESKTOP IS TWO SURFACES (ND-33)
+
+> ⚠️ **AMENDED [S124, Josh]. The earlier text described one desktop surface and chat has two.**
+> _Superseded, quoted not rewritten: "**Desktop:** a `Chat` tab in the project tab strip →
+> `/dashboard/projects/{id}/chat`."_ That tab survives — it is (b) below — but it is **not the
+> primary surface** and it is not the whole of desktop chat.
+
+**Both. Not either.**
+
+#### 7.1a (a) The floating panel — PRIMARY, and GLOBAL
+
+- A **persistent chat icon, bottom-right, on every dashboard page.** Not project-scoped: it
+  renders on Contacts, Estimates, Settings, Billing — **everywhere** in `/dashboard`.
+- Clicking **opens a panel over whatever the user is on.** No navigation, no route change, no
+  loss of the form they were filling in.
+- **Inside the panel: a project switcher.** Users move between project threads **without
+  navigating away** from the page they are on.
+- This is where the interview's problem actually lives. Q4's failure — _"text just sits"_ — is
+  a failure of *reachability*, and a surface you must navigate into to answer is one more
+  reason not to answer.
+
+**What this touches that the tab does not:** the dashboard **layout**, since the icon and panel
+must mount once, above the page, on every route. A per-page mount would be a second
+implementation of the same surface — #129's shape.
+
+#### 7.1a-i The switcher's project list — OPEN (ND-34)
+
+**What it should contain is flagged, not decided.**
+
+`can_view_project()` is the obvious source and is almost certainly right for PM, foreman and
+crew, where it resolves to the handful of projects they are assigned to. **The problem is the
+Owner and Admin**, for whom it resolves by *role* to **every project in the company** — 9 live
+projects today, and a real contractor's archive will not stay at 9.
+
+Options and their costs, for §13 Q3:
+
+| Option | Cost |
+| --- | --- |
+| Every project `can_view_project()` allows | Correct and simple; unusable for an Owner once the archive grows. |
+| Active projects only (`projects.status = 'active'`) | Matches how the switcher will actually be used. Hides a thread on a completed job, which Q6's record argument says should stay reachable. |
+| Recency-ordered, with search | Best behaviour, most build. Recency needs a source — last message in that thread, or the viewer's own `chat_reads.last_read_at`. |
+| Projects with unread first | Answers "where am I needed" directly, but an empty-unread state then looks like an empty switcher. |
+
+**Whatever is chosen, the list must not be a second definition of project membership** — it is a
+*presentation* of `can_view_project()`, filtered or ordered, never a different set.
+
+#### 7.1b (b) The project Chat tab — for reading and auditing
+
+- A `Chat` tab in the project tab strip → `/dashboard/projects/{id}/chat`.
+- For reading a thread **properly** when already inside a project: full height, full history,
+  the auditing view. Q6's _"where does the record live"_ is answered here, not in a panel
+  corner.
+- The tab strip is `TABS` in **`app/dashboard/projects/[id]/project-header.tsx:24`** — an array
+  of `{ slug, label, roles? }`, currently 14 entries.
+
+#### 7.1c Tab gating — UNGATED (ND-35)
+
+**No `roles` entry on the Chat tab.** RLS already decides who can read a thread, via
+`can_view_project()`. A role list on the tab would be **a second answer to a question already
+answered** — the pattern **§4.11.10a** warns against — and the two answers would then have to
+be kept in step forever. Several existing tabs do carry `roles`; chat deliberately does not.
+
+#### 7.1d Mobile — the panel SHAPE is ruled, the ENTRY POINT is OPEN (ND-36)
+
+**Ruled:** mobile keeps the **panel shape**, not a full screen. _Superseded, quoted not
+rewritten: "**Mobile:** a chat entry in the project screen → `/m/p/{id}/chat`. **A real
+screen**, per M6M **D-28** (pages, not sheets)."_
+
+**Not ruled, and deliberately not invented here:** what opens it. The geometry is genuinely
+tight and two existing rulings constrain it:
+
+- **The app bar's right slot is taken** — the notifications bell (ND-13 as amended), 44px, and
+  A-40 as rewritten asserts *no right-hand element other than the bell*.
+- **The tab bar is full** — five slots plus the centre camera, and **D-3 stands** (ND-14 closed
+  the six-slot question on the arithmetic: a sixth slot cuts each envelope 77.0px → 61.6px).
+
+**Candidates, with their costs — §13 Q2 asks Josh to pick:**
+
+| Option | What it costs |
+| --- | --- |
+| **A floating action button** above the tab bar, bottom-right | Overlaps content on every `/m` screen and competes with the 66px camera, which already breaks the bar's top edge. |
+| **A bottom sheet** raised from a control inside the project screen | Honest to the 402px canvas and to M6M's existing sheet pattern, but chat then exists only *inside* a project — it loses the global reach that makes 7.1a the primary desktop surface. |
+| **An app-bar slot on project routes only** | The left slot holds the back chevron on `/m/p/*` (A-40b) and the right holds the bell. There is no third slot without amending A-40 again, one session after it was rewritten. |
+| **A row in the existing sheet** (§3.3's tile grid) | Cheapest and breaks nothing, but buries the primary surface two taps down — the opposite of what 7.1a is for. |
+
+**A floating panel on 402px is tight and a bottom sheet may be the honest form** — that is
+Josh's call, not this document's.
+
+#### 7.1e Thread selection within a surface
+
+- **v1 (ND-29): one thread per project.** No segmented control — a control with one option is
+  not a control.
+- **v2, where both threads exist:** a two-item segmented control — `Crew` · `Subs` — each
+  carrying its own unread dot. _Where only the crew thread exists (ND-25): no segmented control
+  at all, and not a disabled second segment._
+
+### 7.2 Thread view
+
+- Newest at bottom, scrolled to bottom on open, author + timestamp per message.
+- ✅ **§S5 — ANSWERED, AND RULED AS A NAMED EXCEPTION (ND-32) [S124, Josh].**
+
+  **There is no message-shaped precedent in M6M.** D-4, quoted as written
+  (`docs/specs/M6M-mobile-pwa-spec.md:216`):
+
+  > **The project card** (§4.2) is the one list pattern. Every other mobile list reuses its
+  > geometry.
+
+  And it is obeyed literally elsewhere — daily-log rows use "project-card geometry (D-4)"
+  (`:890`), and `:1454` / `:3068` both repeat _"Patterns are reused, never re-invented."_
+  Chat would be the **first** mobile list that is not a card.
+
+  **Ruling: messages render as bubbles. This is a named D-4 exception, not a quiet drift.**
+  D-4 exists to stop lists being reinvented casually, and a conversation is genuinely a
+  different thing from a list of records — author, time and adjacency carry meaning that card
+  geometry throws away. **Naming the exception is what keeps D-4 intact**: an unnamed
+  divergence would make the next one easier and the rule would erode without anyone deciding
+  to erode it.
+
+  **The exception is scoped to the message list itself.** Everything around it — the thread
+  picker, the project switcher, any list of threads — stays on card geometry.
+- Opening a thread writes `chat_reads.last_read_at` for that thread.
+- **No infinite history load in v1** — a page of recent messages with load-more. R2 makes the
+  log permanent and therefore eventually large.
+
+### 7.3 Composer
+
+- Text input, `@` button, attach button, send.
+- **Failure state (ND-24):** the failed message stays visible in the thread, visually distinct,
+  with an explicit retry. It is **not** removed, and it is **not** shown as sent.
+- No draft persistence in v1.
+
+### 7.4 The crew-reading-sub-thread banner (3d)
+
+Replaces the composer. Josh's requirement (Q24) is _"don't post here, subs can see this"_,
+delivered _"cleaner and more professional."_
+
+**PROPOSED wording:** **"Read-only — this thread includes subcontractors."**
+
+Two things it must do and one it must not:
+
+- State that they cannot post.
+- State **why** — the sub audience is the reason, and a crew member who does not know that will
+  assume it is a bug.
+- **Not** scold. It is a normal thread they are welcome to read.
+
+### 7.5 Mention picker
+
+- Triggered by `@` in the composer or the `@` button.
+- Lists the **postable** set for that thread (§5.2), name and role.
+- Filters as typed.
+- **Empty picker is possible** — a sub thread where the only postable people are Owner and
+  Admin and the viewer is one of them. Shows the other, or an empty state; never crashes.
+
+---
+
+## §8 — Acceptance criteria
+
+**New criteria use `A-C` to avoid colliding with the parent's `A-N` series.**
+
+**Superseded parent criteria:** **A-N31–A-N34** were written against a one-thread model and
+must be re-read at build time. A-N31 (plain message notifies no one), A-N32 (mention notifies
+only that person, push text is the body) and A-N33 (deleting a notification leaves the message)
+survive unchanged in substance. **A-N34** (both surfaces call the same `lib/` path) survives
+and is strengthened by A-C16.
+
+**Threads (ND-19)**
+
+- **A-C1** A project with an assigned sub who has a profile exposes **two** threads. `[live]`
+- **A-C2** A project with no such sub exposes **one**, and no empty second segment renders. `[Playwright]` _(ND-25 — a disabled segment is the likeliest wrong build and passes any "one thread renders" assertion.)_
+- **A-C3** A message posted in the crew thread never appears in the sub thread of the same project. `[live]`
+- **A-C4** Unread state is per thread: reading the crew thread leaves the sub thread unread. `[live]` _(The `chat_reads` re-key. A build that kept `project_id` passes every other criterion here.)_
+
+**Access (ND-20) — ⚠️ A-C5…A-C10 are v2 (ND-29 defers the sub thread). v1's only access
+criterion is A-C5b below.**
+
+- **A-C5b** A member who fails `can_view_project()` can neither SELECT nor INSERT a message on that project's thread. `[live]` _(v1's whole access model. With one thread there is no role branch — §S1.)_
+
+
+- **A-C5** A subcontractor cannot SELECT any crew-thread message, on any project. `[live]` _(The one absolute. §5.2.)_
+- **A-C6** A crew member can SELECT sub-thread messages and **cannot INSERT** one. `[live]` _(The divergence. §S1.)_
+- **A-C7** The crew member's sub-thread view renders **no composer element in the DOM**. `[Playwright]` _(M6M D-54 — a hidden button is not a permission; this asserts the render side and A-C6 asserts the policy side. Both are required.)_
+- **A-C8** An Owner not assigned to a project can post in both its threads. `[live]` _(Parent ND-3 — role, not assignment. An assignment-keyed build fails.)_
+- **A-C9** A PM not assigned to a project can read neither thread. `[live]`
+- **A-C10** A crew member does not appear in the sub thread's mention picker. `[live]`
+
+**Mentions and notifications**
+
+- **A-C11** A plain message writes no notification row for anyone, including thread members with unread state. `[live]` _(Parent R6. §2.4 — this is the criterion a well-meaning later change breaks.)_
+- **A-C12** A crew-thread mention notification reads `{author} ({project}): {body}`; a sub-thread one reads `{author} ({project} — subs): {body}`. `[live]` _(ND-23.)_
+- **A-C13** *(v2, ND-29)* A sub-thread mention opens the **sub** thread, not the crew thread. `[Playwright]` _(§S3 — the resolver carries no thread param today. With one thread in v1 the existing `chat` key resolves correctly, so this criterion has nothing to catch until slice 4 — but **the key must gain the thread BEFORE that slice, not with it**.)_
+- **A-C14** `@Josh … @Josh` in one message writes **one** notification row. `[unit]`
+- **A-C15** A self-mention writes no row. `[unit]`
+- **A-C16** Both surfaces call the same `lib/` send-and-parse path. `[unit]` _(Parent A-N34, #129's precedent — a second implementation that "does the same thing" **is** the divergence.)_
+
+**Photos (ND-22)**
+
+- **A-C17** A message can reference two photos (`files` rows, `category='photos'`) and renders both as thumbnails opening the existing viewer via `photos.ts`'s `displayUrl`. `[live]` _(ND-28. `displayUrl` at `lib/services/photos.ts:40,121–130` is D-31's resolution — chat must never resolve a file path itself.)_
+- **A-C17b** Hard-deleting a referenced file removes the reference and **leaves the message and its text intact**. `[live]` _(ND-28's CASCADE. `files-client.ts:334` hard-deletes the row and the storage blob, so this is a real case, not a soft-delete flag.)_
+- **A-C17c** The composer refuses a `files` row whose `category` is not `'photos'`. `[unit]` _(**The FK cannot enforce this** — §4.3. This criterion is the only backstop, which is exactly why it exists.)_
+- **A-C18** Chat exposes no file-upload path. `[unit]` _(Reference, not ingest. A build that adds an upload "because it's easier" fails here and nowhere else.)_
+- **A-C19** The gallery picker offers only that project's photos — `project_id` scoped **and** `category='photos'`. `[live]` _(A receipt or contract PDF appearing in the picker is the failure this catches.)_
+
+**Offline (ND-24)**
+
+- **A-C20** A send with no connectivity fails visibly and the message is **not** enqueued to the M6M offline queue. `[live]` _(The deliberate divergence. A build that "helpfully" reuses the queue fails.)_
+- **A-C21** A failed message is never displayed as sent. `[Playwright]`
+
+**Desktop surfaces (ND-33, ND-35)**
+
+- **A-C24** The chat icon renders on a dashboard page that is **not** a project page — Contacts, Estimates and Settings all carry it. `[Playwright]` _(ND-33's "global, not project-scoped". A build that mounts it per project page passes every other criterion here.)_
+- **A-C25** Opening the panel does **not** change the route, and the underlying page keeps its state. `[Playwright]` _(The whole point of a panel over a tab.)_
+- **A-C26** Switching project inside the panel does not navigate. `[Playwright]`
+- **A-C27** The `Chat` tab carries **no** `roles` entry in `TABS`. `[unit]` _(ND-35 — asserting the absence, because adding one would look like a safety improvement.)_
+- **A-C28** The panel and the tab render messages through the **same** `lib/` component. `[unit]` _(A-C16's rule applied to the two desktop surfaces; #129 is what two implementations cost.)_
+
+**The tripwire (S124 correction)**
+
+- **A-C29** `PENDING_ROUTES` in `s123-incident-notify.test.ts` no longer contains `'chat'`, and the whole suite is green. `[unit]` _(The guard is designed to fail when chat ships. **The commit creating the chat routes must clear it in that same commit**, or it ships red.)_
+
+**Retention (parent R2)
+
+- **A-C22** Deleting a mention notification leaves the message intact. `[live]` _(Parent A-N33.)_
+- **A-C23** No chat message has an `expires_at` and none is deleted by the expiry cron. `[live]` _(R2 — "the chat log NEVER expires.")_
+
+---
+
+## §9 — Open, and what each costs
+
+### 9.1 ND-26 — transport. **The one decision this spec does not make.**
+
+**Verified in the parent (§5.1, S123): the `supabase_realtime` publication is EMPTY — zero
+tables.** Realtime is not enabled anywhere on this database. This is **opt-in work**, not a
+confirmation step.
+
+|                   | Realtime                                                                                                                                            | Poll                                                                                                  |
+| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| **Cost**          | A migration adding `chat_messages` (and `notifications`) to the publication, plus per-table replica identity. New infrastructure for this database. | No migration. A polling interval on an open thread.                                                   |
+| **Chat quality**  | Messages appear as sent.                                                                                                                            | Messages appear on an interval. Parent §5.1: _"Chat without Realtime is a materially worse product."_ |
+| **Badge quality** | Live.                                                                                                                                               | _"Merely less live"_ (parent §5.1).                                                                   |
+| **Risk**          | Untested on this database at any scale. First use.                                                                                                  | Battery and request volume on mobile; a thread left open all day polls all day.                       |
+
+**This is a cost decision, not a workflow one, which is why the interview did not reach it.**
+It needs a ruling before the build slice that touches transport — **not** before the schema
+slice.
+
+### 9.2 Carried from the parent, unchanged by this spec
+
+- **FFNav position** for the desktop notifications item — owned by the deferred reindex.
+- **`/api/cron/invoice-reminders` has no schedule** (parent §14.4) — pre-existing, unrelated.
+- **TECH_DEBT #117** — untouched.
+
+### 9.3 New, opened by this spec — STATUS AFTER S124's LIVE READ
+
+**Closed by ruling:**
+
+- ~~**§S4** — photo deletion behaviour.~~ **RULED, ND-28** — `files(id)`, CASCADE. §4.3.
+- ~~**A message-shaped list precedent (§S5).**~~ **ANSWERED: none exists. RULED as a named D-4
+  exception, ND-32.** §7.2.
+
+**Answered by live read, no ruling needed:**
+
+- ~~**§S1**~~ — 32 precedents; two policies is the shape. And v1 needs none of it (ND-29).
+- ~~**§S2**~~ — `project_assignments → company_members → profiles`. One sub has a profile.
+- ~~**§S3**~~ — one file, `lib/notify/links.ts`. The workers are insulated.
+
+**Still open — see §13:**
+
+- **Push truncation length** (§6.3) — 140 proposed, not ruled. §13 Q1.
+- **Mobile entry point** (ND-36) — shape ruled, entry point open. §13 Q2.
+- **Switcher project list** (ND-34) — §13 Q3.
+- **History pagination size** (§7.2) — R2 makes the log permanent; v1 needs a page size.
+  §13 Q4.
+- **ND-26 transport** — unchanged, and still not blocking slices 1–3.
+
+---
+
+## §10 — STATE.md:514 is answered for internal chat (ND-27)
+
+STATE.md:514 reads: _"Client portal messaging. Real-time chat or async email-style?"_, tied to
+the Pre-Module 9 gate.
+
+**The entry treats internal chat and client messaging as one transport decision. They are not,
+and Q9 dissolves the competition rather than resolving it:** clients type into nothing. There
+is no client participant in any thread this spec builds, so nothing here constrains what
+Module 9 chooses for client messaging.
+
+**What to amend and what not to:**
+
+- **Amend** STATE.md:514 to record that internal chat is decided and does not gate it.
+- **Do not close it.** Client messaging remains a real Pre-Module 9 question, and the
+  Pre-Module 9 gate's own rule stands: every client deliverable is delivered **by email**;
+  the portal is an additional access surface, not the delivery mechanism.
+
+---
+
+## §11 — Severability, and what scope is worth
+
+**§7.2 of the parent stands:** the M8 gate is satisfied by notifications core, which is built.
+**Chat is wanted, not needed.**
+
+**What that bought in this spec, recorded so the reasoning survives:**
+
+- **Two threads (ND-19) was not trimmed**, because it is the difference between chat working
+  for subs and chat being crew-only. It came from the interview, not from ambition.
+- **Photo reference (ND-22) was not trimmed**, because it is 50% of the real cases Josh gave
+  and it is a _reference_, not an upload — the cheap half of the feature.
+- **Offline was trimmed to nothing (ND-24)** and that is the largest saving in the spec.
+- **Invite was trimmed to nothing (ND-21)** by asking one more question rather than building
+  a membership table.
+
+**The honest risk, stated once:** §2.4. Chat's delivery guarantee depends on humans typing `@`,
+and Josh's mitigation is enforcement. If adoption fails, it will fail there, and the fix is
+**not** more notifications — Q12 already ruled that out.
+
+---
+
+## §12 — Suggested build order
+
+**Not a ruling. Each slice ends at a stop-point.**
+
+1. **Schema** — `chat_threads`, `chat_messages`, `chat_reads`; RLS is
+   `can_view_project()` for both SELECT and INSERT, **with no role branch** (ND-29 defers the
+   §S1 divergence to slice 4). `chat_message_photos` moves to **slice 6** with ND-22, since its
+   FK and CASCADE (ND-28) are only exercised there. Rebuild-test first, RLS probes under the impersonation harness
+   (failing-then-passing evidence, never as postgres). **Stop.**
+2. **`lib/` core** — thread resolution, send, mention parse, `notify()` call. Both surfaces
+   consume it (A-C16). **Stop.**
+3. **Desktop chat** — crew thread only. Walk 3a-1 and 3a-2 against a real Bishop job. **Stop.**
+4. ~~**Sub thread** — both surfaces, §5.2's divergence, the banner.~~ **CUT FROM v1 (ND-29).**
+   Retained as the numbering so later slices are not renumbered, and because §5.2/§5.3 keep the
+   full specification it will build from. Revisit when real subcontractors have logins — today
+   there is exactly one, and it is a test account.
+5. **Mobile chat** — panel shape (ND-36). **Blocked on §13 Q2: the entry point.** **Stop.**
+6. **Photo reference** (ND-22, ND-28) — includes the picker, which is **new work**; no
+   reusable gallery picker exists. **Stop.**
+7. **Transport** — requires ND-26 ruled first.
+
+**v1 = slices 1, 2, 3, 6 plus the desktop panel (ND-33).** Slice 4 is deferred and slice 7 is
+gated on a ruling.
+
+**§S blocks are filled by CC from live reads at the start of the slice that needs them**, not
+in advance and not by this document.
+
+---
+
+## §13 — Open questions after the S124 edit pass
+
+Four. Everything else the §S blocks asked has been answered by live read or ruled.
+
+1. **Push truncation length (§6.3, ND-31).** Chat truncates in its own render function; the
+   shared path is untouched and no existing notification changes. **140 characters of body** is
+   proposed — a display budget rather than a payload one, since 4 KB is not the constraint and
+   two-to-four collapsed lines is. 3a-1's real message is 62 characters and passes through
+   whole. **Confirm 140, or name another number.**
+
+2. **Mobile entry point (§7.1d, ND-36).** The panel *shape* is ruled. What opens it is not, and
+   it is genuinely constrained: the app bar's right slot is the bell (A-40 as rewritten) and the
+   tab bar is full at five under D-3. Four candidates with their costs are in §7.1d — a
+   floating action button, a bottom sheet, an app-bar slot on project routes only, or a row in
+   the existing sheet. **The bottom sheet is the honest form for 402px but loses the global
+   reach that makes the desktop panel primary**, which is the trade to rule on.
+
+3. **Switcher project list (§7.1a-i, ND-34).** `can_view_project()` is right for PM/foreman/crew
+   and resolves to **every project in the company** for an Owner — 9 today, more later. Options
+   and costs in §7.1a-i: all, active-only, recency-with-search, or unread-first.
+
+4. **History page size (§7.2).** R2 makes the log permanent and therefore eventually large. v1
+   needs a number for the initial load and the load-more increment. Not asked before; it
+   becomes concrete once the panel exists, because a panel shows fewer messages than a tab.
