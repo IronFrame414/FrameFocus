@@ -608,6 +608,71 @@ expected `m-sheet-tile-undefined`. **The app was right.**
 
 ---
 
+### 14:20 UTC — PHASE 1 / SLICE 6 COMPLETE. The photo reference. Pushed `fac9b06`.
+
+**Ground truth:** branch `feat/chat`, HEAD was `55c74f0`, tree clean, 0/0 vs origin, CLI on
+`nmyphyhmfttxkdoposvf`, all chat tables at 0.
+
+**Branch-collision check, done first and answered definitively.** `feat/ffnav-reindex` is on
+origin at `a7d7e97` and was cut from `origin/main`, so the two branches **diverged** — both
+modify `dashboard-shell.tsx`. Rather than warn about a hypothetical, `git merge-tree --write-tree`
+was run: **exit 0, zero conflict markers.** They merge cleanly. **This run touched
+`dashboard-shell.tsx` not at all** (`git diff --name-only` → 0 matches).
+
+| Check | Exit | Signal |
+| --- | --- | --- |
+| `supabase db push` | **0** | Verified against `schema_migrations` + `pg_policy` + `pg_constraint`, not the CLI line |
+| `npm run db:types` | **0** | 6928 → **6977** lines, 4 `chat_message_photos` references |
+| `npx turbo run type-check --force` | **0** | 5/5, 0 cached |
+| `npx vitest run` (`apps/web/`) | **0** | **656 passed (656)** |
+| live `s126-chat-photos.live.ts` | **0** | **8 passed** |
+| Playwright `desktop-chat-photos` | **0** | **5 passed** |
+
+**§4.5a PROVEN, not assumed.** In one transaction under the impersonation harness: an Owner's
+**direct** delete on `chat_message_photos` removed **0** rows — no DELETE policy exists for any
+role — and deleting the **file** removed the reference anyway, with `message_survives = 1` and the
+body intact. That is both halves of the claim: the CASCADE works *because* referential actions are
+performed by the system rather than the caller.
+
+**THREE REAL DEFECTS IN MY OWN BUILD, each caught by something running:**
+
+1. **`send(body)` silently discarded every attached photo.** The composer passed `fileIds`; the
+   hook's handler took fewer parameters, which **TypeScript permits**. It type-checked perfectly
+   and photos would never have been sent.
+2. **`withPhotos` took a client it only half-used.** It called `getProjectPhotos()` internally,
+   which builds its own request-scoped client via `cookies()` — so the join ran as the caller and
+   the gallery read ran as something else. Worked in a route, threw everywhere else. The resolver
+   is now injected, the shape `createChatPoll` already uses here.
+3. **A photo-only message was rejected with a 400.** §5.4 allows "text, photos, or both"; slice 6
+   relaxed the composer and left `chatSendSchema` requiring `min(1)` on the body. Every photo-only
+   send failed and surfaced as an unsent message.
+
+**TWO WRONG TESTS, both mine, both established before touching the build:**
+
+- **The browser fixture premise.** I wrote that "test"'s photos had "real storage paths, so
+  `displayUrl` genuinely signs" — **and asserted it without checking.** Measured after the
+  failure: `project-files` holds 62 objects and **exactly six** `category='photos'` rows have a
+  matching storage object, all on **"kitchen test"**. The others resolve to `displayUrl: null`,
+  which the renderer correctly **skips**. The build was right; the fixture was the defect.
+- **Test pollution.** Teardown in `afterAll` let test 1's two-photo message survive into the
+  tests below, whose global counts read 2 instead of 1 — indistinguishable from a rendering bug.
+
+**A gap between spec and codebase, logged not papered over.** §5.4 says thumbnails open "the
+existing photo viewer". **On desktop there is no such viewer** —
+`app/dashboard/projects/[id]/photos/page.tsx` is a stub reading *"Photos — coming soon"*, and the
+real gallery/viewer is mobile-only (M-8/M-9). Thumbnails therefore open `displayUrl` directly in a
+new tab: not a chat-specific viewer (which §5.4 forbids), and chat still never resolves a path.
+**When the desktop gallery lands, this is one line.**
+
+**ND-31's notification string for a photo-only message was NOT needed** — `mentionTitle()` already
+produces `{author} ({project}): {body}`, and a photo-only mention is an edge case no test reached.
+§5.4's proposed `"[photo]"` wording **remains PROPOSED and unapproved**; nothing in the build
+depends on it.
+
+- **Next:** Phase 2 — ND-41's notification-expiry cron.
+
+---
+
 ## RESUME HERE
 
 **Single next action:** start **slice 6** — the photo reference (ND-22, ND-28). **Not started.**
