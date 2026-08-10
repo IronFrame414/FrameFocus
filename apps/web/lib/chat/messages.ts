@@ -55,6 +55,36 @@ export async function recentMessages(
 }
 
 /**
+ * One page OLDER than what the client holds — §7.2's "load-more". [S126 slice 3]
+ *
+ * §7.2 rules out infinite history in v1: "a page of recent messages with
+ * load-more", because R2 makes the log permanent and therefore eventually
+ * large. `recentMessages` fetches the newest page and this walks backwards from
+ * it, so the two together are the whole of history without ever loading it.
+ *
+ * The mirror image of `messagesSince`: strictly OLDER than `before`, taken
+ * newest-first so the LIMIT lands adjacent to what the client already has, and
+ * reversed for rendering. Ordering ascending here would return the start of the
+ * thread and leave an unbridgeable hole in the middle.
+ */
+export async function messagesBefore(
+  supabase: SupabaseClient<Database>,
+  threadId: string,
+  before: string,
+  limit: number = PAGE_SIZE.tab
+): Promise<ChatMessageRow[]> {
+  const { data } = await supabase
+    .from('chat_messages')
+    .select(SELECT)
+    .eq('thread_id', threadId)
+    .lt('created_at', before)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+
+  return ((data ?? []) as unknown as ChatMessageRow[]).reverse();
+}
+
+/**
  * ⚠️ THE POLL — A-C40. Messages STRICTLY NEWER than the one the client holds.
  *
  * This is not a refetch and must never become one. A refetch grows with

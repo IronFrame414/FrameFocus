@@ -4,9 +4,16 @@ import type { Database } from '@framefocus/shared/types/database';
 import type { CompanyRole } from '@framefocus/shared';
 import { createClient } from '@/lib/supabase-server';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
-import { chatSendSchema } from '@framefocus/shared/validation/chat';
+import { chatSendSchema, chatPollSchema } from '@framefocus/shared/validation/chat';
 import { resolveThread, postableSet } from '@/lib/chat/threads';
-import { insertMessage, insertMentions } from '@/lib/chat/messages';
+import {
+  insertMessage,
+  insertMentions,
+  messagesSince,
+  messagesBefore,
+  PAGE_SIZE,
+} from '@/lib/chat/messages';
+import { chatSession } from '../_session';
 import { parseMentions } from '@/lib/chat/mentions';
 import { notifyMentions } from '@/lib/chat/mention-notify';
 
@@ -25,6 +32,68 @@ import { notifyMentions } from '@/lib/chat/mention-notify';
 // The audience resolution (postableSet) also uses the service role: working out
 // WHO may be mentioned is not the same act as writing the message, and the
 // caller is not necessarily entitled to read every profile it considers.
+
+/**
+ * ⚠️ THE POLL'S TRANSPORT — A-C40, A-C41.
+ *
+ * This is the ONLY way the browser learns about new messages. No component
+ * subscribes to anything; the client holds a `since` and asks for what is newer
+ * (§9.1c — which is what keeps the Realtime swap at one file plus a migration).
+ *
+ * `since` is ALWAYS a `created_at` the database stamped and the client echoed
+ * back. It is never `new Date()` in the browser: `chat_messages.created_at` is
+ * on the database clock, and a browser running fast would ask for messages
+ * newer than a moment that has not happened yet — silently receiving nothing,
+ * forever, with no error to see. Same defect class as the markThreadRead bug
+ * (20260908000000). A client with nothing yet sends no `since` at all and gets
+ * the recent page instead.
+ */
+export async function GET(request: NextRequest) {
+  const session = await chatSession();
+  if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+
+  const params = request.nextUrl.searchParams;
+
+  // §7.2's load-more. Distinct parameter from `since` rather than a mode flag,
+  // so a request can never accidentally mean both directions at once.
+  const before = params.get('before');
+  if (before) {
+    const parsedBefore = chatPollSchema.safeParse({
+      thread_id: params.get('thread_id') ?? undefined,
+      since: before,
+    });
+    if (!parsedBefore.success) {
+      return NextResponse.json({ error: parsedBefore.error.errors[0].message }, { status: 400 });
+    }
+    const older = await messagesBefore(
+      session.supabase,
+      parsedBefore.data.thread_id,
+      before,
+      PAGE_SIZE[params.get('surface') === 'tab' ? 'tab' : 'panel']
+    );
+    return NextResponse.json({ messages: older });
+  }
+
+  const parsed = chatPollSchema.safeParse({
+    thread_id: params.get('thread_id') ?? undefined,
+    since: params.get('since'),
+  });
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 });
+  }
+
+  // No thread check of its own: `chat_messages_select_visible` already returns
+  // nothing for a thread the caller cannot read, so an unauthorised thread id
+  // yields an empty page rather than a leak. Answering 403 here would require a
+  // second membership test — a second answer to a question RLS has answered.
+  const messages = await messagesSince(
+    session.supabase,
+    parsed.data.thread_id,
+    parsed.data.since ?? null
+  );
+
+  return NextResponse.json({ messages });
+}
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient();

@@ -68,6 +68,45 @@ export function extractTokens(body: string): string[] {
   return out;
 }
 
+/**
+ * The token the mention PICKER should insert for a candidate — the inverse of
+ * `parseMentions`, and deliberately in the same file as it.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THE PICKER CANNOT JUST INSERT THE FIRST NAME
+ * ---------------------------------------------------------------------------
+ * `parseMentions` resolves a token only when EXACTLY ONE candidate carries it,
+ * and an ambiguous token resolves to nobody on purpose. So a picker that offers
+ * "Chris Doyle", inserts `@chris`, and happens to sit in a thread with two
+ * Chrises produces a message that **notifies neither of them** — while the
+ * sender watches the picker confirm the choice. Under §2.4 the entire delivery
+ * guarantee rests on the `@`, so a silently inert mention is the worst failure
+ * this feature has.
+ *
+ * Returns the first token unique within `all`, or **null** when the person has
+ * no unambiguous token at all. Null is a real answer: the picker must say the
+ * name is ambiguous rather than insert something it knows will not resolve.
+ */
+export function insertTokenFor(
+  candidate: MentionCandidate,
+  all: MentionCandidate[]
+): string | null {
+  const owners = new Map<string, Set<string>>();
+  for (const c of all) {
+    for (const t of c.tokens) {
+      const set = owners.get(t) ?? new Set<string>();
+      set.add(c.profileId);
+      owners.set(t, set);
+    }
+  }
+  // `candidate.tokens` is ordered first, last, first.last, firstlast — so the
+  // shortest unambiguous form wins, which is what a person would have typed.
+  for (const t of candidate.tokens) {
+    if (owners.get(t)?.size === 1) return t;
+  }
+  return null;
+}
+
 export interface ParseResult {
   /** Unique profile ids to notify, in first-appearance order. */
   profileIds: string[];

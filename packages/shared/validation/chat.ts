@@ -21,6 +21,34 @@ export type ChatSendInput = z.infer<typeof chatSendSchema>;
 
 export const chatPollSchema = z.object({
   thread_id: z.string().uuid(),
-  /** ISO timestamp of the newest message the client holds. Null on first load. */
-  since: z.string().datetime().nullable().optional(),
+  /**
+   * ISO timestamp of the newest message the client holds. Null on first load.
+   *
+   * ⚠️ `{ offset: true }` IS LOAD-BEARING — CORRECTED [S126 slice 3].
+   * _Superseded, quoted not rewritten: `z.string().datetime().nullable().optional()`._
+   * Plain `.datetime()` accepts only a `Z` suffix. PostgREST returns
+   * `2026-07-11T22:13:07.184263+00:00` — a numeric offset — so the original
+   * form rejected **every real timestamp this field will ever carry**, and the
+   * poll would have 400'd on its second request forever.
+   *
+   * It was invisible because slice 2 wrote this schema and built no route that
+   * used it. The value here is always a `created_at` the DATABASE stamped and
+   * the client merely echoes back; it is never produced by a browser clock.
+   */
+  since: z.string().datetime({ offset: true }).nullable().optional(),
 });
+
+/**
+ * Opening a thread: resolve-or-create, mark read, return the first page.
+ *
+ * `surface` picks ND-38's page size — 50 in the tab, 25 in a panel. It is a
+ * request field rather than two routes because the two surfaces differ in one
+ * number and nothing else (A-C28).
+ */
+export const chatOpenSchema = z.object({
+  project_id: z.string().uuid(),
+  kind: z.enum(['crew', 'sub']),
+  surface: z.enum(['tab', 'panel']).default('panel'),
+});
+
+export type ChatOpenInput = z.infer<typeof chatOpenSchema>;
