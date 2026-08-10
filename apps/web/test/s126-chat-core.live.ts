@@ -229,7 +229,17 @@ describe('mentions and notify() — the whole pipeline', () => {
     const candidates = await postableSet(admin, thread!, companyId);
 
     // --- plain message first: R6 says it notifies nobody ---
-    const plainSince = new Date().toISOString();
+    // ⚠️ IDS, NOT A CLIENT CLOCK [S131] — and this file already says why, 40
+    // lines below: "Same family as comparing a client timestamp to a server one
+    // anywhere else: don't." That note was written after skew hid a row from a
+    // positive; this is the same defect pointing the other way, where skew
+    // makes an OLDER mention row look new and a "notify nobody" assertion fails
+    // on someone else's row. Measured: the database clock runs ~110ms ahead.
+    const plainBefore = new Set(
+      (
+        (await admin.from('notifications').select('id').eq('type', 'mention')).data ?? []
+      ).map((r) => r.id)
+    );
     const plain = await insertMessage(crewC, {
       threadId: thread!.id,
       authorProfileId: crewProfileId,
@@ -238,12 +248,12 @@ describe('mentions and notify() — the whole pipeline', () => {
     const plainParse = parseMentions('no tag here, nobody should be told', candidates, crewProfileId);
     expect(plainParse.profileIds).toEqual([]);
 
-    const { count: plainRows } = await admin
+    const { data: plainAll } = await admin
       .from('notifications')
-      .select('id', { count: 'exact', head: true })
-      .eq('type', 'mention')
-      .gte('created_at', plainSince);
-    expect(plainRows ?? 0, 'a plain message must notify nobody — R6').toBe(0);
+      .select('id')
+      .eq('type', 'mention');
+    const plainRows = (plainAll ?? []).filter((r) => !plainBefore.has(r.id));
+    expect(plainRows, 'a plain message must notify nobody — R6').toHaveLength(0);
 
     // --- now the tagged one ---
     const body = '@Josh running short on trim, need about 3 more sticks';

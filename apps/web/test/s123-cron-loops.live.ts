@@ -515,17 +515,27 @@ describe('§3j — runStillClockedIn', () => {
       .single();
     expect(check!.clock_out, 'the fixture session must actually be clocked out').not.toBeNull();
 
-    const since = new Date().toISOString();
+    // ⚠️ IDS, NOT A CLIENT CLOCK [S131]. `source_id` alone cannot carry this
+    // assertion — the 16:00 test used this SAME session and DID produce a row,
+    // so `.eq('source_id', openSessionId)` matches that one too and the check
+    // would always fail. The time filter was doing real work; it was just doing
+    // it against the wrong clock, and the database's runs ~110ms ahead of
+    // Node's. Diffing ids does the same work with no clock in it at all.
+    const beforeIds = new Set(
+      (
+        (await admin.from('notifications').select('id').eq('source_id', openSessionId)).data ?? []
+      ).map((r) => r.id)
+    );
     await runStillClockedIn(admin as SupabaseClient<Database>, now);
 
     // Paired with the 16:00 test above, which used this exact session while it
     // was open and DID produce a row. Same session, same instant, one field
     // changed — so this cannot pass by the loop being broken generally.
-    const { data: fromThisSession } = await admin
+    const { data: allForSession } = await admin
       .from('notifications')
       .select('id')
-      .eq('source_id', openSessionId)
-      .gte('created_at', since);
-    expect(fromThisSession ?? []).toHaveLength(0);
+      .eq('source_id', openSessionId);
+    const fromThisSession = (allForSession ?? []).filter((r) => !beforeIds.has(r.id));
+    expect(fromThisSession).toHaveLength(0);
   });
 });

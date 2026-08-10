@@ -70,6 +70,46 @@ async function exhaustedRows(since: string) {
   return data ?? [];
 }
 
+/**
+ * ⚠️ THE NEGATIVE USES THESE, BECAUSE `since` IS A CLIENT CLOCK [S131].
+ *
+ * Same defect as `s123-cron-loops.live.ts`, same file family, and it was left
+ * armed here when that one was fixed — the three failing instances were
+ * repaired and this passing fourth was not, which is fixing the instance and
+ * missing the class. It failed on the next full run.
+ *
+ * `new Date()` is stamped by NODE; `notifications.created_at` is stamped by
+ * POSTGRES. Measured on this Codespace across five runs, the database clock is
+ * about 110ms ahead, so a row written BEFORE `since` comes back with a
+ * `created_at` AFTER it. The §3f notification the POSITIVE test just wrote to
+ * Owner and Admin therefore lands inside the negative's window and reads as if
+ * the second run had written it. `remindersSent` and the recorder both said 0 —
+ * the loop was right and only the filter disagreed.
+ *
+ * The clock is removed rather than the window widened: take the ids before, diff
+ * after. Strictly stronger, and it cannot rot with the environment.
+ */
+async function exhaustedIds(): Promise<Set<string>> {
+  const { data } = await admin
+    .from('notifications')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('type', 'reminders_exhausted');
+  return new Set((data ?? []).map((r) => r.id));
+}
+
+/** `reminders_exhausted` rows that did not exist when `before` was taken. */
+async function exhaustedAddedSince(before: Set<string>) {
+  const { data } = await admin
+    .from('notifications')
+    .select('id, recipient_profile_id, title, body, link_key, link_params')
+    .eq('company_id', companyId)
+    .eq('type', 'reminders_exhausted');
+  const fresh = (data ?? []).filter((r) => !before.has(r.id));
+  for (const r of fresh) if (!madeNotifications.includes(r.id)) madeNotifications.push(r.id);
+  return fresh;
+}
+
 beforeAll(async () => {
   assertRebuildTest();
 
@@ -219,7 +259,7 @@ describe('§3f — the loop, end to end, with nothing sent', () => {
     // arithmetic that implements it. The count is now 3 of 3, so the loop
     // `continue`s past this estimate entirely.
     const second = recorder();
-    const since2 = new Date().toISOString();
+    const before = await exhaustedIds();
 
     const outcome = await runEstimateReminders(admin as SupabaseClient<Database>, new Date(), {
       send: second.send,
@@ -228,7 +268,7 @@ describe('§3f — the loop, end to end, with nothing sent', () => {
 
     expect(outcome.remindersSent).toBe(0);
     expect(second.calls).toHaveLength(0);
-    expect(await exhaustedRows(since2)).toHaveLength(0);
+    expect(await exhaustedAddedSince(before)).toHaveLength(0);
   });
 });
 
