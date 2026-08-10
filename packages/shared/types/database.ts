@@ -427,6 +427,55 @@ export type Database = {
           },
         ]
       }
+      chat_message_photos: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          file_id: string
+          id: string
+          message_id: string
+          sort_order: number
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          file_id: string
+          id?: string
+          message_id: string
+          sort_order?: number
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          file_id?: string
+          id?: string
+          message_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_message_photos_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_message_photos_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_message_photos_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "chat_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       chat_messages: {
         Row: {
           author_profile_id: string
