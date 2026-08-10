@@ -29,6 +29,13 @@ export const PROJECT_QA_A_NAME = 'QA A — isolation fixture';
 export const PROJECT_TEST = 'eaf0e25b-d60e-49c0-89b2-5612118d94b4';
 
 export async function signIn(page: Page, email: string): Promise<void> {
+  // ⚠️ COOKIES CLEARED FIRST, so signing in as a SECOND identity in one test
+  // works. `middleware.ts` redirects an AUTHENTICATED request away from
+  // /sign-in to /dashboard — the same behaviour auth.setup.ts documents as the
+  // reason the anonymous and authenticated Playwright projects are separate —
+  // so without this the form never renders and the call hangs on `#email`
+  // until the test times out. Found exactly that way.
+  await page.context().clearCookies();
   await page.goto('/sign-in');
   await page.locator('#email').fill(email);
   await page.locator('#password').fill(PASSWORD);
