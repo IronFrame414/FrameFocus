@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { RotateCw } from 'lucide-react';
 import { color, font } from '@/lib/theme';
-import type { ChatMessageRow } from '@/lib/chat/messages';
+import type { ChatMessageWithPhotos } from '@/lib/chat/photos';
 import type { ThreadKind } from '@/lib/chat/threads';
 import { useChatThread } from './use-chat-thread';
 import { ChatComposer } from './chat-composer';
@@ -69,7 +69,7 @@ export function ChatThreadView({
   } = useChatThread({ projectId, surface, kind });
 
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [older, setOlder] = useState<ChatMessageRow[]>([]);
+  const [older, setOlder] = useState<ChatMessageWithPhotos[]>([]);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const lastSeenCount = useRef(0);
 
@@ -105,9 +105,10 @@ export function ChatThreadView({
       url.searchParams.set('thread_id', thread.id);
       url.searchParams.set('before', first.created_at);
       url.searchParams.set('surface', surface);
+      url.searchParams.set('project_id', projectId);
       const res = await fetch(url.toString());
       const json = res.ok ? await res.json() : { messages: [] };
-      const page: ChatMessageRow[] = json.messages ?? [];
+      const page: ChatMessageWithPhotos[] = json.messages ?? [];
       // Short page means we have reached the start of the thread.
       if (pageSize !== null && page.length < pageSize) setHasOlder(false);
       if (page.length > 0) setOlder((current) => [...page, ...current]);
@@ -221,6 +222,63 @@ export function ChatThreadView({
                 >
                   {m.body}
                 </div>
+
+                {/* ---------------------------------------------------------
+                    ND-22 / A-C17 — photo REFERENCES, rendered as thumbnails.
+
+                    `displayUrl` comes from getProjectPhotos() (M6M D-31), so an
+                    annotated photo shows its DERIVATIVE — the marks. Chat never
+                    resolves a file path itself, which is what stops it showing
+                    the unmarked original the way #129 did.
+
+                    A null displayUrl is SKIPPED rather than rendered broken: it
+                    means the file is gone (ND-28's CASCADE) or could not be
+                    signed, and A-C17b requires the message keep its text either
+                    way.
+                    --------------------------------------------------------- */}
+                {m.photos?.length > 0 && (
+                  <div
+                    data-testid="chat-message-photos"
+                    style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: '5px',
+                      marginTop: '5px',
+                      justifyContent: mine ? 'flex-end' : 'flex-start',
+                      maxWidth: '82%',
+                    }}
+                  >
+                    {m.photos
+                      .filter((photo) => photo.displayUrl)
+                      .map((photo) => (
+                        <a
+                          key={photo.fileId}
+                          data-testid="chat-message-photo"
+                          data-file-id={photo.fileId}
+                          href={photo.displayUrl!}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={photo.fileName}
+                          style={{
+                            display: 'block',
+                            height: '78px',
+                            width: '78px',
+                            overflow: 'hidden',
+                            borderRadius: '9px',
+                            border: `1px solid ${color.inputBorder}`,
+                            background: color.tableHeadBg,
+                          }}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={photo.displayUrl!}
+                            alt={photo.fileName}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                        </a>
+                      ))}
+                  </div>
+                )}
               </div>
             </div>
           );

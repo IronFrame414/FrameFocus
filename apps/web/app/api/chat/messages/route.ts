@@ -17,6 +17,7 @@ import { chatSession } from '../_session';
 import { parseMentions } from '@/lib/chat/mentions';
 import { notifyMentions } from '@/lib/chat/mention-notify';
 import { sendMentionEmails } from '@/lib/chat/mention-email';
+import { attachPhotos, eligiblePhotoIds, withPhotos } from '@/lib/chat/photos';
 
 // Chat send. ND-18's shape, unchanged:
 //
@@ -49,6 +50,24 @@ import { sendMentionEmails } from '@/lib/chat/mention-email';
  * (20260908000000). A client with nothing yet sends no `since` at all and gets
  * the recent page instead.
  */
+/**
+ * ND-22 — attach photo references to a page of messages.
+ *
+ * `project_id` is required to resolve `displayUrl` through getProjectPhotos()
+ * (D-31 — chat never resolves a path itself). A caller that omits it gets
+ * messages with no photos rather than an error: the text is the message, and a
+ * missing thumbnail must not blank the thread.
+ */
+async function decorate(
+  supabase: Parameters<typeof withPhotos>[0],
+  projectId: string | null,
+  messages: Awaited<ReturnType<typeof messagesSince>>
+) {
+  if (!projectId) return messages.map((m) => ({ ...m, photos: [] }));
+  const { getProjectPhotos } = await import('@/lib/services/photos');
+  return withPhotos(supabase, messages, () => getProjectPhotos(projectId));
+}
+
 export async function GET(request: NextRequest) {
   const session = await chatSession();
   if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
@@ -72,7 +91,9 @@ export async function GET(request: NextRequest) {
       before,
       PAGE_SIZE[params.get('surface') === 'tab' ? 'tab' : 'panel']
     );
-    return NextResponse.json({ messages: older });
+    return NextResponse.json({
+      messages: await decorate(session.supabase, params.get('project_id'), older),
+    });
   }
 
   const parsed = chatPollSchema.safeParse({
@@ -93,7 +114,9 @@ export async function GET(request: NextRequest) {
     parsed.data.since ?? null
   );
 
-  return NextResponse.json({ messages });
+  return NextResponse.json({
+    messages: await decorate(session.supabase, params.get('project_id'), messages),
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -143,6 +166,32 @@ export async function POST(request: NextRequest) {
     }
     console.error(`[chat] message insert failed: ${sent.error}`);
     return NextResponse.json({ error: sent.error }, { status: 400 });
+  }
+
+  // ── ND-22 — the photo references, attached as the CALLER.
+  //
+  // ⚠️ ELIGIBILITY IS RE-CHECKED HERE, not trusted from the picker. An FK
+  // cannot enforce `category = 'photos'` (§4.3), so a crafted request could
+  // otherwise attach a contract PDF or a receipt — or a photo from another
+  // project — and it would render as a chat thumbnail. A-C17c is the only
+  // backstop and this is it.
+  //
+  // Ineligible ids are DROPPED rather than failing the send: the message is the
+  // business event and it already exists. `attachedPhotos` travels back so the
+  // composer can say fewer went than were picked.
+  let attachedPhotos = 0;
+  if (input.file_ids && input.file_ids.length > 0) {
+    const eligible = await eligiblePhotoIds(supabase, input.project_id, input.file_ids);
+    if (eligible.length !== input.file_ids.length) {
+      console.error(
+        `[chat] ${input.file_ids.length - eligible.length} ineligible file id(s) dropped from message ${sent.id}`
+      );
+    }
+    // Order preserved from the caller's selection, not from the eligibility query.
+    const ordered = input.file_ids.filter((id) => eligible.includes(id));
+    const outcome = await attachPhotos(supabase, sent.id!, ordered);
+    if (outcome.error) console.error(`[chat] photo attach failed: ${outcome.error}`);
+    attachedPhotos = outcome.attached;
   }
 
   // ── Everything below is best-effort. The message exists and is the business
@@ -222,5 +271,12 @@ export async function POST(request: NextRequest) {
 
   // `unresolved` travels back so the composer can say "@chris matched two
   // people" rather than silently sending a message that notified nobody.
-  return NextResponse.json({ id: sent.id, threadId: thread.id, mentioned, emailed, unresolved });
+  return NextResponse.json({
+    id: sent.id,
+    threadId: thread.id,
+    mentioned,
+    emailed,
+    photos: attachedPhotos,
+    unresolved,
+  });
 }

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createChatPoll } from '@/lib/chat/poll';
-import type { ChatMessageRow } from '@/lib/chat/messages';
+import type { ChatMessageWithPhotos } from '@/lib/chat/photos';
 import type { ChatThread, ThreadKind } from '@/lib/chat/threads';
 
 /**
@@ -39,6 +39,8 @@ export interface PendingMessage {
   tempId: string;
   body: string;
   state: 'sending' | 'failed';
+  /** ND-22 — carried so a RETRY re-attaches the same references (§7.3). */
+  fileIds?: string[];
 }
 
 export interface SendOutcome {
@@ -55,7 +57,7 @@ interface UseChatThreadArgs {
 
 export function useChatThread({ projectId, surface, kind = 'crew' }: UseChatThreadArgs) {
   const [thread, setThread] = useState<ChatThread | null>(null);
-  const [messages, setMessages] = useState<ChatMessageRow[]>([]);
+  const [messages, setMessages] = useState<ChatMessageWithPhotos[]>([]);
   const [pending, setPending] = useState<PendingMessage[]>([]);
   const [status, setStatus] = useState<ThreadStatus>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -86,7 +88,7 @@ export function useChatThread({ projectId, surface, kind = 'crew' }: UseChatThre
   const threadRef = useRef<ChatThread | null>(null);
   const sinceRef = useRef<string | null>(null);
 
-  const absorb = useCallback((incoming: ChatMessageRow[]) => {
+  const absorb = useCallback((incoming: ChatMessageWithPhotos[]) => {
     if (incoming.length === 0) return;
     setMessages((current) => {
       const seen = new Set(current.map((m) => m.id));
@@ -107,11 +109,15 @@ export function useChatThread({ projectId, surface, kind = 'crew' }: UseChatThre
     if (!open) return;
     const url = new URL('/api/chat/messages', window.location.origin);
     url.searchParams.set('thread_id', open.id);
+    // ND-22 — the decorator resolves displayUrl through getProjectPhotos(), so
+    // it needs the project. Omitting it returns messages with no thumbnails,
+    // which is a silent loss rather than an error.
+    url.searchParams.set('project_id', open.project_id);
     if (sinceRef.current) url.searchParams.set('since', sinceRef.current);
 
     const res = await fetch(url.toString());
     if (!res.ok) return;
-    const json = (await res.json()) as { messages?: ChatMessageRow[] };
+    const json = (await res.json()) as { messages?: ChatMessageWithPhotos[] };
     absorb(json.messages ?? []);
   }, [absorb]);
 
@@ -155,7 +161,7 @@ export function useChatThread({ projectId, surface, kind = 'crew' }: UseChatThre
           return;
         }
 
-        const rows: ChatMessageRow[] = json.messages ?? [];
+        const rows: ChatMessageWithPhotos[] = json.messages ?? [];
         threadRef.current = json.thread;
         sinceRef.current = rows[rows.length - 1]?.created_at ?? null;
         setThread(json.thread);
@@ -203,20 +209,30 @@ export function useChatThread({ projectId, surface, kind = 'crew' }: UseChatThre
 
   // ---- send ----------------------------------------------------------------
   const send = useCallback(
-    async (body: string): Promise<SendOutcome> => {
+    async (body: string, fileIds: string[] = []): Promise<SendOutcome> => {
       if (!projectId) return { ok: false, unresolved: [] };
 
       // ND-24: the optimistic row is kept OUT of `messages` on purpose. A-C21 —
       // a failed message is never displayed as sent — is much easier to hold
       // when the sent list and the trying-to-send list are different lists.
       const tempId = `pending-${crypto.randomUUID()}`;
-      setPending((p) => [...p, { tempId, body, state: 'sending' }]);
+      setPending((p) => [...p, { tempId, body, state: 'sending', fileIds }]);
 
       try {
         const res = await fetch('/api/chat/messages', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ project_id: projectId, kind, body }),
+          // ⚠️ `file_ids` MUST BE THREADED THROUGH. TypeScript permits a
+          // handler that takes FEWER parameters than the caller passes, so an
+          // earlier version of this function — `send(body)` — type-checked
+          // perfectly while silently dropping every attached photo. Nothing
+          // failed; the message just arrived with no references.
+          body: JSON.stringify({
+            project_id: projectId,
+            kind,
+            body,
+            ...(fileIds.length > 0 ? { file_ids: fileIds } : {}),
+          }),
         });
         const json = await res.json().catch(() => ({}));
 
@@ -249,7 +265,7 @@ export function useChatThread({ projectId, surface, kind = 'crew' }: UseChatThre
       const failed = pending.find((m) => m.tempId === tempId);
       if (!failed) return;
       setPending((p) => p.filter((m) => m.tempId !== tempId));
-      await send(failed.body);
+      await send(failed.body, failed.fileIds ?? []);
     },
     [pending, send]
   );

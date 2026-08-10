@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { AtSign, Send } from 'lucide-react';
+import { AtSign, Image as ImageIcon, Send, X } from 'lucide-react';
 import { color, font } from '@/lib/theme';
 import type { ThreadKind } from '@/lib/chat/threads';
 
@@ -31,11 +31,22 @@ export interface MentionPerson {
   token: string | null;
 }
 
+/** ND-22 — a photo the composer is holding a REFERENCE to. Never a file. */
+export interface PickablePhoto {
+  fileId: string;
+  fileName: string;
+  displayUrl: string | null;
+  hasMarkup: boolean;
+}
+
 interface ChatComposerProps {
   projectId: string;
   kind: ThreadKind;
   disabled?: boolean;
-  onSend: (body: string) => Promise<{ ok: boolean; unresolved: string[] }>;
+  onSend: (
+    body: string,
+    fileIds: string[]
+  ) => Promise<{ ok: boolean; unresolved: string[] }>;
 }
 
 /** The `@fragment` immediately before the caret, or null. */
@@ -54,6 +65,10 @@ export function ChatComposer({ projectId, kind, disabled, onSend }: ChatComposer
   const [query, setQuery] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
   const [pendingCaret, setPendingCaret] = useState<number | null>(null);
+  /** ND-22 — selected references, in pick order. */
+  const [picked, setPicked] = useState<PickablePhoto[]>([]);
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [gallery, setGallery] = useState<PickablePhoto[] | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   /**
@@ -104,6 +119,33 @@ export function ChatComposer({ projectId, kind, disabled, onSend }: ChatComposer
       cancelled = true;
     };
   }, [projectId, kind]);
+
+  /**
+   * §5.4 / A-C19 — that project's photos only.
+   *
+   * Fetched lazily on first open rather than with the thread: a thread is
+   * opened far more often than a photo is attached, and signing every project
+   * photo's URL is not free.
+   */
+  async function openGallery() {
+    setGalleryOpen(true);
+    if (gallery !== null) return;
+    try {
+      const res = await fetch(`/api/chat/photos?project_id=${projectId}&kind=${kind}`);
+      const json = res.ok ? await res.json() : { photos: [] };
+      setGallery(json.photos ?? []);
+    } catch {
+      setGallery([]);
+    }
+  }
+
+  function togglePhoto(photo: PickablePhoto) {
+    setPicked((current) =>
+      current.some((p) => p.fileId === photo.fileId)
+        ? current.filter((p) => p.fileId !== photo.fileId)
+        : [...current, photo]
+    );
+  }
 
   const syncPicker = useCallback((text: string, caret: number) => {
     const fragment = activeFragment(text, caret);
@@ -163,13 +205,20 @@ export function ChatComposer({ projectId, kind, disabled, onSend }: ChatComposer
 
   async function submit() {
     const trimmed = body.trim();
-    if (!trimmed || sending) return;
+    // §5.4 — "the message can carry text, photos, or both". A photo-only
+    // message is a real message; requiring text would make the attach button
+    // useless on its own.
+    if ((!trimmed && picked.length === 0) || sending) return;
     setSending(true);
     setNotice(null);
-    const outcome = await onSend(trimmed);
+    const outcome = await onSend(
+      trimmed,
+      picked.map((p) => p.fileId)
+    );
     setSending(false);
     if (outcome.ok) {
       setBody('');
+      setPicked([]);
       setPickerOpen(false);
       // The parser reports tokens it refused to guess at. Saying so is the
       // difference between "you notified nobody" and the sender never finding
@@ -248,6 +297,133 @@ export function ChatComposer({ projectId, kind, disabled, onSend }: ChatComposer
         </div>
       )}
 
+      {/* ---- the gallery picker (ND-22) ---- */}
+      {galleryOpen && (
+        <div
+          data-testid="chat-photo-picker"
+          style={{
+            marginBottom: '8px',
+            maxHeight: '208px',
+            overflowY: 'auto',
+            border: `1px solid ${color.inputBorder}`,
+            borderRadius: '9px',
+            padding: '8px',
+            backgroundColor: color.cardBg,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', marginBottom: '6px' }}>
+            <span style={{ ...hintStyle, fontWeight: 600 }}>Project photos</span>
+            <button
+              type="button"
+              data-testid="chat-photo-picker-close"
+              aria-label="Close photo picker"
+              onClick={() => setGalleryOpen(false)}
+              style={{ marginLeft: 'auto', border: 'none', background: 'none', cursor: 'pointer', color: color.muted }}
+            >
+              <X size={15} strokeWidth={2.1} aria-hidden />
+            </button>
+          </div>
+
+          {gallery === null && <p style={hintStyle}>Loading photos…</p>}
+          {gallery !== null && gallery.length === 0 && (
+            <p data-testid="chat-photo-picker-empty" style={hintStyle}>
+              No photos on this project yet.
+            </p>
+          )}
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
+            {(gallery ?? []).map((photo) => {
+              const on = picked.some((p) => p.fileId === photo.fileId);
+              return (
+                <button
+                  key={photo.fileId}
+                  type="button"
+                  data-testid="chat-photo-option"
+                  data-file-id={photo.fileId}
+                  data-selected={on}
+                  onClick={() => togglePhoto(photo)}
+                  title={photo.fileName}
+                  style={{
+                    aspectRatio: '1',
+                    padding: 0,
+                    overflow: 'hidden',
+                    borderRadius: '7px',
+                    border: on ? `2px solid ${color.primary}` : `1px solid ${color.inputBorder}`,
+                    background: color.tableHeadBg,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {photo.displayUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={photo.displayUrl}
+                      alt={photo.fileName}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ---- what is attached, before sending ---- */}
+      {picked.length > 0 && (
+        <div
+          data-testid="chat-composer-attachments"
+          style={{ display: 'flex', gap: '6px', marginBottom: '8px', flexWrap: 'wrap' }}
+        >
+          {picked.map((photo) => (
+            <span
+              key={photo.fileId}
+              data-testid="chat-composer-attachment"
+              style={{
+                position: 'relative',
+                height: '46px',
+                width: '46px',
+                borderRadius: '7px',
+                overflow: 'hidden',
+                border: `1px solid ${color.inputBorder}`,
+                background: color.tableHeadBg,
+              }}
+            >
+              {photo.displayUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={photo.displayUrl}
+                  alt={photo.fileName}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              )}
+              <button
+                type="button"
+                aria-label={`Remove ${photo.fileName}`}
+                data-testid="chat-attachment-remove"
+                onClick={() => togglePhoto(photo)}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  right: 0,
+                  display: 'flex',
+                  height: '17px',
+                  width: '17px',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  border: 'none',
+                  borderRadius: '0 0 0 7px',
+                  background: 'rgba(20,33,61,.72)',
+                  color: '#fff',
+                  cursor: 'pointer',
+                }}
+              >
+                <X size={11} strokeWidth={2.6} aria-hidden />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
       <textarea
         ref={inputRef}
         data-testid="chat-composer-input"
@@ -297,11 +473,39 @@ export function ChatComposer({ projectId, kind, disabled, onSend }: ChatComposer
           Mention
         </button>
 
+        {/* ND-22 — REFERENCE, not upload. This opens the project gallery; it is
+            deliberately not a file input, and A-C18 asserts that chat exposes no
+            upload path anywhere. */}
+        <button
+          type="button"
+          data-testid="chat-attach"
+          aria-label="Attach a project photo"
+          onClick={() => void openGallery()}
+          disabled={disabled || sending}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '9px 12px',
+            borderRadius: '9px',
+            border: `1px solid ${color.inputBorder}`,
+            backgroundColor: '#fff',
+            color: color.body,
+            fontFamily: font.sans,
+            fontSize: '13px',
+            fontWeight: 600,
+            cursor: 'pointer',
+          }}
+        >
+          <ImageIcon size={15} strokeWidth={2.1} aria-hidden />
+          Photo
+        </button>
+
         <button
           type="button"
           data-testid="chat-send"
           onClick={() => void submit()}
-          disabled={disabled || sending || body.trim() === ''}
+          disabled={disabled || sending || (body.trim() === '' && picked.length === 0)}
           style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -310,12 +514,13 @@ export function ChatComposer({ projectId, kind, disabled, onSend }: ChatComposer
             padding: '9px 16px',
             borderRadius: '9px',
             border: 'none',
-            backgroundColor: body.trim() === '' ? color.faintAlt : color.primary,
+            backgroundColor:
+              body.trim() === '' && picked.length === 0 ? color.faintAlt : color.primary,
             color: '#fff',
             fontFamily: font.sans,
             fontSize: '13px',
             fontWeight: 600,
-            cursor: body.trim() === '' ? 'default' : 'pointer',
+            cursor: body.trim() === '' && picked.length === 0 ? 'default' : 'pointer',
           }}
         >
           <Send size={14} strokeWidth={2.2} aria-hidden />

@@ -4,6 +4,7 @@ import { chatSession } from '../_session';
 import { switcherThreads, groupByProject, type SwitcherProject } from '@/lib/chat/switcher';
 import { resolveThread, canPostInThread, subThreadProjects } from '@/lib/chat/threads';
 import { recentMessages, markThreadRead, PAGE_SIZE } from '@/lib/chat/messages';
+import { withPhotos } from '@/lib/chat/photos';
 
 /**
  * The switcher list (GET) and opening a thread (POST).
@@ -160,5 +161,13 @@ export async function POST(request: NextRequest) {
   // Server-stamped by the RPC; see markThreadRead's note on the two clocks.
   await markThreadRead(session.supabase, thread.id);
 
-  return NextResponse.json({ thread, messages, pageSize: limit, canPost });
+  // ND-22 — the first page carries its photo references too, so a thread that
+  // opens on a photo message does not render text-only and then pop thumbnails
+  // in on the first poll.
+  const { getProjectPhotos } = await import('@/lib/services/photos');
+  const withRefs = await withPhotos(session.supabase, messages, () =>
+    getProjectPhotos(input.project_id)
+  );
+
+  return NextResponse.json({ thread, messages: withRefs, pageSize: limit, canPost });
 }
