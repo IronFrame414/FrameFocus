@@ -17,6 +17,7 @@ const MARKER = 'S97FLOOR3';
 let companyId: string;
 let ownerMemberId: string;
 let pmMemberId: string;
+let pmUserId: string;
 let pm: SupabaseClient;
 let owner: SupabaseClient;
 
@@ -48,9 +49,12 @@ beforeAll(async () => {
     .from('company_members').select('id').eq('profile_id', ownerProfile!.id).single()).data!.id;
 
   const { data: pmProfile } = await admin
-    .from('profiles').select('id').eq('email', 'josh+pm@worthprop.com').single();
+    .from('profiles').select('id, user_id').eq('email', 'josh+pm@worthprop.com').single();
   pmMemberId = (await admin
     .from('company_members').select('id').eq('profile_id', pmProfile!.id).single()).data!.id;
+  // The AUTH user id, not the profile id — `change_orders.created_by` is
+  // compared against `auth.uid()` by the S121 read floor. See the CO seeds.
+  pmUserId = pmProfile!.user_id as string;
 
   [pm, owner] = await Promise.all([
     sessionFor('josh+pm@worthprop.com'),
@@ -71,6 +75,28 @@ beforeAll(async () => {
       company_id: companyId, project_id: projectId, author_member_id: ownerMemberId,
       co_number: `${MARKER}-SENT`, title: `${MARKER} sent CO`, co_type: 'fixed_price',
       status: 'draft', tax_rate: 5, material_markup_percent: 20, net_delta: 1000,
+      // ⚠️ AUTHORED BY THE PM, ON PURPOSE [added S130]. Without this the four
+      // PM tests below tested the WRONG RULE and one of them passed vacuously.
+      //
+      // `created_by` defaults to `auth.uid()`, which is NULL for the service
+      // role — so a fixture CO belongs to nobody. The S121 read floor
+      // (20260830000000) lets a PM SELECT only change orders where
+      // `created_by = auth.uid()`, so the PM could not see this row at all.
+      // Postgres evaluates UPDATE's USING clause independently, and
+      // `change_orders_update_authorized` still admits any PM — but with the
+      // row invisible the update matched ZERO ROWS and returned NO ERROR, so
+      // the immutability trigger never fired.
+      //
+      // Measured before changing anything, because "no error" could equally
+      // have meant the write LANDED — which would be a production defect, not
+      // a test one. It did not: the value was still 20 when read back by the
+      // service role before any restore, and the same update as OWNER (who can
+      // see the row) raised 'A sent change order is immutable — void and
+      // reissue instead.' The rule holds; only the SIGNAL had changed.
+      //
+      // Making the PM the author restores what these tests are actually for:
+      // that a PM cannot RE-PRICE a sent CO — not that a PM cannot see one.
+      created_by: pmUserId,
     })
     .select('id').single();
   must('sent CO', coErr);
@@ -113,6 +139,11 @@ beforeAll(async () => {
       company_id: companyId, project_id: projectId, author_member_id: ownerMemberId,
       co_number: `${MARKER}-DRAFT`, title: `${MARKER} draft CO`, co_type: 'fixed_price',
       status: 'draft', tax_rate: 5, net_delta: 0,
+      // Same reason as the sent CO above, and here it is what makes 1d MEAN
+      // anything: "a draft is still fully editable by a PM" asserts only that
+      // the update raised no error, and an invisible row raises no error
+      // either. 1d was passing on a row the PM could not see.
+      created_by: pmUserId,
     })
     .select('id').single();
   must('draft CO', dErr);
@@ -155,11 +186,33 @@ beforeAll(async () => {
     .insert({
       company_id: companyId, sub_type: 'subcontractor', company_name: `${MARKER} Sub Co`,
       contact_first_name: 'QA', contact_last_name: 'Sub',
-      default_hourly_rate: 85, default_markup_percent: 15, notes: `${MARKER}`,
+      notes: `${MARKER}`,
     })
     .select('id').single();
   must('subcontractor', subErr);
   subcontractorId = sub!.id;
+
+  // ⚠️ THE PRICING DEFAULTS ARE NOT ON THIS TABLE ANY MORE [corrected S130].
+  // `default_hourly_rate` and `default_markup_percent` were seeded above until
+  // this run, and the whole suite died in beforeAll with "Could not find the
+  // 'default_hourly_rate' column of 'subcontractors' in the schema cache" —
+  // 17 tests SKIPPED, not failed, which is why it read as one problem rather
+  // than seventeen. 20260903000000 moved both (plus `ein`) to
+  // `subcontractor_financials`; 20260904000000 then dropped the BEFORE UPDATE
+  // trigger that had guarded them, because it read NEW.default_hourly_rate at
+  // runtime and 42703'd on every PM edit of any sub — the production defect in
+  // context99 §4.
+  //
+  // Inserted with the service role, which bypasses the owner/admin policies
+  // below; that is the point of a fixture, and the role gate is what 7a and
+  // 7e-t2 then exercise as the CALLER.
+  const { error: finErr } = await admin
+    .from('subcontractor_financials')
+    .insert({
+      company_id: companyId, subcontractor_id: subcontractorId,
+      default_hourly_rate: 85, default_markup_percent: 15,
+    });
+  must('subcontractor_financials', finErr);
 
   const { data: cat, error: catErr } = await admin
     .from('cost_catalog')
@@ -382,33 +435,52 @@ describe('FLOOR3 — 6. invoices: a PM cannot approve their own invoice', () => 
 
 describe('FLOOR3 — 7. TIER 2: company-wide pricing defaults are Owner/Admin', () => {
   it('7a. a PM cannot change a subcontractor\'s default rate or markup', async () => {
+    // ⚠️ SAME RULING, DIFFERENT MECHANISM, SO A DIFFERENT ASSERTION SHAPE.
+    // [corrected S130 against live schema]
+    //
+    // This used to expect a raised exception: a BEFORE UPDATE trigger on
+    // `subcontractors` rejected the write with 'Subcontractor pricing defaults
+    // are Owner/Admin only.' That trigger is GONE (20260904000000) and the
+    // ruling is now the schema's: both columns sit on
+    // `subcontractor_financials`, whose SELECT/INSERT/UPDATE policies are all
+    // `get_my_role() = ANY('{owner,admin}')`.
+    //
+    // An RLS denial is SILENT where a trigger was LOUD. The USING clause makes
+    // the row invisible, so PostgREST updates zero rows and returns NO error at
+    // all — asserting `error` is not null here would fail against a database
+    // that is enforcing the rule correctly and MORE strictly than before. What
+    // is observable is: nothing came back, and nothing changed.
     const { data: before } = await admin
-      .from('subcontractors')
-      .select('default_hourly_rate, default_markup_percent').eq('id', subcontractorId).single();
+      .from('subcontractor_financials')
+      .select('default_hourly_rate, default_markup_percent')
+      .eq('subcontractor_id', subcontractorId).single();
 
-    const { error } = await pm
-      .from('subcontractors')
+    // Stronger than the trigger ever was: a PM cannot even READ the figures.
+    const { data: pmRead } = await pm
+      .from('subcontractor_financials')
+      .select('default_hourly_rate').eq('subcontractor_id', subcontractorId);
+    expect(pmRead ?? [], 'a PM read subcontractor pricing defaults').toEqual([]);
+
+    const { data: written, error } = await pm
+      .from('subcontractor_financials')
       .update({ default_hourly_rate: 999, default_markup_percent: 99 })
-      .eq('id', subcontractorId)
+      .eq('subcontractor_id', subcontractorId)
       .select('id');
 
-    await admin
-      .from('subcontractors')
-      .update({
-        default_hourly_rate: before!.default_hourly_rate,
-        default_markup_percent: before!.default_markup_percent,
-      })
-      .eq('id', subcontractorId);
-    const { data: restored } = await admin
-      .from('subcontractors')
-      .select('default_hourly_rate, default_markup_percent').eq('id', subcontractorId).single();
-    expect(Number(restored!.default_hourly_rate), 'restore failed')
-      .toBe(Number(before!.default_hourly_rate));
-    expect(Number(restored!.default_markup_percent), 'restore failed')
-      .toBe(Number(before!.default_markup_percent));
+    expect(written ?? [], 'a PM update matched a row it should not see').toEqual([]);
 
-    expect(error, 'a PM rewrote subcontractor pricing defaults').not.toBeNull();
-    expect(error!.message).toContain('Subcontractor pricing defaults are Owner/Admin only.');
+    // Read back as the service role — the only witness that can see the row.
+    // No restore is written: proving the value is untouched is the assertion,
+    // and a restore here would mask a write that had actually landed.
+    const { data: after } = await admin
+      .from('subcontractor_financials')
+      .select('default_hourly_rate, default_markup_percent')
+      .eq('subcontractor_id', subcontractorId).single();
+    expect(Number(after!.default_hourly_rate), 'a PM rewrote the default rate')
+      .toBe(Number(before!.default_hourly_rate));
+    expect(Number(after!.default_markup_percent), 'a PM rewrote the markup')
+      .toBe(Number(before!.default_markup_percent));
+    expect(error, 'an RLS-invisible row should not raise, it should match nothing').toBeNull();
   });
 
   it('7b-t2. a PM CAN still edit the rest of the subcontractor record (not a wall)', async () => {
@@ -464,19 +536,28 @@ describe('FLOOR3 — 7. TIER 2: company-wide pricing defaults are Owner/Admin', 
 
   it('7e-t2. an Owner CAN still set both (the gate is a role gate)', async () => {
     const { data: before } = await admin
-      .from('subcontractors').select('default_hourly_rate').eq('id', subcontractorId).single();
+      .from('subcontractor_financials')
+      .select('default_hourly_rate').eq('subcontractor_id', subcontractorId).single();
 
-    const { error: subError } = await owner
-      .from('subcontractors').update({ default_hourly_rate: 90 }).eq('id', subcontractorId);
+    // Retargeted to the side table [S130] — and `.select('id')` matters. An
+    // Owner denied by RLS would also return `error: null` with zero rows, so
+    // "no error" alone cannot tell a successful write from a silent refusal.
+    // The returned row is what distinguishes them.
+    const { data: subWrote, error: subError } = await owner
+      .from('subcontractor_financials')
+      .update({ default_hourly_rate: 90 })
+      .eq('subcontractor_id', subcontractorId).select('id');
     expect(subError, 'an Owner was blocked from setting a sub default rate').toBeNull();
+    expect((subWrote ?? []).length, 'the Owner update matched no row').toBe(1);
 
     const { error: catError } = await owner
       .from('cost_catalog').update({ unit_cost: 13.75 }).eq('id', catalogItemId);
     expect(catError, 'an Owner was blocked from setting a catalog price').toBeNull();
 
     await admin
-      .from('subcontractors')
-      .update({ default_hourly_rate: before!.default_hourly_rate }).eq('id', subcontractorId);
+      .from('subcontractor_financials')
+      .update({ default_hourly_rate: before!.default_hourly_rate })
+      .eq('subcontractor_id', subcontractorId);
     await admin.from('cost_catalog').update({ unit_cost: 12.5 }).eq('id', catalogItemId);
   });
 });

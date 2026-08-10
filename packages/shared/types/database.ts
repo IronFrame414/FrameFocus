@@ -381,6 +381,268 @@ export type Database = {
           },
         ]
       }
+      chat_message_mentions: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          id: string
+          mentioned_profile_id: string
+          message_id: string
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          id?: string
+          mentioned_profile_id: string
+          message_id: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          id?: string
+          mentioned_profile_id?: string
+          message_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_message_mentions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_message_mentions_mentioned_profile_id_fkey"
+            columns: ["mentioned_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_message_mentions_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "chat_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_message_photos: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          file_id: string
+          id: string
+          message_id: string
+          sort_order: number
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          file_id: string
+          id?: string
+          message_id: string
+          sort_order?: number
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          file_id?: string
+          id?: string
+          message_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_message_photos_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_message_photos_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_message_photos_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "chat_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_messages: {
+        Row: {
+          author_profile_id: string
+          body: string
+          company_id: string
+          created_at: string | null
+          id: string
+          thread_id: string
+        }
+        Insert: {
+          author_profile_id: string
+          body: string
+          company_id?: string
+          created_at?: string | null
+          id?: string
+          thread_id: string
+        }
+        Update: {
+          author_profile_id?: string
+          body?: string
+          company_id?: string
+          created_at?: string | null
+          id?: string
+          thread_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_author_profile_id_fkey"
+            columns: ["author_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_messages_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "chat_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_reads: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          is_deleted: boolean | null
+          last_read_at: string
+          profile_id: string
+          thread_id: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          last_read_at?: string
+          profile_id: string
+          thread_id: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          last_read_at?: string
+          profile_id?: string
+          thread_id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_reads_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_reads_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_reads_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "chat_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_threads: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          is_deleted: boolean | null
+          kind: string
+          project_id: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          kind: string
+          project_id: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          kind?: string
+          project_id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_threads_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_threads_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_contracts: {
         Row: {
           company_id: string
@@ -6329,6 +6591,29 @@ export type Database = {
       can_view_time_session: {
         Args: { p_session_id: string }
         Returns: boolean
+      }
+      chat_can_post: { Args: { p_thread_id: string }; Returns: boolean }
+      chat_mark_read: { Args: { p_thread_id: string }; Returns: string }
+      chat_sub_thread_exists: {
+        Args: { p_project_id: string }
+        Returns: boolean
+      }
+      chat_sub_thread_projects: {
+        Args: never
+        Returns: {
+          project_id: string
+        }[]
+      }
+      chat_switcher_threads: {
+        Args: never
+        Returns: {
+          kind: string
+          last_message_at: string
+          project_id: string
+          project_name: string
+          thread_id: string
+          unread_count: number
+        }[]
       }
       clone_estimate: {
         Args: {

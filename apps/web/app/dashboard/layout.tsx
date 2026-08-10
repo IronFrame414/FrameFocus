@@ -20,7 +20,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('first_name, last_name, role, company_id')
+    // `id` [S126 slice 3] — the chat panel needs the caller's PROFILE id to
+    // decide which bubbles are theirs. A mention recipient is a profile (ND-2)
+    // and `chat_messages.author_profile_id` is a profile id, so `user.id` is
+    // the wrong key here and would silently align every bubble left.
+    .select('id, first_name, last_name, role, company_id')
     .eq('user_id', user.id)
     .single();
 
@@ -52,6 +56,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
       timeZone={timeSettings.timezone}
       gpsMode={timeSettings.gpsClockMode}
       unreadCount={unreadCount}
+      myProfileId={profile.id}
     >
       {/* ND-4 — registers the push-only desktop worker. Renders nothing, and
           registering is not subscribing: no prompt fires from here. */}

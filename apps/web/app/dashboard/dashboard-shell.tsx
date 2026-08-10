@@ -24,6 +24,7 @@ import { brand } from '@/lib/brand';
 import type { GpsClockMode } from '@framefocus/shared/utils/time-tracking';
 import type { SessionWithSegments } from '@/lib/services/time-tracking-client';
 import { GlobalClockButton } from '@/components/time/global-clock-button';
+import { ChatPanel } from '@/components/chat/chat-panel';
 
 interface DashboardShellProps {
   children: React.ReactNode;
@@ -38,6 +39,8 @@ interface DashboardShellProps {
   gpsMode: GpsClockMode;
   /** ND-12 — the Notifications item's unread badge. 0 renders no badge. */
   unreadCount: number;
+  /** ND-33 — the global chat panel needs the caller's PROFILE id, not user id. */
+  myProfileId: string;
 }
 
 // FFNav 12-item order locked S86 round-2 (6a-ui-build-report addendum), built
@@ -113,6 +116,7 @@ export function DashboardShell({
   timeZone,
   gpsMode,
   unreadCount,
+  myProfileId,
 }: DashboardShellProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -252,6 +256,12 @@ export function DashboardShell({
         </header>
         <main className="flex-1 bg-[#f4f6f9] px-[30px] py-[26px]">{children}</main>
       </div>
+      {/* ND-33 / A-C24 — the chat launcher and panel mount ONCE, here, so they
+          render on every /dashboard route including the ones that have nothing
+          to do with a project. Mounting them per page would be a second
+          implementation of one surface (§7.1a) and would fail A-C24 on
+          Contacts, Estimates and Settings while passing everywhere else. */}
+      <ChatPanel myProfileId={myProfileId} />
     </div>
   );
 }

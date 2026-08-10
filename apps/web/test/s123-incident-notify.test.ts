@@ -85,14 +85,31 @@ describe('the route matcher itself', () => {
 });
 
 // ---------------------------------------------------------------------------
-// The one key with no route yet, named explicitly so it cannot quietly grow.
+// ✅ EMPTY — CHAT SHIPPED. A-C29 cleared [S126 slice 3].
 // ---------------------------------------------------------------------------
-// `chat` is specced (§10.5) and is a LATER slice — /m/p/[projectId]/chat and
-// /dashboard/projects/[id]/chat are not built. It is listed here rather than
-// deleted from the resolver because the resolver is what the chat slice wires
-// itself into. When chat ships, this set empties and the guard below fails
-// until it does — which is the reminder.
-const PENDING_ROUTES = new Set(['chat']);
+// _Superseded, quoted not rewritten:_
+//   "// `chat` is specced (§10.5) and is a LATER slice — /m/p/[projectId]/chat
+//    // and /dashboard/projects/[id]/chat are not built. …
+//    const PENDING_ROUTES = new Set(['chat']);"
+//
+// The guard did its job and did it awkwardly, which is worth recording. Slice 3
+// builds `/dashboard/projects/[id]/chat`, so the desktop arm now resolves to a
+// real route and `expect(routeExists(resolved)).toBe(false)` began FAILING —
+// the reminder firing exactly as designed.
+//
+// ⚠️ BUT CLEARING THE SET ALONE WOULD HAVE BROKEN THE MOBILE ARM, and that is
+// the part worth reading. `links.ts` resolved mobile chat to
+// `/m/p/${projectId}/chat` — a route ND-37 says must NEVER exist, because the
+// mobile Chat slot opens an overlay and owns no route, and A-C42 asserts its
+// absence. So `chat` was in a state where neither leaving it here nor removing
+// it could pass: the desktop arm demanded removal and the mobile arm demanded a
+// route the spec forbids.
+//
+// The resolution is not in this file. `links.ts` was corrected to ND-40's ruled
+// destination, `/m/p/{id}?chat=1` — a PARAM on a route that already exists —
+// after which both arms resolve to real routes and the set empties honestly
+// rather than by suppressing one half.
+const PENDING_ROUTES = new Set<string>([]);
 
 describe('ND-11 — every link key points at a route that exists', () => {
   const params = { projectId: 'p1', id: 'i1', week: '2026-08-09' };
@@ -116,8 +133,18 @@ describe('ND-11 — every link key points at a route that exists', () => {
     for (const key of PENDING_ROUTES) {
       expect(LINK_KEYS).toContain(key);
     }
-    // Fails when chat ships — remove the key, and this line, together.
-    expect([...PENDING_ROUTES]).toEqual(['chat']);
+    // Every link key now points at a route that exists. The sweep above is what
+    // enforces that; this line only records that nothing is being excused.
+    expect([...PENDING_ROUTES]).toEqual([]);
+  });
+
+  // A-C42's negative half, asserted at the point the destination is chosen
+  // rather than only in a Playwright walk (ND-37, ND-40). The positive half —
+  // that the overlay actually opens — is slice 5's, but the route's ABSENCE is
+  // a property of the app tree and is true now.
+  it('ND-40 — mobile chat is a PARAM on the project screen, and /m/p/{id}/chat does not exist', () => {
+    expect(resolveLink('chat', { projectId: 'p1' }, 'mobile')).toBe('/m/p/p1?chat=1');
+    expect(ROUTES.some((r) => r.join('/') === 'm/p/[projectId]/chat')).toBe(false);
   });
 });
 

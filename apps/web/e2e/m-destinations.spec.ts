@@ -27,7 +27,12 @@ import { test, expect, type Page } from '@playwright/test';
 
 // All SIX §4.13 destinations are built as of S102 — A-41 and A-42 are now
 // reachable at six of six rather than four.
+// ⚠️ SEVEN [chat ND-36, S126] — `/m/logs` joins the walk, because it became a
+// hamburger destination when Chat took its tab slot. A-41 and A-42 were both
+// rewritten from six routes to seven; A-42's count would otherwise have failed
+// silently as an off-by-one.
 const BUILT = [
+  '/m/logs',
   '/m/schedule',
   '/m/expenses',
   '/m/subs',
@@ -95,6 +100,9 @@ test.describe('§4.13 common rules on the built screens', () => {
   // A-41 — the highlight is now REACHABLE for the four built tiles. The two
   // unbuilt routes still 404, so the walk covers four of six.
   const TILE_FOR: Record<string, string> = {
+    // A-C32 [chat ND-36, S126] — /m/logs joins the walk and lights the Logs
+    // tile. This is M6M A-41 extended to a seventh route.
+    '/m/logs': 'Logs',
     '/m/schedule': 'Schedule',
     '/m/expenses': 'Expenses',
     '/m/subs': 'Subs & Vendors',
