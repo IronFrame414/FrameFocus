@@ -127,7 +127,13 @@ export type EmailType =
   // 7E §6 — an AR reminder on an overdue invoice (email_types row seeded in
   // 20260815000000). The ONLY §7 event that rides this mechanism — see the
   // reminder cron's header.
-  | 'invoice_reminder';
+  | 'invoice_reminder'
+  // Chat §5.6a / ND-42 — a mentioned SUBCONTRACTOR only. The `email_types.mention`
+  // row landed with the chat schema in 20260906000000; this union did not, so
+  // `logEmail({ email_type: 'mention' })` did not type-check until slice 4.
+  // Half the registry shipped and the half that fails a build did not — found
+  // by S126's ruling sweep, not by anything failing.
+  | 'mention';
 
 export interface LogEmailInput {
   company_id: string;

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { chatOpenSchema } from '@framefocus/shared/validation/chat';
 import { chatSession } from '../_session';
 import { switcherThreads, groupByProject, type SwitcherProject } from '@/lib/chat/switcher';
-import { resolveThread } from '@/lib/chat/threads';
+import { resolveThread, canPostInThread, subThreadProjects } from '@/lib/chat/threads';
 import { recentMessages, markThreadRead, PAGE_SIZE } from '@/lib/chat/messages';
 
 /**
@@ -12,35 +12,26 @@ import { recentMessages, markThreadRead, PAGE_SIZE } from '@/lib/chat/messages';
  */
 
 // ---------------------------------------------------------------------------
-// SLICE 3 RENDERS THE CREW THREAD ONLY — AND THIS IS THE ONE PLACE THAT SAYS SO
+// ✅ SLICE 4: BOTH THREADS. Slice 3's crew-only filter is DELETED.
 // ---------------------------------------------------------------------------
-// The switcher RPC returns BOTH kinds, because RLS is what decides visibility
-// and the RPC is not slice-aware. Slice 3 has no sub-thread UI (§5.2's
-// divergence, the banner and the composer suppression are all slice 4), so a
-// sub thread reaching the panel would open a crew-shaped view over a sub-shaped
-// thread: a composer that every non-postable role would watch 403. That is
-// M6M D-54 inverted — a visible button that is not a permission — and it is
-// worse than either alternative the spec weighs.
+// _Superseded, quoted not rewritten: `const SLICE_3_KINDS = ['crew'] as const;`
+// and the `.filter()` that used it._ Slice 3 carried it because it had no
+// sub-thread UI, so a sub thread reaching the panel would have opened a
+// crew-shaped view over a sub-shaped thread — a composer that non-postable
+// roles would watch 403, which is M6M D-54 inverted.
 //
-// Rendering it dead was rejected on the spec's own precedent: §7.1e refuses "a
-// disabled second segment" for exactly the analogous case.
-//
-// ⚠️ AND IT HIDES NOTHING THAT EXISTS. Threads are created lazily, on first
-// open or first message (§4.1). Slice 3 asks for `kind: 'crew'` and nothing
-// else in the app asks at all, so no sub thread can come into being before
-// slice 4 creates one. The filter is therefore a no-op against real data today
-// and a guard against a half-built surface tomorrow.
-//
-// SLICE 4 DELETES THIS CONSTANT AND THE `.filter()` BELOW. Nothing else.
-const SLICE_3_KINDS = ['crew'] as const;
+// Slice 4 builds the divergence, so the filter goes and the switcher tells the
+// truth about what exists. What replaces it is NOT another filter: it is
+// `kinds` below, which says which SEGMENTS a project offers this caller.
 
 export async function GET() {
   const session = await chatSession();
   if (!session) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
-  const threads = (await switcherThreads(session.supabase)).filter((t) =>
-    (SLICE_3_KINDS as readonly string[]).includes(t.kind)
-  );
+  const [threads, subEligible] = await Promise.all([
+    switcherThreads(session.supabase),
+    subThreadProjects(session.supabase),
+  ]);
   const withThreads = groupByProject(threads);
 
   // -------------------------------------------------------------------------
@@ -67,28 +58,21 @@ export async function GET() {
   const seen = new Set(withThreads.map((p) => p.projectId));
   const extra: SwitcherProject[] = [];
 
-  // A subcontractor is excluded from the crew thread absolutely (ND-19), so
-  // offering them a "start a conversation" row on every project they are
-  // assigned to would offer a thread the database will refuse to create. Their
-  // surface is the sub thread, and that is slice 4. Same clause the crew
-  // thread's own policy uses: `get_my_role() IS DISTINCT FROM 'subcontractor'`.
-  if (session.role !== 'subcontractor') {
-    const { data: projects } = await session.supabase
-      .from('projects')
-      .select('id, name')
-      .eq('status', 'active')
-      .eq('is_deleted', false);
+  const { data: projects } = await session.supabase
+    .from('projects')
+    .select('id, name')
+    .eq('status', 'active')
+    .eq('is_deleted', false);
 
-    for (const p of projects ?? []) {
-      if (seen.has(p.id)) continue;
-      extra.push({
-        projectId: p.id,
-        projectName: p.name,
-        threads: [],
-        unreadCount: 0,
-        lastMessageAt: null,
-      });
-    }
+  for (const p of projects ?? []) {
+    if (seen.has(p.id)) continue;
+    extra.push({
+      projectId: p.id,
+      projectName: p.name,
+      threads: [],
+      unreadCount: 0,
+      lastMessageAt: null,
+    });
   }
 
   // The RPC already ordered by the project's most recent activity. Everything
@@ -100,7 +84,34 @@ export async function GET() {
     a.projectName.localeCompare(b.projectName)
   );
 
-  return NextResponse.json({ projects: [...active, ...quiet] });
+  // -------------------------------------------------------------------------
+  // WHICH SEGMENTS A PROJECT OFFERS THIS CALLER — §7.1e, ND-25
+  // -------------------------------------------------------------------------
+  // Computed here rather than in the component, because both halves are role
+  // rules and the component is not the place role rules live:
+  //
+  //   crew  — everyone EXCEPT a subcontractor. The same clause the crew
+  //           thread's own policy opens with, `get_my_role() IS DISTINCT FROM
+  //           'subcontractor'` (ND-19, the one absolute in §5.2's table).
+  //   sub   — only where an assigned subcontractor WITH a profile exists
+  //           (ND-25), which `chat_sub_thread_projects()` answers.
+  //
+  // §7.1e: two segments where both exist; where only one does, **no segmented
+  // control at all — and not a disabled second segment**. A project offering an
+  // empty list is dropped entirely, which is the case a SUBCONTRACTOR hits on a
+  // project whose sub thread does not exist: they cannot read the crew thread
+  // either, so there is nothing there for them.
+  const withKinds = [...active, ...quiet]
+    .map((p) => ({
+      ...p,
+      kinds: [
+        ...(session.role !== 'subcontractor' ? (['crew'] as const) : []),
+        ...(subEligible.has(p.projectId) ? (['sub'] as const) : []),
+      ],
+    }))
+    .filter((p) => p.kinds.length > 0);
+
+  return NextResponse.json({ projects: withKinds });
 }
 
 /**
@@ -137,11 +148,17 @@ export async function POST(request: NextRequest) {
   }
 
   const limit = PAGE_SIZE[input.surface];
-  const messages = await recentMessages(session.supabase, thread.id, limit);
+  const [messages, canPost] = await Promise.all([
+    recentMessages(session.supabase, thread.id, limit),
+    // §7.4 / D-54 — the DATABASE decides whether a composer renders. A crew
+    // member opening the sub thread gets `false` here and sees the banner
+    // instead; the composer is not in the DOM at all (A-C7).
+    canPostInThread(session.supabase, thread.id),
+  ]);
 
   // §7.2 — "Opening a thread writes chat_reads.last_read_at for that thread."
   // Server-stamped by the RPC; see markThreadRead's note on the two clocks.
   await markThreadRead(session.supabase, thread.id);
 
-  return NextResponse.json({ thread, messages, pageSize: limit });
+  return NextResponse.json({ thread, messages, pageSize: limit, canPost });
 }

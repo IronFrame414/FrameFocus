@@ -16,6 +16,7 @@ import {
 import { chatSession } from '../_session';
 import { parseMentions } from '@/lib/chat/mentions';
 import { notifyMentions } from '@/lib/chat/mention-notify';
+import { sendMentionEmails } from '@/lib/chat/mention-email';
 
 // Chat send. ND-18's shape, unchanged:
 //
@@ -148,6 +149,7 @@ export async function POST(request: NextRequest) {
   // event; failing to announce it must not undo it (parent's rule, applied).
   const admin = getSupabaseAdmin() as SupabaseClient<Database>;
   let mentioned = 0;
+  let emailed = 0;
   let unresolved: string[] = [];
 
   try {
@@ -166,6 +168,12 @@ export async function POST(request: NextRequest) {
       const { data: project } = await supabase
         .from('projects').select('name').eq('id', input.project_id).maybeSingle();
 
+      const mentionedRows = (rows ?? []).map((r) => ({
+        profileId: r.id,
+        role: r.role as CompanyRole,
+        email: r.email,
+      }));
+
       const outcome = await notifyMentions({
         admin,
         companyId: profile.company_id,
@@ -176,13 +184,34 @@ export async function POST(request: NextRequest) {
         messageId: sent.id!,
         authorName: `${profile.first_name} ${profile.last_name}`.trim(),
         body: input.body,
-        mentioned: (rows ?? []).map((r) => ({
-          profileId: r.id,
-          role: r.role as CompanyRole,
-          email: r.email,
-        })),
+        mentioned: mentionedRows,
       });
       mentioned = outcome.written;
+
+      // ND-30 / ND-42 — the mention email, SUBS ONLY.
+      //
+      // ⚠️ ALONGSIDE notify(), NOT INSIDE IT. notify() sends no email and four
+      // existing consumers each drive their own; moving this inward would
+      // double-send for every one of them.
+      //
+      // Best-effort like everything else below the message insert: the message
+      // is the business event, and failing to announce it must not undo it.
+      const emailOutcome = await sendMentionEmails({
+        admin,
+        companyId: profile.company_id,
+        projectId: input.project_id,
+        projectName: project?.name ?? 'a project',
+        kind: thread.kind,
+        messageId: sent.id!,
+        authorName: `${profile.first_name} ${profile.last_name}`.trim(),
+        body: input.body,
+        recipients: mentionedRows,
+        origin: request.nextUrl.origin,
+      });
+      if (emailOutcome.errors.length > 0) {
+        console.error(`[chat] mention email errors: ${emailOutcome.errors.join('; ')}`);
+      }
+      emailed = emailOutcome.sent;
     }
   } catch (err) {
     console.error(
@@ -193,5 +222,5 @@ export async function POST(request: NextRequest) {
 
   // `unresolved` travels back so the composer can say "@chris matched two
   // people" rather than silently sending a message that notified nobody.
-  return NextResponse.json({ id: sent.id, threadId: thread.id, mentioned, unresolved });
+  return NextResponse.json({ id: sent.id, threadId: thread.id, mentioned, emailed, unresolved });
 }

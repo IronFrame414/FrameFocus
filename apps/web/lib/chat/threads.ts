@@ -71,6 +71,57 @@ export async function resolveThread(
   return null;
 }
 
+type UntypedRpc = (
+  fn: string,
+  args?: Record<string, unknown>
+) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+
+/**
+ * May the caller post in this thread? — §7.4, M6M D-54. [Slice 4]
+ *
+ * ⚠️ THE DATABASE ANSWERS, NOT TYPESCRIPT. The crew-reading-a-sub-thread case
+ * needs a composer that is ABSENT rather than disabled, and D-54 is explicit
+ * that the absence must be a policy rather than CSS. Re-stating
+ * `chat_messages_insert_authorized`'s predicate here in TypeScript would be a
+ * second definition of who may post, drifting the first time either changed.
+ *
+ * `chat_can_post` (20260909000000) is SECURITY INVOKER and mirrors that policy;
+ * `s126-chat-sub.live.ts` asserts the function and a real INSERT agree for
+ * every role, which is what keeps the mirror honest.
+ *
+ * Defaults to FALSE on any error. A failure to establish permission is not
+ * permission — the wrong direction here renders a composer whose every send is
+ * refused.
+ */
+export async function canPostInThread(
+  supabase: SupabaseClient<Database>,
+  threadId: string
+): Promise<boolean> {
+  const rpc = supabase.rpc.bind(supabase) as unknown as UntypedRpc;
+  const { data, error } = await rpc('chat_can_post', { p_thread_id: threadId });
+  if (error) return false;
+  return data === true;
+}
+
+/**
+ * ND-25 — the projects whose sub thread should render at all. [Slice 4]
+ *
+ * "Where a project has no assigned sub with a profile, the sub thread does not
+ * render." Threads are created lazily, so this cannot be answered by looking
+ * for a `chat_threads` row: the question is asked before the first one exists.
+ *
+ * One round trip for the whole switcher (`chat_sub_thread_projects`), not one
+ * call per project — the N+1 §7.1a-i names.
+ */
+export async function subThreadProjects(
+  supabase: SupabaseClient<Database>
+): Promise<Set<string>> {
+  const rpc = supabase.rpc.bind(supabase) as unknown as UntypedRpc;
+  const { data, error } = await rpc('chat_sub_thread_projects');
+  if (error || !Array.isArray(data)) return new Set();
+  return new Set((data as Array<{ project_id: string }>).map((r) => r.project_id));
+}
+
 /**
  * The thread's POSTABLE set — §5.2, and the set the mention picker offers.
  *
