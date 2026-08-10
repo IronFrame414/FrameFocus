@@ -155,13 +155,30 @@ export async function insertMentions(
  */
 export async function markThreadRead(
   supabase: SupabaseClient<Database>,
-  threadId: string,
-  profileId: string
+  threadId: string
 ): Promise<void> {
-  await supabase
-    .from('chat_reads')
-    .upsert(
-      { thread_id: threadId, profile_id: profileId, last_read_at: new Date().toISOString() },
-      { onConflict: 'profile_id,thread_id' }
-    );
+  // ⚠️ THE SERVER STAMPS THIS. NEVER THE CLIENT.
+  //
+  // _Superseded implementation, quoted not rewritten: an upsert with
+  // `last_read_at: new Date().toISOString()`._ That is the CLIENT clock, and
+  // every value it is compared against — `chat_messages.created_at` — is the
+  // DATABASE clock. Unread is `created_at > last_read_at`, so the two clocks
+  // were being subtracted from each other on every read.
+  //
+  // When the client runs fast, `last_read_at` lands in the database's future,
+  // every later message compares as already-read, and the unread badge silently
+  // never lights again. There is nothing to see: the thread simply stops
+  // reporting anything new, which is precisely the failure chat exists to
+  // prevent. The S126 live harness caught it; the switcher RPC was returning the
+  // right count for the same rows all along.
+  //
+  // A PostgREST upsert cannot express `SET last_read_at = now()`, so this is an
+  // RPC (20260908000000). SECURITY INVOKER — chat_reads RLS still decides, and
+  // the profile comes from the session rather than from the caller, so one
+  // member cannot mark another's thread read.
+  const rpc = supabase.rpc.bind(supabase) as unknown as (
+    fn: string,
+    args?: Record<string, unknown>
+  ) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+  await rpc('chat_mark_read', { p_thread_id: threadId });
 }
