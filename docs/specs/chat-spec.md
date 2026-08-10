@@ -58,7 +58,7 @@
 | ND-26 | **Transport — Realtime vs poll**       | **POLLING, every 12 seconds, WHILE A THREAD IS OPEN.** [S124c, Josh] Not Realtime. _"Real-time is not needed"_ — a 10–15s delay is invisible to a foreman, and **push already covers the away case**, so this governs only what happens with a thread open on screen. Two rules are spec-level, not build detail: **polling stops when the thread is not open**, and **the poll asks for messages SINCE the last one it has**, never a refetch. §9.1. |
 | ND-27 | **Client messaging**                   | **OUT, and STATE.md:514 is ANSWERED for internal chat.** [S124, Josh, Q9 — *"no"*, clients type into nothing.] The transport competition that entry recorded is **dissolved**, not resolved: internal chat and client messaging were never one decision. Client messaging remains a Module 9 / Pre-Module 9 gate question, untouched here. §10.                                                        |
 | ND-28 | **Photo reference target**             | **`files(id)`, `ON DELETE CASCADE`.** [S124, Josh] There is **no `photos` table** — photos are `files` rows with `category='photos'`. A deleted photo vanishes from the thread; the message keeps its text. **An FK cannot enforce `category`**, so the category check is service-layer — §4.3. `RESTRICT` rejected: it would let chat block an owner from deleting a file, which nothing else in the app does. |
-| ND-29 | **Sub thread — DEFERRED**              | **OUT of v1.** [S124, Josh] 35 subcontractor member rows exist; **one** has a profile, and it is a test account on two fixture projects. This resolves when real subs get logins, not through code. **Consequence:** `chat_messages` needs no per-role branch in v1 — `can_view_project()` and nothing else. §5.2, §5.3. |
+| ND-29 | **Sub thread — ⚠️ REVERSED [S125, Josh]. IT IS BUILT, IN v1.** | **ND-19 and ND-20 return to v1** — two threads per project, crew read-only in the sub thread. _Superseded text, quoted not rewritten: "**OUT of v1.** [S124, Josh] 35 subcontractor member rows exist; **one** has a profile, and it is a test account on two fixture projects. This resolves when real subs get logins, not through code. **Consequence:** `chat_messages` needs no per-role branch in v1 — `can_view_project()` and nothing else."_ **The counts were right and did not carry it** — see §2.5 for what reversed it. |
 | ND-30 | **Mention email — DEFERRED**           | **v2. In-app + push only.** [S124, Josh] Three pieces are missing, all found by live read: the `email_types` migration the `email_logs` FK requires, a template, and a send call — because **`notify()` sends no email** and every consumer sends its own. §5.6a. |
 | ND-31 | **Push truncation**                    | **CHAT ONLY, inside the render function. 140 characters of body.** [S124, Josh — length confirmed S124b] The shared push path stays untouched, so **no existing notification changes behaviour**. §6.3. |
 | ND-32 | **D-4 exception, NAMED**               | **Messages render as bubbles, not card geometry.** [S124, Josh] D-4 exists to stop lists being reinvented casually; a conversation is genuinely a different thing. **Naming the exception keeps D-4 intact rather than eroding it silently.** §7.2. |
@@ -68,6 +68,38 @@
 | ND-36 | **Mobile entry point**                 | **CHAT TAKES A BOTTOM-BAR SLOT. DAILY LOGS MOVES TO THE HAMBURGER.** [S124b, Josh] The bar stays at **five** and **D-3's "no destination appears in both" holds — Logs leaves as Chat arrives.** M6M **D-3 is amended; A-3b, A-41 and A-42 must be REWRITTEN, not satisfied.** The cost is stated rather than buried: §7.1d. |
 | ND-37 | **The Chat slot opens an OVERLAY**     | **Not a screen. It does not navigate.** [S124b, Josh] Tapping Chat opens a panel over the current screen, matching the desktop shape. **This breaks M6M A-1c** — "the active tab reflects the current screen" — because an overlay has no screen to reflect. A-1c is **rewritten**, not satisfied: the Chat slot is lit **while the overlay is open**. §7.1d-ii. |
 | ND-38 | **History page size**                  | **50 in the tab, 25 in a panel**, same number again per load-more. [S124b, CC's call, Josh's delegation] Sized so the first scroll never lands on a loader on the surface it is for. §7.2a. |
+| ND-39 | **Mention storage**                    | **A join table, `chat_message_mentions`.** [S125, Josh] Not a `uuid[]` on the message. Matches the house pattern, sits beside `chat_message_photos`, keeps `chat_messages` at five columns and append-only clean, and leaves a mention-scoped read ("mentions of me") possible later with no schema change. §4.3a. |
+| ND-40 | **Where a mobile mention lands**       | **`/m/p/{id}?chat=1` — a deep-link PARAM, not a route.** [S125, Josh] **ND-37 stays literally true**: mobile chat has no address of its own, it is a state the project screen can be in. A thin route would put a chat page back in the tree and make ND-37 half-true, which is worse than either whole answer. The null-resolver arm was rejected: it is the one shape where the recipient of `@Josh needs you on Alvarez` does **not** land in the conversation. §5.6c. |
+| ND-41 | **Notification expiry — IN SCOPE**     | **Chat builds `/api/cron/notification-expiry`.** [S125, Josh] Parent R2 expires unstarred rows at 30 days and parent §5.6 specs the route; the S125 audit found **six cron routes, none of them it**, and no code reading `notifications.expires_at`. **This is notifications-core work landing in the chat module**, said plainly rather than filed under chat — chat is simply what makes it bite. §9.4, slice 0. |
+
+---
+
+### §0a — The precedent this document is audited against, stated accurately
+
+**Corrected at S125**, because the earlier phrasing of it was wrong in a way that mattered: it
+was being used to justify an audit, and a false precedent is worse than none.
+
+_The claim as it circulated: "the S89 parent spec turned out to be wrong about its own
+footprint, its own schema, and `notify()`'s live signature."_ **One of those three is the
+parent's.**
+
+| Claim | Whose error, actually |
+| --- | --- |
+| "Footprint before this spec: zero" | **This document's own front matter.** The parent makes no footprint claim. |
+| `chat_message_photos → photos(id)` | **This document's own §4.3.** The parent names no `photos` table. |
+| `notify()`'s signature | **The parent's §4.6** — and it is wrong on **five** counts, not three. |
+
+**Parent §4.6 documents** `notify({ type, recipients, render, link, projectId, source, override })`.
+Against the shipped `NotifyParams`: `override` does not exist; "fire internal email" is not
+something `notify()` does; `link` is really **two** parameters (`linkKey`, `linkParams`);
+responsibility 1, *"resolve recipients to `profiles`"*, is false — the caller resolves and
+`notify()` only de-duplicates; and `admin` and `companyId` are **required** and unmentioned.
+
+**The lesson, in the form it should be carried:** it is not that the parent is unreliable. It
+is that **documents written outside the repo have a track record** — and **this document was
+written by an agent with no filesystem access**, which is precisely why every shape in it
+carried a `§S` block and why the S125 audit found three schema defects in §4 that no amount of
+internal review would have surfaced.
 
 ---
 
@@ -127,8 +159,11 @@ thread and seeing different messages in it. That is a thread that lies about its
    directly.
 4. **Photo reference** in the composer (ND-22).
 5. **Per-thread unread state**, separate from the notifications badge (parent R6).
-6. **Both surfaces** — `/dashboard/projects/{id}/chat` and `/m/p/{id}/chat`, one `lib/`
-   implementation (parent §10.5's parity rule, and #129's precedent).
+6. **Both surfaces** — desktop at `/dashboard/projects/{id}/chat` **plus the global panel**
+   (ND-33), and mobile as an **overlay on the project screen, reached by `/m/p/{id}?chat=1`**
+   (ND-37, ND-40) — **there is no `/m/p/{id}/chat` route.** _Superseded, quoted not rewritten:
+   "`/dashboard/projects/{id}/chat` and `/m/p/{id}/chat`."_ One `lib/` implementation across
+   all of them (parent §10.5's parity rule, and #129's precedent).
 
 ### 2.3 Out of scope, v1
 
@@ -164,6 +199,35 @@ message be better than losing them — and the answer was **no**.
 
 ---
 
+### 2.5 ND-29 reversed — the sub thread is built [S125, Josh]
+
+**Recorded as a reversal, not a silent restoration**, because the deferral was itself a ruling
+and a later reader must be able to see both sides.
+
+**What ND-29 was ruled on, and the numbers were not wrong.** Live read, S124 and re-verified at
+the S125 audit: **35 subcontractor member rows company-wide, exactly one with a
+`profile_id`** — `josh+qa-sub@worthprop.com`, display name "QA Subcontractor Co (TEST
+IDENTITY)", assigned to `test` and `QA A — isolation fixture`, **both test projects**. On real
+Bishop jobs the sub thread would render **nowhere**. Deferring a feature with no user is
+ordinarily the right instinct.
+
+**Why it did not carry.** The S125 audit established that **the schema cost is already paid
+either way**: §4.1 ships `kind ENUM('crew','sub')` and `UNIQUE (project_id, kind)` in slice 1
+whether or not the sub thread is built, because `chat_reads` needs a thread row to key against
+and ND-25 needs one to ask "does this project have a sub thread". So the deferral never saved a
+migration. **What it saved was an RLS policy and a panel.**
+
+**And what it cost was the largest single thing the S124 interview produced** — Q8 (subs reach
+Josh by email, text and call), Q15 (crew must be able to read sub conversation), Q19
+(assignment is membership), §2.1's entire argument for two threads, and traces 3c, 3d and 3e.
+**Trading that for one policy and one panel was not a trade Josh took.**
+
+**Consequences, applied throughout this document:** §5.2's access table is v1 in full; A-C1…A-C10
+are live v1 criteria; §S1's divergence is back in play with its two live templates; traces 3c,
+3d and 3e are v1.
+
+---
+
 ## §3 — Traces (PROPOSED acceptance examples)
 
 **These are PROPOSED, not approved.** House rule: an acceptance example is approved once
@@ -195,8 +259,10 @@ Luis types `@Josh running short on trim, need about 3 more sticks of the 3¼ col
 - **Output:** badge +1. Tab and push both read
   **`Luis (Alvarez): running short on trim, need about 3 more sticks of the 3¼ colonial`** —
   the real message text, per parent R6.
-- **Link:** `chat:{project_id}#{message_id}` (parent ND-11), resolving to `/m/p/{id}/chat` or
-  `/dashboard/projects/{id}/chat`.
+- **Link:** `chat` + `linkParams` carrying the project, thread and message (parent ND-11),
+  resolving to **`/m/p/{id}?chat=1`** on mobile (ND-40 — a param, not a route) and
+  `/dashboard/projects/{id}/chat` on desktop. _Superseded, quoted not rewritten:
+  "`chat:{project_id}#{message_id}` … resolving to `/m/p/{id}/chat`."_
 - **Nobody else is notified**, including other Alvarez crew who can read it.
 - **Mentionable set:** profiles passing `can_view_project(project_id)` (parent ND-3) — **not**
   `project_assignments`.
@@ -299,6 +365,7 @@ has a sub thread" (ND-25) before anyone has spoken.
 
 ```
 id
+company_id        → companies(id)        -- ADDED [S125, D1]
 thread_id         → chat_threads(id)     -- REPLACES project_id
 author_profile_id → profiles(id)         -- unchanged (parent ND-2/ND-3)
 body              text                   -- unchanged
@@ -321,6 +388,8 @@ standard triggers** — see §4.4. `chat_threads` likewise. Reading the exceptio
 ### 4.3 `chat_message_photos` — NEW (ND-22, ND-28)
 
 ```
+id
+company_id → companies(id)      -- ADDED [S125, D1]
 message_id → chat_messages(id)  ON DELETE CASCADE
 file_id    → files(id)          ON DELETE CASCADE
 sort_order int
@@ -353,9 +422,42 @@ composer and a contract PDF appearing as a chat thumbnail. Treat it as a rule wi
 backstop — the same posture CLAUDE.md records for punch VERIFY (#146) and the project gate
 (#82).
 
+### 4.3a `chat_message_mentions` — NEW (ND-39) [S125]
+
+```
+id
+company_id        → companies(id)        -- tenant scope; see §4.5a
+message_id        → chat_messages(id)    ON DELETE CASCADE
+mentioned_profile_id → profiles(id)      ON DELETE CASCADE
+created_at        timestamptz
+UNIQUE (message_id, mentioned_profile_id)
+```
+
+**Resolves D2 from the S125 audit.** §5.1 has always said mentions are *"parsed at write time
+and resolved to profile ids, **stored** so a later display-name change does not break the
+link"* — and until now there was **nowhere to store them**. `chat_messages` is five columns and
+there was no join table. The requirement was asserted with no home; the audit caught it.
+
+**A join table, not a `uuid[]` on the message** (ND-39):
+
+- It **matches the house pattern** and sits directly beside `chat_message_photos`, which is the
+  same shape for the same reason.
+- It keeps `chat_messages` at five columns and **append-only clean** — an array column would be
+  a field that wants updating the first time someone edits a mention, and edit is out of scope
+  precisely so that pressure never arrives.
+- It leaves a **mention-scoped read possible later** — "mentions of me", across projects —
+  **with no schema change**. An array makes that a scan.
+
+**`UNIQUE (message_id, mentioned_profile_id)` is what implements A-C14** — `@Josh … @Josh` in
+one message is one row, enforced by the database rather than by the parser remembering.
+
+**Append-only, like its siblings** — written once at message insert, never updated. §4.5a.
+
 ### 4.4 `chat_reads` — AMENDED from parent §4.3
 
 ```
+id
+company_id → companies(id)               -- ADDED [S125, D1]
 profile_id → profiles(id)
 thread_id  → chat_threads(id)            -- REPLACES project_id
 last_read_at timestamptz
@@ -373,6 +475,35 @@ a thread is opened, so CLAUDE.md's append-only exception explicitly does **not**
 (§4.2). It needs `company_id`, `created_at`, `updated_at`, `created_by`, `updated_by`,
 `is_deleted`, `deleted_at`, the three column defaults, and both `chat_reads_updated_at` and
 `chat_reads_set_updated_by`.
+
+### 4.5a Tenant scope and the DELETE posture — D1 and D3 from the S125 audit
+
+**Every chat table carries `company_id`.** The audit found it missing from the stated shapes of
+`chat_messages`, `chat_message_photos` and `chat_reads` — only `chat_threads` had it. CLAUDE.md
+is unambiguous (*"Every table has a `company_id` column"*) and the **append-only exception
+retains it** where the table is per-tenant. It is not decorative: **every RLS policy in this
+database opens with `company_id = get_my_company_id()`**, so without the column these tables
+cannot follow the house pattern at all. The three column defaults apply
+(`company_id`, `created_by`, `updated_by` where the table has them).
+
+**The DELETE posture, stated rather than implied.** R2 makes the chat log permanent, which
+under CLAUDE.md's append-only exception means:
+
+| Table | Policies |
+| --- | --- |
+| `chat_messages` | **SELECT and INSERT only.** No UPDATE, no DELETE. |
+| `chat_message_photos` | **SELECT and INSERT only.** |
+| `chat_message_mentions` | **SELECT and INSERT only.** |
+| `chat_threads` | SELECT and INSERT. Ordinary table, both standard triggers (§4.1). |
+| `chat_reads` | SELECT, INSERT **and UPDATE** — `last_read_at` moves. Not append-only (§4.4). |
+
+**⚠️ AND THE THING THAT LOOKS LIKE A CONTRADICTION AND IS NOT.** ND-28 gives
+`chat_message_photos.file_id` **`ON DELETE CASCADE`**, so those rows *are* deleted when a file
+is hard-deleted — on a table with **no DELETE policy**. That is fine, and it is written down
+because it reads wrong at a glance: **an FK cascade is executed by the database, not by the
+caller, and RLS does not apply to it.** A reader who "fixes" this by adding a DELETE policy
+would be widening the table for no reason; a reader who removes the CASCADE to "respect"
+append-only would strand references to files that no longer exist.
 
 ### 4.5 What is NOT added
 
@@ -392,18 +523,20 @@ a thread is opened, so CLAUDE.md's append-only exception explicitly does **not**
 - The picker is **prominent**, not a hidden keyboard shortcut. §2.4: the whole delivery
   guarantee rests on a human typing `@`, so the affordance carries weight it would not
   otherwise deserve. An `@` button adjacent to send on mobile.
-- Mentions are parsed **at write time** and resolved to profile ids, stored so a later display-
-  name change does not break the link.
+- Mentions are parsed **at write time** and resolved to profile ids, **stored in
+  `chat_message_mentions` (§4.3a, ND-39)** so a later display-name change does not break the
+  link. _Until S125 this sentence had nowhere to store them — see §4.3a._
 - **Multiple mentions in one message → one notification each, one row each.** No dedupe across
-  recipients; dedupe **within** a message per recipient (`@Josh … @Josh` is one row).
+  recipients; dedupe **within** a message per recipient (`@Josh … @Josh` is one row) — enforced
+  by `UNIQUE (message_id, mentioned_profile_id)` (§4.3a), not by the parser remembering.
 - **Self-mention notifies nobody.** Precedent: parent §16.5's self-assignment rule, same
   reasoning — it would be the most common notification the platform sends and every one useless.
 
 ### 5.2 Access — the two threads (ND-20)
 
-> **ND-29 [S124, Josh]: the sub-thread columns below are v2.** v1 ships the **crew thread
-> only**. The table is kept whole rather than trimmed, because it is the specification slice 4
-> builds from — but nothing in the `Sub thread` columns is in v1 scope.
+> ✅ **ND-29 REVERSED [S125, Josh]: this table is v1 in full.** _Superseded banner, quoted not
+> rewritten: "the sub-thread columns below are v2. v1 ships the crew thread only."_ Both
+> threads are built in v1 — reasoning in §2.5.
 
 |                                | Crew thread                | Sub thread — POST             | Sub thread — READ        |
 | ------------------------------ | -------------------------- | ----------------------------- | ------------------------ |
@@ -442,10 +575,13 @@ is the reason ND-19 exists.
 > `files_insert_non_client` and the storage `objects` policy. A sub-thread INSERT would be the
 > third place a sub can write anything.
 >
-> **⚠️ BUT ND-29 DEFERS THE SUB THREAD OUT OF v1, SO v1 NEEDS NONE OF IT.** With one thread,
-> `chat_messages` RLS is `company_id = get_my_company_id() AND can_view_project(thread's project)`
-> for both SELECT and INSERT — no role branch at all. **The two templates above are recorded
-> here deliberately so slice 4 does not re-derive them**, not because v1 uses them.
+> ✅ **BACK IN PLAY [S125] — ND-29 is reversed and v1 builds the divergence.** _Superseded,
+> quoted not rewritten: "BUT ND-29 DEFERS THE SUB THREAD OUT OF v1, SO v1 NEEDS NONE OF IT. …
+> The two templates above are recorded here deliberately so slice 4 does not re-derive them,
+> not because v1 uses them."_ **v1 uses them.** The divergence is built with the two live
+> templates above — `inspections`/`phases`/`tasks` for read-wide/write-narrow, and
+> `punch_list_items_select_visible` for the subcontractor branch — and it is emphatically **not
+> an invented pattern**: 32 tables on this database already split SELECT from INSERT.
 >
 > M6M **D-54** still governs whenever the divergence is built: _a hidden button is not a
 > permission._ The composer's absence must be a policy, not CSS.
@@ -460,7 +596,8 @@ The sub thread renders **only when** the project has ≥1 assigned subcontractor
   appear; it does not disappear when they are unassigned if messages exist (a thread with
   history is never hidden — Q6's record must survive).
 
-> ✅ **§S2 — ANSWERED [S124, CC live read], and the data is why ND-29 defers this.**
+> ✅ **§S2 — ANSWERED [S124, CC live read]. The data below is why ND-29 deferred the sub
+> thread, and §2.5 is why that deferral was reversed at S125.**
 >
 > **The table is `project_assignments`.** Subs appear in it through their member row; there is
 > **no separate 6-series sub-assignment table**. The chain is
@@ -487,7 +624,10 @@ The sub thread renders **only when** the project has ≥1 assigned subcontractor
 >
 > Bishop's other projects: `test4` 3 subs / 0 with profile, `Copy of test4` 1/0, `kitchen test`
 > 0/0, `test5` 0/0. **On real Bishop jobs the sub thread would render nowhere.** It is
-> buildable and testable, and it has no user. ND-29 defers it until real subs have logins.
+> buildable and testable, and today it has no real user. **ND-29 deferred it on exactly that
+> ground and was REVERSED at S125** — the schema cost is paid either way, so the deferral saved
+> a policy and a panel rather than a migration, and that was not worth the interview's largest
+> finding. §2.5.
 
 ### 5.4 Photo reference (ND-22)
 
@@ -586,6 +726,32 @@ truncated message body (§6.3), `linkKey: 'chat'` and `linkParams` carrying the 
 > `chat` key already resolves correctly. **Carrying the thread is a v2 requirement**, and the
 > key must gain it *before* slice 4, not with it.
 
+### 5.6c Where a mobile mention lands — a deep-link PARAM (ND-40) [S125]
+
+**`/m/p/{id}?chat=1`.** Not a thin route, and not a null resolver arm.
+
+**Why not a thin route.** ND-37 says mobile chat has **no address of its own** — it is a state
+the project screen can be in. A thin `/m/p/{id}/chat` page that immediately opened the overlay
+would put a chat page back in the route tree and make ND-37 **half-true**, which is worse than
+either whole answer: the next reader finds a route and reasonably concludes chat is a screen.
+
+**Why not a null resolver arm.** Returning `null` for mobile sends the tap to
+`/m/notifications` via `resolveClickTarget()`. **That is the one shape where the recipient of
+`@Josh needs you on Alvarez` does not land in the conversation** — an extra tap on precisely
+the notification chat exists to deliver. Rejected [S125, Josh].
+
+**What this touches — three places, and the audit found all three disagreeing:**
+
+1. **`apps/web/lib/notify/links.ts:51`** — the `chat` key's **mobile arm** changes from
+   `` `/m/p/${p.projectId}/chat` `` to the param form. The desktop arm is unchanged. This is
+   still **one file** (§S3): the sender resolves and both workers only read `data.url`.
+2. **The project screen** (`app/m/p/[projectId]/page.tsx`) reads the param and **opens the
+   overlay on mount**.
+3. **This document**, which asserted a mobile chat route in two further places — §2.2 and
+   §3a-2 — both now reconciled.
+
+**Asserted by A-C42.**
+
 ### 5.6a Email is DEFERRED to v2 (ND-30)
 
 **v1 is in-app row + push. No mention email.** Parent §5.5 says a new `email_types` row is
@@ -601,8 +767,28 @@ chat @mention — **all of that stands, and none of it is v1.**
 3. **A send call.** Because `notify()` sends no email (above), chat must make its own, the way
    `incident-notify.ts` does.
 
-**Deferring it costs subs nothing in v1**, because ND-29 defers the sub thread too — and a
-mention can only reach someone who can read the thread.
+> ⚠️ **THIS JUSTIFICATION IS SUPERSEDED [S125] AND THE CONSEQUENCE IS NOW LIVE.** _Quoted not
+> rewritten: "**Deferring it costs subs nothing in v1**, because ND-29 defers the sub thread
+> too — and a mention can only reach someone who can read the thread."_ **ND-29 is reversed**
+> (§2.5), so the sub thread ships in v1 and **a subcontractor with a profile can be mentioned
+> in v1 and will receive no email.**
+
+**What that means, stated rather than left to be discovered.** Parent **ND-15** says subs get
+email **always**, and chat @mention is one of its three scoped events. ND-30 defers the mention
+email to v2, so **v1 knowingly ships one of ND-15's three events without its email half.**
+
+**Why that is tolerable and not a silent breach:**
+
+- The sub who can be mentioned **has a profile by definition** (ND-25 — a sub with no account
+  has no thread), so they get the **in-app row and the push**. §13.2's state-1 channel pair is
+  in-app *and* email; v1 delivers one of the two, to someone who is signed in.
+- The population is **one identity today**, and it is a test account (§5.3).
+- The three missing pieces are enumerated above and unchanged, so v2 is a known quantity rather
+  than a rediscovery.
+
+**It is recorded as a partial breach of ND-15 rather than as "costs subs nothing", because the
+earlier sentence is now simply untrue** and a later reader comparing ND-15 to the build would
+otherwise find an undocumented gap.
 
 ### 5.6b Chat calls `notify()` from a SERVER ROUTE
 
@@ -713,6 +899,18 @@ jobs do not need to be one tap away._
 - **Order:** most recent message in that project's thread, newest first. A project with no
   messages sorts last — it has nothing to return to.
 
+**⚠️ BOTH OF THESE ARE NEW SERVICE WORK AND THE SPEC SAYS SO [S125 audit].** Neither exists:
+
+- **"Ordered by most recent message"** needs a query joining projects to the latest
+  `chat_messages.created_at` per thread. There is no such function today.
+- **The per-thread unread dot** needs a count of messages newer than the viewer's
+  `chat_reads.last_read_at`, **per thread in the list** — the naive shape is N+1 across the
+  switcher.
+
+Both belong in slice 2's `lib/` core, and both should be **one query, not a loop**. Named here
+because a spec that lists a behaviour without noting it has no implementation is how a slice
+gets estimated at half its size.
+
 **⚠️ THE LIST IS A PRESENTATION OF `can_view_project()`, NEVER A DIFFERENT SET.** The status
 filter and the ordering are applied *on top of* the helper. A switcher that assembled its own
 membership would be a second definition of who can read a thread, and the two would drift.
@@ -770,14 +968,27 @@ the swap rather than excepted.
 
 ##### 7.1d-i What this costs, stated plainly rather than buried
 
-**"Log the day" is the end-of-shift action, and several screens carry it as their primary amber
-button.** Those buttons route to **`/m/logs/new`** and **keep working exactly as they do
-today** — the capture path is untouched, and the action that matters most at the end of a shift
-is not behind one more tap.
+> ⚠️ **CORRECTED [S125 audit]. The earlier statement of this cost was wrong on the facts, and
+> it was the one thing Josh asked to be stated plainly rather than buried.** _Superseded,
+> quoted not rewritten: "**several screens carry it as their primary amber button.** Those
+> buttons route to `/m/logs/new` and **keep working exactly as they do today** — the capture
+> path is untouched."_
 
-**What moves is the LIST at `/m/logs`.** Reviewing what was logged now costs **an extra tap**:
-hamburger → Logs, instead of a bar slot. That is the whole of the regression and it is a
-review-path cost, not a capture-path one.
+**"Log the day" is the end-of-shift action, and there are exactly TWO entry points to
+`/m/logs/new`** — not "several", and one of them is the screen being demoted:
+
+| Entry point | Effect of the swap |
+| --- | --- |
+| `app/m/p/[projectId]/page.tsx:286` — the **project screen** (M-3) | **Untouched.** This is the one a foreman standing on a job uses, and it still routes straight to `/m/logs/new`. |
+| `app/m/logs/log-rows.tsx:140` — the **primary 60px amber button** (§4.6's *"Primary 60px amber 'Log the day' at the bottom"*) | **It lives ON `/m/logs`, the screen moving behind the hamburger.** Reaching it becomes hamburger → Logs → button. |
+
+**So the honest cost is not "review only".** The review path costs an extra tap, **and so does
+the capture path from that second entry** — hamburger → Logs → Log the day, where it used to be
+one slot. What is genuinely untouched is the project-screen entry, which is the primary one in
+the field.
+
+**The ruling still holds on that basis** — a foreman logs the day from the job, not from the
+company-wide log list — but the spec says the real shape rather than a flattering one.
 
 ##### 7.1d-ii Four M6M criteria are BROKEN by this and must be REWRITTEN, not satisfied
 
@@ -927,14 +1138,16 @@ and is strengthened by A-C16.
 **Threads (ND-19)**
 
 - **A-C1** A project with an assigned sub who has a profile exposes **two** threads. `[live]`
-- **A-C2** A project with no such sub exposes **one**, and no empty second segment renders. `[Playwright]` _(ND-25 — a disabled segment is the likeliest wrong build and passes any "one thread renders" assertion.)_
+- **A-C2** A project with **no** assigned sub who has a profile exposes **one** thread and renders **no segmented control at all** — not a disabled second segment — **while a project that has one renders two segments in the same build.** `[Playwright]` _(ND-25. **Amended [S125]:** under ND-29 this was **vacuous** — no project could expose two, so "exposes one" was true by construction and could never fail. With the sub thread built it can fail, and the trailing clause is what makes it fail on a build that simply never renders a second segment: without it, a chat that forgot sub threads entirely still passes.)_
 - **A-C3** A message posted in the crew thread never appears in the sub thread of the same project. `[live]`
 - **A-C4** Unread state is per thread: reading the crew thread leaves the sub thread unread. `[live]` _(The `chat_reads` re-key. A build that kept `project_id` passes every other criterion here.)_
 
-**Access (ND-20) — ⚠️ A-C5…A-C10 are v2 (ND-29 defers the sub thread). v1's only access
-criterion is A-C5b below.**
+**Access (ND-20) — ✅ ALL v1. ND-29 is reversed (§2.5).**
 
-- **A-C5b** A member who fails `can_view_project()` can neither SELECT nor INSERT a message on that project's thread. `[live]` _(v1's whole access model. With one thread there is no role branch — §S1.)_
+_Superseded banner, quoted not rewritten: "⚠ A-C5…A-C10 are v2 (ND-29 defers the sub thread).
+v1's only access criterion is A-C5b below."_
+
+- **A-C5b** A member who fails `can_view_project()` can neither SELECT nor INSERT a message on either thread of that project. `[live]` _(The floor under both threads, and the only access rule the crew thread needs.)_
 
 
 - **A-C5** A subcontractor cannot SELECT any crew-thread message, on any project. `[live]` _(The one absolute. §5.2.)_
@@ -948,7 +1161,7 @@ criterion is A-C5b below.**
 
 - **A-C11** A plain message writes no notification row for anyone, including thread members with unread state. `[live]` _(Parent R6. §2.4 — this is the criterion a well-meaning later change breaks.)_
 - **A-C12** A crew-thread mention notification reads `{author} ({project}): {body}`; a sub-thread one reads `{author} ({project} — subs): {body}`. `[live]` _(ND-23.)_
-- **A-C13** *(v2, ND-29)* A sub-thread mention opens the **sub** thread, not the crew thread. `[Playwright]` _(§S3 — the resolver carries no thread param today. With one thread in v1 the existing `chat` key resolves correctly, so this criterion has nothing to catch until slice 4 — but **the key must gain the thread BEFORE that slice, not with it**.)_
+- **A-C13** A sub-thread mention opens the **sub** thread, not the crew thread. `[Playwright]` _(§S3. **v1 again [S125]** — ND-29 is reversed, so the resolver must carry the thread from the start rather than "before slice 4". This is the failure that ships silently: with two threads and a thread-blind link, every sub-thread mention opens the crew thread and nothing errors.)_
 - **A-C14** `@Josh … @Josh` in one message writes **one** notification row. `[unit]`
 - **A-C15** A self-mention writes no row. `[unit]`
 - **A-C16** Both surfaces call the same `lib/` send-and-parse path. `[unit]` _(Parent A-N34, #129's precedent — a second implementation that "does the same thing" **is** the divergence.)_
@@ -995,14 +1208,24 @@ criterion is A-C5b below.**
 - **A-C40** A poll requests only messages **newer than the newest the client holds**, and a thread with 500 messages polls the same payload as a thread with 5. `[unit]` _(§9.1d rule 2. **A refetch is functionally correct and invisible in the UI** — only a test that watches the request catches it, and without it an old thread silently costs more to keep open than a new one.)_
 - **A-C41** Nothing above the service function knows the transport — no component subscribes directly. `[unit]` _(§9.1c. This is the property that keeps the Realtime swap at one file plus a migration; a component that subscribes destroys it.)_
 
-**The tripwire (S124 correction)**
+**Mobile deep link (ND-40)**
+
+- **A-C42** A mobile mention notification opens **`/m/p/{id}?chat=1`** — the project screen with the chat overlay already open — and **no `/m/p/{id}/chat` route exists in the app tree.** `[Playwright]` _(ND-37 + ND-40. Both halves are required: the positive proves the recipient lands in the conversation, and the negative is what keeps ND-37 literally true rather than half-true.)_
+
+**Notification expiry (ND-41) — notifications-core, landing here**
+
+- **A-C43** An unstarred notification past `expires_at` is deleted by the cron; a **starred** one past `expires_at` is **not**. `[live]` _(The pair is the criterion. A job that deletes everything past the date passes any "expired rows are removed" assertion and quietly destroys the rows a user deliberately kept.)_
+- **A-C44** The expiry route is **registered in `vercel.json`**. `[unit]` _(A correct handler that nothing schedules never runs — the exact defect parent §5.6 flagged for `/api/cron/invoice-reminders`, which has had a handler and no schedule since before this module.)_
+- **A-C45** The route is gated by `CRON_SECRET` and answers 401 without it. `[unit]` _(Every other cron route does; a delete endpoint is the last one that should not.)_
+
+**The tripwire (S124 correction)
 
 - **A-C29** `PENDING_ROUTES` in `s123-incident-notify.test.ts` no longer contains `'chat'`, and the whole suite is green. `[unit]` _(The guard is designed to fail when chat ships. **The commit creating the chat routes must clear it in that same commit**, or it ships red.)_
 
 **Retention (parent R2)**
 
 - **A-C22** Deleting a mention notification leaves the message intact. `[live]` _(Parent A-N33.)_
-- **A-C23** No chat message has an `expires_at` and none is deleted by the expiry cron. `[live]` _(R2 — "the chat log NEVER expires.")_
+- **A-C23** No chat message has an `expires_at`, and **running `/api/cron/notification-expiry` deletes zero chat messages** while deleting the expired unstarred notification rows in the same pass. `[live]` _(R2. **Amended [S125]:** the second half used to be untestable — there was no cron. ND-41 builds it, so this now asserts a real interaction rather than an absence. It fails on a build whose expiry job reaches past `notifications`.)_
 
 ---
 
@@ -1093,6 +1316,36 @@ every poll would re-transmit the page.
 functionally correct and invisible in the UI, so only a test that watches the payload catches
 it.
 
+### 9.4 Notification expiry — IN SCOPE, and it is NOT chat work (ND-41) [S125]
+
+**Chat builds `/api/cron/notification-expiry`.** One route, one delete, one Vercel schedule
+slot.
+
+**⚠️ SAY WHAT THIS IS: notifications-core work landing in the chat module.** It is not a chat
+feature and it should not be filed as one. Parent **R2** expires unstarred notification rows at
+30 days, and parent **§5.6** already specs the route by name — *"a route at
+`/api/cron/notification-expiry` deletes unstarred rows past `expires_at`, mirroring the
+existing cron handlers."* **It was never built.** The S125 audit found **six cron routes and
+none of them it**, and **no code anywhere reading `notifications.expires_at`**.
+
+**Why it lands here rather than staying unbuilt.** Chat is the module that makes it bite: every
+mention writes a notification row, R2 says the **chat log is permanent and the notification is
+not**, and today **neither expires**. Shipping chat without it means the one table designed to
+be transient grows forever, and A-C23 — which asserts chat messages are *not* deleted by the
+expiry cron — is untestable because there is no cron.
+
+**Shape**, mirroring the existing handlers:
+
+- `CRON_SECRET` gate, as every other cron route has.
+- Delete `notifications` where `expires_at < now()` **and `starred = false`**. Starred rows are
+  kept indefinitely — that is what starring means.
+- Service role; `notifications` has no DELETE policy for any authenticated role.
+- **Registered in `apps/web/vercel.json`.** The Pro schedule slot is available — Hobby's
+  two-a-day cap was what forced the upgrade (context99 §5), so this is not competing for a
+  scarce slot.
+
+**Sequenced as slice 0** (§12): it is independent of every chat table and can land before them.
+
 ### 9.2 Carried from the parent, unchanged by this spec
 
 - **FFNav position** for the desktop notifications item — owned by the deferred reindex.
@@ -1126,14 +1379,20 @@ it.
 
 **Nothing in this spec is awaiting a ruling.**
 
-**Two things remain, and neither is a decision:**
+_Superseded at S125, quoted not rewritten: "**ND-29's revisit condition** — the sub thread
+returns when real subcontractors have logins." **ND-29 is reversed and the sub thread is
+built** (§2.5), so there is no revisit condition._
 
-- **ND-29's revisit condition** — the sub thread returns when real subcontractors have logins.
-  Nobody decides this; it is a fact that changes. Today: one sub with a profile, and it is a
-  test account.
+**One thing remains, and it is not a decision:**
+
 - **A cost signal to watch, not answer** — §9.1c: request volume on the Supabase usage
   dashboard as concurrent open threads grow. It has a stated trigger and a documented reversal
   path, so it is monitoring rather than an open question.
+
+**And one fixture reality that is a fact, not a question:** the sub thread has **one** testable
+identity — `josh+qa-sub@worthprop.com`, on two test projects (§5.3). Enough to prove A-C1,
+A-C3, A-C5 and A-C6 against; not enough to demo. That constrains what slice 4 can *show*, not
+whether it is correct.
 
 ---
 
@@ -1181,18 +1440,24 @@ and Josh's mitigation is enforcement. If adoption fails, it will fail there, and
 
 **Not a ruling. Each slice ends at a stop-point.**
 
-1. **Schema** — `chat_threads`, `chat_messages`, `chat_reads`; RLS is
-   `can_view_project()` for both SELECT and INSERT, **with no role branch** (ND-29 defers the
-   §S1 divergence to slice 4). `chat_message_photos` moves to **slice 6** with ND-22, since its
-   FK and CASCADE (ND-28) are only exercised there. Rebuild-test first, RLS probes under the impersonation harness
-   (failing-then-passing evidence, never as postgres). **Stop.**
+0. **Notification expiry** (ND-41) — `/api/cron/notification-expiry`, its `vercel.json` slot,
+   and A-C43…A-C45. **Notifications-core work, not chat** (§9.4). Independent of every chat
+   table, so it can land first and unblocks A-C23. **Stop.**
+1. **Schema** — `chat_threads`, `chat_messages`, `chat_message_mentions`, `chat_reads`.
+   **RLS includes §S1's divergence** — ND-29 is reversed (§2.5), so the sub thread's
+   read-wide/write-narrow split is built here, following `inspections`/`phases`/`tasks` and
+   `punch_list_items_select_visible`. Every table carries `company_id`; the DELETE posture is
+   §4.5a's. `chat_message_photos` stays in **slice 6** with ND-22, since its FK and CASCADE
+   (ND-28) are only exercised there. Rebuild-test first, RLS probes under the impersonation
+   harness (failing-then-passing evidence, never as postgres). **Stop.**
 2. **`lib/` core** — thread resolution, send, mention parse, `notify()` call. Both surfaces
    consume it (A-C16). **Stop.**
 3. **Desktop chat** — crew thread only. Walk 3a-1 and 3a-2 against a real Bishop job. **Stop.**
-4. ~~**Sub thread** — both surfaces, §5.2's divergence, the banner.~~ **CUT FROM v1 (ND-29).**
-   Retained as the numbering so later slices are not renumbered, and because §5.2/§5.3 keep the
-   full specification it will build from. Revisit when real subcontractors have logins — today
-   there is exactly one, and it is a test account.
+4. **Sub thread** — both surfaces, §5.2's divergence, the banner. ✅ **BACK IN v1 [S125] —
+   ND-29 reversed (§2.5).** _Superseded, quoted not rewritten: "CUT FROM v1 (ND-29) … revisit
+   when real subcontractors have logins."_ The RLS half lands in slice 1; this slice is the UI
+   and the banner. **Note the fixture reality: one sub with a profile, on two test projects**
+   (§5.3) — that is enough to test against and is not enough to demo.
 5. **Mobile chat** — panel shape, entered from the **bottom-bar Chat slot** (ND-36, ND-37).
    **Unblocked at S124b.** This slice also carries the M6M edits in §14 — the bar swap, the
    seventh tile, and the four rewritten criteria — because the bar changes here or nowhere.
@@ -1204,8 +1469,8 @@ and Josh's mitigation is enforcement. If adoption fails, it will fail there, and
    function**, and A-C39/A-C40/A-C41 are asserted there. **Kept as a numbered entry only so the
    Realtime swap has somewhere to live if the bill ever calls for it (§9.1c).**
 
-**v1 = slices 1, 2, 3, 5, 6 plus the desktop panel (ND-33).** Slice 4 is deferred (ND-29);
-slice 7 is absorbed into slice 2 and is no longer gated.
+**v1 = slices 0 through 6 plus the desktop panel (ND-33).** Nothing is deferred: ND-29 is
+reversed, and slice 7 is absorbed into slice 2's service function.
 
 **§S blocks are filled by CC from live reads at the start of the slice that needs them**, not
 in advance and not by this document.
@@ -1235,9 +1500,12 @@ survives the way the parent's superseded text does.
    written down: **polling stops when the thread is not open**, and **the poll asks for
    messages since the last one it has**.
 
-**NOTHING IN THIS SPEC IS AWAITING A RULING.** §9.3 records the two items that remain, neither
-of which is a decision: ND-29's revisit condition, which is a fact that changes rather than a
-choice, and §9.1c's cost signal, which is something to watch.
+**NOTHING IN THIS SPEC IS AWAITING A RULING.**
+
+**S125 closed four more**, raised by the audit rather than by the interview: mention storage
+(ND-39), where a mobile mention lands (ND-40), the ND-29 reversal (§2.5), and notification
+expiry (ND-41). §9.3 records the one item that remains, which is a cost signal to watch rather
+than a decision.
 
 ---
 
@@ -1248,13 +1516,18 @@ discovered mid-slice:
 
 | M6M item | Change |
 | --- | --- |
+| **A-3** | ⚠️ **THE WORST OMISSION, found by the S125 audit.** `M6M:4356` reads *"The hamburger sheet contains **no** tile for Projects, Timeclock, **Logs**, or Field."* Moving Logs **into** the sheet makes this **false by design** — not an off-by-one, a direct inversion. Remove Logs from the no-tile list. |
 | **D-3** | Bar contents amended: `Projects · Timeclock · [camera] · Chat · Field`. Still five, still "no destination appears in both". |
 | **A-3b** | Six named tiles → **seven**, naming Logs. |
 | **A-41** | Six-route walk → **seven**, adding `/m/logs`. |
 | **A-42** | "all six routes" → **seven**. |
 | **A-1c** | Add the Chat slot's rule: lit while the overlay is open, never by the route underneath. |
-| **D-39** | Inherited, not changed — `/m/logs` joins the hamburger destinations and keeps the hamburger. |
+| **A-42b** | `M6M:4636` — *"**All six** carry the hamburger, not a back chevron."* Six → **seven**. The same off-by-one as A-42; §14 previously cited D-39 (the ruling) but not the criterion enforcing it. |
+| **D-39** | Behaviour inherited — `/m/logs` keeps the hamburger. **But the row's own title reads "App bar on the six destinations" and becomes seven.** Previously marked "inherited, not changed"; the title is a change. |
 | **D-4** | Gains a **named exception** (ND-32): the chat message list renders as bubbles. |
+
+**Nine items, not seven** — A-3 and A-42b were missing until the S125 audit, and A-3 is the one
+that fails immediately rather than subtly.
 
 **These are edits to another spec and are deliberately not made here.** They belong in the M6M
 document, in the same commit as the slice that changes the bar.
