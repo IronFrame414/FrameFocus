@@ -26,10 +26,77 @@ export interface ChatMessageRow {
   author: { first_name: string; last_name: string } | null;
 }
 
-const SELECT = 'id, thread_id, author_profile_id, body, created_at, author:profiles(first_name, last_name)';
+// ⚠️ NO `author:profiles(...)` JOIN HERE, AND THAT IS RULING B's DOING [S131].
+//
+// _Superseded, quoted rather than rewritten:_
+// `'id, thread_id, author_profile_id, body, created_at, author:profiles(first_name, last_name)'`
+//
+// These reads run as the CALLER (ND-18), so an embedded join is filtered by the
+// caller's own RLS. Ruling B floors `profiles`: a subcontractor now reads only
+// Owner, Admin, PM and their own row. In a SUB THREAD the posters are Owner,
+// Admin, the assigned PM **and the assigned subs** — so a sub reading a message
+// from ANOTHER SUB would have got `author: null` and rendered a bubble with no
+// name. No error, no failure, just a message from nobody. That is the #129
+// shape exactly: divergence that presents as data being quietly wrong
+// somewhere else.
+//
+// Names are a DECORATION, not the caller's read of the roster. They now come
+// from the service role via `withAuthors()` — the same separation the mention
+// picker already makes deliberately (`app/api/chat/mentions/route.ts`: "runs as
+// admin by design (working out who MAY be mentioned is not the same act as
+// reading the thread)"). Which messages you may see is still, and only, RLS.
+const SELECT = 'id, thread_id, author_profile_id, body, created_at';
 
 /** ND-38: 50 in the tab, 25 in a panel. The caller says which surface it is. */
 export const PAGE_SIZE = { tab: 50, panel: 25 } as const;
+
+export interface AuthorName {
+  first_name: string;
+  last_name: string;
+}
+
+/**
+ * Resolve display names for a set of profile ids.
+ *
+ * INJECTED, the shape `withPhotos` and `createChatPoll` already use in this
+ * module. The service function stays testable without a request, and the route
+ * remains the only thing that knows a name comes from the service role.
+ */
+export type AuthorResolver = (profileIds: string[]) => Promise<Map<string, AuthorName>>;
+
+/**
+ * Shape rows out of the query with `author` explicitly null.
+ *
+ * Not cosmetic: `ChatMessageRow.author` is a required key, and returning rows
+ * that simply LACK it would leave `withAuthors` and every consumer reading
+ * `undefined` where they type-check for `null`. Every read path goes through
+ * here so there is one answer to "what does an undecorated row look like".
+ */
+function withoutAuthors(data: unknown): ChatMessageRow[] {
+  return ((data ?? []) as Omit<ChatMessageRow, 'author'>[]).map((row) => ({
+    ...row,
+    author: null,
+  }));
+}
+
+/**
+ * Fill in author names — ONE query for the page, never one per message.
+ *
+ * A message whose author cannot be resolved keeps `author: null`, which is what
+ * `chat-thread.tsx` already renders around. That is the honest failure: an
+ * unresolvable name is not the same as a name of "".
+ */
+export async function withAuthors(
+  messages: ChatMessageRow[],
+  resolve: AuthorResolver
+): Promise<ChatMessageRow[]> {
+  if (messages.length === 0) return [];
+
+  const ids = Array.from(new Set(messages.map((m) => m.author_profile_id)));
+  const names = await resolve(ids);
+
+  return messages.map((m) => ({ ...m, author: names.get(m.author_profile_id) ?? null }));
+}
 
 /**
  * The most recent page of a thread, oldest-first for rendering.
@@ -51,7 +118,7 @@ export async function recentMessages(
     .order('created_at', { ascending: false })
     .limit(limit);
 
-  return ((data ?? []) as unknown as ChatMessageRow[]).reverse();
+  return withoutAuthors(data).reverse();
 }
 
 /**
@@ -81,7 +148,7 @@ export async function messagesBefore(
     .order('created_at', { ascending: false })
     .limit(limit);
 
-  return ((data ?? []) as unknown as ChatMessageRow[]).reverse();
+  return withoutAuthors(data).reverse();
 }
 
 /**
@@ -112,7 +179,7 @@ export async function messagesSince(
     .order('created_at', { ascending: true })
     .limit(limit);
 
-  return (data ?? []) as unknown as ChatMessageRow[];
+  return withoutAuthors(data);
 }
 
 export interface SendResult {

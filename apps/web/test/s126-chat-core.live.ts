@@ -9,7 +9,9 @@ import {
   messagesSince,
   recentMessages,
   markThreadRead,
+  withAuthors,
 } from '@/lib/chat/messages';
+import { adminAuthorResolver } from '@/lib/chat/authors';
 import { parseMentions } from '@/lib/chat/mentions';
 import { switcherThreads, groupByProject } from '@/lib/chat/switcher';
 import { notifyMentions } from '@/lib/chat/mention-notify';
@@ -139,7 +141,21 @@ describe('the send path, end to end', () => {
 
     const rows = await recentMessages(crewC, thread!.id);
     expect(rows.map((r) => r.id)).toContain(sent.id);
-    expect(rows[rows.length - 1].author).not.toBeNull();
+
+    // ⚠️ THE NAME NO LONGER COMES OFF THIS CALL [Ruling B, S131]. `recentMessages`
+    // used to embed `author:profiles(...)`, which ran as the CALLER and so was
+    // filtered by the caller's roster floor — a subcontractor reading another
+    // sub's message got a bubble with no name and no error. Names are now a
+    // decoration resolved through the service role, so the undecorated row is
+    // `author: null` BY DESIGN and asserting otherwise here would be asserting
+    // the bug back.
+    expect(rows[rows.length - 1].author, 'undecorated rows carry no name').toBeNull();
+
+    // The criterion this test actually exists for — a name reaches the reader —
+    // asserted where it now lives.
+    const named = await withAuthors(rows, adminAuthorResolver(admin as SupabaseClient<Database>));
+    expect(named[named.length - 1].author).not.toBeNull();
+    expect(named[named.length - 1].author!.first_name.length).toBeGreaterThan(0);
   });
 
   it('⚠️ crew CANNOT post in the sub thread, and the failure is typed as denied', async () => {

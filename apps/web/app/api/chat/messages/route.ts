@@ -11,6 +11,7 @@ import {
   insertMentions,
   messagesSince,
   messagesBefore,
+  withAuthors,
   PAGE_SIZE,
 } from '@/lib/chat/messages';
 import { chatSession } from '../_session';
@@ -18,6 +19,7 @@ import { parseMentions } from '@/lib/chat/mentions';
 import { notifyMentions } from '@/lib/chat/mention-notify';
 import { sendMentionEmails } from '@/lib/chat/mention-email';
 import { attachPhotos, eligiblePhotoIds, withPhotos } from '@/lib/chat/photos';
+import { adminAuthorResolver } from '@/lib/chat/authors';
 
 // Chat send. ND-18's shape, unchanged:
 //
@@ -63,9 +65,18 @@ async function decorate(
   projectId: string | null,
   messages: Awaited<ReturnType<typeof messagesSince>>
 ) {
-  if (!projectId) return messages.map((m) => ({ ...m, photos: [] }));
+  // ⚠️ NAMES FIRST, AND FROM THE SERVICE ROLE — Ruling B [S131]. The join that
+  // used to do this ran as the caller, so a subcontractor reading a sub thread
+  // saw no name on another sub's message. See `lib/chat/authors.ts` for why a
+  // decoration is not a hole in the roster floor.
+  const named = await withAuthors(
+    messages,
+    adminAuthorResolver(getSupabaseAdmin() as SupabaseClient<Database>)
+  );
+
+  if (!projectId) return named.map((m) => ({ ...m, photos: [] }));
   const { getProjectPhotos } = await import('@/lib/services/photos');
-  return withPhotos(supabase, messages, () => getProjectPhotos(projectId));
+  return withPhotos(supabase, named, () => getProjectPhotos(projectId));
 }
 
 export async function GET(request: NextRequest) {
