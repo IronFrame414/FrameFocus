@@ -272,3 +272,44 @@ describe('ND-33 — the panel mounts in the shell, not per page', () => {
     expect(src.match(/<ChatPanel/g) ?? []).toHaveLength(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// A-C20 / ND-24 — chat is NOT enrolled in the offline queue
+// ---------------------------------------------------------------------------
+describe('A-C20 (ND-24) — chat fails visibly and is never queued', () => {
+  const chatFiles = [
+    '../lib/chat/messages.ts',
+    '../lib/chat/threads.ts',
+    '../components/chat/use-chat-thread.ts',
+    '../components/chat/chat-composer.tsx',
+    '../components/chat/chat-body.tsx',
+    '../app/api/chat/messages/route.ts',
+  ];
+
+  it('no chat module imports the offline queue', () => {
+    // ⚠️ THIS ASSERTS AN ABSENCE, WHICH IS WHAT A-C20 ACTUALLY IS. ND-24 is a
+    // deliberate divergence from M6M's offline model, chosen at interview Q16 —
+    // "sees it fail". A build that reuses the queue "because everything else
+    // does" is the likeliest wrong build, and it would pass every other chat
+    // criterion. Until now nothing asserted the absence at all; S126's ruling
+    // sweep found it unguarded.
+    for (const f of chatFiles) {
+      expect(codeOnly(read(f)), `${f} reaches for the offline queue`).not.toMatch(
+        /lib\/offline|OfflineQueue|useOfflineSync|enqueue/
+      );
+    }
+  });
+
+  it('⚠️ and the queue itself has no chat entity to enrol INTO', () => {
+    // The stronger guarantee, and the one that cannot be got round by renaming
+    // an import: QueueEntity is a closed union, so enrolling chat would require
+    // editing this line — which is a visible, reviewable act rather than an
+    // accident.
+    const queue = read('../lib/offline/queue.ts');
+    const union = /export type QueueEntity =([^;]*);/.exec(queue);
+    expect(union, 'QueueEntity not found').not.toBeNull();
+    expect(union![1]).not.toMatch(/chat/i);
+    // Not vacuous: the union genuinely lists the things that ARE queued.
+    expect(union![1]).toContain('daily_log');
+  });
+});
