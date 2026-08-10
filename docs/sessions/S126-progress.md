@@ -10,6 +10,11 @@
 
 ## Entries
 
+> ⚠️ **Timestamp note.** Two entries below were first written with estimated times (03:05,
+> 03:40) that ran ahead of the clock; corrected to ~02:50 and ~02:55 against Mon Aug 10 02:56:02 AM UTC 2026. Flagged
+> rather than quietly fixed, because a pickup log whose timestamps are invented is worth less
+> than one with none.
+
 ### 02:37 UTC — progress log created, before Phase 0
 
 Created this file first, per the run brief, so a dead run is still recoverable.
@@ -45,7 +50,7 @@ depends on.
 - **Exit code:** branch creation 0; all reads 0.
 - **Next:** slice 1 — re-verify the `is_assigned_to_project()` role-blindness finding from live
   schema before writing any policy.
-### 03:05 UTC — SLICE 1 COMPLETE AND VERIFIED. Committed `fc2b910`.
+### ~02:50 UTC — SLICE 1 COMPLETE AND VERIFIED. Committed `fc2b910`.
 
 Migration `20260906000000_chat_core.sql`. **Rebuild-test only** — CLI link checked
 immediately before the push (`LINKED: framefocus-rebuild-test nmyphyhmfttxkdoposvf`,
@@ -128,7 +133,7 @@ not a counterfactual.**
 All probe fixtures deleted — **0 rows** in all four chat tables. Tree clean.
 
 - **Next:** push the branch, then slice 2.
-### 03:40 UTC — SLICE 2 CORE COMMITTED (`lib/chat` + route). PARTIAL — read the split below.
+### ~02:55 UTC — SLICE 2 CORE COMMITTED (`lib/chat` + route). PARTIAL — read the split below.
 
 Two commits, grouped by concern: services, then route + tests.
 
