@@ -105,11 +105,24 @@ export async function getTeamMembers(supabase: SupabaseClient) {
   return data as TeamMember[];
 }
 
-/** Fetch all pending invitations for the current user's company */
+/**
+ * Fetch all pending invitations for the current user's company.
+ *
+ * D4 [S135] — `token` is now selected, so the Team page can show the link
+ * again. Before this there was no way to retrieve an invite link after
+ * creation: the only control on a pending row was Cancel, so a lost link meant
+ * cancel-and-re-invite.
+ *
+ * ⚠️ NO POLICY CHANGE WAS NEEDED, AND THAT IS THE POINT.
+ * `invitations_select_owner_admin` has always granted Owner/Admin SELECT on the
+ * whole row, `token` included, and `Invitation` already declared `token?:
+ * string`. The column was simply never asked for. Anyone reviewing this should
+ * confirm the same — the reach is unchanged, only the projection.
+ */
 export async function getPendingInvitations(supabase: SupabaseClient) {
   const { data, error } = await supabase
     .from('invitations')
-    .select('id, email, role, status, created_at, expires_at')
+    .select('id, email, role, status, created_at, expires_at, token')
     .eq('status', 'pending')
     .eq('is_deleted', false)
     .order('created_at', { ascending: false });
