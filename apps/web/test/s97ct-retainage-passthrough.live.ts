@@ -161,6 +161,21 @@ afterAll(async () => {
   if (contracts.length) {
     check('contracts', (await admin.from('subcontractor_contracts').delete().in('id', contracts)).error);
   }
+
+  // ⚠️ CHILDREN BEFORE PARENTS [S135]. `convert_estimate_to_project()` writes
+  // `project_assignments` for the converting user, so deleting the project
+  // first violated `project_assignments_project_id_fkey` and this teardown
+  // reported "rows left: 18" while looking like it had run. Those orphans then
+  // broke `s123-assignment-routes.live.ts`, which picked "the first project in
+  // the company" — a leak in one harness surfacing as a failure in another,
+  // which is the whole of TECH_DEBT #149/#150.
+  const projectIds = [projectWithRetainage, projectWithout].filter(Boolean) as string[];
+  if (projectIds.length) {
+    check(
+      'assignments',
+      (await admin.from('project_assignments').delete().in('project_id', projectIds)).error
+    );
+  }
   for (const id of [projectWithRetainage, projectWithout]) {
     if (id) check('project', (await admin.from('projects').delete().eq('id', id)).error);
   }

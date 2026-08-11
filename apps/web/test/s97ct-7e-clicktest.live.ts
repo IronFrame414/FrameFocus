@@ -24,6 +24,9 @@
  */
 import { createClient as createSupabaseClient, type SupabaseClient } from '@supabase/supabase-js';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+// S135 — see the call site. This file predates live-session.ts and builds its
+// own service-role client; only the identity-adoption helper is borrowed.
+import { adoptSignupProfile } from './live-session';
 
 const REQUIRED_PROJECT_REF = 'nmyphyhmfttxkdoposvf';
 const MARKER = 'S97CT7E';
@@ -227,28 +230,31 @@ beforeAll(async () => {
     if (error) throw new Error(`createUser(${email}): ${error.message}`);
     const userId = created.user.id;
 
-    const { data: profile, error: pErr } = await admin
-      .from('profiles')
-      .insert({
-        user_id: userId,
-        company_id: companyId,
-        email,
-        first_name: MARKER,
-        last_name: role,
-        role,
-      })
-      .select('id')
-      .single();
-    if (pErr) throw new Error(`profile(${email}): ${pErr.message}`);
-
-    // `profiles_create_member` auto-creates the company_members row — read it,
-    // never insert a second one (idx_company_members_profile_id is unique).
-    const { data: member, error: mErr } = await admin
-      .from('company_members')
-      .select('id')
-      .eq('profile_id', profile.id)
-      .single();
-    if (mErr) throw new Error(`member(${email}): ${mErr.message}`);
+    // ⚠️ ADOPTED, NOT INSERTED [S135].
+    //
+    // _Superseded, quoted rather than rewritten:_
+    // ```
+    // const { data: profile, error: pErr } = await admin
+    //   .from('profiles').insert({ user_id: userId, company_id: companyId, ... })
+    // ```
+    //
+    // `20260914000000` brought the `auth.users` trigger into version control.
+    // It has always existed on production and never existed here, so this file
+    // could INSERT a profile by hand; now the trigger inserts one first and
+    // `profiles_user_id_key` refuses the second. `adoptSignupProfile()`
+    // repoints the trigger's profile into this company and removes the tenant
+    // the owner path created along with it.
+    const { profileId, memberId } = await adoptSignupProfile(userId, {
+      companyId,
+      email,
+      role,
+      firstName: MARKER,
+      lastName: role,
+    });
+    const profile = { id: profileId };
+    if (!memberId) throw new Error(`member(${email}): profiles_create_member did not run`);
+    const member = { id: memberId };
+    void profile;
 
     if (role === 'admin') {
       adminUserId = userId;

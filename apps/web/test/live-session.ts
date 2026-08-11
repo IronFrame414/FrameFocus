@@ -37,6 +37,83 @@ export function assertRebuildTest(): void {
   }
 }
 
+/**
+ * Repoint the profile the `auth.users` trigger just created, and remove the
+ * tenant it came with.
+ *
+ * ⚠️ WHY THIS EXISTS AS OF S135. `20260914000000` brought the `on_auth_user_created`
+ * trigger into version control. It had ALWAYS existed on production and had
+ * NEVER existed on rebuild-test, which is why harnesses here could call
+ * `admin.auth.admin.createUser()` and then INSERT a profile by hand. They can
+ * no longer: the trigger inserts one first, and `profiles_user_id_key` refuses
+ * the second. The direct INSERT was never a design — it was standing in for a
+ * divergence between the two databases.
+ *
+ * A tokenless `createUser` takes the OWNER path, so it leaves a company, a
+ * subscription, a `trial_emails` row and a seeded tag set behind. This adopts
+ * the profile into the company the caller actually wanted and deletes the rest,
+ * `trial_emails` included — leaving that row would silently deny a real trial
+ * to the same address later.
+ *
+ * Harnesses that want to exercise the INVITED path should not use this; they
+ * should pass `invitation_token` in `user_metadata` against a live invitation,
+ * as `s133-subcontractor-read-floor.live.ts` does.
+ */
+export async function adoptSignupProfile(
+  userId: string,
+  fields: {
+    companyId: string;
+    email: string;
+    role: string;
+    firstName?: string;
+    lastName?: string;
+  }
+): Promise<{ profileId: string; memberId: string | null }> {
+  const { data: auto, error } = await admin
+    .from('profiles')
+    .select('id, company_id')
+    .eq('user_id', userId)
+    .single();
+  if (error || !auto) {
+    throw new Error(
+      `adoptSignupProfile: no profile for ${userId} — is the auth.users trigger installed? (${error?.message})`
+    );
+  }
+  const profileId = (auto as { id: string }).id;
+  const spuriousCompanyId = (auto as { company_id: string }).company_id;
+
+  const { error: upErr } = await admin
+    .from('profiles')
+    .update({
+      company_id: fields.companyId,
+      role: fields.role,
+      first_name: fields.firstName ?? '',
+      last_name: fields.lastName ?? '',
+    })
+    .eq('id', profileId);
+  if (upErr) throw new Error(`adoptSignupProfile: ${upErr.message}`);
+
+  // `profiles_create_member` made the member row in the spurious company.
+  const { data: member } = await admin
+    .from('company_members')
+    .select('id')
+    .eq('profile_id', profileId)
+    .maybeSingle();
+  const memberId = member ? (member as { id: string }).id : null;
+  if (memberId) {
+    await admin.from('company_members').update({ company_id: fields.companyId }).eq('id', memberId);
+  }
+
+  if (spuriousCompanyId !== fields.companyId) {
+    await admin.from('tag_options').delete().eq('company_id', spuriousCompanyId);
+    await admin.from('subscriptions').delete().eq('company_id', spuriousCompanyId);
+    await admin.from('companies').delete().eq('id', spuriousCompanyId);
+  }
+  await admin.from('trial_emails').delete().eq('email', fields.email.toLowerCase());
+
+  return { profileId, memberId };
+}
+
 export async function sessionFor(email: string): Promise<SupabaseClient> {
   const client = createSupabaseClient(URL_, ANON, {
     auth: { autoRefreshToken: false, persistSession: false },
