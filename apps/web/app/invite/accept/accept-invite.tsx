@@ -46,6 +46,42 @@ export default function AcceptInviteContent() {
     lookupInvitation();
   }, [token]);
 
+  /**
+   * D1 [S135] — WHY, not just "no".
+   *
+   * _Superseded, quoted rather than rewritten:_
+   * ```
+   * setError('This invitation is invalid, expired, or has already been used.');
+   * ```
+   *
+   * Three different problems with three different remedies, in one sentence
+   * that told the reader to guess. `get_invitation_by_token()` returns zero rows
+   * for all of them, so this screen could not have said more even if it wanted
+   * to; `get_invitation_status()` (20260914000000 §1) is the RPC that can.
+   *
+   * ⚠️ AND THIS IS THE ONLY LAYER THAT CAN SAY IT. The trigger raises a
+   * distinct exception per reason, but a RAISE inside a trigger on `auth.users`
+   * is wrapped by GoTrue and reaches the browser as "Database error saving new
+   * user". The trigger is the backstop; this is the explanation.
+   */
+  function messageFor(reason: string): string {
+    switch (reason) {
+      case 'expired':
+        return 'This invitation has expired. Ask the company to resend it — they can do that from their Team page.';
+      case 'already_used':
+        return 'This invitation has already been used. If that was you, sign in instead.';
+      case 'cancelled':
+        return 'This invitation was cancelled. Ask the company to send a new one.';
+      default:
+        return 'This invitation link is not valid. Check you copied the whole link, or ask the company to resend it.';
+    }
+  }
+
+  async function reasonFor(): Promise<string> {
+    const { data } = await supabase.rpc('get_invitation_status', { invite_token: token });
+    return typeof data === 'string' ? data : 'unknown';
+  }
+
   async function lookupInvitation() {
     try {
       const { data, error: rpcError } = await supabase.rpc('get_invitation_by_token', {
@@ -55,7 +91,7 @@ export default function AcceptInviteContent() {
       if (rpcError) throw rpcError;
 
       if (!data || data.length === 0) {
-        setError('This invitation is invalid, expired, or has already been used.');
+        setError(messageFor(await reasonFor()));
         return;
       }
 
@@ -101,7 +137,17 @@ export default function AcceptInviteContent() {
         },
       });
 
-      if (signUpError) throw signUpError;
+      // D1 [S135] — the invitation can lapse BETWEEN the page loading and the
+      // form being submitted, and it is exactly the 7-day-expiry case that
+      // would. The trigger now refuses rather than silently making this person
+      // the owner of a new company, but GoTrue flattens its message to
+      // "Database error saving new user" — so ask the RPC again and say which.
+      if (signUpError) {
+        const reason = await reasonFor();
+        setError(reason === 'valid' ? signUpError.message : messageFor(reason));
+        setInvitation(null);
+        return;
+      }
 
       setSuccess(true);
     } catch (err: unknown) {

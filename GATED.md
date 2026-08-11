@@ -44,6 +44,28 @@ branding, and delivery must be settled first.
 - Domain cutover
 - Login branding
 
+### TRIAL LIFECYCLE — **RULED [Josh, S135]. Not built. Needs its own spec and interview.**
+
+Raised by D3.2 of the invitation-flow work: `trial_emails` is append-only, so an address that
+has ever started a trial gets `subscriptions.status = 'incomplete'` on any later signup, and
+`middleware.ts:168` treats `incomplete` as `needsPayment` and redirects **every dashboard route**
+to `/dashboard/billing/plans`. The person can recover self-serve **only by paying immediately**;
+restoring the trial needs an operator. Josh hit this himself with `josh+test2@worthprop.com`.
+
+**The S135 branch changed NOTHING here, deliberately.** D1's fix stops *new* spurious burns by
+refusing the signup outright; existing `trial_emails` rows stay, and the behaviour is untouched.
+
+**The ruling this spec starts from — do not re-derive it:**
+
+1. **Immediate deletion at trial expiry**, with a **3-day warning** beforehand.
+2. **30 days' retention** for paying customers who cancel.
+3. **An export path before deletion.**
+4. **3 trials per email address**, tracked (not the current 1, and not unlimited).
+
+⚠️ **This is four systems, not a setting** — a scheduler, a notification path, a retention/erasure
+policy and an export pipeline — **with legal exposure** (data deletion, retention promises, what an
+export must contain). It gets a spec and an interview before any code.
+
 ### Module 9 dependencies raised while building the S133 read floor — **[S133, Josh]**
 
 Both are **flagged, not built.** They surfaced while deciding which roles the

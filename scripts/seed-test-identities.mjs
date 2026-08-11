@@ -95,22 +95,55 @@ async function ensureIdentity({ email, role, first, last }, companyId) {
   });
   must(`createUser(${email})`, uErr);
 
+  // ⚠️ ADOPT THE TRIGGER'S PROFILE — DO NOT INSERT ONE [S135].
+  //
+  // _Superseded, quoted rather than rewritten:_
+  // ```
+  // const { data: profile, error: pErr } = await db.from('profiles').insert({
+  //   user_id: created.user.id, company_id: companyId, email, ... });
+  // ```
+  //
+  // `20260914000000` brought the `on_auth_user_created` trigger into version
+  // control. It has ALWAYS existed on production and NEVER existed on
+  // rebuild-test, which is the only reason this script could insert a profile
+  // by hand — `profiles_user_id_key` now refuses the second row.
+  //
+  // A tokenless createUser takes the OWNER path, so it leaves a company, a
+  // trialing subscription, a `trial_emails` row and a seeded tag set behind.
+  // Repoint the profile and delete the rest — `trial_emails` especially, since
+  // leaving it silently denies a real trial to that address later.
+  //
+  // Mirrors `apps/web/test/live-session.ts:adoptSignupProfile()`, which the live
+  // harnesses use for the same reason. Kept as its own copy because this file is
+  // plain .mjs and cannot import the TypeScript helper.
+  const { data: auto, error: aErr } = await db
+    .from('profiles')
+    .select('id, company_id')
+    .eq('user_id', created.user.id)
+    .single();
+  must(`auto-profile(${email})`, aErr);
+
+  const spuriousCompanyId = auto.company_id;
+
   const { data: profile, error: pErr } = await db
     .from('profiles')
-    .insert({
-      user_id: created.user.id,
-      company_id: companyId,
-      email,
-      first_name: first,
-      last_name: last,
-      role,
-    })
+    .update({ company_id: companyId, role, first_name: first, last_name: last })
+    .eq('id', auto.id)
     .select('id, user_id, role')
     .single();
   must(`profile(${email})`, pErr);
 
-  // `profiles_create_member` auto-creates the company_members row.
-  note(`identity ${email}`, 'CREATED', `role=${role}`);
+  // `profiles_create_member` made the member row in the spurious company.
+  await db.from('company_members').update({ company_id: companyId }).eq('profile_id', auto.id);
+
+  if (spuriousCompanyId && spuriousCompanyId !== companyId) {
+    await db.from('tag_options').delete().eq('company_id', spuriousCompanyId);
+    await db.from('subscriptions').delete().eq('company_id', spuriousCompanyId);
+    await db.from('companies').delete().eq('id', spuriousCompanyId);
+  }
+  await db.from('trial_emails').delete().eq('email', email.toLowerCase());
+
+  note(`identity ${email}`, 'CREATED', `role=${role} (adopted from the signup trigger)`);
   return profile;
 }
 

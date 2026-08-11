@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import type { SupabaseClient } from '@supabase/supabase-js';
-import { admin, assertRebuildTest, sessionFor, TEST_PASSWORD } from './live-session';
+import { randomUUID } from 'node:crypto';
+import { createClient as createSupabaseClient, type SupabaseClient } from '@supabase/supabase-js';
+import { admin, assertRebuildTest, sessionFor, TEST_PASSWORD, URL_, ANON } from './live-session';
 import { resolveThread } from '@/lib/chat/threads';
 import { insertMessage, recentMessages } from '@/lib/chat/messages';
 import { withMemberNames } from '@/lib/services/punch';
@@ -42,6 +43,8 @@ let subProjects: string[] = [];
 const seeded: Array<{ table: string; id: string }> = [];
 /** The transient second PM — profile/member/assignment/auth user. */
 let pm2: { userId: string; profileId: string; memberId: string; projectId: string } | null = null;
+let pm2InvitationId = '';
+let pm2InviteToken = '';
 let taskAssignedId = '';
 let taskUnassignedId = '';
 
@@ -121,24 +124,67 @@ beforeAll(async () => {
   const { data: existing } = await admin.from('profiles').select('id, user_id').eq('email', email).maybeSingle();
   if (existing) throw new Error(`${email} already exists — a previous run did not clean up`);
 
-  const { data: created, error: uErr } = await admin.auth.admin.createUser({
+  // ⚠️ SEEDED THROUGH THE REAL INVITATION PATH [S135] — not by hand.
+  //
+  // _Superseded, quoted rather than rewritten:_
+  // ```
+  // const { data: created } = await admin.auth.admin.createUser({ ... });
+  // await admin.from('profiles').insert({ user_id: created.user.id, ... });
+  // ```
+  //
+  // That collided with `profiles_user_id_key` the moment `20260914000000`
+  // brought the `auth.users` trigger into version control. It had worked here
+  // ONLY because rebuild-test never had the trigger production has had all
+  // along — the direct insert was standing in for a divergence, not a design.
+  // Going through an invitation is what production does, and it buys end-to-end
+  // coverage of the invited path for free (asserted below).
+  const { data: ownerProf } = await admin
+    .from('profiles')
+    .select('user_id')
+    .eq('email', OWNER)
+    .single();
+  const ownerUserId = (ownerProf as { user_id: string }).user_id;
+
+  pm2InviteToken = randomUUID();
+  const { data: inv, error: invErr } = await admin
+    .from('invitations')
+    .insert({
+      company_id: companyId,
+      email,
+      role: 'project_manager',
+      invited_by: ownerUserId,
+      created_by: ownerUserId,
+      token: pm2InviteToken,
+    })
+    .select('id')
+    .single();
+  if (invErr) throw new Error(`pm2 invitation: ${invErr.message}`);
+  pm2InvitationId = (inv as { id: string }).id;
+
+  // ADMIN createUser, not signUp: `user_metadata` lands in `raw_user_meta_data`
+  // exactly as signUp's `options.data` does, so the SAME trigger runs the SAME
+  // invited path — but no confirmation email is sent, and Supabase's email rate
+  // limit is not touched. live-session.ts's header documents that limit biting
+  // after a few harness runs; a signUp here made this file fail on its second
+  // run of the session.
+  const { data: signUpData, error: suErr } = await admin.auth.admin.createUser({
     email,
     password: TEST_PASSWORD,
     email_confirm: true,
+    user_metadata: { first_name: 'S133', last_name: 'PM Two', invitation_token: pm2InviteToken },
   });
-  if (uErr) throw new Error(`createUser: ${uErr.message}`);
+  if (suErr) throw new Error(`pm2 createUser: ${suErr.message}`);
 
-  const { data: p2, error: pErr } = await admin
+  const { data: p2 } = await admin
     .from('profiles')
-    .insert({ user_id: created.user.id, company_id: companyId, email, first_name: 'S133', last_name: 'PM Two', role: 'project_manager' })
-    .select('id')
+    .select('id, company_id, role')
+    .eq('email', email)
     .single();
-  if (pErr) throw new Error(`profile pm2: ${pErr.message}`);
+  if (!p2) throw new Error('pm2 signUp created no profile — the auth.users trigger is missing');
 
-  // `profiles_create_member` auto-creates the company_members row.
   const { data: m2 } = await admin
     .from('company_members')
-    .select('id')
+    .select('id, company_id')
     .eq('profile_id', (p2 as { id: string }).id)
     .single();
 
@@ -150,7 +196,7 @@ beforeAll(async () => {
   });
 
   pm2 = {
-    userId: created.user.id,
+    userId: signUpData.user!.id,
     profileId: (p2 as { id: string }).id,
     memberId: (m2 as { id: string }).id,
     projectId: otherProjectId,
@@ -167,6 +213,7 @@ afterAll(async () => {
     await admin.from('profiles').delete().eq('id', pm2.profileId);
     await admin.auth.admin.deleteUser(pm2.userId);
   }
+  if (pm2InvitationId) await admin.from('invitations').delete().eq('id', pm2InvitationId);
   await admin.from('chat_threads').delete().eq('project_id', PROJECT_QA_A);
 });
 
@@ -410,6 +457,39 @@ describe('⚠️ THE RULING B NARROWING — the PM is project-scoped', () => {
     expect(new Set(rows.map((r) => r.role))).toEqual(
       new Set(['owner', 'admin', 'project_manager', 'subcontractor'])
     );
+  });
+
+  it('⚠️ D1 [S135] — PM2 arrived through the REAL invited path, end to end', async () => {
+    // PM2 is seeded by signing up with a live invitation token, so this asserts
+    // the whole invited path in passing: the profile lands in the INVITER's
+    // company (not a new one), with the invitation's role, the member row lands
+    // in the same tenant, and the invitation flips to `accepted`.
+    const { data: p } = await admin
+      .from('profiles')
+      .select('company_id, role')
+      .eq('id', pm2!.profileId)
+      .single();
+    expect((p as { company_id: string }).company_id, 'the invited profile landed in the WRONG company').toBe(companyId);
+    expect((p as { role: string }).role).toBe('project_manager');
+
+    const { data: m } = await admin
+      .from('company_members')
+      .select('company_id')
+      .eq('id', pm2!.memberId)
+      .single();
+    expect((m as { company_id: string }).company_id, 'the member row landed in the wrong tenant').toBe(companyId);
+
+    const { data: inv } = await admin
+      .from('invitations')
+      .select('status')
+      .eq('id', pm2InvitationId)
+      .single();
+    expect((inv as { status: string }).status, 'the invitation was not flipped to accepted').toBe('accepted');
+
+    // ...and the token is now spent, which is what `get_invitation_status`
+    // must be able to say.
+    const { data: reason } = await admin.rpc('get_invitation_status', { invite_token: pm2InviteToken });
+    expect(reason).toBe('already_used');
   });
 
   it('⚠️ the counterfactual: the second PM EXISTS and is a PM', async () => {

@@ -17,6 +17,10 @@ export default function TeamPageClient({ userRole }: { userRole: string }) {
   const router = useRouter();
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
+  // D4 — per-row UI state for Copy link / Resend.
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [resendingId, setResendingId] = useState<string | null>(null);
+  const [resendNote, setResendNote] = useState<Record<string, { ok: boolean; text: string }>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,6 +44,55 @@ export default function TeamPageClient({ userRole }: { userRole: string }) {
       setError(err instanceof Error ? err.message : 'Failed to load team data');
     } finally {
       setLoading(false);
+    }
+  }
+
+  // D4 — the link, retrievable again. `token` comes back on the row now
+  // (getPendingInvitations); the policy always allowed it.
+  function handleCopyLink(inv: Invitation) {
+    if (!inv.token) return;
+    navigator.clipboard.writeText(`${window.location.origin}/invite/accept?token=${inv.token}`);
+    setCopiedId(inv.id);
+    setTimeout(() => setCopiedId((cur) => (cur === inv.id ? null : cur)), 2000);
+  }
+
+  // D4 — resend REUSES the token and RESETS the expiry (Josh, S135 Q6), so a
+  // copy already circulating keeps working. The note below reports whether the
+  // email actually went: D2's whole point is not claiming a send that failed.
+  async function handleResend(invitationId: string) {
+    setResendingId(invitationId);
+    try {
+      const res = await fetch(`/api/invites/${invitationId}/resend`, { method: 'POST' });
+      const payload = await res.json();
+      if (!res.ok) {
+        setResendNote((p) => ({
+          ...p,
+          [invitationId]: { ok: false, text: payload.error ?? 'Could not resend.' },
+        }));
+        return;
+      }
+      setResendNote((p) => ({
+        ...p,
+        [invitationId]: payload.emailed
+          ? { ok: true, text: 'Invitation re-sent. The link is valid for another 7 days.' }
+          : {
+              ok: false,
+              text: `Expiry extended, but the email did not send${
+                payload.emailError ? ` (${payload.emailError})` : ''
+              }. Use Copy link instead.`,
+            },
+      }));
+      await loadData();
+    } catch (err) {
+      setResendNote((p) => ({
+        ...p,
+        [invitationId]: {
+          ok: false,
+          text: err instanceof Error ? err.message : 'Could not resend.',
+        },
+      }));
+    } finally {
+      setResendingId(null);
     }
   }
 
@@ -170,13 +223,41 @@ export default function TeamPageClient({ userRole }: { userRole: string }) {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                       {inv.expires_at ? new Date(inv.expires_at).toLocaleDateString() : '—'}
                     </td>
+                    {/* D4 [S135] — Cancel used to be the ONLY control here, so
+                        a lost link (or, before D2, a link that was never
+                        delivered because no invite email existed) left
+                        cancel-and-re-invite as the only path. */}
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <button
-                        onClick={() => handleCancelInvite(inv.id)}
-                        className="text-sm text-red-600 hover:text-red-800"
-                      >
-                        Cancel
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => handleCopyLink(inv)}
+                          className="text-sm text-gray-700 hover:text-gray-900"
+                        >
+                          {copiedId === inv.id ? 'Copied' : 'Copy link'}
+                        </button>
+                        <button
+                          onClick={() => handleResend(inv.id)}
+                          disabled={resendingId === inv.id}
+                          className="text-sm text-blue-600 hover:text-blue-800 disabled:opacity-50"
+                        >
+                          {resendingId === inv.id ? 'Resending…' : 'Resend'}
+                        </button>
+                        <button
+                          onClick={() => handleCancelInvite(inv.id)}
+                          className="text-sm text-red-600 hover:text-red-800"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                      {resendNote[inv.id] && (
+                        <p
+                          className={`mt-1 text-xs ${
+                            resendNote[inv.id].ok ? 'text-green-700' : 'text-yellow-800'
+                          }`}
+                        >
+                          {resendNote[inv.id].text}
+                        </p>
+                      )}
                     </td>
                   </tr>
                 ))}
