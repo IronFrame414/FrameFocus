@@ -44,6 +44,32 @@ branding, and delivery must be settled first.
 - Domain cutover
 - Login branding
 
+### Module 9 dependencies raised while building the S133 read floor — **[S133, Josh]**
+
+Both are **flagged, not built.** They surfaced while deciding which roles the
+subcontractor read floor (`20260912000000`) should exclude, and both are
+pre-existing gaps rather than anything that migration introduced.
+
+- **M9-D1 — `project_budget_items` carries COST ONLY; the client financial page needs
+  SELL and PROFIT.** The table holds `committed_amount` and `actual_amount`, and the
+  budgeted figure moved to `project_budget_amounts` (Owner/Admin). **There is no sell
+  column anywhere on it.** The portal's financial page varies by contract type, and
+  this gap **blocks the cost-plus and T&M cases specifically**, where what a client is
+  billed is cost plus a margin the schema cannot currently express. This is why
+  `20260912000000` leaves **no client exclusion** on `project_budget_items` — the
+  exclusion would have to be unpicked to build the page anyway. Unresolved.
+
+- **M9-D2 — client-visible files and photos need a per-row flag that does not exist.**
+  Clients will see files and photos flagged for client view. Nothing in the schema
+  carries such a flag today. It needs **a column, a UI to set it, and a client arm on
+  both the file and photo policies.**
+
+  ⚠️ **This reclassifies an S133 audit finding from settled to PROVISIONAL.**
+  `files_select_non_client` was recorded as category (a) — *intended by construction*,
+  because it excludes `client` by name. **That holds today and stops holding the moment
+  the flag exists.** It is an exclusion that was **never revisited**, not a decision
+  that was made. A future reader must not treat it as the latter.
+
 ---
 
 ## ~~Gate 2 — Test identities~~ — **CLOSED [S97, 2026-08-02]; fully closed [S113, 2026-08-07]**
