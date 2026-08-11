@@ -133,7 +133,12 @@ export type EmailType =
   // `logEmail({ email_type: 'mention' })` did not type-check until slice 4.
   // Half the registry shipped and the half that fails a build did not — found
   // by S126's ruling sweep, not by anything failing.
-  | 'mention';
+  | 'mention'
+  // D2 [S135] — a team invitation. The `email_types.invite` row lands in
+  // 20260915000000, in the SAME commit as this line: S126 found `mention`
+  // shipped in the table and missing from this union, and that half only fails
+  // at compile time, so it shipped silently. Both halves or neither.
+  | 'invite';
 
 export interface LogEmailInput {
   company_id: string;
