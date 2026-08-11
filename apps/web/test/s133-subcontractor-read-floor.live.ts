@@ -263,6 +263,54 @@ describe('⚠️ THE FAILING HALF — the hole is still open underneath, by mech
 });
 
 // ============================================================================
+describe('the client arm — five tables, and WHY it cannot be probed directly', () => {
+  // ⚠️ THE HONEST VERSION. The client exclusion is on five of the nine
+  // (client_contracts, subcontractor_contracts, purchase_orders, deliveries,
+  // inspections) and deliberately NOT on the other four, because Module 9's
+  // portal is being specified and those four are plausibly on its path.
+  //
+  // A test that asserted "a client reads 0" would pass identically with the
+  // clause, without the clause, and with the whole migration reverted — a
+  // client has no `company_members` row, so `can_view_project()` already
+  // refuses them everywhere. Rather than bank a vacuous green, this asserts the
+  // PRECONDITION that makes the arm unexercisable. The day someone gives
+  // clients member rows — which Module 9 may well need — this goes red and the
+  // client arm has to be re-reasoned instead of silently starting to matter.
+
+  it('a client has NO company_members row — the reason the arm is defence-in-depth', async () => {
+    const { data: cp } = await admin
+      .from('profiles')
+      .select('id')
+      .eq('email', 'josh+qa-client@worthprop.com')
+      .single();
+    const { data: member } = await admin
+      .from('company_members')
+      .select('id')
+      .eq('profile_id', (cp as { id: string }).id)
+      .maybeSingle();
+
+    expect(
+      member,
+      'a client now HAS a member row — the client arm is live and must be probed for real'
+    ).toBeNull();
+  });
+
+  it('and no client is assigned to any project', async () => {
+    const { data: clients } = await admin
+      .from('profiles')
+      .select('id')
+      .eq('company_id', companyId)
+      .eq('role', 'client');
+    expect((clients ?? []).length, 'no client identity to reason about').toBeGreaterThan(0);
+    // With no member row there is no `member_id` a client could appear under,
+    // so this is belt-and-braces on the same fact.
+    const clientC = await sessionFor('josh+qa-client@worthprop.com');
+    const { count: n } = await clientC.from('project_assignments').select('*', { count: 'exact', head: true });
+    expect(n ?? 0, 'a client reads project assignments').toBe(0);
+  });
+});
+
+// ============================================================================
 describe('tasks — assigned only, never project-wide', () => {
   it('⚠️ the sub reads the task ASSIGNED to them and NOT the one beside it', async () => {
     const { data } = await subC.from('tasks').select('id, title, assignee_id');

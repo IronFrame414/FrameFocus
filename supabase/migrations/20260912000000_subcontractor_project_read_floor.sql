@@ -57,17 +57,47 @@
 -- unchanged. Those three assertions are re-run as part of this change.
 --
 -- ----------------------------------------------------------------------------
--- ⚠️ `client` IS EXCLUDED ALONGSIDE `subcontractor` ON THE NINE "NOTHING" TABLES
+-- ⚠️ THE `client` ARM IS DELIBERATELY NOT UNIFORM — READ THIS BEFORE "FIXING" IT
 -- ----------------------------------------------------------------------------
--- Josh's ruling names clients explicitly on three (purchase_orders, deliveries,
--- inspections) and says only "nothing" on the rest. The same two-role exclusion
--- is applied to all nine, deliberately and flagged rather than done quietly:
--- Ruling A/B [S131] already give a client no roster and no dashboard, Module 9
--- is a placeholder, and an inconsistent role list between sibling policies on
--- the same surface is exactly the shape TECH_DEBT #117 records. A client is not
--- in `project_assignments` today, so on current data this clause changes
--- nothing it does not also change for a subcontractor — it closes the same hole
--- for the one other role that has a login and no business on these tables.
+-- The SUBCONTRACTOR exclusion is on all nine. The CLIENT exclusion is on five,
+-- and its absence from the other four is a decision, not an oversight:
+--
+--   client excluded      client_contracts, subcontractor_contracts,
+--                        purchase_orders, deliveries, inspections
+--   client NOT excluded  project_budget_items, daily_logs, project_contacts,
+--                        punch_lists
+--
+-- ⚠️ AN EARLIER DRAFT OF THIS MIGRATION EXCLUDED CLIENTS FROM ALL NINE. Josh
+-- narrowed it [S133], and the reason is forward-looking rather than about
+-- today's data: **Module 9's client portal is being specified now**, and clients
+-- will read contracts, invoices, proposals and change orders plus a financial
+-- page whose contents depend on contract type. Four of the nine are plausibly on
+-- that portal's path. A blanket exclusion written before the portal exists is
+-- something a future reader unpicks without knowing why it was there — so it is
+-- not written. The five that keep the exclusion are either ruled explicitly
+-- (purchase_orders, deliveries, inspections) or hold money a client must never
+-- see (client_contracts, subcontractor_contracts.contract_value).
+--
+-- ⚠️ THE CLIENT ARM IS DEFENCE-IN-DEPTH AND IS NOT EXERCISABLE TODAY. A client
+-- has no `company_members` row — `profiles_create_member` (20260704210000)
+-- skips both `client` and `subcontractor` — so `get_my_member_id()` is NULL,
+-- `is_assigned_to_project()` can never be true, and `can_view_project()` already
+-- refuses them everywhere. Any probe asserting "a client reads 0" therefore
+-- passes whether this clause exists or not. That is stated here rather than
+-- dressed up as a passing test.
+--
+-- ----------------------------------------------------------------------------
+-- MODULE 9 DEPENDENCY, FLAGGED HERE AND NOT BUILT [Josh, S133]
+-- ----------------------------------------------------------------------------
+-- The client financial page will need `project_budget_items` to carry SELL and
+-- PROFIT, not only cost. Today the table holds `budgeted_amount` (moved to
+-- `project_budget_amounts`, Owner/Admin), `committed_amount` and
+-- `actual_amount` — all cost. **There is no sell column anywhere on it.** That
+-- gap is PRE-EXISTING and unresolved, and it blocks the cost-plus and T&M
+-- cases, where what a client is billed is derived from cost plus a margin the
+-- schema cannot currently express. It is why `project_budget_items` keeps no
+-- client exclusion here: the exclusion would have to be unpicked to build the
+-- page anyway. Recorded as a Module 9 dependency in GATED.md.
 --
 -- ----------------------------------------------------------------------------
 -- WHAT IS NOT HERE
@@ -82,10 +112,15 @@
 -- ----------------------------------------------------------------------------
 -- 1. The nine "nothing" tables.
 --
---    One shape, nine times. `get_my_role() <> ALL (...)` is the form Ruling B
---    already uses on `contacts` and `subcontractors`, so this reads the same as
---    the floor it extends. NULL-safe by construction: a NULL role yields NULL
---    from `<> ALL`, which RLS treats as false — deny, not admit.
+--    ONE SHAPE, TWO ROLE LISTS — see the client-arm section above for which
+--    tables get which, and why that is deliberate. `get_my_role() <> ALL (...)`
+--    is the form Ruling B already uses on `contacts` and `subcontractors`, so
+--    this reads the same as the floor it extends.
+--
+--    NULL-safe by construction, and identically so in both variants: a NULL role
+--    yields NULL from `<> ALL`, which RLS treats as false — deny, not admit. A
+--    NULL-role profile is a broken row, and it used to pass these policies
+--    outright because they consulted no role at all.
 -- ----------------------------------------------------------------------------
 
 -- 1a. client_contracts — R7. The sub was never in the Financial Floor's role
@@ -113,14 +148,17 @@ CREATE POLICY subcontractor_contracts_select_visible ON public.subcontractor_con
     AND public.can_view_project(project_id)
   );
 
--- 1c. project_budget_items — R7. SUBCONTRACTOR ONLY; see the warning in the
---     header. Foreman and crew keep `actual_amount` / `committed_amount`.
+-- 1c. project_budget_items — R7. SUBCONTRACTOR ONLY, in two senses: only the
+--     sub is excluded, and only the sub arm may ever be added here. Foreman and
+--     crew keep `actual_amount` / `committed_amount` — see the header warning.
+--     NO CLIENT ARM: Module 9's financial page reads this table, and it already
+--     needs a sell/profit column it does not have (header, Module 9 dependency).
 DROP POLICY IF EXISTS project_budget_items_select_visible ON public.project_budget_items;
 CREATE POLICY project_budget_items_select_visible ON public.project_budget_items
   FOR SELECT TO authenticated
   USING (
     company_id = public.get_my_company_id()
-    AND public.get_my_role() <> ALL (ARRAY['subcontractor'::text, 'client'::text])
+    AND public.get_my_role() <> ALL (ARRAY['subcontractor'::text])
     AND public.can_view_project(project_id)
   );
 
@@ -157,24 +195,30 @@ CREATE POLICY inspections_select_visible ON public.inspections
 -- 1g. daily_logs — internal crew records.
 --     Only the SELECT policy changes. #97's INSERT author bind and #98's
 --     soft-delete trigger (20260728000000) are untouched.
+--     NO CLIENT ARM: a daily log is plausibly on Module 9's portal path (a
+--     client seeing progress is the point of the portal), and the decision of
+--     what a client reads there belongs to Module 9, not to this migration.
 DROP POLICY IF EXISTS daily_logs_select_visible ON public.daily_logs;
 CREATE POLICY daily_logs_select_visible ON public.daily_logs
   FOR SELECT TO authenticated
   USING (
     company_id = public.get_my_company_id()
-    AND public.get_my_role() <> ALL (ARRAY['subcontractor'::text, 'client'::text])
+    AND public.get_my_role() <> ALL (ARRAY['subcontractor'::text])
     AND public.can_view_project(project_id)
   );
 
 -- 1h. project_contacts — the floored contacts table: clients and vendors, not
 --     people. Ruling B already gives a sub zero `contacts`; this closes the
 --     per-project join table that reaches the same rows.
+--     NO CLIENT ARM: this is the join table a portal would use to work out
+--     WHICH client a project belongs to. Excluding clients from it pre-emptively
+--     is the exclusion most likely to be unpicked by Module 9.
 DROP POLICY IF EXISTS project_contacts_select_visible ON public.project_contacts;
 CREATE POLICY project_contacts_select_visible ON public.project_contacts
   FOR SELECT TO authenticated
   USING (
     company_id = public.get_my_company_id()
-    AND public.get_my_role() <> ALL (ARRAY['subcontractor'::text, 'client'::text])
+    AND public.get_my_role() <> ALL (ARRAY['subcontractor'::text])
     AND public.can_view_project(project_id)
   );
 
@@ -194,12 +238,15 @@ CREATE POLICY project_contacts_select_visible ON public.project_contacts
 --     resolved through the service role by `lib/services/punch-list-names.ts` —
 --     the `member-names.ts` shape, taking ids off rows RLS already returned and
 --     unable to enumerate. The sub reads their ITEMS, never the list.
+--
+--     NO CLIENT ARM: a punch walk is a plausible portal surface, and the same
+--     reasoning applies — Module 9 decides, not this migration.
 DROP POLICY IF EXISTS punch_lists_select_visible ON public.punch_lists;
 CREATE POLICY punch_lists_select_visible ON public.punch_lists
   FOR SELECT TO authenticated
   USING (
     company_id = public.get_my_company_id()
-    AND public.get_my_role() <> ALL (ARRAY['subcontractor'::text, 'client'::text])
+    AND public.get_my_role() <> ALL (ARRAY['subcontractor'::text])
     AND public.can_view_project(project_id)
   );
 
