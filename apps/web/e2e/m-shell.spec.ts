@@ -89,9 +89,6 @@ test.describe('/m does not bounce an authenticated visitor to the desktop app', 
     // The shell itself rendered — a URL alone would not prove the mobile app
     // is what loaded.
     await expect(page.getByTestId('m-tabbar')).toBeVisible();
-    // TEMPORARY [S133] — deliberate failure proving a shard failure turns the
-    // workflow red. REVERTED IMMEDIATELY AFTER THE RUN.
-    await expect(page.getByTestId('zz-deliberate-failure-s133')).toBeVisible({ timeout: 3000 });
   });
 
   test('a deep /m route is not bounced either', async ({ page }) => {
