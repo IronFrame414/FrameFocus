@@ -67,49 +67,46 @@ jobs:
   # Separate jobs also run in parallel.
   # ---------------------------------------------------------------------------
   # ---------------------------------------------------------------------------
-  # SHARDED [S133]. #197 was CANCELLED AT THE 20-MINUTE CAP with nothing failing.
+  # UN-SHARDED, DELIBERATELY — the sharding of S133 was REVERTED. [Josh, S134]
   # ---------------------------------------------------------------------------
-  # Every mark in that log was a pass or a skip — it died around 400 of 497 tests
-  # on wall clock alone. The same suite runs locally in this exact configuration
-  # (production build, `npm run start`, one worker) in 14.3 minutes; GitHub's
-  # runner is slower and the suite grew as chat and the roster work landed.
+  # Sharding (S133, commit ce6efa8) ran four runners against the ONE shared
+  # rebuild-test database. To that database the four shards are CONCURRENT runs,
+  # which is the exact hazard #198/#199/#200 were sequenced to avoid — carried,
+  # unnoticed, across the shard boundary. It surfaced as CI #201: a PM-authored
+  # `net_delta:0` change order created by `m-co-recalc-route.spec.ts` on shard N
+  # was read by `desktop-payload.spec.ts:175` on shard 1, failing an
+  # assert-absence. Not a payload leak — a test that asserts the ABSENCE / count
+  # of something another shard writes to a shared fixture. See TECH_DEBT for the
+  # full exposed set.
   #
-  # RAISING `timeout-minutes` WAS THE ALTERNATIVE AND WAS REJECTED [Josh, S133]:
-  # it buys headroom the suite consumes again. Sharding divides the work instead.
+  # THE REASONING, so it is not re-litigated: the only two speedups available —
+  # sharding, and `workers > 1` in one job — BOTH introduce that same intra-DB
+  # concurrency. Absent per-shard fixture isolation, SERIAL is the only correct
+  # configuration and the wall-clock is its price. A red-that-should-be-green is
+  # worse than a slow green. `workers: 1` (playwright.config.ts) is load-bearing
+  # here, not incidental.
   #
-  # ⚠️ THE SHARD COUNT IS DECLARED ONCE, in the matrix below. `--shard` reads it
-  # back as `strategy.job-total`, so changing the matrix changes both halves and
-  # they cannot drift into `--shard=3/4` running on a 5-way matrix — which does
-  # not error, it silently never runs a quarter of the suite.
+  # timeout RAISED 20 -> 35: #197 hit the old 20-minute cap un-sharded; local is
+  # ~14.3 min and GitHub's runner is slower. 35 is headroom, not a target.
   #
-  # PLAYWRIGHT SHARDS BY FILE, verified against 1.62.1 rather than assumed:
-  # listing all four shards, the only file appearing in more than one is
-  # `auth.setup.ts`, which is the setup project every shard depends on. So a
-  # single spec file is never split across runners — which matters for
-  # `m-writes.spec.ts`, whose known order-dependent test ("an OWNER edits both
-  # halves") stays with the rest of its file. Sharding changes the order files
-  # run in, not the order within one. Distribution measured: 125 / 141 / 128 /
-  # 106 tests.
+  # NOT THE EVENTUAL ANSWER. A database PER SHARD (safe by construction) is, and
+  # it is BLOCKED on a reproducible seed that does not exist — the pinned
+  # fixtures are hand-curated on rebuild-test. See TECH_DEBT. The sharding work
+  # is correct and kept on branch `ci/shard-playwright` for when that seed
+  # lands; this revert does not delete it.
   #
-  # WHAT IS DELIBERATELY NOT CHANGED HERE — one variable at a time:
-  #   · `workers` stays at 1 under CI (playwright.config.ts).
-  #   · `retries` is untouched. ⚠️ NOTE FOR THE READER: the config sets
-  #     `retries: process.env.CI ? 2 : 0`, so CI DOES retry twice. That is what
-  #     produced #194's `1 flaky`, which masked the m-writes ordering problem.
-  #     The `--retries=0` figure quoted for the 14.3-minute local run was a
-  #     LOCAL override, not CI's behaviour. Changing it is a real decision about
-  #     what CI hides and belongs in its own change, not smuggled into sharding.
+  # RETRIES ARE UNTOUCHED, DELIBERATELY. `retries: process.env.CI ? 2` stays.
+  # Under serial execution there is nothing cross-test to mask, so retries are
+  # safe and useful. Whether CI should retry at all is a live, unruled question
+  # that predates sharding and is not folded into this change.
+  #
+  # JOB NAME `E2E (Playwright)` PRESERVED. A required status check may be pinned
+  # to it; branch protection could not be read (403 Resource not accessible by
+  # integration), so the name is kept rather than gambled on.
   e2e:
-    name: E2E shard
+    name: E2E (Playwright)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    strategy:
-      # A failing shard must not cancel its siblings: the merged report is only
-      # readable if every shard finished, and one shard's failure should not
-      # hide a second one in another.
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4]
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
 
@@ -190,99 +187,19 @@ jobs:
       # NOT ON THE BUILD STEP ABOVE, deliberately: `next build` prerenders and
       # evaluates middleware, neither of which reaches an admin client, and a
       # secret not handed to a step cannot leak from it.
-      #
-      # EACH SHARD GETS ITS OWN SERVER, AND NOTHING HAD TO CHANGE FOR THAT.
-      # A matrix job is a separate runner, so every shard has its own localhost
-      # and its own :3000 — they cannot collide with each other. `webServer`
-      # starts one per shard, and `reuseExistingServer` is already false under
-      # CI, so each gets a fresh `next start` rather than a stale one.
-      # `scripts/e2e-preflight.sh` is deliberately NOT involved: it is a local
-      # guard against `npm run dev` sliding to 3001 on a busy Codespace, and it
-      # is not referenced anywhere in this workflow. Confirmed by grep, because
-      # that port slide has cost two full runs before.
-      #
-      # `--reporter=blob` REPLACES the config's CI reporters for this step. Blob
-      # is the only format `merge-reports` can recombine; the github annotations
-      # and the HTML both come back out of the merge job below, so nothing is
-      # lost by not emitting them here — and emitting an HTML report per shard
-      # would give four partial reports and no whole one.
-      - name: Run Playwright tests (shard ${{ matrix.shard }}/${{ strategy.job-total }})
-        run: npx playwright test --shard=${{ matrix.shard }}/${{ strategy.job-total }} --reporter=blob
+      - name: Run Playwright tests
+        run: npx playwright test
         working-directory: apps/web
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
-      # ALWAYS, not `if: failure()`. The merge job needs every shard's blob to
-      # produce one report, including the green ones — uploading only on failure
-      # would give a merged report containing just the shard that broke.
-      - name: Upload blob report
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: blob-report-${{ matrix.shard }}
-          path: apps/web/blob-report/
-          retention-days: 3
-
-  # ---------------------------------------------------------------------------
-  # THE GATE, AND THE ONE READABLE REPORT.
-  # ---------------------------------------------------------------------------
-  # ⚠️ THIS JOB KEEPS THE NAME `E2E (Playwright)` ON PURPOSE. That was the e2e
-  # job's name before sharding, and a required status check configured on it
-  # would silently stop being satisfied if the name vanished — a branch would
-  # then wait forever on a check that no longer exists. I could NOT read the
-  # branch protection to confirm whether such a rule exists: the API returns
-  # 403 `Resource not accessible by integration` for this token. So the name is
-  # preserved rather than gambled on.
-  #
-  # ⚠️ AND IT MUST GO RED WHEN A SHARD DOES. `merge-reports` succeeds whether or
-  # not the tests it merges passed — it is a report tool, not a gate. Without
-  # the explicit check at the end, this job would be green over a failed shard,
-  # and a matrix that reports green because a shard errored is worse than the
-  # timeout it replaced. `needs.e2e.result` is the aggregate of the whole
-  # matrix: `success` only if every shard succeeded.
-  merge-reports:
-    name: E2E (Playwright)
-    if: ${{ !cancelled() }}
-    needs: [e2e]
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - run: npm ci
-
-      - name: Download blob reports
-        uses: actions/download-artifact@v4
-        with:
-          path: apps/web/all-blob-reports
-          pattern: blob-report-*
-          merge-multiple: true
-
-      - name: Merge into one HTML report
-        run: npx playwright merge-reports --reporter=html,github ./all-blob-reports
-        working-directory: apps/web
-        env:
-          PLAYWRIGHT_HTML_OPEN: never
-
-      - name: Upload merged report
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+      # Uploaded on failure only — a green run's report is noise, a red one is
+      # the trace and screenshot that explain it.
+      - uses: actions/upload-artifact@v4
+        if: failure()
         with:
           name: playwright-report
           path: apps/web/playwright-report/
           retention-days: 14
-
-      # LAST, so the report is uploaded before this fails the job.
-      - name: Fail if any shard failed
-        if: ${{ needs.e2e.result != 'success' }}
-        run: |
-          echo "Playwright matrix result: ${{ needs.e2e.result }}"
-          echo "Open the 'playwright-report' artifact — it is the MERGED report for all shards."
-          exit 1
