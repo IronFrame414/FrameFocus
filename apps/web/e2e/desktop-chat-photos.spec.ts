@@ -143,7 +143,30 @@ test.describe('A-C17 — a message references two photos and renders both', () =
 
     // And it actually loaded — a signed URL for a blob that is not there would
     // give naturalWidth 0 and every assertion above would still pass.
-    const width = await thumb.locator('img').evaluate((img) => (img as HTMLImageElement).naturalWidth);
+    //
+    // ⚠️ WAIT FOR THE FETCH TO SETTLE FIRST, AND THE ORDER OF THESE TWO LINES
+    // IS THE WHOLE FIX [S131]. `toBeVisible()` above is satisfied the moment the
+    // <img> has a layout box, and this one is 78x78 by CSS — so it is "visible"
+    // while its bytes are still in flight. Reading `naturalWidth` immediately
+    // after therefore asks "has it decoded yet?", not "did it decode?".
+    //
+    // THIS IS NOT A LOAD RACE, AND IT IS NOT FLAKINESS — it reproduces
+    // DETERMINISTICALLY against a PRODUCTION build (`npm run build && npm run
+    // start`, which is what CI serves) and passes every time under `next dev`.
+    // Measured: 3/3 failures in CI #195 at one worker, 1/1 locally in
+    // production mode, 0 in dev. Production renders FASTER, so the assertion
+    // lands sooner relative to the image fetch — the opposite of the usual
+    // "slow environment is flaky" intuition, which is why it looked like an
+    // environment gap.
+    //
+    // The criterion is UNCHANGED and deliberately not weakened. `complete`
+    // turns true for a FAILED load too, so waiting on it only rules out "not
+    // yet"; `naturalWidth > 0` still has to hold afterwards, and a signed URL
+    // for a blob that is not there still fails exactly as intended. Verified by
+    // probe: the response is 200 image/png and the image decodes to 612px wide.
+    const img = thumb.locator('img');
+    await expect(img).toHaveJSProperty('complete', true);
+    const width = await img.evaluate((el) => (el as HTMLImageElement).naturalWidth);
     expect(width).toBeGreaterThan(0);
   });
 });

@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { signInAs } from './sign-in-as';
 import { adminClient } from './hub-fixture';
 
 // M6M Part C — the write paths. D-51 (CO create → edit → send), D-52 as
@@ -36,7 +37,6 @@ const OWNER = 'josh+test50@worthprop.com';
 const PM = 'josh+pm@worthprop.com';
 const FOREMAN = 'josh+qa-foreman@worthprop.com';
 const SUB = 'josh+qa-sub@worthprop.com';
-const PASSWORD = process.env.E2E_PASSWORD ?? 'FrameFocusTest!2026';
 
 /** The project the rest of the mobile suite drives. */
 const PROJECT = 'eaf0e25b-d60e-49c0-89b2-5612118d94b4';
@@ -50,14 +50,9 @@ function stamp(): string {
   return String(Date.now()).slice(-6);
 }
 
-async function signInAs(page: Page, email: string) {
-  await page.context().clearCookies();
-  await page.goto('/sign-in');
-  await page.locator('#email').fill(email);
-  await page.locator('#password').fill(PASSWORD);
-  await page.getByRole('button', { name: /sign in/i }).click();
-  await expect(page).toHaveURL(/\/dashboard/, { timeout: 30_000 });
-}
+// signInAs now comes from `./sign-in-as` — RULING A [S131]. This file held one
+// of FIVE byte-identical copies that each waited for `/dashboard`, which a
+// subcontractor no longer reaches. The destination belongs in one place.
 
 // ---------------------------------------------------------------------------
 // WHICH IDENTITIES CAN REACH THIS PROJECT — MEASURED, AND NOW UNIFORM [S119]
