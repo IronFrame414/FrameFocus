@@ -31,20 +31,47 @@ async function myMemberId(): Promise<string | null> {
 
 // ── Lists (create: all roles incl. Crew; delete: Foreman+) ──
 
+/**
+ * ⚠️ THE ID IS GENERATED HERE, AND THERE IS NO `RETURNING` — S133.
+ *
+ * _Superseded, quoted rather than rewritten:_
+ * ```
+ * const { data, error } = await supabase
+ *   .from('punch_lists')
+ *   .insert({ project_id: projectId, name })
+ *   .select('id')
+ *   .single();
+ * ```
+ *
+ * The S133 read floor (`20260912000000` §1i) closes `punch_lists` to
+ * subcontractors. INSERT is untouched and still admits them — `punch_lists_insert_authenticated`
+ * is unchanged, and A-59 says a sub may create a list. But **Postgres applies
+ * the SELECT policy to a RETURNING clause and refuses the whole statement when
+ * the new row fails it**, which is precisely the trap `s114`'s own comment
+ * documents against `expenses`. Measured under the S90 harness as the QA sub:
+ *
+ *     INSERT no .select()   -> OK, row written
+ *     INSERT .select('id')  -> 42501 new row violates row-level security policy
+ *
+ * The insert was never the problem; reading the row back was. So the caller
+ * chooses the id — the `deliveries` pattern, where the schema already says "client
+ * may generate (offline-ready)" — and the statement never needs to read anything
+ * back. A sub creates a list, gets its id, and files an item into it, while
+ * still being unable to SELECT a single list.
+ *
+ * A PK collision would surface as a normal insert error, not silent overwrite.
+ */
 export async function createPunchList(
   projectId: string,
   name: string
 ): Promise<{ success: boolean; id?: string; error?: string }> {
   const supabase = createClient();
 
-  const { data, error } = await supabase
-    .from('punch_lists')
-    .insert({ project_id: projectId, name })
-    .select('id')
-    .single();
+  const id = crypto.randomUUID();
+  const { error } = await supabase.from('punch_lists').insert({ id, project_id: projectId, name });
 
   if (error) return { success: false, error: error.message };
-  return { success: true, id: data.id };
+  return { success: true, id };
 }
 
 export async function deletePunchList(

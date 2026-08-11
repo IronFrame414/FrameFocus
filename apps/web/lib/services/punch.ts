@@ -1,6 +1,10 @@
 import { createClient } from '@/lib/supabase-server';
 import type { Database } from '@framefocus/shared/types/database';
 import { adminMemberNameResolver, type MemberNameResolver } from '@/lib/services/member-names';
+import {
+  adminPunchListNameResolver,
+  type PunchListNameResolver,
+} from '@/lib/services/punch-list-names';
 
 type PunchListRow = Database['public']['Tables']['punch_lists']['Row'];
 type PunchItemRow = Database['public']['Tables']['punch_list_items']['Row'];
@@ -112,7 +116,39 @@ export async function withMemberNames(
   }));
 }
 
-export async function getPunchLists(projectId: string): Promise<PunchList[]> {
+/**
+ * ⚠️ ITEM-FIRST, NOT LIST-FIRST — S133 subcontractor read floor.
+ *
+ * _Superseded, quoted rather than rewritten:_
+ * ```
+ * if (error || !lists) return [];
+ * ...
+ * return lists.map((list) => ({
+ *   ...list,
+ *   items: punchItems.filter((i) => i.punch_list_id === list.id),
+ * }));
+ * ```
+ *
+ * The old shape read the PARENTS first and nested the children inside them, so
+ * the parent read silently bounded the child read. `punch_lists` is now closed
+ * to subcontractors (`20260912000000` §1i) while `punch_list_items` keeps D-57,
+ * which under the old shape meant a sub's two visible items rendered as none —
+ * `app/m/p/[projectId]/punch/page.tsx` does `lists.flatMap((l) => l.items)`.
+ *
+ * Now the ITEMS decide. Any item whose parent RLS refused still appears, under a
+ * list entry whose NAME is resolved through the service role
+ * (`punch-list-names.ts` — takes ids off rows RLS already returned, cannot
+ * enumerate). The return shape is unchanged, so all five call sites, the
+ * flatMap, the `listNameByItemId` map and the picker's `listOptions` keep
+ * working untouched.
+ *
+ * FOR EVERY NON-SUBCONTRACTOR ROLE THIS IS A NO-OP: they read every list on the
+ * project, so there are no orphans and the synthesised branch never runs.
+ */
+export async function getPunchLists(
+  projectId: string,
+  resolveListNames: PunchListNameResolver = adminPunchListNameResolver()
+): Promise<PunchList[]> {
   const supabase = await createClient();
 
   const { data: lists, error } = await supabase
@@ -122,7 +158,9 @@ export async function getPunchLists(projectId: string): Promise<PunchList[]> {
     .eq('is_deleted', false)
     .order('created_at', { ascending: true });
 
-  if (error || !lists) return [];
+  // A refused parent read is no longer fatal — the items below stand on their
+  // own. `lists` stays whatever RLS allowed, which for a sub is nothing.
+  const readable = (error ? [] : (lists ?? [])) as PunchListRow[];
 
   const { data: items } = await supabase
     .from('punch_list_items')
@@ -135,7 +173,38 @@ export async function getPunchLists(projectId: string): Promise<PunchList[]> {
   // answer alone (D-57 for subcontractors).
   const punchItems = await withMemberNames((items ?? []) as unknown as RawPunchItem[]);
 
-  return lists.map((list) => ({
+  const readableIds = new Set(readable.map((l) => l.id));
+  const orphanIds = Array.from(
+    new Set(
+      punchItems
+        .map((i) => i.punch_list_id)
+        .filter((id): id is string => Boolean(id) && !readableIds.has(id))
+    )
+  );
+
+  // A PROJECTION OF A LIST, NOT A ROW. Only `id` and `name` are real; the rest
+  // is carried off the item that reached us, or null. Nothing renders these
+  // fields — the name is the only thing a caller wants from a parent it is not
+  // allowed to read — and inventing plausible-looking `created_by` / audit
+  // values would be worse than nulls, which are visibly absent.
+  const orphanNames = await resolveListNames(orphanIds);
+  const synthesised: PunchListRow[] = orphanIds.map((id) => {
+    const first = punchItems.find((i) => i.punch_list_id === id)!;
+    return {
+      id,
+      name: orphanNames.get(id) ?? 'Punch list',
+      project_id: projectId,
+      company_id: first.company_id,
+      created_at: first.created_at,
+      updated_at: first.created_at,
+      created_by: null,
+      updated_by: null,
+      is_deleted: false,
+      deleted_at: null,
+    };
+  });
+
+  return [...readable, ...synthesised].map((list) => ({
     ...list,
     items: punchItems.filter((i) => i.punch_list_id === list.id),
   }));
