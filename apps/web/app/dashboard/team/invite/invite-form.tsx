@@ -1,8 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+// `createInvitation()` is no longer called from here — the route creates AND
+// sends (D2). It stays exported from lib/services/team.ts because the seat-usage
+// read below still uses this client, and because deleting a service function is
+// a wider change than this defect warrants.
 import { createClient } from '@/lib/supabase-browser';
-import { createInvitation } from '@/lib/services/team';
 
 const INVITABLE_ROLES = [
   {
@@ -53,6 +56,9 @@ export default function InviteForm({ companyId, invitedBy, seatUsage, currentUse
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
+  // D2 — whether the email actually went, and why not. Both drive the panel.
+  const [emailed, setEmailed] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
 
   // Client invites don't count toward seat limits
   const isClientRole = role === 'client';
@@ -78,15 +84,33 @@ export default function InviteForm({ companyId, invitedBy, seatUsage, currentUse
 
     try {
       setLoading(true);
-      const invitation = await createInvitation(supabase, {
-        companyId,
-        email,
-        role,
-        invitedBy,
+      // D2 [S135] — POSTs to a route that CREATES AND SENDS.
+      //
+      // _Superseded, quoted rather than rewritten:_
+      // ```
+      // const invitation = await createInvitation(supabase, {...});
+      // setInviteLink(`${baseUrl}/invite/accept?token=${invitation.token}`);
+      // ```
+      //
+      // That inserted a row and rendered a link under "Share this link with
+      // {email}" — no email was ever sent by this product. Josh invited two
+      // employees and neither received anything. The insert still runs under
+      // the caller's session inside the route, so RLS is still the gate.
+      const res = await fetch('/api/invites', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, role }),
       });
+      const payload = await res.json();
 
-      const baseUrl = window.location.origin;
-      setInviteLink(`${baseUrl}/invite/accept?token=${invitation.token}`);
+      if (!res.ok) {
+        setError(payload.error ?? 'Failed to create invitation');
+        return;
+      }
+
+      setInviteLink(payload.link as string);
+      setEmailed(payload.emailed === true);
+      setEmailError((payload.emailError as string | null) ?? null);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to create invitation');
     } finally {
@@ -105,6 +129,8 @@ export default function InviteForm({ companyId, invitedBy, seatUsage, currentUse
     setRole('');
     setInviteLink(null);
     setError(null);
+    setEmailed(false);
+    setEmailError(null);
   }
 
   return (
@@ -135,31 +161,63 @@ export default function InviteForm({ companyId, invitedBy, seatUsage, currentUse
         </div>
       )}
 
+      {/* ⚠️ D2 [S135] — THE SCREEN MUST NOT IMPLY A SEND THAT DID NOT HAPPEN.
+          The old copy said "Share this link with {email}" whether or not
+          anything was delivered, because nothing ever was. Now the heading and
+          the body follow `emailed`, and a failed send says so in its own words
+          and keeps the link visible — the invitation is valid either way, and
+          hiding the failure would be the same defect wearing a different coat. */}
       {inviteLink ? (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-6">
-          <h2 className="text-lg font-semibold text-green-800 mb-2">Invitation Created</h2>
-          <p className="text-sm text-green-700 mb-4">
-            Share this link with <strong>{email}</strong> to join as{' '}
-            <strong>{INVITABLE_ROLES.find((r) => r.value === role)?.label}</strong>:
-          </p>
+        <div
+          className={`rounded-lg border p-6 ${
+            emailed ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200'
+          }`}
+        >
+          <h2
+            className={`text-lg font-semibold mb-2 ${
+              emailed ? 'text-green-800' : 'text-yellow-800'
+            }`}
+          >
+            {emailed ? 'Invitation sent' : 'Invitation created — but the email did not send'}
+          </h2>
+          {emailed ? (
+            <p className="text-sm text-green-700 mb-4">
+              We emailed <strong>{email}</strong> an invitation to join as{' '}
+              <strong>{INVITABLE_ROLES.find((r) => r.value === role)?.label}</strong>. You can also
+              share this link directly:
+            </p>
+          ) : (
+            <p className="text-sm text-yellow-800 mb-4">
+              The invitation for <strong>{email}</strong> to join as{' '}
+              <strong>{INVITABLE_ROLES.find((r) => r.value === role)?.label}</strong> is valid, but
+              we could not email it{emailError ? ` (${emailError})` : ''}. Send them this link
+              yourself, or try Resend from the Team page:
+            </p>
+          )}
           <div className="flex items-center gap-2">
             <input
               type="text"
               readOnly
               value={inviteLink}
-              className="flex-1 rounded-md border border-green-300 bg-white px-3 py-2 text-sm text-gray-700"
+              className="flex-1 rounded-md border border-gray-300 bg-white px-3 py-2 text-sm text-gray-700"
             />
             <button
               onClick={handleCopyLink}
-              className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700"
+              className={`rounded-md px-4 py-2 text-sm font-medium text-white ${
+                emailed ? 'bg-green-600 hover:bg-green-700' : 'bg-yellow-600 hover:bg-yellow-700'
+              }`}
             >
               Copy
             </button>
           </div>
-          <p className="text-xs text-green-600 mt-3">This link expires in 7 days.</p>
+          <p className={`text-xs mt-3 ${emailed ? 'text-green-600' : 'text-yellow-700'}`}>
+            This link expires in 7 days.
+          </p>
           <button
             onClick={handleReset}
-            className="mt-4 text-sm text-green-700 underline hover:text-green-900"
+            className={`mt-4 text-sm underline ${
+              emailed ? 'text-green-700 hover:text-green-900' : 'text-yellow-800 hover:text-yellow-900'
+            }`}
           >
             Invite another team member
           </button>
