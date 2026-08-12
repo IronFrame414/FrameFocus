@@ -70,9 +70,14 @@ up to an hour. Q3(c)'s premise is two-thirds true. Also measured: **unban is ide
 | Unlock triggers | **All four** — checkout, subscription→active, a DB trigger, an admin override. |
 | Export driver | **A sweeper cron**, not the browser. |
 
-Two I flagged as non-blocking and proceeded on stated defaults: the export **includes** the
-Owner/Admin-only financial side tables (it is Owner/Admin gated and it is the customer's own data),
-and **every** screen carries the copy gap, not only the 4th-attempt one.
+Two more were built on stated defaults and then **CONFIRMED EXPLICITLY [Josh, S138]** rather than
+left to stand by omission — recorded that way because a default nobody ever said out loud is
+indistinguishable from an oversight:
+
+| Q | Ruling |
+| --- | --- |
+| Export scope | **Includes the Owner/Admin-only financial side tables.** It is the company's own data and only Owner and Admin can request it. Correct as built. |
+| Copy gap | **Every screen, not only the 4th-attempt one.** TL-23 covers all deletion-facing wording. |
 
 ---
 
@@ -140,7 +145,8 @@ manifest saying "FrameFocus", the pre-rebrand name.
   route tree in this repo**, so building a dashboard to host one button was out of scope.
 - **An `/m` trial surface.** `trial_warning` resolves both surfaces to `/dashboard/trial`.
 - **Playwright coverage** for the four new screens. The suite was not run this session.
-- **Postponement has no UI.** `postponed_until` / `postponed_by` / `postponed_reason` are honoured
+- **Postponement has no UI — CONFIRMED AND ACCEPTED [Josh, S138], recorded in the spec's
+  out-of-scope list rather than left implied.** `postponed_until` / `postponed_by` / `postponed_reason` are honoured
   by both loops and probed, but nothing writes them.
 
 ---

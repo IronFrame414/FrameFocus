@@ -266,6 +266,12 @@ admin; that UI does not exist and is not built here.
   costs, budgets or sub contracts (R7).
 - **The paid-cancellation 30-day path.** Named in §1 so it is not conflated with the trial path.
 - **The system-admin UI** for postpone and trial reset. Schema is shaped for it; it is not built.
+  **[CONFIRMED AND ACCEPTED — Josh, S138.]** Not owed, and not an omission awaiting a fix:
+  **postponement has NO UI and setting it is a manual database edit.** `postponed_until`,
+  `postponed_by` and `postponed_reason` are honoured by both the warning loop and the lock loop and
+  are probed in `s137-trial-lifecycle.live.ts` ("a postponed company is not warned", "a postponed
+  company is not locked"), so the flag works the moment a row is written — by hand, by whoever has
+  database access. Recorded here plainly so a later reader does not file it as a gap.
 - **The customer-facing wording.** §2b.
 
 ---
