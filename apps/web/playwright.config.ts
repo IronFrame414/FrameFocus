@@ -48,7 +48,7 @@ export default defineConfig({
   // CI machines are noisier; a browser test that flakes once is not news.
   //
   // ---------------------------------------------------------------------------
-  // LOCAL IS 1, NOT 0 — TECH_DEBT #147(a) [S123]. THIS NUMBER IS THE EVIDENCE.
+  // LOCAL IS 1, NOT 0 — TECH_DEBT #152(a) [S123]. THIS NUMBER IS THE EVIDENCE.
   // ---------------------------------------------------------------------------
   // ⚠️ `trace: 'on-first-retry'` below produces a trace ONLY IF THERE IS A FIRST
   // RETRY. With `retries: 0` there never is one, so for the whole life of this
