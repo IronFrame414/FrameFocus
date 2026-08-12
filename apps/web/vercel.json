@@ -23,6 +23,18 @@
     {
       "path": "/api/cron/notification-expiry",
       "schedule": "30 3 * * *"
+    },
+    {
+      "path": "/api/cron/trial-warnings",
+      "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/cron/trial-lock",
+      "schedule": "15 14 * * *"
+    },
+    {
+      "path": "/api/cron/export-worker",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

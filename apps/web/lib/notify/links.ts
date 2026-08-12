@@ -150,6 +150,22 @@ const LINKS: Record<string, LinkDef> = {
     mobile: () => null,
     desktop: (p) => (p.id ? `/dashboard/estimates/${p.id}` : null),
   },
+  // `trial_warning` — REGISTERED [S138]. S137 shipped `linkKey: 'trial_warning'`
+  // in lifecycle.ts with no entry here, so `resolveLink()` returned null for
+  // every warning: the in-app notice rendered non-interactive and a push click
+  // fell through to the notifications list. Not a crash, which is why it went
+  // unnoticed — the key was written before the screen existed.
+  //
+  // Both surfaces resolve to the SAME desktop route, and that is the honest
+  // answer rather than a parity violation: the warning is addressed to Owner
+  // and Admin, `/m` has no trial surface to open, and the page is a plain
+  // responsive document. Sending a phone to `null` would drop an Owner reading
+  // notifications on their phone at the notifications list with no way to
+  // reach the notice they just tapped.
+  trial_warning: {
+    mobile: () => '/dashboard/trial',
+    desktop: () => '/dashboard/trial',
+  },
 };
 
 /** Where a surface sends a notification that has no destination of its own. */

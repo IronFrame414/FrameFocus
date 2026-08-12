@@ -1,6 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import type { Database } from '@framefocus/shared/types/database';
 import { getStripe } from '@/lib/stripe';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { unlockCompany } from '@/lib/trial/lifecycle';
+
+/**
+ * S138 — release a trial lock when payment lands.
+ *
+ * ⚠️ SAFE TO CALL WHEN NOTHING IS LOCKED, AND SAFE TO CALL TWICE. Stripe
+ * retries webhooks; `unlock_trial_company()` is idempotent by construction (it
+ * un-bans only rows that are banned and clears `locked_at` only where it is
+ * set), and a second un-ban of an already-un-banned user is a no-op — measured
+ * in S138 rather than assumed.
+ *
+ * Never throws into the handler. A failure to unlock must not make the webhook
+ * return 500, because Stripe would then retry the WHOLE event and the
+ * subscription update above it has already been applied.
+ */
+async function releaseTrialLock(
+  admin: SupabaseClient<Database>,
+  companyId: string,
+  reason: string
+): Promise<void> {
+  try {
+    const { unbanned } = await unlockCompany(admin, companyId);
+    if (unbanned > 0) {
+      console.log(`[trial-unlock] ${reason}: company=${companyId} unbanned=${unbanned}`);
+    }
+  } catch (err) {
+    // Logged, not thrown: the daily reconcile in /api/cron/trial-lock is the
+    // backstop for exactly this, so a lost unlock costs hours, not the account.
+    console.error(`[trial-unlock] FAILED for company=${companyId} (${reason}):`, err);
+  }
+}
 
 export async function POST(request: NextRequest) {
   const stripe = getStripe();
@@ -66,6 +99,13 @@ export async function POST(request: NextRequest) {
               .eq('id', companyId)
               .is('stripe_customer_id', null);
           }
+
+          // S138 — path 1 of 4: the trial converts through Checkout.
+          await releaseTrialLock(
+            supabaseAdmin as unknown as SupabaseClient<Database>,
+            companyId,
+            'checkout.session.completed'
+          );
         }
         break;
       }
@@ -106,6 +146,16 @@ export async function POST(request: NextRequest) {
                 : null,
             })
             .eq('company_id', companyId);
+
+          // S138 — path 2 of 4: reactivation, a past_due recovery, or a change
+          // made from the Stripe dashboard rather than through Checkout.
+          if (subscription.status === 'active') {
+            await releaseTrialLock(
+              supabaseAdmin as unknown as SupabaseClient<Database>,
+              companyId,
+              'customer.subscription.updated→active'
+            );
+          }
         }
         break;
       }

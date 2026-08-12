@@ -719,6 +719,47 @@ non-role portal identity; then build the sub-facing surface that issues these in
 
   **Fix direction when sharding returns:** #149's reproducible seed → Option A (DB per shard). Until then, isolate these specific writers/asserters at the source (private projects/threads; per-thread not per-project chat teardown) if partial sharding is ever attempted. Cross-ref #149. Raised S134.
 
+
+- **#1-trial** **THE TRIAL DELETION JOB IS BUILT, TESTED, AND DELIBERATELY NOT SCHEDULED — because nobody has confirmed we may delete these records on this timetable.** Raised S137 (2026-08-12).
+
+  ⚠️ **Provisional branch-scoped id**, per CLAUDE.md → "Tech-debt numbering" [S136]. This is the first use of that rule. It converts to the next free number from **main's** file when `feature/trial-lifecycle` lands.
+
+  **What is built:** `trial_lifecycle`, `deletion_jobs`, `export_jobs`, the `exports` bucket, the warning loop, the lock, and `lib/trial/deletion.ts` — a resumable, per-table, rows-then-storage job that stops and alarms rather than retrying. `apps/web/vercel.json` carries `trial-warnings` and `trial-lock` and **deliberately carries no entry for `/api/cron/trial-deletion`.**
+
+  **Why it is not scheduled.** **TL-24 is unanswered and with professional legal review**: whether these records may be permanently deleted on a 14-day timer *at all*. Some of what the job destroys is material a construction company is legally required to retain — signed contracts, change orders, lien releases, safety incidents, and daily logs that evidence what happened on site on a given day. **Legal review can invalidate the expiry ruling entirely**, which is why the code exists and the schedule does not.
+
+  **The one line that turns it on is Josh's, after legal returns.** Until then the absence of that line is load-bearing, and it is asserted: `s137-trial-lifecycle.live.ts` fails if `/api/cron/trial-deletion` ever appears in `vercel.json`. That assertion was **verified load-bearing** — adding the entry turned it red naming the reason, and it returned to green on revert.
+
+  **Also open, and part of the same gate — the signed-document mechanism.** The ruling is that *signed* client contracts, change orders and subcontractor contracts survive deletion while unsigned ones do not. That cannot be expressed as a row filter: all three tables carry `project_id` REFERENCES `projects`, and the project is deleted, so a surviving signed row would hold an FK to a row that no longer exists. Two reasonable answers and nothing picks one — **(a)** detach (null the linkage, accept an orphaned document), or **(b)** archive (copy signed documents plus identifying context outside the company-scoped set, then delete the originals). **Until it is ruled, all three tables are excluded from the walk ENTIRELY**, so the signed rows survive as required and the unsigned ones survive too. Keeping more than asked is the safe direction to be wrong in while TL-24 is open, and it is asserted rather than assumed.
+
+  **What unblocks it:** legal's answer on TL-24 and TL-23 (the customer-facing wording, which is deliberately absent from the spec and the code — a placeholder would be mistaken for approved language). Cross-ref: `docs/specs/trial-lifecycle-spec.md`, `docs/specs/trial-lifecycle-interview.md`, GATED.md → TRIAL LIFECYCLE.
+
+  **⚠️ AMENDED [S138] — the claim "built, TESTED" above was too strong, and one more thing is now known.** What S137 tested were the job's exclusion *lists*; the job had never been run. S138 ran it and found `#3-trial`. The deletion cron is **still unscheduled** and the assertion guarding that is still green (`s137-trial-lifecycle.live.ts` 20/20, re-run after `export-worker` was added to `vercel.json`). Note for whoever reads the schedule file next: **`/api/cron/export-worker` IS scheduled and that is not a loosening of this gate** — it creates a copy of the customer's data for the customer and removes only the export artefacts it made itself. Nothing in it destroys tenant data.
+
+  **Also now known: there must be no backfill of `trial_lifecycle`.** Ruled [Josh, S138] and written into `20260919000000_trial_unlock.sql` §3 with the reason. Two live production tenants are `trialing` with an already-past `trial_end`; a backfill would make the next lock run ban them for a year, and the `status = 'active'` skip does not protect them.
+
+- **#3-trial** **"Deleted" leaves the company row standing, with its NAME on it — and until S138 the job reported a clean completion anyway.** Raised S138 (2026-08-12). Provisional id, same rule as #1-trial.
+
+  **Found by RUNNING the deletion job for the first time.** S137's log said "the job exists, is tested"; what was tested were its exclusion *lists*. `runTrialDeletion()` had never been executed. `apps/web/test/s138-trial-deletion-run.live.ts` executes it against a company built to be destroyed, and the first run destroyed every tenant row, every storage object and the auth users — then **left `companies` in place and returned `completed: 1`**, because the error from the parent delete was discarded.
+
+  **The cause is structural, not a typo.** Five tables on the `SURVIVES` list hold a plain `REFERENCES companies(id)` with no on-delete action, so the parent delete is RESTRICTed by exactly the rows the ruling says must outlive the tenant: `email_logs`, `trial_lifecycle`, `trial_warning_acknowledgements`, `deletion_jobs`, `export_jobs`. `trial_lifecycle` cannot even be nulled out of the way — `company_id` is its primary key and it is where `deleted_at` lives.
+
+  **What S138 fixed, and what it deliberately did not.** Fixed: the job is now honest. It checks the error, records `tenant data deleted, but the companies row remains: …` on the `deletion_jobs` row, marks the job `stopped` (needs a human), and counts `companyRowsRemaining` in its outcome so this can never again be reported as a completion. **Not fixed:** whether the shell *should* survive. That is a ruling, it sits directly under TL-24, and the two answers are meaningfully different — **(a)** accept a tombstone and say so in the customer-facing wording (the company NAME survives deletion, which is a privacy statement, not an implementation detail), or **(b)** make the audit tables tolerate an absent parent (`ON DELETE SET NULL` where the column is nullable, and a different home for `trial_lifecycle.deleted_at`).
+
+  **Do not close this by changing the FKs without answering (a) vs (b).** The probe asserts the shell REMAINS; if it ever starts passing with the row gone, the ruling has been made implicitly by whoever edited the constraints.
+
+- **#2-trial ✅ BUILT [S138]** — the export exists. `lib/trial/export.ts` (chunked by self-contained `part-NNN.zip`, cursor-resumed), `lib/trial/export-sweep.ts` (the worker plus the 24-hour sweep), `POST /api/trial/export`, `GET /api/trial/export/[id]`, `GET /api/cron/export-worker` (scheduled `*/5`), and `/dashboard/trial/export`. `fflate` is the zip dependency. Evidence: `export.test.ts` 12/12 and `s138-trial-export.live.ts` 6/6, which writes real rows, runs the real sweeper and reads the entries out of the real zip in the real bucket.
+
+  **TL-1 is now reproducible**, which was the substantive complaint below: `scripts/measure-export-throughput.mjs` is committed and refuses to run anywhere but rebuild-test. Re-measured S138 — 62 files, 28.41 MB, 15.20 s → **1.87 MB/s**, large case ≈ 2.7 h, ~61× margin on the 168 h window, ~42 invocations. S137's 1.07 MB/s was the conservative figure; the conclusion is unchanged. _Original entry retained below._
+
+- **#2-trial (original entry)** **The trial EXPORT is specced and measured but NOT BUILT.** Raised S137 (2026-08-12). Provisional id, same rule as #1-trial.
+
+  `export_jobs` and the private `exports` bucket exist; the job that fills them does not, and no zip dependency has been added. The spec's `input → store → output` trace (§4) is written and is what a build should follow.
+
+  **TL-1 is settled and does NOT change a ruling.** Measured on rebuild-test — 61 files, 28.19 MB, sequential through the service role: **1.07 MB/s, 0.434 s/file**. Extrapolated to Josh's stated shape (15–20 projects; thousands of photos; 50+ page blueprint sets): a small company ≈ **5 minutes**, a mid one (~2k files, 4 GB) ≈ **64 minutes**, a large one (~8.5k files, 18 GB) ≈ **4.8 hours**. Against the **7-day** pre-expiry export window that is a ~35× margin, so the window is not the binding constraint and no ruling has to move.
+
+  **What IS binding is Vercel's `maxDuration = 300`.** A large export needs roughly 58 invocations at five minutes each, so the job must chunk and resume across invocations — which is why `export_jobs.cursor` exists. Method stated so the number can be challenged: sequential, single connection, from a Codespace; parallel downloads would improve it and production egress may differ.
+
 ## Closed Tech Debt
 
 <!-- Moved from Open Tech Debt [S122] — closed in S119/S121, relocated during housekeeping. -->

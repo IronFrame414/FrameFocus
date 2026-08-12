@@ -53,8 +53,20 @@ describe('§3j — the spec premise that turned out to be false', () => {
       // This module's own files are the expected hits.
       .filter((f) => !f.includes('notify') && !f.includes('still-clocked-in'));
 
-    expect(hits, `unexpected still-clocked-in producers: ${hits.join(', ')}`).toEqual([
+    // ⚠️ THESE TWO ARE REGISTRY DECLARATIONS, NOT PRODUCERS [S137].
+    //
+    // The premise this test defends — 6A has no still-clocked-in emitter — is
+    // unchanged and still true. What the grep cannot distinguish is a file that
+    // EMITS the notification from one that DECLARES the type enum, and
+    // `notifications_type_check` necessarily lists every type, so any migration
+    // that re-creates that constraint lands here.
+    //
+    // 20260918000000 (S137, trial lifecycle) re-creates it to add
+    // `trial_warning`. It is the same category as notifications_core.sql, which
+    // this list already allowed for exactly the same reason.
+    expect(hits.sort(), `unexpected still-clocked-in producers: ${hits.join(', ')}`).toEqual([
       'supabase/migrations/20260905000000_notifications_core.sql',
+      'supabase/migrations/20260918000000_trial_lifecycle.sql',
     ]);
   });
 });

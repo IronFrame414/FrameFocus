@@ -138,7 +138,10 @@ export type EmailType =
   // 20260915000000, in the SAME commit as this line: S126 found `mention`
   // shipped in the table and missing from this union, and that half only fails
   // at compile time, so it shipped silently. Both halves or neither.
-  | 'invite';
+  | 'invite'
+  // S137 — the day −7 / day −3 trial warning. `email_types.trial_warning` row
+  // lands in 20260918000000, same rule as above: both halves or neither.
+  | 'trial_warning';
 
 export interface LogEmailInput {
   company_id: string;
