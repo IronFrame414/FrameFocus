@@ -4,6 +4,7 @@ import { billingEnforcementEnabled } from '@/lib/billing-flag';
 import { safeNextPath } from '@/lib/safe-next';
 import { defaultSignedInPath } from '@/lib/device';
 import { dashboardDeniedRedirect } from '@/lib/dashboard-access';
+import { isMyCompanyLocked, isLockExemptApiPath, isLockExemptPagePath } from '@/lib/trial/lock-guard';
 
 type CookieEntry = { name: string; value: string; options?: Record<string, unknown> };
 
@@ -120,6 +121,38 @@ export async function middleware(request: NextRequest) {
   // including when `DISABLE_BILLING_ENFORCEMENT` is set. So the fetch moved out
   // here rather than being duplicated inside the billing condition. Same number
   // of round trips as before: `role` is one more column, not one more query.
+  // ---------------------------------------------------------------------------
+  // ⚠️ THE TRIAL LOCK GUARD [S138] — BEFORE the dashboard block, and covering
+  // `/m` and `/api` as well, which the subscription block below never has.
+  // ---------------------------------------------------------------------------
+  // The lock is a session ban. Measured in S138: the ban stops sign-in and
+  // refresh IMMEDIATELY, but an access token issued before the lock keeps
+  // working for the rest of its 3600s life. This is what closes that hour.
+  //
+  // Ordering matters and is the same reasoning as Ruling A above: this runs
+  // before the role guard and before billing, because a locked tenant should be
+  // told they are locked rather than bounced to a price list or a roster check.
+  //
+  // ⚠️ THE EXEMPTIONS ARE THE LOAD-BEARING PART, not the guard. A locked
+  // company must still be able to PAY — see LOCK_EXEMPT_API_PREFIXES.
+  if (user && !isLockExemptPagePath(pathname) && !isLockExemptApiPath(pathname)) {
+    const locked = await isMyCompanyLocked(supabase);
+    if (locked) {
+      if (pathname.startsWith('/api')) {
+        // JSON, not a redirect: an API caller following a 307 to an HTML page
+        // gets a parse error that points nowhere near the cause.
+        return NextResponse.json(
+          { error: 'Account locked — trial expired', code: 'TRIAL_LOCKED' },
+          { status: 403 }
+        );
+      }
+      const url = request.nextUrl.clone();
+      url.pathname = '/locked';
+      url.search = '';
+      return NextResponse.redirect(url);
+    }
+  }
+
   if (user && pathname.startsWith('/dashboard')) {
     const { data: profile } = await supabase
       .from('profiles')
@@ -151,7 +184,7 @@ export async function middleware(request: NextRequest) {
     if (enforceBilling && profile && !pathname.startsWith('/dashboard/billing')) {
       const { data: subscription } = await supabase
         .from('subscriptions')
-        .select('status, trial_end')
+        .select('status, trial_end, trial_start, stripe_subscription_id')
         .eq('company_id', profile.company_id)
         .single();
 
@@ -160,6 +193,24 @@ export async function middleware(request: NextRequest) {
           subscription.status === 'trialing' &&
           subscription.trial_end &&
           new Date(subscription.trial_end) < new Date();
+
+        // ⚠️ THE FOURTH-SIGNUP CASE IS NOT A BILLING FAILURE [S138].
+        // `handle_new_user()` marks a 4th trial from the same address
+        // `incomplete` with no trial dates and no Stripe subscription. Sending
+        // that to the price list — which is what happened until now — shows a
+        // pricing table with no hint of why the trial did not start, which
+        // reads as a payment error. It gets its own screen.
+        const isTrialLimited =
+          subscription.status === 'incomplete' &&
+          subscription.trial_start === null &&
+          subscription.stripe_subscription_id === null;
+
+        if (isTrialLimited) {
+          const url = request.nextUrl.clone();
+          url.pathname = '/trial-limit';
+          url.search = '';
+          return NextResponse.redirect(url);
+        }
 
         const needsPayment =
           isExpiredTrial ||
@@ -200,6 +251,27 @@ export async function middleware(request: NextRequest) {
 // lives under /dashboard (covered), or is an API Route Handler — where
 // cookies().set() SUCCEEDS, so those refresh themselves and need no middleware.
 // invite / sign-co / reset-password are token-based and hold no session.
+// `/api/:path*` and `/locked` ADDED [S138] for the trial lock guard above.
+//
+// ⚠️ ADDING /api HERE IS A REAL COST AND A DELIBERATE TRADE. Every API request
+// now runs getUser() plus one `is_my_company_locked()` RPC. The alternative was
+// an opt-in helper called from each route, which is a list someone forgets to
+// add a route to — the exact failure mode the comment above describes for this
+// matcher. One enforcement point is worth the round trip; the guard fails OPEN
+// so a fault here cannot lock the product.
+//
+// The routes that must survive a lock (payment above all) are exempted by
+// path in lib/trial/lock-guard.ts, not by being left out of the matcher —
+// they still need the session refresh this matcher provides.
 export const config = {
-  matcher: ['/dashboard/:path*', '/m', '/m/:path*', '/sign-in', '/sign-up'],
+  matcher: [
+    '/dashboard/:path*',
+    '/m',
+    '/m/:path*',
+    '/sign-in',
+    '/sign-up',
+    '/locked',
+    '/trial-limit',
+    '/api/:path*',
+  ],
 };

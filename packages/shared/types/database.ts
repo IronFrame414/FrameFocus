@@ -6951,6 +6951,7 @@ export type Database = {
         Args: { p_project_id: string }
         Returns: boolean
       }
+      is_my_company_locked: { Args: never; Returns: boolean }
       is_my_recent_segment: { Args: { p_segment_id: string }; Returns: boolean }
       is_platform_admin: { Args: never; Returns: boolean }
       is_project_creator: { Args: { p_project_id: string }; Returns: boolean }

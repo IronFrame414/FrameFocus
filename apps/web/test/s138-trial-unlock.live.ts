@@ -217,6 +217,63 @@ describe('unlockCompany() — the TypeScript path, and its idempotency', () => {
   });
 });
 
+describe('the lock guard — the ≤60-minute hole the ban leaves open', () => {
+  it('⚠️ a LIVE token whose company is locked is caught by is_my_company_locked()', async () => {
+    // Unlocked first, and signed in BEFORE the lock — this is the exact shape
+    // of the hole: the JWT was issued while the account was fine.
+    await admin.from('subscriptions').update({ status: 'active' }).eq('company_id', companyId);
+    await unlockCompany(admin, companyId);
+
+    const live = createClient(URL_, ANON, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    const { error: siErr } = await live.auth.signInWithPassword({
+      email: OWNER_EMAIL,
+      password: TEST_PASSWORD,
+    });
+    expect(siErr, siErr?.message).toBeNull();
+
+    const before = await live.rpc('is_my_company_locked');
+    expect(before.data).toBe(false);
+
+    // Lock WITHOUT banning, so the token stays usable — isolating the guard
+    // from the ban and proving it is the guard doing the work.
+    await admin
+      .from('trial_lifecycle')
+      .update({ locked_at: new Date().toISOString(), delete_after: new Date().toISOString() })
+      .eq('company_id', companyId);
+
+    const after = await live.rpc('is_my_company_locked');
+    expect(after.error).toBeNull();
+    expect(after.data).toBe(true);
+
+    // The token still reads data — which is WHY the guard is needed, not a
+    // failure. Recorded here so the reason survives the next refactor.
+    const { data: stillReads } = await live.from('profiles').select('id').eq('user_id', ownerUserId);
+    expect(stillReads).toHaveLength(1);
+
+    await unlockCompany(admin, companyId);
+  });
+
+  it('⚠️ the guard answers only about the CALLER\'s own company', async () => {
+    const live = createClient(URL_, ANON, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    await live.auth.signInWithPassword({ email: OWNER_EMAIL, password: TEST_PASSWORD });
+    // Nothing locked anywhere for this tenant.
+    const { data } = await live.rpc('is_my_company_locked');
+    expect(data).toBe(false);
+  });
+
+  it('an anonymous caller cannot execute the guard at all', async () => {
+    const anonClient = createClient(URL_, ANON, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    });
+    const { error } = await anonClient.rpc('is_my_company_locked');
+    expect(error).not.toBeNull();
+  });
+});
+
 describe('the reconciler — the backstop for a missed signal', () => {
   it('⚠️ a LOCKED company with an ACTIVE subscription is released', async () => {
     await banCompanyUsers(admin, companyId);
