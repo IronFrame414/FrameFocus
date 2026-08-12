@@ -9,6 +9,7 @@ import {
   type PushState,
   type Surface,
 } from '@/lib/notify/push-client';
+import { brand } from '@/lib/brand';
 
 /**
  * Push enrolment control. ONE component, both surfaces.
@@ -78,7 +79,7 @@ export function PushEnrolment({ surface }: { surface: Surface }) {
         // ⚠️ NO BUTTON IN THIS BRANCH. A-N26 asserts its absence.
         <div data-testid="push-ios-install">
           <p>
-            To get notifications on iPhone or iPad, add FrameFocus to your Home Screen
+            To get notifications on iPhone or iPad, add {brand.name} to your Home Screen
             first.
           </p>
           <ol>
@@ -89,8 +90,10 @@ export function PushEnrolment({ surface }: { surface: Surface }) {
               Tap <strong>Add to Home Screen</strong>.
             </li>
             <li>
-              <strong>Open FrameFocus from the new icon</strong>, then turn notifications
-              on there.
+              {/* shortName, not name: this sentence points at the label UNDER the
+                  home-screen icon, and that label IS the manifest's short_name. */}
+              <strong>Open {brand.shortName} from the new icon</strong>, then turn
+              notifications on there.
             </li>
           </ol>
           <p>
@@ -107,7 +110,7 @@ export function PushEnrolment({ surface }: { surface: Surface }) {
         // silently does nothing, which reads as a broken app.
         <p data-testid="push-denied">
           Notifications are blocked for this site. To turn them back on, allow
-          notifications for FrameFocus in your browser settings.
+          notifications for {brand.name} in your browser settings.
         </p>
       )}
 

@@ -2,6 +2,7 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
 import { ROLE_LABELS, type CompanyRole } from '@framefocus/shared';
+import { brand } from '@/lib/brand';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { buildSenderAddress, logEmail, sendEmail } from '@/lib/services/email-service';
 import { InviteEmail } from '@/lib/email/templates/invite-email';
@@ -104,7 +105,13 @@ export async function sendInviteEmail(
     : 'the date shown on the invitation';
 
   const from = buildSenderAddress({ name: co.name, slug: co.slug });
-  const subject = `${co.name} invited you to join them on FrameFocus`;
+  // ⚠️ THE SUBJECT READS FROM `brand`, LIKE THE TEMPLATE DOES [S136].
+  // This line shipped as a literal `FrameFocus` and reached real recipients as
+  // "Worth Properties invited you to join them on Frame…". The TEMPLATE was
+  // always correct — it imports `brand` — which is exactly why no test caught
+  // this: `brand-email-footer.test.tsx` renders templates, and a subject is not
+  // in one. See the subject-line assertion added alongside this fix.
+  const subject = `${co.name} invited you to join them on ${brand.name}`;
 
   let messageId: string | null = null;
   let error: string | null = null;
