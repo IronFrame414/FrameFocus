@@ -85,7 +85,14 @@ export type NotificationType =
   | 'still_clocked_in'
   | 'contract_signed'
   | 'punch_assigned'
-  | 'low_stock';
+  | 'low_stock'
+  // S137 — the day −7 / day −3 trial warning. The `notifications_type_check`
+  // value lands in 20260918000000, in the SAME commit as this line. Three
+  // registries now have to move together for a notified email type: this union,
+  // the CHECK constraint, and `email_types` + `EmailType`. S126 shipped
+  // `mention` in the table and not in a union, and that half only fails at
+  // compile time — so it shipped silently.
+  | 'trial_warning';
 
 export interface NotifyParams {
   admin: SupabaseClient<Database>;

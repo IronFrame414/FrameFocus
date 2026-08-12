@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import {
   Camera,
@@ -11,6 +11,7 @@ import {
   Folder,
   Images,
   HardHat,
+  MessageSquare,
   Receipt,
   Settings,
   Timer,
@@ -24,6 +25,7 @@ import { MobileHeaderProvider, useMobileHeader } from './mobile-header';
 import { NotificationBell } from '@/components/notifications/notification-bell';
 import { OfflineSyncProvider, useOfflineSync } from './offline-sync';
 import { CaptureStoreProvider, projectInContext, useCaptureStore } from './capture-store';
+import { MobileChatOverlay } from '@/components/chat/mobile-chat-overlay';
 
 // M6M §3 — THE MOBILE SHELL.
 //
@@ -35,23 +37,51 @@ import { CaptureStoreProvider, projectInContext, useCaptureStore } from './captu
 // detail (see A-2 below).
 
 // ---------------------------------------------------------------------------
-// §3.2 — the five tab slots. Order is Projects · Timeclock · [camera] · Logs ·
-// Field; the camera is not in this list because it is not a tab (it has no
-// label, no active state, and is rendered separately).
+// §3.2 — the five tab slots. ⚠️ AMENDED [ND-36, S126 slice 5].
+//
+// _Superseded, quoted not rewritten: "Order is Projects · Timeclock · [camera]
+// · Logs · Field"._
+//
+//     BEFORE   Projects · Timeclock · [camera] · Logs · Field
+//     AFTER    Projects · Timeclock · [camera] · Chat · Field
+//
+// The bar stays at FIVE, so ND-14's arithmetic is untouched — no envelope
+// shrinks and the camera keeps a true centre. D-3's "no destination appears in
+// both" also holds, because Logs LEAVES the bar as Chat ARRIVES: the rule is
+// preserved by the swap rather than excepted.
+//
+// ⚠️ CHAT IS NOT IN THIS LIST BECAUSE IT IS NOT A LINK. It owns no route
+// (ND-37) — it opens an overlay over the current screen — so it is rendered
+// separately, like the camera, and for the same reason: a slot with no href
+// cannot be a `<Link>` and has no route-derived active state.
+//
+// The cost of demoting Logs is stated in §7.1d-i rather than buried: the
+// project screen's "Log the day" entry is UNTOUCHED, and the one on /m/logs now
+// costs hamburger → Logs → button.
 // ---------------------------------------------------------------------------
 const TABS = [
   { href: '/m/projects', label: 'Projects', Icon: Folder },
   { href: '/m/timeclock', label: 'Timeclock', Icon: Timer },
-  { href: '/m/logs', label: 'Logs', Icon: ClipboardList },
   { href: '/m/field', label: 'Field', Icon: HardHat },
 ] as const;
 
 // ---------------------------------------------------------------------------
-// §3.3 — the SIX sheet tiles, in the spec's order, and nothing else.
+// §3.3 — the SEVEN sheet tiles. ⚠️ AMENDED [ND-36, S126 slice 5].
 //
-// Projects, Timeclock, Logs and Field are ABSENT BY RULE: "Because the tab bar
-// owns [them], those four are deliberately absent here. A build that adds them
-// back is wrong." A-3 fails if any of them appears.
+// _Superseded, quoted not rewritten: "the SIX sheet tiles, in the spec's order,
+// and nothing else. Projects, Timeclock, Logs and Field are ABSENT BY RULE …
+// A-3 fails if any of them appears."_
+//
+// ⚠️ LOGS IS NOW HERE, AND M6M A-3 WAS REWRITTEN TO SAY SO. The old rule read
+// "no tile for Projects, Timeclock, LOGS, or Field", so moving Logs into the
+// sheet made that criterion FALSE BY DESIGN — not an off-by-one but a direct
+// inversion, and the single worst item in §14's list. Projects, Timeclock and
+// Field remain absent by rule, because the bar still owns those three.
+//
+// LOGS IS FIRST, and that placement is a judgement: §3.3 never ordered a
+// seventh tile, and Logs is the one destination here that a foreman reaches
+// daily. Putting it first minimises the hunt that §7.1d-i already concedes the
+// swap costs. Everything else keeps its ruled order.
 //
 // DASHBOARD IS ABSENT BY RULING — D-38 [S100] CUT it from v1. Every non-money
 // figure it carried is already owned by M-2, M-3, M-13 or M-14; its attention
@@ -70,6 +100,7 @@ const TABS = [
 // to be un-pointed later, and A-12c's principle is that a tile goes where it says.
 // ---------------------------------------------------------------------------
 const SHEET_TILES = [
+  { href: '/m/logs', label: 'Logs', Icon: ClipboardList },
   { href: '/m/schedule', label: 'Schedule', Icon: CalendarDays },
   { href: '/m/expenses', label: 'Expenses', Icon: Receipt },
   { href: '/m/subs', label: 'Subs & Vendors', Icon: Truck },
@@ -97,6 +128,15 @@ function hhmm(d: Date): string {
  * Returns null on routes no tab owns (`/m/offline`, `/m/capture`). §3.2 does not
  * say what those should light up, and lighting up an unrelated tab would be a
  * lie about where you are — so nothing is active. Flagged.
+ */
+/**
+ * ⚠️ `/m/logs` NOW RETURNS null, AND THAT IS A-C33.
+ *
+ * The Logs slot left the bar (ND-36), so no tab owns that route any more. The
+ * criterion — "on /m/logs the tab bar renders and NO slot carries the active
+ * state" — therefore holds by the same mechanism `/m/offline` and `/m/capture`
+ * already used, rather than by a special case. M6M A-42 was rewritten from six
+ * routes to seven for the same reason.
  */
 export function activeTabHref(pathname: string): string | null {
   if (pathname === '/m/projects' || pathname.startsWith('/m/projects/')) return '/m/projects';
@@ -223,6 +263,8 @@ export type MobileShellProps = {
   teamCount: number | null;
   /** ND-13 — the app-bar bell's unread count. 0 renders no badge (A-N44). */
   unreadCount: number;
+  /** ND-37 — the chat overlay needs the caller's PROFILE id, not their user id. */
+  myProfileId: string;
 };
 // `userName` was a prop here and is GONE with the avatar (D-36) — it had no
 // other consumer. The signed-in name is not lost: M-30 (§4.13.7) binds it to
@@ -244,10 +286,22 @@ export function MobileShell(props: MobileShellProps) {
   );
 }
 
-function MobileShellInner({ children, companyName, teamCount, unreadCount }: MobileShellProps) {
+function MobileShellInner({
+  children,
+  companyName,
+  teamCount,
+  unreadCount,
+  myProfileId,
+}: MobileShellProps) {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const router = useRouter();
   const [sheetOpen, setSheetOpen] = useState(false);
+  /**
+   * ND-37 — the Chat overlay. The Chat slot's active state IS this boolean,
+   * never the route underneath (A-C34).
+   */
+  const [chatOpen, setChatOpen] = useState(false);
   const declared = useMobileHeader();
   const capture = useCaptureStore();
 
@@ -275,6 +329,22 @@ function MobileShellInner({ children, companyName, teamCount, unreadCount }: Mob
     },
     [capture, pathname, router]
   );
+
+  /**
+   * ND-40 / A-C42 — `?chat=1` opens the overlay on arrival.
+   *
+   * This is the whole of the mobile deep link: a mention resolves to
+   * `/m/p/{id}?chat=1`, the project screen loads, and the overlay opens over it
+   * already showing that project's thread. No `/m/p/{id}/chat` route exists and
+   * none may — a thin route "just for the link" would make ND-37 half-true.
+   *
+   * Read once, on mount. Re-reading on every search change would re-open the
+   * overlay after the user closed it without navigating away.
+   */
+  useEffect(() => {
+    if (searchParams?.get('chat') === '1') setChatOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const insideProject = showsBackChevron(pathname);
   const activeHref = activeTabHref(pathname);
@@ -416,6 +486,17 @@ function MobileShellInner({ children, companyName, teamCount, unreadCount }: Mob
             onClose={() => setSheetOpen(false)}
           />
         ) : null}
+
+        {/* ND-37 — the chat overlay, rendered INSIDE the content region so it
+            physically cannot cover the tab bar below (A-C35, M6M A-1). Same
+            technique as the sheet above, and for the same reason: the guarantee
+            is layout, not z-index. */}
+        <MobileChatOverlay
+          open={chatOpen}
+          onClose={() => setChatOpen(false)}
+          myProfileId={myProfileId}
+          projectId={projectFromPath(pathname)}
+        />
       </div>
 
       {/* ------------------------------------------------------------------ */}
@@ -486,10 +567,68 @@ function MobileShellInner({ children, companyName, teamCount, unreadCount }: Mob
           </label>
         </div>
 
+        {/* ND-36/ND-37 — the Chat slot. A BUTTON, not a Link: it owns no
+            route and opens an overlay over the current screen.
+
+            ⚠️ A-C34 — IT IS LIT ONLY WHILE THE OVERLAY IS OPEN, AND NEVER BY
+            THE ROUTE UNDERNEATH. M6M A-1c ("the active tab reflects the current
+            screen") assumes every slot owns a route; this one owns none, so
+            A-1c was REWRITTEN rather than satisfied. A build that lights Chat
+            because the user happens to be on a project misstates where they
+            are — the same defect A-42 exists to prevent one level up. */}
+        <ChatTabItem active={chatOpen} onClick={() => setChatOpen((v) => !v)} />
         <TabItem {...TABS[2]} active={activeHref === TABS[2].href} />
-        <TabItem {...TABS[3]} active={activeHref === TABS[3].href} />
       </nav>
     </div>
+  );
+}
+
+/**
+ * The project the overlay should open into, or null.
+ *
+ * ND-40's link lands on `/m/p/{id}`, and §5.6c is explicit that the one shape
+ * the recipient of "@Josh needs you on Alvarez" must NOT get is a list they
+ * have to search. Anywhere else, the overlay opens on the switcher.
+ */
+function projectFromPath(pathname: string): string | null {
+  const m = /^\/m\/p\/([^/]+)/.exec(pathname);
+  return m ? m[1] : null;
+}
+
+/**
+ * The Chat slot — ND-36, ND-37.
+ *
+ * A `<button>`, not a `<Link>`, because it owns no route. Its geometry matches
+ * TabItem exactly (56px target, 23px icon, 11px label) so the bar's five slots
+ * stay measurably identical — ND-14's arithmetic depends on it.
+ */
+function ChatTabItem({ active, onClick }: { active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      data-testid="m-tab-chat"
+      data-active={active}
+      aria-pressed={active}
+      aria-label="Chat"
+      onClick={onClick}
+      className="flex h-14 w-14 shrink-0 flex-col items-center justify-center gap-[3px] border-none bg-transparent p-0"
+    >
+      <MessageSquare
+        size={23}
+        strokeWidth={2}
+        className={active ? 'text-m6m-primary' : 'text-m6m-muted'}
+        aria-hidden
+      />
+      <span
+        className={
+          active
+            ? 'text-[11px] font-bold text-m6m-primary'
+            : 'text-[11px] font-semibold text-m6m-muted'
+        }
+      >
+        Chat
+      </span>
+    </button>
   );
 }
 

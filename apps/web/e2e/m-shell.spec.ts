@@ -27,7 +27,11 @@ const SHELL_ROUTES = ['/m/timeclock', '/m/projects', '/m/logs', '/m/field', '/m/
  *   "Tiles: Schedule · Expenses · Subs & Vendors · Team (count) · Contacts · Settings. Six."
  * Dashboard was the seventh and is CUT (D-38).
  */
+// ⚠️ SEVEN [chat ND-36, S126]. Logs joined the sheet as it left the tab bar,
+// and it is FIRST — §3.3 never ordered a seventh tile, and Logs is the one
+// destination here a foreman reaches daily.
 const SHEET_TILES = [
+  'Logs',
   'Schedule',
   'Expenses',
   'Subs & Vendors',
@@ -143,8 +147,14 @@ test.describe('A-1 · tab bar is present and locked on every /m route', () => {
 test.describe('A-1c · the active tab reflects the current screen', () => {
   const CASES: Array<{ route: string; active: string }> = [
     { route: '/m/timeclock', active: 'm-tab-timeclock' },
+    // ⚠️ `/m/logs` REMOVED [chat ND-36, S126]. Superseded, quoted not
+    // rewritten: `{ route: '/m/logs', active: 'm-tab-logs' },`. The Logs slot
+    // left the bar when Chat took it, so there is no tab for that route to
+    // light — and the criterion covering `/m/logs` is now A-C33 ("the bar
+    // renders and NO slot carries the active state"), asserted in
+    // m-chat-shell.spec.ts. A-1c itself was rewritten rather than satisfied,
+    // because the Chat slot owns no screen to reflect.
     { route: '/m/projects', active: 'm-tab-projects' },
-    { route: '/m/logs', active: 'm-tab-logs' },
     { route: '/m/field', active: 'm-tab-field' },
   ];
 
@@ -167,11 +177,15 @@ test.describe('A-1c · the active tab reflects the current screen', () => {
   });
 
   test('/m/p/{id} reached by in-app navigation leaves Projects active', async ({ page }) => {
-    await page.goto('/m/logs');
-    await expect(page.getByTestId('m-tab-logs')).toHaveAttribute('aria-current', 'page');
+    // Starts from Timeclock rather than Logs [chat ND-36, S126] — Logs no
+    // longer owns a slot, so it could not have been lit to begin with. What the
+    // test is actually for is unchanged: arriving at a project must MOVE the
+    // active state, not merely fail to set it.
+    await page.goto('/m/timeclock');
+    await expect(page.getByTestId('m-tab-timeclock')).toHaveAttribute('aria-current', 'page');
     await page.goto(`/m/p/${PROJECT_ID}`);
     await expect(page.getByTestId('m-tab-projects')).toHaveAttribute('aria-current', 'page');
-    await expect(page.getByTestId('m-tab-logs')).not.toHaveAttribute('aria-current', 'page');
+    await expect(page.getByTestId('m-tab-timeclock')).not.toHaveAttribute('aria-current', 'page');
   });
 });
 
@@ -222,8 +236,12 @@ test.describe('A-2 · the open sheet does not swallow the tab bar', () => {
 // ===========================================================================
 // A-3 / A-3b / A-3c — the sheet's contents
 // ===========================================================================
-test.describe('A-3 · the sheet omits the four tab destinations', () => {
-  for (const forbidden of ['Projects', 'Timeclock', 'Logs', 'Field']) {
+// ⚠️ THREE, NOT FOUR [chat ND-36, S126]. A-3 was REWRITTEN, not repaired: it
+// named Logs among the tiles that must NOT appear, and moving Logs into the
+// sheet makes that false by design. The other three stay forbidden because the
+// bar still owns them.
+test.describe('A-3 · the sheet omits the three tab destinations', () => {
+  for (const forbidden of ['Projects', 'Timeclock', 'Field']) {
     test(`no ${forbidden} tile`, async ({ page }) => {
       await page.goto('/m/timeclock');
       await openSheet(page);
@@ -236,8 +254,8 @@ test.describe('A-3 · the sheet omits the four tab destinations', () => {
   }
 });
 
-test.describe('A-3b · the sheet holds exactly the six named tiles + Sign out', () => {
-  test('exactly six tiles, in order, and nothing else', async ({ page }) => {
+test.describe('A-3b · the sheet holds exactly the seven named tiles + Sign out', () => {
+  test('exactly seven tiles, in order, and nothing else', async ({ page }) => {
     await page.goto('/m/timeclock');
     await openSheet(page);
 
@@ -266,7 +284,7 @@ test.describe('A-3b · the sheet holds exactly the six named tiles + Sign out', 
     expect(row.width).toBeCloseTo(sheet.width - 36, 0);
   });
 
-  test('Sign out is not one of the six tiles', async ({ page }) => {
+  test('Sign out is not one of the seven tiles', async ({ page }) => {
     await page.goto('/m/timeclock');
     await openSheet(page);
     await expect(

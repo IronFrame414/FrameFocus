@@ -48,7 +48,23 @@ interface LinkDef {
 
 const LINKS: Record<string, LinkDef> = {
   chat: {
-    mobile: (p) => (p.projectId ? `/m/p/${p.projectId}/chat` : null),
+    // ⚠️ A PARAM, NOT A ROUTE — CORRECTED [S126 slice 3] against ND-40/ND-37.
+    // _Superseded, quoted not rewritten: `/m/p/${p.projectId}/chat`._
+    //
+    // The Chat slot opens an OVERLAY over the current screen and owns no route
+    // (ND-37), so there is no `/m/p/{id}/chat` to land on and A-C42 requires
+    // that there never be one. The old path was written from the key name — the
+    // same way `incident` and `delivery` were wrong below — and it resolved to
+    // a 404 for every mobile mention.
+    //
+    // `mention-notify.ts` has asserted this shape in a comment since slice 2
+    // while this file still produced the other one; the comment was right and
+    // the code was not.
+    //
+    // The overlay itself is slice 5. Until then this lands on the project
+    // screen without opening chat — the correct project, one tap short — which
+    // is a soft degradation rather than a dead link.
+    mobile: (p) => (p.projectId ? `/m/p/${p.projectId}?chat=1` : null),
     desktop: (p) => (p.projectId ? `/dashboard/projects/${p.projectId}/chat` : null),
   },
   // ---------------------------------------------------------------------------
@@ -133,6 +149,22 @@ const LINKS: Record<string, LinkDef> = {
   estimate: {
     mobile: () => null,
     desktop: (p) => (p.id ? `/dashboard/estimates/${p.id}` : null),
+  },
+  // `trial_warning` — REGISTERED [S138]. S137 shipped `linkKey: 'trial_warning'`
+  // in lifecycle.ts with no entry here, so `resolveLink()` returned null for
+  // every warning: the in-app notice rendered non-interactive and a push click
+  // fell through to the notifications list. Not a crash, which is why it went
+  // unnoticed — the key was written before the screen existed.
+  //
+  // Both surfaces resolve to the SAME desktop route, and that is the honest
+  // answer rather than a parity violation: the warning is addressed to Owner
+  // and Admin, `/m` has no trial surface to open, and the page is a plain
+  // responsive document. Sending a phone to `null` would drop an Owner reading
+  // notifications on their phone at the notifications list with no way to
+  // reach the notice they just tapped.
+  trial_warning: {
+    mobile: () => '/dashboard/trial',
+    desktop: () => '/dashboard/trial',
   },
 };
 

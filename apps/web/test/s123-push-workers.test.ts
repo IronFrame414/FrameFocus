@@ -99,7 +99,19 @@ describe('A-N22 — the mobile worker keeps its scope and its cache rule', () =>
 describe('ND-11 — one row, two destinations', () => {
   it('A-N19 the same key resolves to a different path per surface', () => {
     const params = { projectId: 'p1' };
-    expect(resolveLink('chat', params, 'mobile')).toBe('/m/p/p1/chat');
+    // ⚠️ MOBILE LITERAL UPDATED [S126 slice 3] — the TEST was stale, not the code.
+    // _Superseded, quoted not rewritten: `.toBe('/m/p/p1/chat')`._
+    //
+    // Established before changing it, because a failing assertion is as likely
+    // to be a wrong test as a wrong build: this file is S123 and ND-40 is S125,
+    // which ruled the mobile destination to be a PARAM on the project screen
+    // (`?chat=1`) because the Chat slot opens an overlay and owns no route
+    // (ND-37). A-C42 requires `/m/p/{id}/chat` never to exist, so the old
+    // literal pinned a path the spec forbids.
+    //
+    // What A-N19 actually asserts — one key, two DIFFERENT destinations — is
+    // untouched, and is still exactly what the two lines below show.
+    expect(resolveLink('chat', params, 'mobile')).toBe('/m/p/p1?chat=1');
     expect(resolveLink('chat', params, 'desktop')).toBe('/dashboard/projects/p1/chat');
   });
 

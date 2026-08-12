@@ -127,11 +127,19 @@ afterAll(async () => {
 
 describe('#132 — the three figures are OFF the subcontractors row', () => {
   // THE test. While these columns exist, everything else here is decoration.
+  // ⚠️ `subcontractor` WAS IN THIS LIST AND IS NOT ANY MORE [Ruling B, S131].
+  // It is not a weakened test — it moved to the one below, which asserts
+  // something strictly stronger. A sub used to READ this row and merely lack
+  // three columns; the roster floor
+  // (`20260911000000_roster_visibility_floor.sql`) means they cannot read the
+  // row AT ALL. Left in this loop, the case failed on
+  // `subcontractor should still see the sub itself` — the assertion was correct
+  // for #132 and is now contradicted by a later ruling, so the test is what
+  // changed, not the build.
   for (const [label, get] of [
     ['crew', () => crewC],
     ['foreman', () => foremanC],
     ['project_manager', () => pmC],
-    ['subcontractor', () => subC],
   ] as const) {
     it(`⚠️ a ${label} reading subcontractors with select('*') gets NO rate, markup or ein key`, async () => {
       const { data } = await get().from('subcontractors').select('*').eq('id', subId).maybeSingle();
@@ -141,6 +149,23 @@ describe('#132 — the three figures are OFF the subcontractors row', () => {
       }
     });
   }
+
+  it('⚠️ a SUBCONTRACTOR does not reach the row at all now — Ruling B supersedes the column floor', async () => {
+    const { data, error } = await subC
+      .from('subcontractors')
+      .select('*')
+      .eq('id', subId)
+      .maybeSingle();
+
+    // An RLS refusal is silent: the row is invisible, so this is `null` with no
+    // error rather than a raised permission failure.
+    expect(error, 'an invisible row should not raise, it should match nothing').toBeNull();
+    expect(data, 'a subcontractor read a subcontractor record').toBeNull();
+
+    // And not because the fixture is missing — the Owner reads it below.
+    // #132's column floor is now redundant for this role and still load-bearing
+    // for crew, foreman and PM, which is why the loop above keeps all three.
+  });
 
   it('the non-change half: the Owner still reads the sub, and its name', async () => {
     const { data } = await ownerC.from('subcontractors').select('*').eq('id', subId).maybeSingle();

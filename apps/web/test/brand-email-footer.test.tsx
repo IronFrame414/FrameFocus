@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { render } from '@react-email/render';
 import { brand } from '@/lib/brand';
+import { InviteEmail } from '@/lib/email/templates/invite-email';
+import { buildInviteSubject } from '@/lib/services/invite-email';
 import { ProposalEmail } from '@/lib/email/templates/proposal-email';
 import { InvoiceEmail } from '@/lib/email/templates/invoice-email';
 import { ChangeOrderEmail } from '@/lib/email/templates/change-order-email';
@@ -90,6 +94,68 @@ const CLIENT_FACING = [
   ],
 ] as const;
 
+// ============================================================================
+// ⚠️ S136 — THE LIST BELOW IS NOW WALKED, NOT TRUSTED.
+// ============================================================================
+// This file used a HARDCODED list of five templates. `InviteEmail` shipped in
+// S135 and was never added to it, so it was invisible here BY DESIGN — and the
+// stale product name went out to real recipients. A sixth template must not be
+// able to do that again.
+//
+// The walk does not RENDER unknown templates (each takes different props and a
+// generic render would assert nothing). It asserts COVERAGE: every template
+// file on disk must be named in COVERED below. A new template turns this red
+// until someone decides what its brand contract is, which is the decision that
+// was skipped last time.
+const COVERED = new Set([
+  'proposal-email.tsx',
+  'invoice-email.tsx',
+  'change-order-email.tsx',
+  'reminder-email.tsx',
+  'notification-email.tsx',
+  'invite-email.tsx',
+]);
+
+describe('every email template is covered by this file', () => {
+  it('⚠️ the templates directory holds nothing this file does not assert', () => {
+    const dir = join(__dirname, '..', 'lib', 'email', 'templates');
+    const onDisk = readdirSync(dir).filter((f) => f.endsWith('.tsx'));
+
+    expect(onDisk.length, 'the walk found no templates — it is not walking').toBeGreaterThan(4);
+
+    const uncovered = onDisk.filter((f) => !COVERED.has(f));
+    expect(
+      uncovered,
+      `template(s) with no brand assertion:\n${uncovered.join('\n')}\n` +
+        'Add a render block below AND add the filename to COVERED.'
+    ).toEqual([]);
+
+    // ...and the reverse, so COVERED cannot rot into naming files that are gone.
+    const missing = [...COVERED].filter((f) => !onDisk.includes(f));
+    expect(missing, `COVERED names deleted template(s):\n${missing.join('\n')}`).toEqual([]);
+  });
+});
+
+// ============================================================================
+// ⚠️ S136 — THE SUBJECT LINE. THIS IS THE HOLE THAT ACTUALLY FIRED.
+// ============================================================================
+// The invite TEMPLATE was always correct; the literal was in the SUBJECT, built
+// in `invite-email.ts`. Subjects are not templates, so nothing above could have
+// caught it — not even with InviteEmail added to the list. `buildInviteSubject`
+// was extracted from the send path expressly so this assertion can exist
+// without a database.
+describe('email SUBJECTS name the product from the brand source', () => {
+  it('⚠️ the invite subject carries the current name and no stale one', () => {
+    const subject = buildInviteSubject('Worth Properties');
+    expect(subject).toContain(brand.name);
+    expect(subject).not.toContain('FrameFocus');
+    // The exact string Josh received, asserted as an absence so a regression
+    // reads as itself rather than as a generic mismatch.
+    expect(subject).not.toBe('Worth Properties invited you to join them on FrameFocus');
+    expect(subject).toBe(`Worth Properties invited you to join them on ${brand.name}`);
+  });
+});
+
 describe('transactional emails carry the rebranded footer', () => {
   describe.each(CLIENT_FACING)('%s (client-facing)', (_label, makeElement) => {
     it('footer names the product, and no FrameFocus survives', async () => {
@@ -130,6 +196,39 @@ describe('transactional emails carry the rebranded footer', () => {
     });
 
     it('carries no tenant logo — it is internal mail', async () => {
+      const html = await render(make());
+      expect(html).not.toContain(LOGO);
+    });
+  });
+
+  // S135's template, added here in S136 — the one whose absence let the stale
+  // name ship. Not client-facing white-label: an invitation names the product
+  // deliberately, because the recipient may never have heard of it.
+  describe('invite (recipient is not yet a user)', () => {
+    const make = () => (
+      <InviteEmail
+        brandColor="#2f49d1"
+        companyName={COMPANY}
+        roleLabel="Project Manager"
+        inviterName="Josh Bishop"
+        acceptUrl="https://example.com/invite/accept?token=tok"
+        expiresOn="August 19, 2026"
+      />
+    );
+
+    it('names the current product and no stale one', async () => {
+      const html = readable(await render(make()));
+      expect(html).toContain(brand.name);
+      expect(html).not.toContain('FrameFocus');
+    });
+
+    it('plain-text alternative carries it too', async () => {
+      const text = await render(make(), { plainText: true });
+      expect(text).toContain(brand.name);
+      expect(text).not.toContain('FrameFocus');
+    });
+
+    it('carries no tenant logo — the tenant is named, not branded', async () => {
       const html = await render(make());
       expect(html).not.toContain(LOGO);
     });

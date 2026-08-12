@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { admin, assertRebuildTest, sessionFor } from './live-session';
 
@@ -104,15 +105,57 @@ afterAll(async () => {
 // did not touch INSERT, and this is the criterion that would catch someone
 // "finishing" the narrowing by flooring INSERT too.
 describe('A-59 — a subcontractor creates punch lists and items, and completes them', () => {
+  // ⚠️ REWRITTEN [S133] — THE RULING CHANGED THIS TEST'S CONTRACT, NOT ITS POINT.
+  //
+  // _Superseded, quoted rather than rewritten:_
+  // ```
+  // const { data, error } = await sub
+  //   .from('punch_lists')
+  //   .insert({ ... }).select('id').single();
+  // expect(error, ...).toBeNull();
+  // ```
+  //
+  // A-59 still holds in full: a subcontractor may CREATE a punch list. What no
+  // longer holds is reading it back in the same statement. The S133 floor
+  // (`20260912000000` §1i) closes `punch_lists` to subcontractors — they see
+  // their ITEMS, never the container — and Postgres applies the SELECT policy to
+  // a RETURNING clause, so the chained `.select('id')` now refuses the whole
+  // insert with 42501. INSERT itself is untouched and still admits them.
+  //
+  // `createPunchList()` therefore generates the id client-side and does not
+  // read back (the `deliveries` offline pattern). This test drives the same
+  // shape, and asserts BOTH halves so neither can regress unnoticed.
   it('creates a punch list on a project they are assigned to', async () => {
-    const { data, error } = await sub
+    const id = randomUUID();
+    const { error } = await sub
       .from('punch_lists')
-      .insert({ company_id: COMPANY, project_id: PROJECT, name: `QA A-59 list ${Date.now()}` })
+      .insert({ id, company_id: COMPANY, project_id: PROJECT, name: `QA A-59 list ${Date.now()}` });
+    expect(error, `punch list insert refused: ${error?.code} ${error?.message}`).toBeNull();
+
+    // The row really is there — asserted OUTSIDE the policy that hides it, since
+    // the sub is now unable to confirm its own write.
+    const { data: written } = await admin.from('punch_lists').select('id').eq('id', id).maybeSingle();
+    expect(written, 'the list was not actually written').not.toBeNull();
+
+    madeLists.push(id);
+  });
+
+  it('...but cannot read that list back — the S133 floor, stated as the refusal it is', async () => {
+    const listId = madeLists[0];
+    expect(listId, 'the list test must run first').toBeTruthy();
+
+    // Plain SELECT: refused by matching no rows.
+    const { data } = await sub.from('punch_lists').select('id').eq('id', listId);
+    expect(data ?? [], 'a sub read the container the S133 ruling closes').toEqual([]);
+
+    // And the chained RETURNING form errors outright, which is why
+    // createPunchList() no longer uses it.
+    const { error } = await sub
+      .from('punch_lists')
+      .insert({ company_id: COMPANY, project_id: PROJECT, name: `QA A-59 returning ${Date.now()}` })
       .select('id')
       .single();
-    expect(error, `punch list insert refused: ${error?.code} ${error?.message}`).toBeNull();
-    expect(data?.id).toBeTruthy();
-    madeLists.push(data!.id as string);
+    expect(error?.code, 'INSERT ... RETURNING no longer refuses — createPunchList could be simplified').toBe('42501');
   });
 
   it('creates an item, and the chained RETURNING survives its own SELECT policy', async () => {

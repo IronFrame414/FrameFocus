@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { signInAs } from './sign-in-as';
 
 // M6M §4.13 acceptance criteria for ALL SIX hamburger destinations.
 // M-25/27/28/29 landed in 13b1a8e; M-26 and M-30 complete the set.
@@ -27,7 +28,12 @@ import { test, expect, type Page } from '@playwright/test';
 
 // All SIX §4.13 destinations are built as of S102 — A-41 and A-42 are now
 // reachable at six of six rather than four.
+// ⚠️ SEVEN [chat ND-36, S126] — `/m/logs` joins the walk, because it became a
+// hamburger destination when Chat took its tab slot. A-41 and A-42 were both
+// rewritten from six routes to seven; A-42's count would otherwise have failed
+// silently as an off-by-one.
 const BUILT = [
+  '/m/logs',
   '/m/schedule',
   '/m/expenses',
   '/m/subs',
@@ -95,6 +101,9 @@ test.describe('§4.13 common rules on the built screens', () => {
   // A-41 — the highlight is now REACHABLE for the four built tiles. The two
   // unbuilt routes still 404, so the walk covers four of six.
   const TILE_FOR: Record<string, string> = {
+    // A-C32 [chat ND-36, S126] — /m/logs joins the walk and lights the Logs
+    // tile. This is M6M A-41 extended to a seventh route.
+    '/m/logs': 'Logs',
     '/m/schedule': 'Schedule',
     '/m/expenses': 'Expenses',
     '/m/subs': 'Subs & Vendors',
@@ -518,12 +527,10 @@ test.describe('M-26 · Expenses', () => {
   test('A-45b2 · a subcontractor sees no expense rows, and gets the ordinary empty state', async ({
     page,
   }) => {
-    await page.context().clearCookies();
-    await page.goto('/sign-in');
-    await page.locator('#email').fill('josh+qa-sub@worthprop.com');
-    await page.locator('#password').fill(process.env.E2E_PASSWORD ?? 'FrameFocusTest!2026');
-    await page.getByRole('button', { name: /sign in/i }).click();
-    await expect(page).toHaveURL(/\/dashboard/, { timeout: 30_000 });
+    // RULING A [S131] — the FIFTH copy of the sign-in wait, inlined rather than
+    // in a helper, which is why a grep for the helper would have missed it. A
+    // subcontractor lands on /m/projects now; `signInAs` derives that.
+    await signInAs(page, 'josh+qa-sub@worthprop.com');
 
     await page.goto('/m/expenses');
 

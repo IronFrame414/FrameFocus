@@ -41,7 +41,7 @@ export type Database = {
     Tables: {
       ai_tag_logs: {
         Row: {
-          company_id: string
+          company_id: string | null
           created_at: string | null
           error_message: string | null
           estimated_cost_usd: number | null
@@ -53,7 +53,7 @@ export type Database = {
           success: boolean
         }
         Insert: {
-          company_id?: string
+          company_id?: string | null
           created_at?: string | null
           error_message?: string | null
           estimated_cost_usd?: number | null
@@ -65,7 +65,7 @@ export type Database = {
           success?: boolean
         }
         Update: {
-          company_id?: string
+          company_id?: string | null
           created_at?: string | null
           error_message?: string | null
           estimated_cost_usd?: number | null
@@ -374,6 +374,268 @@ export type Database = {
           },
           {
             foreignKeyName: "change_orders_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_message_mentions: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          id: string
+          mentioned_profile_id: string
+          message_id: string
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          id?: string
+          mentioned_profile_id: string
+          message_id: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          id?: string
+          mentioned_profile_id?: string
+          message_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_message_mentions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_message_mentions_mentioned_profile_id_fkey"
+            columns: ["mentioned_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_message_mentions_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "chat_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_message_photos: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          file_id: string
+          id: string
+          message_id: string
+          sort_order: number
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          file_id: string
+          id?: string
+          message_id: string
+          sort_order?: number
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          file_id?: string
+          id?: string
+          message_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_message_photos_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_message_photos_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_message_photos_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "chat_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_messages: {
+        Row: {
+          author_profile_id: string
+          body: string
+          company_id: string
+          created_at: string | null
+          id: string
+          thread_id: string
+        }
+        Insert: {
+          author_profile_id: string
+          body: string
+          company_id?: string
+          created_at?: string | null
+          id?: string
+          thread_id: string
+        }
+        Update: {
+          author_profile_id?: string
+          body?: string
+          company_id?: string
+          created_at?: string | null
+          id?: string
+          thread_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_author_profile_id_fkey"
+            columns: ["author_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_messages_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "chat_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_reads: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          is_deleted: boolean | null
+          last_read_at: string
+          profile_id: string
+          thread_id: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          last_read_at?: string
+          profile_id: string
+          thread_id: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          last_read_at?: string
+          profile_id?: string
+          thread_id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_reads_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_reads_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_reads_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "chat_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      chat_threads: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          is_deleted: boolean | null
+          kind: string
+          project_id: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          kind: string
+          project_id: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          kind?: string
+          project_id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_threads_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_threads_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
@@ -1519,6 +1781,59 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deletion_jobs: {
+        Row: {
+          attempts: number
+          auth_done: boolean
+          company_id: string
+          created_at: string
+          finished_at: string | null
+          id: string
+          last_error: string | null
+          started_at: string | null
+          state: string
+          storage_done: boolean
+          tables_done: string[]
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          auth_done?: boolean
+          company_id: string
+          created_at?: string
+          finished_at?: string | null
+          id?: string
+          last_error?: string | null
+          started_at?: string | null
+          state?: string
+          storage_done?: boolean
+          tables_done?: string[]
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          auth_done?: boolean
+          company_id?: string
+          created_at?: string
+          finished_at?: string | null
+          id?: string
+          last_error?: string | null
+          started_at?: string | null
+          state?: string
+          storage_done?: boolean
+          tables_done?: string[]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deletion_jobs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
         ]
@@ -2818,6 +3133,69 @@ export type Database = {
             columns: ["sub_contract_id"]
             isOneToOne: false
             referencedRelation: "subcontractor_contracts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      export_jobs: {
+        Row: {
+          bytes_written: number
+          categories: string[]
+          company_id: string
+          created_at: string
+          cursor: Json
+          expires_at: string | null
+          format: string
+          id: string
+          last_error: string | null
+          object_path: string | null
+          requested_by: string
+          state: string
+          updated_at: string
+        }
+        Insert: {
+          bytes_written?: number
+          categories?: string[]
+          company_id: string
+          created_at?: string
+          cursor?: Json
+          expires_at?: string | null
+          format?: string
+          id?: string
+          last_error?: string | null
+          object_path?: string | null
+          requested_by: string
+          state?: string
+          updated_at?: string
+        }
+        Update: {
+          bytes_written?: number
+          categories?: string[]
+          company_id?: string
+          created_at?: string
+          cursor?: Json
+          expires_at?: string | null
+          format?: string
+          id?: string
+          last_error?: string | null
+          object_path?: string | null
+          requested_by?: string
+          state?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "export_jobs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "export_jobs_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -6273,21 +6651,127 @@ export type Database = {
       }
       trial_emails: {
         Row: {
+          company_id: string | null
           created_at: string | null
           email: string
           id: string
+          trial_number: number
         }
         Insert: {
+          company_id?: string | null
           created_at?: string | null
           email: string
           id?: string
+          trial_number?: number
         }
         Update: {
+          company_id?: string | null
           created_at?: string | null
           email?: string
           id?: string
+          trial_number?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "trial_emails_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trial_lifecycle: {
+        Row: {
+          company_id: string
+          created_at: string
+          delete_after: string | null
+          deleted_at: string | null
+          locked_at: string | null
+          postponed_by: string | null
+          postponed_reason: string | null
+          postponed_until: string | null
+          trial_end: string
+          updated_at: string
+          warned_3_at: string | null
+          warned_7_at: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          delete_after?: string | null
+          deleted_at?: string | null
+          locked_at?: string | null
+          postponed_by?: string | null
+          postponed_reason?: string | null
+          postponed_until?: string | null
+          trial_end: string
+          updated_at?: string
+          warned_3_at?: string | null
+          warned_7_at?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          delete_after?: string | null
+          deleted_at?: string | null
+          locked_at?: string | null
+          postponed_by?: string | null
+          postponed_reason?: string | null
+          postponed_until?: string | null
+          trial_end?: string
+          updated_at?: string
+          warned_3_at?: string | null
+          warned_7_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trial_lifecycle_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: true
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trial_warning_acknowledgements: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          profile_id: string
+          warning_kind: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          profile_id: string
+          warning_kind: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          profile_id?: string
+          warning_kind?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trial_warning_acknowledgements_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trial_warning_acknowledgements_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
@@ -6329,6 +6813,29 @@ export type Database = {
       can_view_time_session: {
         Args: { p_session_id: string }
         Returns: boolean
+      }
+      chat_can_post: { Args: { p_thread_id: string }; Returns: boolean }
+      chat_mark_read: { Args: { p_thread_id: string }; Returns: string }
+      chat_sub_thread_exists: {
+        Args: { p_project_id: string }
+        Returns: boolean
+      }
+      chat_sub_thread_projects: {
+        Args: never
+        Returns: {
+          project_id: string
+        }[]
+      }
+      chat_switcher_threads: {
+        Args: never
+        Returns: {
+          kind: string
+          last_message_at: string
+          project_id: string
+          project_name: string
+          thread_id: string
+          unread_count: number
+        }[]
       }
       clone_estimate: {
         Args: {
@@ -6388,6 +6895,11 @@ export type Database = {
             }
             Returns: string
           }
+      email_has_account: { Args: { p_email: string }; Returns: boolean }
+      generate_company_slug: {
+        Args: { p_company_name: string; p_exclude_company_id?: string }
+        Returns: string
+      }
       get_invitation_by_token: {
         Args: { invite_token: string }
         Returns: {
@@ -6407,6 +6919,7 @@ export type Database = {
           role: string
         }[]
       }
+      get_invitation_status: { Args: { invite_token: string }; Returns: string }
       get_my_company_id: { Args: never; Returns: string }
       get_my_member_id: { Args: never; Returns: string }
       get_my_profile_id: { Args: never; Returns: string }
@@ -6438,9 +6951,11 @@ export type Database = {
         Args: { p_project_id: string }
         Returns: boolean
       }
+      is_my_company_locked: { Args: never; Returns: boolean }
       is_my_recent_segment: { Args: { p_segment_id: string }; Returns: boolean }
       is_platform_admin: { Args: never; Returns: boolean }
       is_project_creator: { Args: { p_project_id: string }; Returns: boolean }
+      member_profile_role: { Args: { p_member_id: string }; Returns: string }
       next_co_number: { Args: { p_project_id: string }; Returns: string }
       next_estimate_number: { Args: never; Returns: string }
       next_invoice_number: { Args: never; Returns: string }
@@ -6522,6 +7037,10 @@ export type Database = {
         }
         Returns: Json
       }
+      shares_assigned_project_with_me: {
+        Args: { p_profile_id: string }
+        Returns: boolean
+      }
       submit_delivery_check_in: {
         Args: { p_delivery_id: string }
         Returns: undefined
@@ -6555,6 +7074,7 @@ export type Database = {
         Args: { p_new_owner_id: string }
         Returns: undefined
       }
+      unlock_trial_company: { Args: { p_company_id: string }; Returns: number }
     }
     Enums: {
       [_ in never]: never

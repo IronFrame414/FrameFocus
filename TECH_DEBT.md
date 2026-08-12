@@ -1,6 +1,46 @@
 # TECH_DEBT.md — FrameFocus
 
-> **Last updated:** August 9, 2026 — S123 (**#147 AND #148 RAISED**, both from Josh, both investigated before filing rather than described from the request. **#147 multi-address is a UI GAP, not a schema gap** — `contact_addresses` has no unique constraint on `contact_id`, only a PARTIAL one-primary index, and `listAddressesForContact()` plus the 4D estimate address picker already handle N; exactly one form, `contact-form.tsx`, only ever writes the primary. No migration needed. **#148 inline contact-create is a SHARED COMPONENT's change** — `ContactAddressPicker` has three consumers, and `contacts_insert_authorized` matches `estimates_insert_manager` exactly, so there is no permission gap. The two meet at `contact-form.tsx` and should be sequenced together)
+<!-- ========================================================================= -->
+
+## ⚠️ NUMBERING RECONCILIATION OWED AT MERGE — `#147`–`#149` [S136]
+
+**This file is the assignment authority. Two unmerged branches allocated numbers independently
+and they collide — with main and with each other.** Read this before merging either.
+
+The divergence starts at **`#147`, not `#148`.** All three refs are identical through `#146`.
+
+| number | **main** (authority) | `feat/notifications` | `feature/m6m-mobile` |
+| --- | --- | --- | --- |
+| `#147` | contact holds only ONE address | *same as main* | **residue of #145** (S123) |
+| `#148` | estimate cannot create a contact | *same as main* | **LEAN-REPO SWEEP** (S123) |
+| `#149` | e2e fixtures not reproducible | **push enrolment not tappable** (S123) | **`updateProject()` zero callers** (S123) |
+| `#150` | four shards, one database | — | — |
+
+Verified these are genuinely different items, not one entry renumbered: main contains no
+"actionable residue" entry, and `feature/m6m-mobile` contains no "ONE address" entry.
+
+**Reassignment to apply AT MERGE TIME [Josh, S136 Q6]. Renumbering happens when the branch lands,
+NOT now — a debt number cited elsewhere becomes ambiguous the moment it moves, and neither branch
+is touched by S136.**
+
+| branch | its number | becomes |
+| --- | --- | --- |
+| `feat/notifications` | `#149` push enrolment not tappable | **`#151`** |
+| `feature/m6m-mobile` | `#147` residue of #145 | **`#152`** |
+| `feature/m6m-mobile` | `#148` LEAN-REPO SWEEP | **`#153`** |
+| `feature/m6m-mobile` | `#149` `updateProject()` zero callers | **`#154`** |
+
+Whichever branch merges second must re-check this table against the file as it then stands, not
+against this snapshot.
+
+**The rule that stops it recurring is in CLAUDE.md → "Tech-debt numbering", not here.** A note in
+this header is a statement, and a statement is exactly what failed: the S134 header already said
+"main's file is the assignment authority" and two branches still collided.
+
+<!-- ========================================================================= -->
+
+> **Last updated:** August 11, 2026 — S134 (**#149 AND #150 RAISED**, filing the fallout of reverting the S133 Playwright sharding (Option D, Josh's ruling). **#150** records the concurrency hazard precisely — four shards shared one rebuild-test DB, so any test asserting the absence/count of something another shard writes to a shared fixture was exposed; CI #201 (`desktop-payload.spec.ts:175`) is the instance, NOT a payload leak — the #117 read floor holds at the query. **#149** is the constraint that blocked every safe fix: the pinned e2e fixtures are hand-curated on rebuild-test and reproducible from no script — `seed-test-identities.mjs` only *warns* if `eaf0e25b` is missing — which is what blocks a database-per-shard, the fix that is safe by construction. The sharding work is kept on branch `ci/shard-playwright`, not deleted. **⚠️ #149 is also speculatively used on two unmerged branches (`feat/notifications`, `feature/m6m-mobile`) for different items — a merge-time reconciliation is owed there regardless; main's file is the assignment authority.**)
+> **Previously:** August 9, 2026 — S123 (**#147 AND #148 RAISED**, both from Josh, both investigated before filing rather than described from the request. **#147 multi-address is a UI GAP, not a schema gap** — `contact_addresses` has no unique constraint on `contact_id`, only a PARTIAL one-primary index, and `listAddressesForContact()` plus the 4D estimate address picker already handle N; exactly one form, `contact-form.tsx`, only ever writes the primary. No migration needed. **#148 inline contact-create is a SHARED COMPONENT's change** — `ContactAddressPicker` has three consumers, and `contacts_insert_authorized` matches `estimates_insert_manager` exactly, so there is no permission gap. The two meet at `contact-form.tsx` and should be sequenced together)
 > **Previously:** August 8, 2026 — S120 (**#145 FIXED, and its diagnosis was WRONG.** Not memory: `/dev/shm` is **64 MB**, the Docker default, and Chromium's renderer dies when it fills. `oom_kill` is **0** in `/proc/vmstat` and in every cgroup — nothing on this box was ever OOM-killed. One flag, `--disable-dev-shm-usage`, took the same 217-test group from **53 failures to 2** in a single unsplit process, and made it faster. **The four-process split is retired.** Also: M6M §6 camera capture + M-22, and §4.6's M-6 daily-logs screen, replacing a placeholder that had let A-12d/A-12e pass on a stub)
 > **Previously:** August 7, 2026 — S120 (**#145 RAISED** — the Codespace OOMs during a full Playwright chunk and Chromium's renderer is killed mid-navigation: 7.9 GB total, **130 MB free**, no swap, `next-server` at **1.4 GB RSS**. Presents as `Page crashed` on a different test each run, which reads as a flake and is a resource ceiling. Worked around by splitting the e2e gate into **four** processes with a server restart; **#135's `next build && next start` would remove the cause instead**. Also: **A-30f** — the detail views had no back chevron, found on a phone)
 > **Previously:** August 7, 2026 — S119 (**#143 AND #144 BOTH CLOSED.** #143: the seed now assigns PM/foreman/crew to the m-sections project — it created exactly one row, the foreman's, confirming the diagnosis — and the crew-for-foreman substitutions are reverted. **The reachability guard needed a new negative**: with every company-A identity reaching every company-A project, the table no longer contained a `false`, so it now asserts the cross-tenant refusal against company B as well. #144 below)
@@ -644,6 +684,81 @@ non-role portal identity; then build the sub-facing surface that issues these in
   **`createContact()` already exists** (`contacts-client.ts:3`) and takes a loose `Record<string, unknown>` — validation lives in `contact-form.tsx`, not in the service. So an inline create either reuses that form, **which also owns the address write**, or defines a minimal field set of its own.
 
   **#147 and #148 meet at `contact-form.tsx`** — one wants it to write N addresses, the other wants part of it reusable inline. Worth sequencing together rather than separately. Observed S123.
+
+- **#149** **The e2e pinned fixtures are hand-curated on rebuild-test and NOT reproducible from any script — this is the constraint that blocked every good fix for the sharding hazard (#150), and it is a standing liability independent of CI.** Raised S134 (2026-08-11), while reverting the S133 sharding.
+
+  **What is not scripted.** `scripts/seed-test-identities.mjs` seeds identities, the second company, invoices and a set of `project_assignments` idempotently — but it does **not** create the entities the specs pin by literal UUID. For the m-sections project it does the opposite: it `select`s `eaf0e25b-d60e-49c0-89b2-5612118d94b4` and, if absent, only **warns** (`seed-test-identities.mjs:465-469`, *"`{id}` not found — e2e/m-sections.spec.ts PROJECT_ID has moved; A-33c's sub arm will be vacuous"*). The project itself, its two non-deleted change orders (`net_delta` 1410 and 21385.91), the three shared chat projects, the pinned photo rows and the roster memberships were made **by hand** and exist only on rebuild-test. `eaf0e25b` alone is referenced by literal UUID in **13 spec files**.
+
+  **What that costs today, beyond CI.** If that project (or rebuild-test) were reset or the row deleted, 13 spec files break and **nothing recreates them** — there is no record of how they were built. The seed's own warning is the only guard, and it degrades a real assertion to a vacuous pass rather than failing.
+
+  **What it blocks, and unblocks.** A reproducible seed is the prerequisite for a **database per shard** — the only fix for #150 that is safe *by construction* (a new test cannot reintroduce the collision because it has its own DB). It also makes **namespaced fixtures** (each shard writes its own company/project) honest rather than discipline-dependent. Both were ruled out for the #150 revert **because this seed does not exist**.
+
+  **The option analysis, recorded so the next reader does not redo it** (full form in the S134 diagnosis; the pattern that already works is the M6M per-worker prefix fixture — `hub-fixture.ts`, created and hard-deleted per worker, genuinely isolated):
+
+  | Option | Cost | Leaves fragile | If someone adds a test unaware |
+  | ------ | ---- | -------------- | ------------------------------ |
+  | **A · DB per shard** | High — needs this seed reproduced in N places (blocked here); then 4 standing Supabase projects (migrations ×4, 4 secret sets, org cost) or ephemeral branch DBs (per-run seed + auth users, minutes/shard) | Seed drift — a migration applied to 3 of 4 silently breaks one shard | **Cannot reintroduce the bug** — own DB per shard. Safe by construction. |
+  | **B · Namespaced fixtures** | High-medium — same seed prerequisite ×N in one DB; every literal UUID in 13 files becomes a shard-indexed lookup; shard index must be plumbed to test code | The discipline that *every* shared-entity access routes through the resolver | **Breaks** — a hard-coded UUID (13 already exist) collides, with nothing to stop it short of a lint banning literal project UUIDs. |
+  | **C · Pin colliding files to one shard** | Low to type — but `--shard=k/n` gives no file→shard control; needs hand-partitioned per-shard file lists, forfeiting Playwright's auto-balancing (125/141/128/106) | A hand-maintained grouping invariant with no machine check; balance drifts as files grow | **Breaks silently** — a new spec touching a shared entity lands in the default group and collides across shards. |
+  | **D · Un-shard, raise the cap** ← **CHOSEN [Josh, S134]** | Wall-clock — serial `workers:1` is ~14.3 min local, slower on GitHub; timeout raised 20→35 | Wall-clock ceiling — every added test pushes back toward the cap; a reprieve, not a cure | **Cannot reintroduce the bug** — serial can't collide, whatever a new test does. |
+
+  A is the eventual answer and is blocked here. **Building the reproducible seed is the real unlock.** Cross-ref #150. Raised S134.
+
+- **#150** **Four CI shards shared ONE rebuild-test database, so any test asserting the ABSENCE / emptiness / exact COUNT of something another shard writes to a shared fixture was exposed. Recorded precisely so a future sharding attempt starts from this list, not a fresh audit.** Raised S134 (2026-08-11). The sharding that caused it (S133, `ce6efa8`) is reverted for now (Option D, #149); the sharding work is kept on branch `ci/shard-playwright`, not deleted, for when the seed (#149) lands.
+
+  **The generalization, plainly.** Sharding replaced one serial DB consumer with four concurrent ones against the same DB. To that DB the four shards **are** concurrent runs — the exact hazard `#198/#199/#200` were run *in sequence* to avoid. That reasoning was not carried across the shard boundary. `desktop-payload.spec.ts:175` is the test that noticed, not the problem. (Playwright shards **by file** with `workers:1`, so a writer and asserter in the *same* file are serial and safe; the hazard is only across *different* files.)
+
+  **The exposed set — concentrated in two subsystems, not diffuse:**
+  - **Change orders on `eaf0e25b`.** `desktop-payload.spec.ts:172-175` asserts a PM sees **no** `net_delta` on that project (they authored none there); `m-co-recalc-route.spec.ts:111-136` transiently inserts a **PM-authored** (`created_by = josh+pm`) `net_delta:0` CO on the same project and deletes it in a `finally`. Cross-shard, the PM legitimately sees their own row → `["0"]` where `[]` is asserted. **This is CI #201.** Not a payload leak — the #117 read floor (`20260830000000`) holds at the query, verified by JWT impersonation (PM gets 0 foreign rows); a foreign row would redact to `net_delta:null`, never `0`. Also here: `m-details.spec.ts` `firstCoUrlAsOwner .first()` can 404 when `m-writes`/`m-co-recalc` delete their transient `E2E` COs mid-read (borderline ordering race).
+  - **Chat on the three shared chat projects.** `desktop-chat-poll.spec.ts:86/91/96` assert **exact thread totals** (`toHaveCount(25/30/0)`); five other files (`desktop-chat-send`, `-mentions`, `-switcher`, `-sub`, `m-chat-sub`) both send to and **`teardownChat([project])`** the same threads. **Teardown is per-PROJECT**, so a teardown on one shard can delete another shard's in-flight chat data — the ~11-file chat suite is mutually fragile on shared threads, broader than the count assertions alone. `desktop-chat-switcher` unread badges are a borderline second case.
+  - **Latent near-miss, recorded as a load-bearing invariant.** `m-destinations.spec.ts` roster partition-equality (`subs + vendors === all`, `crew + subs === all` over `COMPANY_A`) is safe **only because no spec currently inserts or deletes `subcontractors`/`contacts`/`company_members` rows** — `m-writes` only UPDATEs and restores. The day any spec starts creating/soft-deleting roster rows, these become exposed. Undocumented until now.
+
+  **What is safe, and why it is the pattern to copy.** The ~11-file M6M mobile surface (hubs, capture, photos, logs) uses per-worker prefixed fixtures (`M6M`/`M6MC`/`M6MP`, `hub-fixture.ts`), created and torn down in isolation — **source-level isolation is already proven in this repo**. Every count/absence assertion there resolves against an isolated fixture or a unique key.
+
+  **Correction to the S121-era read of one line:** `m-writes.spec.ts:542-544` ("exactly one punch list", `toHaveCount(2)`) is **safe, not exposed** — the only writer of punch lists to `eaf0e25b` is `m-writes` itself, and same-file means serial under shard-by-file. A reader working from the first classification would chase it.
+
+  **Fix direction when sharding returns:** #149's reproducible seed → Option A (DB per shard). Until then, isolate these specific writers/asserters at the source (private projects/threads; per-thread not per-project chat teardown) if partial sharding is ever attempted. Cross-ref #149. Raised S134.
+
+
+- **#1-trial** **THE TRIAL DELETION JOB IS BUILT, TESTED, AND DELIBERATELY NOT SCHEDULED — because nobody has confirmed we may delete these records on this timetable.** Raised S137 (2026-08-12).
+
+  ⚠️ **Provisional branch-scoped id**, per CLAUDE.md → "Tech-debt numbering" [S136]. This is the first use of that rule. It converts to the next free number from **main's** file when `feature/trial-lifecycle` lands.
+
+  **What is built:** `trial_lifecycle`, `deletion_jobs`, `export_jobs`, the `exports` bucket, the warning loop, the lock, and `lib/trial/deletion.ts` — a resumable, per-table, rows-then-storage job that stops and alarms rather than retrying. `apps/web/vercel.json` carries `trial-warnings` and `trial-lock` and **deliberately carries no entry for `/api/cron/trial-deletion`.**
+
+  **Why it is not scheduled.** **TL-24 is unanswered and with professional legal review**: whether these records may be permanently deleted on a 14-day timer *at all*. Some of what the job destroys is material a construction company is legally required to retain — signed contracts, change orders, lien releases, safety incidents, and daily logs that evidence what happened on site on a given day. **Legal review can invalidate the expiry ruling entirely**, which is why the code exists and the schedule does not.
+
+  **The one line that turns it on is Josh's, after legal returns.** Until then the absence of that line is load-bearing, and it is asserted: `s137-trial-lifecycle.live.ts` fails if `/api/cron/trial-deletion` ever appears in `vercel.json`. That assertion was **verified load-bearing** — adding the entry turned it red naming the reason, and it returned to green on revert.
+
+  **Also open, and part of the same gate — the signed-document mechanism.** The ruling is that *signed* client contracts, change orders and subcontractor contracts survive deletion while unsigned ones do not. That cannot be expressed as a row filter: all three tables carry `project_id` REFERENCES `projects`, and the project is deleted, so a surviving signed row would hold an FK to a row that no longer exists. Two reasonable answers and nothing picks one — **(a)** detach (null the linkage, accept an orphaned document), or **(b)** archive (copy signed documents plus identifying context outside the company-scoped set, then delete the originals). **Until it is ruled, all three tables are excluded from the walk ENTIRELY**, so the signed rows survive as required and the unsigned ones survive too. Keeping more than asked is the safe direction to be wrong in while TL-24 is open, and it is asserted rather than assumed.
+
+  **What unblocks it:** legal's answer on TL-24 and TL-23 (the customer-facing wording, which is deliberately absent from the spec and the code — a placeholder would be mistaken for approved language). Cross-ref: `docs/specs/trial-lifecycle-spec.md`, `docs/specs/trial-lifecycle-interview.md`, GATED.md → TRIAL LIFECYCLE.
+
+  **⚠️ AMENDED [S138] — the claim "built, TESTED" above was too strong, and one more thing is now known.** What S137 tested were the job's exclusion *lists*; the job had never been run. S138 ran it and found `#3-trial`. The deletion cron is **still unscheduled** and the assertion guarding that is still green (`s137-trial-lifecycle.live.ts` 20/20, re-run after `export-worker` was added to `vercel.json`). Note for whoever reads the schedule file next: **`/api/cron/export-worker` IS scheduled and that is not a loosening of this gate** — it creates a copy of the customer's data for the customer and removes only the export artefacts it made itself. Nothing in it destroys tenant data.
+
+  **Also now known: there must be no backfill of `trial_lifecycle`.** Ruled [Josh, S138] and written into `20260919000000_trial_unlock.sql` §3 with the reason. Two live production tenants are `trialing` with an already-past `trial_end`; a backfill would make the next lock run ban them for a year, and the `status = 'active'` skip does not protect them.
+
+- **#3-trial** **"Deleted" leaves the company row standing, with its NAME on it — and until S138 the job reported a clean completion anyway.** Raised S138 (2026-08-12). Provisional id, same rule as #1-trial.
+
+  **Found by RUNNING the deletion job for the first time.** S137's log said "the job exists, is tested"; what was tested were its exclusion *lists*. `runTrialDeletion()` had never been executed. `apps/web/test/s138-trial-deletion-run.live.ts` executes it against a company built to be destroyed, and the first run destroyed every tenant row, every storage object and the auth users — then **left `companies` in place and returned `completed: 1`**, because the error from the parent delete was discarded.
+
+  **The cause is structural, not a typo.** Five tables on the `SURVIVES` list hold a plain `REFERENCES companies(id)` with no on-delete action, so the parent delete is RESTRICTed by exactly the rows the ruling says must outlive the tenant: `email_logs`, `trial_lifecycle`, `trial_warning_acknowledgements`, `deletion_jobs`, `export_jobs`. `trial_lifecycle` cannot even be nulled out of the way — `company_id` is its primary key and it is where `deleted_at` lives.
+
+  **What S138 fixed, and what it deliberately did not.** Fixed: the job is now honest. It checks the error, records `tenant data deleted, but the companies row remains: …` on the `deletion_jobs` row, marks the job `stopped` (needs a human), and counts `companyRowsRemaining` in its outcome so this can never again be reported as a completion. **Not fixed:** whether the shell *should* survive. That is a ruling, it sits directly under TL-24, and the two answers are meaningfully different — **(a)** accept a tombstone and say so in the customer-facing wording (the company NAME survives deletion, which is a privacy statement, not an implementation detail), or **(b)** make the audit tables tolerate an absent parent (`ON DELETE SET NULL` where the column is nullable, and a different home for `trial_lifecycle.deleted_at`).
+
+  **Do not close this by changing the FKs without answering (a) vs (b).** The probe asserts the shell REMAINS; if it ever starts passing with the row gone, the ruling has been made implicitly by whoever edited the constraints.
+
+- **#2-trial ✅ BUILT [S138]** — the export exists. `lib/trial/export.ts` (chunked by self-contained `part-NNN.zip`, cursor-resumed), `lib/trial/export-sweep.ts` (the worker plus the 24-hour sweep), `POST /api/trial/export`, `GET /api/trial/export/[id]`, `GET /api/cron/export-worker` (scheduled `*/5`), and `/dashboard/trial/export`. `fflate` is the zip dependency. Evidence: `export.test.ts` 12/12 and `s138-trial-export.live.ts` 6/6, which writes real rows, runs the real sweeper and reads the entries out of the real zip in the real bucket.
+
+  **TL-1 is now reproducible**, which was the substantive complaint below: `scripts/measure-export-throughput.mjs` is committed and refuses to run anywhere but rebuild-test. Re-measured S138 — 62 files, 28.41 MB, 15.20 s → **1.87 MB/s**, large case ≈ 2.7 h, ~61× margin on the 168 h window, ~42 invocations. S137's 1.07 MB/s was the conservative figure; the conclusion is unchanged. _Original entry retained below._
+
+- **#2-trial (original entry)** **The trial EXPORT is specced and measured but NOT BUILT.** Raised S137 (2026-08-12). Provisional id, same rule as #1-trial.
+
+  `export_jobs` and the private `exports` bucket exist; the job that fills them does not, and no zip dependency has been added. The spec's `input → store → output` trace (§4) is written and is what a build should follow.
+
+  **TL-1 is settled and does NOT change a ruling.** Measured on rebuild-test — 61 files, 28.19 MB, sequential through the service role: **1.07 MB/s, 0.434 s/file**. Extrapolated to Josh's stated shape (15–20 projects; thousands of photos; 50+ page blueprint sets): a small company ≈ **5 minutes**, a mid one (~2k files, 4 GB) ≈ **64 minutes**, a large one (~8.5k files, 18 GB) ≈ **4.8 hours**. Against the **7-day** pre-expiry export window that is a ~35× margin, so the window is not the binding constraint and no ruling has to move.
+
+  **What IS binding is Vercel's `maxDuration = 300`.** A large export needs roughly 58 invocations at five minutes each, so the job must chunk and resume across invocations — which is why `export_jobs.cursor` exists. Method stated so the number can be challenged: sequential, single connection, from a Codespace; parallel downloads would improve it and production egress may differ.
 
 ## Closed Tech Debt
 

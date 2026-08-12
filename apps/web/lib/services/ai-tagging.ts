@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase-server';
 import { getOpenAI } from '@/lib/openai';
 import { getActiveTags } from '@/lib/services/tag-options';
 import { getSignedUrl } from '@/lib/services/files';
+import { brand } from '@/lib/brand';
 
 // ----------------------------------------------------------------------------
 // Constants
@@ -102,7 +103,15 @@ export async function autoTagFile(fileId: string): Promise<AutoTagResult> {
     .map(([category, names]) => `${category.toUpperCase()}: ${names.join(', ')}`)
     .join('\n');
 
-  const prompt = `You are a construction-photo tagger for FrameFocus, a contractor management platform. You analyze a single photo and select the most relevant tags from a fixed allowed list.
+  // ⚠️ THIS IS A MODEL INPUT, NOT A BRAND SURFACE [S136]. It carried the
+  // pre-rebrand name and no user ever saw it — but it names a product that no
+  // longer exists, and prompt text is the one place a stale name changes
+  // BEHAVIOUR rather than appearance. Committed separately from the five
+  // user-facing literals so it can be reverted alone if tagging output shifts.
+  // The tagging tests assert structure, not content (CLAUDE.md), so they cannot
+  // detect a drift here — that is a reason for the separate commit, not a
+  // reason to think the risk is zero.
+  const prompt = `You are a construction-photo tagger for ${brand.name}, a contractor management platform. You analyze a single photo and select the most relevant tags from a fixed allowed list.
 
 Rules:
 1. Pick AT MOST ${MAX_TAGS} tags.

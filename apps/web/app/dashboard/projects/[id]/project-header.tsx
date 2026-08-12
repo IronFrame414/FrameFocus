@@ -53,6 +53,21 @@ const TABS: { slug: string; label: string; roles?: string[] }[] = [
   { slug: 'contacts', label: 'Contacts' },
   { slug: 'contracts', label: 'Contracts' },
   { slug: 'team', label: 'Team' },
+  // ND-33/ND-35 [S126 slice 3] — the project Chat tab (§7.1b): the reading and
+  // auditing surface, and the only way back to an ARCHIVED project's thread
+  // once the switcher drops it (§7.1a-i).
+  //
+  // ⚠️ NO `roles` ENTRY, AND THAT IS THE RULING, NOT AN OVERSIGHT (A-C27).
+  // `can_view_project()` already decides who can read a thread; a role list
+  // here would be a second answer to the same question and the two would have
+  // to be kept in step forever. A-C27 asserts this ABSENCE precisely because
+  // adding one would look like a safety improvement.
+  //
+  // APPENDED rather than inserted: §7.1b names the tab and not its position,
+  // and the same reasoning the Notifications sidebar item carries applies —
+  // placing it mid-strip would be a decision this build has no authority to
+  // make.
+  { slug: 'chat', label: 'Chat' },
 ];
 
 // ui-03 §4 badge system (shared with the list screen).

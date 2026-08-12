@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { signInAs } from './sign-in-as';
 
 // M6M Part B — the five detail views: M-31, M-34, M-35, M-36, and M-16's
 // file-open path. D-55 ("every list row opens its own page") and D-54
@@ -44,7 +45,6 @@ import { test, expect, type Page } from '@playwright/test';
 const CREW = 'josh+crew@worthprop.com';
 const OWNER = 'josh+test50@worthprop.com';
 const SUB = 'josh+qa-sub@worthprop.com';
-const PASSWORD = process.env.E2E_PASSWORD ?? 'FrameFocusTest!2026';
 
 /** The project e2e/m-sections.spec.ts drives: 2 COs, 1 punch item, 1 contact, 4 assignments. */
 const PROJECT = 'eaf0e25b-d60e-49c0-89b2-5612118d94b4';
@@ -66,14 +66,9 @@ const FILES_PROJECT = '545edc73-e3e6-402a-a594-a8da00701f09';
 // `signInAs` below already used 30s for the same reason.
 const NAV = { timeout: 30_000 };
 
-async function signInAs(page: Page, email: string) {
-  await page.context().clearCookies();
-  await page.goto('/sign-in');
-  await page.locator('#email').fill(email);
-  await page.locator('#password').fill(PASSWORD);
-  await page.getByRole('button', { name: /sign in/i }).click();
-  await expect(page).toHaveURL(/\/dashboard/, { timeout: 30_000 });
-}
+// signInAs now comes from `./sign-in-as` — RULING A [S131]. This file held one
+// of FIVE byte-identical copies that each waited for `/dashboard`, which a
+// subcontractor no longer reaches. The destination belongs in one place.
 
 /**
  * A readable CO url — AS OWNER, since the #117 floor [S121].
@@ -297,25 +292,50 @@ test.describe('D-54 · a subcontractor is blocked from the four gated detail rou
 
   test('the row tap is ALSO hidden — D-54 step 1, on top of the guard', async ({ page }) => {
     await signInAs(page, SUB);
-    // The LIST is still reachable (§4.11.10b: "Gets the list"), so this is not
-    // a bounce — the rows are simply not links.
-    await page.goto('/m/contacts');
-    await expect(page.getByTestId('m-contact-row').first()).toBeVisible();
-    await expect(page.getByTestId('m-row-link')).toHaveCount(0);
 
+    // ⚠️ THE CONTACTS HALF MOVED TO THE TEST BELOW — RULING B [S131].
+    // It asserted `m-contact-row` was VISIBLE but not a link. Ruling B floors
+    // `contacts` to zero rows for a subcontractor, so there is no row to be
+    // visible and the assertion failed on `element(s) not found`. The build is
+    // right and the premise is superseded: "the rows are not links" was the
+    // weaker claim, and "there are no rows" is the stronger one.
+    //
+    // `/m/team` still exercises the ORIGINAL D-54 step-1 claim, because a sub
+    // does still read the Owner/Admin/PM member rows — so this test keeps its
+    // point instead of being deleted.
     await page.goto('/m/team');
     await expect(page.getByTestId('m-member-row').first()).toBeVisible();
     await expect(page.getByTestId('m-row-link')).toHaveCount(0);
   });
 
-  test('the tap-to-act circles SURVIVE for a subcontractor', async ({ page }) => {
-    // What a sub loses is the row navigation, not the ability to phone someone.
-    // A build that hid the whole row would pass every assertion above.
+  test('⚠️ a subcontractor now gets NO contacts at all, as the ordinary empty state', async ({
+    page,
+  }) => {
+    // _Superseded, quoted rather than rewritten: 'the tap-to-act circles
+    // SURVIVE for a subcontractor' — "What a sub loses is the row navigation,
+    // not the ability to phone someone."_
+    //
+    // Ruling B [S131] makes that false: a sub loses contacts ENTIRELY, and
+    // `ContactActions` (the tel/mail circles) is rendered only by
+    // `/m/contacts`, so tap-to-act is not reachable for a subcontractor
+    // anywhere. The old test would not have failed — it ends in
+    // `test.skip(count === 0)`, so it would have gone on reporting green while
+    // asserting nothing at all. A silent skip is worse than a red test.
+    //
+    // Replaced with Ruling B's actual UI consequence, in the shape
+    // `m-destinations.spec.ts` already uses for A-45b2: RLS returning zero rows
+    // must surface as M-26's ORDINARY EMPTY STATE, never as an error or a
+    // "not permitted" panel — a UI role branch is what A-45d forbids and what
+    // no database assertion can see.
     await signInAs(page, SUB);
     await page.goto('/m/contacts');
-    const tel = page.getByTestId('m-tel').first();
-    if ((await tel.count()) === 0) test.skip(true, 'no contact carries a phone');
-    await expect(tel).toHaveAttribute('href', /^tel:/);
+
+    await expect(page.getByTestId('m-contact-row')).toHaveCount(0);
+    await expect(page.getByTestId('m-tel')).toHaveCount(0);
+    await expect(page.getByTestId('m-empty')).toHaveCount(1);
+
+    const body = (await page.getByTestId('m-content').textContent()) ?? '';
+    expect(body).not.toMatch(/not permitted|no access|restricted|error|something went wrong/i);
   });
 });
 

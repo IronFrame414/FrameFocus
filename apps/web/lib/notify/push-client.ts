@@ -40,6 +40,8 @@
  * is a parameter.
  */
 
+import { brand } from '@/lib/brand';
+
 export type PushState =
   /** No Push API at all — an old browser, or a hardened one. */
   | 'unsupported'
@@ -162,7 +164,7 @@ export async function enablePush(
     return {
       ok: false,
       state: 'ios-needs-install',
-      reason: 'Add FrameFocus to your Home Screen first, then open it from there.',
+      reason: `Add ${brand.name} to your Home Screen first, then open it from there.`,
     };
   }
 

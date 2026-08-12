@@ -479,7 +479,44 @@ Each subscribing company is an isolated tenant. Within that company, there are 6
 | Project Manager | `project_manager` | Full (scoped to assigned projects) | Full              | Create/manage estimates, manage assigned projects, assign tasks, create change orders, **view job ACTUAL COSTS only — NOT contract value, budgeted/sell amounts, or CO dollar amounts** (Financial Visibility Floor, added 2026-07-20), manage client communication                                                    |
 | Foreman         | `foreman`         | Limited                            | Full              | Manage assigned field crews, daily logs, schedule crew tasks, review Crew Member submissions, punch lists, quality control                                                                                                                                                                                              |
 | Crew Member     | `crew_member`     | Minimal                            | Full              | Clock in/out with GPS, daily log entries, photo capture, task status updates, view assigned tasks and schedule                                                                                                                                                                                                          |
-| Client          | `client`          | Portal only                        | No (future phase) | View project timeline, photo gallery, approve selections, sign documents, make payments, message PM, view AI weekly summaries                                                                                                                                                                                           |
+| Client          | `client`          | Portal only — **see the note below** | No (future phase) | View project timeline, photo gallery, approve selections, sign documents, make payments, message PM, view AI weekly summaries                                                                                                                                                                                           |
+
+### Roster Visibility Floor — **RULED [Josh, S131]**, and `DASHBOARD_ROLES` is now enforced
+
+**"Portal only" in the Client row above described an intention, not a mechanism, until S131.**
+`DASHBOARD_ROLES` (`packages/shared/constants/roles.ts`) excluded `subcontractor` and `client`
+from the day it was written and **no code consulted it**. Measured on rebuild-test in S130 as the
+real QA identities: a subcontractor and a client each signed in to `/dashboard` and read the
+company's **full contacts list, sub roster and team roster — 6 / 4 / 7 rows, identical to the
+Owner's.** There was also no portal route tree for a client to be "only" in.
+
+Two separate changes, because one is routing and one is data:
+
+- **Ruling A — the route.** `middleware.ts` and `app/dashboard/layout.tsx` both guard `/dashboard`
+  via `apps/web/lib/dashboard-access.ts` (M6M D-54: hidden **and** route-guarded). A
+  `subcontractor` goes to `/m/projects`; a `client` goes to a **placeholder** that Module 9
+  replaces. ⚠️ **The Pre-Module 9 gate — hosted portal vs. email plus magic-link tokenised pages —
+  is OPEN and untouched.** A placeholder is not a portal.
+- **Ruling B — the data.** `20260911000000_roster_visibility_floor.sql`. **A redirect protects no
+  data**, since `/m`, every API route and any direct PostgREST call bypass routing entirely.
+
+| Role | Team roster (`profiles` **and** `company_members`) | `contacts` | `subcontractors` |
+| ---- | ---- | ---- | ---- |
+| `subcontractor` | Owner, Admin, PM **only** | **none** | **none** |
+| `client` | **none** | **none** | **none** |
+| the five `DASHBOARD_ROLES` | unchanged, company-wide | unchanged | unchanged |
+
+**Own row is always readable, for every role.** Not a softening of the ruling — a precondition for
+it. There are 94 direct `from('profiles')` reads keyed on `user_id = auth.uid()`, including both
+layouts; a client who cannot read their own row cannot load the placeholder they were just
+redirected to.
+
+**Two traps recorded for whoever edits these policies next:**
+
+1. **The roster is TWO tables.** `/dashboard/team` reads `profiles`; `/m/team` reads
+   `company_members` via `getMembers()`. Flooring one closes one surface.
+2. **`profiles` carried TWO permissive SELECT policies**, and permissive policies are **OR**'d.
+   Adding a third, narrower one changes nothing — the widest always wins. Both were replaced by one.
 
 ### Financial Visibility Floor (authoritative — added 2026-07-20)
 
@@ -572,6 +609,29 @@ Module 3H patterns for every future AI feature (Module 4 estimating, 9 client su
 6. No retry logic in v1 — risk of double-charging. Use a manual retry button or background queue if needed.
 
 **Testing AI features.** GPT-4o is non-deterministic even at temperature 0.2. Tests assert structure (well-formed, validation discarded unknowns, output ≤ cap, cost row inserted), not exact content.
+
+## Tech-debt numbering — **RULED [Josh, S136]**
+
+**Never allocate a bare `#N` on a branch.** `TECH_DEBT.md` lives in the working tree, so every
+branch appends to its own copy and two branches filing on the same day both "take" the same
+number. There is no allocator, and there cannot be one while the file is versioned alongside code.
+
+**On a branch, file with a provisional branch-scoped id: `#N-<branch-tag>`** — `#12-notif`,
+`#3-m6m`. Numbered from 1 within the branch; the tag is short and names the branch, not the
+session. **Convert to a real number when the branch lands**, taking the next free number from
+**main's** `TECH_DEBT.md` at that moment, and update any cross-references in the same commit.
+
+**Why not "just take the next number from main":** that was the previous rule, it was written into
+`TECH_DEBT.md`'s own header as "main's file is the assignment authority", and it still failed.
+`feat/notifications` and `feature/m6m-mobile` each independently allocated `#147`–`#149` for
+**four different items**, colliding with main and with each other. Reserving from main only works
+if a branch merges before the next one files, which is not how these branches run.
+
+A provisional id is ugly on purpose: `#12-notif` in a commit message or a code comment reads as
+"this is not final yet", which a bare `#149` does not. **The reconciliation table for the current
+collision is in `TECH_DEBT.md`'s header** and is applied at merge, not now.
+
+---
 
 ## Instruction Preferences
 

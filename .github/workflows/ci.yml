@@ -66,10 +66,47 @@ jobs:
   # wait on a browser download, and would let an e2e flake mask a type error.
   # Separate jobs also run in parallel.
   # ---------------------------------------------------------------------------
+  # ---------------------------------------------------------------------------
+  # UN-SHARDED, DELIBERATELY — the sharding of S133 was REVERTED. [Josh, S134]
+  # ---------------------------------------------------------------------------
+  # Sharding (S133, commit ce6efa8) ran four runners against the ONE shared
+  # rebuild-test database. To that database the four shards are CONCURRENT runs,
+  # which is the exact hazard #198/#199/#200 were sequenced to avoid — carried,
+  # unnoticed, across the shard boundary. It surfaced as CI #201: a PM-authored
+  # `net_delta:0` change order created by `m-co-recalc-route.spec.ts` on shard N
+  # was read by `desktop-payload.spec.ts:175` on shard 1, failing an
+  # assert-absence. Not a payload leak — a test that asserts the ABSENCE / count
+  # of something another shard writes to a shared fixture. See TECH_DEBT for the
+  # full exposed set.
+  #
+  # THE REASONING, so it is not re-litigated: the only two speedups available —
+  # sharding, and `workers > 1` in one job — BOTH introduce that same intra-DB
+  # concurrency. Absent per-shard fixture isolation, SERIAL is the only correct
+  # configuration and the wall-clock is its price. A red-that-should-be-green is
+  # worse than a slow green. `workers: 1` (playwright.config.ts) is load-bearing
+  # here, not incidental.
+  #
+  # timeout RAISED 20 -> 35: #197 hit the old 20-minute cap un-sharded; local is
+  # ~14.3 min and GitHub's runner is slower. 35 is headroom, not a target.
+  #
+  # NOT THE EVENTUAL ANSWER. A database PER SHARD (safe by construction) is, and
+  # it is BLOCKED on a reproducible seed that does not exist — the pinned
+  # fixtures are hand-curated on rebuild-test. See TECH_DEBT. The sharding work
+  # is correct and kept on branch `ci/shard-playwright` for when that seed
+  # lands; this revert does not delete it.
+  #
+  # RETRIES ARE UNTOUCHED, DELIBERATELY. `retries: process.env.CI ? 2` stays.
+  # Under serial execution there is nothing cross-test to mask, so retries are
+  # safe and useful. Whether CI should retry at all is a live, unruled question
+  # that predates sharding and is not folded into this change.
+  #
+  # JOB NAME `E2E (Playwright)` PRESERVED. A required status check may be pinned
+  # to it; branch protection could not be read (403 Resource not accessible by
+  # integration), so the name is kept rather than gambled on.
   e2e:
     name: E2E (Playwright)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
 

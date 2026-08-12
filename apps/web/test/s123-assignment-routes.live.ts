@@ -98,14 +98,48 @@ beforeAll(async () => {
   crewMemberId = members!.find((m) => m.profile_id === crewProfileId)!.id;
   pmMemberId = members!.find((m) => m.profile_id === pmProfileId)!.id;
 
+  // ⚠️ PINNED TO A PROJECT THE CREW IS ACTUALLY ASSIGNED TO [S135].
+  //
+  // _Superseded, quoted rather than rewritten:_
+  // ```
+  // const { data: project } = await admin.from('projects')
+  //   .select('id').eq('company_id', companyId).eq('is_deleted', false)
+  //   .limit(1).single();
+  // ```
+  //
+  // `limit(1)` with NO `order()` is whatever Postgres hands back first, and the
+  // PERMIT test below needs `can_view_project()` to be TRUE for crew — so it
+  // only ever passed because the first row happened to be a project crew was on.
+  // It stopped being: another harness leaked a project ("S97PASSTHRU
+  // with-retainage") when its teardown hit an FK it deletes in the wrong order,
+  // that row sorted first, and this test began failing for a reason that had
+  // nothing to do with what it tests. TECH_DEBT #149's shape exactly.
+  //
+  // Now derived from the assignment itself, so it cannot drift again.
+  const { data: crewAssignments } = await admin
+    .from('project_assignments')
+    .select('project_id')
+    .eq('member_id', crewMemberId)
+    .eq('is_deleted', false);
+
+  const crewProjectIds = ((crewAssignments ?? []) as Array<{ project_id: string }>).map(
+    (r) => r.project_id
+  );
   const { data: project } = await admin
     .from('projects')
     .select('id')
     .eq('company_id', companyId)
     .eq('is_deleted', false)
+    .in('id', crewProjectIds.length ? crewProjectIds : ['00000000-0000-0000-0000-000000000000'])
+    .order('created_at', { ascending: true })
     .limit(1)
     .single();
-  projectId = project!.id;
+  if (!project) {
+    throw new Error(
+      'no project the crew member is assigned to — the PERMIT test below would fail for a fixture reason, not a policy one'
+    );
+  }
+  projectId = project.id;
 
   // §13.2 state 2 — a subcontractor member with an email but NO login.
   const { data: subs } = await admin

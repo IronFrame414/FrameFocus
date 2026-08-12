@@ -238,10 +238,31 @@ test.describe('M-37 · daily log detail', () => {
 
     await expect(page.getByTestId('m-back')).toBeVisible();
     await expect(page.getByTestId('m-hamburger')).toHaveCount(0);
-    // Logs is a TAB, so unlike M-35/M-36 the tab stays lit — the section is
-    // still where you are. A-42's "no tab active" belongs to the company-scoped
-    // family and must not be copied here.
-    await expect(page.getByTestId('m-tab-logs')).toHaveAttribute('aria-current', 'page');
+
+    // ⚠️ THE TENTH CRITERION — §14 REWROTE NINE AND MISSED THIS ONE [S131].
+    //
+    // _Superseded, quoted rather than rewritten: "Logs is a TAB, so unlike
+    // M-35/M-36 the tab stays lit — the section is still where you are. A-42's
+    // 'no tab active' belongs to the company-scoped family and must not be
+    // copied here."_ followed by
+    // `await expect(page.getByTestId('m-tab-logs')).toHaveAttribute('aria-current', 'page');`
+    //
+    // Logs STOPPED BEING A TAB in slice 5 (ND-36): `TABS` in
+    // `app/m/mobile-shell.tsx` is Projects, Timeclock, Field, and the Logs slot
+    // left the bar when Chat took it. `m-tab-logs` cannot exist, so this
+    // asserted an element that is never rendered.
+    //
+    // `m-shell.spec.ts:151` WAS rewritten for exactly this and says so inline —
+    // the A-1c case for `/m/logs` was removed and its replacement named as
+    // A-C33, "the bar renders and NO slot carries the active state". So the
+    // rewrite found the instance in one file and missed the one in this file.
+    // Worth recording plainly: §14 was itself the correction to an earlier
+    // incomplete list, and it was incomplete too.
+    //
+    // The criterion this test is FOR — a way back, the chevron and not the
+    // hamburger — is untouched above and still passes. Only the tab clause was
+    // stale, and A-C33 is what it becomes.
+    expect(await page.locator('[data-testid^="m-tab-"][aria-current="page"]').count()).toBe(0);
   });
 
   test('M-21 keeps its own chrome — the capture screen is NOT a detail view', async ({ page }) => {

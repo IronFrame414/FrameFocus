@@ -117,17 +117,27 @@ describe('M6M A-40 / A-40b / A-40c — what the shell may and may not carry', ()
     // arithmetic; a later reader is exactly the person who undoes that by
     // accident, and the reversal's whole justification was protecting this bar.
     //
-    // Scoped to the TABS array specifically. A whole-file regex for
-    // `{ href: '/m/…', label: …, Icon: … }` matched 9 — the 4 tabs PLUS 5 of the
-    // 6 SHEET_TILES, which share the shape exactly. That would have passed while
-    // counting the wrong thing, and gone on passing if a tab were added and a
-    // sheet tile removed.
+    // ⚠️ MECHANISM REWRITTEN [chat ND-36, S126], GUARD UNCHANGED. Counting TABS
+    // used to be counting slots, because every slot was a link. The Chat slot
+    // owns no route (ND-37), so it is a BUTTON rendered outside the array and
+    // the old count of 4 became 3 — the bar is still five. The test was what
+    // was wrong; the invariant it protects is not.
+    //
+    // Still scoped rather than a whole-file regex: `{ href: '/m/…' }` matches
+    // SHEET_TILES too, which would pass while counting the wrong thing.
     const tabsBlock = /const TABS = \[([\s\S]*?)\] as const;/.exec(shell);
     expect(tabsBlock, 'TABS array not found').not.toBeNull();
     const tabs = tabsBlock![1].match(/\{ href: '\/m\//g) ?? [];
-    expect(tabs).toHaveLength(4); // 4 side items + the camera = 5 slots.
+    expect(tabs).toHaveLength(3); // 3 link slots + Chat + the camera = 5.
+
+    // The two non-link slots, asserted by name so the count above cannot drift
+    // into meaning something else.
+    expect(shell).toContain('<ChatTabItem');
+    expect(shell).toContain('data-testid="m-camera"');
     expect(shell).toContain('TABS[0]');
-    expect(shell).toContain('TABS[3]');
+    expect(shell).toContain('TABS[2]');
+    // A fourth link slot would be six with Chat — the exact reversal this guards.
+    expect(shell).not.toContain('TABS[3]');
     // Notifications must NOT have become a tab.
     expect(shell).not.toContain("href: '/m/notifications'");
   });
