@@ -47,7 +47,89 @@ The export window is the **pre-expiry** period. That is why the warnings moved t
 
 ---
 
+## Step 1 — the spec (DONE) — `428ae1a`
+
+`docs/specs/trial-lifecycle-spec.md`, with `input → store → output` traces for the export (§4) and
+the deletion job (§5). The interview file stays.
+
+## Step 2 — schema (DONE) — `cc7f03c`
+
+`20260918000000_trial_lifecycle.sql`. Push **exit 0**, then **verified against the catalog** rather
+than the CLI's success line: all four tables readable, `trial_emails`' new columns present,
+`email_types.trial_warning` present, private `exports` bucket listed.
+
+## Step 3 — warnings, lock, deletion job (DONE) — `0291e7a`
+
+`tsc` **exit 0** · unit **exit 0**, 47 files / 673 tests · build **exit 0**.
+
+**Two things the build found that the ruling could not be built without:**
+1. **`ai_tag_logs.company_id` was `NOT NULL`**, so "survives with `company_id` nulled" was
+   unbuildable as written. Found by the type-checker, not by reading the schema.
+2. **The migration was not replay-safe** — bare `CREATE TRIGGER` fails 42710 on the second
+   application even with `CREATE TABLE IF NOT EXISTS` above it. Same lesson as S136's slug backfill.
+
+**`s123-still-clocked-in` — the TEST was wrong, not the code.** It greps for the string and cannot
+distinguish a file that EMITS the notification from one that DECLARES the type enum;
+`notifications_type_check` necessarily lists every type, and `notifications_core.sql` was already
+allowed for exactly that reason.
+
+## Step 4 — probes (DONE)
+
+`s137-trial-lifecycle.live.ts` — **20/20, exit 0**, under the S90 harness (real user JWTs, never
+`postgres`). Covers: `trial_lifecycle` readable by Owner only and **writable by nobody** (the Owner
+cannot move their own `trial_end`), acknowledgement is first-person-only, warning idempotency, −3
+beating −7, postpone honoured on both loops, the 14-day retention clock, and the survivor list.
+
+⚠️ **The most consequential assertion is VERIFIED LOAD-BEARING:** temporarily adding
+`/api/cron/trial-deletion` to `vercel.json` turned the probe red naming the reason (**exit 1**);
+reverting returned it to green (**exit 0**), and `vercel.json` was confirmed clean afterwards.
+
+One probe bug of mine, fixed: `ai_tag_logs.model` is `NOT NULL` and my fixture omitted it, so the
+failure read as "the column is still NOT NULL" when the test was wrong.
+
+## Step 5 — TL-1 SETTLED, and it changes no ruling
+
+Measured on rebuild-test, sequential, service role: **61 files, 28.19 MB, 26.45 s → 1.07 MB/s,
+0.434 s/file.**
+
+| company shape | estimate |
+| --- | --- |
+| small (~120 files, 0.3 GB) | ~5 min |
+| mid (~2.1k files, 4 GB) | ~64 min |
+| large (~8.5k files, 18 GB) | **~4.8 hours** |
+
+Against the **7-day (168-hour)** pre-expiry window that is a ~35× margin, so **the window is not
+the binding constraint and no ruling has to move.** Per Q7(c) synthesising was therefore not
+required — the extrapolation does not land near the window.
+
+**What IS binding is `maxDuration = 300`:** a large export needs ~58 invocations, which is why
+`export_jobs.cursor` exists. Method stated so the number can be challenged: sequential, single
+connection, from a Codespace; parallelism would improve it, production egress may differ.
+
+## Step 6 — TECH_DEBT (DONE)
+
+`#1-trial` (deletion built and unscheduled; plus the unruled signed-document mechanism) and
+`#2-trial` (export specced and measured, not built). **Provisional branch-scoped ids** — the first
+use of the CLAUDE.md rule added in S136 — converting to real numbers at merge.
+
+Full live suite after everything: **53 files / 597 tests, exit 0.**
+
+---
+
+## NOT BUILT — carried, with reasons
+
+- **The export job itself** (`#2-trial`). Specced, measured, tables and bucket exist; the job and a
+  zip dependency do not.
+- **The 4th-attempt screen** (Q5's copy-gap screen) and the in-app warning screen. `handle_new_user`
+  already routes a 4th signup to `incomplete`; the screens are not written.
+- **The acknowledgement button.** The table, its RLS and its probes exist; no UI writes to it yet.
+- **Widening middleware to `/m` and the API routes.** The session ban makes the lock real without
+  it, but the redirect gap found in Phase 0 is still open on paper.
+
+---
+
 ## RESUME HERE
 
-**Next action:** write `docs/specs/trial-lifecycle-spec.md` — the house rule requires the spec,
-with `input → store → output` traces for the export and the deletion job, BEFORE any build.
+**Next action:** build the export job per spec §4 (`#2-trial`) — add a streaming zip dependency,
+fill `export_jobs`, chunk against `maxDuration = 300`, and write the 24-hour sweep.
+
