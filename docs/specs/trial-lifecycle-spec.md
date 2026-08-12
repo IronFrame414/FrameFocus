@@ -267,3 +267,99 @@ admin; that UI does not exist and is not built here.
 - **The paid-cancellation 30-day path.** Named in §1 so it is not conflated with the trial path.
 - **The system-admin UI** for postpone and trial reset. Schema is shaped for it; it is not built.
 - **The customer-facing wording.** §2b.
+
+---
+
+# S138 AMENDMENT — the unlock, the guard, and what the export actually became
+
+_Appended, not rewritten. Sections 1–9 above stand as written in S137; where this contradicts them,
+this is the later record and says so explicitly._
+
+## §6a — THE LOCK IS NOT SUFFICIENT ON ITS OWN (new, and it corrects §6)
+
+§6 assumes that banning the auth users makes the account unreachable. **Measured in S138 against
+rebuild-test, that is two-thirds true:**
+
+```
+ACCESS TOKEN LIFETIME:              3600s
+fresh sign-in after the ban:        refused — "User is banned"
+token refresh after the ban:        refused — "Invalid Refresh Token: User Banned"
+ALREADY-ISSUED token after the ban: rows=1, error=none
+```
+
+PostgREST validates a JWT by signature and `exp` and never consults `auth.users.banned_until`, so a
+tenant holding a live access token at the moment of the lock keeps full read and write access —
+through `/m`, every API route and any direct PostgREST call — for up to an hour.
+
+**Ruled [Josh, S138]: a server-side guard**, not acceptance and not a shorter JWT for every tenant.
+`is_my_company_locked()` (`20260920000000`) returns a single boolean so every role can be refused
+without widening `trial_lifecycle`'s Owner/Admin SELECT floor. `middleware.ts` covers `/dashboard`,
+`/m` and `/api`. **The guard fails OPEN** — a fault in one query must not lock the product.
+
+**⚠️ The exemption list is the load-bearing part** (`lib/trial/lock-guard.ts`). A locked company
+must still reach `/api/stripe/checkout` and `/dashboard/billing`, or the lock becomes unrecoverable
+by the one action that ends it.
+
+## §7a — THE UNLOCK (new; §7 covered warnings only)
+
+**S137 shipped `unlockCompany()` with no callers while the lock cron was scheduled.** Four paths
+now reach it, and the rule lives in SQL rather than TypeScript because of the third:
+
+1. `checkout.session.completed`
+2. `customer.subscription.updated` → `active`
+3. **A direct database edit** — a trigger on `subscriptions`. Every comped company on production is
+   `active` with `stripe_subscription_id NULL`, i.e. hand-edited in the Supabase dashboard, which
+   fires no webhook and runs no application code.
+4. `POST /api/admin/trial-unlock`, gated on `platform_admins`. **A route and not a button: there is
+   no `/admin` route tree in this repo.**
+
+A daily reconcile in `/api/cron/trial-lock` releases any company that is locked while its
+subscription is active — the backstop for a signal that never arrived.
+
+**Two guards** stop a trial unlock reinstating a removed member: `is_deleted = false`, and a
+50-year horizon separating the trial lock (`8760h`) from `softDeleteTeamMember()`'s `876000h`.
+
+## §3a — NO BACKFILL OF `trial_lifecycle`. RULED [Josh, S138].
+
+Rows are written only by `handle_new_user()`. **Two live production tenants are `trialing` with a
+`trial_end` already in the past**; a backfill would ban them for a year on the next lock run, and
+`runTrialLock()`'s `status = 'active'` skip does not cover them because they are not active. The
+mechanism applies to signups from `20260918000000` onward. Reasoning and evidence are in
+`20260919000000_trial_unlock.sql` §3.
+
+## §4a — WHAT THE EXPORT BECAME
+
+§4's trace holds. Two things it did not specify, decided at build:
+
+- **Parts, not one archive.** A zip cannot be appended to across invocations without re-uploading
+  the whole thing each time, so each invocation writes a self-contained `part-NNN.zip` and
+  `export_jobs.cursor` records where to resume. The customer downloads N valid zips plus a manifest
+  that says so. Visible to the customer, therefore stated in the manifest.
+- **A cron drives it** (`/api/cron/export-worker`, `*/5`), one job per invocation, ~240s of the
+  300s budget. **This being scheduled is not a loosening of the TL-24 gate**: it creates a copy of
+  the customer's data for the customer and removes only the artefacts it made itself.
+
+TL-1 is reproducible from the repo now — `scripts/measure-export-throughput.mjs`, rebuild-test
+only. S138 re-measurement: **1.87 MB/s**, large case ≈ 2.7 h, ~61× margin, ~42 invocations.
+
+## §5a — THE DELETION JOB LEAVES THE COMPANY SHELL, AND USED TO CLAIM OTHERWISE
+
+Run for the first time in S138. It destroys every tenant row, storage object and auth user, then
+**cannot delete `companies`** — five `SURVIVES` tables hold RESTRICT foreign keys to it
+(`email_logs`, `trial_lifecycle`, `trial_warning_acknowledgements`, `deletion_jobs`,
+`export_jobs`), and `trial_lifecycle.company_id` is a primary key that cannot be nulled aside.
+Until S138 the error was discarded and the job reported `completed`.
+
+The job is now honest: `stopped`, the real error recorded, `companyRowsRemaining` in the outcome.
+**Whether the shell — carrying the company NAME — should survive deletion is UNRULED**, sits under
+TL-24, and is TECH_DEBT `#3-trial`. It is a privacy statement, not an implementation detail, so it
+is not a build's call.
+
+## §10 — COPY
+
+Unchanged in substance and worth restating: **no hand-authored customer-facing wording about
+deletion, retention or consequences exists anywhere in this feature.** Every screen renders
+`CopyPendingLegalReview`, which is deliberately loud and greppable by
+`COPY PENDING LEGAL REVIEW`. Dates and counts are stated plainly because they are facts. The only
+customer-facing sentences shipped are the notification titles `Trial ends in 7 days` /
+`Trial ends in 3 days`.

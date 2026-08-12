@@ -42,6 +42,14 @@ export interface DeletionOutcome {
   completed: number;
   stopped: number;
   postponed: number;
+  /**
+   * Companies whose tenant data was destroyed but whose `companies` row could
+   * not be removed, because tables on the SURVIVES list hold RESTRICT foreign
+   * keys to it. [S138] — see the block at the end of `runTrialDeletion()` and
+   * TECH_DEBT #3-trial. Counted separately so this can never again be reported
+   * as a clean completion.
+   */
+  companyRowsRemaining: number;
 }
 
 /** After this many failed attempts the job stops and alarms. */
@@ -251,7 +259,13 @@ export async function runTrialDeletion(
   admin: SupabaseClient<Database>,
   now: Date
 ): Promise<DeletionOutcome> {
-  const outcome: DeletionOutcome = { processed: 0, completed: 0, stopped: 0, postponed: 0 };
+  const outcome: DeletionOutcome = {
+    processed: 0,
+    completed: 0,
+    stopped: 0,
+    postponed: 0,
+    companyRowsRemaining: 0,
+  };
 
   const { data: due, error } = await admin
     .from('trial_lifecycle')
@@ -345,12 +359,62 @@ export async function runTrialDeletion(
     const authDeleted = await deleteAuthUsers(admin, userIds);
     void authDeleted;
 
-    await admin.from('companies').delete().eq('id', row.company_id);
+    // ========================================================================
+    // ⚠️ THE COMPANY ROW USUALLY SURVIVES, AND THIS USED TO REPORT SUCCESS
+    // ANYWAY. FOUND BY RUNNING THE JOB [S138] — see TECH_DEBT #3-trial.
+    // ========================================================================
+    // The first real execution of this function (s138-trial-deletion-run.live.ts)
+    // destroyed every tenant row, the storage objects and the auth users, then
+    // left `companies` standing and returned `completed: 1`.
+    //
+    // The cause is structural, not a typo. FIVE tables on the SURVIVES list
+    // hold a plain `REFERENCES companies(id)` with NO on-delete action, so the
+    // parent delete is RESTRICTed by the very rows the ruling says must
+    // outlive the tenant:
+    //
+    //     email_logs · trial_lifecycle · trial_warning_acknowledgements
+    //     deletion_jobs · export_jobs
+    //
+    // `trial_lifecycle` cannot even be nulled out of the way — `company_id` is
+    // its primary key, and it is where `deleted_at` is recorded.
+    //
+    // Whether "deleted" should mean "the company shell survives with its NAME
+    // on it" is a RULING, not a code fix, and it sits directly under TL-24.
+    // Until that is answered this function's job is to be HONEST: it reports
+    // what actually happened and stops the job for a human rather than
+    // claiming a completion it did not achieve.
+    const { error: companyError } = await admin
+      .from('companies')
+      .delete()
+      .eq('id', row.company_id);
 
+    // The tenant's data really is gone by this point, so the stamp is accurate
+    // even when the shell remains — it is what takes the company out of the
+    // due-for-deletion walk on the next run.
     await admin
       .from('trial_lifecycle')
       .update({ deleted_at: now.toISOString() })
       .eq('company_id', row.company_id);
+
+    if (companyError) {
+      await admin
+        .from('deletion_jobs')
+        .update({
+          state: 'stopped',
+          tables_done: done,
+          storage_done: true,
+          auth_done: true,
+          last_error: `tenant data deleted, but the companies row remains: ${companyError.message}`.slice(
+            0,
+            2000
+          ),
+          finished_at: now.toISOString(),
+        })
+        .eq('id', jobId);
+      outcome.stopped += 1;
+      outcome.companyRowsRemaining += 1;
+      continue;
+    }
 
     await admin
       .from('deletion_jobs')

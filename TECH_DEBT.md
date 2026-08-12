@@ -734,7 +734,25 @@ non-role portal identity; then build the sub-facing surface that issues these in
 
   **What unblocks it:** legal's answer on TL-24 and TL-23 (the customer-facing wording, which is deliberately absent from the spec and the code — a placeholder would be mistaken for approved language). Cross-ref: `docs/specs/trial-lifecycle-spec.md`, `docs/specs/trial-lifecycle-interview.md`, GATED.md → TRIAL LIFECYCLE.
 
-- **#2-trial** **The trial EXPORT is specced and measured but NOT BUILT.** Raised S137 (2026-08-12). Provisional id, same rule as #1-trial.
+  **⚠️ AMENDED [S138] — the claim "built, TESTED" above was too strong, and one more thing is now known.** What S137 tested were the job's exclusion *lists*; the job had never been run. S138 ran it and found `#3-trial`. The deletion cron is **still unscheduled** and the assertion guarding that is still green (`s137-trial-lifecycle.live.ts` 20/20, re-run after `export-worker` was added to `vercel.json`). Note for whoever reads the schedule file next: **`/api/cron/export-worker` IS scheduled and that is not a loosening of this gate** — it creates a copy of the customer's data for the customer and removes only the export artefacts it made itself. Nothing in it destroys tenant data.
+
+  **Also now known: there must be no backfill of `trial_lifecycle`.** Ruled [Josh, S138] and written into `20260919000000_trial_unlock.sql` §3 with the reason. Two live production tenants are `trialing` with an already-past `trial_end`; a backfill would make the next lock run ban them for a year, and the `status = 'active'` skip does not protect them.
+
+- **#3-trial** **"Deleted" leaves the company row standing, with its NAME on it — and until S138 the job reported a clean completion anyway.** Raised S138 (2026-08-12). Provisional id, same rule as #1-trial.
+
+  **Found by RUNNING the deletion job for the first time.** S137's log said "the job exists, is tested"; what was tested were its exclusion *lists*. `runTrialDeletion()` had never been executed. `apps/web/test/s138-trial-deletion-run.live.ts` executes it against a company built to be destroyed, and the first run destroyed every tenant row, every storage object and the auth users — then **left `companies` in place and returned `completed: 1`**, because the error from the parent delete was discarded.
+
+  **The cause is structural, not a typo.** Five tables on the `SURVIVES` list hold a plain `REFERENCES companies(id)` with no on-delete action, so the parent delete is RESTRICTed by exactly the rows the ruling says must outlive the tenant: `email_logs`, `trial_lifecycle`, `trial_warning_acknowledgements`, `deletion_jobs`, `export_jobs`. `trial_lifecycle` cannot even be nulled out of the way — `company_id` is its primary key and it is where `deleted_at` lives.
+
+  **What S138 fixed, and what it deliberately did not.** Fixed: the job is now honest. It checks the error, records `tenant data deleted, but the companies row remains: …` on the `deletion_jobs` row, marks the job `stopped` (needs a human), and counts `companyRowsRemaining` in its outcome so this can never again be reported as a completion. **Not fixed:** whether the shell *should* survive. That is a ruling, it sits directly under TL-24, and the two answers are meaningfully different — **(a)** accept a tombstone and say so in the customer-facing wording (the company NAME survives deletion, which is a privacy statement, not an implementation detail), or **(b)** make the audit tables tolerate an absent parent (`ON DELETE SET NULL` where the column is nullable, and a different home for `trial_lifecycle.deleted_at`).
+
+  **Do not close this by changing the FKs without answering (a) vs (b).** The probe asserts the shell REMAINS; if it ever starts passing with the row gone, the ruling has been made implicitly by whoever edited the constraints.
+
+- **#2-trial ✅ BUILT [S138]** — the export exists. `lib/trial/export.ts` (chunked by self-contained `part-NNN.zip`, cursor-resumed), `lib/trial/export-sweep.ts` (the worker plus the 24-hour sweep), `POST /api/trial/export`, `GET /api/trial/export/[id]`, `GET /api/cron/export-worker` (scheduled `*/5`), and `/dashboard/trial/export`. `fflate` is the zip dependency. Evidence: `export.test.ts` 12/12 and `s138-trial-export.live.ts` 6/6, which writes real rows, runs the real sweeper and reads the entries out of the real zip in the real bucket.
+
+  **TL-1 is now reproducible**, which was the substantive complaint below: `scripts/measure-export-throughput.mjs` is committed and refuses to run anywhere but rebuild-test. Re-measured S138 — 62 files, 28.41 MB, 15.20 s → **1.87 MB/s**, large case ≈ 2.7 h, ~61× margin on the 168 h window, ~42 invocations. S137's 1.07 MB/s was the conservative figure; the conclusion is unchanged. _Original entry retained below._
+
+- **#2-trial (original entry)** **The trial EXPORT is specced and measured but NOT BUILT.** Raised S137 (2026-08-12). Provisional id, same rule as #1-trial.
 
   `export_jobs` and the private `exports` bucket exist; the job that fills them does not, and no zip dependency has been added. The spec's `input → store → output` trace (§4) is written and is what a build should follow.
 

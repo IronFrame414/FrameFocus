@@ -116,6 +116,35 @@ Full live suite after everything: **53 files / 597 tests, exit 0.**
 
 ---
 
+## ⚠️ CORRECTION [S138, 2026-08-12] — THIS LOG READ AS THOUGH THE UNLOCK SHIPPED
+
+**It did not. `unlockCompany()` was written with ZERO CALLERS** — no webhook, no route, no
+button — **while `/api/cron/trial-lock` WAS scheduled** in `apps/web/vercel.json`. Nothing above
+said so, and the NOT-BUILT list below did not mention it, so the pay-to-recover half of the 14-day
+window read as done. As this branch stood, a trial expiring in production would have banned every
+auth user in the company for 8760h and paying would have done nothing.
+
+Found by re-verifying the branch rather than reading it, and fixed in S138. Three further
+corrections to claims made above:
+
+1. **"The job exists, is tested" (Step 3) overstated the deletion job.** What was tested were its
+   exclusion LISTS. `runTrialDeletion` had never been executed. S138 ran it, and the first run
+   found a real defect — see `docs/sessions/S138-progress.md` and TECH_DEBT `#3-trial`.
+2. **The lock was not sufficient on its own.** Q3(c) assumed session revocation removed the need
+   for a routing or data gate. Measured in S138: a ban stops sign-in and refresh immediately, but
+   an **already-issued access token keeps full access for up to 3600s**. A guard was owed and is
+   now built.
+3. **`linkKey: 'trial_warning'` was never registered** in `lib/notify/links.ts`, so every warning
+   notification resolved to `null` and rendered non-interactive.
+
+Also corrected: the migration header said the deletion job spans "two storage buckets";
+`deleteStorage()` has always walked **three**.
+
+_Nothing above this line has been rewritten — the original text stands as the record of what was
+believed at the time._
+
+---
+
 ## NOT BUILT — carried, with reasons
 
 - **The export job itself** (`#2-trial`). Specced, measured, tables and bucket exist; the job and a
@@ -125,11 +154,21 @@ Full live suite after everything: **53 files / 597 tests, exit 0.**
 - **The acknowledgement button.** The table, its RLS and its probes exist; no UI writes to it yet.
 - **Widening middleware to `/m` and the API routes.** The session ban makes the lock real without
   it, but the redirect gap found in Phase 0 is still open on paper.
+- **⚠️ THE UNLOCK — ADDED TO THIS LIST IN S138, because it belonged here and was missing.**
+  `unlockCompany()` existed with no callers while the lock cron was scheduled. See the correction
+  block above.
+
+**All six items on this list were built in S138** except the parts named as still open in
+`docs/sessions/S138-progress.md`.
 
 ---
 
 ## RESUME HERE
 
-**Next action:** build the export job per spec §4 (`#2-trial`) — add a streaming zip dependency,
-fill `export_jobs`, chunk against `maxDuration = 300`, and write the 24-hour sweep.
+**Superseded — see [`S138-progress.md`](S138-progress.md).** The export job named below was built
+in S138, along with the unlock, the lock guard and the four screens.
+
+_Original next action, kept as the record:_ build the export job per spec §4 (`#2-trial`) — add a
+streaming zip dependency, fill `export_jobs`, chunk against `maxDuration = 300`, and write the
+24-hour sweep.
 
