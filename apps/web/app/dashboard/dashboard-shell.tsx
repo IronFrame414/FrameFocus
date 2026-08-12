@@ -43,59 +43,128 @@ interface DashboardShellProps {
   myProfileId: string;
 }
 
-// FFNav 12-item order locked S86 round-2 (6a-ui-build-report addendum), built
-// with the 6B UI: Field Ops inserted after Schedule. Role gates preserved from
-// ui-01 §5/§S5: Estimates + Cost Catalog owner/admin/pm; Settings owner/admin;
-// Billing owner-only. Icon mapping per §5/§S4 (lucide; hard-hat = Field Ops).
-// 7A [S90]: Expenses APPENDED after Timeclock as item 13 of the locked 12
-// (7A-spec §5.2 — ungated, the Field Ops precedent; page content is
-// role-scoped). Final position is owed to the deferred FFNav reindex session.
+// ===========================================================================
+// FFNav — 14 items, THREE SECTIONS. Locked [S130, Josh]. Spec:
+// docs/specs/ffnav-reindex-spec.md
+// ===========================================================================
+//
+// ⚠️ THE ORDER IS AN INTERVIEW OUTCOME, NOT A CONVENTION. Dashboard, Projects
+// and Schedule lead because they are what Josh opens every morning on desktop;
+// he named that order explicitly. It is not alphabetical and not inherited.
+// The top layer is the DAILY SET; Reference and Admin are the items he does not
+// touch in a month, and that split is his own. Reasoning in the spec's §2 so a
+// later reader can meet it rather than rediscover it.
+//
+// _Superseded, quoted not rewritten — the history this replaces:_
+//   "FFNav 12-item order locked S86 round-2 (6a-ui-build-report addendum), built
+//    with the 6B UI: Field Ops inserted after Schedule. … 7A [S90]: Expenses
+//    APPENDED after Timeclock as item 13 of the locked 12 (7A-spec §5.2 —
+//    ungated, the Field Ops precedent; page content is role-scoped). Final
+//    position is owed to the deferred FFNav reindex session."
+//
+// That comment was accurate every time it was written. The list grew four times
+// — ui-01 specced TEN, the M6 handoff refreshed to ELEVEN, S86 round-2 locked
+// TWELVE, 7A appended Expenses (13), ND-12 appended Notifications (14) — and
+// each append correctly flagged that its final position was owed to a reindex
+// session that had not happened. It has now happened. See the spec's §0 for why
+// three different counts were all simultaneously true.
+//
+// ROLE GATES ARE UNCHANGED BY THIS WORK and must stay that way: Estimates +
+// Cost Catalog owner/admin/pm; Settings owner/admin; Billing owner-only
+// (ui-01 §5/§S5). Moving items between groups is exactly when a gate gets
+// "tidied" by accident — A-N6 asserts they did not.
+//
+// Icon mapping per ui-01 §5/§S4 (lucide; hard-hat = Field Ops).
+
+/** §1 — the two labelled sections. The top layer is `null`: no header. */
+type NavSection = 'reference' | 'admin' | null;
+
 const NAV_ITEMS: {
   href: string;
   label: string;
   icon: LucideIcon;
   roles?: CompanyRole[];
+  section: NavSection;
 }[] = [
-  { href: '/dashboard', label: 'Dashboard', icon: LayoutGrid },
-  { href: '/dashboard/projects', label: 'Projects', icon: Rows3 },
-  { href: '/dashboard/schedule', label: 'Schedule', icon: Calendar },
+  // ---- TOP LAYER — the daily set. No header. ----------------------------
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutGrid, section: null },
+  { href: '/dashboard/projects', label: 'Projects', icon: Rows3, section: null },
+  { href: '/dashboard/schedule', label: 'Schedule', icon: Calendar, section: null },
   // Field Ops: ungated (all dashboard roles) per the S86 round-2 decision;
   // per-project RLS (can_view_project) scopes what the hub actually lists.
-  { href: '/dashboard/field-ops', label: 'Field Ops', icon: HardHat },
+  { href: '/dashboard/field-ops', label: 'Field Ops', icon: HardHat, section: null },
   // PERMANENT first-class item (S86 decision — no longer interim). Timesheets
   // is NOT a nav item: it lives at /dashboard/timeclock/timesheets (S85).
-  { href: '/dashboard/timeclock', label: 'Timeclock', icon: Clock },
+  { href: '/dashboard/timeclock', label: 'Timeclock', icon: Clock, section: null },
   // 7A: ungated — crew capture + own list; content is role-scoped (§5.4).
-  { href: '/dashboard/expenses', label: 'Expenses', icon: Receipt },
-  { href: '/dashboard/contacts', label: 'Contacts', icon: User },
-  { href: '/dashboard/subcontractors', label: 'Subs & Vendors', icon: Users },
+  { href: '/dashboard/expenses', label: 'Expenses', icon: Receipt, section: null },
   {
     href: '/dashboard/estimates',
     label: 'Estimates',
     icon: FileText,
     roles: ['owner', 'admin', 'project_manager'],
+    section: null,
   },
+  // ND-12 [S123] — Notifications. UNGATED: every role has notifications, and
+  // `notifications_select_own` is what scopes the contents, so a role gate here
+  // would have to be kept in step with every future consumer for no gain.
+  //
+  // ✅ POSITION RULED [S130]: EIGHTH, last in the top layer. _Superseded,
+  // quoted not rewritten: "⚠️ POSITION IS NOT DECIDED HERE … FINAL PLACEMENT IS
+  // STILL OWED TO THE DEFERRED FFNav REINDEX."_ It is checked by BADGE rather
+  // than navigated to, so proximity to the top buys nothing the badge does not
+  // already provide — while positions 1–3 are load-bearing, being the three
+  // Josh named as his morning order.
+  { href: '/dashboard/notifications', label: 'Notifications', icon: Bell, section: null },
+
+  // ---- REFERENCE — labelled. -------------------------------------------
+  // Contacts and Subs & Vendors are ONE THING in Josh's head and the system
+  // treats them differently, hence adjacent rather than merged.
+  { href: '/dashboard/contacts', label: 'Contacts', icon: User, section: 'reference' },
+  {
+    href: '/dashboard/subcontractors',
+    label: 'Subs & Vendors',
+    icon: Users,
+    section: 'reference',
+  },
+  // ⚠️ TEAM WAS IN NONE OF THE INTERVIEW'S THREE GROUPS — the ruling accounted
+  // for 13 items and the list has 14. Found by reading NAV_ITEMS in full rather
+  // than trusting the count. Ruled into Reference [S130]: it is people-shaped
+  // and belongs beside the two above.
+  //
+  // Admin was REJECTED for it, on the ruling's own worked example: Team is
+  // UNGATED, so placing it in Admin would give a crew member an Admin header
+  // with Team under it — contradicting "a crew member's Admin is empty".
+  { href: '/dashboard/team', label: 'Team', icon: UsersRound, section: 'reference' },
   {
     href: '/dashboard/catalog',
     label: 'Cost Catalog',
     icon: List,
     roles: ['owner', 'admin', 'project_manager'],
+    section: 'reference',
   },
-  { href: '/dashboard/settings', label: 'Settings', icon: Settings, roles: ['owner', 'admin'] },
-  { href: '/dashboard/team', label: 'Team', icon: UsersRound },
-  { href: '/dashboard/billing', label: 'Billing', icon: CreditCard, roles: ['owner'] },
-  // ND-12 [S123] — Notifications. UNGATED: every role has notifications, and
-  // `notifications_select_own` is what scopes the contents, so a role gate here
-  // would have to be kept in step with every future consumer for no gain. This
-  // follows the Field Ops / Expenses precedent above, both ungated with
-  // role-scoped page content.
-  //
-  // ⚠️ POSITION IS NOT DECIDED HERE. The spec's S89 form called this "the 13th
-  // sidebar item"; there were already 13, so it is the 14th, and FINAL PLACEMENT
-  // IS STILL OWED TO THE DEFERRED FFNav REINDEX (see the header comment above).
-  // Appended rather than inserted for exactly that reason — inserting it
-  // mid-list would be a placement decision this build has no authority to make.
-  { href: '/dashboard/notifications', label: 'Notifications', icon: Bell },
+
+  // ---- ADMIN — labelled. ------------------------------------------------
+  {
+    href: '/dashboard/settings',
+    label: 'Settings',
+    icon: Settings,
+    roles: ['owner', 'admin'],
+    section: 'admin',
+  },
+  {
+    href: '/dashboard/billing',
+    label: 'Billing',
+    icon: CreditCard,
+    roles: ['owner'],
+    section: 'admin',
+  },
+];
+
+/** §4b — the section labels. Order here IS render order. */
+const NAV_SECTIONS: { key: Exclude<NavSection, null>; label: string }[] = [
+  { key: 'reference', label: 'Reference' },
+  { key: 'admin', label: 'Admin' },
 ];
 
 /** First initial of first + last word of the wired name (ui-01 §S6). */
@@ -133,6 +202,42 @@ export function DashboardShell({
   function isActive(href: string): boolean {
     if (href === '/dashboard') return pathname === '/dashboard';
     return pathname === href || pathname.startsWith(`${href}/`);
+  }
+
+  // The role filter, applied ONCE. Order is NAV_ITEMS' order, always.
+  const visible = NAV_ITEMS.filter((item) => !item.roles || item.roles.includes(userRole));
+
+  function renderItem(item: (typeof NAV_ITEMS)[number]) {
+    const active = isActive(item.href);
+    const Icon = item.icon;
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        data-testid={`nav-item-${item.href}`}
+        className={
+          active
+            ? 'flex items-center gap-[11px] rounded-[9px] bg-brand-500 px-3 py-[10px] text-sm font-semibold text-white'
+            : 'flex items-center gap-[11px] rounded-[9px] px-3 py-[10px] text-sm font-medium text-brand-200 transition-colors duration-150 hover:bg-white/5'
+        }
+      >
+        <Icon size={17} strokeWidth={1.9} aria-hidden />
+        {item.label}
+        {/* ND-12 — the unread badge, on the Notifications item only. Nothing at
+            0: an always-present "0" is noise that trains people to ignore the
+            item, and it would pass any "the badge exists" assertion (A-N44
+            tests all three states). Caps at 9+, matching parent §10.3's mobile
+            rule so the two surfaces do not diverge. */}
+        {item.href === '/dashboard/notifications' && unreadCount > 0 && (
+          <span
+            data-testid="nav-unread-badge"
+            className="ml-auto min-w-[20px] rounded-full bg-accent-500 px-1.5 text-center font-mono text-[11px] font-bold leading-5 text-brand-900"
+          >
+            {unreadCount > 9 ? '9+' : unreadCount}
+          </span>
+        )}
+      </Link>
+    );
   }
 
   return (
@@ -186,36 +291,44 @@ export function DashboardShell({
           <p className="mt-[2px] text-[12px] font-medium text-brand-300">{companyName}</p>
         </div>
 
-        {/* Nav */}
+        {/* ------------------------------------------------------------------
+            Nav — THREE SECTIONS [S130]. Spec: docs/specs/ffnav-reindex-spec.md
+
+            The top layer renders with NO header; Reference and Admin render a
+            label above their items.
+
+            ⚠️ AN EMPTY SECTION RENDERS NO HEADER. A labelled group with nothing
+            under it is worse than no group — and it is the case a crew member
+            actually hits, since both Admin items are gated away from them.
+            Because the role filter runs BEFORE the grouping below, an empty
+            section simply produces no rows and its header is never reached.
+            Nothing else is needed: headers are labels rather than dividers, so
+            omitting one leaves no artefact behind.
+
+            ⚠️ ROLE FILTERING NEVER RE-ORDERS. `visible` preserves NAV_ITEMS'
+            order and only removes; each section then renders its own subset in
+            that same order. A build that sorted per role would pass every
+            "the right items are present" assertion and fail A-N3.
+            ------------------------------------------------------------------ */}
         <nav className="flex flex-1 flex-col gap-[2px] px-[14px]">
-          {NAV_ITEMS.filter((item) => !item.roles || item.roles.includes(userRole)).map((item) => {
-            const active = isActive(item.href);
-            const Icon = item.icon;
+          {visible.filter((item) => item.section === null).map(renderItem)}
+
+          {NAV_SECTIONS.map(({ key, label }) => {
+            const items = visible.filter((item) => item.section === key);
+            if (items.length === 0) return null;
             return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={
-                  active
-                    ? 'flex items-center gap-[11px] rounded-[9px] bg-brand-500 px-3 py-[10px] text-sm font-semibold text-white'
-                    : 'flex items-center gap-[11px] rounded-[9px] px-3 py-[10px] text-sm font-medium text-brand-200 transition-colors duration-150 hover:bg-white/5'
-                }
-              >
-                <Icon size={17} strokeWidth={1.9} aria-hidden />
-                {item.label}
-                {/* ND-12 — the unread badge, on the Notifications item only.
-                    Nothing at 0: an always-present "0" is noise that trains
-                    people to ignore the item, and it would pass any "the badge
-                    exists" assertion (A-N44 tests all three states). */}
-                {item.href === '/dashboard/notifications' && unreadCount > 0 && (
-                  <span
-                    data-testid="nav-unread-badge"
-                    className="ml-auto min-w-[20px] rounded-full bg-accent-500 px-1.5 text-center font-mono text-[11px] font-bold leading-5 text-brand-900"
-                  >
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </span>
-                )}
-              </Link>
+              <div key={key} className="contents">
+                {/* §4b — ui-01's microLabelStyle, recoloured for navy. A token
+                    reused rather than one invented. No divider rule: Josh ruled
+                    labels, not bare dividers. */}
+                <p
+                  data-testid={`nav-section-${key}`}
+                  className="mt-[14px] mb-[2px] px-3 font-mono text-[11px] font-semibold uppercase tracking-[0.04em] text-brand-300"
+                >
+                  {label}
+                </p>
+                {items.map(renderItem)}
+              </div>
             );
           })}
         </nav>

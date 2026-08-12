@@ -108,8 +108,20 @@ Rebuild as a normal component in the app's framework (reference only: `FFNav.dc.
 - Wordmark: **"Rafter" white + "Works" amber `#f59e0b`**, Barlow 800 / 20px / letter-spacing −.01em. (Platform renamed; the `FFNav.dc.html` reference still shows the old FrameFocus mark — spec wins. Repo/package names stay FrameFocus; this change is display-only.)
 - Company name below: Barlow 500 / 12px / `#8fa0c4`, margin-top 2px. **Bind to real company (§S6)** — this is the tenant (e.g. Bishop Contracting), not the platform name.
 
-**Nav** (`padding 0 14px`, `gap 2px`, flex column). **Ten items**, **this order**:
-`Dashboard · Projects · Schedule · Contacts · Subs & Vendors · Estimates · Cost Catalog · Settings · Team · Billing`
+**Nav** (`padding 0 14px`, `gap 2px`, flex column). ⚠️ **SUPERSEDED [S130] — see
+`docs/specs/ffnav-reindex-spec.md`.** _Quoted, not rewritten: "**Ten items**, **this order**:
+`Dashboard · Projects · Schedule · Contacts · Subs & Vendors · Estimates · Cost Catalog ·
+Settings · Team · Billing`"._
+
+**Now 14 items in THREE SECTIONS**, ruled from an interview rather than inherited:
+
+- **Top layer, no header (8):** `Dashboard · Projects · Schedule · Field Ops · Timeclock ·
+  Expenses · Estimates · Notifications`
+- **Reference, labelled (4):** `Contacts · Subs & Vendors · Team · Cost Catalog`
+- **Admin, labelled (2):** `Settings · Billing`
+
+The item geometry below is UNCHANGED and still governs — the reindex explicitly declined to
+tighten `padding 10px 12px` to buy vertical space (spec §4d).
 
 **§5a — Schedule nav item (added 2026-07-19; amended 2026-07-20; round 2).** The dashboard currently renders a company-wide `CompanyCalendar` (`apps/web/app/dashboard/company-calendar.tsx`, fed by `getCalendarEvents`) — there is no standalone `/schedule` route. **Create a standalone `/schedule` route and MOVE `CompanyCalendar` (with its `getCalendarEvents` fetch) into it** — a **move, not a copy**. **Consequence (round 2):** the dashboard loses its schedule view until ui-02 ships its new schedule card; that gap is expected and acceptable. Icon: calendar (lucide). **ui-01 owns the 1a restyle** of the extracted Schedule view (its List/Gantt/Calendar surfaces); **ui-04's Schedule tab reuses this same restyled component** — it is not re-restyled downstream.
 - Item: flex, align center, `gap 11px`, `padding 10px 12px`, radius 9px.

@@ -85,9 +85,14 @@ Inbound (already built/specced):
 - Cross-cutting Notifications system (sidebar item w/ unread count, 30-day
   retention, delete, star-to-save, mobile push) is its OWN build, sequenced
   BEFORE M8 launch. M8 low-stock alert is a consumer, not the owner.
-- Nav placement (sidebar item for Inventory, and the Notifications item) is
-  deferred to the FFNav reindex owned by the 6B UI work (Session 87). Flagged,
-  not decided here.
+- Nav placement. ✅ **PARTLY CLOSED [S130]** — the FFNav reindex happened (it was owned
+  by the 6B UI work at Session 87 and deferred a further six sessions;
+  `docs/specs/ffnav-reindex-spec.md`). **The Notifications item is placed: item 8, top
+  layer.** **Inventory is NOT placed** — it does not exist yet, and the reindex ruled the
+  list it found. When M8 ships, its item joins a 14-item list in three sections
+  (top / Reference / Admin) and needs a section, not just an index. _Superseded, quoted
+  not rewritten: "deferred to the FFNav reindex owned by the 6B UI work (Session 87).
+  Flagged, not decided here."_
 
 ## 6. Sub-module split (PROPOSED, not decided)
 

@@ -150,12 +150,27 @@ describe('ND-12 — the desktop sidebar item', () => {
   );
 
   it('is present and UNGATED — every role has notifications', () => {
-    expect(shell).toContain("href: '/dashboard/notifications'");
-    // A role array on this entry would have to be kept in step with every future
+    // ⚠️ REWRITTEN [S130 FFNav reindex], AND THE TEST WAS WHAT WAS WRONG.
+    //
+    // _Superseded, quoted not rewritten:_
+    //   expect(shell).toMatch(
+    //     /\{ href: '\/dashboard\/notifications', label: 'Notifications', icon: Bell \}/
+    //   );
+    //
+    // That regex required `}` immediately after `icon: Bell`, so it pinned the
+    // entry's FORMATTING rather than its property. Grouping added a `section`
+    // field and it failed — while "present and ungated", the thing ND-12
+    // actually rules, was never in doubt. It was predicted before the reorder
+    // landed rather than discovered by the console.
+    //
+    // The replacement is STRONGER: it extracts the entry and asserts the
+    // ABSENCE of a role array, which the old literal only implied by omission.
+    const entry = shell.match(/\{[^{}]*href: '\/dashboard\/notifications'[^{}]*\}/);
+    expect(entry, 'no notifications entry in NAV_ITEMS').not.toBeNull();
+    expect(entry![0]).toContain("label: 'Notifications'");
+    // A role array here would have to be kept in step with every future
     // consumer, for no gain: notifications_select_own already scopes contents.
-    expect(shell).toMatch(
-      /\{ href: '\/dashboard\/notifications', label: 'Notifications', icon: Bell \}/
-    );
+    expect(entry![0]).not.toContain('roles');
   });
 
   it('badges only the notifications item, and only above zero', () => {
