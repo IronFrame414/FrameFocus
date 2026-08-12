@@ -59,8 +59,25 @@ async function convertHeicToJpeg(file: File): Promise<File | null> {
 export async function uploadFile(
   file: File,
   options: {
-    project_id: string;
+    /**
+     * NULL for a COMPANY-SCOPED file that belongs to no job — 7C compliance
+     * documents are keyed on a member, not a project [S140].
+     *
+     * A null here is not a loosening: `files_insert_non_client`
+     * (20260728000000) only admits `project_id IS NULL` for Owner/Admin, so
+     * the database refuses this shape for every other role whatever the caller
+     * passes. `path_segment` is then REQUIRED, because the storage path's
+     * second segment has no project id to take.
+     */
+    project_id: string | null;
     category: FileCategory;
+    /**
+     * Second storage-path segment when `project_id` is null (e.g.
+     * `compliance/{member_id}`). Ignored when a project id is present.
+     * Storage RLS keys on segment ONE (the company id), so anything below it
+     * is free-form — see CLAUDE.md, storage-policy inline-subquery note.
+     */
+    path_segment?: string;
     tags?: string[];
     /**
      * Client-generated row id (§5.3, offline-ready). When present the insert
@@ -114,12 +131,24 @@ export async function uploadFile(
     .single();
   if (!profile) return { success: false, error: 'Profile not found' };
 
-  // Storage path: {company_id}/{project_id}/{uuid}-{safe_filename}
+  // Storage path: {company_id}/{project_id}/{uuid}-{safe_filename}, or
+  // {company_id}/{path_segment}/{uuid}-{safe_filename} for a company-scoped
+  // file with no project [S140].
   // Category lives in the column, NOT in the path — keeps category editable
   // without orphaning the storage location.
   const uniqueId = crypto.randomUUID();
   const safeFilename = upload.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-  const storagePath = `${profile.company_id}/${options.project_id}/${uniqueId}-${safeFilename}`;
+  const scopeSegment = options.project_id ?? options.path_segment;
+  if (!scopeSegment) {
+    // Guarded rather than allowed to interpolate: `${null}` would have
+    // produced a literal "null" path segment and stored the bytes somewhere
+    // no reader looks. Fail before touching storage.
+    return {
+      success: false,
+      error: 'Upload needs either a project or a path segment.',
+    };
+  }
+  const storagePath = `${profile.company_id}/${scopeSegment}/${uniqueId}-${safeFilename}`;
 
   // Upload bytes first
   const { error: uploadError } = await supabase.storage.from(BUCKET).upload(storagePath, upload, {

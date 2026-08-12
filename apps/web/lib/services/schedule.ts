@@ -1,4 +1,6 @@
 import { createClient } from '@/lib/supabase-server';
+import { getExpiringCompliance } from '@/lib/services/payables';
+import type { ComplianceDocType, ComplianceStatus } from '@/lib/services/payables-shared';
 import type { Database } from '@framefocus/shared/types/database';
 
 type ScheduleEntryRow = Database['public']['Tables']['schedule_entries']['Row'];
@@ -36,7 +38,7 @@ export const GENERAL_KIND_LABELS: Record<GeneralKind, string> = {
  */
 export interface CalendarEvent {
   id: string;
-  source: 'task' | 'general' | 'inspection';
+  source: 'task' | 'general' | 'inspection' | 'compliance';
   title: string;
   start_date: string;
   end_date: string; // same as start for single-day
@@ -52,6 +54,8 @@ export interface CalendarEvent {
     kind?: GeneralKind;
     result?: InspectionResult;
     notes?: string | null;
+    /** 7C §3.3 — 'expiring_soon' | 'expired' on a compliance event. */
+    complianceStatus?: ComplianceStatus;
   };
 }
 
@@ -197,6 +201,50 @@ export async function getCalendarEvents(options: {
     });
   }
 
+  // Source 4: subcontractor compliance expiries (7C §3.3) — DERIVED AT READ,
+  // never stored as calendar rows. A COI's expiry is a date on the compliance
+  // document; materialising it here would need a sync trigger and would go
+  // stale the moment the document is renewed.
+  //
+  // ⚠️ PROJECT-SCOPED CALENDARS GET NONE OF THESE, deliberately. Compliance is
+  // company-wide (a member's COI is not a property of any one job), so
+  // attaching it to a project calendar would either duplicate it across every
+  // job the sub touches or pick one arbitrarily.
+  //
+  // The read is Owner/Admin by RLS (20260921000000). For every other role it
+  // returns an empty list and no compliance events appear — the floor, not a
+  // filter written here.
+  if (!options.projectId && !options.ownMemberId) {
+    const expiring = await getExpiringCompliance();
+    for (const doc of expiring) {
+      if (!doc.expiration_date) continue; // NULL never alerts (W-9 rule)
+      events.push({
+        id: `compliance:${doc.id}`,
+        source: 'compliance',
+        title: `${COMPLIANCE_CALENDAR_LABELS[doc.doc_type]} ${
+          doc.derivedStatus === 'expired' ? 'expired' : 'expires'
+        } — ${doc.member?.display_name ?? 'Subcontractor'}`,
+        start_date: doc.expiration_date,
+        end_date: doc.expiration_date,
+        member_id: doc.member?.id ?? null,
+        member_name: doc.member?.display_name ?? null,
+        member_type: 'subcontractor',
+        color: null,
+        project_id: null,
+        project_label: null,
+        detail: { complianceStatus: doc.derivedStatus, notes: doc.notes },
+      });
+    }
+  }
+
   events.sort((a, b) => a.start_date.localeCompare(b.start_date));
   return events;
 }
+
+/** Short labels for the calendar — the sub record spells them out in full. */
+const COMPLIANCE_CALENDAR_LABELS: Record<ComplianceDocType, string> = {
+  coi: 'COI',
+  license: 'License',
+  w9: 'W-9',
+  other: 'Compliance doc',
+};

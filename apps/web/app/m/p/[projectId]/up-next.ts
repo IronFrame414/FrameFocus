@@ -31,6 +31,11 @@ const SOURCE_RANK: Record<CalendarEvent['source'], number> = {
   inspection: 0,
   task: 1,
   general: 2,
+  // Never reached: this card is project-scoped and compliance events are
+  // emitted only company-wide (7C §3.3). Ranked last rather than omitted so
+  // the map stays exhaustive and a future company-wide caller cannot get
+  // `undefined` out of it and sort on NaN.
+  compliance: 3,
 };
 
 /**

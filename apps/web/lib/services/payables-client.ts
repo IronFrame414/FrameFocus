@@ -1,15 +1,19 @@
 import { createClient } from '@/lib/supabase-browser';
 import { readBudgeted } from '@/lib/services/budget-shared';
 import type { Database } from '@framefocus/shared/types/database';
-import { uploadFile } from '@/lib/services/files-client';
+import { uploadFile, softDeleteFile } from '@/lib/services/files-client';
 import type { ExpenseCategory } from '@/lib/services/expenses';
 import type { PayableListItem } from '@/lib/services/payables';
 import {
   committedRemaining,
+  daysUntilExpiry,
+  deriveComplianceStatus,
   grossPaid,
   PAYABLE_OR_FILTER,
+  type ComplianceDocType,
   type ExpensePayment,
 } from '@/lib/services/payables-shared';
+import { companyToday } from '@framefocus/shared/utils/dates';
 import { validateCaptureSplit } from '@/lib/services/expenses-client';
 export type { PayableListItem } from '@/lib/services/payables';
 export type { ExpensePayment } from '@/lib/services/payables-shared';
@@ -704,4 +708,208 @@ export async function getCommittedRemaining(projectId: string): Promise<number> 
     (sum, row) => sum + committedRemaining(row, (row.payments ?? []) as ExpensePayment[]),
     0
   );
+}
+
+// ----------------------------------------------------------------------------
+// 7C compliance documents (§2.5, §4 screen 6) — OWNER/ADMIN ONLY
+// ----------------------------------------------------------------------------
+//
+// Built S140 against the S92 ruling (§6.10 option (b)): Owner/Admin-only
+// compliance upload, v1. §2.5's PM writers are struck, and 20260921000000
+// narrows all three DB policies to match — so these functions are a friendly
+// wrapper over the floor, not the floor itself.
+//
+// TWO THINGS DIFFER FROM EVERY OTHER UPLOAD IN THIS FILE:
+//
+//   1. The file is MEMBER-scoped, so `project_id` is NULL. Only the
+//      Owner/Admin arm of files_insert_non_client admits that shape; a PM
+//      reaching this code is refused by the database, not by a check here.
+//   2. A compliance ROW may exist with NO FILE. `file_id` is nullable and its
+//      FK is ON DELETE SET NULL, deliberately: the office records that a COI
+//      expires on a date before the PDF arrives, and a permanently deleted
+//      file must leave the row behind reading "document missing" rather than
+//      erase the expiry the -30/-7 sweep runs on.
+
+type ComplianceInsert =
+  Database['public']['Tables']['subcontractor_compliance_documents']['Insert'];
+type ComplianceUpdate =
+  Database['public']['Tables']['subcontractor_compliance_documents']['Update'];
+
+export interface ComplianceDocInput {
+  member_id: string;
+  doc_type: ComplianceDocType;
+  issued_date?: string | null;
+  expiration_date?: string | null;
+  notes?: string | null;
+}
+
+/** Upload a compliance PDF for a member. Returns the `files` row id.
+ *
+ *  The path segment is `compliance/{member_id}` — storage RLS keys on segment
+ *  ONE (the company id), so everything below it is free-form and this keeps a
+ *  member's documents together in the bucket. */
+export async function uploadComplianceFile(
+  file: File,
+  memberId: string
+): Promise<{ success: boolean; id?: string; error?: string }> {
+  const uploaded = await uploadFile(file, {
+    project_id: null,
+    path_segment: `compliance/${memberId}`,
+    category: 'compliance',
+  });
+  if (!uploaded.success || !uploaded.id) {
+    return {
+      success: false,
+      // The RLS refusal a non-Owner/Admin gets is a policy violation on
+      // `files`, whose message names no cause. Say what it actually is.
+      error: uploaded.error ?? 'Upload failed — compliance documents are Owner/Admin only.',
+    };
+  }
+  return { success: true, id: uploaded.id };
+}
+
+/** Create a compliance row, optionally with a file already uploaded. */
+export async function createComplianceDocument(
+  input: ComplianceDocInput & { file_id?: string | null }
+): Promise<CreateResult> {
+  const supabase = createClient();
+
+  // company_id, created_by and updated_by come from the column defaults.
+  const row: ComplianceInsert = {
+    member_id: input.member_id,
+    doc_type: input.doc_type,
+    file_id: input.file_id ?? null,
+    issued_date: input.issued_date ?? null,
+    expiration_date: input.expiration_date ?? null,
+    notes: input.notes ?? null,
+  };
+
+  const { data, error } = await supabase
+    .from('subcontractor_compliance_documents')
+    .insert(row)
+    .select('id')
+    .single();
+
+  if (error) {
+    return { success: false, error: friendlyComplianceError(error.message) };
+  }
+  return { success: true, id: data.id };
+}
+
+/** Upload and record in one step — the screen-6 happy path. */
+export async function uploadComplianceDocument(
+  file: File,
+  input: ComplianceDocInput
+): Promise<CreateResult> {
+  const uploaded = await uploadComplianceFile(file, input.member_id);
+  if (!uploaded.success || !uploaded.id) {
+    return { success: false, error: uploaded.error };
+  }
+  const created = await createComplianceDocument({ ...input, file_id: uploaded.id });
+  if (!created.success) {
+    // The bytes landed but the row did not. Remove the orphan rather than
+    // leave a file nothing references — the uploadFile insert-failure
+    // precedent, applied one layer up.
+    await softDeleteFile(uploaded.id);
+  }
+  return created;
+}
+
+export async function updateComplianceDocument(
+  id: string,
+  updates: Partial<ComplianceDocInput> & { file_id?: string | null }
+): Promise<MutationResult> {
+  const supabase = createClient();
+
+  // BEFORE UPDATE trigger `subcontractor_compliance_documents_set_updated_by`
+  // handles updated_by. updated_at is handled by the existing updated_at
+  // trigger. Neither is set here.
+  const patch: ComplianceUpdate = updates;
+  const { error } = await supabase
+    .from('subcontractor_compliance_documents')
+    .update(patch)
+    .eq('id', id);
+
+  if (error) return { success: false, error: friendlyComplianceError(error.message) };
+  return { success: true };
+}
+
+/** Soft delete — the table has no DELETE policy, by design. */
+export async function softDeleteComplianceDocument(id: string): Promise<MutationResult> {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from('subcontractor_compliance_documents')
+    .update({ is_deleted: true, deleted_at: new Date().toISOString() })
+    .eq('id', id);
+
+  if (error) return { success: false, error: friendlyComplianceError(error.message) };
+  return { success: true };
+}
+
+/** An RLS refusal on this table means one thing and it is worth saying. */
+function friendlyComplianceError(message: string): string {
+  if (/row-level security|violates row-level/i.test(message)) {
+    return 'Compliance documents are Owner/Admin only.';
+  }
+  return message;
+}
+
+export interface ComplianceWarning {
+  docType: ComplianceDocType;
+  status: 'expired' | 'expiring_soon';
+  /** Negative when already expired. NULL only if the row lost its date. */
+  days: number | null;
+}
+
+/**
+ * 7C §4.4 — the release-time compliance chips. ADVISORY, NEVER BLOCKING.
+ *
+ * 5I §5 and architecture P2 both say it outright: "'Clear for payment' is a
+ * notification, not a gate." This returns what is wrong so the modal can say
+ * so; nothing reads its result to decide whether a payment may proceed.
+ *
+ * Owner/Admin by RLS (20260921000000). Every other role gets an empty list and
+ * therefore no chips — which is correct: they cannot reach the payment surface
+ * either. An empty result NEVER means "compliant"; it means "nothing to warn
+ * about that you can see", and the modal does not claim otherwise.
+ */
+export async function getComplianceWarnings(
+  subContractId: string
+): Promise<ComplianceWarning[]> {
+  const supabase = createClient();
+
+  const { data: contract } = await supabase
+    .from('subcontractor_contracts')
+    .select('member_id')
+    .eq('id', subContractId)
+    .single();
+  if (!contract?.member_id) return [];
+
+  const { data: docs } = await supabase
+    .from('subcontractor_compliance_documents')
+    .select('doc_type, expiration_date')
+    .eq('member_id', contract.member_id)
+    .eq('is_deleted', false)
+    .not('expiration_date', 'is', null);
+  if (!docs || docs.length === 0) return [];
+
+  // The COMPANY day, not the browser's. `new Date()` here would be the
+  // device's timezone, so a phone in Denver and the desktop beside it in
+  // New York could chip the same COI differently — the parity rule's exact
+  // failure mode, and the defect class the S131 client-clock sweep closed.
+  // RLS scopes `companies` to the caller's own row, so no id filter is needed.
+  const { data: company } = await supabase.from('companies').select('timezone').maybeSingle();
+  const today = companyToday(company?.timezone ?? 'America/New_York');
+
+  const out: ComplianceWarning[] = [];
+  for (const d of docs) {
+    const status = deriveComplianceStatus(d.expiration_date, today);
+    if (status !== 'expired' && status !== 'expiring_soon') continue;
+    out.push({
+      docType: d.doc_type as ComplianceDocType,
+      status,
+      days: daysUntilExpiry(d.expiration_date, today),
+    });
+  }
+  return out;
 }

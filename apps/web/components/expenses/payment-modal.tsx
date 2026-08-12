@@ -13,13 +13,26 @@
 // isn't signed" surface is separate — this is only the formal flag.
 
 import { useEffect, useState } from 'react';
-import { getFormalContractWarning, recordPayment } from '@/lib/services/payables-client';
+import {
+  getComplianceWarnings,
+  getFormalContractWarning,
+  recordPayment,
+  type ComplianceWarning,
+} from '@/lib/services/payables-client';
 import { fmtMoney } from '@/components/expenses/expense-ui';
 import { overlayStyle, fieldLabelStyle, inputStyle } from '@/components/time/clock-modal';
 import { cardStyle, color, h2Style, primaryButtonStyle, secondaryButtonStyle } from '@/lib/theme';
 
 /** Free text v1 (7G may force an enum) — datalist suggestions only. */
 const METHOD_SUGGESTIONS = ['check', 'ach', 'card', 'cash'];
+
+/** Short forms — the sub record spells these out. */
+const COMPLIANCE_LABEL: Record<ComplianceWarning['docType'], string> = {
+  coi: 'Certificate of insurance',
+  license: 'License',
+  w9: 'W-9',
+  other: 'Compliance document',
+};
 
 interface PaymentModalProps {
   expense: {
@@ -46,6 +59,10 @@ export function PaymentModal({ expense, subContractId, onClose, onDone }: Paymen
   const [note, setNote] = useState('');
   const [overStageConfirm, setOverStageConfirm] = useState(false);
   const [formalWarn, setFormalWarn] = useState<{ subName: string } | null>(null);
+  /** 7C §4.4 [S140] — release-time compliance chips. ADVISORY ONLY: nothing
+   *  below reads this to decide whether the payment may proceed, and there is
+   *  no acknowledge step. 5I §5 / architecture P2 — warn, never block. */
+  const [complianceWarn, setComplianceWarn] = useState<ComplianceWarning[]>([]);
   const [formalConfirm, setFormalConfirm] = useState(false);
   const [formalAck, setFormalAck] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -56,6 +73,9 @@ export function PaymentModal({ expense, subContractId, onClose, onDone }: Paymen
     let cancelled = false;
     void getFormalContractWarning(subContractId).then((warn) => {
       if (!cancelled) setFormalWarn(warn);
+    });
+    void getComplianceWarnings(subContractId).then((warns) => {
+      if (!cancelled) setComplianceWarn(warns);
     });
     return () => {
       cancelled = true;
@@ -127,6 +147,33 @@ export function PaymentModal({ expense, subContractId, onClose, onDone }: Paymen
           >
             This contract with {formalWarn.subName} requires a formal contract and it is not
             signed yet — this payment sends money out before the contract is in place.
+          </div>
+        )}
+
+        {complianceWarn.length > 0 && (
+          <div
+            style={{
+              padding: '8px 12px',
+              borderRadius: '8px',
+              marginBottom: '12px',
+              backgroundColor: '#fffbeb',
+              border: '1px solid #fde68a',
+              color: color.warningDeep,
+              fontSize: '12px',
+            }}
+          >
+            {complianceWarn.map((w) => (
+              <div key={w.docType}>
+                {COMPLIANCE_LABEL[w.docType]}{' '}
+                {w.status === 'expired'
+                  ? `expired${w.days !== null ? ` ${Math.abs(w.days)} days ago` : ''}`
+                  : `expires${w.days !== null ? ` in ${w.days} days` : ' soon'}`}
+                .
+              </div>
+            ))}
+            <div style={{ marginTop: '4px', color: color.muted }}>
+              Advisory only — this never blocks a payment.
+            </div>
           </div>
         )}
 

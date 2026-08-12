@@ -1,4 +1,6 @@
 import { createClient } from '@/lib/supabase-server';
+import { companyToday } from '@framefocus/shared/utils/dates';
+import { getCompanyTimeSettings } from '@/lib/services/company';
 import type { Database } from '@framefocus/shared/types/database';
 import type { Expense } from '@/lib/services/expenses';
 import {
@@ -165,9 +167,14 @@ export async function getSubSchedule(subContractId: string): Promise<SubSchedule
 
 // ----------------------------------------------------------------------------
 // Compliance (§2.5 — 5I §3a design; status DERIVED, never stored).
-// NOTE: the compliance UPLOAD surface is not built — the #96 files policies
-// admit project_id-NULL rows for Owner/Admin only, conflicting with §2.5's
-// Owner/Admin/PM writers. These reads are ready for when that resolves.
+//
+// [S140] BUILT. The former note here said the upload surface did not exist
+// because the #96 files policies admit project_id-NULL rows for Owner/Admin
+// only, "conflicting with §2.5's Owner/Admin/PM writers." S92 resolved that
+// conflict the other way — §6.10 option (b), Owner/Admin-only upload — and
+// 20260921000000 narrows all three policies on this table to match, so the
+// conflict is gone rather than worked around. Writers live in
+// payables-client.ts; the surface is /dashboard/subcontractors/[id].
 // ----------------------------------------------------------------------------
 
 type ComplianceRow = Database['public']['Tables']['subcontractor_compliance_documents']['Row'];
@@ -181,11 +188,25 @@ export interface ComplianceDocWithStatus extends ComplianceDocument {
   daysUntilExpiry: number | null;
 }
 
-function todayUtcYmd(): string {
-  return new Date().toISOString().slice(0, 10);
+/**
+ * "Today" for the -30/-7 compliance thresholds, on the COMPANY timezone.
+ *
+ * [S140] This was `new Date().toISOString().slice(0, 10)` — UTC. On a US
+ * company that is the NEXT day from roughly 7pm local, so between 7pm and
+ * midnight every expiry chip was computed a day ahead: a COI expiring today
+ * read "expired", and one 31 days out crossed into "expiring soon" a day
+ * early. Harmless-looking and wrong, and it is exactly the class 7D spent
+ * four commits fixing (54e623a, 09ec8cd, 3b45988, 07c3f38) and 7E's migration
+ * states as a rule. The reads were written at S91 against a surface that was
+ * never built, so nothing ever displayed the drift until now.
+ */
+async function complianceToday(): Promise<string> {
+  const { timezone } = await getCompanyTimeSettings();
+  return companyToday(timezone);
 }
 
-/** A member's compliance docs with derived status (RLS: Owner/Admin/PM). */
+/** A member's compliance docs with derived status (RLS: Owner/Admin only,
+ *  20260921000000). */
 export async function getComplianceStatus(memberId: string): Promise<ComplianceDocWithStatus[]> {
   const supabase = await createClient();
 
@@ -197,7 +218,7 @@ export async function getComplianceStatus(memberId: string): Promise<ComplianceD
     .order('doc_type', { ascending: true });
 
   if (error) return [];
-  const today = todayUtcYmd();
+  const today = await complianceToday();
   return ((data ?? []) as ComplianceDocument[]).map((d) => ({
     ...d,
     derivedStatus: deriveComplianceStatus(d.expiration_date, today),
@@ -222,7 +243,7 @@ export async function getExpiringCompliance(): Promise<ExpiringComplianceDoc[]> 
     .order('expiration_date', { ascending: true });
 
   if (error) return [];
-  const today = todayUtcYmd();
+  const today = await complianceToday();
   return ((data ?? []) as unknown as ExpiringComplianceDoc[])
     .map((d) => ({
       ...d,

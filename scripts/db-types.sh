@@ -43,7 +43,11 @@ MIN_LINES=500
 REQUIRED_SYMBOLS=("export type Database" "company_members" "subcontractors" "change_orders")
 
 echo "==> Linked project:"
-npx supabase projects list 2>/dev/null | grep '●' || {
+# `--output pretty` is REQUIRED, not cosmetic. CLI 2.113.0 defaults `projects
+# list` to JSON, which carries no '●' — so the bare command made this guard
+# fail for a linked, logged-in CLI and reported it as a lost link [S140]. The
+# link marker only exists in the pretty table.
+npx supabase projects list --output pretty 2>/dev/null | grep '●' || {
   echo "!! Could not read the project list. Is the CLI linked and logged in?" >&2
   exit 1
 }

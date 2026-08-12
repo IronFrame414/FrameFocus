@@ -18,6 +18,11 @@ export type FileCategory =
   // 'deliveries' added to files_category_check by migration 20260723010000
   // (S90) — delivery record PDFs only; check-in photos stay in 'photos'.
   | 'deliveries'
+  // 'compliance' added to files_category_check by 20260921000000 (S140) — 7C
+  // subcontractor compliance documents (COI, license, W-9). These rows are
+  // MEMBER-scoped and carry project_id IS NULL, which files_insert_non_client
+  // admits for Owner/Admin only.
+  | 'compliance'
   | 'other';
 
 export type FileRecord = Omit<FileRow, 'category'> & {
