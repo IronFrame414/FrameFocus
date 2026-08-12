@@ -7073,6 +7073,7 @@ export type Database = {
         Args: { p_new_owner_id: string }
         Returns: undefined
       }
+      unlock_trial_company: { Args: { p_company_id: string }; Returns: number }
     }
     Enums: {
       [_ in never]: never

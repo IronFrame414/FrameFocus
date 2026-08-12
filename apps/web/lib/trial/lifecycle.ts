@@ -259,28 +259,64 @@ export async function banCompanyUsers(
  * ⚠️ THIS IS THE ONLY WAY BACK, so it must clear BOTH the ban and the retention
  * clock. Leaving `delete_after` set on a company that has paid would delete a
  * paying customer, which is the worst outcome this feature can produce.
+ *
+ * ⚠️ A WRAPPER, NOT AN IMPLEMENTATION [S138]. The rule lives in
+ * `unlock_trial_company()` (migration 20260919000000) because ONE of the four
+ * ways a company starts paying is a direct edit to `subscriptions` in the
+ * Supabase dashboard — which is how every comped company on production got
+ * that way — and no TypeScript is running when that happens. A trigger has to
+ * be able to do it, so the trigger and this function call the same SQL rather
+ * than agreeing by coincidence.
+ *
+ * The SQL also refuses to un-ban a DEACTIVATED member, which the loop this
+ * replaced could not distinguish. See the migration's two guards.
  */
 export async function unlockCompany(
   admin: SupabaseClient<Database>,
   companyId: string
 ): Promise<{ unbanned: number }> {
-  const { data: profiles } = await admin
-    .from('profiles')
-    .select('user_id')
-    .eq('company_id', companyId)
-    .eq('is_deleted', false);
+  const { data, error } = await admin.rpc('unlock_trial_company', { p_company_id: companyId });
+  if (error) throw new Error(`unlockCompany(${companyId}): ${error.message}`);
+  return { unbanned: data ?? 0 };
+}
 
-  let unbanned = 0;
-  for (const p of (profiles ?? []) as Array<{ user_id: string | null }>) {
-    if (!p.user_id) continue;
-    const { error } = await admin.auth.admin.updateUserById(p.user_id, { ban_duration: 'none' });
-    if (!error) unbanned += 1;
+/**
+ * The safety net: any company that is LOCKED but whose subscription is ACTIVE
+ * has paid and should not be locked. Reconcile it.
+ *
+ * ⚠️ WHY THIS EXISTS WHEN THREE OTHER PATHS ALREADY CALL `unlockCompany()`.
+ * Each of those paths can be missed — a webhook Stripe retried into a deploy
+ * window, a trigger dropped by a migration written later, an admin override
+ * nobody clicked. None of them is watched. This one runs every day inside the
+ * lock cron, sees the end state rather than the event, and costs one query.
+ *
+ * Deliberately bounded to `locked_at IS NOT NULL`: it must never touch a
+ * company that is not locked, so a bug here cannot invent an unlock.
+ */
+export async function runTrialUnlockReconcile(
+  admin: SupabaseClient<Database>
+): Promise<{ reconciled: number; unbanned: number }> {
+  const outcome = { reconciled: 0, unbanned: 0 };
+
+  const { data: locked, error } = await admin
+    .from('trial_lifecycle')
+    .select('company_id')
+    .not('locked_at', 'is', null)
+    .is('deleted_at', null);
+  if (error) throw new Error(`unlock reconcile read: ${error.message}`);
+
+  for (const row of (locked ?? []) as Array<{ company_id: string }>) {
+    const { data: sub } = await admin
+      .from('subscriptions')
+      .select('status')
+      .eq('company_id', row.company_id)
+      .maybeSingle();
+    if (!sub || (sub as { status: string }).status !== 'active') continue;
+
+    const { unbanned } = await unlockCompany(admin, row.company_id);
+    outcome.reconciled += 1;
+    outcome.unbanned += unbanned;
   }
 
-  await admin
-    .from('trial_lifecycle')
-    .update({ locked_at: null, delete_after: null })
-    .eq('company_id', companyId);
-
-  return { unbanned };
+  return outcome;
 }

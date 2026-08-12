@@ -27,7 +27,9 @@
 --
 -- **If you are here because you noticed there is no cron entry for
 -- /api/cron/trial-deletion: that is not an oversight.** Adding that one line
--- permanently destroys customer data across 71 tables and two storage buckets.
+-- permanently destroys customer data across 71 tables and THREE storage
+-- buckets — `project-files`, `company-logos` and `exports`. (Corrected S138:
+-- this said "two", while `deleteStorage()` has always walked three.)
 -- It is Josh's line to add, after legal returns. The same warning is in the
 -- spec and in the route file.
 -- ============================================================================

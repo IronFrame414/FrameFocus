@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
-import { runTrialLock } from '@/lib/trial/lifecycle';
+import { runTrialLock, runTrialUnlockReconcile } from '@/lib/trial/lifecycle';
 
 // S137 — expiry. Locks the account and starts the 14-day retention clock.
 // Spec §6.
@@ -22,6 +22,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const outcome = await runTrialLock(getSupabaseAdmin() as SupabaseClient<Database>, new Date());
-  return NextResponse.json(outcome);
+  const admin = getSupabaseAdmin() as SupabaseClient<Database>;
+
+  // ⚠️ RECONCILE BEFORE LOCKING [S138]. A company that has paid but is still
+  // flagged locked must be released before this run considers anything else —
+  // otherwise a missed webhook keeps a paying customer banned for another full
+  // day, every day, and nothing in the system ever notices.
+  const unlocked = await runTrialUnlockReconcile(admin);
+
+  const outcome = await runTrialLock(admin, new Date());
+  return NextResponse.json({ ...outcome, unlocked });
 }
