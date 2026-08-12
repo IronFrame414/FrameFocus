@@ -40,6 +40,12 @@ export type CompanyData = Pick<
   | 'trade_type'
   | 'license_number'
   | 'logo_url'
+  // 7F §10.2 [S140] — the printed name and title on a lien release. The
+  // signature IMAGE is `contractor_signature_path`, which already existed and
+  // already stamps change orders; only these two are net-new.
+  | 'signatory_name'
+  | 'signatory_title'
+  | 'contractor_signature_path'
 >;
 
 export async function getCompany(): Promise<CompanyData | null> {
@@ -61,7 +67,7 @@ export async function getCompany(): Promise<CompanyData | null> {
   const { data: company } = await supabase
     .from('companies')
     .select(
-      'id, name, address_line1, address_line2, city, state, zip, phone, email, website, trade_type, license_number, logo_url'
+      'id, name, address_line1, address_line2, city, state, zip, phone, email, website, trade_type, license_number, logo_url, signatory_name, signatory_title, contractor_signature_path'
     )
     .eq('id', profile.company_id)
     .single();

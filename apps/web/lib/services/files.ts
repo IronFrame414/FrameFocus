@@ -23,6 +23,11 @@ export type FileCategory =
   // MEMBER-scoped and carry project_id IS NULL, which files_insert_non_client
   // admits for Owner/Admin only.
   | 'compliance'
+  // 'lien_releases' added by 20260922000000 (S140) — 7F. Covers all three
+  // artifacts: a template's uploaded blank form, a generated release, and a
+  // notarized copy uploaded back. All company-scoped (project_id IS NULL), so
+  // Owner/Admin only by the same policy arm.
+  | 'lien_releases'
   | 'other';
 
 export type FileRecord = Omit<FileRow, 'category'> & {

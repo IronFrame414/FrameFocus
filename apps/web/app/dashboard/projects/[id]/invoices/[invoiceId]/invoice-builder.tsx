@@ -434,6 +434,12 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
             deliveries={deliveries}
             status={invoice.status}
             hasLines={invoice.lines.length > 0}
+            /* 7F §5.1 — Owner/Admin only, matching the release role gate
+               (§8.2). A PM sees no prompt because a PM cannot generate one;
+               offering a link that refuses is worse than offering nothing. */
+            lienReleasePrompt={
+              role === 'owner' || role === 'admin' ? { projectId } : null
+            }
           />
         </div>
       )}

@@ -1118,6 +1118,8 @@ export type Database = {
           paid_break_cap_minutes: number
           phone: string | null
           project_internal_sequence: number
+          signatory_name: string | null
+          signatory_title: string | null
           slug: string
           state: string | null
           stripe_customer_id: string | null
@@ -1178,6 +1180,8 @@ export type Database = {
           paid_break_cap_minutes?: number
           phone?: string | null
           project_internal_sequence?: number
+          signatory_name?: string | null
+          signatory_title?: string | null
           slug: string
           state?: string | null
           stripe_customer_id?: string | null
@@ -1238,6 +1242,8 @@ export type Database = {
           paid_break_cap_minutes?: number
           phone?: string | null
           project_internal_sequence?: number
+          signatory_name?: string | null
+          signatory_title?: string | null
           slug?: string
           state?: string | null
           stripe_customer_id?: string | null
@@ -3957,6 +3963,291 @@ export type Database = {
           },
         ]
       }
+      lien_release_template_boxes: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          custom_label: string | null
+          deleted_at: string | null
+          height: number
+          id: string
+          is_deleted: boolean | null
+          kind: string
+          page: number
+          template_id: string
+          updated_at: string | null
+          updated_by: string | null
+          value_key: string | null
+          width: number
+          x: number
+          y: number
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          custom_label?: string | null
+          deleted_at?: string | null
+          height: number
+          id?: string
+          is_deleted?: boolean | null
+          kind: string
+          page?: number
+          template_id: string
+          updated_at?: string | null
+          updated_by?: string | null
+          value_key?: string | null
+          width: number
+          x: number
+          y: number
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          custom_label?: string | null
+          deleted_at?: string | null
+          height?: number
+          id?: string
+          is_deleted?: boolean | null
+          kind?: string
+          page?: number
+          template_id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+          value_key?: string | null
+          width?: number
+          x?: number
+          y?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lien_release_template_boxes_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lien_release_template_boxes_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "lien_release_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lien_release_templates: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          direction: string
+          id: string
+          is_default: boolean
+          is_deleted: boolean | null
+          is_final: boolean
+          jurisdiction_state: string | null
+          name: string
+          pdf_file_id: string | null
+          type: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          direction?: string
+          id?: string
+          is_default?: boolean
+          is_deleted?: boolean | null
+          is_final?: boolean
+          jurisdiction_state?: string | null
+          name: string
+          pdf_file_id?: string | null
+          type: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          direction?: string
+          id?: string
+          is_default?: boolean
+          is_deleted?: boolean | null
+          is_final?: boolean
+          jurisdiction_state?: string | null
+          name?: string
+          pdf_file_id?: string | null
+          type?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lien_release_templates_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lien_release_templates_pdf_file_id_fkey"
+            columns: ["pdf_file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lien_releases: {
+        Row: {
+          amount: number | null
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          direction: string
+          expense_id: string | null
+          filled_values: Json
+          generated_pdf_file_id: string | null
+          id: string
+          invoice_id: string | null
+          is_deleted: boolean | null
+          is_final: boolean
+          notarized_pdf_file_id: string | null
+          notary_required: boolean
+          status: string
+          sub_contract_id: string | null
+          supersedes_release_id: string | null
+          template_id: string | null
+          type: string
+          updated_at: string | null
+          updated_by: string | null
+          void_reason: string | null
+          voided_at: string | null
+          voided_by: string | null
+        }
+        Insert: {
+          amount?: number | null
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          direction?: string
+          expense_id?: string | null
+          filled_values?: Json
+          generated_pdf_file_id?: string | null
+          id?: string
+          invoice_id?: string | null
+          is_deleted?: boolean | null
+          is_final?: boolean
+          notarized_pdf_file_id?: string | null
+          notary_required?: boolean
+          status?: string
+          sub_contract_id?: string | null
+          supersedes_release_id?: string | null
+          template_id?: string | null
+          type: string
+          updated_at?: string | null
+          updated_by?: string | null
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
+        }
+        Update: {
+          amount?: number | null
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          direction?: string
+          expense_id?: string | null
+          filled_values?: Json
+          generated_pdf_file_id?: string | null
+          id?: string
+          invoice_id?: string | null
+          is_deleted?: boolean | null
+          is_final?: boolean
+          notarized_pdf_file_id?: string | null
+          notary_required?: boolean
+          status?: string
+          sub_contract_id?: string | null
+          supersedes_release_id?: string | null
+          template_id?: string | null
+          type?: string
+          updated_at?: string | null
+          updated_by?: string | null
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "lien_releases_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lien_releases_expense_id_fkey"
+            columns: ["expense_id"]
+            isOneToOne: false
+            referencedRelation: "expenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lien_releases_generated_pdf_file_id_fkey"
+            columns: ["generated_pdf_file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lien_releases_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lien_releases_notarized_pdf_file_id_fkey"
+            columns: ["notarized_pdf_file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lien_releases_sub_contract_id_fkey"
+            columns: ["sub_contract_id"]
+            isOneToOne: false
+            referencedRelation: "subcontractor_contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lien_releases_supersedes_release_id_fkey"
+            columns: ["supersedes_release_id"]
+            isOneToOne: false
+            referencedRelation: "lien_releases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "lien_releases_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "lien_release_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       member_burden_settings: {
         Row: {
           burden_multiplier: number
@@ -4636,6 +4927,7 @@ export type Database = {
           id: string
           internal_notes: string | null
           is_deleted: boolean | null
+          legal_description: string | null
           name: string
           project_internal_seq: number
           project_number: string
@@ -4665,6 +4957,7 @@ export type Database = {
           id?: string
           internal_notes?: string | null
           is_deleted?: boolean | null
+          legal_description?: string | null
           name: string
           project_internal_seq?: number
           project_number?: string
@@ -4694,6 +4987,7 @@ export type Database = {
           id?: string
           internal_notes?: string | null
           is_deleted?: boolean | null
+          legal_description?: string | null
           name?: string
           project_internal_seq?: number
           project_number?: string
