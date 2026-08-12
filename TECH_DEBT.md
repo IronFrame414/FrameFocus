@@ -1,5 +1,44 @@
 # TECH_DEBT.md — FrameFocus
 
+<!-- ========================================================================= -->
+
+## ⚠️ NUMBERING RECONCILIATION OWED AT MERGE — `#147`–`#149` [S136]
+
+**This file is the assignment authority. Two unmerged branches allocated numbers independently
+and they collide — with main and with each other.** Read this before merging either.
+
+The divergence starts at **`#147`, not `#148`.** All three refs are identical through `#146`.
+
+| number | **main** (authority) | `feat/notifications` | `feature/m6m-mobile` |
+| --- | --- | --- | --- |
+| `#147` | contact holds only ONE address | *same as main* | **residue of #145** (S123) |
+| `#148` | estimate cannot create a contact | *same as main* | **LEAN-REPO SWEEP** (S123) |
+| `#149` | e2e fixtures not reproducible | **push enrolment not tappable** (S123) | **`updateProject()` zero callers** (S123) |
+| `#150` | four shards, one database | — | — |
+
+Verified these are genuinely different items, not one entry renumbered: main contains no
+"actionable residue" entry, and `feature/m6m-mobile` contains no "ONE address" entry.
+
+**Reassignment to apply AT MERGE TIME [Josh, S136 Q6]. Renumbering happens when the branch lands,
+NOT now — a debt number cited elsewhere becomes ambiguous the moment it moves, and neither branch
+is touched by S136.**
+
+| branch | its number | becomes |
+| --- | --- | --- |
+| `feat/notifications` | `#149` push enrolment not tappable | **`#151`** |
+| `feature/m6m-mobile` | `#147` residue of #145 | **`#152`** |
+| `feature/m6m-mobile` | `#148` LEAN-REPO SWEEP | **`#153`** |
+| `feature/m6m-mobile` | `#149` `updateProject()` zero callers | **`#154`** |
+
+Whichever branch merges second must re-check this table against the file as it then stands, not
+against this snapshot.
+
+**The rule that stops it recurring is in CLAUDE.md → "Tech-debt numbering", not here.** A note in
+this header is a statement, and a statement is exactly what failed: the S134 header already said
+"main's file is the assignment authority" and two branches still collided.
+
+<!-- ========================================================================= -->
+
 > **Last updated:** August 11, 2026 — S134 (**#149 AND #150 RAISED**, filing the fallout of reverting the S133 Playwright sharding (Option D, Josh's ruling). **#150** records the concurrency hazard precisely — four shards shared one rebuild-test DB, so any test asserting the absence/count of something another shard writes to a shared fixture was exposed; CI #201 (`desktop-payload.spec.ts:175`) is the instance, NOT a payload leak — the #117 read floor holds at the query. **#149** is the constraint that blocked every safe fix: the pinned e2e fixtures are hand-curated on rebuild-test and reproducible from no script — `seed-test-identities.mjs` only *warns* if `eaf0e25b` is missing — which is what blocks a database-per-shard, the fix that is safe by construction. The sharding work is kept on branch `ci/shard-playwright`, not deleted. **⚠️ #149 is also speculatively used on two unmerged branches (`feat/notifications`, `feature/m6m-mobile`) for different items — a merge-time reconciliation is owed there regardless; main's file is the assignment authority.**)
 > **Previously:** August 9, 2026 — S123 (**#147 AND #148 RAISED**, both from Josh, both investigated before filing rather than described from the request. **#147 multi-address is a UI GAP, not a schema gap** — `contact_addresses` has no unique constraint on `contact_id`, only a PARTIAL one-primary index, and `listAddressesForContact()` plus the 4D estimate address picker already handle N; exactly one form, `contact-form.tsx`, only ever writes the primary. No migration needed. **#148 inline contact-create is a SHARED COMPONENT's change** — `ContactAddressPicker` has three consumers, and `contacts_insert_authorized` matches `estimates_insert_manager` exactly, so there is no permission gap. The two meet at `contact-form.tsx` and should be sequenced together)
 > **Previously:** August 8, 2026 — S120 (**#145 FIXED, and its diagnosis was WRONG.** Not memory: `/dev/shm` is **64 MB**, the Docker default, and Chromium's renderer dies when it fills. `oom_kill` is **0** in `/proc/vmstat` and in every cgroup — nothing on this box was ever OOM-killed. One flag, `--disable-dev-shm-usage`, took the same 217-test group from **53 failures to 2** in a single unsplit process, and made it faster. **The four-process split is retired.** Also: M6M §6 camera capture + M-22, and §4.6's M-6 daily-logs screen, replacing a placeholder that had let A-12d/A-12e pass on a stub)

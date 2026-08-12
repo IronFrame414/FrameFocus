@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { sendInviteEmail } from '@/lib/services/invite-email';
+import { brand } from '@/lib/brand';
 
 // D2 + D3.1 [S135] — create an invitation AND send it.
 //
@@ -67,8 +68,7 @@ export async function POST(request: NextRequest) {
   if (taken === true) {
     return NextResponse.json(
       {
-        error:
-          'That email address already has a FrameFocus account, so it cannot accept an invitation. Ask them to sign in with it, or invite a different address.',
+        error: `That email address already has an ${brand.name} account, so it cannot accept an invitation. Ask them to sign in with it, or invite a different address.`,
         code: 'email_in_use',
       },
       { status: 409 }

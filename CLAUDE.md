@@ -610,6 +610,29 @@ Module 3H patterns for every future AI feature (Module 4 estimating, 9 client su
 
 **Testing AI features.** GPT-4o is non-deterministic even at temperature 0.2. Tests assert structure (well-formed, validation discarded unknowns, output ≤ cap, cost row inserted), not exact content.
 
+## Tech-debt numbering — **RULED [Josh, S136]**
+
+**Never allocate a bare `#N` on a branch.** `TECH_DEBT.md` lives in the working tree, so every
+branch appends to its own copy and two branches filing on the same day both "take" the same
+number. There is no allocator, and there cannot be one while the file is versioned alongside code.
+
+**On a branch, file with a provisional branch-scoped id: `#N-<branch-tag>`** — `#12-notif`,
+`#3-m6m`. Numbered from 1 within the branch; the tag is short and names the branch, not the
+session. **Convert to a real number when the branch lands**, taking the next free number from
+**main's** `TECH_DEBT.md` at that moment, and update any cross-references in the same commit.
+
+**Why not "just take the next number from main":** that was the previous rule, it was written into
+`TECH_DEBT.md`'s own header as "main's file is the assignment authority", and it still failed.
+`feat/notifications` and `feature/m6m-mobile` each independently allocated `#147`–`#149` for
+**four different items**, colliding with main and with each other. Reserving from main only works
+if a branch merges before the next one files, which is not how these branches run.
+
+A provisional id is ugly on purpose: `#12-notif` in a commit message or a code comment reads as
+"this is not final yet", which a bare `#149` does not. **The reconciliation table for the current
+collision is in `TECH_DEBT.md`'s header** and is applied at merge, not now.
+
+---
+
 ## Instruction Preferences
 
 When generating code, migrations, or instructions for Josh:
