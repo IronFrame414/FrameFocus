@@ -41,7 +41,7 @@ export type Database = {
     Tables: {
       ai_tag_logs: {
         Row: {
-          company_id: string
+          company_id: string | null
           created_at: string | null
           error_message: string | null
           estimated_cost_usd: number | null
@@ -53,7 +53,7 @@ export type Database = {
           success: boolean
         }
         Insert: {
-          company_id?: string
+          company_id?: string | null
           created_at?: string | null
           error_message?: string | null
           estimated_cost_usd?: number | null
@@ -65,7 +65,7 @@ export type Database = {
           success?: boolean
         }
         Update: {
-          company_id?: string
+          company_id?: string | null
           created_at?: string | null
           error_message?: string | null
           estimated_cost_usd?: number | null
@@ -1785,6 +1785,59 @@ export type Database = {
           },
         ]
       }
+      deletion_jobs: {
+        Row: {
+          attempts: number
+          auth_done: boolean
+          company_id: string
+          created_at: string
+          finished_at: string | null
+          id: string
+          last_error: string | null
+          started_at: string | null
+          state: string
+          storage_done: boolean
+          tables_done: string[]
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          auth_done?: boolean
+          company_id: string
+          created_at?: string
+          finished_at?: string | null
+          id?: string
+          last_error?: string | null
+          started_at?: string | null
+          state?: string
+          storage_done?: boolean
+          tables_done?: string[]
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          auth_done?: boolean
+          company_id?: string
+          created_at?: string
+          finished_at?: string | null
+          id?: string
+          last_error?: string | null
+          started_at?: string | null
+          state?: string
+          storage_done?: boolean
+          tables_done?: string[]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deletion_jobs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       deliveries: {
         Row: {
           checked_in_at: string | null
@@ -3080,6 +3133,69 @@ export type Database = {
             columns: ["sub_contract_id"]
             isOneToOne: false
             referencedRelation: "subcontractor_contracts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      export_jobs: {
+        Row: {
+          bytes_written: number
+          categories: string[]
+          company_id: string
+          created_at: string
+          cursor: Json
+          expires_at: string | null
+          format: string
+          id: string
+          last_error: string | null
+          object_path: string | null
+          requested_by: string
+          state: string
+          updated_at: string
+        }
+        Insert: {
+          bytes_written?: number
+          categories?: string[]
+          company_id: string
+          created_at?: string
+          cursor?: Json
+          expires_at?: string | null
+          format?: string
+          id?: string
+          last_error?: string | null
+          object_path?: string | null
+          requested_by: string
+          state?: string
+          updated_at?: string
+        }
+        Update: {
+          bytes_written?: number
+          categories?: string[]
+          company_id?: string
+          created_at?: string
+          cursor?: Json
+          expires_at?: string | null
+          format?: string
+          id?: string
+          last_error?: string | null
+          object_path?: string | null
+          requested_by?: string
+          state?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "export_jobs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "export_jobs_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -6535,21 +6651,127 @@ export type Database = {
       }
       trial_emails: {
         Row: {
+          company_id: string | null
           created_at: string | null
           email: string
           id: string
+          trial_number: number
         }
         Insert: {
+          company_id?: string | null
           created_at?: string | null
           email: string
           id?: string
+          trial_number?: number
         }
         Update: {
+          company_id?: string | null
           created_at?: string | null
           email?: string
           id?: string
+          trial_number?: number
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "trial_emails_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trial_lifecycle: {
+        Row: {
+          company_id: string
+          created_at: string
+          delete_after: string | null
+          deleted_at: string | null
+          locked_at: string | null
+          postponed_by: string | null
+          postponed_reason: string | null
+          postponed_until: string | null
+          trial_end: string
+          updated_at: string
+          warned_3_at: string | null
+          warned_7_at: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          delete_after?: string | null
+          deleted_at?: string | null
+          locked_at?: string | null
+          postponed_by?: string | null
+          postponed_reason?: string | null
+          postponed_until?: string | null
+          trial_end: string
+          updated_at?: string
+          warned_3_at?: string | null
+          warned_7_at?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          delete_after?: string | null
+          deleted_at?: string | null
+          locked_at?: string | null
+          postponed_by?: string | null
+          postponed_reason?: string | null
+          postponed_until?: string | null
+          trial_end?: string
+          updated_at?: string
+          warned_3_at?: string | null
+          warned_7_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trial_lifecycle_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: true
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trial_warning_acknowledgements: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          profile_id: string
+          warning_kind: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          id?: string
+          profile_id: string
+          warning_kind: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          profile_id?: string
+          warning_kind?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "trial_warning_acknowledgements_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "trial_warning_acknowledgements_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
@@ -6673,6 +6895,11 @@ export type Database = {
             }
             Returns: string
           }
+      email_has_account: { Args: { p_email: string }; Returns: boolean }
+      generate_company_slug: {
+        Args: { p_company_name: string; p_exclude_company_id?: string }
+        Returns: string
+      }
       get_invitation_by_token: {
         Args: { invite_token: string }
         Returns: {
@@ -6692,6 +6919,7 @@ export type Database = {
           role: string
         }[]
       }
+      get_invitation_status: { Args: { invite_token: string }; Returns: string }
       get_my_company_id: { Args: never; Returns: string }
       get_my_member_id: { Args: never; Returns: string }
       get_my_profile_id: { Args: never; Returns: string }
@@ -6807,6 +7035,10 @@ export type Database = {
           p_sub_contract_id: string
         }
         Returns: Json
+      }
+      shares_assigned_project_with_me: {
+        Args: { p_profile_id: string }
+        Returns: boolean
       }
       submit_delivery_check_in: {
         Args: { p_delivery_id: string }

@@ -81,6 +81,10 @@ CREATE INDEX IF NOT EXISTS idx_trial_lifecycle_trial_end
 CREATE INDEX IF NOT EXISTS idx_trial_lifecycle_delete_after
   ON public.trial_lifecycle (delete_after) WHERE deleted_at IS NULL;
 
+-- Replay-safe: this migration is re-applied during development, and a bare
+-- CREATE TRIGGER fails with 42710 on the second run even though every
+-- CREATE TABLE above is IF NOT EXISTS.
+DROP TRIGGER IF EXISTS trial_lifecycle_updated_at ON public.trial_lifecycle;
 CREATE TRIGGER trial_lifecycle_updated_at
   BEFORE UPDATE ON public.trial_lifecycle
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
@@ -91,6 +95,7 @@ ALTER TABLE public.trial_lifecycle ENABLE ROW LEVEL SECURITY;
 -- expiry date is reasonable; a tenant WRITING it would move their own deletion
 -- date, so there is deliberately no INSERT, UPDATE or DELETE policy and every
 -- write is service-role. This is the whole security model of the table.
+DROP POLICY IF EXISTS trial_lifecycle_select_owner_admin ON public.trial_lifecycle;
 CREATE POLICY trial_lifecycle_select_owner_admin ON public.trial_lifecycle
   FOR SELECT TO authenticated
   USING (
@@ -123,6 +128,7 @@ CREATE INDEX IF NOT EXISTS idx_trial_ack_company
 
 ALTER TABLE public.trial_warning_acknowledgements ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS trial_ack_select_owner_admin ON public.trial_warning_acknowledgements;
 CREATE POLICY trial_ack_select_owner_admin ON public.trial_warning_acknowledgements
   FOR SELECT TO authenticated
   USING (
@@ -133,6 +139,7 @@ CREATE POLICY trial_ack_select_owner_admin ON public.trial_warning_acknowledgeme
 -- The acknowledger must be acknowledging AS THEMSELVES. Without the profile
 -- test an Admin could acknowledge on the Owner's behalf, which is precisely the
 -- evidence this table exists to be.
+DROP POLICY IF EXISTS trial_ack_insert_self ON public.trial_warning_acknowledgements;
 CREATE POLICY trial_ack_insert_self ON public.trial_warning_acknowledgements
   FOR INSERT TO authenticated
   WITH CHECK (
@@ -172,6 +179,27 @@ COMMENT ON COLUMN public.trial_emails.company_id IS
 
 
 -- ----------------------------------------------------------------------------
+-- 3b. ai_tag_logs.company_id must become NULLABLE.
+--
+--     Ruled [Josh, S137 Q1]: the row SURVIVES company deletion with
+--     `company_id` NULLED — it is OUR AI spend, not the customer's data, so the
+--     financial trail is kept and the tenant linkage is dropped. The same
+--     instinct as its `file_id` FK, which CLAUDE.md records as ON DELETE SET
+--     NULL precisely so cost data outlives the thing it describes.
+--
+--     ⚠️ THE COLUMN WAS `NOT NULL`, so the ruling was unbuildable as written
+--     until this line. Found by the type-checker rather than by reading the
+--     schema — `Type 'null' is not assignable to type 'string'` on the update
+--     the deletion job performs.
+-- ----------------------------------------------------------------------------
+ALTER TABLE public.ai_tag_logs ALTER COLUMN company_id DROP NOT NULL;
+
+COMMENT ON COLUMN public.ai_tag_logs.company_id IS
+  'S137: NULLABLE. The row survives company deletion with this nulled — our AI '
+  'spend, not the tenant''s data.';
+
+
+-- ----------------------------------------------------------------------------
 -- 4. deletion_jobs — per-table resumable state.
 --
 --    Deletion spans 71 company-scoped tables plus two storage buckets and
@@ -201,6 +229,10 @@ CREATE TABLE IF NOT EXISTS public.deletion_jobs (
 
 CREATE INDEX IF NOT EXISTS idx_deletion_jobs_state ON public.deletion_jobs (state);
 
+-- Replay-safe: this migration is re-applied during development, and a bare
+-- CREATE TRIGGER fails with 42710 on the second run even though every
+-- CREATE TABLE above is IF NOT EXISTS.
+DROP TRIGGER IF EXISTS deletion_jobs_updated_at ON public.deletion_jobs;
 CREATE TRIGGER deletion_jobs_updated_at
   BEFORE UPDATE ON public.deletion_jobs
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
@@ -239,6 +271,10 @@ CREATE INDEX IF NOT EXISTS idx_export_jobs_company ON public.export_jobs (compan
 CREATE INDEX IF NOT EXISTS idx_export_jobs_expires ON public.export_jobs (expires_at)
   WHERE expires_at IS NOT NULL;
 
+-- Replay-safe: this migration is re-applied during development, and a bare
+-- CREATE TRIGGER fails with 42710 on the second run even though every
+-- CREATE TABLE above is IF NOT EXISTS.
+DROP TRIGGER IF EXISTS export_jobs_updated_at ON public.export_jobs;
 CREATE TRIGGER export_jobs_updated_at
   BEFORE UPDATE ON public.export_jobs
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at();
@@ -249,6 +285,7 @@ ALTER TABLE public.export_jobs ENABLE ROW LEVEL SECURITY;
 -- everything on their last day is a real scenario", so the row is readable by
 -- Owner/Admin and is never deleted when the object expires — the object goes,
 -- the record of who took it stays.
+DROP POLICY IF EXISTS export_jobs_select_owner_admin ON public.export_jobs;
 CREATE POLICY export_jobs_select_owner_admin ON public.export_jobs
   FOR SELECT TO authenticated
   USING (
