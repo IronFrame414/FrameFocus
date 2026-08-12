@@ -46,9 +46,11 @@ budget line as **committed**, not only as budgeted cost. The seven locked decisi
 6. `budgeted_amount` stays the **plan** (from the estimate baseline); `committed_amount`
    reflects the **sub-contract**. They sit side by side on the merged Budget & Cost
    screen; a renegotiation before confirm shows as variance.
-7. **7F grows** to own the sub-contract **agreement** (template + sub-facing
-   e-signature) alongside lien waivers — **gated** behind the Pre-Module 9
-   external-surface gate, and **not** on 7D's critical path.
+7. ~~**7F grows** to own the sub-contract **agreement** (template + sub-facing
+   e-signature) alongside lien waivers~~ — **AMENDED [S140], see §7.** The sub-contract
+   agreement belongs to **7I (Contracts)**; 7F owns the document engine 7I consumes,
+   and lien waivers. Still **gated** behind Gate 1 (a sub-facing signature is a new
+   external surface), and still **not** on 7D's critical path.
 
 ---
 
@@ -284,13 +286,39 @@ UI path this was deferred to]`
 
 ## 7. 7F scope growth (gated — NOT this build)
 
-Record in `module7-architecture.md` §7.2 (7F row) that **7F owns the sub-contract
+> ## ⚠️ AMENDED [S140] — **7F DOES NOT OWN THE SUB-CONTRACT AGREEMENT**
+>
+> `7f2-spec.md` §1 (S98) put this beyond doubt and declared the amendment owed:
+> _"**Not in 7F:** client contracts and sub contracts. Those get their own Module 7
+> spec. `113c-spec.md:285` §7 currently assigns the sub-contract agreement to 7F —
+> **that assignment is superseded and 113c is owed an amendment**."_
+>
+> **The amendment never landed.** The S140 survey found two live specs still
+> disagreeing about which module owns sub contracts, two sessions after the question
+> was settled. It is applied here.
+>
+> **Where each piece actually lives now:**
+>
+> | Piece | Owner |
+> | --- | --- |
+> | The **document engine** — PDF overlay, box maps, generate, stamp, store | **7F**, built direction-agnostic and document-type-agnostic *precisely so the contracts spec consumes it rather than rebuilding it* (`7f2-spec.md` §1) |
+> | The **sub-contract agreement** itself — its template, its delivery, its signature → `status='signed'` linkage | **7I (Contracts)**, `docs/specs/7I-spec.md` |
+> | Lien releases and waivers, both directions | **7F** |
+>
+> **What does NOT change:** stage 6 is still gated, and still behind Gate 1 — a
+> sub-facing signature is a **new recurring external surface aimed at a party the
+> platform does not email today**, which is exactly what the S140 re-scope of Gate 1
+> kept in scope (`GATED.md` Gate 1, item 3). The owner moved; the gate did not.
+>
+> _Superseded text follows, quoted rather than rewritten._
+
+~~Record in `module7-architecture.md` §7.2 (7F row) that **7F owns the sub-contract
 agreement** — a company-level reusable template via the §7F.3 box-map builder, filled per
 sub, sent to the sub for **e-signature**. The sub-facing signature is an external surface
 → **Pre-Module 9 external-surface gate** (email + magic-link vs. hosted portal, §7F.8).
 The §7F.3 document machinery is already "direction-agnostic and reused as-is"; only the
 sub-contract template, external delivery, and the signature→`status='signed'` linkage are
-new. **This is later, gated work — the §5 italic never waits on it; 7D stays unblocked.**
+new.~~ **This is later, gated work — the §5 italic never waits on it; 7D stays unblocked.**
 
 ---
 
@@ -351,8 +379,8 @@ signed/void remain the only contract-level freezes.
    Owner/Admin re-approval; closed-out stages and signed/void contracts refuse
    wholly; a retainage shape/percent switch mid-stream leaves the withheld accrual
    row untouched; a Σ-stages-vs-contract-value mismatch WARNS, never blocks.
-6. **(GATED, later — not this build)** 7F sub-contract template + sub-facing e-signature
-   (§7).
+6. **(GATED, later — not this build)** Sub-contract template + sub-facing e-signature
+   (§7). **[S140] Owned by 7I, not 7F** — 7F supplies the document engine only.
 
 Stages 1–5 are #113(c) proper and unblock 7D. Stage 6 is deferred behind the Pre-M9 gate.
 

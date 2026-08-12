@@ -144,6 +144,29 @@ It answers, per job: **what did this cost, what will it earn, are we on budget, 
 
 10. **[S96; SCOPE DEFINED S97] FINANCIAL-RLS-FLOOR is batched into 7H's build.**
 
+    > ## ⚠️ SUPERSEDED BY EVENTS [S140] — **the floor shipped WITHOUT 7H, and 7H
+    > ships no migration.**
+    >
+    > This decision was written when the floor was owed and 7H was the natural
+    > carrier. It then landed on its own at S97, two sessions before 7H was built:
+    > `20260806000000_financial_rls_floor.sql`, `…08…_part2`, `…09…_part3`,
+    > `…10…_tier2`, plus the two column moves it needed —
+    > `20260811000000_project_financials.sql` and `20260816000000_budget_amounts.sql`
+    > — and their drops (`20260812000000`, `20260817000000`).
+    >
+    > **7H's build at S140 therefore contains ZERO migrations**, and
+    > `lib/services/profitability.ts` says so at the top. §7H.1's "one exception to
+    > 'enforces nothing'" is withdrawn: **7H enforces nothing, owns nothing and
+    > writes nothing**, which is what §S always claimed and is now simply true.
+    >
+    > **The `CLAUDE.md` correction this decision obliges is still owed and still
+    > wanted** — it is independent of the migration. Ruled: **PM and foreman see
+    > actual AND committed cost; crew sees actual only.** `CLAUDE.md`'s Financial
+    > Visibility Floor still says PM/foreman/crew see "ACTUAL COST ONLY" and lists
+    > committed among the figures gated from PM, which contradicts money-rep P9 and
+    > the shipped policies. Applied at S140 — see §7H.12.
+
+
         The floor is enforced **in the UI only** today. **[S97 — verified]** `can_view_project()`
         (`20260704211000:248`) is a pure **visibility** predicate — `owner/admin OR
 

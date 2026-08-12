@@ -78,6 +78,37 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
 ## Open Tech Debt
 
+### Branch-scoped, awaiting real numbers — `feature/m7-compliance-profit-liens` [S140]
+
+> Provisional ids per the S136 rule: **never allocate a bare `#N` on a branch.** These
+> convert to the next free numbers from main's file when this branch lands, and any
+> cross-reference updates in the same commit.
+
+- **#1-m7cpl — the Financial Visibility Floor and `budgetColumnsFor()` disagree about
+  FOREMAN, and it is not obvious which is right.**
+
+  Surfaced at S140 while applying the `CLAUDE.md` correction that `7h1-spec.md` §7H.2
+  #10 has owed since S97.
+
+  | Role | Ruling (money-rep P9, 7h1 #10) | Shipped `budgetColumnsFor()` |
+  | --- | --- | --- |
+  | Project Manager | actual + committed | `committed`, 5 cols — agrees |
+  | **Foreman** | **actual + committed** | **`actual_only`, 3 cols, `seesCommitted: false`** |
+  | Crew | actual only | `none` — redirected off the screen, stricter than the ruling |
+
+  **Neither side was changed**, deliberately: widening foreman is a behaviour change to
+  a shipped screen that **ui-05 §7.1's column counts (Owner/Admin 7, PM 5, Foreman 3)**
+  and `s97ct-budget-floor.live.ts` both assert, and nobody asked for it; narrowing the
+  ruling would discard a decision P9 made on purpose.
+
+  **What a ruling has to decide:** does a foreman see committed cost? If yes, three
+  things move together — `budgetColumnsFor()`, ui-05 §7.1's counts, and the live
+  harness. If no, money-rep P9 and `7h1-spec.md` #10 are amended instead. Doing one
+  without the others is how this drifted in the first place.
+
+  Cross-refs: `CLAUDE.md` → Financial Visibility Floor (carries the same table);
+  `apps/web/lib/services/invoices-shared.ts` `budgetColumnsFor()`.
+
 ### Pre-Beta
 
 - **#1** No tags UI on contacts/subs forms (columns exist as TEXT[], no input component yet)
