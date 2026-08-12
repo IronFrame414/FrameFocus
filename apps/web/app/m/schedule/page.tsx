@@ -26,6 +26,11 @@ const SOURCE_LABEL: Record<CalendarEvent['source'], string> = {
   task: 'Task',
   general: 'Schedule',
   inspection: 'Inspection',
+  // 7C §3.3 [S140]. This calendar is COMPANY-WIDE, so compliance expiries do
+  // reach it — and they must: parity says a feature on both surfaces behaves
+  // the same on both. An Owner/Admin sees the same COI expiry here as on
+  // /dashboard/schedule. Every other role reads none, by RLS, not by a filter.
+  compliance: 'Compliance',
 };
 
 function formatDay(iso: string): string {

@@ -476,7 +476,7 @@ Each subscribing company is an isolated tenant. Within that company, there are 6
 | --------------- | ----------------- | ---------------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Owner           | `owner`           | Full                               | Full              | All features, billing/subscription management, user invitations, approval authority on change orders/payments/AI content, company settings, QuickBooks connection — [SUPERSEDED for COs — Owner-final-approval gate removed; see module5-architecture.md §5.7c AMENDMENT (Session 55). Owner/Admin/PM all create+send.] |
 | Admin           | `admin`           | Full                               | Full              | Everything Owner can do EXCEPT items in the owner-only list below                                                                                                                                                                                                                                                       |
-| Project Manager | `project_manager` | Full (scoped to assigned projects) | Full              | Create/manage estimates, manage assigned projects, assign tasks, create change orders, **view job ACTUAL COSTS only — NOT contract value, budgeted/sell amounts, or CO dollar amounts** (Financial Visibility Floor, added 2026-07-20), manage client communication                                                    |
+| Project Manager | `project_manager` | Full (scoped to assigned projects) | Full              | Create/manage estimates, manage assigned projects, assign tasks, create change orders, **view job ACTUAL AND COMMITTED COSTS — NOT contract value, budgeted/sell amounts, or CO dollar amounts** (Financial Visibility Floor, added 2026-07-20; **"actual only" corrected to "actual and committed" [S140]** per money-rep P9 — `budgetColumnsFor()` has shipped `seesCommitted: true` for a PM since S97), manage client communication                                                    |
 | Foreman         | `foreman`         | Limited                            | Full              | Manage assigned field crews, daily logs, schedule crew tasks, review Crew Member submissions, punch lists, quality control                                                                                                                                                                                              |
 | Crew Member     | `crew_member`     | Minimal                            | Full              | Clock in/out with GPS, daily log entries, photo capture, task status updates, view assigned tasks and schedule                                                                                                                                                                                                          |
 | Client          | `client`          | Portal only — **see the note below** | No (future phase) | View project timeline, photo gallery, approve selections, sign documents, make payments, message PM, view AI weekly summaries                                                                                                                                                                                           |
@@ -520,7 +520,34 @@ redirected to.
 
 ### Financial Visibility Floor (authoritative — added 2026-07-20)
 
-**Only Owner and Admin may see contract/budget/sell/CO dollar figures. Project Manager, Foreman, and Crew see ACTUAL AND COMMITTED COST ONLY.**
+**Only Owner and Admin may see contract/budget/sell/CO dollar figures. Project Manager and Foreman see ACTUAL AND COMMITTED COST ONLY. Crew sees ACTUAL COST ONLY.** — **CORRECTED [S140]**
+
+> _Superseded text, quoted rather than rewritten:_ _"Project Manager, Foreman, and Crew
+> see ACTUAL AND COMMITTED COST ONLY."_ That lumped crew in with the other two. The
+> S97 ruling recorded in `7h1-spec.md` §7H.2 #10 splits them: **PM and foreman see
+> actual and committed; crew sees actual only.** money-rep **P9** is the source of the
+> widening, and it is a deliberate revision of the older blanket "actual only" wording.
+>
+> ⚠️ **THE SHIPPED CODE DOES NOT MATCH THIS ROW FOR FOREMAN, and the code is not
+> obviously wrong.** `budgetColumnsFor()` (`apps/web/lib/services/invoices-shared.ts`)
+> ships:
+>
+> | Role | This ruling | `budgetColumnsFor()` |
+> | --- | --- | --- |
+> | Owner / Admin | everything | `full`, 7 columns |
+> | Project Manager | actual + committed | `committed`, 5 columns — **agrees** |
+> | **Foreman** | **actual + committed** | **`actual_only`, 3 columns, `seesCommitted: false` — DISAGREES** |
+> | Crew | actual only | `none` — redirected off the screen entirely, i.e. **stricter** than this row |
+>
+> **Neither side was changed at S140**, deliberately. Widening foreman to committed is
+> a behaviour change to a shipped screen that ui-05 §7.1's per-role column counts
+> (Owner/Admin 7, PM 5, Foreman 3) and `s97ct-budget-floor.live.ts` both assert, and
+> nobody asked for it. Narrowing the ruling to match the code would discard a decision
+> money-rep P9 made on purpose. **This needs a ruling, and it is filed as
+> `#1-m7cpl`** — see `TECH_DEBT.md`.
+>
+> Until then: **the code is what runs.** Do not cite this row as evidence that foreman
+> already sees committed cost.
 
 - **Gated from PM/foreman/crew:** contract value (`project_financials.contract_value`), original/revised contract, budgeted and sell/price amounts (`project_budget_amounts.budgeted_amount` and any future sell column), labor/burden rates (`instrument_rates`), variance, projected margin, and **change-order dollar amounts** (`change_orders.net_delta` and any `$` sum derived from it). Both money columns moved to 1:1 side tables to get this enforced — see the status table below; the old `projects.contract_value` and `project_budget_items.budgeted_amount` no longer exist.
 - **Visible to all roles:** actual and committed cost (`project_budget_items.actual_amount` and `committed_amount`), and non-dollar facts — CO counts/statuses, project status, dates, punch counts, schedule. **This is deliberate, not an oversight:** the budgeted figure was split off onto `project_budget_amounts` precisely so actual and committed could stay on a row Foreman and Crew can still read. A role floor on `project_budget_items` itself would over-reach — `s97ct-roles.live.ts` **8b-ii** and `s97ct-budget-floor.live.ts` **7-foreman/7-crew_member** exist to fail loudly if anyone adds one.

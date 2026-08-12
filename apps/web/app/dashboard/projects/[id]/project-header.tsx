@@ -46,6 +46,30 @@ const TABS: { slug: string; label: string; roles?: string[] }[] = [
     label: 'Payments',
     roles: ['owner', 'admin', 'project_manager'],
   },
+  // 7H — job profitability. OWNER/ADMIN ONLY (§7H.6), narrower than Invoices
+  // and Payments beside it: a PM legitimately sees invoice amounts (the S97
+  // Floor carve-out) but margin is not an invoice amount. money-rep P9 —
+  // "budgeted, sell, and margin figures remain Owner/Admin-only".
+  //
+  // The page repeats this gate server-side. A tab hidden from the bar is not
+  // a gate; the route is reachable by typing it.
+  {
+    slug: 'profitability',
+    label: 'Profitability',
+    roles: ['owner', 'admin'],
+  },
+  // 7F — lien releases and waivers. OWNER/ADMIN ONLY (§8.2).
+  //
+  // ⚠️ NOT justified on the Financial Visibility Floor — that rationale was
+  // STRUCK at S98, because the Floor's S97 carve-out already lets a PM see
+  // invoice totals and retainage, which IS the release amount. The reason is
+  // narrower and sufficient: a release waives legal rights and voiding does
+  // not retrieve it, so the actor must be able to bind the company.
+  {
+    slug: 'lien-releases',
+    label: 'Lien Releases',
+    roles: ['owner', 'admin'],
+  },
   { slug: 'punch', label: 'Punch List' },
   { slug: 'deliveries', label: 'Deliveries' },
   { slug: 'files', label: 'Files' },

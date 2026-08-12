@@ -124,7 +124,16 @@ export function SubcontractorsList({ subcontractors, canEdit }: SubcontractorsLi
               {filtered.map((s) => (
                 <tr key={s.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
                   <td style={{ padding: '0.75rem 0.5rem', fontWeight: 500 }}>
-                    {s.company_name}
+                    {/* [S140] The name is now the way IN to the sub record.
+                        Until this run the only link on the row was "Edit", so
+                        looking at a sub meant opening the form that changes
+                        them (TECH_DEBT #13 / #108(c)). */}
+                    <a
+                      href={`/dashboard/subcontractors/${s.id}`}
+                      style={{ color: '#2563eb', textDecoration: 'none' }}
+                    >
+                      {s.company_name}
+                    </a>
                   </td>
                   <td style={{ padding: '0.75rem 0.5rem', color: '#6b7280' }}>
                     {s.contact_first_name || s.contact_last_name

@@ -24,6 +24,11 @@ const SOURCE_LABEL: Record<CalendarEvent['source'], string> = {
   task: 'Task',
   general: 'Schedule',
   inspection: 'Inspection',
+  // Unreachable on this screen and deliberately so: getCalendarEvents emits
+  // compliance events ONLY for the company-wide calendar (7C §3.3) — a
+  // member's COI belongs to no single job. Present because the map is
+  // exhaustive over the union, not because a compliance row can render here.
+  compliance: 'Compliance',
 };
 
 function formatDay(iso: string): string {

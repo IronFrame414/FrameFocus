@@ -12,11 +12,46 @@
 
 ---
 
-## Gate 1 — Pre-M9 external-surface gate
+## Gate 1 — Pre-M9 external-surface gate — **RE-SCOPED [S140]**
 
-Nothing that puts a FrameFocus surface in front of someone outside the company ships
-until this gate is cleared. First external surface = first impression; identity,
-branding, and delivery must be settled first.
+> ⚠️ **The previous opening sentence was false, and had been for some time.** Quoted
+> rather than silently rewritten:
+>
+> _"Nothing that puts a FrameFocus surface in front of someone outside the company
+> ships until this gate is cleared. First external surface = first impression;
+> identity, branding, and delivery must be settled first."_
+>
+> **Three such surfaces had already shipped**, and the S140 survey found the gate
+> still claiming otherwise:
+>
+> | Surface | Shipped |
+> | --- | --- |
+> | `/sign/[token]` + `signing_sessions` | clients sign proposals, in production |
+> | `/sign-co/[token]` + `co_signing_sessions` | clients sign change orders, in production |
+> | Invoice email + attached PDF | `20260807000000_7d_invoice_email.sql`, `api/invoices/[id]/send/route.ts:294-309`, proven by `s97ct-invoice-email.live.ts` |
+>
+> `7f2-spec.md:487` reached the same finding independently for the first two and
+> called the sub-inbound deferral rationale dead. The invoice email is the third
+> and is stronger: it mails a company-branded document to a paying client today.
+>
+> **A gate that everyone has already walked through stops being read.** It is
+> re-scoped rather than deleted, because what it was really protecting is still
+> genuinely open.
+
+**What this gate actually protects, stated positively:**
+
+1. **The Pre-Module 9 product decision** — hosted client portal vs. email plus
+   magic-link tokenised pages vs. both. This is unresolved and blocks Module 9's
+   shape. See "Pre-Module 9 Decision Gate" in `STATE.md`.
+2. **Identity and branding on anything a client receives** — sender domain, login
+   branding, the RESEND secret actually being deliverable.
+3. **NEW, RECURRING external surfaces** — a surface aimed at a party the platform
+   does not email today, most notably **subcontractors** (113c stage 6 below).
+
+**What it does NOT block, and never should have been read as blocking:** extending
+delivery to a party FrameFocus already emails through machinery already in
+production. The tokenized-signing pattern and the invoice mailer are precedent, not
+exceptions to be argued around each time.
 
 **Blocked behind it**
 
@@ -72,19 +107,53 @@ Both are **flagged, not built.** They surfaced while deciding which roles the
 subcontractor read floor (`20260912000000`) should exclude, and both are
 pre-existing gaps rather than anything that migration introduced.
 
-- **M9-D1 — `project_budget_items` carries COST ONLY; the client financial page needs
-  SELL and PROFIT.** The table holds `committed_amount` and `actual_amount`, and the
-  budgeted figure moved to `project_budget_amounts` (Owner/Admin). **There is no sell
-  column anywhere on it.** The portal's financial page varies by contract type, and
-  this gap **blocks the cost-plus and T&M cases specifically**, where what a client is
-  billed is cost plus a margin the schema cannot currently express. This is why
-  `20260912000000` leaves **no client exclusion** on `project_budget_items` — the
-  exclusion would have to be unpicked to build the page anyway. Unresolved.
+- **M9-D1 — `project_budget_items` carries COST ONLY.** ~~**BLOCKS the cost-plus and
+  T&M cases**~~ — **CORRECTED [S140]. It does not block them.**
 
-- **M9-D2 — client-visible files and photos need a per-row flag that does not exist.**
-  Clients will see files and photos flagged for client view. Nothing in the schema
-  carries such a flag today. It needs **a column, a UI to set it, and a client arm on
-  both the file and photo policies.**
+  _Superseded text, quoted not rewritten:_ _"The portal's financial page varies by
+  contract type, and this gap **blocks the cost-plus and T&M cases specifically**,
+  where what a client is billed is cost plus a margin the schema cannot currently
+  express."_
+
+  **The schema expresses it, and has since S93.** Sell is not a column and is not
+  meant to be one: money-rep **P1** keeps the budget line as cost, **P2** makes sell
+  _"DERIVED… computed from cost + instrument pricing context at read time"_, and the
+  mechanism shipped — `instrument_rates` carries four cost-plus rates plus the T&M
+  pair, and `deriveCostLine` / `deriveLaborLines` price against them. 7D bills real
+  invoices this way in production, and **7H now reports margin the same way**
+  (`lib/services/profitability.ts`, S140).
+
+  **Adding a sell column would be a regression, not the fix.** `project_budget_items`
+  is INSERT-ONLY by design — no UPDATE policy, no DELETE, guarded by
+  `s97ct-budget-immutability.live.ts` — so a stored sell figure could never be
+  corrected or removed. `project-income.ts` names storing-on-the-budget-line as the
+  thing it deliberately refuses, for exactly this reason.
+
+  **What is actually owed for the client financial page** is a build item, not a
+  schema gap: a read-time derivation service (7H's is the model) plus a `client` arm
+  on the relevant policies. `20260912000000` leaving no client exclusion on
+  `project_budget_items` still stands — for that reason, not this one.
+
+- **M9-D2 — client-visible files and photos.** ~~**Nothing in the schema carries such
+  a flag today.**~~ **CORRECTED [S140]: `files.client_visible` EXISTS.**
+
+  _Superseded text, quoted not rewritten:_ _"Nothing in the schema carries such a flag
+  today. It needs **a column, a UI to set it, and a client arm on both the file and
+  photo policies.**"_
+
+  The column is live and already load-bearing: `files_insert_non_client`
+  (`20260728000000:84-90`) restricts setting `client_visible` at INSERT to Owner/Admin
+  and treats NULL as false, with a BEFORE UPDATE trigger guarding the UPDATE side —
+  because, as that migration says, an insert policy cannot see updates.
+
+  **Two of the three named pieces remain owed**, and the third is narrower than
+  stated: a **UI to set the flag**, and a **client arm on the file and photo
+  policies**. Photos ride the same `files` table, so there is one column, not two.
+
+  ⚠️ **The S133 reclassification still stands, unchanged.** `files_select_non_client`
+  excludes `client` by name; that holds today and stops holding the moment the client
+  arm is added. It is an exclusion that was never revisited, not a decision that was
+  made.
 
   ⚠️ **This reclassifies an S133 audit finding from settled to PROVISIONAL.**
   `files_select_non_client` was recorded as category (a) — *intended by construction*,

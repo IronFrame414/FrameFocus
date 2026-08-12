@@ -28,6 +28,44 @@
 >
 > **Provenance tags:** `[S98]` = ruled by Josh this session · `[S97]`/`[S96]` = carried and
 > re-verified · `[VERIFIED]` = read from the live repo this session.
+>
+> ---
+>
+> # ⚠️ BUILT [S140] — client-outbound only, and THREE `[VERIFIED]` TAGS WENT STALE
+>
+> **Built on `feature/m7-compliance-profit-liens`**, migration
+> `20260922000000_7f_lien_releases.sql`. **Sub-inbound (§12) is DEFERRED** [ruling C0] —
+> its four open questions in §12.1 are unanswered. Everything else in this spec shipped.
+>
+> **Re-verify before trusting any `[VERIFIED]` below.** Three were true when written and
+> are false now — this spec was written S98, and the repo moved:
+>
+> | § | The claim | Live state [S140] |
+> | --- | --- | --- |
+> | **§6.3** | `contract_value` ← `projects.contract_value` | **The column was DROPPED** (`20260812000000`); it lives on `project_financials`. Retargeted, and **ruled [C7] to print the ORIGINAL, not the revised** — a release speaks to the contract entered into, not its running total after change orders. |
+> | **§5.3** | _"7D does **not** email invoices today"_ | **It does.** `20260807000000_7d_invoice_email.sql` + `api/invoices/[id]/send/route.ts:294-309`. The sequencing dependency Josh named is **satisfied**; the conditional prompt rides the shipped send. |
+> | **§8.1** | _"[VERIFIED] Nothing delivers that event. No notification tables and no event bus exist"_ | **Both exist.** `notifications` (`20260905000000`) and `notify()` at `lib/notify/notify.ts:149`. 7F can emit a real notification; this build does not yet, and that is now a choice rather than a limitation. |
+>
+> **§10.3's `invoice_id NOT NULL` was NOT built as specified, and could not be.**
+> §5.2 rules one release per invoice; §12 then added sub-inbound at S98 without
+> reconciling the two — a release collected FROM a sub has no client invoice. Ruled
+> [C6]: `invoice_id`, `expense_id` and `sub_contract_id` are all nullable, with a CHECK
+> requiring exactly one, keyed off `direction`. **Decided now even though sub-inbound is
+> deferred**, because the alternative is migrating a table that has already shipped.
+>
+> **The five `[OPEN — JOSH]` items are RULED [S140]:**
+>
+> | § | Ruling |
+> | --- | --- |
+> | §3.1 text overflow | **Shrink-to-fit with a 6pt floor**, and flag anything that shrank in the review step. Truncation was rejected: silently dropping the tail of a name or an amount on a legal instrument produces a document that looks complete and says something else. |
+> | §4.3 two templates, one slot | **Always show the picker**, pre-selected to the match. |
+> | §4.4 jurisdiction tag | **KEEP as a display label.** It drives no selection; it is how a user tells two Florida forms from a Georgia one. |
+> | §5.5a notary + signature | **The signature area is left BLANK on the notary path.** A notary attests to a signature made in their presence; a pre-stamped image defeats the acknowledgment, and blank is the safer error. |
+> | §12.1 (four sub-side items) | **Deferred with §12** [C0]. |
+>
+> **Evidence:** `apps/web/test/s140-lien-releases.live.ts` — 17/17 under real user
+> sessions; `lien-releases-shared.test.ts` — 26/26. Both proved load-bearing by
+> mutation. Migration applied to **rebuild-test only**.
 
 ---
 

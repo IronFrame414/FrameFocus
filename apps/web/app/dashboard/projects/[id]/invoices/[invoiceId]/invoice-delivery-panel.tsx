@@ -44,6 +44,7 @@ export function InvoiceDeliveryPanel({
   deliveries,
   status,
   hasLines,
+  lienReleasePrompt,
 }: {
   invoiceId: string;
   canSend: boolean;
@@ -53,6 +54,21 @@ export function InvoiceDeliveryPanel({
    *  numbered and frozen, an issued one is only being re-delivered. */
   status: string;
   hasLines: boolean;
+  /**
+   * 7F §5.1 — the CONDITIONAL release is prompted at invoice SEND, not at
+   * invoice create.
+   *
+   * Why send: 7D allocates invoice_number AT SEND, and the immutability
+   * trigger freezes amount_receivable / billed_total / retainage_withheld only
+   * at send. A release generated against a draft would carry a figure that can
+   * still move — exactly the failure §6.3's amount rule exists to prevent.
+   *
+   * ⚠️ ADVISORY, NEVER BLOCKING (§8.3). Architecture P2: "the system informs;
+   * the human decides." This link never gates the send and never gates a
+   * payment. Null when the caller is not Owner/Admin, or a live conditional
+   * release already exists for this invoice.
+   */
+  lienReleasePrompt?: { projectId: string } | null;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -147,6 +163,22 @@ export function InvoiceDeliveryPanel({
                 ? 'Email again'
                 : 'Email to client'}
         </button>
+      )}
+
+      {/* 7F §5.1 — offered AFTER the invoice is issued, because only then is
+          the receivable frozen and the invoice numbered. Advisory: it is a
+          link, not a gate, and nothing here can stop the send. */}
+      {lienReleasePrompt && !willIssue && (
+        <p style={{ fontSize: '12px', color: color.muted, marginTop: '10px' }}>
+          No conditional lien release has been issued for this invoice.{' '}
+          <a
+            href={`/dashboard/projects/${lienReleasePrompt.projectId}/lien-releases`}
+            style={{ color: color.primary }}
+          >
+            Issue one
+          </a>{' '}
+          — optional, and it never holds up the money.
+        </p>
       )}
 
       {canSend && willIssue && !blockedReason && (
