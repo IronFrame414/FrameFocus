@@ -197,7 +197,105 @@ users **0**, banned auth users on rebuild-test **0**, `trial_lifecycle` on the s
 
 ---
 
+---
+
+## Part 2 — `feat/ffnav-reindex` brought up to main
+
+**Merge, not rebase, and the reason is that the branch is already published.** Rebasing its 4
+commits onto main's 97 rewrites pushed history and needs a force-push, and would replay the
+`dashboard-shell.tsx` change once per commit that touches it. A merge resolves it once and records
+honestly when main was integrated. Commit `2619c59`, pushed. **NOT merged to main.**
+
+⚠️ **NO CONFLICT AROSE, and both of the prompt's expectations about it were wrong.** It predicted a
+conflict in `dashboard-shell.tsx` from *the trial work*. Main's **only** change to that file since
+the fork is from the **chat** slice (`ec4188e`): a `ChatPanel` import, a `myProfileId` prop, its
+destructure, and the panel mounted in the JSX tail — **10 insertions**, none of them near
+`NAV_ITEMS`, which is the only region the reindex rewrites (171 insertions / 58 deletions).
+
+**A clean auto-merge of a file where one side rewrote 171 lines is exactly when to check nothing
+was dropped**, so both sides were verified present rather than assumed: main's four additions each
+grep to `1`, and the branch's `section:` field and three-section `NAV_ITEMS` are intact.
+
+**Is it mergeable? Yes** — `git merge-base --is-ancestor origin/main HEAD` is true, tree clean.
+
+**What changed in substance rather than position: nothing.** The stale-nav-literal risk the prompt
+anticipated was already handled **on the branch itself** by `21e2041` ("unpin the Notifications
+literal"), so no test needed touching.
+
+| Check after the merge | Exit | Corroboration |
+| --- | --- | --- |
+| `npm install` | **0** | main brought `fflate` |
+| `tsc --noEmit` | **0** | 0 `error TS` |
+| `next lint` | **0** | 0 Errors |
+| `next build` | **0** | |
+| `vitest run` | **0** | **50 files / 713 tests** (main's 49/702 + `s130-ffnav.test.ts`) |
+| Playwright: ffnav + dashboard-guard + chat-panel + harness | **0** | **28 passed**, ✘ 0, incl. all 10 ffnav tests |
+
+---
+
+## Part 3 — TECH_DEBT renumbering
+
+**The next free number was re-verified, not trusted.** Main's own entries stop at **`#150`**; its
+header table allocates `#151`–`#154`. S137/S138 filed only branch-scoped ids (`#1-trial`…
+`#3-trial`) under CLAUDE.md's rule, so they consumed no numbers. The prompt's `#151` is correct.
+
+| branch | moved | commit |
+| --- | --- | --- |
+| `feat/notifications` | `#149` → **`#151`** (one) | `2955d21`, pushed |
+| `feature/m6m-mobile` | `#147`→**`#152`**, `#148`→**`#153`**, `#149`→**`#154`** (three) | `c47b3bc`, pushed |
+
+**Citations were grepped before each move.** `feat/notifications`: exactly two hits, both in
+`TECH_DEBT.md`; its `#147`/`#148` are byte-identical to main's and were deliberately left alone.
+
+⚠️ **`feature/m6m-mobile` had a citation IN CODE**, which is the whole reason the rule exists.
+`apps/web/playwright.config.ts` read
+`LOCAL IS 1, NOT 0 — TECH_DEBT #147(a) [S123]. THIS NUMBER IS THE EVIDENCE.` A comment calling a
+number "the evidence" is worse than useless pointing at the wrong entry; it moved in the same
+commit and now reads `#152(a)`. Occurrences enumerated before (`#147`×3, `#148`×4, `#149`×3 across
+two files) and confirmed **zero** after.
+
+⚠️ **A type-check scare that was neither side.** `tsc` on `feature/m6m-mobile` first returned
+**exit 2, four `TS2307`s** — all in `.next/types` for `app/api/chat/threads` and
+`app/client-placeholder`, routes that exist on main and **do not exist on that branch**. Stale
+build output from having built the merged ffnav branch in the same worktree. Established rather
+than assumed (the named routes are genuinely absent); `rm -rf .next` → **exit 0, 0 errors**.
+
+**CLAUDE.md compliance.** The provisional `#N-<tag>` form applies to *new* items filed on a branch.
+These four were filed in S123, before the rule, and Josh ruled they convert to real numbers at
+merge; converting them to bare `#151`–`#154` is that conversion, which is the form the rule
+prescribes post-landing. **Any NEW debt filed on either branch from here must use `#N-<tag>`.**
+
+⚠️ **Residual, and it is real:** `#151`–`#154` are reserved by *convention* only. Nothing enforces
+them, and main's own table says whichever branch merges second must re-check against the file as it
+then stands. If some other branch lands first and files debt, these collide again.
+
+---
+
+## BLOCKED — NEEDS JOSH
+
+Neither is a coding decision I can derive; both are information or rulings only Josh holds.
+
+**1. Production's `NEXT_PUBLIC_APP_URL` — one env-var read, and it decides whether Part 4 has a
+code-side cause at all.** Mail is sent from `@ezcontractorbinder.com`. Links are built from
+`NEXT_PUBLIC_APP_URL`. Both hosts are live and neither redirects to the other
+(`ezcontractorbinder.com` → 200 on a Vercel IP; `frame-focus-eight.vercel.app` → 200). I cannot
+read Vercel env vars.
+
+- *If it is `https://ezcontractorbinder.com`* — sending domain and link domain match. Nothing to do
+  code-side; the investigation is entirely reputation/placement.
+- *If it is `https://frame-focus-eight.vercel.app`* — every link inside mail from
+  `@ezcontractorbinder.com` points at an unrelated domain, which is a real Gmail placement signal.
+  Then there is a decision: point `NEXT_PUBLIC_APP_URL` at the custom domain (aligns them; changes
+  every generated link, including ones already sent), or leave it and accept the mismatch.
+
+**2. Google Postmaster Tools.** Needs an interactive Google sign-in; no API key or service account
+exists here. Stating "no data yet" would be an inference dressed as a finding. Unknown — Josh's to
+read. What it would settle: whether Gmail is reporting a spam-rate or reputation problem, which is
+where Part 4's evidence now points.
+
+---
+
 ## RESUME HERE
 
-**Next action:** Part 2 — merge `origin/main` into `feat/ffnav-reindex` and resolve
-`dashboard-shell.tsx`.
+**Next action:** read production's `NEXT_PUBLIC_APP_URL` in Vercel and answer BLOCKED item 1 —
+everything else in this session is finished and pushed.
