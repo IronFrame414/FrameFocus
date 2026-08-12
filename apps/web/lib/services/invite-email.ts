@@ -38,6 +38,23 @@ export function buildInviteLink(token: string, origin: string): string {
   return `${origin.replace(/\/+$/, '')}/invite/accept?token=${token}`;
 }
 
+/**
+ * The invite email's subject line.
+ *
+ * ⚠️ EXTRACTED SO IT CAN BE ASSERTED [S136]. It was previously built inline, and
+ * that is precisely why the stale product name reached real recipients: the
+ * TEMPLATE was always correct, and `brand-email-footer.test.tsx` renders
+ * templates. A subject is not in a template, so no brand test could see it, and
+ * adding InviteEmail to that test would still not have caught this.
+ *
+ * A pure function of the company name needs no database, so the assertion is a
+ * unit test rather than a live harness. Any future subject that names the
+ * product should be built the same way, for the same reason.
+ */
+export function buildInviteSubject(companyName: string): string {
+  return `${companyName} invited you to join them on ${brand.name}`;
+}
+
 export async function sendInviteEmail(
   supabase: SupabaseClient<Database>,
   invitationId: string,
@@ -105,13 +122,7 @@ export async function sendInviteEmail(
     : 'the date shown on the invitation';
 
   const from = buildSenderAddress({ name: co.name, slug: co.slug });
-  // ⚠️ THE SUBJECT READS FROM `brand`, LIKE THE TEMPLATE DOES [S136].
-  // This line shipped as a literal `FrameFocus` and reached real recipients as
-  // "Worth Properties invited you to join them on Frame…". The TEMPLATE was
-  // always correct — it imports `brand` — which is exactly why no test caught
-  // this: `brand-email-footer.test.tsx` renders templates, and a subject is not
-  // in one. See the subject-line assertion added alongside this fix.
-  const subject = `${co.name} invited you to join them on ${brand.name}`;
+  const subject = buildInviteSubject(co.name);
 
   let messageId: string | null = null;
   let error: string | null = null;
