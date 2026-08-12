@@ -30,7 +30,13 @@ const A_FOREMAN = 'josh+qa-foreman@worthprop.com';
 const B_OWNER = 'josh+qa-b-owner@worthprop.com';
 
 const COMPANY_A_NAME = 'Bishop Contracting';
-const COMPANY_B_SLUG = 'ridgeline-test-co-2';
+// ⚠️ RESOLVED BY NAME, NOT SLUG [S136]. This pinned `slug = 'ridgeline-test-co-2'`
+// until S136's backfill rewrote company slugs to drop their hex suffix
+// (20260917000000), at which point this file failed with "Company B not found —
+// run seed-test-identities.mjs", which was untrue and pointed at the wrong fix.
+// `slug` is the EMAIL LOCAL PART and is now rewritable; the name is what this
+// test actually means. Company A on line 67 was already resolved this way.
+const COMPANY_B_NAME = 'Ridgeline Builders (TEST CO 2)';
 
 let aOwner: SupabaseClient;
 let aAdmin: SupabaseClient;
@@ -65,7 +71,7 @@ beforeAll(async () => {
   assertRebuildTest();
 
   const { data: a } = await admin.from('companies').select('id').eq('name', COMPANY_A_NAME).single();
-  const { data: b } = await admin.from('companies').select('id').eq('slug', COMPANY_B_SLUG).maybeSingle();
+  const { data: b } = await admin.from('companies').select('id').eq('name', COMPANY_B_NAME).maybeSingle();
   if (!b) {
     throw new Error(
       'Company B not found — run `node scripts/seed-test-identities.mjs` first (GATED.md Gate 2 / #104).'

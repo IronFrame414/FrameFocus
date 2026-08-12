@@ -42,8 +42,12 @@ beforeAll(async () => {
   bishopId = bishop!.id;
   bishopEmailBefore = bishop!.email;
 
+  // ⚠️ BY NAME, NOT SLUG [S136]. S136's backfill (20260917000000) rewrote
+  // company slugs to drop the hex suffix, so `slug` is no longer a stable
+  // lookup key — it is the email local part. Bishop above was already resolved
+  // by name; this line was the inconsistent one.
   const { data: ridgeline } = await admin
-    .from('companies').select('id').eq('slug', 'ridgeline-test-co-2').single();
+    .from('companies').select('id').eq('name', 'Ridgeline Builders (TEST CO 2)').single();
   ridgelineId = ridgeline!.id;
 
   const { data: orphan, error } = await admin
