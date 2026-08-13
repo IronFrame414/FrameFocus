@@ -78,6 +78,36 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
 ## Open Tech Debt
 
+### Branch-scoped, awaiting real numbers — `feature/s143-void-guard-qb-reconcile` [S143]
+
+> Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.
+
+- **#1-s143 — `enforce_time_clock_sessions_column_scope` is the only column-scope
+  trigger in the repo with no service-role escape.**
+
+  Every sibling — `enforce_expenses_column_scope`, `enforce_invoices_column_scope`,
+  and both 7E QB guards — opens with `IF auth.uid() IS NULL THEN RETURN NEW; END IF;`.
+  6A's does not. It goes straight to `get_my_role()`, so a service-role or system
+  write to a time session is refused outright with *"Session system columns are not
+  editable for your role."*
+
+  **Found the hard way at S143:** it blocked `20260924000000`'s own backfill, twice —
+  first by referencing a renamed column, then by refusing the corrected write. The
+  migration works around it by suspending the trigger for its own two statements,
+  inside the transaction.
+
+  **Not fixed there, deliberately.** Adding the escape changes a shipped Module 6A
+  guard nobody asked to change, inside a migration about QuickBooks columns. It also
+  has a second-order effect worth a ruling: any future maintenance script touching
+  `time_clock_sessions` hits the same wall, and the workaround (suspend the trigger)
+  is more dangerous than the escape would be.
+
+  **What a ruling decides:** add the `auth.uid() IS NULL` escape to match every
+  sibling, or keep 6A deliberately stricter and accept that system writes to time
+  sessions must suspend it each time. Cross-ref: the S143-Q2 probe asserts the
+  asymmetry rather than papering over it — `time_clock_sessions` refuses an
+  out-of-vocabulary status via the TRIGGER, before its CHECK is ever reached.
+
 ### Branch-scoped, awaiting real numbers — `feature/m7-compliance-profit-liens` [S140]
 
 > Provisional ids per the S136 rule: **never allocate a bare `#N` on a branch.** These
