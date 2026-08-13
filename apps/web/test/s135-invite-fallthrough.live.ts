@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { randomUUID } from 'node:crypto';
-import { admin, assertRebuildTest, TEST_PASSWORD } from './live-session';
+import { admin, assertRebuildTest, purgeCompaniesNamed, TEST_PASSWORD } from './live-session';
 
 // ============================================================================
 // D1 [S135] — AN UNRESOLVABLE INVITE TOKEN FAILS LOUDLY AND LEAVES NOTHING.
@@ -102,6 +102,13 @@ async function createInvitation(email: string, opts: { expiresAt?: string; statu
   return token;
 }
 
+/**
+ * [#2-s147] Only the OWNER signup makes a company (`S135 Owner Co`) — the other
+ * two carry an `invitation_token`, so `handle_new_user()` joins an existing
+ * tenant instead of building one. 1 leaked per run.
+ */
+const MARKERS = ['S135'] as const;
+
 beforeAll(async () => {
   assertRebuildTest();
   const { data: o } = await admin
@@ -113,11 +120,17 @@ beforeAll(async () => {
   companyId = (o as { company_id: string }).company_id;
 
   for (const e of [EMAIL_BOGUS, EMAIL_EXPIRED, EMAIL_OWNER]) await purge(e);
+  await purgeCompaniesNamed(admin, MARKERS);
 }, 240_000);
 
 afterAll(async () => {
   for (const e of [EMAIL_BOGUS, EMAIL_EXPIRED, EMAIL_OWNER]) await purge(e);
   for (const id of invitationIds) await admin.from('invitations').delete().eq('id', id);
+  await purgeCompaniesNamed(admin, MARKERS);
+
+  // A cleanup that cannot fail its own run is not a cleanup.
+  const { data } = await admin.from('companies').select('id').ilike('name', 'S135%');
+  expect(data ?? [], 'S135 companies survived teardown').toHaveLength(0);
 });
 
 describe('⚠️ the fallthrough is closed', () => {

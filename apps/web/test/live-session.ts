@@ -15,6 +15,9 @@
  * real user JWT, so RLS applies exactly as it does in the app.
  */
 import { createClient as createSupabaseClient, type SupabaseClient } from '@supabase/supabase-js';
+import { deleteCompanies, purgeCompaniesNamed } from '../test-support/company-purge';
+
+export { deleteCompanies, purgeCompaniesNamed };
 
 export const REQUIRED_PROJECT_REF = 'nmyphyhmfttxkdoposvf'; // framefocus-rebuild-test
 
@@ -104,10 +107,19 @@ export async function adoptSignupProfile(
     await admin.from('company_members').update({ company_id: fields.companyId }).eq('id', memberId);
   }
 
+  // ⚠️ #2-s147 — THIS BLOCK LEAKED A COMPANY EVERY TIME IT RAN.
+  //
+  // It used to delete `tag_options`, `subscriptions`, `companies` — and read no
+  // error from any of them. Since 7F's seed trigger (`20260922000000`) the
+  // parent delete cannot succeed: 8 `lien_release_templates` pin it and the FK
+  // is NO ACTION. The spurious company therefore survived, silently, on every
+  // adopted signup.
+  //
+  // Measured: 2 orphans per run of `s97ct-7e-clicktest.live.ts`, this helper's
+  // only caller. `deleteCompanies()` deletes the full child list and THROWS if
+  // the parent still stands.
   if (spuriousCompanyId !== fields.companyId) {
-    await admin.from('tag_options').delete().eq('company_id', spuriousCompanyId);
-    await admin.from('subscriptions').delete().eq('company_id', spuriousCompanyId);
-    await admin.from('companies').delete().eq('id', spuriousCompanyId);
+    await deleteCompanies(admin, [spuriousCompanyId]);
   }
   await admin.from('trial_emails').delete().eq('email', fields.email.toLowerCase());
 

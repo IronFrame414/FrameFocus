@@ -158,8 +158,57 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   tests failed as parallel-fixture artifacts that CI would never show. Reproduce
   and verify with `--workers=1`.
 
-- **#2-s147 — THE SAME LEAK IS LIVE IN FIVE MORE HARNESSES, and `#1-s147` fixes
-  only the one CI named.**
+- **#2-s147 — ✅ FIXED [S147b] — the same leak in six more harnesses. Zero new
+  companies after a full live-suite run.**
+
+  **THE ATTRIBUTION IN THE ORIGINAL FILING WAS BY NAMING CONVENTION AND WAS WRONG
+  IN ONE PLACE.** Re-done by instrumentation — purge to zero, run each harness
+  alone, measure the delta:
+
+  | harness | measured leak/run | filed guess |
+  | --- | --- | --- |
+  | `s136-company-slug` | 3 | ✓ |
+  | `s137-trial-lifecycle` | 2 | ✓ |
+  | `s138-trial-unlock` | 2 | (grouped as 4 across three files) |
+  | `s138-trial-export` | 1 | ✓ |
+  | `s138-trial-deletion-run` | 1 | ✓ |
+  | **`s97ct-7e-clicktest`** | **2** | **filed as "live-session `adoptSignupProfile`"** |
+  | `s135-invite-fallthrough` | 1 | ✓ |
+  | `s133-subcontractor-read-floor` | **0** | — not a leaker |
+  | `s97ct-reply-to` | **0** | control; `#4-s146` holds |
+
+  `adoptSignupProfile()` is the **mechanism**; `s97ct-7e-clicktest` is its only
+  caller. `"My Company"` is `handle_new_user()`'s DEFAULT name for any
+  `createUser` without `company_name` metadata, which is exactly why marker names
+  cannot attribute reliably. **`s133` creates users and leaks nothing** because it
+  passes `invitation_token` — the invited path joins an existing tenant instead of
+  building one.
+
+  **So the shared helper covered ONE of the six**, not several. Establishing that
+  before touching the rest was the point of measuring.
+
+  **Fixed** with one shared module, `apps/web/test-support/company-purge.ts`,
+  imported by both trees — `COMPANY_CHILDREN`, `deleteCompanies()` (error-checked)
+  and `purgeCompaniesNamed()` (case-insensitive, name-keyed). `#1-s146` and
+  `#1-s147` had each grown their own copy; the child list is the thing that goes
+  stale and it now goes stale in one place. Every harness calls the purge from
+  **both ends** and asserts it worked.
+
+  **Acceptance test met: full live suite, companies BEFORE `2 / 0 orphans`,
+  AFTER `2 / 0 orphans`.** Previously one run re-created 12.
+
+  **`COMPANY_CHILDREN` fails loudly rather than leaking — confirmed empirically.**
+  `contacts` is deliberately NOT in the list and `s138-trial-export` populates it.
+  Removing that harness's own `contacts` delete produces
+  *"purge companies: … violates foreign key constraint "contacts_company_id_fkey"
+  on table "contacts""* and fails the run — naming the table to add. The
+  subsequent run then refuses to start rather than proceeding over the residue,
+  which is the same property one layer earlier.
+
+  _Superseded filing text, quoted rather than deleted:_
+
+- **~~#2-s147 — THE SAME LEAK IS LIVE IN FIVE MORE HARNESSES, and `#1-s147` fixes
+  only the one CI named.~~**
 
   Measured on rebuild-test at S147: **111 companies, 109 with no profile** — i.e.
   109 orphans and only the two real QA tenants. Every orphan carried exactly 8

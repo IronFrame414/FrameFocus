@@ -23,7 +23,13 @@
  * ============================================================================
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { admin, assertRebuildTest, TEST_PASSWORD } from './live-session';
+import {
+  admin,
+  assertRebuildTest,
+  deleteCompanies,
+  purgeCompaniesNamed,
+  TEST_PASSWORD,
+} from './live-session';
 import { runTrialDeletion } from '@/lib/trial/deletion';
 
 const EMAIL = 'josh+s138doomed@worthprop.com';
@@ -31,6 +37,17 @@ const EMAIL = 'josh+s138doomed@worthprop.com';
 let companyId = '';
 let userId = '';
 let aiLogId = '';
+
+
+/**
+ * [#2-s147] Companies this file creates, purged BY NAME from both ends.
+ *
+ * ⚠️ THE BY-EMAIL PATH IN `nuke()` CANNOT REACH A LEAKED ONE. It finds the
+ * company through the auth user's profile — and the auth user deletes
+ * successfully while the company does not, so the orphan loses its only handle
+ * on the very run that creates it. The name is the handle that outlives both.
+ */
+const MARKERS = ['S138 Doomed Co'] as const;
 
 async function nuke(): Promise<void> {
   const { data: list } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
@@ -44,17 +61,14 @@ async function nuke(): Promise<void> {
     const cid = p ? (p as { company_id: string }).company_id : null;
     if (cid) {
       await admin.from('deletion_jobs').delete().eq('company_id', cid);
-      await admin.from('trial_lifecycle').delete().eq('company_id', cid);
       await admin.from('contacts').delete().eq('company_id', cid);
-      await admin.from('tag_options').delete().eq('company_id', cid);
-      await admin.from('subscriptions').delete().eq('company_id', cid);
-      await admin.from('company_members').delete().eq('company_id', cid);
-      await admin.from('profiles').delete().eq('company_id', cid);
-      await admin.from('companies').delete().eq('id', cid);
+      // [#2-s147] `contacts` first — NO ACTION and not in COMPANY_CHILDREN.
+      await deleteCompanies(admin, [cid]);
     }
     await admin.from('trial_emails').delete().eq('email', EMAIL.toLowerCase());
     await admin.auth.admin.deleteUser(u.id);
   }
+  await purgeCompaniesNamed(admin, MARKERS);
 }
 
 beforeAll(async () => {
