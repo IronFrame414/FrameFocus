@@ -1,40 +1,117 @@
-# S148 — 7G QuickBooks: §S designed, slice 1 built
+# 7G QuickBooks — the schema build (S148 → S149)
 
-**Branch:** `feature/s148-7g-quickbooks`, cut off `53c8dde` (`origin/main`).
+**S148:** `feature/s148-7g-quickbooks` off `53c8dde` — §S designed, slice 1.
+**S149:** `feature/s149-7g-queue-webhooks` off `8358435` — slices 2 and 3.
 **Scope ruled [Josh, S148]:** schema, RLS and probes only. **No OAuth route, no worker, no
-UI, no Intuit calls.** Three slices, each independently committable.
+UI, no Intuit calls.** Three slices, each independently committable. **All three are done.**
 
 ---
 
 ## RESUME HERE
 
-**Slice 1 is DONE, committed and pushed. Slices 2 and 3 are NOT started.**
+**Slices 1, 2 and 3 are DONE, committed and pushed.** The 7G SCHEMA IS COMPLETE — every
+one of §S's eleven items now has a home.
 
-**NEXT ACTION — slice 2: entity ids + the sync queue.** All decided at S148, nothing to
-re-ask:
+**NEXT ACTION: the OAuth route and the sync worker** — still unbuilt by ruling, and the
+first thing that will call Intuit. Everything below it exists:
 
-- `contacts.qb_customer_id text` — per-client QB Customer id
-- `projects.qb_sub_customer_id text` — per-job sub-customer (naming convention verified
-  live: `PRJ-100`…`PRJ-104` + job name; no new source field)
-- `invoices.qb_void_memo text` — the void/reissue memo (#9); the id/status/synced trio
-  already ships
-- **`client_payments.qb_synced_at`** — [Josh, S148] the asymmetry is residue from two
-  sessions and this is the moment to remove it, same reasoning as S143's rename. **Only
-  `invoices` has this column today.**
-- **`qb_sync_queue`** — the largest single item, no scaffolding at all. Columns as drawn
-  in Phase 2: `company_id`, `realm_id`, `entity_type`, `entity_id`, `operation`,
-  `depends_on_id` (self-FK, dependency ordering), `status`
-  (`queued|in_flight|pushed|failed_transient|failed_terminal`), `attempts`,
-  `next_attempt_at`, `last_error`. Owner/Admin SELECT; **no client INSERT/UPDATE** — the
-  worker is service role.
+- **Connect flow** → writes `companies.qb_realm_id`, calls `qb_vault_put()`, sets
+  `qb_connection_state='connected'`, stamps `qb_reauth_required_after` at +5 years.
+  Owner-only, enforced by `enforce_companies_qb_scope`.
+- **Refresh loop** → `qb_vault_put(…, p_secret_id)` REPLACES the blob; stamp
+  `qb_refresh_rotated_at`. ⚠️ Intuit rotates the refresh token every ~24–26h and
+  invalidates its predecessor — storing the original and reusing it is `invalid_grant` a
+  day later.
+- **On `invalid_grant`** → `qb_connection_state='needs_reauth'`, and **the queue keeps
+  queueing.** Nothing is marked failed. Asserted by `s149…` S149-E.
+- **Worker** → service role, `company_id` explicit on every query
+  (`invoice-derivation-server.ts` pattern). It can now write every QB column, including
+  `time_clock_sessions`' — that was `#1-s143`, closed at S148.
+- **Counter** → increment `qb_read_budget.coreplus_reads` **only on 2xx**. Core (data-in)
+  is free and uncapped and must not be counted.
 
-**Then slice 3:** `qb_webhook_events` (idempotency, keyed on Intuit's event id — a webhook
-carries a reference payload only, so a follow-up read is required and it is metered) and
-`qb_read_budget` (**counter only**, ruled: deferring the alert is cheap, deferring the
-count means the data does not exist retrospectively, and Builder **blocks rather than
-throttles** so the first symptom is a cliff).
+**Still owed, do not let it drop:** `qb_vault_forget` has **no assertion that disconnect
+destroys the ciphertext** — it is exercised only as harness cleanup. Not slice 2 or 3's
+work because the disconnect path does not exist yet; it belongs with the OAuth route.
 
 **Carry into every new migration header:** the two write-guard naming conventions, below.
+
+---
+
+## SLICE 2 and SLICE 3 [S149]
+
+**`qb_synced_at` went on all four remaining synced objects, not just payments.** A9 ruled
+it for `client_payments` and asked whether refunds and expenses needed it. They do, and so
+does `time_clock_sessions`: the column answers one question — *when did this record last
+agree with QuickBooks* — and that question is identical for all five. Adding it to payments
+and stopping would have replaced a 1-of-5 asymmetry with a 2-of-5 one, which is the same
+defect with a better ratio. `time_clock_sessions` is included for the reason S143 included
+it at all [B3]: leaving it out means someone designs it a third way later.
+
+**Seven guard functions were extended, each rebuilt from the live `pg_get_functiondef()`
+body** rather than retyped, and each verified afterwards by asserting its *original*
+distinguishing branch survived. `contacts` had no guard of any kind and took the
+`_qb_scope` convention; `projects` already had one, so its QB column joined the existing
+function rather than growing a second trigger on the same table.
+
+**`projects` got its own RAISE for the QB column**, separate from the financial one. A
+connector column is not a financial term, and a message naming the wrong cause is worse
+than none. S149-A asserts both messages on the same row, which is what proves they are
+actually distinct rather than one pattern matching twice.
+
+**The queue's status model expresses the `needs_reauth` ruling rather than contradicting
+it.** `queued` is the resting state while disconnected. On `invalid_grant` nothing moves to
+either failed state — S149-E asserts existing rows stay `queued` **and** that new work
+still enqueues while the connection is broken.
+
+**One live entry per (entity, operation), partial on the non-terminal statuses.** QB has no
+PUT, so a double push creates a second object. Partial so a record can legitimately be
+re-queued after `pushed`, or after a human clears a terminal failure.
+
+**Slice 3's two tables encode the two metering facts.** Only successful 2xx calls are
+metered, so the counter must not increment on failure and retries are cheaper than the spec
+assumed. And a webhook carries a reference payload only, so acting on one needs a follow-up
+read that is metered — the idempotency store protects **a paid read**, not just a duplicate
+write.
+
+**Neither slice-3 table takes a write guard**, and that is deliberate: neither has any
+client write policy at all, so there is no reachable column for a guard to protect.
+
+### S149 evidence
+
+`s149-qb-queue-webhooks.live.ts` — **23/23**, and green on **two consecutive runs**.
+
+| Gate | Printed | Signal |
+| --- | --- | --- |
+| `type-check` | `0` | 0 `error TS` |
+| `lint` | `0` | 0 `Error:`, 16 pre-existing `Warning:` |
+| `s149-qb-queue-webhooks` ×2 | `0` each | **23/23** |
+| **full live suite** | **`0`** | **67/67 files, 793/793 tests, ZERO failures** |
+| companies before → after | — | **2 / 0 orphans → 2 / 0 orphans** |
+
+`s138-trial-deletion-run` **passed in-suite this run**, which is consistent with the
+intermittent characterisation rather than a change — it alternates, and passes alone every
+time. Checked rather than assumed.
+
+**Mutation-proved twice, each reverted and re-verified:**
+
+| mutation | result |
+| --- | --- |
+| drop the `WHERE` from `idx_qb_sync_queue_one_live_per_entity_op` | **red** — *"a pushed row still blocks re-queueing — the index is not partial"* |
+| add an INSERT policy to `qb_sync_queue` | **red**, but only after the test was fixed — see below |
+
+⚠️ **THE SECOND MUTATION FOUND A DEFECT IN THE TEST, WHICH IS THE POINT OF MUTATION.** The
+first version of *"an OWNER cannot INSERT"* reused the invoice already queued earlier in the
+file and asserted `/row-level security|violates/i`. **"duplicate key value VIOLATES unique
+constraint" matches that too** — so the test was passing on the unique index, not on the
+absence of a write policy, and it stayed green against a deliberately added INSERT policy.
+Fixed to use a subject no live row holds and to assert `/row-level security/` specifically
+while asserting NOT `/duplicate key/`. It then went red under the mutation as it should.
+
+**And the mutation run leaked a queue row** the harness could not reach by id — the Owner's
+insert succeeded under the added policy and never went through `enqueue()`. `beforeAll` is
+now self-healing on `company_id`, which is `#2-s147`'s rule applied to a table that is not
+`companies`: *a cleanup that cannot fail its own run is not a cleanup.*
 
 ---
 
@@ -42,11 +119,13 @@ throttles** so the first symptom is a cliff).
 
 **Twelve `qb_*` columns across five tables, not ten.** Six pre-existed; `20260924000000`
 added six. All four `qb_push_status` CHECKs carry the same four-value vocabulary.
-**`qb_synced_at` exists only on `invoices`** — slice 2 closes that.
+~~`qb_synced_at` exists only on `invoices` — slice 2 closes that.~~ **Closed at S149:** it
+is now on all five synced objects.
 
 ### ⚠️ TWO NAMING CONVENTIONS FOR THE QB WRITE GUARDS
 
-A sweep for `enforce%column_scope` finds **three of the six** guards:
+A sweep for `enforce%column_scope` finds **three of the eight** guards (six at S148, plus
+`enforce_contacts_qb_scope` and the `projects` arm added at S149):
 
 | function | guards |
 | --- | --- |
