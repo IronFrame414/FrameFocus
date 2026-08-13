@@ -314,6 +314,45 @@ export async function getClientRefunds(contactId: string): Promise<ClientRefund[
 }
 
 /** Remaining on one invoice — the figure the record-payment form pre-fills. */
+/**
+ * 7D §9 [S143] — the payment state the VOID DECISION needs.
+ *
+ * `canVoidInvoice()` has always taken this, and its only caller passed a
+ * hardcoded `false` with the comment "7E owns payments and is not built".
+ * 7E landed at S97, so the matrix silently took its unpaid arm on every
+ * invoice, paid or not.
+ *
+ * `syncedToQuickBooks` is HARD-CODED FALSE and that is correct today, not a
+ * repeat of the same mistake: 7G is not built, `client_payments.qb_push_status`
+ * is inert on every row, and nothing can have reached QuickBooks. It is read
+ * from the column rather than assumed so that the day 7G ships, this function
+ * starts telling the truth without anyone remembering to come back.
+ */
+export async function getInvoiceVoidState(
+  invoiceId: string
+): Promise<{ hasPayment: boolean; syncedToQuickBooks: boolean }> {
+  const supabase = await createClient();
+
+  const { data: apps } = await supabase
+    .from('client_payment_applications')
+    .select('amount, payment:client_payments(qb_push_status)')
+    .eq('invoice_id', invoiceId)
+    .eq('is_deleted', false);
+
+  const live = apps ?? [];
+  const hasPayment = live.some((a) => Number(a.amount) > 0);
+
+  // "In QuickBooks" means the payment actually landed there — queued or failed
+  // has not. §9's third arm exists only while QB is disconnected and a payment
+  // sits queued, so `queued` must NOT count as synced.
+  const syncedToQuickBooks = live.some((a) => {
+    const payment = Array.isArray(a.payment) ? a.payment[0] : a.payment;
+    return (payment as { qb_push_status?: string } | null)?.qb_push_status === 'pushed';
+  });
+
+  return { hasPayment, syncedToQuickBooks };
+}
+
 export async function getInvoiceRemaining(invoiceId: string): Promise<number> {
   const supabase = await createClient();
   const { data: invoice } = await supabase

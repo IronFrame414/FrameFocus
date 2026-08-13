@@ -276,10 +276,18 @@ export function findSplitDays(
 // ── §9 — who may void, and when ─────────────────────────────────────────────
 
 export interface VoidContext {
-  /** Whether any payment has been applied. 7E owns payments and is not built,
-   *  so this is false in practice today; the caller passes what it knows. */
+  /**
+   * Whether any payment has been applied.
+   *
+   * ⚠️ [S143] This comment used to read "7E owns payments and is not built, so
+   * this is false in practice today". 7E LANDED AT S97, and the one caller
+   * went on passing a hardcoded `false` — so the matrix below took its unpaid
+   * arm on every invoice, paid or not, for two sessions. Read it from
+   * `getInvoiceVoidState()`; never assume it.
+   */
   hasPayment: boolean;
-  /** 7G G3 — a payment queued while QuickBooks is disconnected. */
+  /** 7G G3 — a payment queued while QuickBooks is disconnected. False for
+   *  every invoice today because 7G is not built, but READ, not assumed. */
   paymentSyncedToQuickBooks: boolean;
   role: string;
   status: InvoiceStatus;
@@ -292,13 +300,25 @@ export type VoidDecision =
 /**
  * §9's actor matrix, as a pure decision so it can be proven:
  *
- *   unpaid                          -> Owner/Admin, reason required
- *   partially paid, NOT yet in QB   -> Owner ONLY, with a warning
- *   partially paid, already in QB   -> NOT voidable (7E credit/refund)
- *   fully paid                      -> NOT voidable (7E credit/refund)
+ *   unpaid                            -> Owner/Admin, reason required
+ *   paid or part-paid, NOT yet in QB  -> Owner ONLY, with a warning
+ *   paid or part-paid, already in QB  -> NOT voidable (7E credit/refund)
  *
  * §9 notes the "not yet in QuickBooks" row exists ONLY while QB is
  * disconnected and a payment sits queued — build it as the exception it is.
+ *
+ * ⚠️ [S143] THE FOURTH ROW WAS REMOVED BECAUSE IT WAS NEVER TRUE OF THIS CODE.
+ * It read "fully paid -> NOT voidable", but nothing here distinguishes a full
+ * payment from a partial one — both take the `hasPayment` arm and both are
+ * voidable by the Owner. Josh's S143 ruling settles it the way the code
+ * already behaved: "a PAID OR PARTIALLY-PAID invoice — PM cannot void, Owner
+ * can void with a warning, and a client credit is created." The docstring was
+ * the stale half, not the logic.
+ *
+ * ⚠️ [S143] THIS FUNCTION IS NO LONGER THE ONLY GATE, and must not be treated
+ * as one. `enforce_invoice_void_authority` (20260923000000) enforces the same
+ * matrix in the database, because `invoices_update_authorized` admits a PM and
+ * a direct PostgREST call bypasses everything in this file.
  */
 export function canVoidInvoice(ctx: VoidContext): VoidDecision {
   if (ctx.status === 'voided') {
