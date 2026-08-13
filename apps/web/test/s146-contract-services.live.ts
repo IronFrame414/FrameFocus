@@ -52,12 +52,15 @@ import { catalogForKind } from '@/lib/services/contracts-shared';
 const OWNER = 'josh+test50@worthprop.com';
 const ADMIN_USER = 'josh+qa-admin@worthprop.com';
 const PM = 'josh+pm@worthprop.com';
+const OTHER_CO_OWNER = 'josh+qa-b-owner@worthprop.com';
 
 const MARKER = 'S146SVC';
 
 let ownerC: SupabaseClient;
 let adminC: SupabaseClient;
 let pmC: SupabaseClient;
+/** Company B's OWNER — an owner by role, blind to company A by RLS. */
+let otherCoC: SupabaseClient;
 
 let companyId = '';
 let estimateId = '';
@@ -72,10 +75,11 @@ const madeDocuments: string[] = [];
 
 beforeAll(async () => {
   assertRebuildTest();
-  [ownerC, adminC, pmC] = (await Promise.all([
+  [ownerC, adminC, pmC, otherCoC] = (await Promise.all([
     sessionFor(OWNER),
     sessionFor(ADMIN_USER),
     sessionFor(PM),
+    sessionFor(OTHER_CO_OWNER),
   ])) as SupabaseClient[];
   state.client = ownerC;
 
@@ -88,10 +92,10 @@ beforeAll(async () => {
   companyId = (prof as { company_id: string }).company_id;
 
   // self-heal after a crashed run
+  // NOT scoped to companyId — the fixture also creates a template in company B.
   const { data: stale } = await admin
     .from('contract_templates')
     .select('id')
-    .eq('company_id', companyId)
     .like('name', `${MARKER}%`);
   const staleIds = (stale ?? []).map((t) => (t as { id: string }).id);
   if (staleIds.length) {
@@ -140,14 +144,15 @@ beforeAll(async () => {
     .limit(1)
     .single();
   estimateId = (estimate as { id: string }).id;
+
 });
+
 
 afterAll(async () => {
   if (madeDocuments.length) await admin.from('contract_documents').delete().in('id', madeDocuments);
   const { data: tpls } = await admin
     .from('contract_templates')
     .select('id')
-    .eq('company_id', companyId)
     .like('name', `${MARKER}%`);
   const ids = (tpls ?? []).map((t) => (t as { id: string }).id);
   if (ids.length) {
@@ -362,10 +367,15 @@ describe('S146-C3 — document reads through the service', () => {
   });
 });
 
-describe('S146-C4 — VOID AUTHORITY: the service check is a message, the database is the gate', () => {
-  it('a PM is refused by the service check, with the reason', async () => {
+describe('S146-C4 — VOID AUTHORITY: resolved server-side, and a discarded write fails', () => {
+  // ⚠️ THIS BLOCK PROBES THE #1-s146 FIX. Before it, `voidContractDocument`
+  // took `role` as a PARAMETER and returned `{ success: true }` over a write
+  // RLS had discarded. Both halves are now asserted, and both are paired with a
+  // positive so neither can pass by refusing everybody.
+
+  it('HALF 1 — a PM is refused BY THE FUNCTION, not merely by the database', async () => {
     state.client = pmC;
-    const res = await voidContractDocument(documentId, 'project_manager', 'sent', 'no longer needed');
+    const res = await voidContractDocument(documentId, 'sent', 'no longer needed');
     expect(res.success).toBe(false);
     expect(res.error).toMatch(/Owner\/Admin only/i);
 
@@ -377,33 +387,25 @@ describe('S146-C4 — VOID AUTHORITY: the service check is a message, the databa
     expect((data as { status: string }).status).toBe('sent');
   });
 
-  it('⚠️ A PM WHO LIES ABOUT THEIR ROLE WALKS PAST THE SERVICE — the DOCUMENT is safe', async () => {
-    // This is the whole C4(b) argument, and running it turned up a defect.
+  it('⚠️ HALF 1 — THE LIE IS NO LONGER SAYABLE: role is resolved from get_my_role()', async () => {
+    // The old signature was (id, role, status, reason) and a project_manager
+    // passing role:'owner' cleared canVoidContract() outright — nothing in the
+    // service layer read the caller's ACTUAL role, so the only thing that saved
+    // the data was the database refusing the write.
     //
-    // `role` is a PARAMETER, so `canVoidContract()` believes whatever the caller
-    // says. Nothing in the service layer reads the caller's ACTUAL role. If the
-    // guard lived only in `contracts-client.ts`, this call would void a signed
-    // legal document.
-    //
-    // WHAT ACTUALLY STOPS IT is `contract_documents_update_owner_admin`, whose
-    // USING clause is `get_my_role() = ANY('owner','admin')`. The PM's UPDATE
-    // therefore matches ZERO ROWS. The document is not voided — the important
-    // property, asserted below.
-    //
-    // ⚠️ BUT THE CALL REPORTS SUCCESS. A zero-row UPDATE is not an error, so
-    // `error` is null and the function returns `{ success: true }`. The caller
-    // is told a legal document was voided when it was not. Filed as
-    // #1-s146; the fix is a row count, and this assertion INVERTS when it lands.
-    //
-    // Note this is NOT the same hole S145-C4 probed. There the subject was
-    // `client_contracts`, where an assigned PM DOES have an UPDATE policy, so
-    // the row is visible, the trigger fires, and Postgres raises. Two tables,
-    // two different outcomes for the same lie — which is exactly why the
-    // service path had to be run rather than reasoned about.
+    // There is now no `role` argument to lie in. This test asserts the property
+    // that replaced it: the SAME PM session, making the same call, is refused
+    // with the Owner/Admin message — which can only be produced by a role the
+    // caller did not supply. `get_my_role()` is the same SECURITY DEFINER
+    // function the RLS policies call, so the service check and the database gate
+    // cannot disagree about who the caller is.
     state.client = pmC;
-    const res = await voidContractDocument(documentId, 'owner', 'sent', 'pretending to be the owner');
+    const res = await voidContractDocument(documentId, 'sent', 'pretending to be the owner');
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/Owner\/Admin only/i);
 
-    // THE SAFETY PROPERTY — the one that matters. Nothing was written.
+    // It is refused BEFORE the write, so the document is untouched — same
+    // safety property as before, now reached one layer earlier.
     const { data } = await admin
       .from('contract_documents')
       .select('status, void_reason, voided_by, voided_at')
@@ -419,37 +421,73 @@ describe('S146-C4 — VOID AUTHORITY: the service check is a message, the databa
     expect(row.void_reason).toBeNull();
     expect(row.voided_by).toBeNull();
     expect(row.voided_at).toBeNull();
-
-    // THE DEFECT, pinned so it cannot drift unnoticed. When #1-s146 is fixed
-    // this line fails and is replaced by `toBe(false)` plus a message check.
-    expect(res.success, 'if this is now false, #1-s146 has been fixed — invert it').toBe(true);
   });
 
-  it('⚠️ the false success is GENERAL to UPDATE-shaped writes, not special to void', async () => {
-    // Same mechanism, different function: a PM has no UPDATE policy on
-    // `contract_templates` either, so the update touches nothing and reports
-    // success. Recorded here so #1-s146 is scoped to the pattern rather than to
-    // one call site — the INSERT-shaped writes (createContractTemplate, the box
-    // insert) DO surface a real error, which is why C1 and C2 pass.
+  it('⚠️ HALF 2 — a write RLS DISCARDS returns failure, not success', async () => {
+    // The row-count half, isolated from the role half.
+    //
+    // The caller is company B's OWNER. `get_my_role()` returns 'owner', so
+    // canVoidContract() passes and the write is genuinely attempted — but the
+    // document belongs to company A, so contract_documents_update_owner_admin
+    // matches no row. Postgres reports NO ERROR: the policy simply matched
+    // nothing, and an UPDATE that changes nothing is valid. That is the exact
+    // shape that used to return `{ success: true }`.
+    //
+    // A cross-tenant owner rather than a bogus id ON PURPOSE — the row EXISTS
+    // and is merely invisible, which is what "RLS discarded it" means. It also
+    // makes this a tenant-isolation assertion in its own right.
+    state.client = otherCoC;
+    const res = await voidContractDocument(documentId, 'sent', 'reaching across tenants');
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/not applied/i);
+
+    // …and company A's document is untouched.
+    const { data } = await admin
+      .from('contract_documents')
+      .select('status, void_reason')
+      .eq('id', documentId)
+      .single();
+    expect((data as { status: string }).status).toBe('sent');
+    expect((data as { void_reason: string | null }).void_reason).toBeNull();
+    state.client = ownerC;
+  });
+
+  it('HALF 2 — the same failure for a row that does not exist at all', async () => {
+    state.client = ownerC;
+    const res = await voidContractDocument(
+      '11111111-1111-1111-1111-111111111111',
+      'sent',
+      'no such document'
+    );
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/not applied/i);
+  });
+
+  it('⚠️ the fix is GENERAL to UPDATE-shaped writes, not special to void', async () => {
+    // Same mechanism, different function. A PM has no UPDATE policy on
+    // contract_templates either, so the update touches nothing and Postgres
+    // reports no error — updateContractTemplate() used to return success.
+    // Every UPDATE-shaped write in contracts-client.ts now selects its affected
+    // rows and fails when there are none.
     state.client = pmC;
     const res = await updateContractTemplate(clientTemplateId, {
       name: `${MARKER} pm renamed this`,
     });
-    expect(res.success, 'if this is now false, #1-s146 has been fixed — invert it').toBe(true);
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/not applied/i);
 
     const { data } = await admin
       .from('contract_templates')
       .select('name')
       .eq('id', clientTemplateId)
       .single();
-    // The name did NOT change — the write was filtered, not applied.
     expect((data as { name: string }).name).not.toBe(`${MARKER} pm renamed this`);
     state.client = ownerC;
   });
 
   it('an Owner CAN void it — so the refusals above are authority, not breakage', async () => {
     state.client = ownerC;
-    const res = await voidContractDocument(documentId, 'owner', 'sent', 'superseded by rev 2');
+    const res = await voidContractDocument(documentId, 'sent', 'superseded by rev 2');
     expect(res.error).toBeUndefined();
     expect(res.success).toBe(true);
 
@@ -488,7 +526,7 @@ describe('S146-C4 — VOID AUTHORITY: the service check is a message, the databa
     const id = (doc as { id: string }).id;
     madeDocuments.push(id);
 
-    const res = await voidContractDocument(id, 'owner', 'sent', '   ');
+    const res = await voidContractDocument(id, 'sent', '   ');
     expect(res.success).toBe(false);
     expect(res.error).toMatch(/needs a reason/i);
 
@@ -502,7 +540,7 @@ describe('S146-C4 — VOID AUTHORITY: the service check is a message, the databa
 
   it('an already-voided document cannot be voided twice', async () => {
     state.client = ownerC;
-    const res = await voidContractDocument(documentId, 'owner', 'voided', 'again');
+    const res = await voidContractDocument(documentId, 'voided', 'again');
     expect(res.success).toBe(false);
     expect(res.error).toMatch(/already voided/i);
   });

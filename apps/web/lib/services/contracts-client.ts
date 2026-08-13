@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase-browser';
 import { uploadFile } from '@/lib/services/files-client';
 import {
+  canManageContracts,
   canVoidContract,
   isKeyValidForKind,
   type ContractBoxKind,
@@ -14,6 +15,69 @@ import type {
   SubcontractorContract,
 } from '@/lib/services/contracts';
 export type { ClientContract, ContractStatus, SubcontractorContract };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// #1-s146 — the two halves of the fix, applied to every write below.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The caller's role, resolved SERVER-SIDE.
+ *
+ * ⚠️ A FUNCTION THAT ASKS THE CALLER WHO THEY ARE IS NOT A CHECK. Until S146
+ * `voidContractDocument()` took `role` as a PARAMETER, so a project_manager
+ * passing `role: 'owner'` cleared `canVoidContract()` outright and the only
+ * thing that saved the data was the database refusing the write.
+ *
+ * `get_my_role()` is the SAME SECURITY DEFINER function every RLS policy calls,
+ * which is the reason to use it over a `profiles` read: the service check and
+ * the database gate cannot disagree about who the caller is, because they ask
+ * the same question of the same source.
+ *
+ * Precedent: `time-tracking-client.ts:107`.
+ */
+async function myRole(supabase: ReturnType<typeof createClient>): Promise<string | null> {
+  const { data, error } = await supabase.rpc('get_my_role');
+  if (error) return null;
+  return (data as string | null) ?? null;
+}
+
+/**
+ * A write that RLS discarded, reported as the failure it is.
+ *
+ * ⚠️ ZERO AFFECTED ROWS IS NOT AN ERROR IN POSTGRES. When a policy matches
+ * nothing, the UPDATE is valid and changes nothing — PostgREST returns no error,
+ * so every caller below used to return `{ success: true }` over a row it had not
+ * touched. On a contract that means reporting a legal document as voided while
+ * it is still live.
+ *
+ * ⚠️ AND THE SAME CODE BEHAVED TWO DIFFERENT WAYS DEPENDING ON THE TABLE, which
+ * is what makes this worth a helper rather than a one-line fix:
+ *
+ *   `client_contracts` — an assigned PM HOLDS an UPDATE policy, so the row is
+ *     visible, `enforce_contract_void_authority` fires, and Postgres RAISES.
+ *     The caller got a real error.
+ *   `contract_documents` — `contract_documents_update_owner_admin` admits only
+ *     owner/admin, so a PM matches NO ROWS. No policy match, no trigger, no
+ *     error — and the identical lie returned success.
+ *
+ * Same function, same call, opposite outcomes. Proved by
+ * `s146-contract-services.live.ts` S146-C4.
+ *
+ * The message names no cause it has not verified (CLAUDE.md): an empty result
+ * cannot distinguish "policy refused you" from "the row is gone", so it says
+ * both. `.select('id')` is what makes the affected rows observable at all.
+ */
+const DISCARDED =
+  'That change was not applied. You may not have permission to make it, or the record no longer exists.';
+
+/**
+ * ⚠️ DO NOT apply this to a DELETE whose empty result is legitimate — see
+ * `saveContractBoxMap`, where clearing a template that has no boxes yet
+ * correctly affects zero rows.
+ */
+function applied(rows: unknown[] | null): boolean {
+  return Array.isArray(rows) && rows.length > 0;
+}
 
 export async function createClientContract(contract: {
   project_id: string;
@@ -43,9 +107,14 @@ export async function updateClientContract(
 
   // BEFORE UPDATE trigger `client_contracts_set_updated_by` handles updated_by.
   // updated_at is handled by the existing updated_at trigger.
-  const { error } = await supabase.from('client_contracts').update(updates).eq('id', id);
+  const { data, error } = await supabase
+    .from('client_contracts')
+    .update(updates)
+    .eq('id', id)
+    .select('id');
 
   if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 
@@ -78,9 +147,14 @@ export async function updateSubcontractorContract(
   const supabase = createClient();
 
   // BEFORE UPDATE trigger handles updated_by; updated_at trigger handles updated_at.
-  const { error } = await supabase.from('subcontractor_contracts').update(updates).eq('id', id);
+  const { data, error } = await supabase
+    .from('subcontractor_contracts')
+    .update(updates)
+    .eq('id', id)
+    .select('id');
 
   if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 
@@ -150,18 +224,25 @@ export async function updateContractTemplate(
 ): Promise<ContractResult> {
   const supabase = createClient();
   // Triggers handle updated_at / updated_by; never set them here.
-  const { error } = await supabase.from('contract_templates').update(updates).eq('id', id);
+  const { data, error } = await supabase
+    .from('contract_templates')
+    .update(updates)
+    .eq('id', id)
+    .select('id');
   if (error) return { success: false, error: friendlyContract(error.message) };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 
 export async function softDeleteContractTemplate(id: string): Promise<ContractResult> {
   const supabase = createClient();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('contract_templates')
     .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
   if (error) return { success: false, error: friendlyContract(error.message) };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 
@@ -238,6 +319,25 @@ export async function saveContractBoxMap(
   }
 
   const supabase = createClient();
+
+  // #1-s146 — THE ROLE GATE IS LOAD-BEARING HERE, not defence in depth.
+  //
+  // The row-count fix used below cannot reach this function's empty case: a
+  // caller passing `[]` runs the clear and returns at the early exit, and a
+  // clear that RLS discarded is indistinguishable from a clear that had nothing
+  // to remove. Without this, a project_manager calling
+  // `saveContractBoxMap(id, kind, [])` was told the map was emptied when it was
+  // untouched. Resolving the role server-side closes it before the write.
+  const role = await myRole(supabase);
+  if (!role || !canManageContracts(role)) {
+    return { success: false, error: 'Contracts are Owner/Admin only.' };
+  }
+
+  // ⚠️ NO ROW-COUNT CHECK ON THIS DELETE, DELIBERATELY. Clearing a template that
+  // has no boxes yet legitimately affects zero rows — that is the first save of
+  // every template. `applied()` here would refuse the commonest case. The
+  // unauthorised caller is already gone at the gate above, and an authorised
+  // caller's discarded delete is caught by the INSERT below, which errors.
   const { error: clearError } = await supabase
     .from('contract_template_boxes')
     .delete()
@@ -273,25 +373,35 @@ export async function saveContractBoxMap(
  * `client_contracts_update_authorized` admits an assigned PM and the shipped
  * contracts panel already exposes a void action. A UI gate alone is the
  * defect class S143 closed on invoices.
+ *
+ * ⚠️ `role` WAS A PARAMETER UNTIL S146 (#1-s146), and that made this check
+ * decorative: a project_manager passing `role: 'owner'` cleared
+ * `canVoidContract()` and reached the write. It is now resolved server-side
+ * from `get_my_role()` — the same function the policies call — so the caller
+ * cannot assert it. `status` is still supplied by the caller: it selects the
+ * message ("already voided"), not the authority, and the void-shape CHECK plus
+ * the void-authority trigger both hold regardless of what is passed.
  */
 export async function voidContractDocument(
   id: string,
-  role: string,
   status: ContractDocumentStatus,
   reason: string
 ): Promise<ContractResult> {
-  const decision = canVoidContract(role, status, reason);
-  if (!decision.allowed) return { success: false, error: decision.reason };
-
   const supabase = createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) return { success: false, error: 'Not authenticated' };
 
+  const role = await myRole(supabase);
+  if (!role) return { success: false, error: 'Not authenticated' };
+
+  const decision = canVoidContract(role, status, reason);
+  if (!decision.allowed) return { success: false, error: decision.reason };
+
   // The void-shape CHECK requires all three together, so they are written
   // together — a partial void is refused by the database, not by this code.
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('contract_documents')
     .update({
       status: 'voided',
@@ -299,8 +409,10 @@ export async function voidContractDocument(
       voided_by: user.id,
       voided_at: new Date().toISOString(),
     })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
   if (error) return { success: false, error: friendlyContract(error.message) };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 
@@ -316,10 +428,12 @@ export async function setEstimateContractToggle(
   include: boolean
 ): Promise<ContractResult> {
   const supabase = createClient();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('estimates')
     .update({ include_client_contract: include })
-    .eq('id', estimateId);
+    .eq('id', estimateId)
+    .select('id');
   if (error) return { success: false, error: friendlyContract(error.message) };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
