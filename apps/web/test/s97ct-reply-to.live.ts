@@ -34,8 +34,49 @@ async function resolve(companyId: string): Promise<string | null> {
   return resolveCompanyReplyTo(companyId);
 }
 
+/**
+ * Delete every `MARKER%` company AND the rows that pin it. [S146, #4-s146]
+ *
+ * ⚠️ DELETING THE COMPANY ALONE DOES NOT WORK, AND DID NOT FAIL LOUDLY.
+ * 7F's seed trigger (`20260922000000`) creates 8 `lien_release_templates` on
+ * every new company, and `lien_release_templates_company_id_fkey` is NO ACTION:
+ *
+ *   23503: update or delete on table "companies" violates foreign key
+ *   constraint "lien_release_templates_company_id_fkey" on table
+ *   "lien_release_templates"
+ *
+ * The old teardown deleted the company by id, pushed that error into a list, and
+ * only `console.log`-ged it — which vitest suppresses for a PASSING file. So the
+ * orphan survived, and the NEXT run died in this `beforeAll` on
+ * `companies_slug_key`, because the slug is a CONSTANT. The file passed once
+ * after a manual clear and never twice in a row.
+ *
+ * A seed change broke this harness's CLEANUP rather than its assertions, which
+ * is why nothing caught it. Called from BOTH ends: self-healing on the way in so
+ * a crashed run cannot poison the next one, and complete on the way out.
+ */
+async function purgeMarkerCompanies(): Promise<void> {
+  const { data: stale } = await admin
+    .from('companies')
+    .select('id')
+    .like('name', `${MARKER}%`);
+  const ids = (stale ?? []).map((c) => (c as { id: string }).id);
+  if (!ids.length) return;
+
+  must(
+    'purge boxes',
+    (await admin.from('lien_release_template_boxes').delete().in('company_id', ids)).error
+  );
+  must(
+    'purge templates',
+    (await admin.from('lien_release_templates').delete().in('company_id', ids)).error
+  );
+  must('purge companies', (await admin.from('companies').delete().in('id', ids)).error);
+}
+
 beforeAll(async () => {
   assertRebuildTest();
+  await purgeMarkerCompanies();
 
   const { data: bishop } = await admin
     .from('companies').select('id, email').eq('name', 'Bishop Contracting').single();
@@ -123,11 +164,24 @@ afterAll(async () => {
     errors.push(`restore FAILED: email is ${after!.email}, expected ${bishopEmailBefore}`);
   }
 
-  if (orphanCompanyId) {
-    check('orphan company', (await admin.from('companies').delete().eq('id', orphanCompanyId)).error);
+  // Clears the seeded templates first — see purgeMarkerCompanies. Keyed on the
+  // NAME rather than on `orphanCompanyId`, so a run that died before the insert
+  // still cleans up whatever a previous one left.
+  try {
+    await purgeMarkerCompanies();
+  } catch (e) {
+    errors.push((e as Error).message);
   }
 
   const { count } = await admin
     .from('companies').select('id', { count: 'exact', head: true }).like('name', `${MARKER}%`);
   console.log(`\n[${MARKER} TEARDOWN] rows left: ${count}; errors: ${errors.length ? JSON.stringify(errors) : 'NONE'}`);
+
+  // ⚠️ ASSERTED, NOT JUST LOGGED. The previous version reported the failed
+  // delete to stdout and vitest swallowed it for a passing file, so the leak was
+  // invisible for four sessions and surfaced as an unrelated-looking
+  // `companies_slug_key` error in the NEXT run's beforeAll. A cleanup that
+  // cannot fail its own run is not a cleanup.
+  expect(count, `${MARKER} companies left behind — cleanup did not work`).toBe(0);
+  expect(errors, 'teardown errors').toEqual([]);
 }, 180_000);
