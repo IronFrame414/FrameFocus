@@ -82,14 +82,26 @@ describe('S143-Q2 — an out-of-vocabulary status is refused everywhere', () => 
   // CHECK constraints bind the service role too, so these are valid evidence
   // run as `admin` — unlike an RLS probe, which would not be.
   //
-  // ⚠️ `time_clock_sessions` refuses for a DIFFERENT reason and that is not a
-  // gap. Its 6A column-scope trigger is the only one in the repo without an
-  // `auth.uid() IS NULL` escape, so it fires BEFORE the CHECK is ever
-  // evaluated and refuses with its own message. The CHECK is present either
-  // way — asserted independently below — it is simply unreachable by this
-  // path. Recorded rather than papered over: the asymmetry is TECH_DEBT
-  // #1-s143, and it is what made this migration need a trigger suspension.
-  const TRIGGER_REFUSES_FIRST = new Set(['time_clock_sessions']);
+  // ⚠️ THE ASYMMETRY THIS BLOCK USED TO ENCODE IS GONE — #1-s143 CLOSED [S148].
+  //
+  // _Superseded, quoted rather than deleted, because the reasoning is still how
+  // you would diagnose it if it came back:_
+  //
+  // > "`time_clock_sessions` refuses for a DIFFERENT reason and that is not a
+  // >  gap. Its 6A column-scope trigger is the only one in the repo without an
+  // >  `auth.uid() IS NULL` escape, so it fires BEFORE the CHECK is ever
+  // >  evaluated and refuses with its own message. […] the asymmetry is
+  // >  TECH_DEBT #1-s143."
+  //
+  // `20260927000000` added that escape, ruled at S148 because 7G's sync worker
+  // is SERVICE ROLE and could not otherwise write `qb_push_status` or
+  // `qb_time_activity_id` at all. With the escape the service-role write now
+  // reaches the CHECK, so this table refuses exactly like the other four and
+  // the special case has nothing left to describe.
+  //
+  // The CHECK was always present — asserted independently below — it was merely
+  // unreachable by this path. That independent assertion is why closing the
+  // trigger gap could not disguise a missing constraint.
 
   for (const { table } of SYNCED) {
     it(`${table} refuses an invented status`, async () => {
@@ -100,11 +112,7 @@ describe('S143-Q2 — an out-of-vocabulary status is refused everywhere', () => 
         .update({ qb_push_status: 'synced' })
         .eq('id', (row as { id: string }).id);
       expect(error, `${table} accepted an out-of-vocabulary status`).toBeTruthy();
-      expect(error?.message).toMatch(
-        TRIGGER_REFUSES_FIRST.has(table)
-          ? /not editable for your role/i
-          : /qb_push_status_check|violates check/i
-      );
+      expect(error?.message).toMatch(/qb_push_status_check|violates check/i);
     });
   }
 

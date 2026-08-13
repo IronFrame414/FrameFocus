@@ -82,8 +82,8 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
 > Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.
 
-- **#1-s143 — `enforce_time_clock_sessions_column_scope` is the only column-scope
-  trigger in the repo with no service-role escape.**
+- **#1-s143 — ✅ FIXED [S148] — `enforce_time_clock_sessions_column_scope` was the
+  only column-scope trigger in the repo with no service-role escape.**
 
   Every sibling — `enforce_expenses_column_scope`, `enforce_invoices_column_scope`,
   and both 7E QB guards — opens with `IF auth.uid() IS NULL THEN RETURN NEW; END IF;`.
@@ -102,11 +102,33 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   `time_clock_sessions` hits the same wall, and the workaround (suspend the trigger)
   is more dangerous than the escape would be.
 
-  **What a ruling decides:** add the `auth.uid() IS NULL` escape to match every
-  sibling, or keep 6A deliberately stricter and accept that system writes to time
-  sessions must suspend it each time. Cross-ref: the S143-Q2 probe asserts the
-  asymmetry rather than papering over it — `time_clock_sessions` refuses an
-  out-of-vocabulary status via the TRIGGER, before its CHECK is ever reached.
+  **RULED [Josh, S148]: option (a) — add the escape.** It is the anomaly, not the
+  rule. The two rejected alternatives are recorded in `20260927000000`'s header:
+  dropping TimeActivity from 7G's scope would drop scope to accommodate a defect,
+  and having the worker suspend the trigger is more dangerous than the escape it
+  works around.
+
+  **What forced the ruling:** 7G's sync worker is ruled SERVICE ROLE (7g1-spec §S),
+  and this trigger made the two columns `20260924000000` added to that table
+  (`qb_push_status`, `qb_time_activity_id`) **unreachable by their only intended
+  writer**. Proved at S148 with a paired probe, both writes carrying no JWT:
+  `invoices.qb_push_status` SUCCEEDED (escape present) while
+  `time_clock_sessions.qb_push_status` was REFUSED — then SUCCEEDED after the fix.
+
+  **Fixed** in `20260927000000_time_clock_service_escape.sql`, recreated from the
+  live body via `pg_get_functiondef()` rather than retyped — S143 paid for that
+  lesson on this same function. Every pre-existing branch is byte-identical; the
+  new lines are reachable only when `auth.uid()` is NULL, which no browser session
+  ever is. `s148-qb-connection.live.ts` S148-Q5 pairs the service-role success with
+  a real PM session still being refused on the same row, and that PM still clocking
+  out on it — so the guard was widened, not opened.
+
+  **Consequence for the S143 probe, which was correct to pin it:** S143-Q2 encoded
+  the asymmetry as expected behaviour and named this item as the reason. With the
+  escape in place `time_clock_sessions` now refuses an out-of-vocabulary status via
+  its CHECK, exactly like the other four, so the special case was removed and the
+  superseded comment quoted in place. **The test was the side that was wrong** —
+  it pinned a defect that has since been fixed.
 
 ### Branch-scoped, awaiting real numbers — `feature/s147-trial-screens-teardown` [S147]
 
