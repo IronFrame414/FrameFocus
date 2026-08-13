@@ -1,4 +1,13 @@
 import { createClient } from '@/lib/supabase-server';
+import {
+  clientContractApplies,
+  subContractBadge,
+  type ContractBoxKind,
+  type ContractDocumentStatus,
+  type DeliveryMode,
+  type DocumentKind,
+  type SubContractBadge,
+} from '@/lib/services/contracts-shared';
 import type { Database } from '@framefocus/shared/types/database';
 
 export type ContractStatus = 'draft' | 'sent' | 'signed' | 'void';
@@ -55,4 +64,156 @@ export async function getSubcontractorContracts(
 
   if (error) return [];
   return (data ?? []) as unknown as SubcontractorContract[];
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Module 7I — the contract DOCUMENT layer [S145]
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Everything above this line is Module 5A's contract RECORDS and is not
+// rebuilt (§4, §11.1 — "7I extends these. It does not create them.").
+//
+// Owner/Admin by RLS on all four 7I tables, SELECT included (§8, reasoning
+// rewritten at S145). No service-role bypass on any read here.
+
+export type ContractTemplate = Omit<
+  Database['public']['Tables']['contract_templates']['Row'],
+  'document_kind'
+> & { document_kind: DocumentKind };
+
+export type ContractDocument = Omit<
+  Database['public']['Tables']['contract_documents']['Row'],
+  'document_kind' | 'status' | 'delivery_mode'
+> & {
+  document_kind: DocumentKind;
+  status: ContractDocumentStatus;
+  delivery_mode: DeliveryMode;
+};
+
+export type ContractTemplateBox = Omit<
+  Database['public']['Tables']['contract_template_boxes']['Row'],
+  'kind'
+> & { kind: ContractBoxKind };
+
+export async function getContractTemplates(
+  kind?: DocumentKind
+): Promise<ContractTemplate[]> {
+  const supabase = await createClient();
+  let query = supabase
+    .from('contract_templates')
+    .select('*')
+    .eq('is_deleted', false)
+    .order('name', { ascending: true });
+  if (kind) query = query.eq('document_kind', kind);
+  const { data } = await query;
+  return (data ?? []) as ContractTemplate[];
+}
+
+export async function getContractTemplateBoxes(
+  templateId: string
+): Promise<ContractTemplateBox[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from('contract_template_boxes')
+    .select('*')
+    .eq('template_id', templateId)
+    .eq('is_deleted', false)
+    .order('page', { ascending: true });
+  return (data ?? []) as ContractTemplateBox[];
+}
+
+/** §5 — the client contract documents on an estimate. */
+export async function getContractDocumentsForEstimate(
+  estimateId: string
+): Promise<ContractDocument[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from('contract_documents')
+    .select('*')
+    .eq('estimate_id', estimateId)
+    .eq('is_deleted', false)
+    .order('created_at', { ascending: false });
+  return (data ?? []) as ContractDocument[];
+}
+
+/** §6 — the sub contract documents on a subcontract. */
+export async function getContractDocumentsForSubContract(
+  subContractId: string
+): Promise<ContractDocument[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from('contract_documents')
+    .select('*')
+    .eq('sub_contract_id', subContractId)
+    .eq('is_deleted', false)
+    .order('created_at', { ascending: false });
+  return (data ?? []) as ContractDocument[];
+}
+
+/**
+ * §5.2 — does this estimate ship a client contract?
+ *
+ * BOTH levels of the toggle, resolved in one read so no caller re-derives it.
+ * §5.2 makes this "the single trigger for everything conditional", and a
+ * trigger evaluated in three places is three chances to disagree.
+ */
+export async function clientContractAppliesToEstimate(
+  estimateId: string
+): Promise<boolean> {
+  const supabase = await createClient();
+
+  // RLS scopes `companies` to the caller's own row.
+  const { data: company } = await supabase
+    .from('companies')
+    .select('client_contracts_enabled')
+    .maybeSingle();
+
+  const { data: estimate } = await supabase
+    .from('estimates')
+    .select('include_client_contract')
+    .eq('id', estimateId)
+    .maybeSingle();
+
+  return clientContractApplies(
+    Boolean(company?.client_contracts_enabled),
+    Boolean(estimate?.include_client_contract)
+  );
+}
+
+/**
+ * §6.1 — the badge state for a subcontract.
+ *
+ * "Set up" means the stage schedule exists, because §6.3 prints that schedule
+ * INSIDE the contract: sending before the stages are entered produces a
+ * contract with an empty schedule block, which is worse than no contract
+ * because it looks complete.
+ */
+export async function getSubContractBadge(
+  subContractId: string
+): Promise<SubContractBadge> {
+  const supabase = await createClient();
+
+  const { data: contract } = await supabase
+    .from('subcontractor_contracts')
+    .select('requires_formal_contract')
+    .eq('id', subContractId)
+    .maybeSingle();
+  if (!contract) return 'none';
+
+  // 7C writes a sub's stages as payable `expenses` rows carrying the contract.
+  const { data: stages } = await supabase
+    .from('expenses')
+    .select('id')
+    .eq('sub_contract_id', subContractId)
+    .eq('is_deleted', false)
+    .limit(1);
+
+  const documents = await getContractDocumentsForSubContract(subContractId);
+  const live = documents.find((d) => d.status !== 'voided');
+
+  return subContractBadge({
+    requiresFormalContract: Boolean(contract.requires_formal_contract),
+    hasSchedule: (stages ?? []).length > 0,
+    documentStatus: live?.status ?? null,
+  });
 }

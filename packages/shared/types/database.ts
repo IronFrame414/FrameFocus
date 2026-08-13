@@ -1081,6 +1081,7 @@ export type Database = {
           brand_color: string | null
           breaks_paid: boolean
           city: string | null
+          client_contracts_enabled: boolean
           contractor_signature_path: string | null
           created_at: string | null
           default_expiration_days: number
@@ -1143,6 +1144,7 @@ export type Database = {
           brand_color?: string | null
           breaks_paid?: boolean
           city?: string | null
+          client_contracts_enabled?: boolean
           contractor_signature_path?: string | null
           created_at?: string | null
           default_expiration_days?: number
@@ -1205,6 +1207,7 @@ export type Database = {
           brand_color?: string | null
           breaks_paid?: boolean
           city?: string | null
+          client_contracts_enabled?: boolean
           contractor_signature_path?: string | null
           created_at?: string | null
           default_expiration_days?: number
@@ -1464,6 +1467,360 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contract_documents: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          delivery_mode: string
+          document_kind: string
+          estimate_id: string | null
+          executed_pdf_file_id: string | null
+          filled_values: Json
+          generated_pdf_file_id: string | null
+          id: string
+          is_deleted: boolean | null
+          project_id: string | null
+          status: string
+          sub_contract_id: string | null
+          supersedes_document_id: string | null
+          template_id: string
+          updated_at: string | null
+          updated_by: string | null
+          void_reason: string | null
+          voided_at: string | null
+          voided_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          delivery_mode: string
+          document_kind: string
+          estimate_id?: string | null
+          executed_pdf_file_id?: string | null
+          filled_values?: Json
+          generated_pdf_file_id?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          project_id?: string | null
+          status?: string
+          sub_contract_id?: string | null
+          supersedes_document_id?: string | null
+          template_id: string
+          updated_at?: string | null
+          updated_by?: string | null
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          delivery_mode?: string
+          document_kind?: string
+          estimate_id?: string | null
+          executed_pdf_file_id?: string | null
+          filled_values?: Json
+          generated_pdf_file_id?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          project_id?: string | null
+          status?: string
+          sub_contract_id?: string | null
+          supersedes_document_id?: string | null
+          template_id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contract_documents_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contract_documents_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contract_documents_executed_pdf_file_id_fkey"
+            columns: ["executed_pdf_file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contract_documents_generated_pdf_file_id_fkey"
+            columns: ["generated_pdf_file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contract_documents_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contract_documents_sub_contract_id_fkey"
+            columns: ["sub_contract_id"]
+            isOneToOne: false
+            referencedRelation: "subcontractor_contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contract_documents_supersedes_fkey"
+            columns: ["supersedes_document_id"]
+            isOneToOne: false
+            referencedRelation: "contract_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contract_documents_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "contract_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contract_signing_sessions: {
+        Row: {
+          company_id: string
+          consent_given: boolean
+          consent_text: string | null
+          contract_document_id: string
+          created_at: string | null
+          decline_notes: string | null
+          declined_at: string | null
+          expires_at: string
+          id: string
+          initial_data: string | null
+          initial_type: string | null
+          recipient_email: string | null
+          signature_data: string | null
+          signature_type: string | null
+          signed_at: string | null
+          signer_ip: string | null
+          signer_name: string | null
+          signer_user_agent: string | null
+          status: string
+          token: string
+          updated_at: string | null
+        }
+        Insert: {
+          company_id?: string
+          consent_given?: boolean
+          consent_text?: string | null
+          contract_document_id: string
+          created_at?: string | null
+          decline_notes?: string | null
+          declined_at?: string | null
+          expires_at: string
+          id?: string
+          initial_data?: string | null
+          initial_type?: string | null
+          recipient_email?: string | null
+          signature_data?: string | null
+          signature_type?: string | null
+          signed_at?: string | null
+          signer_ip?: string | null
+          signer_name?: string | null
+          signer_user_agent?: string | null
+          status?: string
+          token: string
+          updated_at?: string | null
+        }
+        Update: {
+          company_id?: string
+          consent_given?: boolean
+          consent_text?: string | null
+          contract_document_id?: string
+          created_at?: string | null
+          decline_notes?: string | null
+          declined_at?: string | null
+          expires_at?: string
+          id?: string
+          initial_data?: string | null
+          initial_type?: string | null
+          recipient_email?: string | null
+          signature_data?: string | null
+          signature_type?: string | null
+          signed_at?: string | null
+          signer_ip?: string | null
+          signer_name?: string | null
+          signer_user_agent?: string | null
+          status?: string
+          token?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contract_signing_sessions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contract_signing_sessions_document_fkey"
+            columns: ["contract_document_id"]
+            isOneToOne: false
+            referencedRelation: "contract_documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contract_template_boxes: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          custom_label: string | null
+          deleted_at: string | null
+          height: number
+          id: string
+          is_deleted: boolean | null
+          kind: string
+          page: number
+          template_id: string
+          updated_at: string | null
+          updated_by: string | null
+          value_key: string | null
+          width: number
+          x: number
+          y: number
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          custom_label?: string | null
+          deleted_at?: string | null
+          height: number
+          id?: string
+          is_deleted?: boolean | null
+          kind: string
+          page?: number
+          template_id: string
+          updated_at?: string | null
+          updated_by?: string | null
+          value_key?: string | null
+          width: number
+          x: number
+          y: number
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          custom_label?: string | null
+          deleted_at?: string | null
+          height?: number
+          id?: string
+          is_deleted?: boolean | null
+          kind?: string
+          page?: number
+          template_id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+          value_key?: string | null
+          width?: number
+          x?: number
+          y?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contract_template_boxes_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contract_template_boxes_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "contract_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contract_templates: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          document_kind: string
+          id: string
+          is_default: boolean
+          is_deleted: boolean | null
+          name: string
+          pdf_file_id: string | null
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          document_kind: string
+          id?: string
+          is_default?: boolean
+          is_deleted?: boolean | null
+          name: string
+          pdf_file_id?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          document_kind?: string
+          id?: string
+          is_default?: boolean
+          is_deleted?: boolean | null
+          name?: string
+          pdf_file_id?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contract_templates_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contract_templates_pdf_file_id_fkey"
+            columns: ["pdf_file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
             referencedColumns: ["id"]
           },
         ]
@@ -2619,10 +2976,12 @@ export type Database = {
           expires_at: string | null
           grand_total: number
           id: string
+          include_client_contract: boolean
           internal_notes: string | null
           is_deleted: boolean | null
           labor_markup_percent: number | null
           last_reminder_sent_at: string | null
+          legal_description: string | null
           material_markup_percent: number | null
           name: string
           parent_estimate_id: string | null
@@ -2632,15 +2991,20 @@ export type Database = {
           proposal_pricing_level: string
           reminder_count: number
           reminder_schedule: Json | null
+          retainage_percent: number | null
           reviewed_at: string | null
           reviewed_by: string | null
           scope_sections: Json | null
           scope_summary: string | null
           sent_at: string | null
+          signed_contract_file_id: string | null
           signed_proposal_file_id: string | null
+          start_date: string | null
           status: string
           subcontractor_markup_percent: number | null
+          substantial_completion_days: number | null
           subtotal: number
+          target_end_date: string | null
           tax_rate: number | null
           tax_total: number
           terms_sections: Json | null
@@ -2673,10 +3037,12 @@ export type Database = {
           expires_at?: string | null
           grand_total?: number
           id?: string
+          include_client_contract?: boolean
           internal_notes?: string | null
           is_deleted?: boolean | null
           labor_markup_percent?: number | null
           last_reminder_sent_at?: string | null
+          legal_description?: string | null
           material_markup_percent?: number | null
           name: string
           parent_estimate_id?: string | null
@@ -2686,15 +3052,20 @@ export type Database = {
           proposal_pricing_level?: string
           reminder_count?: number
           reminder_schedule?: Json | null
+          retainage_percent?: number | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           scope_sections?: Json | null
           scope_summary?: string | null
           sent_at?: string | null
+          signed_contract_file_id?: string | null
           signed_proposal_file_id?: string | null
+          start_date?: string | null
           status?: string
           subcontractor_markup_percent?: number | null
+          substantial_completion_days?: number | null
           subtotal?: number
+          target_end_date?: string | null
           tax_rate?: number | null
           tax_total?: number
           terms_sections?: Json | null
@@ -2727,10 +3098,12 @@ export type Database = {
           expires_at?: string | null
           grand_total?: number
           id?: string
+          include_client_contract?: boolean
           internal_notes?: string | null
           is_deleted?: boolean | null
           labor_markup_percent?: number | null
           last_reminder_sent_at?: string | null
+          legal_description?: string | null
           material_markup_percent?: number | null
           name?: string
           parent_estimate_id?: string | null
@@ -2740,15 +3113,20 @@ export type Database = {
           proposal_pricing_level?: string
           reminder_count?: number
           reminder_schedule?: Json | null
+          retainage_percent?: number | null
           reviewed_at?: string | null
           reviewed_by?: string | null
           scope_sections?: Json | null
           scope_summary?: string | null
           sent_at?: string | null
+          signed_contract_file_id?: string | null
           signed_proposal_file_id?: string | null
+          start_date?: string | null
           status?: string
           subcontractor_markup_percent?: number | null
+          substantial_completion_days?: number | null
           subtotal?: number
+          target_end_date?: string | null
           tax_rate?: number | null
           tax_total?: number
           terms_sections?: Json | null
@@ -2805,6 +3183,13 @@ export type Database = {
             columns: ["reviewed_by"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimates_signed_contract_file_id_fkey"
+            columns: ["signed_contract_file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
             referencedColumns: ["id"]
           },
           {
@@ -6002,6 +6387,8 @@ export type Database = {
       subcontractor_contracts: {
         Row: {
           company_id: string
+          completed_at: string | null
+          completed_by: string | null
           contract_value: number | null
           created_at: string | null
           created_by: string | null
@@ -6023,6 +6410,8 @@ export type Database = {
         }
         Insert: {
           company_id?: string
+          completed_at?: string | null
+          completed_by?: string | null
           contract_value?: number | null
           created_at?: string | null
           created_by?: string | null
@@ -6044,6 +6433,8 @@ export type Database = {
         }
         Update: {
           company_id?: string
+          completed_at?: string | null
+          completed_by?: string | null
           contract_value?: number | null
           created_at?: string | null
           created_by?: string | null

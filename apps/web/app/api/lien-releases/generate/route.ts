@@ -4,9 +4,11 @@ import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import {
   getTemplateBoxes,
   resolveReleaseValues,
+  resolveSubReleaseValues,
 } from '@/lib/services/lien-releases';
 import { renderRelease } from '@/lib/services/lien-release-pdf-service';
 import { isLegalValueKey, type ReleaseType } from '@/lib/services/lien-releases-shared';
+import type { SubReleaseTrigger } from '@/lib/services/lien-releases';
 
 // 7F §7 — the generate flow, server side.
 //
@@ -61,20 +63,93 @@ export async function POST(request: NextRequest) {
     type?: ReleaseType;
     values?: Record<string, string>;
     notaryRequired?: boolean;
+    // §12 [S145] — the sub-inbound arm. Mutually exclusive with invoiceId.
+    subTrigger?: SubReleaseTrigger;
+    subContractId?: string;
+    expenseId?: string;
   };
 
-  const { invoiceId, templateId, type, notaryRequired = false } = body;
-  if (!invoiceId || !templateId || (type !== 'conditional' && type !== 'unconditional')) {
+  const { invoiceId, templateId, notaryRequired = false, subTrigger } = body;
+  if (!templateId) {
+    return NextResponse.json({ error: 'templateId is required' }, { status: 400 });
+  }
+
+  // ── Which direction? ─────────────────────────────────────────────────────
+  // The two arms are mutually exclusive, and the database says so too:
+  // `lien_releases_subject_check` requires exactly one subject per direction.
+  // Rejecting both-at-once here means the caller gets a sentence rather than a
+  // constraint violation.
+  if (invoiceId && subTrigger) {
     return NextResponse.json(
-      { error: 'invoiceId, templateId and a valid type are required' },
+      { error: 'A release is client-outbound or sub-inbound, never both.' },
       { status: 400 }
     );
   }
 
-  const resolved = await resolveReleaseValues(invoiceId, type);
-  if (!resolved) {
-    console.error(`[lien-releases/generate] invoice ${invoiceId} not visible to ${profile.id}`);
-    return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
+  let resolved: Awaited<ReturnType<typeof resolveReleaseValues>> = null;
+  let direction: 'client_outbound' | 'sub_inbound' = 'client_outbound';
+  let type: ReleaseType;
+  let subjectColumns: { invoice_id?: string; expense_id?: string; sub_contract_id?: string } = {};
+  let storageKey = '';
+
+  if (subTrigger) {
+    // §12 ruling (ii) — the TYPE IS FIXED BY THE TRIGGER, never passed in.
+    //   completion -> CONDITIONAL   ("I will release when paid")
+    //   payment    -> UNCONDITIONAL ("I have been paid")
+    // Accepting `type` from the caller here would let a completion prompt
+    // produce an unconditional release, which is a false statement about money
+    // that has not moved.
+    direction = 'sub_inbound';
+    type = subTrigger === 'completion' ? 'conditional' : 'unconditional';
+
+    // Ruling B2 — completion hangs off the contract, payment off the stage.
+    if (subTrigger === 'completion') {
+      if (!body.subContractId) {
+        return NextResponse.json(
+          { error: 'subContractId is required for a completion release' },
+          { status: 400 }
+        );
+      }
+      subjectColumns = { sub_contract_id: body.subContractId };
+      storageKey = body.subContractId;
+    } else {
+      if (!body.expenseId) {
+        return NextResponse.json(
+          { error: 'expenseId is required for a payment release' },
+          { status: 400 }
+        );
+      }
+      subjectColumns = { expense_id: body.expenseId };
+      storageKey = body.expenseId;
+    }
+
+    resolved = await resolveSubReleaseValues({
+      trigger: subTrigger,
+      subContractId: body.subContractId,
+      expenseId: body.expenseId,
+    });
+    if (!resolved) {
+      console.error(
+        `[lien-releases/generate] sub subject not visible to ${profile.id} (${subTrigger})`
+      );
+      return NextResponse.json({ error: 'Subcontract not found' }, { status: 404 });
+    }
+  } else {
+    if (!invoiceId || (body.type !== 'conditional' && body.type !== 'unconditional')) {
+      return NextResponse.json(
+        { error: 'invoiceId and a valid type are required' },
+        { status: 400 }
+      );
+    }
+    type = body.type;
+    subjectColumns = { invoice_id: invoiceId };
+    storageKey = invoiceId;
+
+    resolved = await resolveReleaseValues(invoiceId, type);
+    if (!resolved) {
+      console.error(`[lien-releases/generate] invoice ${invoiceId} not visible to ${profile.id}`);
+      return NextResponse.json({ error: 'Invoice not found' }, { status: 404 });
+    }
   }
 
   // §6.3 BUILD GUARD — REFUSE rather than render a blank required field. The
@@ -142,7 +217,13 @@ export async function POST(request: NextRequest) {
   // §9 — the signature already exists and is already consumed in production
   // by the CO send route. 7F reuses it; nothing new is captured.
   let signatureImage: Buffer | null = null;
-  if (!notaryRequired) {
+  // §12 [S145] — NEVER stamp on sub-inbound. On this direction the SUB is the
+  // lienor and theirs is the signature that matters; ruling (i) has them sign
+  // on paper and send the executed copy back. Stamping our own signature onto
+  // a release we are RECEIVING would be signing someone else's instrument.
+  // Same reasoning as the notary path, different reason — hence both in one
+  // condition rather than the notary flag alone.
+  if (!notaryRequired && direction === 'client_outbound') {
     const { data: company } = await supabase
       .from('companies')
       .select('contractor_signature_path')
@@ -174,7 +255,7 @@ export async function POST(request: NextRequest) {
 
   // Store the rendered PDF against the company (no project on the file row —
   // the release links to its invoice, which carries the project).
-  const storagePath = `${profile.company_id}/lien-releases/${invoiceId}-${type}-${Date.now()}.pdf`;
+  const storagePath = `${profile.company_id}/lien-releases/${storageKey}-${type}-${Date.now()}.pdf`;
   const { error: uploadErr } = await admin.storage
     .from('project-files')
     .upload(storagePath, rendered.pdf, { contentType: 'application/pdf', upsert: true });
@@ -189,7 +270,7 @@ export async function POST(request: NextRequest) {
       company_id: profile.company_id,
       project_id: null,
       category: 'lien_releases',
-      file_name: `lien-release-${type}-${invoiceId}.pdf`,
+      file_name: `lien-release-${direction}-${type}-${storageKey}.pdf`,
       file_path: storagePath,
       file_size: rendered.pdf.length,
       mime_type: 'application/pdf',
@@ -211,11 +292,14 @@ export async function POST(request: NextRequest) {
     .from('lien_releases')
     .insert({
       template_id: templateId,
-      direction: 'client_outbound',
-      invoice_id: invoiceId,
+      direction,
+      ...subjectColumns,
       type,
       is_final: template.is_final,
-      status: notaryRequired ? 'draft' : 'signed',
+      // sub-inbound is ALWAYS a draft at generate: the blank goes out and the
+      // sub's signature comes back by upload (ruling i). Only a client-outbound
+      // release we stamped ourselves is 'signed' the moment it renders.
+      status: notaryRequired || direction === 'sub_inbound' ? 'draft' : 'signed',
       notary_required: notaryRequired,
       generated_pdf_file_id: fileRow.id,
       filled_values: values,

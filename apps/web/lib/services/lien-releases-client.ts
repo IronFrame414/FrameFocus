@@ -227,3 +227,112 @@ export async function attachNotarizedCopy(
   if (error) return { success: false, error: friendly(error.message) };
   return { success: true };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// §12 — SUB-INBOUND [S145]
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Owner/Admin by RLS, inherited: sub-inbound releases are rows in the same
+// tables client-outbound already uses, and those are Owner/Admin on all three
+// verbs with no DELETE policy. Ruling (iii) needed no new policy.
+//
+// ⚠️ NO TOKENISED SIGNING HERE, AND THAT IS THE RULING, NOT AN OMISSION.
+// Ruling (i) is UPLOAD-BACK: we send the sub the PDF, they sign it on paper,
+// we upload the executed copy. `attachNotarizedCopy()` above already does
+// exactly that and is reused unchanged. It also keeps sub-inbound clear of
+// Gate 1, which S140 re-scoped to still cover "a surface aimed at a party the
+// platform does not email today, most notably subcontractors".
+
+/**
+ * §12 [ruling B1(b)] — mark a sub's work complete.
+ *
+ * THE SIGNAL THAT DID NOT EXIST. Before this there was no representation of
+ * "this sub finished": the contract status is draft|sent|signed|void,
+ * `expenses.closed_out_at` closes one commitment row, and
+ * `subcontractors.did_not_finish` is written once and read nowhere (#108(a)).
+ *
+ * It is deliberately an EXPLICIT act rather than something derived from the
+ * last stage closing out, because ruling (ii) makes completion and payment
+ * DIFFERENT events: completion prompts a CONDITIONAL release ("I will release
+ * when paid"), payment prompts an UNCONDITIONAL one ("I have been paid").
+ * Deriving the first from the second would make it a statement about the
+ * future issued after the fact.
+ *
+ * Owner/Admin — `completed_at` is frozen below that by the column-scope
+ * trigger, so a PM calling this is refused by the database.
+ */
+export async function markSubContractComplete(
+  subContractId: string
+): Promise<MutationResult> {
+  const supabase = createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: 'Not authenticated' };
+
+  const { error } = await supabase
+    .from('subcontractor_contracts')
+    .update({ completed_at: new Date().toISOString(), completed_by: user.id })
+    .eq('id', subContractId);
+
+  if (error) {
+    if (/row-level security|Owner\/Admin only/i.test(error.message)) {
+      return { success: false, error: 'Marking a subcontract complete is Owner/Admin only.' };
+    }
+    return { success: false, error: error.message };
+  }
+  return { success: true };
+}
+
+/** Undo — completion is a judgement, and a mis-click should not be permanent. */
+export async function reopenSubContract(subContractId: string): Promise<MutationResult> {
+  const supabase = createClient();
+  const { error } = await supabase
+    .from('subcontractor_contracts')
+    .update({ completed_at: null, completed_by: null })
+    .eq('id', subContractId);
+  if (error) {
+    if (/row-level security|Owner\/Admin only/i.test(error.message)) {
+      return { success: false, error: 'Reopening a subcontract is Owner/Admin only.' };
+    }
+    return { success: false, error: error.message };
+  }
+  return { success: true };
+}
+
+/**
+ * §12 — the executed copy the sub sends back (ruling i).
+ *
+ * Distinct from `attachNotarizedCopy()` only in what it means: there is no
+ * notary here, the sub simply signed on paper. Both files are retained — the
+ * generated blank and the returned signature — because the pair is the audit
+ * trail and only the second is legally operative.
+ */
+export async function attachSignedSubRelease(
+  releaseId: string,
+  file: File
+): Promise<MutationResult> {
+  if (file.type !== 'application/pdf') {
+    return { success: false, error: 'The signed release must be a PDF.' };
+  }
+  const uploaded = await uploadFile(file, {
+    project_id: null,
+    path_segment: `lien-releases/${releaseId}`,
+    category: 'lien_releases',
+  });
+  if (!uploaded.success || !uploaded.id) {
+    return { success: false, error: uploaded.error ?? 'Upload failed.' };
+  }
+  const supabase = createClient();
+  // `notarized_pdf_file_id` carries the returned copy in both directions. The
+  // column is named for the client-side notary path that shipped first; on this
+  // side it holds the sub's wet signature. One column, one meaning — "the
+  // executed copy that came back" — rather than a second nullable FK that is
+  // always null on one direction.
+  const { error } = await supabase
+    .from('lien_releases')
+    .update({ notarized_pdf_file_id: uploaded.id, status: 'signed' })
+    .eq('id', releaseId);
+  if (error) return { success: false, error: friendly(error.message) };
+  return { success: true };
+}

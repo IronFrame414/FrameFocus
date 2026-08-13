@@ -1,11 +1,33 @@
 # Module 7I — Contracts — BUILD SPEC — **rev 4**
 
-> # ⚠️ STALE PROVENANCE — AUDIT BEFORE BUILDING
+> # ✅ AUDITED [S145] against `b267ed1` — the five DANGEROUS items are corrected
 >
-> **Verified against `d395c01`. The branch is now at `97a2aec`, 13 commits later.** Committed
-> deliberately (Josh, S99) so the design survives; **the schema claims below are not current and an
-> audit is owed before any build.** Do not treat a `[VERIFIED]` tag here as current without
-> re-checking it against HEAD.
+> _Superseded banner, quoted rather than deleted:_
+>
+> > _"⚠️ **STALE PROVENANCE — AUDIT BEFORE BUILDING.** Verified against `d395c01`. The branch is now
+> > at `97a2aec`, 13 commits later. Committed deliberately (Josh, S99) so the design survives; the
+> > schema claims below are not current and an audit is owed before any build. Do not treat a
+> > `[VERIFIED]` tag here as current without re-checking it against HEAD."_
+>
+> **The audit was performed at S144 and its findings applied at S145.** What changed, all corrected
+> in place with the superseded text quoted:
+>
+> | Where | Was | Now |
+> | --- | --- | --- |
+> | **§4.3** | "unchanged since baseline… NO role floor" | S133's read floor added `role <> ALL ('subcontractor','client')` to both SELECTs |
+> | **§4.3** | "an assigned PM can update `contract_value`" | **Refused by column-scope trigger** on both tables |
+> | **§4.3 / §8** | the S97 `999999` demo as live evidence | the column it exploited was **dropped** (`20260812000000`) |
+> | **§8** | "the gate is UI-only… over an open database" | **REWRITTEN** — the floor shipped at S97; the database agrees with the ruling |
+> | **§14** | "the notification system does not exist" | `notifications` + `notify()` both ship |
+> | §9 · §0.2 #1 · §3.4 · §7.1 · §7.5c · §5.1a | various | citations refreshed; 7F's engine, signatory columns and `legal_description` are all **built** |
+>
+> **The rulings in this document are untouched.** Only claims about the repo were corrected, and
+> every one of them moved in 7I's favour except §4.3's, which narrowed what a PM can do.
+>
+> ⚠️ **Still true, and the reason this banner is not simply deleted:** a `[VERIFIED]` tag records
+> what a past session read. **The tags below were verified at `d395c01` unless a `[S145]` note says
+> otherwise.** S144 checked all 17 plus the banner's five; the remaining tagged claims are
+> unchecked. Re-verify anything you build on.
 >
 > **Five known-stale areas, found before committing. This is the audit's starting point, not its end:**
 >
@@ -53,7 +75,7 @@ HEAD is **`d395c01`**. `28829de` is an ancestor, 4 commits back (`e1f43c4`, `3b7
 
 | #   | Claim                                                                          | Repo at `d395c01`                                                                                                                                                                                                                                 |
 | --- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Read `docs/specs/7f2-spec.md`                                                  | **Not in the repo.** 7F2 exists only as the project doc `claude/7f2-spec`; the repo carries `7f1-spec.md`, which 7F2 supersedes. **The document engine is uncommitted design, not code.**                                                         |
+| 1   | Read `docs/specs/7f2-spec.md`                                                  | ~~**Not in the repo.** 7F2 exists only as the project doc `claude/7f2-spec`; the repo carries `7f1-spec.md`, which 7F2 supersedes. **The document engine is uncommitted design, not code.**~~ **REVERSED [S145]:** `docs/specs/7f2-spec.md` **is** in the repo, `7f1-spec.md` is gone, and **the engine SHIPPED at S141** (`20260922000000` + the `lien-release*` services). §1's "consumes it rather than rebuilding it" is now literal. |
 | 2   | `subcontractor_contracts` comes from "7C / 113c"                               | **Module 5A baseline**, `20260704211000:438`. 7C and 113c only `ALTER` it.                                                                                                                                                                        |
 | 3   | The payment schedule printing inside the sub-contract is "recorded in 113c §7" | **It is not.** §7 is `113c-spec.md:285–293` and says nothing about it; all 35 "schedule" hits in that file are data/RPC/editor-level. Josh ruled it in this session `[S99]`, so it is now real — but as **net-new**, not as a restatement (§6.3). |
 | 4   | "Service triple … per CLAUDE.md"                                               | CLAUDE.md documents a **pair** (`:308–321`); `-shared.ts` is undocumented de-facto convention. And **`contracts.ts` / `contracts-client.ts` already exist** (§11.1).                                                                              |
@@ -76,6 +98,13 @@ almost nothing but the engine**.
 | Signed by | the client, in the estimate's signing flow                                     | the sub                                                                 |
 | Optional? | **Yes** — per-company toggle `[S99]`                                           | Governed by the existing `requires_formal_contract`                     |
 | Reads     | `estimates`, `contacts`, `contact_addresses`, `companies` — **not `projects`** | `subcontractor_contracts`, `projects`, `company_members`, 7C stage rows |
+
+> **[S145] 7I OWNS THE SUB-CONTRACT AGREEMENT — recorded here because 7I's own text never said so.**
+> `113c-spec.md` §7 assigned it to 7F until S140; `7f2-spec.md` §1 declared that superseded at S98
+> and the amendment landed at S141 (`113c-spec.md:50-51`, `:289`). The split as it now stands:
+> **7F owns the document ENGINE** — PDF overlay, box maps, `renderRelease()`, template CRUD — and
+> **7I owns both contract agreements**, client and sub, consuming that engine. Gate 1 is unmoved:
+> the sub-facing e-signature (§6.5) is still behind it.
 
 **The contract _records_ already ship from 5A and are not rebuilt** (§4). 7I supplies the document and
 signing layer they lack.
@@ -234,7 +263,9 @@ generate time and is backfilled at conversion** (§5.6). The sub contract sets i
 Mode columns on `change_orders`: `contractor_signature_mode` (`saved_image`|`typed_name`),
 `contractor_signature_ref`, `contractor_signature_name`. **7I reuses this shape verbatim.**
 
-`companies.signatory_name` / `signatory_title` are **net-new and unbuilt** — zero hits across all
+~~`companies.signatory_name` / `signatory_title` are **net-new and unbuilt**~~ — **CORRECTED
+[S145]: BOTH ARE LIVE**, shipped by 7F at `20260922000000`. 7I reads them; it does not add them.
+The superseded absence claim was: "zero hits across all
 migrations and all `.ts` `[VERIFIED]`. **They belong to 7F** (`7f2-spec` §10.2). **7I consumes them and
 must not add them** — a duplicate-column collision is exactly the failure `20260710120000` created for
 `email_logs.signing_session_id`. One signatory per company `[S98]`.
@@ -291,28 +322,77 @@ requires_formal_contract boolean NOT NULL DEFAULT false
 `requires_formal_contract=false`, `scope_of_work` = the winning line's **name**, **`signed_doc_file_id`
 = the winning bid's `bid_document_file_id`**.
 
-Left NULL: `executed_date`, `notes`, `retainage_shape`, `retainage_percent`. **And no schedule** —
+Left NULL: `executed_date`, `notes`, `retainage_shape`. ~~`retainage_percent`~~ — **CORRECTED
+[S145]: `retainage_percent` is PRE-FILLED on insert.**
+`20260814000000_sub_retainage_passthrough.sql` (S97) added a BEFORE INSERT trigger that copies
+`projects.retainage_percent` onto a new sub-contract — pass-through, INSERT-only, existing rows
+untouched. A new contract therefore arrives with a retainage rate already set, which §6.3's
+"do not print an unenforced retainage term" guard must account for. **And no schedule** —
 `:19–20`: _"NO committed dollars, NO schedule — a draft has no expense rows."_ This is exactly why
 Josh ruled the sub contract **cannot be sent at conversion** (§6.2).
 
 > **`signed_doc_file_id` is occupied by the bid PDF at award, before any signature exists.** It is
 > **not** a free slot for 7I's executed artifact. 7I stores its own (§10.4).
 
-### §4.3 — `[VERIFIED]` RLS on both tables
+### §4.3 — RLS on both tables — **REWRITTEN [S145]. The S99 reading is false on two counts.**
 
-Unchanged since baseline — grepped all migrations for later policy changes: **none**.
+> ## ⚠️ SUPERSEDED [S145] — quoted in full, then corrected
+>
+> _"**`[VERIFIED]`** Unchanged since baseline — grepped all migrations for later policy changes:
+> **none**._
+>
+> ```
+> SELECT : company_id = get_my_company_id() AND can_view_project(project_id)   -- NO role floor
+> INSERT : owner|admin OR (project_manager AND is_assigned_to_project(project_id))
+> UPDATE : owner|admin OR (project_manager AND is_assigned_to_project(project_id))
+> ```
+>
+> _`client_contracts` `:400–431`; `subcontractor_contracts` `:494–524`._
+>
+> _**An assigned PM can already read, insert and update both rows — including `contract_value` —
+> today.** Demonstrated at S97, `GATED.md:122`: "A PM rewrote `contract_value` to 999999 on an
+> assigned project."_
+>
+> **Both bolded claims were true at `d395c01` and are false at HEAD.** This is the section a
+> builder would have read to decide 7I's permissions, on a legal document.
+
+**The live policy set, read from `pg_policies` at `b267ed1` [S145]:**
 
 ```
-SELECT : company_id = get_my_company_id() AND can_view_project(project_id)   -- NO role floor
+SELECT : company_id = get_my_company_id()
+         AND get_my_role() <> ALL (ARRAY['subcontractor','client'])   -- ROLE FLOOR, since S133
+         AND can_view_project(project_id)
 INSERT : owner|admin OR (project_manager AND is_assigned_to_project(project_id))
 UPDATE : owner|admin OR (project_manager AND is_assigned_to_project(project_id))
 ```
 
-`client_contracts` `:400–431`; `subcontractor_contracts` `:494–524`.
+**Correction 1 — the SELECT policies DID change.** S133's subcontractor read floor
+(`20260912000000_subcontractor_project_read_floor.sql`) added
+`get_my_role() <> ALL (ARRAY['subcontractor','client'])` to both. The "no role floor" annotation is
+wrong, and "unchanged since baseline" is wrong.
 
-**An assigned PM can already read, insert and update both rows — including `contract_value` — today.**
-Demonstrated at S97, `GATED.md:122`: _"A PM rewrote `contract_value` to 999999 on an assigned
-project."_ See §8.
+**Correction 2 — a PM CANNOT write `contract_value`, and has not been able to since S97.** RLS
+admits the UPDATE; a **column-scope trigger then refuses it**. Read from `pg_get_functiondef`:
+
+| Trigger | Freezes below Owner/Admin |
+| --- | --- |
+| `enforce_client_contracts_column_scope` (`20260809000000`) | `contract_value`, `signed_proposal_file_id`, `executed_date` |
+| `enforce_subcontractor_contracts_column_scope` (`20260808000000`) | `contract_value`, `retainage_percent`, `retainage_shape`, `signed_doc_file_id`, `executed_date`, `member_id` |
+
+Both raise *"The financial terms of a … contract are Owner/Admin only."* Both early-return on
+`auth.uid() IS NULL`, so service-role paths are unaffected — see §11.4, where that bypass is
+load-bearing.
+
+**Correction 3 — the S97 demo no longer exists to cite.** That write was against
+**`projects.contract_value`**, which `20260812000000_drop_projects_contract_value.sql` **DROPPED**;
+the figure lives on `project_financials` (`20260811000000`), which is Owner/Admin by RLS. So the
+evidence is dead in both places at once: the column is gone, and the tables the spec pointed at are
+trigger-frozen.
+
+**What an assigned PM can still do:** read both rows, insert them, and update their non-financial
+columns (`scope_of_work`, `notes`, `status`). That is the real surface 7I must reason from.
+
+See §8 for the role ruling this supports.
 
 ---
 
@@ -329,7 +409,21 @@ Under §1.1(3) the conflict does not arise. **Both signatures land on the estima
 `status='signed'` at conversion is accurate for both. **7I never writes `client_contracts.status` and
 never amends the conversion status logic.**
 
-> **`[OPEN — JOSH] §5.1a` — the one residual edge.** `v_is_signed` (`20260731030000:96`) tests
+> **`[RULED — Josh, S145: option (ii), ACCEPT IT]` §5.1a — the one residual edge.**
+> The Contracts panel shows the contract's own state; conversion is not amended. Option (i) — teaching
+> `v_is_signed` about the contract toggle — is **recorded as owed**, not taken: it would be the
+> **sixth** redefinition of `convert_estimate_to_project` across six migrations, and S143 proved what
+> happens when a function body drifts from the migration a spec cites.
+>
+> ⚠️ **[S145] AND THIS CITATION IS ITSELF STALE BY TWO MIGRATIONS.** The live owner of
+> `convert_estimate_to_project` is **`20260817000000_drop_budgeted_amount.sql`**, not
+> `20260731030000`. The chain is `20260704212000` → `20260730010000` → `20260731030000` →
+> `20260811010000` → `20260817000000`. The `v_is_signed` predicate is **byte-identical** across all
+> five and the live function knows nothing of any contract toggle (verified against `pg_proc`), so
+> the edge below is real and unchanged — but anyone amending the cited migration would be editing a
+> superseded body.
+>
+> _Superseded citation, quoted:_ `v_is_signed` (`20260731030000:96`) tests
 > **proposal** signals only. If the toggle is on and the client signs the proposal but **declines or
 > ignores the contract**, conversion still stamps `'signed'`. Two ways: (i) amend `v_is_signed` to also
 > require the contract signature when the toggle was on for that estimate, or (ii) accept it and let
@@ -558,7 +652,7 @@ No two-date mapping, no reconciliation.
 | Key                                 | Client (estimate stage)                                                                                                    | Sub (project stage)                                                    |
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
 | Contractor name / address / license | `companies.name`, `address_line1/2`, `city`, `state`, `zip`, `license_number`                                              | same                                                                   |
-| Signatory name / title              | **`companies.signatory_name` / `signatory_title` — 7F, unbuilt (§3.4)**                                                    | same                                                                   |
+| Signatory name / title              | ~~7F, unbuilt~~ **LIVE [S145]** — `companies.signatory_name` / `signatory_title`, shipped `20260922000000`                 | same                                                                   |
 | Counterparty                        | `contacts` via `estimates.contact_id` (**NOT NULL**) — `company_name`, else `first_name + ' ' + last_name` (both NOT NULL) | `company_members.display_name` via `subcontractor_contracts.member_id` |
 | Property address                    | `contact_addresses` via `estimates.contact_address_id` — **nullable**                                                      | via `projects.contact_address_id` — **nullable**                       |
 | Scope                               | `estimates.scope_summary`, `scope_sections`                                                                                | `subcontractor_contracts.scope_of_work`                                |
@@ -745,7 +839,10 @@ Everything else a contract needs is **already shared** between the two tables: `
 
 Josh: _"this is also added in 7f-lien. give users the ability to use the field in the contract."_
 
-**The 7F half is confirmed** `[VERIFIED]` — `7f2-spec` §10.1 adds `projects.legal_description text
+**The 7F half is BUILT [S145]** — `projects.legal_description` is live (`20260922000000`), so the
+twin below is the only half still owed. _Superseded wording: "The 7F half is confirmed `[VERIFIED]`
+— `7f2-spec` §10.1 **adds**"._ For the record, that section reads: `7f2-spec` §10.1 adds
+`projects.legal_description text
 NULL`, user-entered on project overview/detail, printing alongside the address. _(Note this reverses
 S98's earlier D6 recommendation of "no column in v1", which the S98 build spec already superseded.)_
 
@@ -783,34 +880,72 @@ into `projects` at conversion alongside the other movers (§7.5b).
 
 ---
 
-## §8 — Roles — `[S99 — RULED: Owner/Admin only]`
+## §8 — Roles — `[S99 — RULED: Owner/Admin only]` · **reasoning REWRITTEN [S145]**
 
-Josh ruled **(a)**. Recorded with the evidence, because the reasoning matters for future sessions:
+> ## ⚠️ THE THIRD LEG WAS SUPERSEDED BY EVENTS. Quoted, then replaced.
+>
+> _"**But the gate is UI-only.** `CLAUDE.md:403`: 'the **DB-level floor is NOT yet in place**… treat
+> the floor as UI-only and defense-in-depth-incomplete.' The shipped RLS on both contract tables
+> admits an assigned PM to SELECT/INSERT/UPDATE (§4.3), and S97 proved a PM writing `contract_value`
+> (`GATED.md:122`). **7I's role gate is a UI gate over an open database, and the spec says so rather
+> than pretending otherwise.** The fix is the named `FINANCIAL-RLS-FLOOR` follow-up — not 7I's."_
+>
+> **Every sentence of that is now false**, and it is the most dangerous paragraph in the document:
+> a builder following it either skips a database gate believing one pointless, or finds the triggers
+> and stops trusting the spec.
+>
+> | The claim | HEAD |
+> | --- | --- |
+> | `CLAUDE.md:403` says the floor is not in place | **That line does not exist.** `CLAUDE.md:556` reads: *"three of the four figure families are now DB-enforced as well. The previous text here — 'the DB-level floor is NOT yet in place' — is superseded."* Both cited offsets (401, 403) now land in the Service Layer Pattern section. |
+> | RLS admits a PM to write contract value | **Refused by column-scope trigger** on both tables — §4.3. |
+> | S97 proved a PM writing `contract_value` | **Against a dropped column** (`projects.contract_value`, `20260812000000`). |
+> | The fix is the FINANCIAL-RLS-FLOOR follow-up | **It landed** — `20260806000000` and its three parts, S97. |
 
-- **The Financial Visibility Floor argument is VALID here, unlike in 7F.** `CLAUDE.md:401`'s S97
-  carve-out admits a PM to _"the amounts ON an invoice they can reach"_ but states it _"does **NOT**
-  extend to contract value… which remain Owner/Admin on **every surface**."_ A contract displays
-  contract value. **7F had to strike this reasoning; 7I does not.** Do not "fix" this gate by analogy
-  to 7F.
-- money-rep P9 (`money-representation.md:113–116`) widens PM to actual **and committed**, and leaves
-  sell/budget figures Owner/Admin — it does not reach contract value either.
-- **But the gate is UI-only.** `CLAUDE.md:403`: _"the **DB-level floor is NOT yet in place**… treat the
-  floor as UI-only and defense-in-depth-incomplete."_ The shipped RLS on both contract tables admits
-  an assigned PM to SELECT/INSERT/UPDATE (§4.3), and S97 proved a PM writing `contract_value`
-  (`GATED.md:122`). **7I's role gate is a UI gate over an open database, and the spec says so rather
-  than pretending otherwise.** The fix is the named `FINANCIAL-RLS-FLOOR` follow-up — not 7I's.
+**The ruling is unchanged: Owner/Admin only.** Two of the three original legs survive intact, and the
+third now argues the opposite way.
+
+- **The Financial Visibility Floor argument is VALID here, unlike in 7F.** `CLAUDE.md`'s S97 carve-out
+  admits a PM to _"the amounts ON an invoice they can reach"_ but states it _"does **NOT** extend to
+  contract value… which remain Owner/Admin on **every surface**."_ A contract displays contract value.
+  **7F had to strike this reasoning; 7I does not.** Do not "fix" this gate by analogy to 7F.
+  _(Cited by section, not by line number — the line moved once already.)_
+- **money-rep P9** widens PM to actual **and committed** and leaves sell/budget figures Owner/Admin —
+  it does not reach contract value either.
+- **And the database already agrees.** `FINANCIAL-RLS-FLOOR` shipped at S97; `project_financials`
+  holds contract value behind an Owner/Admin policy; both contract tables freeze their financial
+  columns below Owner/Admin. **7I's Owner/Admin gate is therefore consistent with a floor that is
+  already enforced, not a UI veneer over an open table.**
 
 **New 7I tables get Owner/Admin-only RLS for SELECT as well as write**, deliberately narrower than
-7E's payment tables (which admit `project_manager` on SELECT).
+7E's payment tables (which admit `project_manager` on SELECT). **This is now the same shape 7F
+shipped** (`20260922000000` — Owner/Admin on all three lien-release tables, SELECT included), so it
+is the house pattern for legal documents rather than an outlier needing its own defence.
+
+> **[S145] And 7I's own writes need a database guard too — `[C5 — RULED]`.** `contracts-panel.tsx:145`
+> already voids a client contract through `updateClientContract`, and **`status` is not among the
+> columns either column-scope trigger freezes** — so an assigned PM can void a contract today with no
+> database opinion at all. That is the invoice-void defect class (S143, `20260923000000`) on a legal
+> document. 7I ships `enforce_contract_void_authority` alongside its tables.
 
 ---
 
-## §9 — Gate 1
+## §9 — Gate 1 — **citations refreshed [S145]; the conclusion is unchanged and better founded**
 
-`GATED.md:15–46` blocks, **by name** (`:23–35`): _"#113(c) stage 6 — 7F sub-contract template +
-sub-facing e-signature… This is also what gives the 'contract isn't signed' state real backing."_
+> **[S145] Gate 1 was RE-SCOPED at S140** and every line number this section quoted has moved.
+> _Superseded citations: `GATED.md:15–46`, `:23–35`, `:42–44`._ The re-scope happened because Gate 1's
+> opening sentence — *"nothing that puts a FrameFocus surface in front of someone outside the company
+> ships"* — had become false: `/sign/[token]`, `/sign-co/[token]` and 7D's invoice email had all
+> shipped under it.
+>
+> **That re-scope strengthens this section rather than weakening it.** Gate 1 now states positively
+> what it still protects, and item 3 is *"NEW, RECURRING external surfaces — a surface aimed at a
+> party the platform does not email today, **most notably subcontractors** (113c stage 6 below)"*
+> (`GATED.md:49`). 7I's sub e-signature is not merely still named — it is now the **paradigm case**.
+
+Gate 1 blocks, by name (`GATED.md:58`): _"#113(c) stage 6 — 7F sub-contract template + sub-facing
+e-signature… This is also what gives the 'contract isn't signed' state real backing."_
 **That is §6 described exactly.** Unblockers: **RESEND secret, domain cutover, login branding**
-(`:42–44`).
+(`GATED.md:77–80`).
 
 The honest comparison the brief asked for:
 
@@ -1097,9 +1232,16 @@ payment-schedule module — which blocks **only** stage 5. Stages 1–4 proceed 
 (§7.0a, §7.3b, §7.3c, §7.3d, §5.2a, §5.3a — collapsed by the one-signature ruling — §7.5a's
 `project_type`, and §7.5c's `legal_description`).
 
-**Not open, recorded so they are not reopened:** the notification system does not exist (no tables, no
-event bus; `incident-notify.ts` is a bespoke 6C emailer) — **7I may name events and cannot deliver
-them**. A change order never spawns a new contract `[S99]`. One session table, not two _(my call,
+**Not open, recorded so they are not reopened:** ~~the notification system does not exist (no tables,
+no event bus; `incident-notify.ts` is a bespoke 6C emailer) — **7I may name events and cannot deliver
+them**.~~
+
+> **⚠️ CORRECTED [S145] — 7I CAN deliver events.** The quoted claim was true at `d395c01` and is
+> false at HEAD: `notifications` shipped in `20260905000000_notifications_core.sql` and `notify()`
+> lives at `apps/web/lib/notify/notify.ts:149`, with delivery on both surfaces. This is the
+> identical stale claim S140 found in `7f2-spec.md` §8.1 — a spec instructing a builder **not** to
+> deliver an event it now can. Any 7I event (contract sent, signed, declined, voided) uses
+> `notify()`; nothing bespoke is needed. A change order never spawns a new contract `[S99]`. One session table, not two _(my call,
 §10.5)_.
 
 ---
