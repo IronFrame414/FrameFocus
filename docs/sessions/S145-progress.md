@@ -20,8 +20,15 @@ one session · C3 proposal keeps its link on the notary path · C5 a DB guard on
 
 ## RESUME HERE
 
-**Parts 1 and 2 are DONE and committed. Next: Part 3 — 7I schema, then services,
-then `contracts-shared.ts`, then probes. UI is NOT this run [C4=(b)].**
+**All three parts DONE, committed and pushed. Nothing is blocked.**
+
+**NEXT ACTION: build 7I's UI** — Company Settings template CRUD + box placement
+(`catalogForKind()` drives the field picker), the estimate-side toggle on the proposal
+send screen, and the contract document list. The schema, services, `contracts-shared.ts`
+and probes all landed this run [C4=(b)]; the UI was deliberately deferred so an
+unattended dead run would cost UI work rather than a half-built permissions model.
+
+**Do NOT build §6.5's tokenised sub e-signature** — still behind Gate 1.
 
 ---
 
@@ -79,3 +86,35 @@ subcontract complete: expected null to be truthy", exit 1; restored, re-verified
 repo root instead of `apps/web` — a config-resolution error, not a test failure.
 
 type-check 0 · vitest 761/761 · eslint clean.
+
+### Part 3 — 7I schema, services, shared, probes — **DONE**
+
+`20260926000000_7i_contracts.sql`, verified against the catalog: 4 tables, 11 policies,
+8 table triggers, 4 void-authority triggers, 7 estimate columns, 1 company toggle.
+
+- **Four tables** — `contract_templates`, `contract_template_boxes`, `contract_documents`,
+  `contract_signing_sessions` (one session table, §10.5). Owner/Admin on all, SELECT included.
+- **`enforce_contract_void_authority` [C5]** — closes a hole that is LIVE ON PRODUCTION.
+- **`contracts-shared.ts`** — the third leg of the triple; 7I's own value catalog, side-scoped.
+- **Server reads and client writes** appended to the existing 5A pair, which 7I extends.
+
+**NOT built, deliberately:** §6.5's tokenised sub e-signature (Gate 1); the conversion RPC
+amendment (A1(ii) — accepted, recorded as owed); all UI (C4=(b)).
+
+Evidence: `s145-contracts.live.ts` 19/19, `contracts-shared.test.ts` 22/22. Both proved
+load-bearing by mutation. **Two latent fixture defects in my own harnesses found and fixed:**
+both picked contracts without constraining to a PM-assigned project, so the PM refusals
+would have passed for the wrong reason (no visibility, not no authority). They passed on
+first run by row ordering and broke as soon as the two files ran in sequence.
+
+type-check 0 · vitest 783/783 (53 files) · eslint clean.
+
+---
+
+## Owed, recorded so it is not lost
+
+- **A1(i)** — teaching `v_is_signed` about the client-contract toggle. Accepted as not-done;
+  the Contracts panel shows the contract's own state instead.
+- **7I UI** — the next action above.
+- **§6.5 tokenised sub e-signature** — behind Gate 1.
+- **#1-s143** — `enforce_time_clock_sessions_column_scope` still has no service-role escape.

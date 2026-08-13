@@ -48,11 +48,36 @@ beforeAll(async () => {
     .single();
   companyId = (prof as { company_id: string }).company_id;
 
+  // ⚠️ THE FIXTURE MUST SIT ON A PROJECT THE PM IS ASSIGNED TO, and the first
+  // version of this did not constrain it. `subcontractor_contracts_select_
+  // visible` requires `can_view_project`, so an unassigned project's contract
+  // is invisible to the PM — and S2's refusal would then pass for the WRONG
+  // REASON: no visibility rather than no authority. It passed on first run by
+  // row ordering alone and broke the moment another harness churned the rows.
+  const { data: pmProfile } = await admin
+    .from('profiles')
+    .select('id')
+    .eq('email', PM)
+    .eq('is_deleted', false)
+    .single();
+  const { data: pmMember } = await admin
+    .from('company_members')
+    .select('id')
+    .eq('profile_id', (pmProfile as { id: string }).id)
+    .maybeSingle();
+  const { data: assignments } = await admin
+    .from('project_assignments')
+    .select('project_id')
+    .eq('member_id', (pmMember as { id: string }).id);
+  const assignedProjectIds = (assignments ?? []).map((a) => a.project_id);
+  expect(assignedProjectIds.length, 'the PM identity has no project assignments').toBeGreaterThan(0);
+
   const { data: contract } = await admin
     .from('subcontractor_contracts')
     .select('id, project_id')
     .eq('company_id', companyId)
     .eq('is_deleted', false)
+    .in('project_id', assignedProjectIds)
     .limit(1)
     .single();
   subContractId = (contract as { id: string }).id;
@@ -62,6 +87,7 @@ beforeAll(async () => {
     .select('id')
     .eq('company_id', companyId)
     .eq('is_deleted', false)
+    .in('project_id', assignedProjectIds)
     .limit(1)
     .single();
   expenseId = (expense as { id: string }).id;
