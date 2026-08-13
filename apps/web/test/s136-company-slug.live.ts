@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { admin, assertRebuildTest, sessionFor } from './live-session';
+import { admin, assertRebuildTest, purgeCompaniesNamed, sessionFor } from './live-session';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 // ============================================================================
@@ -31,10 +31,34 @@ async function slugFor(name: string, excludeId?: string): Promise<string> {
   return data as string;
 }
 
-beforeAll(() => assertRebuildTest());
+/**
+ * [#2-s147] Every company this file makes is named `s136-…` or `S136 …`.
+ *
+ * ⚠️ MATCHED CASE-INSENSITIVELY — it uses BOTH cases (`S136 Idem …` and
+ * `s136-walk-…`), and a case-sensitive match would silently miss half of them,
+ * which is the same class of bug as the leak itself.
+ */
+const MARKERS = ['S136'] as const;
+
+beforeAll(async () => {
+  assertRebuildTest();
+  // Self-heal: a run that died before `afterAll` left companies that the id
+  // list below cannot reach, because that list is rebuilt empty every run.
+  await purgeCompaniesNamed(admin, MARKERS);
+});
 
 afterAll(async () => {
-  for (const id of madeCompanyIds) await admin.from('companies').delete().eq('id', id);
+  // ⚠️ #2-s147 — THIS USED TO BE `delete().eq('id', id)` PER ID, WITH NO ERROR
+  // READ, and it leaked 3 companies per run (measured). Since 7F's seed trigger
+  // (`20260922000000`) the parent delete cannot succeed — 8
+  // `lien_release_templates` pin each company and the FK is NO ACTION — and the
+  // discarded error is why nobody noticed for four sessions.
+  await purgeCompaniesNamed(admin, MARKERS);
+  madeCompanyIds.length = 0;
+
+  // A cleanup that cannot fail its own run is not a cleanup.
+  const { data } = await admin.from('companies').select('id').ilike('name', 'S136%');
+  expect(data ?? [], 'S136 companies survived teardown').toHaveLength(0);
 });
 
 describe('the ruling: a bare local part', () => {

@@ -11,7 +11,13 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { unzipSync, strFromU8 } from 'fflate';
-import { admin, assertRebuildTest, TEST_PASSWORD } from './live-session';
+import {
+  admin,
+  assertRebuildTest,
+  deleteCompanies,
+  purgeCompaniesNamed,
+  TEST_PASSWORD,
+} from './live-session';
 import { runExportSweep } from '@/lib/trial/export-sweep';
 import { initialCursor } from '@/lib/trial/export';
 
@@ -20,6 +26,17 @@ const EMAIL = 'josh+s138export@worthprop.com';
 let companyId = '';
 let profileId = '';
 let userId = '';
+
+
+/**
+ * [#2-s147] Companies this file creates, purged BY NAME from both ends.
+ *
+ * ⚠️ THE BY-EMAIL PATH IN `nuke()` CANNOT REACH A LEAKED ONE. It finds the
+ * company through the auth user's profile — and the auth user deletes
+ * successfully while the company does not, so the orphan loses its only handle
+ * on the very run that creates it. The name is the handle that outlives both.
+ */
+const MARKERS = ['S138 Export Co'] as const;
 
 async function nuke(): Promise<void> {
   const { data: list } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
@@ -42,16 +59,14 @@ async function nuke(): Promise<void> {
       }
       await admin.from('export_jobs').delete().eq('company_id', cid);
       await admin.from('contacts').delete().eq('company_id', cid);
-      await admin.from('trial_lifecycle').delete().eq('company_id', cid);
-      await admin.from('tag_options').delete().eq('company_id', cid);
-      await admin.from('subscriptions').delete().eq('company_id', cid);
-      await admin.from('company_members').delete().eq('company_id', cid);
-      await admin.from('profiles').delete().eq('company_id', cid);
-      await admin.from('companies').delete().eq('id', cid);
+      // [#2-s147] `contacts` stays above — it is NOT in COMPANY_CHILDREN and
+      // is NO ACTION, so it must go first or deleteCompanies() will raise it.
+      await deleteCompanies(admin, [cid]);
     }
     await admin.from('trial_emails').delete().eq('email', EMAIL.toLowerCase());
     await admin.auth.admin.deleteUser(u.id);
   }
+  await purgeCompaniesNamed(admin, MARKERS);
 }
 
 /** Enqueue a job the way the route does, and drive it to completion. */
@@ -137,6 +152,10 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await nuke();
+  for (const m of MARKERS) {
+    const { data } = await admin.from('companies').select('id').ilike('name', `${m}%`);
+    expect(data ?? [], `${m} companies survived teardown`).toHaveLength(0);
+  }
 });
 
 describe('the export actually produces a zip with the data in it', () => {

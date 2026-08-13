@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { admin, assertRebuildTest, sessionFor } from './live-session';
+import { admin, assertRebuildTest, purgeCompaniesNamed, sessionFor } from './live-session';
 import { daysUntil, isPostponed, runTrialWarnings, runTrialLock } from '@/lib/trial/lifecycle';
 import { SURVIVES, COMPANY_TABLES } from '@/lib/trial/deletion';
 
@@ -32,8 +32,16 @@ let ownerProfileId = '';
 /** A throwaway company so the loops never touch the fixture tenant. */
 let probeCompanyId = '';
 
+/**
+ * [#2-s147] `S137 Probe …` and `S137 Null …`. The Null company at the bottom of
+ * this file was never deleted at all; the Probe one was deleted by id with no
+ * error read, which since 20260922000000 could not succeed. 2 leaked per run.
+ */
+const MARKERS = ['S137'] as const;
+
 beforeAll(async () => {
   assertRebuildTest();
+  await purgeCompaniesNamed(admin, MARKERS);
   [ownerC, pmC, subC] = (await Promise.all([
     sessionFor(OWNER),
     sessionFor(PM),
@@ -64,7 +72,11 @@ afterAll(async () => {
   await admin.from('trial_lifecycle').delete().eq('company_id', companyId);
   await admin.from('trial_warning_acknowledgements').delete().eq('company_id', companyId);
   await admin.from('export_jobs').delete().eq('company_id', companyId);
-  await admin.from('companies').delete().eq('id', probeCompanyId);
+  await purgeCompaniesNamed(admin, MARKERS);
+
+  // A cleanup that cannot fail its own run is not a cleanup.
+  const { data } = await admin.from('companies').select('id').ilike('name', 'S137%');
+  expect(data ?? [], 'S137 companies survived teardown').toHaveLength(0);
 });
 
 // ============================================================================

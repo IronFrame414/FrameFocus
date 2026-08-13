@@ -16,7 +16,15 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@supabase/supabase-js';
-import { admin, assertRebuildTest, URL_, ANON, TEST_PASSWORD } from './live-session';
+import {
+  admin,
+  assertRebuildTest,
+  deleteCompanies,
+  purgeCompaniesNamed,
+  URL_,
+  ANON,
+  TEST_PASSWORD,
+} from './live-session';
 import { banCompanyUsers, unlockCompany, runTrialUnlockReconcile } from '@/lib/trial/lifecycle';
 
 const OWNER_EMAIL = 'josh+s138owner@worthprop.com';
@@ -27,6 +35,17 @@ let ownerUserId = '';
 let goneUserId = '';
 
 /** Remove any residue from an aborted previous run, then the run itself. */
+
+/**
+ * [#2-s147] Companies this file creates, purged BY NAME from both ends.
+ *
+ * ⚠️ THE BY-EMAIL PATH IN `nuke()` CANNOT REACH A LEAKED ONE. It finds the
+ * company through the auth user's profile — and the auth user deletes
+ * successfully while the company does not, so the orphan loses its only handle
+ * on the very run that creates it. The name is the handle that outlives both.
+ */
+const MARKERS = ['S138 Unlock Co', 'S138 Throwaway'] as const;
+
 async function nuke(): Promise<void> {
   for (const email of [OWNER_EMAIL, GONE_EMAIL]) {
     const { data: list } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
@@ -40,17 +59,16 @@ async function nuke(): Promise<void> {
       const cid = p ? (p as { company_id: string }).company_id : null;
       await admin.from('profiles').delete().eq('user_id', u.id);
       if (cid) {
-        await admin.from('trial_lifecycle').delete().eq('company_id', cid);
-        await admin.from('tag_options').delete().eq('company_id', cid);
-        await admin.from('subscriptions').delete().eq('company_id', cid);
-        await admin.from('company_members').delete().eq('company_id', cid);
-        await admin.from('profiles').delete().eq('company_id', cid);
-        await admin.from('companies').delete().eq('id', cid);
+        // [#2-s147] was six inline deletes ending in an unchecked
+        // `companies` delete that could not succeed — 8 lien_release_templates
+        // pin every company since 20260922000000 and the FK is NO ACTION.
+        await deleteCompanies(admin, [cid]);
       }
       await admin.from('trial_emails').delete().eq('email', email.toLowerCase());
       await admin.auth.admin.deleteUser(u.id);
     }
   }
+  await purgeCompaniesNamed(admin, MARKERS);
 }
 
 beforeAll(async () => {
@@ -110,6 +128,11 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await nuke();
+  // A cleanup that cannot fail its own run is not a cleanup.
+  for (const m of MARKERS) {
+    const { data } = await admin.from('companies').select('id').ilike('name', `${m}%`);
+    expect(data ?? [], `${m} companies survived teardown`).toHaveLength(0);
+  }
 });
 
 async function bannedUntil(userId: string): Promise<string | null> {
