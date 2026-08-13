@@ -63,10 +63,24 @@ beforeAll(async () => {
     .single();
   invoiceId = (invoice as { id: string }).id;
 
+  // ⚠️ THE DIRECTION FILTER IS LOAD-BEARING [S146]. This file is CLIENT-OUTBOUND
+  // ONLY (ruling C0, banner above), and since S145 seeded the sub_inbound
+  // defaults every company has EIGHT templates, not four. Without the filter
+  // this `.limit(1)` can hand back a `sub_inbound` template, which is then bound
+  // to the `client_outbound` release seeded below.
+  //
+  // That mismatch does NOT fail. Nothing in `pg_constraint` ties a template's
+  // direction to a release's — `lien_releases_template_id_fkey` is a plain
+  // single-column FK — so the row is accepted and the fixture silently tests the
+  // wrong pairing. Considered as a composite FK at S146 and DEFERRED by ruling
+  // (Q2): it would foreclose a template ever serving both directions, which is a
+  // real option to give up for an invariant nothing has violated. Revisit if a
+  // bug appears; the filter here closes the actual leak.
   const { data: template } = await admin
     .from('lien_release_templates')
     .select('id')
     .eq('company_id', companyId)
+    .eq('direction', 'client_outbound')
     .limit(1)
     .single();
   templateId = (template as { id: string }).id;
@@ -94,11 +108,17 @@ afterAll(async () => {
 });
 
 describe('S140-F1 — the fixture is real', () => {
-  it('four starting templates exist per company (§4)', async () => {
+  // [S146] SCOPED TO client_outbound, EXPECTATION KEPT AT FOUR. S145 seeded four
+  // `sub_inbound` defaults per company, so the unscoped count is now 8 and this
+  // went red. Widening it to 8 would have kept it green and lost what it tests:
+  // that the CLIENT seed lays down exactly one template per type × is_final slot.
+  // The sub-side equivalent is asserted separately, in s145-sub-inbound S145-S1.
+  it('four starting CLIENT templates exist per company (§4)', async () => {
     const { data } = await admin
       .from('lien_release_templates')
       .select('type, is_final')
       .eq('company_id', companyId)
+      .eq('direction', 'client_outbound')
       .eq('is_default', true);
     expect(data).toHaveLength(4);
     const slots = (data ?? []).map((t) => `${t.type}|${t.is_final}`).sort();
@@ -108,6 +128,31 @@ describe('S140-F1 — the fixture is real', () => {
       'unconditional|false',
       'unconditional|true',
     ]);
+  });
+
+  // [S146] THE FIXTURE'S OWN PAIRING, ASSERTED RATHER THAN ASSUMED.
+  //
+  // The `.limit(1)` template pick above had no direction filter until S146, and
+  // its failure mode was SILENCE: a `sub_inbound` template bound to a
+  // `client_outbound` release is accepted by the database, so the fixture would
+  // simply have tested the wrong pairing while staying green. There is nothing
+  // to make go red, which is exactly why this assertion exists — it converts an
+  // unenforced invariant into a checked one at the only layer that can check it.
+  it('the fixture template and its release agree on direction (§4)', async () => {
+    const { data: rel } = await admin
+      .from('lien_releases')
+      .select('direction, template_id')
+      .eq('id', seededReleaseId)
+      .single();
+    const { data: tpl } = await admin
+      .from('lien_release_templates')
+      .select('direction')
+      .eq('id', (rel as { template_id: string }).template_id)
+      .single();
+    expect((tpl as { direction: string }).direction).toBe('client_outbound');
+    expect((tpl as { direction: string }).direction).toBe(
+      (rel as { direction: string }).direction
+    );
   });
 
   it('NONE of them carries a PDF — FrameFocus supplies no form (§2)', async () => {

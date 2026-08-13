@@ -111,12 +111,20 @@ afterAll(async () => {
 });
 
 describe('S145-S1 — the four sub templates exist and are pre-named, not pre-filled', () => {
-  it('every company has four sub_inbound templates spanning type × is_final', async () => {
+  // [S146] SCOPED TO `is_default`. These three counts are about WHAT THE SEED
+  // LAYS DOWN, and they were counting every template on the company — so any
+  // non-default template broke them: a fixture from another harness, or simply
+  // a custom form a real user uploads through Company Settings, which the
+  // product supports. Third instance of the fixture-drift class S146 fixed in
+  // `s140-lien-releases.live.ts`; scoping states the intent instead of relying
+  // on the company never having a custom template.
+  it('every company has four default sub_inbound templates spanning type × is_final', async () => {
     const { data } = await admin
       .from('lien_release_templates')
       .select('type, is_final, pdf_file_id')
       .eq('company_id', companyId)
-      .eq('direction', 'sub_inbound');
+      .eq('direction', 'sub_inbound')
+      .eq('is_default', true);
     expect(data).toHaveLength(4);
     const slots = (data ?? []).map((t) => `${t.type}|${t.is_final}`).sort();
     expect(slots).toEqual([
@@ -135,13 +143,15 @@ describe('S145-S1 — the four sub templates exist and are pre-named, not pre-fi
       .from('lien_release_templates')
       .select('id')
       .eq('company_id', companyId)
-      .eq('direction', 'client_outbound');
+      .eq('direction', 'client_outbound')
+      .eq('is_default', true);
     expect(client).toHaveLength(4);
-    // Eight in total, four each. Not one shared set of four.
+    // Eight seeded in total, four each. Not one shared set of four.
     const { data: all } = await admin
       .from('lien_release_templates')
       .select('id')
-      .eq('company_id', companyId);
+      .eq('company_id', companyId)
+      .eq('is_default', true);
     expect(all).toHaveLength(8);
   });
 });
@@ -281,6 +291,41 @@ describe('S145-S3 — the subject CHECK enforces ruling B2', () => {
     if (data) madeReleases.push(...(data as { id: string }[]).map((r) => r.id));
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// [S146] WHY THE TRIGGER→TYPE MAPPING IS NOT A DATABASE CHECK.
+//
+// It was proposed at S146 as `sub_contract_id IS NOT NULL -> conditional` (and
+// the payment arm likewise), on the reasoning that four findings in this project
+// — #117, the compliance floor, the invoice-void hole and the contract-void hole
+// S145 closed — all had the rule in the service while the database disagreed.
+// RULED [Josh, S146]: FILE IT, DO NOT BUILD IT. The reasoning, so nobody
+// re-derives it from that list and reaches the opposite conclusion:
+//
+//   1. THOSE FOUR ARE ABOUT AUTHORITY — who may do a thing. That belongs in the
+//      database, and `enforce_contract_void_authority` is the right shape for it.
+//      Trigger→type is about WHICH OF TWO LEGAL INSTRUMENTS the workflow offers
+//      by default. The ruling makes that layer optional: the system prompts, it
+//      never blocks. A CHECK there converts an optional prompt into a
+//      schema-level refusal of a valid waiver.
+//
+//   2. BOTH ARMS WOULD BLOCK REAL INSTRUMENTS. `expense_id` + CONDITIONAL is the
+//      conditional waiver on progress payment — what a GC collects BEFORE
+//      releasing a stage payment, and the sub-side analogue of the
+//      client-outbound flow 7F already ships. `sub_contract_id` + UNCONDITIONAL
+//      is the final waiver covering a whole contract that has been paid out.
+//
+//   3. THE SCHEMA ALREADY SAYS SO. Both partial unique indexes are keyed
+//      `(subject, TYPE)`, not `(subject)`. That is a deliberate statement that
+//      both types may exist against one subject — and the test immediately below
+//      asserts it. A CHECK would make the `type` column of
+//      `idx_lien_releases_one_per_sub_contract_type` dead and turn that test red.
+//
+// The mapping is enforced where it belongs: the generate route derives the type
+// from the trigger and refuses to take one from the caller. That is EXECUTED, not
+// asserted structurally — `s146-generate-route.live.ts` S146-G3, "the caller
+// CANNOT choose the type".
+// ─────────────────────────────────────────────────────────────────────────────
 
 describe('S145-S4 — one release per subject per type (ruling B2)', () => {
   it('a second live conditional on the same subcontract is refused', async () => {
