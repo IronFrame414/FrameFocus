@@ -112,8 +112,8 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
 > Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.
 
-- **#1-s146 — an UPDATE-shaped write in `contracts-client.ts` reports SUCCESS when
-  RLS filtered the row away.**
+- **#1-s146 — ✅ FIXED [S146] — role was a caller-supplied parameter, and an
+  UPDATE-shaped write reported SUCCESS when RLS filtered the row away.**
 
   `voidContractDocument()` takes the caller's `role` as a PARAMETER, so
   `canVoidContract()` believes whatever it is told. A project_manager passing
@@ -136,11 +136,51 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   see this. Pinned by `s146-contract-services.live.ts` S146-C4, whose two
   assertions say *"if this is now false, #1-s146 has been fixed — invert it"*.
 
-  **Fix:** ask PostgREST for the affected rows (`.select()` on the update, or
-  `count: 'exact'`) and return `{ success: false }` when nothing was touched.
-  Small, but it changes the return contract of several shipped functions, so it
-  wants a ruling rather than a drive-by. **Do this before the 7I UI ships**, since
-  the UI is the first caller that will believe the answer.
+  **FIXED [Josh ruled both halves, S146], applied across the pattern.**
+
+  **Half 1 — role resolved server-side.** `role` is gone as a parameter;
+  `voidContractDocument(id, status, reason)` resolves it through
+  `get_my_role()` — **the same SECURITY DEFINER function every RLS policy
+  calls**, chosen over a `profiles` read so the service check and the database
+  gate cannot disagree about who the caller is. Precedent:
+  `time-tracking-client.ts:107`. `status` stays a parameter deliberately: it
+  selects the message, not the authority, and both the void-shape CHECK and the
+  void-authority trigger hold regardless of what is passed.
+
+  **Half 2 — zero affected rows is a failure.** Every UPDATE-shaped write in the
+  file now `.select('id')`s and returns `DISCARDED` when nothing was touched:
+  `updateClientContract`, `updateSubcontractorContract`, `updateContractTemplate`,
+  `softDeleteContractTemplate`, `voidContractDocument`, `setEstimateContractToggle`.
+  The message names no cause it has not verified — an empty result cannot tell
+  "policy refused you" from "the row is gone", so it says both.
+
+  **Two write sites are deliberately NOT row-counted, and the reasons differ:**
+  the four INSERTs already surface a real error, and `saveContractBoxMap`'s
+  `.delete()` clear **legitimately affects zero rows on the first save of every
+  template** — `applied()` there would refuse the commonest case. That left a
+  hole the row count could not reach: a PM passing `[]` cleared nothing and was
+  told the map was emptied. Closed with the ROLE half instead —
+  `saveContractBoxMap` now gates on `canManageContracts(await myRole(...))`
+  before the write.
+
+  **Probed and mutation-proved**, `s146-contract-services.live.ts` S146-C4, 22/22:
+
+  - *Half 1* — a PM is refused **by the function** with the Owner/Admin message,
+    which can only come from a role they did not supply. Mutating `myRole()` to
+    return `'owner'` (i.e. trusting the caller, as the old parameter did) turns
+    both half-1 tests red — the PM falls through to the database and gets
+    `DISCARDED` instead of the service refusal, which is exactly the old shape.
+  - *Half 2* — **company B's OWNER** voiding company A's document. Role gate
+    passes (they really are an owner), the row EXISTS and is merely invisible, so
+    RLS matches nothing and Postgres reports no error. Returns failure. A
+    cross-tenant owner rather than a bogus id on purpose: it isolates "the policy
+    matched nothing" from "no such row", and doubles as a tenant-isolation
+    assertion. Mutating `applied()` to `return true` turns all three half-2 tests
+    red.
+
+  All three shipped call sites in `contracts-panel.tsx` already branch on
+  `result.success` and surface `result.error`, so a discarded void now shows the
+  user a message instead of a silent success over unchanged data.
 
   **Related, and worth deciding together:** `contract_documents_void_authority` is
   currently **unreachable in practice**. RLS on that table is strictly narrower
@@ -200,6 +240,33 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   directions, which is a real option to give up for an invariant nothing has
   violated. The S146 direction filters close the actual leak. **Revisitable if a
   bug appears.**
+
+- **#5-s146 — ✅ FIXED [S146] — `s97ct-isolation.live.ts` could report a
+  cross-company ISOLATION FAILURE over a row nobody had breached.** Fourth
+  instance of the fixture-drift class.
+
+  `firstIdFor()` picked its fixture row with `.limit(1)` and **neither an
+  `is_deleted` filter nor an ORDER BY**. Company A currently has **four of its ten
+  invoices soft-deleted**, so the pick could hand test 11 — *"B's owner cannot
+  soft-delete company A's invoice"* — a row whose `is_deleted` was **already
+  true**. B's owner was refused correctly and the assertion failed anyway.
+
+  **The absence of an ORDER BY is why it looked like a regression.** Postgres
+  returns heap order and an UPDATE moves a row, so the pick is not stable between
+  runs: the file passed four consecutive full-suite runs and then failed, with
+  nothing relevant having changed. It failed STANDALONE too, which is what ruled
+  out a cross-harness race.
+
+  **Not caused by the `#1-s146` service change**, checked rather than assumed:
+  that diff touches `contracts-client.ts` only, and its single occurrence of the
+  word "invoice" is inside a comment.
+
+  **Fixed** by filtering to live rows — `NO_SOFT_DELETE` names the two tables in
+  the list that genuinely lack the column, read from `information_schema` rather
+  than guessed — and ordering by `created_at`. **A fixture that can select a
+  deleted row cannot test soft-delete refusal.** Red standalone before, 14/14
+  after, which is also the proof the isolation itself was never broken: given a
+  LIVE invoice, B's owner cannot touch it.
 
 - **#4-s146 — ✅ FIXED [S146] — `s97ct-reply-to.live.ts` leaked a fixed-slug company
   and blocked every later full-suite run. Same root cause as Part 1, third instance.**

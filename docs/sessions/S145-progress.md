@@ -28,11 +28,11 @@ send screen, and the contract document list. The schema, services, `contracts-sh
 and probes all landed at S145 [C4=(b)]; S146 then EXECUTED the service layer and the
 generate route, so the UI is now building on exercised code rather than reviewed code.
 
-⚠️ **Read `#1-s146` in TECH_DEBT.md BEFORE writing the UI.** `voidContractDocument()`
-and `updateContractTemplate()` return `{ success: true }` when RLS filtered the row
-away. The UI is the first caller that will believe that answer, and the first screen
-it affects reports a legal document as voided when it is still live. The fix is a
-row count and it wants a ruling on the return contract.
+✅ **`#1-s146` is FIXED** — applied at S146 on Josh's ruling, before merge. Role is
+resolved server-side through `get_my_role()` and is no longer a parameter, and every
+UPDATE-shaped write in `contracts-client.ts` treats zero affected rows as a failure.
+**`voidContractDocument()` lost its `role` argument** — its signature is now
+`(id, status, reason)`. It had no production caller yet, so nothing else moved.
 
 **Do NOT build §6.5's tokenised sub e-signature** — still behind Gate 1.
 
@@ -228,6 +228,46 @@ to a probe that writes to the tables directly, which is what S145's did. Also re
 `contract_documents_void_authority` is unreachable in practice there — RLS is strictly
 narrower than the trigger — while remaining genuinely load-bearing on the two 5A tables.
 
+### Part 5 — `#1-s146` APPLIED [Josh ruled both halves, before merge] — **DONE**
+
+**Half 1 — role resolved server-side.** `role` is gone as a parameter. It is read from
+`get_my_role()`, **the same SECURITY DEFINER function every RLS policy calls** — chosen
+over a `profiles` read so the service check and the database gate cannot disagree about
+who the caller is. `voidContractDocument(id, status, reason)`; no production caller
+existed, so nothing else moved. `status` stays a parameter deliberately: it selects the
+message, not the authority.
+
+**Half 2 — zero affected rows is a failure**, applied to all six UPDATE-shaped writes
+in the file, not the two already named.
+
+**The sweep turned up the interesting case.** `saveContractBoxMap`'s `.delete()` clear
+**legitimately affects zero rows on the first save of every template**, so a row count
+there would refuse the commonest case — and that left a hole the count could not reach:
+a PM passing `[]` cleared nothing and was told the map was emptied. Closed with the
+ROLE half instead. The two halves are not interchangeable, and this is where that shows.
+
+Mutation-proved separately. Making `myRole()` return `'owner'` — trusting the caller,
+as the old parameter did — turns both half-1 tests red, and the PM falls through to the
+database and gets the discard message instead of the service refusal, which is exactly
+the old shape. Making `applied()` return `true` turns all three half-2 tests red.
+
+**The half-2 probe is a cross-tenant owner, not a bogus id, on purpose:** company B's
+OWNER voiding company A's document passes the role gate for real, and the row EXISTS
+and is merely invisible — which is what "RLS discarded it" means. It doubles as a
+tenant-isolation assertion.
+
+**And the verification run turned up a FOURTH instance of the fixture-drift class**
+(`#5-s146`), which is the one that looked most like a real defect. `s97ct-isolation`
+reported *"B's owner cannot soft-delete company A's invoice"* as FAILING. It was not a
+breach: `firstIdFor()` picked with `.limit(1)` and neither an `is_deleted` filter nor an
+ORDER BY, company A has four of ten invoices soft-deleted, and the pick handed the test
+a row whose `is_deleted` was already `true`. B's owner was refused correctly and the
+assertion failed anyway. Ruled out as a regression from the service change by checking
+rather than assuming — that diff touches `contracts-client.ts` only and its single
+occurrence of "invoice" is in a comment — and ruled out as a cross-harness race because
+it **failed standalone**. Fixed by selecting live rows in a deterministic order; 14/14
+after, which is itself the proof the isolation was never broken.
+
 Box-map replace-not-merge was mutation-proved: removing the clear gives 3 boxes where 1
 is expected. Reverted; service byte-identical to HEAD.
 
@@ -281,9 +321,7 @@ diagnoses and the `s138` intermittency, run 4 came back **clean**.
 - **§6.5 tokenised sub e-signature** — behind Gate 1. Confirmed still not built at S146:
   the only tokenised routes in the tree are `/sign` and `/sign-co`, both pre-existing.
 - **#1-s143** — `enforce_time_clock_sessions_column_scope` still has no service-role escape.
-- **#1-s146** — UPDATE-shaped writes in `contracts-client.ts` report false success.
-  **Blocks nothing, but the 7I UI is its first believing caller.** Needs a ruling on the
-  return contract, not a drive-by fix.
+- ~~**#1-s146**~~ — **FIXED at S146 before merge**, both halves, on Josh's ruling.
 - **#2-s146** — trigger→type has no DB backstop. **Ruled: filed, not built.** Revisit only
   if a second writer to `lien_releases` appears.
 - **#3-s146** — no constraint ties a template's `direction` to a release's. **Ruled: filed,
