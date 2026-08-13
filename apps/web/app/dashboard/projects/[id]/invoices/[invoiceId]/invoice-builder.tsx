@@ -75,6 +75,12 @@ interface InvoiceBuilderProps {
   instruments: InstrumentOption[];
   /** §5 — contract type by instrument, for the per-line retainage split. */
   instrumentTypes: InstrumentTypes;
+  /**
+   * §9 [S143] — the invoice's REAL payment state, read server-side by
+   * getInvoiceVoidState(). Replaces two hardcoded `false`s that made
+   * canVoidInvoice() take its unpaid arm on every invoice.
+   */
+  voidState: { hasPayment: boolean; syncedToQuickBooks: boolean };
   /** Where a person-day's hours go unless reassigned (Josh's ruling): the
    *  ORIGINAL CONTRACT. */
   defaultInstrumentKey: string | null;
@@ -128,6 +134,7 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
     memberId,
     instruments,
     instrumentTypes,
+    voidState,
     defaultInstrumentKey,
     sourceEstimateId,
     estimateLines,
@@ -418,6 +425,7 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
           busy={busy}
           run={run}
           projectId={projectId}
+          voidState={voidState}
         />
       </div>
 
@@ -1740,6 +1748,7 @@ function LifecycleActions({
   busy,
   run,
   projectId,
+  voidState,
 }: {
   invoice: InvoiceWithLines;
   role: string;
@@ -1749,6 +1758,7 @@ function LifecycleActions({
   busy: boolean;
   run: (fn: () => Promise<{ success: boolean; error?: string }>, msg?: string) => Promise<boolean>;
   projectId: string;
+  voidState: { hasPayment: boolean; syncedToQuickBooks: boolean };
 }) {
   const router = useRouter();
   const [voidOpen, setVoidOpen] = useState(false);
@@ -1825,11 +1835,10 @@ function LifecycleActions({
               const ok = await run(
                 () =>
                   voidInvoice(invoice.id, reason, memberId as string, {
-                    // 7E owns payments and is not built — no payment can exist
-                    // yet, so the unpaid arm applies. When 7E lands it passes
-                    // the real payment state here (§9).
-                    hasPayment: false,
-                    paymentSyncedToQuickBooks: false,
+                    // [S143] READ, not assumed. These were hardcoded `false`
+                    // on the premise that 7E was not built; it shipped at S97.
+                    hasPayment: voidState.hasPayment,
+                    paymentSyncedToQuickBooks: voidState.syncedToQuickBooks,
                     role,
                   }),
                 'Invoice voided. Its costs and hours are available to bill again.'

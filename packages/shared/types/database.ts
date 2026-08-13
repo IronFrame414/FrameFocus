@@ -835,6 +835,7 @@ export type Database = {
           is_deleted: boolean | null
           method: string | null
           project_id: string | null
+          qb_object_type: string | null
           qb_push_status: string
           qb_refund_id: string | null
           reason: string | null
@@ -858,6 +859,7 @@ export type Database = {
           is_deleted?: boolean | null
           method?: string | null
           project_id?: string | null
+          qb_object_type?: string | null
           qb_push_status?: string
           qb_refund_id?: string | null
           reason?: string | null
@@ -881,6 +883,7 @@ export type Database = {
           is_deleted?: boolean | null
           method?: string | null
           project_id?: string | null
+          qb_object_type?: string | null
           qb_push_status?: string
           qb_refund_id?: string | null
           reason?: string | null
@@ -2969,7 +2972,8 @@ export type Database = {
           is_retainage: boolean
           project_id: string
           purchase_order_id: string | null
-          qb_export_status: string | null
+          qb_bill_id: string | null
+          qb_push_status: string
           rejected_at: string | null
           rejected_by: string | null
           rejection_note: string | null
@@ -3004,7 +3008,8 @@ export type Database = {
           is_retainage?: boolean
           project_id: string
           purchase_order_id?: string | null
-          qb_export_status?: string | null
+          qb_bill_id?: string | null
+          qb_push_status?: string
           rejected_at?: string | null
           rejected_by?: string | null
           rejection_note?: string | null
@@ -3039,7 +3044,8 @@ export type Database = {
           is_retainage?: boolean
           project_id?: string
           purchase_order_id?: string | null
-          qb_export_status?: string | null
+          qb_bill_id?: string | null
+          qb_push_status?: string
           rejected_at?: string | null
           rejected_by?: string | null
           rejection_note?: string | null
@@ -3835,6 +3841,9 @@ export type Database = {
           notes: string | null
           presentation_level: string
           project_id: string
+          qb_invoice_id: string | null
+          qb_push_status: string
+          qb_synced_at: string | null
           reminder_count: number
           retainage_percent: number | null
           retainage_withheld: number
@@ -3870,6 +3879,9 @@ export type Database = {
           notes?: string | null
           presentation_level?: string
           project_id: string
+          qb_invoice_id?: string | null
+          qb_push_status?: string
+          qb_synced_at?: string | null
           reminder_count?: number
           retainage_percent?: number | null
           retainage_withheld?: number
@@ -3905,6 +3917,9 @@ export type Database = {
           notes?: string | null
           presentation_level?: string
           project_id?: string
+          qb_invoice_id?: string | null
+          qb_push_status?: string
+          qb_synced_at?: string | null
           reminder_count?: number
           retainage_percent?: number | null
           retainage_withheld?: number
@@ -6635,7 +6650,8 @@ export type Database = {
           id: string
           is_deleted: boolean | null
           member_id: string
-          qb_export_status: string | null
+          qb_push_status: string
+          qb_time_activity_id: string | null
           status: string | null
           updated_at: string | null
           updated_by: string | null
@@ -6654,7 +6670,8 @@ export type Database = {
           id?: string
           is_deleted?: boolean | null
           member_id?: string
-          qb_export_status?: string | null
+          qb_push_status?: string
+          qb_time_activity_id?: string | null
           status?: string | null
           updated_at?: string | null
           updated_by?: string | null
@@ -6673,7 +6690,8 @@ export type Database = {
           id?: string
           is_deleted?: boolean | null
           member_id?: string
-          qb_export_status?: string | null
+          qb_push_status?: string
+          qb_time_activity_id?: string | null
           status?: string | null
           updated_at?: string | null
           updated_by?: string | null

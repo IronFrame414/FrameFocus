@@ -207,8 +207,9 @@ All of the following is Intuit-documented behavior gathered at S92, buildable as
   **CreditMemo** is a credit on the client's account; a **RefundReceipt** is money actually sent back.
   7E §5 distinguishes them, so 7G maps them separately.
 - **Vendor / Bill / BillPayment** — sub bills and sub payments. **Owned by 7C**, listed here only so
-  the connector surface is complete. _([S97] `subcontractors.ein` verified present,
-  `baseline_schema.sql:1520`.)_
+  the connector surface is complete. _(~~[S97] `subcontractors.ein` verified present,
+  `baseline_schema.sql:1520`.~~ **CORRECTED [S143] — see §7G.4's Vendor row and §7G.9.**
+  The column MOVED to `subcontractor_financials.ein` at `20260903000000`.)_
 
 **Inbound / catching QB-side changes**
 
@@ -269,6 +270,46 @@ to demand the answer before committing. But two things change:
 2. **The tier is a business decision with a number attached.** ~$300/mo doubles the ceiling; the jump
    to Gold is 10×. Whoever plans pricing should know the free tier has a hard, blocking edge.
 
+---
+
+### ⚠️ THE CADENCE, RULED — **hourly CDC [Josh, S143, 2026-08-13]**
+
+> **This section stated the constraint correctly and then never chose.** The S142 survey's
+> finding was exactly that: hourly and 15-minute are presented as *illustrative*, the text
+> concludes the cadence "must be chosen as such", and no cadence is named — here or in §S.
+> A constraint with no decision attached is not a decision.
+
+**Ruled: hourly.** The reasoning, recorded rather than the bare verdict, because a verdict with
+no reasoning is what a later reader overturns by accident:
+
+- **Josh expects 200–400 companies** _(his figure, S143)_.
+- Hourly reaches **~694** on the free Builder tier. 400 companies at hourly is ~288,000 reads —
+  a little over half the pool.
+- 15-minute reaches **~173**, so it is **already past its ceiling at 200 companies** and roughly
+  3× over at 400.
+- And it fails as a **cliff, not a slowdown**: Builder overage is *blocked*, not throttled, and
+  the quota is per Workspace — so **every connected company's sync stops at once**, with no
+  per-tenant degradation and no warning unless the read-budget telemetry §S asks for exists.
+
+So 15-minute is unusable at the planned scale and hourly costs nothing to choose now.
+**Silver (~$300/mo) becomes a question past ~694 companies, not at 200.**
+
+> ### ⚠️ THE NUMBERS ARE RE-CONFIRMATION-OWED. THE RULING IS NOT.
+>
+> The ruling is firm. **The arithmetic under it is not yet verified against Intuit.** Every
+> figure in this section — the 500,000 Builder quota, the tier prices, and the
+> Workspace-aggregation quote itself — comes from this document's own S97 research. **Neither
+> the S142 survey nor S143 performed any external lookup**; both read this file. §7G.9 already
+> says "tier figures should be re-confirmed at build", and that is unchanged.
+>
+> If the quota or the aggregation scope turns out to differ, **the ceiling arithmetic moves and
+> the ruling may need revisiting** — hourly is chosen because it clears the planned scale with
+> room, not because it is the only cadence that could.
+>
+> Also still open, and it would cut the dominant cost if it went the right way: whether
+> webhook-triggered reads can be batched, or whether any payment detail arrives in the
+> notification itself.
+
 > **Still open for CC:** confirm the tier figures at build — they are current as of Intuit's 2025
 > program launch and this reading. Confirm also whether webhook-triggered reads can be batched or
 > whether any payment detail arrives in the notification itself, which would cut the dominant cost.
@@ -290,8 +331,31 @@ needed for expense accounting and 1099s.]
   creation — nothing reaches QB until an invoice needs it)_
 - Job → QB **sub-customer** under the client _([S92] created lazily at first invoice export.
   **[S96/S97]** named per #7: **`PRJ-### — Job Name`**)_
-- Sub / vendor (with EIN) → QB **Vendor** _(7C — live source: the `subcontractors` table, `ein`
-  verified [S97])_
+- Sub / vendor (with EIN) → QB **Vendor** _(7C)_
+
+  > ## ⚠️ CORRECTED [S143] — THE EIN MOVED, AND THE FAILURE IS SILENT
+  >
+  > _Superseded text, quoted rather than deleted:_ _"live source: the `subcontractors` table,
+  > `ein` verified [S97]"._
+  >
+  > **`subcontractors.ein` no longer exists.** `20260903000000_subcontractor_financials.sql`
+  > (S122, TECH_DEBT #132) moved `ein`, `default_hourly_rate` and
+  > `default_markup_percent` onto **`subcontractor_financials`** — a table created
+  > precisely because `subcontractors_select_authenticated` has no role arm and was
+  > leaking the EIN to every role. Its SELECT, INSERT and UPDATE policies are all
+  > **Owner/Admin**.
+  >
+  > **Why this matters more than a moved column.** Nothing errors when you get it
+  > wrong:
+  >
+  > * a worker doing a plain `subcontractors` select finds **no such column**;
+  > * a worker running under a **non-Owner session** gets **NULL from the side
+  >   table** — RLS filters the row, and `getSubcontractorFinancials()` deliberately
+  >   returns `null` for "refused" and "absent" alike.
+  >
+  > Either way the Vendor exports **with no tax id**, no error is raised, and the
+  > 1099 this row exists for is wrong. Read `subcontractor_financials.ein`, and
+  > assert the read succeeded rather than treating NULL as "this sub has no EIN".
 - Client invoice → QB **Invoice** (CustomerRef = job sub-customer; single income Item) _(7D)_
   **[S96, reworded S97 per 7D §8 as amended] Export the BILLED amount, never the derived one.**
   _Superseded wording: "a **billed** figure (the recorded override)… **7D's disposition figures are
@@ -476,6 +540,27 @@ This section states only _what must be storable_, not how.
   (§7G.3a), monthly read volume needs to be **countable** — otherwise the first sign of trouble is
   every company's sync stopping at once. Count reads; alert before the ceiling.
 
+> ### **[S143 — RULED] The sync worker's privilege level, decided before it is written**
+>
+> **Service role, scoped by an EXPLICIT `company_id` on every query** — the
+> `invoice-derivation-server.ts` pattern, and the tenant established by the caller before the
+> worker runs.
+>
+> **Why it has to be recorded here rather than discovered at build.** The worker needs
+> `subcontractor_financials.ein` for the Vendor export (§7G.4), and that table is Owner/Admin
+> by RLS. So the three options were:
+>
+> | | |
+> | --- | --- |
+> | An Owner session | No bypass, but a cron has no human session to borrow. Unusable. |
+> | Bare service role | Works, and **bypasses RLS entirely** — the same trap `record_client_payment` and `invoice-derivation-server.ts` carry, protected only by the checks it makes itself. Every future edit becomes a potential cross-tenant leak. |
+> | **Service role + explicit `company_id`** | **Ruled.** The bypass is real but every query is tenant-scoped by construction, and the scoping is visible in each call rather than assumed from the session. |
+>
+> **The cost, stated plainly:** the worker is protected only by its own discipline. It must
+> take `company_id` as a parameter, never derive it from a row it just read, and never run a
+> query without it. `invoice-derivation-server.ts` carries this warning at the top of the file
+> and 7G's worker must carry the same one.
+
 CC also confirms, against the live schema:
 
 - That the "Construction Income" default Item and its remap target exist / can be created per company.
@@ -507,7 +592,9 @@ CC also confirms, against the live schema:
   no-payment-button ruling and #7's format correction: [S97].**
 - **Repo-verified [S97]:** `projects.project_number` + `next_project_number()`
   (`20260704211000:42–68, :85`) · `companies.gl_account_labor/_material/_subcontractor/_other`
-  (`20260728010000`) · `subcontractors.ein` (`baseline_schema.sql:1520`) ·
+  (`20260728010000`) · ~~`subcontractors.ein` (`baseline_schema.sql:1520`)~~ **STALE — the
+  column moved to `subcontractor_financials.ein` at `20260903000000` (S122); corrected
+  [S143], see §7G.4** ·
   `change_orders_status_check` (`20260704215000:70`).
 - **[S97] Both `[inferred]` items resolved** — the manual-entry fallback (#3) and the terminal-failure
   escalation (§7G.7). The tag class is retired from this file, and with 7F's five also resolved, from

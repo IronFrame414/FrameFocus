@@ -7,6 +7,7 @@ import { getProject } from '@/lib/services/projects';
 import { getChangeOrders } from '@/lib/services/change-orders';
 import { getCompanyTimeSettings } from '@/lib/services/company';
 import { getMyMember } from '@/lib/services/members';
+import { getInvoiceVoidState } from '@/lib/services/payments';
 import {
   getAvailableCredits,
   getInvoice,
@@ -170,6 +171,13 @@ export default async function InvoiceDetailPage({
   // down; the panel itself renders only for Owner/Admin, and the route enforces
   // that independently.
   const deliveries = await getInvoiceDeliveries(params.invoiceId);
+
+  // §9 [S143] — the REAL payment state the void decision needs. The builder
+  // used to hardcode `hasPayment: false` on the premise that 7E was not built;
+  // it shipped at S97, and the matrix took its unpaid arm on paid invoices for
+  // two sessions. `enforce_invoice_void_authority` (20260923000000) is the
+  // backstop; this is so the user sees the rule rather than hitting it.
+  const voidState = await getInvoiceVoidState(params.invoiceId);
   const { data: projectContact } = project.contact_id
     ? await supabase.from('contacts').select('email').eq('id', project.contact_id).maybeSingle()
     : { data: null };
@@ -196,6 +204,7 @@ export default async function InvoiceDetailPage({
       alreadyBilled={alreadyBilled}
       projectRetainagePercent={project.retainage_percent ?? null}
       timeZone={timezone}
+      voidState={voidState}
     />
   );
 }
