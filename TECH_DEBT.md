@@ -108,6 +108,130 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   asymmetry rather than papering over it — `time_clock_sessions` refuses an
   out-of-vocabulary status via the TRIGGER, before its CHECK is ever reached.
 
+### Branch-scoped, awaiting real numbers — `feature/s145-7i-audit-subinbound` [S146]
+
+> Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.
+
+- **#1-s146 — an UPDATE-shaped write in `contracts-client.ts` reports SUCCESS when
+  RLS filtered the row away.**
+
+  `voidContractDocument()` takes the caller's `role` as a PARAMETER, so
+  `canVoidContract()` believes whatever it is told. A project_manager passing
+  `role: 'owner'` walks straight past it. What stops the write is
+  `contract_documents_update_owner_admin`, whose USING clause is
+  `get_my_role() = ANY('owner','admin')` — so the UPDATE **matches zero rows**.
+
+  **The document is safe. The caller is told a lie.** A zero-row UPDATE is not an
+  error, `error` is null, and the function returns `{ success: true }`. The 7I UI
+  lands next session and will report "contract voided" over a contract that is
+  still live — on a legal document.
+
+  **General to the pattern, not special to void.** `updateContractTemplate()` has
+  the same shape and the same false success. INSERT-shaped writes
+  (`createContractTemplate`, the box insert) are unaffected: RLS surfaces a real
+  error on those, which is why S146-C1 and C2 pass.
+
+  **Found by executing the service layer for the first time** (S146 Part 4) — the
+  RLS probes in `s145-contracts.live.ts` write to the tables directly and cannot
+  see this. Pinned by `s146-contract-services.live.ts` S146-C4, whose two
+  assertions say *"if this is now false, #1-s146 has been fixed — invert it"*.
+
+  **Fix:** ask PostgREST for the affected rows (`.select()` on the update, or
+  `count: 'exact'`) and return `{ success: false }` when nothing was touched.
+  Small, but it changes the return contract of several shipped functions, so it
+  wants a ruling rather than a drive-by. **Do this before the 7I UI ships**, since
+  the UI is the first caller that will believe the answer.
+
+  **Related, and worth deciding together:** `contract_documents_void_authority` is
+  currently **unreachable in practice**. RLS on that table is strictly narrower
+  than the trigger — only owner/admin can UPDATE at all, and the trigger only
+  refuses non-owner/admin — so it can never fire. It is genuinely load-bearing on
+  `client_contracts` and `subcontractor_contracts`, where an assigned PM DOES hold
+  an UPDATE policy (proved by `s145-contracts.live.ts` S145-C4). Harmless as
+  defence in depth; noted so nobody reads the trigger's existence as evidence that
+  the `contract_documents` path is guarded by it.
+
+- **#2-s146 — the sub-inbound trigger→type mapping has no database backstop, and
+  RULED [Josh, S146] that it should not get one.**
+
+  `lien_releases_subject_check` enforces the SUBJECT split (completion →
+  `sub_contract_id`, payment → `expense_id`). That completion yields *conditional*
+  and payment yields *unconditional* lives only in the generate route and
+  `resolveSubReleaseValues()`.
+
+  Proposed as a CHECK and **rejected on the merits.** #117, the compliance floor,
+  the invoice-void hole and the contract-void hole are all about **authority** —
+  who may do a thing — which belongs in the database. Trigger→type is **which of
+  two legal instruments the workflow offers by default**, and the ruling makes that
+  layer optional: the system prompts, it never blocks.
+
+  Both arms would block real instruments. `expense_id` + CONDITIONAL is the
+  conditional waiver on progress payment — what a GC collects before releasing a
+  stage payment, the sub-side analogue of the client-outbound flow 7F ships.
+  `sub_contract_id` + UNCONDITIONAL is the final waiver over a fully paid contract.
+  Both partial unique indexes are keyed `(subject, TYPE)` precisely to allow both,
+  and `s145-sub-inbound.live.ts` S145-S4 asserts it.
+
+  **Filed rather than closed** because the mapping is still only as good as its one
+  writer. The route is now EXECUTED and proved to refuse a caller-supplied `type`
+  (`s146-generate-route.live.ts` S146-G3). Revisit only if a second writer appears.
+  Full reasoning is in the harness, above S145-S4, so it is not re-derived.
+
+- **#3-s146 — nothing ties a lien-release template's `direction` to the release's.**
+
+  `lien_releases_template_id_fkey` is a plain single-column FK, so a `sub_inbound`
+  template bound to a `client_outbound` release is accepted silently. This is what
+  made `s140-lien-releases.live.ts`'s unfiltered `.limit(1)` template pick able to
+  test the wrong pairing without failing — fixed at S146 with a direction filter
+  plus an assertion that the fixture's template and release agree.
+
+  **Expressible and cheap** (PostgreSQL 17.6, so the column-list `ON DELETE SET
+  NULL` is available):
+
+  ```sql
+  ALTER TABLE lien_release_templates ADD CONSTRAINT lien_release_templates_id_direction_key UNIQUE (id, direction);
+  ALTER TABLE lien_releases DROP CONSTRAINT lien_releases_template_id_fkey;
+  ALTER TABLE lien_releases ADD CONSTRAINT lien_releases_template_direction_fkey
+    FOREIGN KEY (template_id, direction) REFERENCES lien_release_templates (id, direction)
+    ON DELETE SET NULL (template_id);
+  ```
+
+  **NOT BUILT [Josh, S146]:** it forecloses a template ever serving both
+  directions, which is a real option to give up for an invariant nothing has
+  violated. The S146 direction filters close the actual leak. **Revisitable if a
+  bug appears.**
+
+- **#4-s146 — `s97ct-reply-to.live.ts` leaks a fixed-slug company and then blocks
+  every later full-suite run. Same root cause as Part 1, second instance.**
+
+  Its `beforeAll` inserts an orphan company with the CONSTANT slug
+  `s97replyto-orphan`; its teardown deletes it by id. **The delete cannot
+  succeed:** 7F's seed trigger (`20260922000000`) now creates 8
+  `lien_release_templates` on every new company, and
+  `lien_release_templates_company_id_fkey` is `NO ACTION`, so `companies` is
+  pinned. The orphan survives, and the NEXT run dies in `beforeAll` on
+  `companies_slug_key`. Once leaked, the file fails forever.
+
+  **Observed three times at S146, and it recurs every run.** Suite run 1 leaked
+  the row; run 2 died in `beforeAll` on it (`Error: orphan company: duplicate key
+  value violates unique constraint "companies_slug_key"`, 5 tests skipped); it was
+  cleared by hand, run 2 then leaked a fresh one and run 3 died on that. **Every
+  full-suite run is therefore red until this is fixed** — the file passes once
+  after a manual clear and never twice in a row. Cleared by hand again after run 3
+  (boxes, templates, then the company) so the database is not left blocked.
+
+  **This is the same lesson as Part 1 in a second instance:** 7F changed seed
+  behaviour and a harness written before it began failing silently — here not by
+  going red on an assertion, but by breaking its own cleanup. A build that
+  changes what gets seeded owes a run of every harness that creates a company.
+
+  **Fix (not applied — outside S146's four parts, wants a ruling):** make
+  `beforeAll` self-healing, as `s146-generate-route.live.ts` and
+  `s146-contract-services.live.ts` now are — delete any pre-existing
+  `MARKER%` company and its seeded templates before inserting — and have the
+  teardown clear the templates before the company. A unique-per-run slug alone
+  would stop the collision but keep leaking companies.
+
 ### Branch-scoped, awaiting real numbers — `feature/m7-compliance-profit-liens` [S140]
 
 > Provisional ids per the S136 rule: **never allocate a bare `#N` on a branch.** These
