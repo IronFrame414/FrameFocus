@@ -10,6 +10,7 @@ import {
   destroyThrowawayCompany,
   giveSharedCompanyATrial,
   lockThrowaway,
+  purgeMarkerCompanies,
   ADMIN,
   LIMIT_EMAIL,
   LOCKED_EMAIL,
@@ -50,6 +51,14 @@ const COPY_GAP = '[data-testid="copy-pending-legal-review"]';
 test.beforeAll(async () => {
   admin = adminClient();
 
+  // [S147 / #1-s147] SELF-HEAL FIRST. A run that died — or a run from before
+  // this fix — leaves `S139%` companies that no longer have an auth user, so
+  // `destroyThrowawayCompany()` cannot find them by email and they accumulate
+  // forever. CI #210 showed 2, 4, 6 across an attempt and two retries; there
+  // were 12 on rebuild-test when this was written. Keyed on the NAME so it does
+  // not depend on anything this run captured.
+  await purgeMarkerCompanies(admin);
+
   await giveSharedCompanyATrial(admin);
 
   locked = await createThrowawayCompany(admin, LOCKED_EMAIL, 'S139 Locked Co');
@@ -63,6 +72,12 @@ test.afterAll(async () => {
   await clearSharedCompanyTrial(admin);
   await destroyThrowawayCompany(admin, LOCKED_EMAIL);
   await destroyThrowawayCompany(admin, LIMIT_EMAIL);
+
+  // [S147] The by-email destroy above now works, so this normally removes
+  // nothing. It is the backstop for the case that produced #1-s147: a company
+  // whose auth user is already gone is invisible to the by-email path, and
+  // keying on the name is the only thing that reaches it.
+  await purgeMarkerCompanies(admin);
 
   // ⚠️ VERIFY THE TEARDOWN. A leaked banned auth user reads as a broken test
   // somewhere else entirely, and S138 left two company tombstones that needed

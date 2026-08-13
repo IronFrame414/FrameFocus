@@ -28,8 +28,39 @@ import { adminClient, COMPANY_A } from './hub-fixture';
  * cannot sign in, and it looks exactly like a broken test somewhere else.
  * S138 also left two `companies` tombstones behind that needed manual removal,
  * because five audit tables hold RESTRICT foreign keys to `companies`
- * (TECH_DEBT #3-trial). `destroyThrowawayCompany()` therefore deletes children
- * in FK order and **verifies** the parent is gone, rather than assuming.
+ * (TECH_DEBT #3-trial).
+ *
+ * ⚠️ THE PARAGRAPH ABOVE USED TO END: "`destroyThrowawayCompany()` therefore
+ * deletes children in FK order and **verifies** the parent is gone, rather than
+ * assuming." **IT DID NEITHER, AND THAT IS WHAT S147 FIXED.** Quoted rather
+ * than deleted, because a comment asserting a property the code does not have
+ * is worse than no comment: it is what stops the next reader checking.
+ *
+ * ============================================================================
+ * ⚠️ #1-s147 — THE DELETE THAT COULD NOT SUCCEED (CI #210)
+ * ============================================================================
+ * `desktop-trial-screens.spec.ts:74` failed with "an S139% company survived
+ * teardown" — 2, then 4, then 6 across the attempt and its two retries. The
+ * climbing count IS the diagnosis: a fixture creating rows it cannot delete.
+ *
+ * The cause, MEASURED across every one of the 87 tables that reference
+ * `companies` with NO ACTION rather than guessed: **`lien_release_templates`,
+ * and only that.** 7F's seed trigger (`20260922000000`) creates 8 templates on
+ * every company insert, the FK does not cascade, and the child list below never
+ * knew about them:
+ *
+ *   23503: update or delete on table "companies" violates foreign key
+ *   constraint "lien_release_templates_company_id_fkey"
+ *
+ * The old code then discarded that error entirely — `await admin.from(
+ * 'companies').delete()` with no `.error` read — so the company survived, the
+ * auth user was deleted, and the orphan became unreachable by email forever.
+ *
+ * ⚠️ THIS IS THE THIRD HARNESS IN TWO SESSIONS with the identical mechanism —
+ * `#4-s146` (`s97ct-reply-to`) and `#5-s146` (`s97ct-isolation`) preceded it.
+ * A build that changes what gets SEEDED owes a run of every harness that
+ * creates the thing being seeded. See the S147 log for the other five leakers
+ * this one shares a cause with.
  */
 
 const PASSWORD = process.env.E2E_PASSWORD ?? 'FrameFocusTest!2026';
@@ -41,6 +72,76 @@ export const PM = 'josh+pm@worthprop.com';
 
 export const LOCKED_EMAIL = 'josh+s139locked@worthprop.com';
 export const LIMIT_EMAIL = 'josh+s139limit@worthprop.com';
+
+/**
+ * Every throwaway company this fixture makes is named `${MARKER} …`, and the
+ * purge is keyed on THAT rather than on ids captured during the run.
+ *
+ * ⚠️ THE NAME IS THE KEY, DELIBERATELY. Keying on ids captured this run cannot
+ * clean up after a run that DIED before capturing them — and keying on the auth
+ * user cannot either, because the user deletes successfully while the company
+ * does not, which is exactly how the CI #210 orphans became unreachable.
+ */
+export const MARKER = 'S139';
+
+/**
+ * Children of `companies` that must go first, IN THIS ORDER.
+ *
+ * `lien_release_template_boxes` and `lien_release_templates` are the S147
+ * additions and the ones that actually blocked the delete. The rest were
+ * already here and already worked. `profiles`, `tag_options` and `ai_tag_logs`
+ * cascade and need no entry; `trial_emails` is SET NULL.
+ */
+const COMPANY_CHILDREN = [
+  'lien_release_template_boxes',
+  'lien_release_templates',
+  'deletion_jobs',
+  'export_jobs',
+  'trial_warning_acknowledgements',
+  'trial_lifecycle',
+  'email_logs',
+  'tag_options',
+  'subscriptions',
+  'company_members',
+  'profiles',
+] as const;
+
+/**
+ * Delete these companies and everything pinning them — and FAIL LOUDLY if the
+ * parent survives.
+ *
+ * ⚠️ THE ERROR CHECK ON THE PARENT DELETE IS THE WHOLE POINT. Without it a
+ * blocked delete is silent, and the next thing to fail is something else
+ * entirely, several sessions later.
+ */
+async function deleteCompanies(admin: SupabaseClient, ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+
+  for (const table of COMPANY_CHILDREN) {
+    const { error } = await admin.from(table).delete().in('company_id', ids);
+    if (error) throw new Error(`purge ${table}: ${error.message}`);
+  }
+  await admin.from('trial_emails').update({ company_id: null }).in('company_id', ids);
+
+  const { error } = await admin.from('companies').delete().in('id', ids);
+  if (error) throw new Error(`purge companies: ${error.message}`);
+}
+
+/**
+ * Self-healing on the way in, complete on the way out. Called from BOTH ends of
+ * the spec so a crashed run cannot poison the next one.
+ */
+export async function purgeMarkerCompanies(admin: SupabaseClient): Promise<number> {
+  const { data, error } = await admin
+    .from('companies')
+    .select('id')
+    .like('name', `${MARKER}%`);
+  if (error) throw new Error(`purgeMarkerCompanies select: ${error.message}`);
+
+  const ids = (data ?? []).map((c) => (c as { id: string }).id);
+  await deleteCompanies(admin, ids);
+  return ids.length;
+}
 
 export interface Throwaway {
   email: string;
@@ -161,22 +262,11 @@ export async function destroyThrowawayCompany(
       .maybeSingle();
     const cid = profile ? (profile as { company_id: string }).company_id : null;
 
+    // [S147] ONE code path for company deletion, shared with the marker purge.
+    // This list used to live inline here, was missing the two lien-release
+    // tables, and threw away the error from the parent delete.
     if (cid && cid !== COMPANY_A) {
-      for (const table of [
-        'deletion_jobs',
-        'export_jobs',
-        'trial_warning_acknowledgements',
-        'trial_lifecycle',
-        'email_logs',
-        'tag_options',
-        'subscriptions',
-        'company_members',
-        'profiles',
-      ]) {
-        await admin.from(table).delete().eq('company_id', cid);
-      }
-      await admin.from('trial_emails').update({ company_id: null }).eq('company_id', cid);
-      await admin.from('companies').delete().eq('id', cid);
+      await deleteCompanies(admin, [cid]);
     }
 
     // ⚠️ Unban before deleting. Deleting a banned user works, but if the delete

@@ -108,6 +108,90 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   asymmetry rather than papering over it — `time_clock_sessions` refuses an
   out-of-vocabulary status via the TRIGGER, before its CHECK is ever reached.
 
+### Branch-scoped, awaiting real numbers — `feature/s147-trial-screens-teardown` [S147]
+
+> Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.
+
+- **#1-s147 — ✅ FIXED [S147] — `desktop-trial-screens.spec.ts` leaked two companies
+  per run and CI #210 failed on it.** Third harness in two sessions with the
+  identical mechanism.
+
+  `desktop-trial-screens.spec.ts:74` — *"an S139% company survived teardown"* —
+  **2, then 4, then 6** across the attempt and its two retries. **The climbing
+  count is the diagnosis**: a fixture creating rows it cannot delete, with the
+  retry mechanism making it visibly worse.
+
+  **Cause, MEASURED not assumed.** 87 tables reference `companies` with
+  `NO ACTION`; a query across all of them showed exactly one holding rows for the
+  orphans: **`lien_release_templates`, 96 rows = 12 companies × 8.** 7F's seed
+  trigger (`20260922000000`) creates 8 per company insert and the FK does not
+  cascade. `destroyThrowawayCompany()`'s inline child list never knew about them,
+  **and the parent delete discarded its error entirely** — `await admin.from(
+  'companies').delete()` with no `.error` read. The company survived, the auth
+  user was deleted, and the orphan became **unreachable by email forever**, which
+  is why `createThrowawayCompany()`'s own by-email self-heal could not recover it.
+
+  **The fixture's own header asserted the property it lacked**: *"deletes children
+  in FK order and **verifies** the parent is gone, rather than assuming."* It did
+  neither. Quoted in place rather than deleted — a comment claiming a property the
+  code does not have is what stops the next reader checking.
+
+  **Fixed** with one `purgeMarkerCompanies()` called from both ends — self-healing
+  in `beforeAll`, complete in `afterAll` — keyed on the **name** (`S139%`) rather
+  than ids captured this run, deleting in FK order through a shared
+  `deleteCompanies()` that `destroyThrowawayCompany()` now also uses, with the
+  parent delete's error checked and thrown. A unique-per-run slug was rejected
+  again for the same reason as `#4-s146`: it stops the collision and keeps leaking.
+
+  **Evidence.** From a clean database: run 1 `Received: 2`, run 2 `Received: 4`,
+  both `EXIT=1` — CI reproduced exactly. After: **three consecutive runs 16/16,
+  `EXIT=0`**, the first starting with 4 orphans present and self-healing them.
+  Mutation-proved by dropping `lien_release_templates` from the child list, which
+  turns the run red **naming the cause** — *"purge companies: update or delete on
+  table "companies" violates foreign key constraint
+  "lien_release_templates_company_id_fkey""* — the exact condition that was
+  silent before.
+
+  **⚠️ A LOCAL RUN WITHOUT `--workers=1` MISREPRESENTS THIS.** `playwright.config.ts`
+  sets `workers: process.env.CI ? 1 : undefined`, so locally the file forks and
+  `beforeAll` runs **per worker**: one run leaked **12**, not 2, and two extra
+  tests failed as parallel-fixture artifacts that CI would never show. Reproduce
+  and verify with `--workers=1`.
+
+- **#2-s147 — THE SAME LEAK IS LIVE IN FIVE MORE HARNESSES, and `#1-s147` fixes
+  only the one CI named.**
+
+  Measured on rebuild-test at S147: **111 companies, 109 with no profile** — i.e.
+  109 orphans and only the two real QA tenants. Every orphan carried exactly 8
+  blocking templates (872 in total). Purged to **0** at S147; **one full live-suite
+  run then re-created 12**, none of them `S139%`:
+
+  | leaker | orphans before purge | re-created by ONE live-suite run |
+  | --- | --- | --- |
+  | `s138-trial-*` (unlock / export / deletion) | 30 | 4 |
+  | `live-session.ts` `adoptSignupProfile()` — "My Company" | 21 | 2 |
+  | `s136-company-slug` | 21 | 3 |
+  | `s137-trial-lifecycle` | 15 | 2 |
+  | `s135-invite-fallthrough` | 10 | 1 |
+  | `desktop-trial-screens` (**fixed, `#1-s147`**) | 12 | **0** |
+
+  **`live-session.ts:107-111` is the one to fix first** — it is the SHARED helper
+  (`adoptSignupProfile()`), it deletes `tag_options`, `subscriptions`, `companies`
+  and nothing else, and it checks no error. Every harness that adopts a signup
+  profile inherits it.
+
+  **Nine harnesses create a company** — three by direct insert
+  (`s136-company-slug`, `s137-trial-lifecycle`, `s97ct-reply-to` — the last already
+  fixed as `#4-s146`) and six via `auth.admin.createUser()` → `handle_new_user()`.
+  **Any harness that creates a company inherits this**, so the answer to "will it
+  surface a fourth time" is that it already has, five times over — silently,
+  because only `desktop-trial-screens` asserts a company count. The others leak
+  without going red.
+
+  **Not fixed here**: outside S147's stated scope (one task, the CI failure).
+  Filed so the next session can take it in one pass; the fix is the same shape
+  each time.
+
 ### Branch-scoped, awaiting real numbers — `feature/s145-7i-audit-subinbound` [S146]
 
 > Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.
