@@ -201,8 +201,8 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   violated. The S146 direction filters close the actual leak. **Revisitable if a
   bug appears.**
 
-- **#4-s146 — `s97ct-reply-to.live.ts` leaks a fixed-slug company and then blocks
-  every later full-suite run. Same root cause as Part 1, second instance.**
+- **#4-s146 — ✅ FIXED [S146] — `s97ct-reply-to.live.ts` leaked a fixed-slug company
+  and blocked every later full-suite run. Same root cause as Part 1, third instance.**
 
   Its `beforeAll` inserts an orphan company with the CONSTANT slug
   `s97replyto-orphan`; its teardown deletes it by id. **The delete cannot
@@ -225,12 +225,24 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   going red on an assertion, but by breaking its own cleanup. A build that
   changes what gets seeded owes a run of every harness that creates a company.
 
-  **Fix (not applied — outside S146's four parts, wants a ruling):** make
-  `beforeAll` self-healing, as `s146-generate-route.live.ts` and
-  `s146-contract-services.live.ts` now are — delete any pre-existing
-  `MARKER%` company and its seeded templates before inserting — and have the
-  teardown clear the templates before the company. A unique-per-run slug alone
-  would stop the collision but keep leaking companies.
+  **FIXED [Josh ruled option (a), S146].** One `purgeMarkerCompanies()` helper
+  called from BOTH ends: self-healing in `beforeAll` so a crashed run cannot
+  poison the next one, and complete in `afterAll` — boxes, then templates, then
+  the company. Keyed on the NAME, not on `orphanCompanyId`, so a run that died
+  before the insert still clears what a previous one left. A unique-per-run slug
+  was rejected: it stops the collision and keeps leaking companies.
+
+  **And the teardown now ASSERTS that it worked** rather than logging. That is
+  the part that let this hide: the failed delete WAS recorded, into a list that
+  was `console.log`-ged, which vitest suppresses for a passing file. **A cleanup
+  that cannot fail its own run is not a cleanup.**
+
+  **Evidence.** Before: run 1 `EXIT=0` / 5 passed then leaks, run 2 `EXIT=1` /
+  5 skipped — reproduced from a clean database. After: three consecutive runs
+  `EXIT=0`, 5/5 each, the first of them starting with a leaked orphan present and
+  self-healing. Mutation-proved by skipping the templates purge, which reproduces
+  the original FK error exactly and now **fails the run** —
+  `S97REPLYTO companies left behind — cleanup did not work: expected 1 to be +0`.
 
 ### Branch-scoped, awaiting real numbers — `feature/m7-compliance-profit-liens` [S140]
 

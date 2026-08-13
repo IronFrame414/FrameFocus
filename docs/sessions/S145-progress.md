@@ -242,23 +242,34 @@ is expected. Reverted; service byte-identical to HEAD.
 | `s146-generate-route` | `EXIT=0` | **9/9** |
 | `s146-contract-services` | `EXIT=0` | **20/20** |
 | `s140-lien-releases` | `EXIT=0` | **18/18** (was `1 failed \| 16 passed`) |
-| **full live suite** | **`LIVE_ALL_EXIT=1`** | 65 files, 740 passed, **7 failed in 2 files — neither this branch's** |
+| **full live suite** | **`LIVE_ALL_EXIT=0`** | **65/65 files, 752/752 tests, 0 failures** — after `#4-s146` |
 
-⚠️ **The background-task notification reported `exit 0` for all three full-suite runs
-whose printed line said `LIVE_ALL_EXIT=1`.** Only the printed line is true; the summary
-is not. This is the third session in a row it has misreported.
+⚠️ **The background-task notification reported `exit 0` for all four full-suite runs —
+including the three whose printed line said `LIVE_ALL_EXIT=1`.** Only the printed line
+is true; the summary is not, and it happened to be right only on the last run. Third
+session in a row it has misreported.
 
-**The two residual failures, both pre-existing:**
+**Four full-suite runs were needed, and each one earned its keep:** run 1 exposed the
+`s97ct-reply-to` leak, run 2 exposed S146's own fixture drift, run 3 confirmed both
+diagnoses and the `s138` intermittency, run 4 came back **clean**.
 
-- **`s97ct-reply-to.live.ts`** — `#4-s146`, above. Guaranteed red on every run.
+**The two residual failures, both pre-existing, both now resolved or characterised:**
+
+- **`s97ct-reply-to.live.ts`** — `#4-s146`. **FIXED [Josh, option (a)]** after the
+  fourth suite run was requested: one `purgeMarkerCompanies()` called from both ends,
+  and a teardown that ASSERTS it worked instead of logging into a stream vitest
+  suppresses. Before: pass, then fail. After: three consecutive passes, the first
+  self-healing a leaked orphan. Mutation-proved.
 - **`s138-trial-deletion-run.live.ts`** — **INTERMITTENT, and the S145 verification's
   description of it was too confident.** It was recorded as "passes alone, fails
   in-suite". Across four full-suite runs it **failed, passed, passed, failed**. It
-  passes alone every time (`9/9`, `EXIT=0`, re-confirmed at S146). The trip is always
-  the same safe-fail — its own fixture is not due for deletion, `expected [] to deeply
+  passes alone every time (`9/9`, `EXIT=0`, re-confirmed at S146). Across FIVE
+  full-suite runs: **failed, passed, passed, failed, passed.** The trip is always the
+  same safe-fail — its own fixture is not due for deletion, `expected [] to deeply
   equal [<id>]` — so it never risks deleting anything. Order- and state-dependent, not
   deterministic. Still not this branch's; still worth stating precisely rather than as
-  "fails in-suite".
+  "fails in-suite". **Left alone deliberately** — it is the one harness that permanently
+  destroys a company, and its safety gate failing CLOSED is the behaviour you want.
 
 ---
 
