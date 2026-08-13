@@ -20,7 +20,8 @@ one session · C3 proposal keeps its link on the notary path · C5 a DB guard on
 
 ## RESUME HERE
 
-**Part 1 is DONE and committed. Next: Part 2 — 7F sub-inbound schema.**
+**Parts 1 and 2 are DONE and committed. Next: Part 3 — 7I schema, then services,
+then `contracts-shared.ts`, then probes. UI is NOT this run [C4=(b)].**
 
 ---
 
@@ -51,3 +52,30 @@ superseded text quoted, per house convention.
   that unchecked tags remain.
 
 Exit codes: no build step — documentation only.
+
+### Part 2 — 7F sub-inbound — **DONE**
+
+`20260925000000_7f_sub_inbound.sql`, applied to rebuild-test and verified against the catalog:
+2 columns, 104 sub templates (26 companies x 4), 2 partial unique indexes, both functions updated.
+
+- **`completed_at` / `completed_by` on `subcontractor_contracts`** [B1(b)] — the signal that did
+  not exist. Frozen below Owner/Admin by extending the existing column-scope trigger (recreated
+  verbatim from the live body, not ALTERed — the S143 lesson applied pre-emptively).
+- **Four sub_inbound templates seeded per company**, pre-named not pre-filled; the shipped seed
+  trigger now owns both directions.
+- **Two partial unique indexes** — one release per expense per type, one per sub-contract per type.
+- **`resolveSubReleaseValues()`** — the second resolver. One catalog, inverted sources: the SUB is
+  the lienor, so `claimant_*` resolves to the subcontractor and `contractor_furnished_to` stays the
+  company. Deliberately never touches `subcontractor_financials` (the EIN trap 7G cites).
+- **Generate route** gains a sub-inbound arm; the TYPE is fixed by the trigger, never accepted from
+  the caller. **Never stamps our signature on an inbound release**, and sub-inbound is always
+  `draft` at generate — the sub signs on paper and the copy comes back by upload.
+- **Client writes:** `markSubContractComplete`, `reopenSubContract`, `attachSignedSubRelease`.
+
+Evidence: `s145-sub-inbound.live.ts` 12/12 as real users. Proved load-bearing by removing
+`completed_at` from the column-scope guard — red at exactly the PM case, "a PM marked a
+subcontract complete: expected null to be truthy", exit 1; restored, re-verified in `pg_proc`,
+12/12 again. One false alarm on the way: a re-run appeared red but had been launched from the
+repo root instead of `apps/web` — a config-resolution error, not a test failure.
+
+type-check 0 · vitest 761/761 · eslint clean.

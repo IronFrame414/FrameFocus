@@ -6002,6 +6002,8 @@ export type Database = {
       subcontractor_contracts: {
         Row: {
           company_id: string
+          completed_at: string | null
+          completed_by: string | null
           contract_value: number | null
           created_at: string | null
           created_by: string | null
@@ -6023,6 +6025,8 @@ export type Database = {
         }
         Insert: {
           company_id?: string
+          completed_at?: string | null
+          completed_by?: string | null
           contract_value?: number | null
           created_at?: string | null
           created_by?: string | null
@@ -6044,6 +6048,8 @@ export type Database = {
         }
         Update: {
           company_id?: string
+          completed_at?: string | null
+          completed_by?: string | null
           contract_value?: number | null
           created_at?: string | null
           created_by?: string | null
