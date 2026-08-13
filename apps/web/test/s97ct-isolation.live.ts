@@ -62,8 +62,30 @@ const TABLES = [
   'contacts',
 ] as const;
 
+/** The two tables above with no `is_deleted` column — checked, not assumed. */
+const NO_SOFT_DELETE = new Set(['invoice_lines', 'instrument_rates']);
+
+/**
+ * ⚠️ LIVE ROWS ONLY, AND IN A DETERMINISTIC ORDER [S146].
+ *
+ * This was `.limit(1)` with neither filter nor ORDER BY, and both omissions bit.
+ * Company A currently has FOUR of its ten invoices soft-deleted, so the pick
+ * could hand test 11 a row whose `is_deleted` was ALREADY true — and test 11
+ * asserts exactly that field is false after B's owner tries to set it. The
+ * result was a cross-company ISOLATION FAILURE reported over a row nobody had
+ * breached: B's owner was refused correctly, and the assertion failed anyway.
+ *
+ * Without an ORDER BY the row is not even stable between runs — Postgres returns
+ * heap order, and an UPDATE moves a row — which is why this passed four full
+ * suite runs and then failed, with nothing relevant having changed.
+ *
+ * A fixture that can select a deleted row cannot test soft-delete refusal. Same
+ * class as the S140/S145/S146 fixture drift; fourth instance.
+ */
 async function firstIdFor(table: string, companyId: string): Promise<string | undefined> {
-  const { data } = await admin.from(table).select('id').eq('company_id', companyId).limit(1).maybeSingle();
+  let query = admin.from(table).select('id').eq('company_id', companyId);
+  if (!NO_SOFT_DELETE.has(table)) query = query.eq('is_deleted', false);
+  const { data } = await query.order('created_at', { ascending: true }).limit(1).maybeSingle();
   return data?.id;
 }
 
