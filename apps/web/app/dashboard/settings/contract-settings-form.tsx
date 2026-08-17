@@ -2,35 +2,65 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { setClientContractsEnabled } from '@/lib/services/contracts-client';
+import {
+  createContractTemplate,
+  setClientContractsEnabled,
+  softDeleteContractTemplate,
+  updateContractTemplate,
+  uploadContractTemplatePdf,
+} from '@/lib/services/contracts-client';
+import { getFileSignedUrlClient } from '@/lib/services/files-client';
+import type { DocumentKind } from '@/lib/services/contracts-shared';
 import { brand } from '@/lib/brand';
-import { cardStyle, color, microLabelStyle } from '@/lib/theme';
+import {
+  cardStyle,
+  color,
+  font,
+  microLabelStyle,
+  secondaryButtonStyle,
+} from '@/lib/theme';
 
-// 7I §5.2, §12.1 — Company Settings: the MASTER half of the two-level
-// client-contract toggle. Stage 1, slice 1.
+// 7I §5.2, §5.2a, §12.1 — Company Settings: the master client-contract toggle
+// (slice 1) and the contract form sets (slice 2).
 //
 // On-screen product name comes from lib/brand.ts, never a literal (S136).
 //
-// ⚠️ THE DEFAULT IS OFF, AND OFF IS LOAD-BEARING. §12.1's first acceptance
-// criterion is that with this off, "nothing about client contracts appears
-// anywhere and behaviour is byte-identical to today". That is currently true by
-// construction rather than by care: `clientContractAppliesToEstimate()` is the
-// only reader of the column, and at this commit NOTHING in `app/` calls it. The
-// send route, the signing page and conversion are untouched. Whoever wires the
-// first consumer (stage 2) inherits the obligation to keep the off path inert.
+// ⚠️ THE PRODUCT AUTHORS NO LEGAL TEXT — the same rule 7F ships under, and for
+// a stronger reason here. A contract is the instrument that binds the parties;
+// a generated approximation of one is a liability, not a feature. The company
+// uploads its own counsel-approved PDF and places boxes over its blanks. There
+// is no template EDITOR in the document sense: a name, an upload, and (slice 3)
+// a box map.
 //
-// ⚠️ THIS IS ONE HALF OF A TWO-LEVEL TOGGLE. Turning it on does not put a
-// contract on any job — §5.2's per-proposal flag (`estimates.include_client_
-// contract`) decides that, one job at a time. The copy below says so, because a
-// master switch that reads as "every proposal now carries a contract" is the
-// one misunderstanding that would matter on a legal document.
+// ⚠️ TWO SETS, NOT ONE LIST WITH A FILTER. §5.2/§10.2 option B keys templates on
+// `document_kind`, and the two kinds are selected by different code at different
+// stages — a client contract off an ESTIMATE, a subcontract off a PROJECT. They
+// render as two sets so a form can never be authored into the wrong half by
+// leaving a dropdown where it was.
+//
+// ⚠️ THE FORM SETS ARE NOT GATED ON THE TOGGLE [§5.2a — RESOLVED]. They render
+// identically whether it is on or off, which is why they sit in their OWN card
+// below rather than inside the toggle's. Only the SEND flow is gated. This lets
+// a company set its forms up before going live, and it makes turning the master
+// off reversible rather than destructive. Do not "tidy" this by wrapping the
+// second card in `{on && ...}`.
+
+export interface ContractTemplateRow {
+  id: string;
+  name: string;
+  pdf_file_id: string | null;
+}
 
 export function ContractSettingsForm({
   companyId,
   enabled,
+  clientTemplates,
+  subTemplates,
 }: {
   companyId: string;
   enabled: boolean;
+  clientTemplates: ContractTemplateRow[];
+  subTemplates: ContractTemplateRow[];
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
@@ -38,6 +68,8 @@ export function ContractSettingsForm({
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const refresh = () => startTransition(() => router.refresh());
 
   async function toggle(next: boolean) {
     // Optimistic, then reverted on failure. A switch that stays where the user
@@ -58,62 +90,304 @@ export function ContractSettingsForm({
       return;
     }
     setSaved(true);
-    startTransition(() => router.refresh());
+    refresh();
   }
 
   return (
-    <div style={{ ...cardStyle, padding: '20px', marginTop: '20px' }}>
-      <p style={{ ...microLabelStyle, marginBottom: '6px' }}>Client contracts</p>
-      <p
-        style={{
-          fontSize: '12.5px',
-          color: color.muted,
-          margin: '0 0 16px',
-          maxWidth: '640px',
-        }}
-      >
-        Turn this on if your company sends a written contract alongside its proposals.{' '}
-        {brand.shortName} does not supply contract wording — you upload your own
-        counsel-approved form and place boxes over its blanks, the same way release forms work.
-      </p>
+    <>
+      {/* ── The master toggle (§5.2) ──────────────────────────────────────── */}
+      <div style={{ ...cardStyle, padding: '20px', marginTop: '20px' }}>
+        <p style={{ ...microLabelStyle, marginBottom: '6px' }}>Client contracts</p>
+        <p
+          style={{
+            fontSize: '12.5px',
+            color: color.muted,
+            margin: '0 0 16px',
+            maxWidth: '640px',
+          }}
+        >
+          Turn this on if your company sends a written contract alongside its proposals.{' '}
+          {brand.shortName} does not supply contract wording — you upload your own
+          counsel-approved form and place boxes over its blanks, the same way release forms work.
+        </p>
 
-      {error && (
-        <p style={{ color: color.danger, fontSize: '13px', margin: '0 0 12px' }}>{error}</p>
+        {error && (
+          <p style={{ color: color.danger, fontSize: '13px', margin: '0 0 12px' }}>{error}</p>
+        )}
+
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            fontSize: '13.5px',
+            color: color.body,
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={on}
+            disabled={busy}
+            onChange={(e) => void toggle(e.target.checked)}
+          />
+          Use client contracts
+          {saved && (
+            <span style={{ color: color.success, fontSize: '12px', marginLeft: '4px' }}>Saved</span>
+          )}
+        </label>
+
+        <p
+          style={{
+            fontSize: '11.5px',
+            color: color.faint,
+            margin: '8px 0 0',
+            maxWidth: '640px',
+          }}
+        >
+          {on
+            ? 'Each proposal still decides for itself whether to include a contract — this only makes the option available.'
+            : 'While this is off, proposals send exactly as they do today. Nothing about contracts appears anywhere else in the app.'}
+        </p>
+      </div>
+
+      {/* ── The form sets (§5.2a — NOT gated on the toggle) ───────────────── */}
+      <div style={{ ...cardStyle, padding: '20px', marginTop: '20px' }}>
+        <p style={{ ...microLabelStyle, marginBottom: '6px' }}>Contract forms</p>
+        <p
+          style={{
+            fontSize: '12.5px',
+            color: color.muted,
+            margin: '0 0 4px',
+            maxWidth: '640px',
+          }}
+        >
+          Upload the agreements your company uses. The uploaded PDF is the legal instrument —{' '}
+          {brand.shortName} fills the blanks you mark on it and never rewrites the wording.
+        </p>
+        <p
+          style={{
+            fontSize: '11.5px',
+            color: color.faint,
+            margin: '0 0 18px',
+            maxWidth: '640px',
+          }}
+        >
+          You can set these up whether or not client contracts are switched on above. Only sending
+          a contract is affected by that switch.
+        </p>
+
+        <TemplateSet
+          kind="client_contract"
+          heading="Client agreements"
+          blurb="Sent to the homeowner or client with a proposal."
+          templates={clientTemplates}
+          busy={busy}
+          setBusy={setBusy}
+          onError={setError}
+          onDone={refresh}
+        />
+
+        <div style={{ height: '26px' }} />
+
+        <TemplateSet
+          kind="sub_contract"
+          heading="Subcontractor agreements"
+          blurb="Issued to a subcontractor once the job is set up. These are authored here now; sending them arrives in a later stage."
+          templates={subTemplates}
+          busy={busy}
+          setBusy={setBusy}
+          onError={setError}
+          onDone={refresh}
+        />
+      </div>
+    </>
+  );
+}
+
+/**
+ * One `document_kind`'s forms.
+ *
+ * Both sets are THIS component, mounted twice — the same rule §2.1 lays down
+ * for the box editor, applied a level up. The two kinds differ in exactly one
+ * value (`document_kind`), so a second copy of this markup would be a fork
+ * waiting to drift, not a variation.
+ */
+function TemplateSet({
+  kind,
+  heading,
+  blurb,
+  templates,
+  busy,
+  setBusy,
+  onError,
+  onDone,
+}: {
+  kind: DocumentKind;
+  heading: string;
+  blurb: string;
+  templates: ContractTemplateRow[];
+  busy: boolean;
+  setBusy: (b: boolean) => void;
+  onError: (message: string | null) => void;
+  onDone: () => void;
+}) {
+  async function run(action: () => Promise<{ success: boolean; error?: string }>, fallback: string) {
+    setBusy(true);
+    const result = await action();
+    setBusy(false);
+    if (!result.success) return onError(result.error ?? fallback);
+    onError(null);
+    onDone();
+  }
+
+  async function addTemplate() {
+    const name = prompt('Name this form (a label in the picker — it is never printed on the page):');
+    if (!name?.trim()) return;
+    await run(
+      () => createContractTemplate({ name: name.trim(), document_kind: kind }),
+      'Could not add.'
+    );
+  }
+
+  async function rename(template: ContractTemplateRow, name: string) {
+    await run(() => updateContractTemplate(template.id, { name }), 'Could not save.');
+  }
+
+  async function upload(template: ContractTemplateRow, file: File) {
+    await run(() => uploadContractTemplatePdf(file, template.id), 'Upload failed.');
+  }
+
+  async function remove(template: ContractTemplateRow) {
+    // Soft delete. Contracts already issued from this form keep working —
+    // `contract_documents.template_id` still resolves, and the executed PDF is
+    // a stored artifact that does not re-render from the template.
+    if (!confirm(`Remove "${template.name}"? Contracts already issued from it are kept.`)) return;
+    await run(() => softDeleteContractTemplate(template.id), 'Could not remove.');
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <p style={{ ...microLabelStyle, margin: 0, color: color.mutedAlt }}>{heading}</p>
+          <p style={{ fontSize: '11.5px', color: color.faint, margin: '3px 0 0', maxWidth: '520px' }}>
+            {blurb}
+          </p>
+        </div>
+        <button type="button" style={secondaryButtonStyle} disabled={busy} onClick={addTemplate}>
+          Add a form
+        </button>
+      </div>
+
+      {templates.length === 0 && (
+        <p
+          style={{
+            fontSize: '12.5px',
+            color: color.faint,
+            margin: '14px 0 0',
+            borderTop: `1px solid ${color.rowDivider}`,
+            paddingTop: '12px',
+          }}
+        >
+          No forms yet.
+        </p>
       )}
 
-      <label
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          fontSize: '13.5px',
-          color: color.body,
-        }}
-      >
-        <input
-          type="checkbox"
-          checked={on}
-          disabled={busy}
-          onChange={(e) => void toggle(e.target.checked)}
-        />
-        Use client contracts
-        {saved && (
-          <span style={{ color: color.success, fontSize: '12px', marginLeft: '4px' }}>Saved</span>
-        )}
-      </label>
+      {templates.map((t) => (
+        <div
+          key={t.id}
+          style={{
+            borderTop: `1px solid ${color.rowDivider}`,
+            marginTop: '10px',
+            padding: '12px 0 0',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            fontSize: '13px',
+            flexWrap: 'wrap',
+          }}
+        >
+          <input
+            defaultValue={t.name}
+            onBlur={(e) => {
+              const next = e.target.value.trim();
+              if (!next) {
+                e.target.value = t.name;
+                return onError('A form needs a name.');
+              }
+              if (next !== t.name) void rename(t, next);
+            }}
+            style={{ ...inputStyle, width: '260px', marginTop: 0 }}
+          />
 
-      <p
-        style={{
-          fontSize: '11.5px',
-          color: color.faint,
-          margin: '8px 0 0',
-          maxWidth: '640px',
-        }}
-      >
-        {on
-          ? 'Each proposal still decides for itself whether to include a contract — this only makes the option available.'
-          : 'While this is off, proposals send exactly as they do today. Nothing about contracts appears anywhere else in the app.'}
-      </p>
+          <span style={{ flex: 1 }} />
+
+          {t.pdf_file_id ? (
+            <button
+              type="button"
+              style={{ ...secondaryButtonStyle, padding: '4px 10px', fontSize: '12px' }}
+              onClick={async () => {
+                const url = await getFileSignedUrlClient(t.pdf_file_id as string);
+                if (url) window.open(url, '_blank', 'noopener');
+                else onError('Could not open that form.');
+              }}
+            >
+              View form
+            </button>
+          ) : (
+            <span style={{ color: color.warningDeep, fontSize: '11.5px' }}>No form uploaded</span>
+          )}
+
+          <label
+            style={{
+              ...secondaryButtonStyle,
+              padding: '4px 10px',
+              fontSize: '12px',
+              cursor: busy ? 'default' : 'pointer',
+            }}
+          >
+            {t.pdf_file_id ? 'Replace' : 'Upload PDF'}
+            <input
+              type="file"
+              accept="application/pdf"
+              style={{ display: 'none' }}
+              disabled={busy}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                // Cleared so re-picking the SAME file after a failed upload
+                // still fires a change event.
+                e.target.value = '';
+                if (f) void upload(t, f);
+              }}
+            />
+          </label>
+
+          <button
+            type="button"
+            disabled={busy}
+            style={{
+              ...secondaryButtonStyle,
+              padding: '4px 10px',
+              fontSize: '12px',
+              color: color.danger,
+            }}
+            onClick={() => remove(t)}
+          >
+            Remove
+          </button>
+        </div>
+      ))}
     </div>
   );
 }
+
+const inputStyle: React.CSSProperties = {
+  display: 'block',
+  width: '100%',
+  marginTop: '3px',
+  padding: '5px 8px',
+  fontSize: '13px',
+  border: `1px solid ${color.inputBorder}`,
+  borderRadius: '6px',
+  fontFamily: font.sans,
+};

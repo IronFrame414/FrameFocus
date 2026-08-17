@@ -14,6 +14,7 @@ import { TimeTrackingSettingsForm } from './time-tracking-settings-form';
 import { GLMappingSettingsForm } from './gl-mapping-settings-form';
 import { getTemplates } from '@/lib/services/lien-releases';
 import { LienReleaseSettingsForm } from './lien-release-settings-form';
+import { getContractTemplates } from '@/lib/services/contracts';
 import { ContractSettingsForm } from './contract-settings-form';
 
 export default async function SettingsPage() {
@@ -46,6 +47,11 @@ export default async function SettingsPage() {
   // 7F §4 / §10.2 — release forms and the signatory. Owner/Admin by RLS, which
   // is the same set this page already admits.
   const lienTemplates = await getTemplates('client_outbound');
+  // 7I §5.2 / §10.2 — TWO sets, keyed on `document_kind`. Read unconditionally:
+  // §5.2a keeps forms authorable while the master toggle is off, so this must
+  // not be gated on `company.client_contracts_enabled`.
+  const clientContractTemplates = await getContractTemplates('client_contract');
+  const subContractTemplates = await getContractTemplates('sub_contract');
 
   return (
     <div>
@@ -82,6 +88,16 @@ export default async function SettingsPage() {
       <ContractSettingsForm
         companyId={company.id}
         enabled={Boolean(company.client_contracts_enabled)}
+        clientTemplates={clientContractTemplates.map((t) => ({
+          id: t.id,
+          name: t.name,
+          pdf_file_id: t.pdf_file_id,
+        }))}
+        subTemplates={subContractTemplates.map((t) => ({
+          id: t.id,
+          name: t.name,
+          pdf_file_id: t.pdf_file_id,
+        }))}
       />
     </div>
   );
