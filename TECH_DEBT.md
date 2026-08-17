@@ -78,6 +78,65 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
 ## Open Tech Debt
 
+### Branch-scoped, awaiting real numbers — `feature/7i-stage1-settings` [S150]
+
+> Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.
+
+- **#2-7i — ⚠️ DEFECT, NOT DEBT. 7F's box editor never loads an existing box map,
+  so re-opening it and saving destroys the placed map. Live, on a legal-document
+  surface.**
+
+  `BoxMapEditor` (`apps/web/app/dashboard/settings/lien-release-settings-form.tsx:334`)
+  initialises `useState<BoxInput[]>([])` and never reads the boxes back.
+  `getTemplateBoxes()` (`lien-releases.ts:53`) has exactly one caller in the repo:
+  `api/lien-releases/generate/route.ts:171`. Nothing in the settings surface calls it.
+
+  So the sequence is: place boxes on a release form → save → re-open "Place boxes" to
+  adjust one → the table is **empty** → save → `saveBoxMap` REPLACES the map with
+  nothing. The form still renders, now with every blank unfilled. There is no error
+  and no warning; the editor's own footnote ("Saving replaces the whole map for this
+  form") reads as a correct description of intended behaviour, which is what makes it
+  hard to see.
+
+  The replace-not-merge semantics are right and are not the bug. The bug is that the
+  editor opens with an empty map it presents as the current one.
+
+  **Not fixed in S150, deliberately** [RULED Josh]: it needs its own click-test against
+  lien releases, and this session is scoped to 7I. 7I's own editor loads from
+  `getContractTemplateBoxes()` on open — ruled non-negotiable — so the defect is not
+  propagated, only left standing where it already is.
+
+  Same class as `#129` (two markup editors, silent loss discovered by reading the save
+  path rather than by anything failing) — see CLAUDE.md's PARITY ruling.
+
+- **#1-7i — Extract and unify 7F's `BoxMapEditor` with 7I's.**
+
+  7I §2.1's BUILD REQUIREMENT — "build the placement editor once, parameterised by
+  template id and value catalog" — was ruled at S150 to mean **7I's two template sets**
+  (`client_contract`, `sub_contract`), not 7F as well. That is option (a): 7I builds its
+  own parameterised editor; 7F's is left untouched.
+
+  Option (b), the better end state, is one editor serving all three mount points. It
+  needs: `BoxMapEditor` extracted out of `lien-release-settings-form.tsx` (it is a
+  private function there); parameterisation over `{catalog, onSave, kinds}` — 7F's has
+  no `initial` kind, which 7I §7.3d requires; and a re-mount in 7F, which is a shipped
+  legal-document surface. 7I's editor is built parameterised so (b) remains available
+  without rewriting it.
+
+  Fixing #2-7i inside (b) closes the defect for both at once, which is the argument for
+  doing them together.
+
+- **§13's prerequisite list is stale on this point, recorded so it is not re-followed.**
+  7I §13 names "the box-placement component" among the hard prerequisites 7F supplies.
+  7F supplies a box-placement *component*, but not a *reusable* one — see #1-7i. A
+  builder reading §13 will look for something to import and find nothing importable.
+
+- **`contract_document_attachments` (§7.4) is owed, and is mis-sequenced in §13.**
+  The table was never created — absent from `20260926000000_7i_contracts.sql` and from
+  `packages/shared/types/database.ts`. §13 lists attachments under stage 1, but every
+  column hangs off `contract_documents(id)` and no contract document exists until stage
+  2 generates one. **Deferred to stage 2** [RULED Josh, S150]. Not created at S150.
+
 ### Branch-scoped, awaiting real numbers — `feature/s143-void-guard-qb-reconcile` [S143]
 
 > Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.
