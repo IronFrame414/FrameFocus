@@ -416,12 +416,49 @@ export async function voidContractDocument(
   return { success: true };
 }
 
+// ── The two-level toggle (§5.2) ─────────────────────────────────────────────
+//
+// Both halves live here so the pair cannot drift. `clientContractApplies()` in
+// contracts-shared.ts is the only place they are combined.
+
+/**
+ * §5.2 — the MASTER half of the toggle, written from Company Settings.
+ *
+ * ⚠️ DELIBERATELY NOT `updateCompany()` [RULED S150, Q2], even though this is a
+ * `companies` column and `updateCompany` is right there. That writer does not
+ * `.select()`, so a write RLS discards returns `{ success: true }` — the exact
+ * `#1-s146` failure every other write in this file was hardened against. It
+ * also sets `updated_at` explicitly, which CLAUDE.md flags as the `companies`
+ * holdover not to copy. Routing a contracts write through it would import both.
+ *
+ * `companies_update_owner_admin` (baseline `:3208`) is the database's opinion —
+ * Owner/Admin, same floor as the four 7I tables. The check below is the
+ * friendly message over that gate, not a substitute for it.
+ *
+ * §12.1 — OFF IS THE DEFAULT AND OFF MUST CHANGE NOTHING. Turning this off
+ * cannot destroy a template or a placed box map; it only stops the send flow
+ * from offering a contract. §5.2a keeps templates authorable either way.
+ */
+export async function setClientContractsEnabled(
+  companyId: string,
+  enabled: boolean
+): Promise<ContractResult> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('companies')
+    .update({ client_contracts_enabled: enabled })
+    .eq('id', companyId)
+    .select('id');
+  if (error) return { success: false, error: friendlyContract(error.message) };
+  if (!applied(data)) return { success: false, error: DISCARDED };
+  return { success: true };
+}
+
 /**
  * §5.2 — the per-proposal half of the toggle.
  *
- * The master lives in Company Settings and is written through
- * `updateCompany()`; this is the estimate-level choice the user makes when
- * sending a proposal.
+ * The master is `setClientContractsEnabled()` above; this is the estimate-level
+ * choice the user makes when sending a proposal. Both must be on.
  */
 export async function setEstimateContractToggle(
   estimateId: string,

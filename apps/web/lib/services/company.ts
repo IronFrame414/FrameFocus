@@ -46,6 +46,13 @@ export type CompanyData = Pick<
   | 'signatory_name'
   | 'signatory_title'
   | 'contractor_signature_path'
+  // 7I §5.2 [S150] — the MASTER half of the two-level client-contract toggle.
+  // Read here so Company Settings can render its current state; WRITTEN by
+  // `setClientContractsEnabled()` in contracts-client.ts, never by
+  // `updateCompany()` — that writer has no row-count guard and would report a
+  // discarded write as success (#1-s146). Off by default: §12.1 requires that
+  // off leaves every other surface byte-identical to today.
+  | 'client_contracts_enabled'
 >;
 
 export async function getCompany(): Promise<CompanyData | null> {
@@ -67,7 +74,7 @@ export async function getCompany(): Promise<CompanyData | null> {
   const { data: company } = await supabase
     .from('companies')
     .select(
-      'id, name, address_line1, address_line2, city, state, zip, phone, email, website, trade_type, license_number, logo_url, signatory_name, signatory_title, contractor_signature_path'
+      'id, name, address_line1, address_line2, city, state, zip, phone, email, website, trade_type, license_number, logo_url, signatory_name, signatory_title, contractor_signature_path, client_contracts_enabled'
     )
     .eq('id', profile.company_id)
     .single();
