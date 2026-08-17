@@ -14,6 +14,7 @@ import { TimeTrackingSettingsForm } from './time-tracking-settings-form';
 import { GLMappingSettingsForm } from './gl-mapping-settings-form';
 import { getTemplates } from '@/lib/services/lien-releases';
 import { LienReleaseSettingsForm } from './lien-release-settings-form';
+import { ContractSettingsForm } from './contract-settings-form';
 
 export default async function SettingsPage() {
   const supabase = await createClient();
@@ -74,6 +75,13 @@ export default async function SettingsPage() {
         signatoryName={company.signatory_name}
         signatoryTitle={company.signatory_title}
         hasSignature={Boolean(company.contractor_signature_path)}
+      />
+      {/* 7I §5.2 — the master client-contract toggle. Owner/Admin by
+          `companies_update_owner_admin`, the same set this page already
+          admits at :34. */}
+      <ContractSettingsForm
+        companyId={company.id}
+        enabled={Boolean(company.client_contracts_enabled)}
       />
     </div>
   );
