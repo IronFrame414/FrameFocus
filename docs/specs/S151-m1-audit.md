@@ -28,6 +28,29 @@ M1 is not a module the rest of the system merely reads from; it is the table the
 
 ---
 
+## §0a — STATUS AFTER S152 — all seven findings closed out
+
+> **This audit was written as findings-and-proposals. S152 is the fix pass.** Each finding below
+> carries its own **`✅ / 📏 / 📌 S152`** block stating what happened. **Original text is left
+> intact above each block** — this repo lost a live TECH_DEBT record at `53c7353` by deleting an
+> entry instead of closing it, and this document is not going to repeat that.
+
+| # | S151 severity | S152 outcome | Commit |
+| --- | --- | --- | --- |
+| **M1-01** | LATENT (narrow reachable) | ✅ **FIXED** — all eight `companies` writers row-counted | `221f900` |
+| **M1-02** | REACHABLE | ✅ **FIXED** — INSERT restricted to unaffiliated callers | `221f900` |
+| **M1-03** | REACHABLE (speed) | ✅ **FIXED** — five round trips → one | `ebe639c` |
+| **M1-04** | LATENT | 📏 **MEASURED, nothing converted** — and the recommendation is **corrected** | `3ea8939` |
+| **M1-05** | LATENT (structural) | 📌 **RECORDED, not actioned** — costed in the measurement doc | `3ea8939` |
+| **M1-06** | REACHABLE (small) | ✅ **FIXED** — and **the finding was half wrong**; see its block | `221f900` |
+| **M1-07** | REACHABLE, documented | ✅ **CLOSED** — absence asserted, not scheduled | `1bb98bc` |
+
+**Two of this document's own claims were wrong and are corrected in place: M1-06's second half, and
+M1-04's recommended fix.** Both corrections are in the finding blocks, with the superseded wording
+quoted.
+
+---
+
 ## §1 — Findings, most severe first
 
 Severity vocabulary: **REACHABLE TODAY** (a user can hit it now) · **LATENT** (the mechanism is
@@ -79,6 +102,25 @@ used once. The next person copying a neighbouring function copies the unguarded 
 mechanical and the helper already exists. **Unambiguous; no ruling needed.** Consider it alongside
 **M1-06**, which touches the same eight call sites.
 
+> ### ✅ FIXED [S152] — `221f900`
+>
+> All eight writers now `.select('id')` and return `DISCARDED` when nothing was affected. The
+> file-level comment was rewritten to state the rule for the whole file rather than for
+> `updateCompany` alone, because *"the file teaches both patterns"* was the actual defect and a
+> single fixed function does not cure it. The two `contractor_signature_path` writers carry their
+> own comment naming what a silent failure there costs.
+>
+> **Proved by `apps/web/test/s152-m1-fixes.live.ts` A1/A2 (11/11)**, which runs the **real shipped
+> services** under a real PM JWT via the `s146` mock technique — a probe against PostgREST directly
+> cannot see a service-layer defect, which is why the S151 evidence file could only demonstrate the
+> mechanism and not the consequence.
+>
+> **Mutation-proved:** restoring the pre-S152 unguarded shape in `updateGLMappingSettings` reddens
+> exactly that case with *"reported success over a write RLS discarded — M1-01 is back"*.
+>
+> **A2 exists because A1 alone is not enough** — without it, A1 passes on a service that fails for
+> everybody, which is the vacuous-pass shape §3 of this document warned about.
+
 ---
 
 ### **M1-02 — any authenticated user, of any role, can INSERT unlimited `companies` rows** — REACHABLE TODAY
@@ -116,6 +158,36 @@ disclosure.
 (`20260914000000`) and `create_member_for_new_profile()` both run in this path, and S135 records
 that harnesses broke when its behaviour was assumed rather than read.
 
+> ### ✅ FIXED [S152] — option (a), `221f900` + `20261004000000`
+>
+> `companies_insert_authenticated` (`WITH CHECK (true)`) is replaced by
+> **`companies_insert_unaffiliated`** — `WITH CHECK (get_my_company_id() IS NULL)`.
+>
+> **The condition this finding set on itself was met before anything was written.** Signup does not
+> evaluate this policy at all: the only `INSERT INTO companies` anywhere in the repo is inside
+> `handle_new_user()` — every other hit is a prior redefinition of that same function — and
+> `handle_new_user()` is **SECURITY DEFINER owned by `postgres`, which carries `rolbypassrls`**
+> [LIVE, `pg_roles`]. There is no app-side, API-route, edge-function or script insert as
+> `authenticated`. So the policy was dead weight on the legitimate path and open on the illegitimate
+> one.
+>
+> Josh's model — *"one login, one company; a second company requires a second email"* — is what makes
+> (a) forecloses-nothing rather than merely tight.
+>
+> **Proved by `s152-m1-fixes.live.ts` B1/B1b/B2.** B1b matters as much as B1: an **Owner** is refused
+> too, which pins the gate as *affiliation* and not *privilege* — a role floor would satisfy B1 and
+> is not what was ruled. **B2 proves the other arm** (an unaffiliated caller can still insert), so the
+> policy is not `WITH CHECK (false)` in disguise; without it, B1 would pass on a closed door.
+>
+> **The RETURNING trap was avoided as instructed** — the refusal probes insert with no `.select()`
+> and verify the row count through the service role, because a `42501` from `INSERT … RETURNING`
+> means RLS refused the **read**.
+>
+> **Recorded in the migration, not discovered later:** a *soft-deleted* profile resolves to NULL and
+> may create a new company (intended — a removed user starting over); and because signup bypasses
+> RLS, the policy could be **dropped outright**, which is strictly tighter and deliberately not
+> taken, since (a) was ruled and preserves a company-less flow the product may want.
+
 ---
 
 ### **M1-03 — the Settings page makes five sequential round trips for one `companies` row, plus a duplicated `profiles` lookup** — REACHABLE TODAY (speed, statically inferable)
@@ -144,6 +216,30 @@ N-query box fetch (`Promise.all`-wrapped, so parallel within a template set).
 (2) collapse the four settings reads into one `select` of the union of columns — the four services
 already return disjoint `Pick<>` slices of the same row, so a single fetch can feed all four.
 **Unambiguous; no ruling needed.**
+
+> ### ✅ FIXED [S152] — `ebe639c`
+>
+> Both halves. `getCompanySettingsBundle()` reads every `companies` field the page renders in **one**
+> round trip; the three independent template fetches run in the same `Promise.all`; and the
+> duplicated `profiles` lookup is gone because the page's existing role query now also returns
+> `company_id`. **Five `companies` round trips → one.**
+>
+> An **addition, not a replacement** — `getCompany()` is still used by `/m/settings` and
+> `getGLMappingSettings()` by `team/[id]`, so no other surface moved.
+>
+> Two things worth carrying forward:
+>
+> - **The column list is enumerated, not `select('*')`.** With 72 columns under one UPDATE policy
+>   (**M1-05**), a star would ship QuickBooks tokens and billing state into a payload needing
+>   neither.
+> - **It pins `.eq('id', …)` rather than a bare `.maybeSingle()`.** `companies_select_own` admits a
+>   platform admin to *every* company row and `maybeSingle()` errors on more than one — a latent bug
+>   in all four readers this replaces, fixed here by construction rather than filed.
+>
+> **One defect was introduced and caught during the change**, recorded because it is instructive:
+> `withBoxes(await getContractTemplates(…))` inside a `Promise.all` array literal evaluates the
+> `await` *before* `Promise.all` is called, leaving two fetches serial and ahead of everything else —
+> the exact bug being removed, reintroduced one line later. Now `.then(withBoxes)`.
 
 ---
 
@@ -187,6 +283,35 @@ highest-traffic policies only, with before/after row counts under a real JWT. **
 as a find-and-replace** — `#116` is the standing example of why a mechanical sweep over a
 security-adjacent pattern goes wrong.
 
+> ### 📏 MEASURED [S152] — nothing converted — `3ea8939`
+>
+> Full results: **`docs/specs/S152-rls-helper-measurement.md`**.
+>
+> ### ⚠️ AND THIS FINDING'S RECOMMENDATION WAS WRONG. Corrected here.
+>
+> _Superseded, quoted rather than deleted:_ _"**The direction is not in doubt; the size is.**"_
+>
+> **The direction WAS in doubt, and measurement is what found it.** `(SELECT helper())` forces single
+> evaluation only when the expression does not depend on the row. It delivers 32–35× on the
+> zero-argument helpers — and **`can_view_project(project_id)` takes the row's project id, so the
+> wrapper does nothing for it.** Measured over 900 rows with a varying argument: **554.4 ms bare vs
+> 576.3 ms wrapped** — no better, marginally worse.
+>
+> That helper costs **636.6 µs per call**, against 9.5–15.7 µs for the zero-argument ones. **58
+> policies across 31 tables call it, and they hold 96% of the measured cost.** Converting the
+> zero-argument calls inside one of them buys about **7%**.
+>
+> **So the blanket rewrite this finding contemplated would have taken 266 chances to break a security
+> boundary in exchange for almost nothing.** Josh's measure-first ruling is what stopped that, and
+> the caution was better founded than the finding that prompted it.
+>
+> **What actually pays** is a set-based rewrite of the 58 (`project_id IN (SELECT
+> my_visible_project_ids())`, hoistable because it takes no row) — measured at **1.3 ms vs 532.6 ms**
+> on the same workload, flagged in the doc as a demonstration of the *shape* rather than a drop-in.
+> Ranked list, per-category risk profile and a pilot-first sequence are in §4–§5 there.
+>
+> **Still nothing converted.** That remains ruled.
+
 ---
 
 ### **M1-05 — `companies` is a 72-column configuration god-object with no ownership boundary** — LATENT (durability / structural)
@@ -212,6 +337,24 @@ answer for sensitive subsets: a 1:1 side table with its own policy, per `project
 QuickBooks block (10 columns, including `qb_token_secret_id`) is the obvious first candidate.
 **Recommend recording the pattern now and moving nothing this pass.**
 
+> ### 📌 RECORDED, NOT ACTIONED [S152] — `3ea8939`
+>
+> Ruled as D's structural cousin: **do not restructure.** Costed in
+> `S152-rls-helper-measurement.md` §6 so the decision is available with its price attached.
+>
+> **One correction the measurement supplies:** the god-object is **not** a performance problem.
+> `companies` holds 3 rows — one per tenant — so it does not appear anywhere in the cost ranking and
+> never will. It is purely a **boundary** problem, which is what this finding said.
+>
+> **What a split would cost, established rather than guessed:** the precedents
+> (`project_financials`, `subcontractor_financials`) both **dropped** the original columns so no
+> stale reader survives, which means the split must follow a seam nothing else crosses.
+> **QuickBooks (10 columns) is such a seam. Estimating defaults are not, and `timezone` — read in
+> 70 files — least of all.**
+>
+> Group A did move one thing here, incidentally: `companies` gained an `updated_by` column, taking
+> it from 72 to 73. See **M1-06**.
+
 ---
 
 ### **M1-06 — `companies` has no `updated_at` trigger, so `updated_at` is maintained by hand at eight call sites — and 7I's write forgets it** — REACHABLE TODAY (small)
@@ -236,6 +379,39 @@ the same migration**. Doing one without the other leaves `updated_at` set twice.
 M1-01** — same eight call sites, one edit. **Needs a ruling only on timing**, since it touches a
 shipped table.
 
+> ### ✅ FIXED [S152] — `221f900` + `20261004000000` — ⚠️ **AND THIS FINDING WAS HALF WRONG**
+>
+> _Superseded text, quoted rather than rewritten:_ _"**toggling client contracts on or off never
+> advances `updated_at` on the company row.**"_
+>
+> **That is false, and it was false when it was written.** `companies_updated_at` **already existed**
+> [LIVE, `pg_trigger`] — `BEFORE UPDATE FOR EACH ROW EXECUTE FUNCTION update_updated_at()`, which
+> sets `NEW.updated_at = now()` unconditionally and overrides whatever the caller supplies. 7I's
+> `setClientContractsEnabled()` has always advanced `updated_at`. The finding read
+> `CLAUDE.md`'s "known holdover" note and the `company-client.ts` comments — **both of which conflate
+> the two triggers** — instead of reading `pg_trigger`, which is the rule this audit set for itself
+> in its own §0.
+>
+> **What was genuinely missing, and is now fixed:**
+>
+> - `companies_set_updated_by` did not exist. ✅ Installed.
+> - It could not be installed as specified, because **`companies` had no `updated_by` column at all**
+>   — nor `created_by`, `is_deleted` or `deleted_at`. ✅ `updated_by` added.
+> - The eight hand-maintained `updated_at` lines were **pure redundancy**, not load-bearing. ✅
+>   Removed, per CLAUDE.md's service-layer contract.
+>
+> **`created_by` was deliberately NOT added.** Its convention is a column DEFAULT of `auth.uid()`,
+> and the only INSERT path is `handle_new_user()` — an AFTER INSERT trigger on `auth.users` where
+> there is no JWT and `auth.uid()` is NULL. The column would be NULL on every real company row while
+> looking like an audit trail, which is worse than not having it.
+>
+> **Proved by `s152-m1-fixes.live.ts` A3**, which asserts `updated_at` advances **and** `updated_by`
+> is stamped with the caller's `auth.uid()`, with no payload help. The two are asserted together on
+> purpose: a passing `updated_at` is exactly what made the missing half invisible.
+>
+> **Also owed and not done:** `CLAUDE.md`'s "Known holdover" note still says `companies` is
+> pre-trigger. It is now fully triggered. Correcting `CLAUDE.md` was outside this session's scope.
+
 ---
 
 ### **M1-07 — `/api/cron/invoice-reminders` has a handler and no schedule** — REACHABLE TODAY, and **already documented**
@@ -250,6 +426,26 @@ from `vercel.json` is **deliberate, explained, and asserted** — `s137-trial-li
 if the entry ever appears, and that assertion was verified load-bearing. `invoice-reminders` has no
 such record, so its absence is indistinguishable from an oversight. **Either schedule it or assert
 its absence the way `trial-deletion` does.** Needs a ruling on which.
+
+> ### ✅ CLOSED [S152] — absence asserted, NOT scheduled — `1bb98bc`
+>
+> **RULED [Josh, S152]: do not schedule it.** Scheduling starts emailing clients on a timer, which is
+> a product decision and not cleanup. `apps/web/test/s152-cron-absence.test.ts` mirrors the
+> `trial-deletion` pattern.
+>
+> **Placed in the committed suite rather than a live harness, deliberately.** The precedent lives in
+> `s137-trial-lifecycle.live.ts` because the rest of that file needs a database — so it only runs
+> when someone runs the live suite by hand, which is precisely when nobody is adding a cron entry.
+> This check reads one file and needs nothing, so **CI runs it on every push.** Same pattern, better
+> placement.
+>
+> **Four assertions, because the obvious one is not enough on its own:** the route still *exists*
+> (otherwise the absence check would be passing about nothing, and the finding would no longer
+> describe reality); `invoice-reminders` is unscheduled; **the nine crons that ARE scheduled still
+> are** (a `vercel.json` that lost its `crons` key would satisfy the absence check while silently
+> stopping all of them); and `trial-deletion` is still unscheduled — duplicated from `s137` so the
+> most consequential absence in the repo does not depend on someone choosing to run a database
+> harness.
 
 ---
 
@@ -297,9 +493,9 @@ Stated rather than inferred. The M7 audit's equivalent section is the model.
 
 ---
 
-## §4 — Grouped for ruling
+## §4 — Grouped for ruling — **ALL FOUR RULED AND DISCHARGED [S152]**
 
-So Josh makes four decisions, not seven.
+So Josh makes four decisions, not seven. **All four were ruled at S152; outcomes in §0a.**
 
 | Group | Findings | Decision needed |
 | --- | --- | --- |

@@ -297,3 +297,84 @@ export async function getGLMappingSettings(): Promise<GLMappingSettings | null> 
 
   return (data as GLMappingSettings | null) ?? null;
 }
+
+// ----------------------------------------------------------------------------
+// M1-03 [S152] — the Settings page reads this row ONCE.
+// ----------------------------------------------------------------------------
+//
+// WHAT WAS WRONG. `settings/page.tsx` awaited getCompany(), getEstimatingSettings(),
+// getProposalSettings(), getTimeTrackingSettings() and getGLMappingSettings() in
+// series — FIVE sequential round trips against the SAME `companies` row, each
+// selecting a different column list. getCompany() additionally re-ran
+// `auth.getUser()` and re-read `profiles`, both of which the page had already
+// done itself to evaluate its role gate.
+//
+// The four individual readers are KEPT: `getCompany` is also used by
+// `/m/settings` and `getGLMappingSettings` by `team/[id]`. This is an addition,
+// not a replacement, so no other surface moves.
+//
+// ⚠️ THE COLUMN LIST IS ENUMERATED, NOT `select('*')`. `companies` carries 72
+// columns and one UPDATE policy over all of them (M1-05), so `*` here would ship
+// QuickBooks tokens and billing state into a payload that needs neither. The
+// union below is 48 of the 72 and each one is on the page.
+//
+// The intersection type works because all five shapes are Pick/Omit of the same
+// Row and they re-narrow DISJOINT CHECK-constrained columns (`gps_clock_mode`,
+// `default_pricing_mode`, `default_proposal_pricing_level`,
+// `default_terms_sections`, `default_reminder_schedule`). A structurally wider
+// object satisfies each narrower prop type, so the page passes one object to all
+// five forms without slicing it.
+
+export type CompanySettingsBundle = CompanyData &
+  TimeTrackingSettings &
+  EstimatingSettings &
+  ProposalSettings &
+  GLMappingSettings;
+
+const SETTINGS_BUNDLE_COLUMNS = [
+  // CompanyData
+  'id, name, address_line1, address_line2, city, state, zip, phone, email, website',
+  'trade_type, license_number, logo_url, signatory_name, signatory_title',
+  'contractor_signature_path, client_contracts_enabled',
+  // TimeTrackingSettings
+  'timezone, week_starts_on, ot_threshold_hours, breaks_paid, paid_break_cap_minutes, gps_clock_mode',
+  // EstimatingSettings
+  'estimate_number_prefix, estimate_number_sequence, default_pricing_mode',
+  'default_subcontractor_markup_percent, default_material_markup_percent, default_labor_markup_percent',
+  'default_subcontractor_margin_percent, default_material_margin_percent, default_labor_margin_percent',
+  'default_tax_rate, default_labor_rate, default_terms_sections',
+  // ProposalSettings
+  'brand_color, default_proposal_email_subject, default_proposal_email_body',
+  'default_reminder_email_subject, default_reminder_email_body, default_reminder_schedule',
+  'default_expiration_days, default_proposal_pricing_level',
+  // GLMappingSettings
+  'gl_account_labor, gl_account_material, gl_account_subcontractor, gl_account_other',
+  'fixed_burden_per_hour',
+].join(', ');
+
+/**
+ * Every `companies` field the Settings page renders, in one round trip.
+ *
+ * Takes `companyId` rather than resolving it, because the only caller has
+ * already read the profile to evaluate its role gate. That is the duplicated
+ * lookup this removes — not an optimisation the caller has to remember, just
+ * the value it already holds.
+ *
+ * `.eq('id', …)` and not a bare `.maybeSingle()`: `companies_select_own` admits
+ * a platform admin to EVERY company row, and `maybeSingle()` errors on more than
+ * one. The four readers this replaces all have that latent bug; pinning the id
+ * does not.
+ */
+export async function getCompanySettingsBundle(
+  companyId: string
+): Promise<CompanySettingsBundle | null> {
+  const supabase = await createClient();
+
+  const { data } = await supabase
+    .from('companies')
+    .select(SETTINGS_BUNDLE_COLUMNS)
+    .eq('id', companyId)
+    .maybeSingle();
+
+  return (data as CompanySettingsBundle | null) ?? null;
+}

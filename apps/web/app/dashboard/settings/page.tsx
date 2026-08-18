@@ -1,12 +1,6 @@
 import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
-import {
-  getCompany,
-  getEstimatingSettings,
-  getGLMappingSettings,
-  getProposalSettings,
-  getTimeTrackingSettings,
-} from '@/lib/services/company';
+import { getCompanySettingsBundle } from '@/lib/services/company';
 import { SettingsForm } from './settings-form';
 import { EstimatingSettingsForm } from './estimating-settings-form';
 import { ProposalSettingsForm } from './proposal-settings-form';
@@ -100,10 +94,13 @@ export default async function SettingsPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect('/sign-in');
 
-  // Check role — only owner and admin can access settings
+  // Check role — only owner and admin can access settings.
+  // M1-03 [S152]: `company_id` comes back with the role, because the page then
+  // hands it to the settings bundle. It used to read the role here and then
+  // call getCompany(), which re-ran auth.getUser() AND re-read this same row.
   const { data: profile } = await supabase
     .from('profiles')
-    .select('role')
+    .select('role, company_id')
     .eq('user_id', user.id)
     .eq('is_deleted', false)
     .single();
@@ -112,16 +109,42 @@ export default async function SettingsPage() {
     redirect('/dashboard');
   }
 
-  const company = await getCompany();
+  // M1-03 [S152] — ONE round trip for every `companies` field on this page.
+  // Was five sequential ones against the same row (getCompany,
+  // getEstimatingSettings, getProposalSettings, getTimeTrackingSettings,
+  // getGLMappingSettings), each selecting a different column list.
+  //
+  // The template reads are independent of it and of each other, so they run
+  // alongside rather than after. They were three more serial awaits.
+  //
+  // ⚠️ The redirect below still fires on a missing company, exactly as before.
+  // The only difference is that the template fetches have also been issued by
+  // then — wasted work on a path that redirects, and cheaper than the four
+  // extra serial round trips it replaces on the path that does not.
+  const [company, lienTemplates, clientContractTemplates, subContractTemplates] = await Promise.all([
+    getCompanySettingsBundle(profile.company_id),
+    // 7F §4 / §10.2 — release forms and the signatory. Owner/Admin by RLS, which
+    // is the same set this page already admits.
+    getTemplates('client_outbound'),
+    // 7I §5.2 / §10.2 — TWO sets, keyed on `document_kind`. Read unconditionally:
+    // §5.2a keeps forms authorable while the master toggle is off, so this must
+    // not be gated on `company.client_contracts_enabled`.
+    // ⚠️ `.then(withBoxes)`, NOT `withBoxes(await …)`. An `await` inside the
+    // array literal is evaluated BEFORE Promise.all is called, so the awaited
+    // form leaves these two serial and ahead of everything else — which is the
+    // bug this whole change exists to remove, reintroduced one line later.
+    getContractTemplates('client_contract').then(withBoxes),
+    getContractTemplates('sub_contract').then(withBoxes),
+  ]);
+
   if (!company) redirect('/dashboard');
 
-  const estimatingSettings = await getEstimatingSettings();
-  const proposalSettings = await getProposalSettings();
-  const timeTrackingSettings = await getTimeTrackingSettings();
-  const glMappingSettings = await getGLMappingSettings();
-  // 7F §4 / §10.2 — release forms and the signatory. Owner/Admin by RLS, which
-  // is the same set this page already admits.
-  const lienTemplates = await getTemplates('client_outbound');
+  // One object feeds all five forms: `CompanySettingsBundle` is the intersection
+  // of their prop types, so a structurally wider object satisfies each.
+  const estimatingSettings = company;
+  const proposalSettings = company;
+  const timeTrackingSettings = company;
+  const glMappingSettings = company;
   // #2-7i FIXED [S150] — 7F's box editor never loaded the existing map, so
   // re-opening it and saving wiped what was placed. `getTemplateBoxes` existed
   // and had exactly one caller (the generate route); no settings surface read
@@ -150,11 +173,6 @@ export default async function SettingsPage() {
       })),
     }))
   );
-  // 7I §5.2 / §10.2 — TWO sets, keyed on `document_kind`. Read unconditionally:
-  // §5.2a keeps forms authorable while the master toggle is off, so this must
-  // not be gated on `company.client_contracts_enabled`.
-  const clientContractTemplates = await withBoxes(await getContractTemplates('client_contract'));
-  const subContractTemplates = await withBoxes(await getContractTemplates('sub_contract'));
 
   return (
     <div>

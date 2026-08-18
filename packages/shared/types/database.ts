@@ -1149,6 +1149,7 @@ export type Database = {
           timezone: string
           trade_type: string | null
           updated_at: string | null
+          updated_by: string | null
           website: string | null
           week_starts_on: number
           zip: string | null
@@ -1222,6 +1223,7 @@ export type Database = {
           timezone?: string
           trade_type?: string | null
           updated_at?: string | null
+          updated_by?: string | null
           website?: string | null
           week_starts_on?: number
           zip?: string | null
@@ -1295,6 +1297,7 @@ export type Database = {
           timezone?: string
           trade_type?: string | null
           updated_at?: string | null
+          updated_by?: string | null
           website?: string | null
           week_starts_on?: number
           zip?: string | null
