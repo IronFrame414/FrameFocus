@@ -298,7 +298,66 @@ read [TECH_DEBT.md #117](TECH_DEBT.md) first; the obvious fix breaks CO authorin
 
 ---
 
-## Gate 3 — 7D–7H specs (blocked on reconciliation + decisions, not on code)
+## ⚠️ OPEN AT THE NEXT DEPLOY — which repo migrations are absent from PRODUCTION is UNKNOWN — **[S150, 2026-08-18]**
+
+**Not a gate. Nothing is blocked on it today. It is recorded here because the next person
+who deploys needs it, and there is nowhere else it would be found.**
+
+**What is unknown.** The set of migrations under `supabase/migrations/` that have been
+applied to **rebuild-test** but NOT to **production**. Nobody has enumerated it.
+
+**What IS known [S150, live reads].** Local and rebuild-test match **exactly** — 109
+migration files, 109 rows in `supabase_migrations.schema_migrations`, no orphan and no
+drift in either direction, after `20261002000000_7i_e1_contract_status_decoupling.sql` was
+pushed and `database.ts` regenerated clean. **Rebuild-test is therefore ahead of production
+by an unmeasured amount**, and has been accumulating that lead across many sessions.
+
+**⚠️ DO NOT ATTEMPT TO CLOSE THIS FROM A NORMAL SESSION. Production is not linked, and must
+not be linked** to answer it. The Supabase CLI in this Codespace is linked to
+`framefocus-rebuild-test` (`nmyphyhmfttxkdoposvf`) and every "applied" claim anywhere in
+this repo means *applied to rebuild-test*. `supabase db dump` is also unavailable here —
+it needs Docker, which is not installed in this Codespace.
+
+**Nothing in S150 touched production.** S150 was rebuild-test only, and this item is a
+statement about a pre-existing condition, not about anything that session did.
+
+**What answering it requires — one of:**
+
+- a `schema_migrations` export from production, diffed against `supabase/migrations/`; or
+- a production link established **deliberately, as the deploy**, by whoever is doing the
+  deploy — not incidentally by a session trying to answer this question.
+
+**Why it is recorded and not attempted.** The S150 Module 7 completion audit was asked for
+exactly this and could not produce it; every other claim in that document is verified, and
+this is the single largest gap in it (`docs/specs/S150-m7-completion-audit.md` §0 and §7
+item 1). Leaving it as an audit footnote means the next deploy rediscovers it at the worst
+moment. **Whoever deploys next: enumerate the delta first.**
+
+---
+
+## ~~Gate 3 — 7D–7H specs~~ — **CLOSED [Josh, S150, 2026-08-18]**
+
+> **✅ CLOSED. Every unblocking condition below is met, and the gate blocks work that has
+> since shipped.** Verified against the repo at `54279df`, not assumed. The gate's own text
+> is retained beneath this banner as the record of what it required.
+>
+> | Unblocking condition, as written below | State at `54279df` |
+> | --- | --- |
+> | *"One reconciliation pass deciding which generation is authoritative … followed by committing the winner and deleting or archiving the rest"* | **Done at S97**, and the commits say so in their own subjects: `6e4fe74` and `d286809` — *"drop superseded specs + prep docs [S97]"*. `7D-spec.md`–`7H-spec.md` are deleted and tracked nowhere; no `Spec-Prep` files remain on disk. The `7x1` generation is tracked and is the sole survivor: `7d1`, `7e1`, `7f2`, `7g1`, `7h1`. **Three generations no longer coexist.** |
+> | *"Josh answers whatever decision lists survive that pass"* | **Done.** Zero open-decision markers across all five. `7f2`'s five `[OPEN — JOSH]` items are **RULED [S140]** in a table at `:56-64` — one of them, §12.1, deferred *by ruling*, which is a decision. |
+> | *"**[UNVERIFIED]** provenance: the untracked docs are said to come from a parallel session"* | **Moot.** The reconciliation happened and the winners were committed under Josh's own commits. Nothing untracked survives to have unverified provenance. |
+>
+> **`§S — TODO for Claude Code` in `7g1` and `7h1` is not an outstanding decision.** It is a
+> build assignment under the M7 method — the schema/data-wiring layer CC writes against live
+> schemas — and 7G's `§S` has since been built (S148–S149).
+>
+> **And the gate is behind events regardless of its conditions:** 7D, 7E, 7F and 7G are all
+> **BUILT** (`docs/specs/S150-m7-completion-audit.md` §2). A gate on "7D–7H specs" cannot
+> block sub-modules that shipped.
+>
+> _Original gate text follows, unaltered._
+
+### Gate 3 — original text (blocked on reconciliation + decisions, not on code)
 
 7E–7H are gated behind 7D's design. **The repo currently disagrees with itself about
 7D's readiness — reconcile this before any 7D build:**
@@ -360,7 +419,44 @@ spec without an approved trace.
 
 ---
 
-## Gate 4 — NOTIFICATIONS are gated behind the PWA install — **[S97, 2026-08-03]**
+## ~~Gate 4 — NOTIFICATIONS behind the PWA install~~ — **CLOSED [Josh, S150, 2026-08-18]**
+
+> **✅ CLOSED. Every one of the nine rows in the S97 inventory below is now false**, the
+> PWA-install half included. Verified file-by-file against the repo at `54279df`.
+>
+> **The notifications half was already known stale** (`7I-spec.md` §14 carries that
+> correction). **The PWA-install half had never been re-checked** since S97 — it was the
+> `[UNVERIFIED]` half of this gate, and it is checked now.
+>
+> | S97 inventory row, as written below | State at `54279df` |
+> | --- | --- |
+> | `manifest.json` / `manifest.ts` **absent** | `apps/web/app/manifest.ts` — full manifest, `start_url: '/m'`, `display: 'standalone'`, every brand value imported. Asserted by `apps/web/test/pwa-manifest.test.ts`. |
+> | Service worker **absent** | `public/sw.js` **and** `public/sw-dashboard.js`, registered by `app/m/register-sw.tsx` (scope `/m`) and `app/dashboard/register-push-sw.tsx` (scope `/dashboard`). |
+> | Icons **absent** — *"`apps/web/public/` contains **only `fonts/`**"* | `icon-192.png`, `icon-512.png`, `icon-maskable-512.png` (a genuinely full-bleed maskable, not a re-export) and `apple-touch-icon-180.png`, plus the SVG/favicon set. |
+> | `theme-color`, `apple-mobile-web-app-*` **absent** | `appleWebApp: { capable, title, statusBarStyle: 'black' }` in `app/layout.tsx`; `theme_color` / `background_color` in the manifest. |
+> | Offline fallback **absent** | `app/m/offline` + `app/m/offline-sync.tsx`. |
+> | `web-push` / VAPID keys **absent** | `web-push ^3.6.7` in `apps/web/package.json`; `lib/notify/push.ts` reads `NEXT_PUBLIC_VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY`. |
+> | `pushManager` / `Notification.requestPermission` / SW registration **absent** — *"zero occurrences in the tree"* | All present in `lib/notify/push-client.ts`; `PushEnrolment` is mounted at `app/m/notifications/page.tsx`. |
+> | Push subscription table **absent** | `push_subscriptions` — `endpoint` / `p256dh` / `auth`, unique on `endpoint` — `20260905000000_notifications_core.sql:123`. |
+> | *"410-Gone endpoint pruning has no equivalent anywhere"* | `lib/notify/push.ts:129-134` handles 410/404 and **cites Gate 4 by name** in its comment. |
+> | `viewport` export in `app/layout.tsx` **absent** | **STILL TRUE — the one real residual.** Filed as `TECH_DEBT.md` `#3-audit` rather than holding this gate open for it. |
+>
+> **The residual is filed, not carried by this gate.** There is no `export const viewport`
+> anywhere under `apps/web/app/`, so nothing controls `viewport-fit=cover` and the shell has
+> no top safe-area inset. As the S97 row itself said, *"Next 14's default is injected, so
+> nothing is broken"* — it does not block push, an install, or anything else this gate
+> existed to sequence. `app/layout.tsx` already reasons about it: `statusBarStyle` is
+> `'black'` and **deliberately not** `'black-translucent'`, precisely because the shell pads
+> the bottom safe area only. See `#3-audit`.
+>
+> **What the gate got right, recorded so the sequencing is not re-litigated:** the ordering
+> argument was correct. iOS delivers Web Push only to an installed PWA, push is delivered to
+> the service worker on every platform, and the manifest/icons/SW genuinely were
+> prerequisites rather than a parallel track. They were built first, and then push.
+>
+> _Original gate text follows, unaltered._
+
+### Gate 4 — original text — NOTIFICATIONS are gated behind the PWA install — **[S97, 2026-08-03]**
 
 **What is blocked:** the notification system (Web Push to field crew).
 

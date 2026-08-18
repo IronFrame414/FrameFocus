@@ -1,6 +1,7 @@
 # CLAUDE.md — FrameFocus Development Guide
 
-> **Last updated:** August 2, 2026 (Session 97 — Financial Visibility Floor enforcement status corrected: contract value, budgeted amount and instrument rates are DB-enforced; `change_orders.net_delta` is UI-only by ruling, filed as TECH_DEBT #117)
+> **Last updated:** August 18, 2026 (Session 150 — **Financial Visibility Floor: FOREMAN sees ACTUAL COST ONLY, RULED [Josh], `#1-m7cpl` resolved in favour of the shipped code.** A deliberate ruling change, narrowing `7h1-spec.md` §7H.2 #10's S97 grant — not a discovered drift. The S140 banner's attribution to money-rep P9 is corrected in the same pass: P9 widens the PM only. `7h1-spec.md` amended at nine sites, argument withdrawn as well as conclusion; `#1-m7cpl` CLOSED.)
+> **Previously:** August 2, 2026 (Session 97 — Financial Visibility Floor enforcement status corrected: contract value, budgeted amount and instrument rates are DB-enforced; `change_orders.net_delta` is UI-only by ruling, filed as TECH_DEBT #117)
 > **Purpose:** This file is the single source of truth for all development conversations. Read this before every session.
 
 ---
@@ -476,7 +477,7 @@ Each subscribing company is an isolated tenant. Within that company, there are 6
 | --------------- | ----------------- | ---------------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Owner           | `owner`           | Full                               | Full              | All features, billing/subscription management, user invitations, approval authority on change orders/payments/AI content, company settings, QuickBooks connection — [SUPERSEDED for COs — Owner-final-approval gate removed; see module5-architecture.md §5.7c AMENDMENT (Session 55). Owner/Admin/PM all create+send.] |
 | Admin           | `admin`           | Full                               | Full              | Everything Owner can do EXCEPT items in the owner-only list below                                                                                                                                                                                                                                                       |
-| Project Manager | `project_manager` | Full (scoped to assigned projects) | Full              | Create/manage estimates, manage assigned projects, assign tasks, create change orders, **view job ACTUAL AND COMMITTED COSTS — NOT contract value, budgeted/sell amounts, or CO dollar amounts** (Financial Visibility Floor, added 2026-07-20; **"actual only" corrected to "actual and committed" [S140]** per money-rep P9 — `budgetColumnsFor()` has shipped `seesCommitted: true` for a PM since S97), manage client communication                                                    |
+| Project Manager | `project_manager` | Full (scoped to assigned projects) | Full              | Create/manage estimates, manage assigned projects, assign tasks, create change orders, **view job ACTUAL AND COMMITTED COSTS — NOT contract value, budgeted/sell amounts, or CO dollar amounts** (Financial Visibility Floor, added 2026-07-20; **"actual only" corrected to "actual and committed" [S140]** per money-rep P9 — `budgetColumnsFor()` has shipped `seesCommitted: true` for a PM since S97. **The same widening for FOREMAN is OVERTURNED [Josh, S150] — see the Floor below.**), manage client communication                                                    |
 | Foreman         | `foreman`         | Limited                            | Full              | Manage assigned field crews, daily logs, schedule crew tasks, review Crew Member submissions, punch lists, quality control                                                                                                                                                                                              |
 | Crew Member     | `crew_member`     | Minimal                            | Full              | Clock in/out with GPS, daily log entries, photo capture, task status updates, view assigned tasks and schedule                                                                                                                                                                                                          |
 | Client          | `client`          | Portal only — **see the note below** | No (future phase) | View project timeline, photo gallery, approve selections, sign documents, make payments, message PM, view AI weekly summaries                                                                                                                                                                                           |
@@ -520,37 +521,99 @@ redirected to.
 
 ### Financial Visibility Floor (authoritative — added 2026-07-20)
 
-**Only Owner and Admin may see contract/budget/sell/CO dollar figures. Project Manager and Foreman see ACTUAL AND COMMITTED COST ONLY. Crew sees ACTUAL COST ONLY.** — **CORRECTED [S140]**
+**Only Owner and Admin may see contract/budget/sell/CO dollar figures. Project Manager sees ACTUAL AND COMMITTED COST. Foreman and Crew see ACTUAL COST ONLY.** — **RULED [Josh, S150]**
 
-> _Superseded text, quoted rather than rewritten:_ _"Project Manager, Foreman, and Crew
-> see ACTUAL AND COMMITTED COST ONLY."_ That lumped crew in with the other two. The
-> S97 ruling recorded in `7h1-spec.md` §7H.2 #10 splits them: **PM and foreman see
-> actual and committed; crew sees actual only.** money-rep **P9** is the source of the
-> widening, and it is a deliberate revision of the older blanket "actual only" wording.
+> ## ⚠️ THIS IS A DELIBERATE RULING CHANGE. IT IS NOT A DISCOVERED DRIFT.
 >
-> ⚠️ **THE SHIPPED CODE DOES NOT MATCH THIS ROW FOR FOREMAN, and the code is not
-> obviously wrong.** `budgetColumnsFor()` (`apps/web/lib/services/invoices-shared.ts`)
-> ships:
+> **Read this before concluding the floor was quietly weakened.** Most of S150's other
+> corrections to this file went the other way — the document was stale, the code was
+> right, and the document was brought to the code as record-keeping. **This one is
+> different.** Foreman's access was **decided** at S150, and the decision **narrows**
+> what the S97 ruling in `7h1-spec.md` §7H.2 #10 had granted. That the code already
+> matches is the outcome, not the argument.
 >
-> | Role | This ruling | `budgetColumnsFor()` |
+> ### What was decided
+>
+> **`#1-m7cpl` is RESOLVED IN FAVOUR OF THE SHIPPED CODE. Foreman stays `actual_only`
+> — 3 columns, `seesCommitted: false`.** `budgetColumnsFor()`
+> (`apps/web/lib/services/invoices-shared.ts:460-472`) is correct as it stands and is
+> not to be changed to admit committed cost for a foreman.
+>
+> ### What it supersedes
+>
+> _Superseded text, quoted rather than rewritten:_ _"Only Owner and Admin may see
+> contract/budget/sell/CO dollar figures. **Project Manager and Foreman see ACTUAL AND
+> COMMITTED COST ONLY.** Crew sees ACTUAL COST ONLY."_ — the S140 correction, itself
+> quoting and superseding an older _"Project Manager, Foreman, and Crew see ACTUAL AND
+> COMMITTED COST ONLY."_ All three generations are kept so the direction of travel stays
+> legible: the grant to foreman was widened at S97 and is **narrowed again here**.
+>
+> The S140 banner that stood in this place is retired. It read, in part: _"⚠️ **THE
+> SHIPPED CODE DOES NOT MATCH THIS ROW FOR FOREMAN, and the code is not obviously
+> wrong.** … **This needs a ruling, and it is filed as `#1-m7cpl`**"_. This is that
+> ruling.
+>
+> ### ⚠️ AND THE S140 BANNER MIS-ATTRIBUTED ITS OWN AUTHORITY — corrected here
+>
+> _Superseded claim, quoted rather than deleted:_ _"money-rep **P9** is the source of
+> the widening"_, and _"narrowing the ruling to match the code would discard a decision
+> money-rep P9 made on purpose."_ **Both are false, and `TECH_DEBT.md` #1-m7cpl repeated
+> the error by listing the authority as one column headed "money-rep P9, 7h1 #10".**
+>
+> **money-rep P9 widens the PM and says nothing whatever about foreman**
+> (`docs/specs/money-representation.md:113` — _"Owner/Admin see everything. PM sees
+> **actual AND committed** (widens today's actual-only floor)"_). And
+> `money-representation.md` **puts foreman at actual-only in two other places, explicitly**:
+>
+> - `:863` — _"**Foreman — actual only**, matching today's gated reflow
+>   (`budget/page.tsx:57-88`)."_
+> - `:1046` — §7.3's per-screen role matrix, row _"S-1 committed (remaining)"_: Foreman
+>   is **—**, while _"S-1 actual / cost to date"_ (`:1047`) is **✓**.
+>
+> The extension to foreman is **`7h1-spec.md` §7H.2 #10's own**, and that document says
+> so in its own words: _"Ruled [S97]: **P9's widening stands, and extends to foreman.**"_
+> — an extension **beyond** P9, not a restatement of it.
+>
+> **This matters for how the S150 ruling should be read.** It does not overturn the money
+> model of record; it **restores agreement with it.** `money-representation.md` and the
+> shipped code have said the same thing about foreman all along, and this section is now
+> the third to agree.
+>
+> ### The floor as ruled
+>
+> | Role | Sees | `budgetColumnsFor()` |
 > | --- | --- | --- |
 > | Owner / Admin | everything | `full`, 7 columns |
-> | Project Manager | actual + committed | `committed`, 5 columns — **agrees** |
-> | **Foreman** | **actual + committed** | **`actual_only`, 3 columns, `seesCommitted: false` — DISAGREES** |
-> | Crew | actual only | `none` — redirected off the screen entirely, i.e. **stricter** than this row |
+> | Project Manager | actual + committed | `committed`, 5 columns |
+> | **Foreman** | **actual only** | **`actual_only`, 3 columns, `seesCommitted: false`** |
+> | Crew | actual only | `none` — redirected off the screen entirely, i.e. stricter still |
 >
-> **Neither side was changed at S140**, deliberately. Widening foreman to committed is
-> a behaviour change to a shipped screen that ui-05 §7.1's per-role column counts
-> (Owner/Admin 7, PM 5, Foreman 3) and `s97ct-budget-floor.live.ts` both assert, and
-> nobody asked for it. Narrowing the ruling to match the code would discard a decision
-> money-rep P9 made on purpose. **This needs a ruling, and it is filed as
-> `#1-m7cpl`** — see `TECH_DEBT.md`.
+> `ui-05` §7.1's per-role column counts (Owner/Admin 7, PM 5, Foreman 3),
+> `s97ct-budget-floor.live.ts`, and `money-representation.md` §7.3 all already assert this
+> shape and need no change.
 >
-> Until then: **the code is what runs.** Do not cite this row as evidence that foreman
-> already sees committed cost.
+> ### ✅ Every document now agrees — `#1-m7cpl` is CLOSED
+>
+> **`7h1-spec.md` §7H.2 #10 was amended at S150**, at all nine sites that stated or relied
+> on the foreman grant, with the superseded text quoted rather than deleted. **Its argument
+> was withdrawn, not just its conclusion** — including §7H.12 A.1's warning at `:199` that
+> an un-corrected `CLAUDE.md` _"would gate committed cost from the two roles that are
+> supposed to see it"_. That warning was **right for the PM and inverted for the foreman**:
+> on foreman the un-corrected `CLAUDE.md` agreed with P9, with `money-representation.md`
+> §7.3, and with the code that had already shipped.
+>
+> **The lesson recorded there, because it is the one that generalises:** §7H.12 A.1 is what
+> *changed* this file at S140, on a citation nobody checked. An obliged amendment to
+> `CLAUDE.md` is only as good as the citation behind it.
+>
+> Document set as of S150 — **`CLAUDE.md`, `money-representation.md`, `7h1-spec.md`,
+> `ui-05` §7.1, `s97ct-budget-floor.live.ts` and `budgetColumnsFor()` all agree.**
+> `#1-m7cpl` closed; see `TECH_DEBT.md`.
 
 - **Gated from PM/foreman/crew:** contract value (`project_financials.contract_value`), original/revised contract, budgeted and sell/price amounts (`project_budget_amounts.budgeted_amount` and any future sell column), labor/burden rates (`instrument_rates`), variance, projected margin, and **change-order dollar amounts** (`change_orders.net_delta` and any `$` sum derived from it). Both money columns moved to 1:1 side tables to get this enforced — see the status table below; the old `projects.contract_value` and `project_budget_items.budgeted_amount` no longer exist.
 - **Visible to all roles:** actual and committed cost (`project_budget_items.actual_amount` and `committed_amount`), and non-dollar facts — CO counts/statuses, project status, dates, punch counts, schedule. **This is deliberate, not an oversight:** the budgeted figure was split off onto `project_budget_amounts` precisely so actual and committed could stay on a row Foreman and Crew can still read. A role floor on `project_budget_items` itself would over-reach — `s97ct-roles.live.ts` **8b-ii** and `s97ct-budget-floor.live.ts` **7-foreman/7-crew_member** exist to fail loudly if anyone adds one.
+
+  > **⚠️ This bullet is about the DATABASE, and it does NOT contradict the foreman ruling above.** `project_budget_items` deliberately has **no role floor**, so `committed_amount` is readable at the DB by every role and must stay that way — the two live tests named above fail loudly if anyone floors it. **A foreman not seeing committed cost is a UI gate, in `budgetColumnsFor()`, not a policy.** Read "visible to all roles" here as "not floored in RLS", never as "rendered for every role". [Clarified S150 alongside the `#1-m7cpl` ruling.]
 - **Named carve-out [S97, 2026-08-01]:** a **PM may see the amounts ON an invoice they can reach** (7D client invoicing) — derived lines, draws, discounts, credits, invoice totals and retainage. This does NOT extend to contract value, budget/sell amounts, or CO dollar figures, which remain Owner/Admin on every surface including 7D's own. Ruling and rationale: [`docs/specs/7d1-spec.md`](docs/specs/7d1-spec.md) §12a.
 - **Why:** this narrows the previous blanket "PM views job finances" grant (PM row above) to actual cost, and extends the same floor to foreman/crew. Foreman/crew are "Limited/Minimal" web roles; they had no business reason to see contract/margin figures, but nothing enforced it.
 - **Current enforcement status [corrected 2026-08-02, S97]:** the UI-refresh specs (ui-01 §11, applied across ui-02–ui-06) gate these figures at the UI layer, and **three of the four figure families are now DB-enforced as well**. The previous text here — "the DB-level floor is NOT yet in place" — is superseded. Verify against the cited migrations rather than trusting this prose:

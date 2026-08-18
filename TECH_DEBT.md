@@ -78,6 +78,205 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
 ## Open Tech Debt
 
+### Branch-scoped, awaiting real numbers — `feature/s150-audit-fixes` [S150]
+
+> Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.
+
+- **#1-audit — the "Retainage held" line asserts "% across payments" without reading
+  `retainage_shape`, and prints the CURRENT rate against a HISTORICAL accrual.**
+
+  Raised by §2 of `docs/specs/S150-m7-completion-audit.md` (7C). Confirmed still present
+  at `54279df`. **7C UI; no ruling covered it, which is why it went unfiled.**
+
+  `apps/web/app/dashboard/projects/[id]/contracts/contracts-panel.tsx:885-886`:
+
+  ```tsx
+  {contract.retainage_percent !== null && (
+    <span style={{ color: '#6b7280' }}>({Number(contract.retainage_percent)}% across payments)</span>
+  )}
+  ```
+
+  The sentence is gated on the PERCENT being non-null and **never consults the shape** —
+  even though the same component reads `retainage_shape` 130 lines below, at `:1016-1017`,
+  to seed the editor. The value is in hand and is not used.
+
+  **Two distinct faults, and they have different reachability. Recorded separately so
+  neither is fixed by accident and the other assumed gone.**
+
+  **(a) Shape-blindness — LATENT, not reachable through the shipped UI today.** The audit's
+  finding, stated as *"for `final_hold` that sentence is false: nothing is withheld across
+  payments"*. That is the right reading of the code, and the reason it does not currently
+  fire is worth writing down, because it is an accident:
+
+  - The block only renders when `retainageRow` exists (`:483`, `:881`) — the `is_retainage`
+    accrual expense. That row is born **only** when `v_withhold > 0`
+    (`20260729010000_7c_accounts_payable.sql:683-696`), which requires
+    `retainage_shape = 'percent_across'` **and** `retainage_percent > 0`. So a pure
+    `final_hold` contract has no accrual row and never reaches `:885`.
+  - Every shipped writer sets shape and percent **together**, and `payables-client.ts`
+    (`:203`, `:285`) suppresses the percent for `final_hold` with
+    `retainage?.shape === 'percent_across' ? retainage.percent : undefined`, so the column
+    lands NULL.
+
+  **What makes it latent rather than dead: that pairing is a client-side ternary, not a
+  constraint.** `setup_payment_schedule` (`20260730010000:1242-1249`) and
+  `revise_sub_contract_schedule` (`20260731060000:121-127`) both validate
+  *`percent_across` ⇒ percent present*. **Neither validates *`final_hold` ⇒ percent absent*,
+  and `subcontractor_contracts` carries no CHECK pairing the two columns.** Any caller that
+  is not `payables-client.ts` — a direct RPC call, a future service, 7I's contract
+  generator reading these columns for Exhibit B — can write `final_hold` with a percent and
+  the false sentence prints. The pass-through trigger
+  (`20260814000000_sub_retainage_passthrough.sql`) is well-behaved here: it sets both, always
+  `percent_across`.
+
+  **(b) Rate-history-blindness — REACHABLE TODAY through the shipped UI, and the sentence is
+  false about the money next to it.** Independent of shape. `revise_sub_contract_schedule`
+  updates `retainage_percent` (`20260731060000:306-310`) and **never touches the accrual row**
+  — stated in that migration's own header, item 5. So:
+
+  1. Sub contract, `percent_across` @ 10%. Pay stage 1 of $10,000 → withhold $1,000; accrual
+     row born at $1,000.
+  2. Revise the schedule, change retainage to 5% (the panel's percent input at `:1295` is
+     editable, and revise submits full state).
+  3. Pay stage 2 of $10,000 → withhold $500; accrual row now $1,500.
+  4. The panel prints **"Retainage held $1,500 (5% across payments)"**. $1,500 is not 5% of
+     $20,000. The accrual is the sum of two rates; the sentence claims one.
+
+  The dollar figure is correct — it is `committedRemaining` over the accrual row, which is the
+  bookkeeping mirror of Σ withheld. **Only the explanation beside it is wrong**, which is the
+  worse failure of the two: a user reconciling the number against the stated rate finds a
+  discrepancy in a figure that is actually right.
+
+  ## ⚖️ RULED [Josh, S150] — RETAINAGE RATE CHANGES ARE PROSPECTIVE ONLY
+
+  **A rate change never reaches back.** Past accruals stand at the rate in force when they
+  were taken; the new rate applies from that point forward.
+
+  **What this settles about the defect, and it is not what the audit assumed.** The dollar
+  figure **was never wrong** — it correctly sums accruals taken across different rates, which
+  under this ruling is exactly right. **The SENTENCE is wrong**, because it names one rate as
+  though that rate explains the whole total. The governing rule for the display follows
+  directly:
+
+  > **The line may name a rate only when that rate accounts for the entire held total.
+  > A multi-rate accrual must not claim a single rate.**
+
+  **⚠️ Do NOT ship the one-line shape fix on its own.** Rendering the parenthetical only for
+  `percent_across` closes (a), leaves (b) alive, and makes the item read as closed. Ruled
+  explicitly against.
+
+  **The runtime already behaves prospectively — nothing MAKES it.** `record_expense_payment`
+  computes the withhold from the contract's rate **at payment time** and freezes it onto the
+  payment row (`20260729010000:683-690`), and `revise_sub_contract_schedule` never touches the
+  accrual row (its header, item 5). Both are properties of two function bodies, not
+  constraints. `convert_estimate_to_project` has been redefined **six** times; a seventh
+  redefinition of either of these would change the rule silently.
+
+  **Enforcement is owed and belongs in the database [RULED Josh, S150].** Grounding for the
+  proposal, all verified at `54279df`:
+
+  - ✅ **Already enforced:** `expense_payments.retainage_withheld` is **immutable for every
+    role, Owner/Admin included** — `enforce_expense_payments_column_scope` (`:270-271`) raises
+    *"A recorded payment is immutable — soft-delete and re-enter to correct it."* A past
+    withhold cannot be restated. This is the strongest existing leg of the ruling.
+  - ❌ **Not enforced — the accrual row's `amount` is freely writable by Owner/Admin.**
+    `enforce_expenses_column_scope` **returns `NEW` immediately for owner/admin**
+    (`20260729010000:143-145`) and does not guard `amount` for anyone. A direct
+    `UPDATE expenses SET amount = …` on the `is_retainage` row restates retainage history with
+    no guard at all.
+  - ❌ **Not recorded:** nothing stores **which rate** produced each withhold. Only the dollar
+    amount is kept, so the rate is inferable but lossily (rounding), and the ruling is true in
+    dollars while being unprovable in rate terms.
+  - ❌ **Not enforced:** the `retainage_shape` / `retainage_percent` pairing — see (a) above.
+
+  **Proposal owed, not built [S150].** Display wording and the enforcement shape were proposed
+  in session and are pending Josh's selection. Nothing was implemented.
+
+  **The pairing CHECK still needs its own decision.** Pairing `final_hold` with
+  `retainage_percent IS NULL` is the tidy backstop for (a), but `subcontractor_contracts`
+  carries live rows and the pass-through trigger writes both columns on every INSERT — a
+  constraint is a migration against shipped money terms, which is #117's and #132's class of
+  decision, not a UI patch. **The S150 prospective-only ruling does not cover this**; it
+  governs rate *changes over time*, not shape/percent coherence at a point in time.
+
+  Observed S150, from the Module 7 completion audit.
+
+- **#2-audit — 7I acceptance criterion 15's parenthetical is stale, and BOTH halves of it
+  are false. PREVIOUSLY FILED AND THEN DELETED, not closed.**
+
+  **⚠️ Read the provenance first, because it is the reason this is being filed twice.** This
+  finding was filed at `35c4927` as an unnumbered bullet in the
+  `feature/7i-stage1-settings` block, and **`53c7353` deleted it** while replacing `#1-7i`
+  and `#2-7i` with their closed forms. It was not closed, not resolved and not superseded —
+  it was dropped. Between `53c7353` and this entry it existed **only in git**, and the S150
+  Module 7 completion audit (finding #1) reported it as *"already recorded in `TECH_DEBT.md`
+  this session"*, which was not true of the file. **Re-filed [Josh, S150] so the loss is
+  visible rather than silently repaired.**
+
+  `53c7353` dropped **three** records in one commit. The other two are `#3-7i` (restored
+  above as a closure) and `#2-7i`'s original text (correctly superseded by its closed form).
+  Only this one was a live finding.
+
+  **The finding.** `docs/specs/7I-spec.md` §12 criterion 15 reads:
+
+  > *"**A PM cannot** generate, send, or void a contract of either kind. **(UI gate; the DB
+  > floor is the separate `FINANCIAL-RLS-FLOOR` follow-up — §8.)**"*
+
+  **Half 1 — "UI gate" is false.** It is a database floor. `20260926000000_7i_contracts.sql`
+  §6 gives all four 7I tables Owner/Admin RLS **including SELECT**, plus
+  `enforce_contract_void_authority` on the three tables carrying contract state. The S150
+  audit confirmed all five 7I tables Owner/Admin against `pg_policies` **[LIVE]**.
+
+  **Half 2 — "the separate `FINANCIAL-RLS-FLOOR` follow-up" is false.** That follow-up
+  **landed at S97**, in `20260806000000_financial_rls_floor.sql`. There is no outstanding
+  work behind this criterion. `GATED.md`'s own "Still owed" entry for that migration was
+  struck through and marked done at S150.
+
+  **Why it matters more than a stale parenthetical usually would.** §8's own S145 banner
+  already corrected this **in the body of the same spec** — so the document contradicts
+  itself, and criterion 15 is the half a builder reads when checking acceptance. A reader
+  taking it at face value concludes a DB floor is still owed and may write a second one.
+
+  **Fix is one edit:** correct the parenthetical in place, quoting the superseded text,
+  per this repo's convention. Not done at S150 — re-filing was the ruling, not amending.
+  Cross-ref: criteria **4** and **16** in the same section were reworded at S150 for
+  unrelated reasons, so §12 has recently-touched neighbours.
+
+- **#3-audit — no `viewport` export anywhere in `apps/web/app/`, so nothing controls
+  `viewport-fit=cover` and the shell has no TOP safe-area inset.**
+
+  **Carried out of Gate 4 at its close [Josh, S150].** It was the single row of Gate 4's
+  nine-row S97 inventory that is still true at `54279df`; the gate was closed and this filed
+  rather than holding a gate open for one item. Verified: `grep -rn "export const viewport"
+  apps/web/app` returns nothing, and neither the root layout nor `app/m/layout.tsx` sets
+  `viewport-fit`.
+
+  **Not currently broken, and Gate 4's own text said so** — *"Next 14's default is injected,
+  so nothing is broken, but there is no control over `viewport-fit=cover` (safe area)."* It
+  blocks no install, no push and no notification work.
+
+  **What it actually costs, and why it is not merely cosmetic.** `app/layout.tsx` already
+  reasons about this in a comment that is worth reading before touching it: `appleWebApp`
+  ships `statusBarStyle: 'black'` and **deliberately not** `'black-translucent'`, because
+  translucent renders content **under** the iOS status bar and needs a top safe-area inset —
+  *"the shell is built now [S105] but pads the safe area at the bottom only (the tab bar) —
+  the app bar does not, so translucent would still ship an overlap."* So the missing viewport
+  export is what pins the status-bar style to the more conservative of the two options.
+
+  **Fix shape, and it is two things that must move together, not one:**
+
+  1. `export const viewport: Viewport = { viewportFit: 'cover', themeColor: … }` in
+     `app/layout.tsx` (Next 14 moved these out of `metadata`).
+  2. **Top safe-area padding on the `/m` app bar** — `env(safe-area-inset-top)` — before any
+     switch to `'black-translucent'`. Shipping (1) alone changes nothing visible; shipping
+     the style change without (2) ships the overlap the comment predicts.
+
+  **Re-check `A-26e` when this moves** — `layout.tsx`'s comment names it as the criterion that
+  must still hold, and flags that this pair of metas is the iOS Web Push precondition (D-10):
+  *"losing them silently blocks Gate 4."* Gate 4 is closed, but the dependency is real.
+
+  Observed S150, verifying Gate 4's `[UNVERIFIED]` PWA-install half.
+
 ### Branch-scoped, awaiting real numbers — `feature/7i-stage1-settings` [S150]
 
 > Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.
@@ -129,16 +328,80 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   advisory on 7F in a way it will not be on 7I once R10 blocks the send.
   Reconciling the two render paths belongs to 7I stage 2.
 
+- **#3-7i — ✅ CLOSED [S150] — superseded. Box placement is no longer typed-only.**
+
+  **Read this before trusting a search of this file: `#3-7i` was DELETED from
+  `TECH_DEBT.md` by `53c7353`, not closed.** Between `35c4927` (which filed it) and
+  HEAD it is recoverable only from git. It is restored here as a closure so the
+  decision has a record where a reader will look for it. Two sibling records went
+  the same way in that commit — see the note at the end of this entry.
+
+  _Original entry, quoted rather than paraphrased (`35c4927`):_
+
+  > **#3-7i — Box placement is TYPED COORDINATES, not visual. Decided by default at
+  > S150, not by ruling.**
+  >
+  > `ContractBoxEditor` is a numeric table: the user types X/Y/W/H as percentages and
+  > reads off where the blanks fall by opening the form in another tab. It matches 7F's
+  > shipped interaction exactly, which is the argument for it — but nobody chose it on
+  > the merits.
+  >
+  > A visual overlay (drag a box onto the rendered page) needs the PDF rasterised in the
+  > browser, and **the repo has no library that can do it**: `pdf-lib` manipulates PDFs
+  > without rendering them and `@react-pdf/renderer` generates them. It would mean adding
+  > `pdfjs-dist` — a real dependency decision on a legal-document surface, out of scope
+  > for a slice scoped to "UI work, no migration", so it was not taken unilaterally.
+  >
+  > Worth a ruling before a company maps a 12-page agreement by typing 4 numbers per
+  > blank. Closing this alongside #1-7i would upgrade both documents at once.
+
+  **Why it is closed.** Its own closing sentence named the condition — *"closing this
+  alongside #1-7i would upgrade both documents at once"* — and that is what happened.
+  The `#1-7i` extraction shipped `components/box-map/box-map-editor.tsx`, which **7F
+  inherited visual placement (R6) from as a side effect**. Box placement is no longer
+  typed-only on either surface, so the question this item held open — whether to accept
+  a numeric table by default — no longer has a subject. **Superseded, not deferred and
+  not decided against.**
+
+  **The dependency decision it was protecting was never taken, and did not need to be.**
+  No `pdfjs-dist` was added. Whatever the shared editor does for placement, it does
+  without rasterising a PDF in the browser — which is the reason the original item
+  existed. Anyone reopening the visual-placement question starts from the shared editor,
+  not from `ContractBoxEditor`, which no longer exists.
+
+  ⚠️ **Closed on the extraction, NOT on a click-test.** `#1-7i` and `#2-7i` both carry
+  the same caveat: neither surface has been exercised by hand since the swap, and Josh
+  accepted that risk explicitly at S150. This closure inherits it.
+
+  **⚠️ `53c7353` dropped three records, not one.** It replaced `#2-7i` and `#1-7i` with
+  their closed forms — correct — but also deleted `#3-7i` (restored above) **and the
+  unnumbered "7I acceptance criterion 15's parenthetical is stale" bullet, which is
+  recorded nowhere at HEAD.** **✅ RE-FILED [Josh, S150] as `#2-audit`** — see this branch's
+  block above, which carries the finding and its provenance in full. The S150 completion
+  audit (finding #1) recorded it as "already recorded in `TECH_DEBT.md` this session";
+  that was not true of the file at the time, and the audit's claim should not be relied
+  on for it. What remains owed is the one-line correction to §12 criterion 15 itself.
+
 - **§13's prerequisite list is stale on this point, recorded so it is not re-followed.**
   7I §13 names "the box-placement component" among the hard prerequisites 7F supplies.
   7F supplies a box-placement *component*, but not a *reusable* one — see #1-7i. A
   builder reading §13 will look for something to import and find nothing importable.
 
-- **`contract_document_attachments` (§7.4) is owed, and is mis-sequenced in §13.**
-  The table was never created — absent from `20260926000000_7i_contracts.sql` and from
-  `packages/shared/types/database.ts`. §13 lists attachments under stage 1, but every
-  column hangs off `contract_documents(id)` and no contract document exists until stage
-  2 generates one. **Deferred to stage 2** [RULED Josh, S150]. Not created at S150.
+- **`contract_document_attachments` (§7.4) — the TABLE shipped; the UI is stage 2's.**
+
+  > **⚠️ CORRECTED [S150, later the same session].** _Superseded text, quoted rather than
+  > rewritten:_ _"The table was never created — absent from `20260926000000_7i_contracts.sql`
+  > and from `packages/shared/types/database.ts`. … Not created at S150."_
+  >
+  > **It was created at S150**, in `20261001000000_7i_party_defaults_attachments.sql:179`,
+  > and it IS in `packages/shared/types/database.ts`. The S150 completion audit read it live
+  > with select/insert/update policies. The bullet was written before that migration landed
+  > and was never revisited.
+
+  The mis-sequencing half stands and is unchanged: §13 listed attachments under stage 1,
+  but every column hangs off `contract_documents(id)` and no contract document exists until
+  stage 2 generates one. **Deferred to stage 2** [RULED Josh, S150]. What remains owed is the
+  **UI**, not the migration. §13 is corrected in place as of this session.
 
 ### Branch-scoped, awaiting real numbers — `feature/s143-void-guard-qb-reconcile` [S143]
 
@@ -534,8 +797,60 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 > convert to the next free numbers from main's file when this branch lands, and any
 > cross-reference updates in the same commit.
 
-- **#1-m7cpl — the Financial Visibility Floor and `budgetColumnsFor()` disagree about
-  FOREMAN, and it is not obvious which is right.**
+- **#1-m7cpl — ✅ CLOSED [Josh, S150]. RULED IN FAVOUR OF THE SHIPPED CODE: foreman stays
+  `actual_only`, and every document now says so.**
+
+  **The ruling.** A foreman does **not** see committed cost. `budgetColumnsFor()` keeps
+  `actual_only`, 3 columns, `seesCommitted: false`. No code changes; `ui-05` §7.1's column
+  counts and `s97ct-budget-floor.live.ts` already assert this and are untouched.
+
+  **⚠️ This is a DELIBERATE RULING CHANGE, not a discovered drift.** It **narrows** what
+  `7h1-spec.md` §7H.2 #10 granted at S97. The code already matching is the outcome, not
+  the argument — most of S150's other corrections went the other way (document stale, code
+  right) and this one must not be read as one of those.
+
+  **`CLAUDE.md` → Financial Visibility Floor is amended [S150]** and is the authority. It
+  carries the ruling, all three superseded generations of the sentence, and the role table.
+
+  **⚠️ THIS ITEM'S OWN FRAMING WAS WRONG, and the correction changes what the ruling
+  means.** _Superseded text, quoted rather than rewritten:_ the table below heads its
+  authority column **"Ruling (money-rep P9, 7h1 #10)"** and the entry says narrowing it
+  *"would discard a decision P9 made on purpose."* **money-rep P9 says nothing about
+  foreman.** It widens the **PM** only (`money-representation.md:113`), and the same
+  document puts foreman at actual-only twice more — `:863` (*"Foreman — actual only"*) and
+  `:1046` (§7.3's matrix: foreman is **—** for committed, **✓** for actual). The extension
+  to foreman is `7h1-spec.md`'s own, in its own words: _"Ruled [S97]: P9's widening stands,
+  and **extends to foreman**."_
+
+  **So the S150 ruling does not overturn the money model of record — it restores agreement
+  with it.** `money-representation.md` and the shipped code never disagreed about foreman.
+  Only `7h1` and (following it) `CLAUDE.md` did.
+
+  **Why it is closed.** Its filed closing condition was that the ruling and every document
+  stating it move together — *"doing one without the others is how this drifted in the first
+  place"*. **`7h1-spec.md` §7H.2 #10 was amended at S150 at all nine sites** that stated or
+  relied on the foreman grant: the floor banner, the role table, the S140 correction note,
+  the two-gates note, the provenance list, §7H.12 A.1 and its argument, and the
+  build-artifact role scope. Superseded text quoted at every one.
+
+  **The argument was withdrawn, not just the conclusion** — as ruled. §7H.12 A.1 warned that
+  an un-corrected `CLAUDE.md` *"would gate committed cost from the two roles that are
+  supposed to see it"*. **Right for the PM, inverted for the foreman:** there, the
+  un-corrected `CLAUDE.md` agreed with P9, with `money-representation.md` §7.3, and with the
+  shipped code. That paragraph is what changed `CLAUDE.md` at S140 and created this item.
+
+  **Full agreement as of S150:** `CLAUDE.md`, `money-representation.md`, `7h1-spec.md`,
+  `ui-05` §7.1, `s97ct-budget-floor.live.ts`, `budgetColumnsFor()`.
+
+  **No code, test or migration changed at any point in this item's life** — it was a
+  documentation divergence from first filing to close, which is exactly why it survived
+  three sessions without anything failing.
+
+  _Original entry retained below. Note its authority column is the mis-attribution corrected
+  above._
+
+- **#1-m7cpl (original entry) — the Financial Visibility Floor and `budgetColumnsFor()`
+  disagree about FOREMAN, and it is not obvious which is right.**
 
   Surfaced at S140 while applying the `CLAUDE.md` correction that `7h1-spec.md` §7H.2
   #10 has owed since S97.
