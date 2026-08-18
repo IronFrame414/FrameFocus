@@ -21,6 +21,30 @@ export type {
   TimeTrackingSettings,
 };
 
+/**
+ * R17 [S150] — a write RLS discarded, reported as the failure it is.
+ *
+ * ⚠️ ZERO AFFECTED ROWS IS NOT AN ERROR IN POSTGRES. When a policy matches
+ * nothing, the UPDATE is valid and changes nothing; PostgREST returns no error,
+ * so a caller that only checks `error` returns success over a row it never
+ * touched. `companies_update_owner_admin` is the policy in question — a caller
+ * whose role or company no longer matches gets "Settings saved successfully."
+ * over an unchanged row.
+ *
+ * `.select('id')` is what makes the affected rows observable at all.
+ *
+ * The message names no cause it has not verified (CLAUDE.md): an empty result
+ * cannot distinguish "policy refused you" from "the row is gone", so it says
+ * both. Same helper and same wording as `contracts-client.ts`, where this
+ * defect (`#1-s146`) was first fixed.
+ */
+const DISCARDED =
+  'That change was not applied. You may not have permission to make it, or the record no longer exists.';
+
+function applied(rows: unknown[] | null): boolean {
+  return Array.isArray(rows) && rows.length > 0;
+}
+
 // ── Company Settings pass [S86] — time-tracking settings ──
 // timezone is excluded: it predates this pass and has no UI control yet;
 // this form updates only the five S86 columns.
@@ -78,13 +102,21 @@ export async function updateCompany(
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = createClient();
 
-  const { error } = await supabase
+  // R17 [S150] — `.select('id')` so a discarded write is visible. `updated_at`
+  // is still set explicitly here: `companies` has no `set_updated_by` trigger
+  // and no `updated_at` trigger, which CLAUDE.md records as a known holdover.
+  // Fixing THAT is a migration and is not this change.
+  const { data, error } = await supabase
     .from('companies')
     .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq('id', companyId);
+    .eq('id', companyId)
+    .select('id');
 
   if (error) {
     return { success: false, error: error.message };
+  }
+  if (!applied(data)) {
+    return { success: false, error: DISCARDED };
   }
   return { success: true };
 }
