@@ -147,19 +147,57 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   worse failure of the two: a user reconciling the number against the stated rate finds a
   discrepancy in a figure that is actually right.
 
-  **Fix shape, cheapest first.** (a) alone is one conditional — render the parenthetical only
-  for `retainage_shape === 'percent_across'`, and say "held from the final stage" for
-  `final_hold`. That does **not** fix (b). (b) needs the sentence to stop claiming a rate it
-  cannot substantiate: either drop the rate from the line and show Σ withheld alone, or derive
-  the phrasing from the payment rows (`expense_payments.retainage_withheld`) rather than from
-  the contract's current column. **Decide (b) before writing (a)**, or the shape fix ships and
-  the item reads as closed.
+  ## ⚖️ RULED [Josh, S150] — RETAINAGE RATE CHANGES ARE PROSPECTIVE ONLY
 
-  **Not a candidate for a DB CHECK without a ruling.** Pairing `final_hold` with
-  `retainage_percent IS NULL` would be the tidy backstop for (a), but `subcontractor_contracts`
-  carries live rows and the pass-through trigger writes both columns on every INSERT —
-  a constraint is a migration against shipped money terms, which is #117's and #132's class of
-  decision, not a UI patch. Recorded as the option, not as the recommendation.
+  **A rate change never reaches back.** Past accruals stand at the rate in force when they
+  were taken; the new rate applies from that point forward.
+
+  **What this settles about the defect, and it is not what the audit assumed.** The dollar
+  figure **was never wrong** — it correctly sums accruals taken across different rates, which
+  under this ruling is exactly right. **The SENTENCE is wrong**, because it names one rate as
+  though that rate explains the whole total. The governing rule for the display follows
+  directly:
+
+  > **The line may name a rate only when that rate accounts for the entire held total.
+  > A multi-rate accrual must not claim a single rate.**
+
+  **⚠️ Do NOT ship the one-line shape fix on its own.** Rendering the parenthetical only for
+  `percent_across` closes (a), leaves (b) alive, and makes the item read as closed. Ruled
+  explicitly against.
+
+  **The runtime already behaves prospectively — nothing MAKES it.** `record_expense_payment`
+  computes the withhold from the contract's rate **at payment time** and freezes it onto the
+  payment row (`20260729010000:683-690`), and `revise_sub_contract_schedule` never touches the
+  accrual row (its header, item 5). Both are properties of two function bodies, not
+  constraints. `convert_estimate_to_project` has been redefined **six** times; a seventh
+  redefinition of either of these would change the rule silently.
+
+  **Enforcement is owed and belongs in the database [RULED Josh, S150].** Grounding for the
+  proposal, all verified at `54279df`:
+
+  - ✅ **Already enforced:** `expense_payments.retainage_withheld` is **immutable for every
+    role, Owner/Admin included** — `enforce_expense_payments_column_scope` (`:270-271`) raises
+    *"A recorded payment is immutable — soft-delete and re-enter to correct it."* A past
+    withhold cannot be restated. This is the strongest existing leg of the ruling.
+  - ❌ **Not enforced — the accrual row's `amount` is freely writable by Owner/Admin.**
+    `enforce_expenses_column_scope` **returns `NEW` immediately for owner/admin**
+    (`20260729010000:143-145`) and does not guard `amount` for anyone. A direct
+    `UPDATE expenses SET amount = …` on the `is_retainage` row restates retainage history with
+    no guard at all.
+  - ❌ **Not recorded:** nothing stores **which rate** produced each withhold. Only the dollar
+    amount is kept, so the rate is inferable but lossily (rounding), and the ruling is true in
+    dollars while being unprovable in rate terms.
+  - ❌ **Not enforced:** the `retainage_shape` / `retainage_percent` pairing — see (a) above.
+
+  **Proposal owed, not built [S150].** Display wording and the enforcement shape were proposed
+  in session and are pending Josh's selection. Nothing was implemented.
+
+  **The pairing CHECK still needs its own decision.** Pairing `final_hold` with
+  `retainage_percent IS NULL` is the tidy backstop for (a), but `subcontractor_contracts`
+  carries live rows and the pass-through trigger writes both columns on every INSERT — a
+  constraint is a migration against shipped money terms, which is #117's and #132's class of
+  decision, not a UI patch. **The S150 prospective-only ruling does not cover this**; it
+  governs rate *changes over time*, not shape/percent coherence at a point in time.
 
   Observed S150, from the Module 7 completion audit.
 
