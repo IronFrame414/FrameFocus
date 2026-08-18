@@ -39,16 +39,13 @@ migrations, wherever a function body is at issue.
 
 ## §1 — Migration state **[LIVE]**
 
-`supabase_migrations.schema_migrations` holds **108** rows. `supabase/migrations/`
-holds **109** files.
+At the time of the audit: `schema_migrations` held **108** rows against **109**
+migration files — the one difference being `20261002000000_7i_e1_contract_status_decoupling.sql`,
+written this session and then still unpushed.
 
-| | |
-|---|---|
-| Local but **not applied** to rebuild-test | `20261002000000_7i_e1_contract_status_decoupling.sql` — written this session, deliberately unpushed |
-| Applied but not local | **none** |
-
-So rebuild-test is exactly the repo minus this session's E1 migration. There is
-no orphan migration and no drift in either direction.
+**UPDATED [S150, later the same session]:** `20261002000000` has since been pushed
+to rebuild-test and `database.ts` regenerated clean. **Local and applied now match
+exactly.** There is no orphan migration and no drift in either direction.
 
 **Production status: [UNVERIFIED].** See §0.
 
@@ -143,8 +140,11 @@ is **built-but-undocumented**.
 | `contract_signing_sessions` | **select only** |
 
 **Unbuilt:** E2 (send route, render v1, N-recipient sessions, completion RPC, v2,
-notary path), F (sub notary), G (client payment schedule). E1 is written this
-session and **unpushed**. §6.5's sub e-signature is held behind Gate 1 by ruling.
+notary path), F (sub notary), G (client payment schedule) — **held for an attended
+session with click-testing [RULED S150]**, not deferred by accident. E1 is built,
+pushed and green (`s150-e1-contract-decoupling`, 3/3). §6.5's sub e-signature is
+held behind Gate 1 by ruling. The §3.2 send-route defect (a live signing token for
+an email never sent) was fixed separately this session.
 
 ---
 
@@ -160,14 +160,21 @@ Five were known going in. I found **eight**.
 | 4 | `convert_estimate_to_project` is owned by `20260731030000` | `7I-spec.md` §5.1a | **Two revisions stale.** Live body is byte-identical to `20260817000000` — verified by diffing `pg_proc.prosrc` against the migration this session. |
 | 5 | Attachments are stage 1 | `7I-spec.md` §13 | **Mis-sequenced.** Every column hangs off `contract_documents`, which stage 2 creates. Table shipped at S150 in the slice-B migration; the UI is still unbuilt. |
 | 6 | `change_orders_select_visible` has "no role floor, no author scoping" | superseded text quoted in `CLAUDE.md` | **False, and CLAUDE.md already corrects it.** Live: `... AND (role IN (owner,admin) OR (role = project_manager AND created_by = auth.uid()))`. Confirmed verbatim **[LIVE]**. |
-| 7 | GATED.md role-check FAILs #1/#3 — "instrument_rates has no role floor, PM/Foreman/Crew read rates from the API" | `GATED.md:249` | **STALE — now fixed.** Live policies are `instrument_rates_select_owner_admin` + `instrument_rates_insert_authorized`. The read floor exists. **GATED.md still presents this as an open FAIL.** |
-| 8 | GATED.md FAIL — "a PM rewrote `projects.contract_value` to 999999" | `GATED.md:251` | **STALE — the column no longer exists.** Contract value lives on `project_financials`, Owner/Admin. The specific exploit is not reproducible. |
+| 7 | GATED.md role-check FAILs #1/#3 — "instrument_rates has no role floor, PM/Foreman/Crew read rates from the API" | `GATED.md:249` | **STALE — now fixed.** `instrument_rates_select_company` no longer exists (0 rows in `pg_policies`); live policies are `instrument_rates_select_owner_admin` + `instrument_rates_insert_authorized`. **✅ GATED.md CORRECTED [S150] — the row now reads resolved, with the superseded text quoted.** |
+| 8 | GATED.md FAIL — "a PM rewrote `projects.contract_value` to 999999" | `GATED.md:251` | **STALE — the column no longer exists** (0 rows in `information_schema.columns`). Contract value lives on `project_financials`, Owner/Admin on all three verbs, no DELETE policy. The exploit is not reproducible. **✅ GATED.md CORRECTED [S150].** |
 
-**Findings 7 and 8 matter beyond bookkeeping.** `GATED.md` is described in the
-brief as "the live gate register", and it is carrying two security FAILs that the
-database has since closed. A reader deciding what to work on would rank fixing
-them highly and find nothing to fix. Recommend re-running that role-check table
-and marking the rows resolved with the migration that closed each.
+**Findings 7 and 8 mattered beyond bookkeeping.** `GATED.md` is described in the
+brief as "the live gate register", and it was carrying two security FAILs the
+database had since closed — a reader deciding what to work on would rank them
+highly and find nothing to fix.
+
+**✅ CORRECTED [S150, ruled].** The Gate 1 role-check table now shows all five
+failures resolved, each against what was read from `pg_policies` /
+`information_schema`, with the original findings quoted rather than deleted. The
+"Still owed" entry for the `FINANCIAL-RLS-FLOOR` migration is struck through and
+marked done. **One caveat carried into that correction:** `change_orders.net_delta`
+is the fourth figure family and is still not fully DB-enforced — deliberately, per
+`#117` — so the correction says so rather than implying the whole floor is closed.
 
 ---
 
@@ -219,8 +226,8 @@ they do not exist.
 
 1. **Answer the production-migration question** — it is the one thing this audit
    was asked for and could not produce. Everything else here is verified.
-2. **Re-run GATED.md's role-check table.** Two FAILs are stale; leaving them
-   reads as unfixed security holes.
+2. ~~**Re-run GATED.md's role-check table.**~~ **✅ DONE [S150]** — all five
+   failures marked resolved against live reads.
 3. **Rule on `#1-m7cpl`** before 7H reporting surfaces make the foreman
    divergence visible in more places.
 4. **Reword acceptance criterion 16** to survive E1.

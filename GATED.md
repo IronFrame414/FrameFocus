@@ -242,24 +242,51 @@ left unfixed pending a ruling; nothing was adjusted to make them pass.
 | 6 | Invoices tab | **PASS** — the real `ProjectHeader` was RENDERED for all five roles: Foreman and Crew get no Invoices tab, the other three do. Both also read **zero** invoices and cannot create one. |
 | 7 (part) | §12a — a PM sees invoice amounts | **PASS** — a PM reads `billed_total` / `amount_receivable` / `retainage_withheld` on an invoice they can reach. |
 
-**Failures — open defects:**
+**Failures — ✅ ALL FIVE RESOLVED. Re-verified against the live database [S150].**
 
-| # | Surface | Defect |
+> ⚠️ **These read as open security defects and are not. They were still presented as open at
+> `30b2a24`**, which is worse than useless in a register people use to decide what to work on:
+> a reader would rank them highly and find nothing to fix. Corrected here; the original text is
+> quoted rather than deleted so the record of what was found still stands.
+>
+> _Superseded text, quoted:_
+>
+> | # | Surface | Defect |
+> | --- | --- | --- |
+> | 1, 3 | Rate section + Overview rate summary | _"**FAIL — the gate is UI-only.** `instrument_rates_select_company` is `company_id = get_my_company_id()` with **no role floor**, so PM, Foreman and Crew each read rate rows straight from the API."_ |
+> | 7 | §12a "Original contract" tile | _"**FAIL — read.** A PM read `contract_value = 12365`; Foreman and Crew read `50000`."_ |
+> | 7 | §12a contract value | _"**FAIL — WRITE.** A **PM rewrote `contract_value` to 999999** on an assigned project. `projects_update_authorized` admits a PM with no column restriction."_ |
+
+**What the database says now.** Read from `pg_policies` / `information_schema` on
+`framefocus-rebuild-test` at S150 via `scripts/live-sql.mjs` — not from a migration file:
+
+| # | Then | Now **[LIVE, S150]** |
 | --- | --- | --- |
-| 1, 3 | Rate section + Overview rate summary | **FAIL — the gate is UI-only.** `instrument_rates_select_company` is `company_id = get_my_company_id()` with **no role floor**, so PM, Foreman and Crew each read rate rows straight from the API. The UI hides the section; the data is not protected. *(Writes ARE gated — `instrument_rates_insert_authorized` is Owner/Admin, and no gated role could insert.)* |
-| 7 | §12a "Original contract" tile | **FAIL — read.** A PM read `contract_value = 12365`; Foreman and Crew read `50000`. The tile's absence is cosmetic. |
-| 7 | §12a contract value | **FAIL — WRITE.** A **PM rewrote `contract_value` to 999999** on an assigned project. `projects_update_authorized` admits a PM with no column restriction. The most serious of the five: the Financial Visibility Floor treats contract value as Owner/Admin, and a PM can not only read it but change it. *(The harness restored the value; it writes only to its own QA fixture, never to real project data.)* |
+| 1, 3 | `instrument_rates_select_company`, no role floor | **That policy no longer exists** (0 rows in `pg_policies`). It was replaced by `instrument_rates_select_owner_admin`: `company_id = get_my_company_id() AND get_my_role() = ANY (ARRAY['owner','admin'])`. Writes remain gated by `instrument_rates_insert_authorized`, same predicate. **The read floor is real; the gate is no longer UI-only.** Applied by `20260806000000_financial_rls_floor.sql` §1. |
+| 7 (read) | a PM read `projects.contract_value` | **`projects.contract_value` no longer exists** (0 rows in `information_schema.columns`). Dropped by `20260812000000`. Contract value lives on `project_financials`, which carries `project_financials_{select,insert,update}_owner_admin` and **no DELETE policy at all**. |
+| 7 (write) | a PM rewrote `contract_value` | **Not reproducible** — the column the exploit targeted is gone, and its replacement is behind an Owner/Admin policy on all three verbs. |
 
-All five are the **`FINANCIAL-RLS-FLOOR`** follow-up CLAUDE.md already names as owed
-(ui-01 §10 — "the DB-level floor is NOT yet in place"). What is new is that they are
-**demonstrated rather than predicted**, and that the floor is not only a read gap: item 7's
-write is beyond what "UI-only read floor" describes.
+**The `FINANCIAL-RLS-FLOOR` follow-up these five were filed against has landed.** CLAUDE.md's
+Financial Visibility Floor status table records three of the four figure families as DB-enforced
+and explicitly supersedes the *"the DB-level floor is NOT yet in place"* wording this section was
+written under.
+
+⚠️ **One of the four is still NOT DB-enforced, and it is not one of these five:**
+`change_orders.net_delta`. `change_orders_select_visible` does carry the S121 read floor —
+verified live at S150 as `company_id = get_my_company_id() AND can_view_project(project_id) AND
+(get_my_role() = ANY (ARRAY['owner','admin']) OR (get_my_role() = 'project_manager' AND created_by
+= auth.uid()))` — so a PM sees only COs they authored, and foreman/crew/subcontractor see none.
+What remains UI-only is narrow and deliberate: a PM sees `net_delta` on their **own** COs, because
+they must be able to author them. **Do not "finish" the floor by flooring `change_orders`** —
+read [TECH_DEBT.md #117](TECH_DEBT.md) first; the obvious fix breaks CO authoring for PMs.
 
 ### Still owed
 
-- **`FINANCIAL-RLS-FLOOR` migration** — a role floor on `instrument_rates` SELECT, and a
+- ~~**`FINANCIAL-RLS-FLOOR` migration** — a role floor on `instrument_rates` SELECT, and a
   column- or policy-level restriction so a PM can neither read nor write
-  `projects.contract_value`. Now backed by five live failures rather than a code reading.
+  `projects.contract_value`.~~ **✅ DONE — verified live [S150].** `instrument_rates` has an
+  Owner/Admin SELECT floor; `projects.contract_value` was dropped and replaced by
+  `project_financials`, Owner/Admin on all three verbs. See the resolved table above.
 - Click-testing the merged Budget & Cost **screen** as PM, foreman, crew (context93 §12.5).
   Its rate section's data layer is covered above; the per-role column counts (§7.1:
   Owner/Admin 7, PM 5, Foreman 3) are still unexercised.
