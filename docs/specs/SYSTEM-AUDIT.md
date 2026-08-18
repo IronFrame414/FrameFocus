@@ -168,6 +168,45 @@ visibility boundary:
 
 ---
 
+### §1.3 — Module 3 (Document & File Management) — filled S155
+
+**M3 owns:** `files`, the `project-files` bucket, and — uniquely — **a SECOND ENFORCEMENT SURFACE.**
+
+**⚠️ Every other module is guarded by one thing: RLS on its tables. M3 is guarded by two —
+`files` RLS and `storage.objects` RLS — written in different migrations, in different shapes
+(a category-and-project floor over a row, versus a regex over a folder path), with nothing keeping
+them in agreement. They do not agree (M3-01).**
+
+**23 foreign keys point at `files` [LIVE]** — the widest fan-in in the system.
+
+| Consumer | Points at | Assumes | Verified S155 |
+| --- | --- | --- | --- |
+| **M7D invoicing** | `files` rows, category `invoices` | the Financial Visibility Floor withholds them below owner/admin (PM excepted) | ✅ on the TABLE · ⚠️ **NOT on the bucket — M3-01** |
+| **M5 change orders**, **M7I contracts**, **M7F lien releases** | `files` rows in floored categories | same | ✅ both surfaces — their paths are not project-scoped, so storage fails closed |
+| **M6 daily logs, deliveries, safety, punch, photos** | `files` via five optional parent FKs | project-scoped visibility | ✅ consistent — these categories are not floored on either surface |
+| **M4 estimating** | `estimate_files` (CASCADE), `signed_proposal_file_id`, `signed_contract_file_id` | a signed PDF persists | ✅ `SET NULL`/`NO ACTION` — a deleted file never takes a contract with it |
+| **M9 client portal** *(unbuilt)* | `files.client_visible` | the flag gates client file access | ⚠️ **nothing reads it for access control — M3-06.** Inert today because both policies refuse `client` outright |
+| **M3H AI tagging** | `ai_tag_logs.file_id` (`SET NULL`) | cost rows survive a file delete | ✅ per the append-only-log convention |
+
+### §1.4 — Module 4 (Sales & Estimating) — filled S156
+
+**M4 owns:** `estimates` and its six child tables, `signing_sessions`, and **the only
+unauthenticated write path in the platform** — `/sign/[token]`.
+
+| Edge | Direction | Verified S156 |
+| --- | --- | --- |
+| **M4 → M5/M7 via `convert_estimate_to_project`** | the widest blast radius in the system; **redefined six times** | ✅ **live body byte-identical to E1's migration** (md5 `13b0a5a4…`) — no drift, the S143 class is clean here |
+| **M4 → M2** (closing the edge from M4's side) | `estimates.contact_id` NOT NULL, `contact_address_id` nullable | consumers resolve contacts **by id** without an `is_deleted` filter — correct per the trash-bin convention (S153 V6). The send routes guard a null email (`send:79`); `proposal-data.ts:272` does not — **M2-04's consequence, filed there** |
+| **M4 → M3** | `signed_proposal_file_id`, `signed_contract_file_id`, `estimate_files` | ✅ FK rules safe (§1.3) |
+| **M4 → M7I** | nine 7I columns on `estimates` | ✅ off by default, **zero `app/` readers** of `clientContractAppliesToEstimate()` — criterion 1 holds |
+| **`signing_sessions`** | one SELECT policy, owner/admin; all writes service-role | ✅ the token is the capability, and that is the correct pattern — **do not add write policies** |
+
+**⚠️ M4 is the counter-example to the row-count-guard pattern.** M1 shipped 1 of 8 writers guarded,
+M2 0 of 3, M3 0 of 4 — **M4 is 6 of 6.** Recorded here because four passes of the same finding would
+otherwise read as a platform-wide indictment. It is three modules and one counter-example.
+
+---
+
 ## §2 — Coverage ledger
 
 > **This is what makes "everything checks against everything" verifiable instead of aspirational.**
@@ -180,10 +219,10 @@ visibility boundary:
 
 | subject ↓ / vs → | M1 | M2 | M3 | M4 | M5 | M6 | M7 | M8 | M9 | M10 | M11 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| **M1 Settings/Admin/Billing** | — | **✓** | — | S | S | S | S | n/a | S | — | — |
-| **M2 Contacts & CRM** | **✓** | — | — | **S** | **S** | — | **S** | n/a | **S** | — | — |
-| **M3 Documents & Files** | — | — | — | — | — | — | — | — | — | — | — |
-| **M4 Sales & Estimating** | — | — | — | — | — | — | — | — | — | — | — |
+| **M1 Settings/Admin/Billing** | — | **✓** | **✓** | **✓** | S | S | S | n/a | S | — | — |
+| **M2 Contacts & CRM** | **✓** | — | **C** | **✓** | **S** | — | **S** | n/a | **S** | — | — |
+| **M3 Documents & Files** | **✓** | **C** | — | **✓** | **S** | **S** | **S** | n/a | **S** | — | — |
+| **M4 Sales & Estimating** | **✓** | **✓** | **✓** | — | **S** | — | **S** | n/a | — | — | — |
 | **M5 Project Management** | — | — | — | — | — | — | — | — | — | — | — |
 | **M6 Team & Field Ops** | — | — | — | — | — | — | — | — | — | — | — |
 | **M7 Job Finances** | — | — | — | — | — | — | — | — | — | — | — |
@@ -191,6 +230,20 @@ visibility boundary:
 | **M9 Client Portal** | — | — | — | — | — | — | — | — | — | — | — |
 | **M10 Reporting** | — | — | — | — | — | — | — | — | — | — | — |
 | **M11 AI Marketing** | — | — | — | — | — | — | — | — | — | — | — |
+
+**Passes 3 and 4 (M3, M4 — S155/S156) notes:**
+
+- **M1↔M3, M1↔M4 are `✓`** — both passes read M1's role helpers and `can_view_project()` from the
+  consumer side, and M3-01's storage policy is built on M1's `profiles` lookup inline (the same
+  hoisted-by-accident shape §3 records for M2).
+- **M2↔M4 is `✓`** — M2's pass examined the edge from M2's side; M4's closed it from M4's, confirming
+  the by-id contact resolution is correct and locating M2-04's one unguarded consumer.
+- **M2↔M3 and M3↔M2 are `C`, not `✓`** — M3's pass established that `files` has no contact edge and
+  M2's established none to `files`. **Neither looked hard**; recorded honestly rather than upgraded.
+- **M3↔M4 is `✓`** — from both sides: M4's signed PDFs are `files` rows, and M3's FK map confirms the
+  delete rules protect them.
+- **M6 is `S` from M3** and unexamined from M4. M3's markup/photo surfaces are M6's UI, and
+  **`#129`'s two markup editors were NOT re-probed this pass** — that belongs to M6's pass.
 
 **Pass 2 (M2, S153) notes on its own row:**
 
@@ -228,6 +281,35 @@ visibility boundary:
 > pass's finding.** State both readings, which evidence each rests on, and which is believed
 > correct. The repo's convention is that superseded text is quoted rather than deleted, and that
 > applies across passes as much as within a document.
+
+**[S156] — PASS 4 CONTRADICTING A PATTERN THREE PASSES HAD ESTABLISHED.**
+
+Passes 1–3 each found the same defect and the tally read as a platform property: **M1 1 of 8 writers
+row-counted · M2 0 of 3 · M3 0 of 4.** S155's own document put it as *"the shared helper existing has
+not been enough"* and asked whether to stop the class.
+
+**M4 is 6 of 6.** Every UPDATE-shaped writer in `estimates-client.ts` ends `.select('id')` and reads
+`data.length`. The S156 probe was written to assert the defect and went red twice before the cause
+became clear.
+
+**What this changes:** the class is **not** platform-wide, and a lint rule proposed on the strength of
+three modules would have been proposed on an incomplete count. M4 also shows the fix predates the
+shared helper — those writers hand-roll the check because `mutation-result.ts` did not exist when
+they were written. **Later passes should count before concluding.**
+
+---
+
+**[S155] — A SECOND ENFORCEMENT SURFACE, which no earlier pass had to consider.**
+
+Passes 1 and 2 could treat "the database decides" as meaning one RLS policy per table. **M3 breaks
+that assumption**: `files` and `storage.objects` are both authoritative, for the same asset, and they
+disagree about categories (M3-01).
+
+**Consequence for every later pass:** *authority belongs in the database* is not satisfied by finding
+one correct policy. **Where bytes are involved, there are two policies and they must be read
+together.** M6 (photos, markup) and M7F/M7I (generated PDFs) all sit on this surface.
+
+---
 
 **[S154] — A FIX PASS CONFIRMING PASS 1's CORRECTED READING, from the other direction.**
 
@@ -293,6 +375,8 @@ as well as migrations**.
 
 | 2 | Module 2 — Contacts & CRM | S153, 2026-08-18 | `docs/specs/S153-m2-audit.md` | `apps/web/test/s153-m2-audit.live.ts` (13/13) |
 | 2-fix | Module 2 — fix pass for pass 2's §4 | S154 | `S153-m2-audit.md` §0a (outcomes) | `s154-m2-fixes.live.ts` (18/18) |
+| 3 | Module 3 — Document & File Management | S155, 2026-08-18 | `docs/specs/S155-m3-audit.md` | `apps/web/test/s155-m3-audit.live.ts` (12/12) |
+| 4 | Module 4 — Sales & Estimating | S156, 2026-08-18 | `docs/specs/S156-m4-audit.md` | `apps/web/test/s156-m4-audit.live.ts` (15/15) |
 
 **A fix pass is not a pass.** It closes an existing pass's findings and does not fill a row or a
 column in §2.
