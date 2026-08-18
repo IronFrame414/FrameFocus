@@ -1179,8 +1179,44 @@ Fallback is the column default `America/New_York`, **never UTC** (`TECH_DEBT.md:
    3b. **One client signature covers both documents.** One signer, one `signature_data`, one IP, one user
    agent. No second session, no partially-signed state.
    3c. **Initials capture typed or drawn**, mirroring `signature_type`, and render into `initial` boxes.
-4. At conversion, `client_contracts.status='signed'` is accurate because both instruments were signed
-   pre-conversion, and the executed contract file is carried forward. **7I writes neither column.**
+4. At conversion, `client_contracts.status` is accurate **for whatever was actually signed** — and
+   the executed contract file is carried forward. **7I writes neither column.**
+
+   > **⚠️ REWORDED [S150] for E1's R16 decoupling. Same treatment as criterion 16.**
+   >
+   > _Superseded text, quoted rather than deleted:_ _"At conversion,
+   > `client_contracts.status='signed'` is accurate **because both instruments were signed
+   > pre-conversion**, and the executed contract file is carried forward. **7I writes neither
+   > column.**"_
+   >
+   > **The premise is what E1 removed, not the criterion.** The old wording assumed conversion
+   > could only ever happen with both instruments signed, so `'signed'` was the only reachable
+   > value and its accuracy followed automatically. **R16 [Josh, S150] rejects that gate**: a
+   > signed proposal converts even when a required contract is unsigned, because the user needs
+   > to start building the job. The old sentence would now be false at conversion time — it
+   > asserts a fact about both instruments that R16 explicitly permits not to hold.
+   >
+   > **What the criterion asserts now**, per `20261002000000_7i_e1_contract_status_decoupling.sql`
+   > (`:150-164`) and Q3.1:
+   >
+   > | At conversion | `status` | `executed_date` |
+   > | --- | --- | --- |
+   > | Contract required and **not** signed | `'draft'` | `NULL` |
+   > | Otherwise, proposal signed | `'signed'` | `accepted_at::date` |
+   > | Otherwise | `'draft'` | `accepted_at::date` |
+   >
+   > `signed_proposal_file_id` carries across in every case — the proposal **was** signed and that
+   > artifact is real. **`v_is_signed` is untouched**: it tests proposal signals, which is correct
+   > for the proposal; the defect was ever stamping the CONTRACT's status from it.
+   >
+   > **The unchanged half.** _"7I writes neither column"_ still holds and is still the point —
+   > `contracts-client.ts` writes neither `status` nor `executed_date`, and §5.1's "conversion owns
+   > them" is unchanged. E1 is the **conversion RPC's** write, not 7I's. See criterion 16.
+   >
+   > **Consequence carried into the build, not left implicit:** because a converted project can now
+   > hold an unsigned required contract, the project must **say so**. That is R16/Q3.2's persistent
+   > warning, delivered as a SECURITY DEFINER boolean rather than by widening RLS on
+   > `contract_documents`.
 5. A sub contract row and a **badge** — not a `tasks` row — appear at conversion. The badge derives
    from `requires_formal_contract = true AND status <> 'signed'`, reusing
    `getFormalContractWarning` / `budget.ts:145`.
