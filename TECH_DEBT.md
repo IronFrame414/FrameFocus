@@ -687,8 +687,57 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 > convert to the next free numbers from main's file when this branch lands, and any
 > cross-reference updates in the same commit.
 
-- **#1-m7cpl — the Financial Visibility Floor and `budgetColumnsFor()` disagree about
-  FOREMAN, and it is not obvious which is right.**
+- **#1-m7cpl — ⚖️ RULED [Josh, S150] IN FAVOUR OF THE SHIPPED CODE. Foreman stays
+  `actual_only`. STILL OPEN — one document has not been amended.**
+
+  **The ruling.** A foreman does **not** see committed cost. `budgetColumnsFor()` keeps
+  `actual_only`, 3 columns, `seesCommitted: false`. No code changes; `ui-05` §7.1's column
+  counts and `s97ct-budget-floor.live.ts` already assert this and are untouched.
+
+  **⚠️ This is a DELIBERATE RULING CHANGE, not a discovered drift.** It **narrows** what
+  `7h1-spec.md` §7H.2 #10 granted at S97. The code already matching is the outcome, not
+  the argument — most of S150's other corrections went the other way (document stale, code
+  right) and this one must not be read as one of those.
+
+  **`CLAUDE.md` → Financial Visibility Floor is amended [S150]** and is the authority. It
+  carries the ruling, all three superseded generations of the sentence, and the role table.
+
+  **⚠️ THIS ITEM'S OWN FRAMING WAS WRONG, and the correction changes what the ruling
+  means.** _Superseded text, quoted rather than rewritten:_ the table below heads its
+  authority column **"Ruling (money-rep P9, 7h1 #10)"** and the entry says narrowing it
+  *"would discard a decision P9 made on purpose."* **money-rep P9 says nothing about
+  foreman.** It widens the **PM** only (`money-representation.md:113`), and the same
+  document puts foreman at actual-only twice more — `:863` (*"Foreman — actual only"*) and
+  `:1046` (§7.3's matrix: foreman is **—** for committed, **✓** for actual). The extension
+  to foreman is `7h1-spec.md`'s own, in its own words: _"Ruled [S97]: P9's widening stands,
+  and **extends to foreman**."_
+
+  **So the S150 ruling does not overturn the money model of record — it restores agreement
+  with it.** `money-representation.md` and the shipped code never disagreed about foreman.
+  Only `7h1` and (following it) `CLAUDE.md` did.
+
+  **Why this item is NOT closed.** Its filed closing condition is that the ruling and every
+  document stating it move together — *"doing one without the others is how this drifted in
+  the first place"*. One document still asserts the superseded position and was **not**
+  amended at S150:
+
+  | Document | Where | Says |
+  | --- | --- | --- |
+  | `docs/specs/7h1-spec.md` | §7H.2 **#10** — `:164`, `:184-185`, `:193-199`, `:501`, `:526-528` | PM **and foreman** see actual and committed |
+
+  It does not merely state the position, it **argues** for it — `:199` warns that an
+  un-corrected `CLAUDE.md` *"would gate committed cost from the two roles that are supposed
+  to see it"*. Amending means retiring that argument with the superseded text quoted, not
+  deleting it.
+
+  **Close this item when `7h1-spec.md` is amended.** Not before — a reader starting there
+  reconstructs the overturned position and finds `CLAUDE.md` apparently wrong.
+
+  _Original entry retained below. Note its authority column is the mis-attribution corrected
+  above._
+
+- **#1-m7cpl (original entry) — the Financial Visibility Floor and `budgetColumnsFor()`
+  disagree about FOREMAN, and it is not obvious which is right.**
 
   Surfaced at S140 while applying the `CLAUDE.md` correction that `7h1-spec.md` §7H.2
   #10 has owed since S97.
