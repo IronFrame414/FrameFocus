@@ -6,6 +6,7 @@ import { getChangeOrders } from '@/lib/services/change-orders';
 import { getRevisedContract } from '@/lib/services/contract-value';
 import { getPhases, getTasks, rollupPhases } from '@/lib/services/tasks';
 import { getProjectAssignments } from '@/lib/services/project-assignments';
+import { projectHasUnsignedContract } from '@/lib/services/contracts';
 import { memberColor } from '@/components/schedule/member-color';
 import { StatusControl } from './status-control';
 import { RateSummary } from './rate-summary';
@@ -202,8 +203,42 @@ export default async function ProjectOverviewPage({ params }: { params: { id: st
   };
   const detailKey: React.CSSProperties = { color: color.muted };
 
+  // R16 / Q3.2 [S150] — the persistent unsigned-contract warning. Visible to
+  // EVERY role that can reach this page, project_manager included, which is why
+  // it goes through the SECURITY DEFINER boolean rather than a contract read.
+  const owesContractSignature = await projectHasUnsignedContract(project.id);
+
   return (
     <div>
+      {/* R16 — a job whose written contract was requested and never signed. It
+          sits ABOVE the KPI row and is not dismissible: conversion deliberately
+          is not blocked (the crew has to be able to start), so this banner is
+          the only thing carrying the fact that the paperwork is outstanding.
+          It names no dollar figure, so it is safe for every role. */}
+      {owesContractSignature && (
+        <div
+          style={{
+            ...cardStyle,
+            background: color.warningBg,
+            borderColor: color.warning,
+            padding: '12px 14px',
+            marginBottom: '18px',
+            display: 'flex',
+            gap: '10px',
+            alignItems: 'baseline',
+          }}
+        >
+          <span style={{ fontSize: '13px', fontWeight: 700, color: color.warningDeep }}>
+            Contract not signed
+          </span>
+          <span style={{ fontSize: '12.5px', color: color.bodyAlt }}>
+            This job was set up to include a written client contract, and no signed contract has
+            been received yet. Work can continue — this is a reminder that the paperwork is
+            outstanding.
+          </span>
+        </div>
+      )}
+
       {/* KPI row — reflow per financial floor */}
       <div
         style={{
