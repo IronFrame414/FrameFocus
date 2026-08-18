@@ -3394,6 +3394,7 @@ export type Database = {
           note: string | null
           over_stage: boolean
           paid_date: string
+          retainage_percent_applied: number | null
           retainage_withheld: number
           updated_at: string | null
           updated_by: string | null
@@ -3411,6 +3412,7 @@ export type Database = {
           note?: string | null
           over_stage?: boolean
           paid_date: string
+          retainage_percent_applied?: number | null
           retainage_withheld?: number
           updated_at?: string | null
           updated_by?: string | null
@@ -3428,6 +3430,7 @@ export type Database = {
           note?: string | null
           over_stage?: boolean
           paid_date?: string
+          retainage_percent_applied?: number | null
           retainage_withheld?: number
           updated_at?: string | null
           updated_by?: string | null
