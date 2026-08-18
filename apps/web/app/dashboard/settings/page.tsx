@@ -61,15 +61,24 @@ export const dynamic = 'force-dynamic';
  * empty one and saving wipes what was placed.
  */
 async function withBoxes(
-  templates: { id: string; name: string; pdf_file_id: string | null }[]
+  templates: {
+    id: string;
+    name: string;
+    pdf_file_id: string | null;
+    is_default: boolean;
+  }[]
 ): Promise<ContractTemplateRow[]> {
   return Promise.all(
     templates.map(async (t) => ({
       id: t.id,
       name: t.name,
       pdf_file_id: t.pdf_file_id,
+      is_default: t.is_default,
       boxes: (await getContractTemplateBoxes(t.id)).map((b) => ({
         page: b.page,
+        // numeric(8,6) arrives from PostgREST as a STRING. Left as one, a
+        // comparison like `width < minWidth` compares lexically and the §2.2
+        // size warning silently stops working.
         x: Number(b.x),
         y: Number(b.y),
         width: Number(b.width),
@@ -77,6 +86,7 @@ async function withBoxes(
         kind: b.kind,
         value_key: b.value_key,
         custom_label: b.custom_label,
+        party: b.party,
       })),
     }))
   );

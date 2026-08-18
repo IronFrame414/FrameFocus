@@ -65,6 +65,16 @@ export interface ContractTemplateRow {
    * client component.
    */
   boxes: ContractBoxInput[];
+  /**
+   * R8 [S150] — the form used when one is not chosen explicitly.
+   *
+   * ⚠️ THIS REVERSES THE S150 SLICE-2 RULING that `is_default` gets no control.
+   * It gets one now, and the invariant is DATABASE-enforced: a partial unique
+   * index allows one default per (company_id, document_kind), and a BEFORE
+   * trigger clears the previous one in the SAME transaction — so this is a
+   * radio, not a checkbox, and the UI never sends two writes.
+   */
+  is_default: boolean;
 }
 
 export function ContractSettingsForm({
@@ -267,6 +277,17 @@ function TemplateSet({
     );
   }
 
+  // R8 — no dedicated service: `updateContractTemplate` already writes this
+  // column, and the "clear the other one" half is the database's job, not a
+  // second client write. Two sequential writes were refused by the ruling.
+  async function makeDefault(template: ContractTemplateRow) {
+    if (template.is_default) return;
+    await run(
+      () => updateContractTemplate(template.id, { is_default: true }),
+      'Could not set the default.'
+    );
+  }
+
   async function upload(template: ContractTemplateRow, file: File) {
     await run(() => uploadContractTemplatePdf(file, template.id), 'Upload failed.');
   }
@@ -321,6 +342,29 @@ function TemplateSet({
             flexWrap: 'wrap',
           }}
         >
+          {/* R8 — one default per kind. A RADIO, because the database allows
+              exactly one: setting this clears the previous default in the same
+              transaction, so there is nothing to un-tick and no second write. */}
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '5px',
+              fontSize: '11.5px',
+              color: t.is_default ? color.body : color.faint,
+            }}
+            title="The form used unless another is chosen when sending."
+          >
+            <input
+              type="radio"
+              name={`default-${kind}`}
+              checked={t.is_default}
+              disabled={busy}
+              onChange={() => void makeDefault(t)}
+            />
+            Default
+          </label>
+
           {/* READ-ONLY [RULED S150]. Renaming lives on the box-placement
               screen, as an explicit "Edit title" act on the screen where you
               are already working on the form — not something changed by

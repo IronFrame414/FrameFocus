@@ -2,7 +2,13 @@
 
 import { useState } from 'react';
 import type { ContractBoxInput } from '@/lib/services/contracts-client';
-import type { ContractValueKey, DocumentKind } from '@/lib/services/contracts-shared';
+import {
+  boxKindNeedsParty,
+  partyOptionsFor,
+  type ContractParty,
+  type ContractValueKey,
+  type DocumentKind,
+} from '@/lib/services/contracts-shared';
 import {
   cardStyle,
   color,
@@ -183,6 +189,11 @@ export function ContractBoxEditor({
       kind,
       value_key: kind === 'value' ? firstKey : null,
       custom_label: null,
+      // R4/R5 — a signature/initials box must carry a party, so one is chosen
+      // rather than left blank for the user to discover at save. `recipient` is
+      // the default because the counterparty's signature is the one a contract
+      // is sent to collect; ours is stamped before it goes out.
+      party: boxKindNeedsParty(kind) ? 'recipient' : null,
     });
   }
 
@@ -304,7 +315,7 @@ export function ContractBoxEditor({
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
             <thead>
               <tr style={{ background: color.tableHeadBg }}>
-                {['Page', 'Kind', 'Field / label', 'X%', 'Y%', 'W%', 'H%', ''].map((h) => (
+                {['Page', 'Kind', 'Field / label / who signs', 'X%', 'Y%', 'W%', 'H%', ''].map((h) => (
                   <th key={h} style={{ padding: '6px 8px', textAlign: 'left', color: color.muted }}>
                     {h}
                   </th>
@@ -360,11 +371,21 @@ export function ContractBoxEditor({
                           style={{ ...inputStyle, width: '210px', marginTop: 0 }}
                         />
                       )}
-                      {b.kind === 'signature' && (
-                        <span style={{ color: color.faint }}>company signature</span>
-                      )}
-                      {b.kind === 'initial' && (
-                        <span style={{ color: color.faint }}>signer&rsquo;s initials</span>
+                      {/* R4/R5 — WHO signs. Options are labelled from
+                          `document_kind` ("The client" / "The subcontractor")
+                          while the stored value stays kind-neutral. */}
+                      {boxKindNeedsParty(b.kind) && (
+                        <select
+                          value={b.party ?? 'recipient'}
+                          onChange={(e) => set(i, { party: e.target.value as ContractParty })}
+                          style={{ ...inputStyle, width: '210px', marginTop: 0 }}
+                        >
+                          {partyOptionsFor(documentKind).map((p) => (
+                            <option key={p.value} value={p.value}>
+                              {p.label}
+                            </option>
+                          ))}
+                        </select>
                       )}
                     </td>
                     {(['x', 'y', 'width', 'height'] as const).map((k) => (
