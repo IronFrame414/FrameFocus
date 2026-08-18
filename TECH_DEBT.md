@@ -163,6 +163,47 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
   Observed S150, from the Module 7 completion audit.
 
+- **#2-audit — 7I acceptance criterion 15's parenthetical is stale, and BOTH halves of it
+  are false. PREVIOUSLY FILED AND THEN DELETED, not closed.**
+
+  **⚠️ Read the provenance first, because it is the reason this is being filed twice.** This
+  finding was filed at `35c4927` as an unnumbered bullet in the
+  `feature/7i-stage1-settings` block, and **`53c7353` deleted it** while replacing `#1-7i`
+  and `#2-7i` with their closed forms. It was not closed, not resolved and not superseded —
+  it was dropped. Between `53c7353` and this entry it existed **only in git**, and the S150
+  Module 7 completion audit (finding #1) reported it as *"already recorded in `TECH_DEBT.md`
+  this session"*, which was not true of the file. **Re-filed [Josh, S150] so the loss is
+  visible rather than silently repaired.**
+
+  `53c7353` dropped **three** records in one commit. The other two are `#3-7i` (restored
+  above as a closure) and `#2-7i`'s original text (correctly superseded by its closed form).
+  Only this one was a live finding.
+
+  **The finding.** `docs/specs/7I-spec.md` §12 criterion 15 reads:
+
+  > *"**A PM cannot** generate, send, or void a contract of either kind. **(UI gate; the DB
+  > floor is the separate `FINANCIAL-RLS-FLOOR` follow-up — §8.)**"*
+
+  **Half 1 — "UI gate" is false.** It is a database floor. `20260926000000_7i_contracts.sql`
+  §6 gives all four 7I tables Owner/Admin RLS **including SELECT**, plus
+  `enforce_contract_void_authority` on the three tables carrying contract state. The S150
+  audit confirmed all five 7I tables Owner/Admin against `pg_policies` **[LIVE]**.
+
+  **Half 2 — "the separate `FINANCIAL-RLS-FLOOR` follow-up" is false.** That follow-up
+  **landed at S97**, in `20260806000000_financial_rls_floor.sql`. There is no outstanding
+  work behind this criterion. `GATED.md`'s own "Still owed" entry for that migration was
+  struck through and marked done at S150.
+
+  **Why it matters more than a stale parenthetical usually would.** §8's own S145 banner
+  already corrected this **in the body of the same spec** — so the document contradicts
+  itself, and criterion 15 is the half a builder reads when checking acceptance. A reader
+  taking it at face value concludes a DB floor is still owed and may write a second one.
+
+  **Fix is one edit:** correct the parenthetical in place, quoting the superseded text,
+  per this repo's convention. Not done at S150 — re-filing was the ruling, not amending.
+  Cross-ref: criteria **4** and **16** in the same section were reworded at S150 for
+  unrelated reasons, so §12 has recently-touched neighbours.
+
 ### Branch-scoped, awaiting real numbers — `feature/7i-stage1-settings` [S150]
 
 > Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.
@@ -262,15 +303,11 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   **⚠️ `53c7353` dropped three records, not one.** It replaced `#2-7i` and `#1-7i` with
   their closed forms — correct — but also deleted `#3-7i` (restored above) **and the
   unnumbered "7I acceptance criterion 15's parenthetical is stale" bullet, which is
-  recorded nowhere at HEAD.** That one is NOT restored here, deliberately: it is a live
-  finding, not a closure, and re-filing it is a decision rather than bookkeeping. The
-  finding itself still holds — `7I-spec.md` §12 criterion 15 still reads *"(UI gate; the
-  DB floor is the separate `FINANCIAL-RLS-FLOOR` follow-up — §8.)"*, and **both halves
-  are false**: the floor landed at S97 (`20260806000000`) and `20260926000000` §6 gives
-  all four 7I tables Owner/Admin RLS **including SELECT**. The S150 completion audit
-  (finding #1) recorded it as "already recorded in `TECH_DEBT.md` this session"; that is
-  no longer true of the file, and the audit's claim should not be relied on. **Owed:
-  either re-file it or correct §12 criterion 15 in place.**
+  recorded nowhere at HEAD.** **✅ RE-FILED [Josh, S150] as `#2-audit`** — see this branch's
+  block above, which carries the finding and its provenance in full. The S150 completion
+  audit (finding #1) recorded it as "already recorded in `TECH_DEBT.md` this session";
+  that was not true of the file at the time, and the audit's claim should not be relied
+  on for it. What remains owed is the one-line correction to §12 criterion 15 itself.
 
 - **§13's prerequisite list is stale on this point, recorded so it is not re-followed.**
   7I §13 names "the box-placement component" among the hard prerequisites 7F supplies.
