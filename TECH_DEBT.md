@@ -109,6 +109,23 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   Same class as `#129` (two markup editors, silent loss discovered by reading the save
   path rather than by anything failing) — see CLAUDE.md's PARITY ruling.
 
+- **#3-7i — Box placement is TYPED COORDINATES, not visual. Decided by default at
+  S150, not by ruling.**
+
+  `ContractBoxEditor` is a numeric table: the user types X/Y/W/H as percentages and
+  reads off where the blanks fall by opening the form in another tab. It matches 7F's
+  shipped interaction exactly, which is the argument for it — but nobody chose it on
+  the merits.
+
+  A visual overlay (drag a box onto the rendered page) needs the PDF rasterised in the
+  browser, and **the repo has no library that can do it**: `pdf-lib` manipulates PDFs
+  without rendering them and `@react-pdf/renderer` generates them. It would mean adding
+  `pdfjs-dist` — a real dependency decision on a legal-document surface, out of scope
+  for a slice scoped to "UI work, no migration", so it was not taken unilaterally.
+
+  Worth a ruling before a company maps a 12-page agreement by typing 4 numbers per
+  blank. Closing this alongside #1-7i would upgrade both documents at once.
+
 - **#1-7i — Extract and unify 7F's `BoxMapEditor` with 7I's.**
 
   7I §2.1's BUILD REQUIREMENT — "build the placement editor once, parameterised by
@@ -125,6 +142,14 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
   Fixing #2-7i inside (b) closes the defect for both at once, which is the argument for
   doing them together.
+
+- **7I acceptance criterion 15's parenthetical is stale [recorded S150].** It reads *"A PM cannot
+  generate, send, or void a contract of either kind. (UI gate; the DB floor is the separate
+  `FINANCIAL-RLS-FLOOR` follow-up — §8.)"* **Both halves of the parenthetical are false at HEAD.**
+  The floor shipped at S97 (`20260806000000`), and `20260926000000` §6 gives all four 7I tables
+  Owner/Admin RLS **including SELECT**, plus `enforce_contract_void_authority` on three tables
+  carrying contract state. It is not a UI gate and there is no outstanding follow-up. Same stale
+  claim §8's own S145 banner already corrected in the body — the criterion was missed.
 
 - **§13's prerequisite list is stale on this point, recorded so it is not re-followed.**
   7I §13 names "the box-placement component" among the hard prerequisites 7F supplies.
