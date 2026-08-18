@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase-browser';
+import { applied, DISCARDED } from '@/lib/services/mutation-result';
 import { uploadFile } from '@/lib/services/files-client';
 import {
   boxKindNeedsParty,
@@ -69,17 +70,14 @@ async function myRole(supabase: ReturnType<typeof createClient>): Promise<string
  * cannot distinguish "policy refused you" from "the row is gone", so it says
  * both. `.select('id')` is what makes the affected rows observable at all.
  */
-const DISCARDED =
-  'That change was not applied. You may not have permission to make it, or the record no longer exists.';
+// applied()/DISCARDED moved to a single home [M2-03, S154].
 
 /**
  * ⚠️ DO NOT apply this to a DELETE whose empty result is legitimate — see
  * `saveContractBoxMap`, where clearing a template that has no boxes yet
  * correctly affects zero rows.
  */
-function applied(rows: unknown[] | null): boolean {
-  return Array.isArray(rows) && rows.length > 0;
-}
+
 
 export async function createClientContract(contract: {
   project_id: string;
