@@ -143,27 +143,50 @@ export async function POST(request: NextRequest) {
   const bodyText = replaceTemplateVariables(input.body, variables);
   const sender = buildSenderAddress(company);
 
-  const { messageId, error: sendError } = await sendEmail({
-    from: sender,
-    // +REPLY-TO [S97]: a client's reply reaches the COMPANY, not the
-    // platform domain. Resolved in sendEmail so senders inherit it.
-    replyToCompanyId: estimate.company_id,
-    to: contact.email,
-    subject,
-    react: ProposalEmail({
-      companyName: company.name,
-      logoUrl: company.logo_url,
-      brandColor: company.brand_color || '#1a56db',
-      bodyText,
-      signingUrl,
-    }),
-    attachments: [
-      {
-        filename: `${estimate.estimate_number}-proposal.pdf`,
-        content: generated.buffer,
-      },
-    ],
-  });
+  // ⚠️ §3.2 [FIXED S150] — sendEmail CAN THROW, AND THE THROW WAS LOAD-BEARING.
+  //
+  // `sendEmail` calls `getResend()` (email-service.ts:276), which throws when
+  // RESEND_API_KEY is unset (:57). This call was BARE. The throw escaped POST
+  // before `logEmail` below and before the `if (sendError)` branch that
+  // invalidates the session — and the session was already created at :103.
+  //
+  // Net effect: a LIVE SIGNING TOKEN for an email that was never sent. The
+  // estimate stayed `draft` so the UI looked untouched, while a valid
+  // `/sign/<token>` URL existed in the database. Nothing surfaced it.
+  //
+  // Folding a thrown error into the same shape as a returned `sendError` lets
+  // the existing logEmail + invalidate path handle both. Copied from the CO
+  // route (change-orders/[id]/send/route.ts:266-292), which has always had this
+  // right — NOT from this route, which is where the defect lived.
+  let messageId: string | null = null;
+  let sendError: string | null = null;
+  try {
+    const sent = await sendEmail({
+      from: sender,
+      // +REPLY-TO [S97]: a client's reply reaches the COMPANY, not the
+      // platform domain. Resolved in sendEmail so senders inherit it.
+      replyToCompanyId: estimate.company_id,
+      to: contact.email,
+      subject,
+      react: ProposalEmail({
+        companyName: company.name,
+        logoUrl: company.logo_url,
+        brandColor: company.brand_color || '#1a56db',
+        bodyText,
+        signingUrl,
+      }),
+      attachments: [
+        {
+          filename: `${estimate.estimate_number}-proposal.pdf`,
+          content: generated.buffer,
+        },
+      ],
+    });
+    messageId = sent.messageId;
+    sendError = sent.error;
+  } catch (err) {
+    sendError = err instanceof Error ? err.message : 'Email send failed';
+  }
 
   await logEmail(admin, {
     company_id: estimate.company_id,

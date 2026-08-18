@@ -184,6 +184,30 @@ export async function clientContractAppliesToEstimate(
 }
 
 /**
+ * R16 / Q3.2 [S150] — does this project still owe a client-contract signature?
+ *
+ * ⚠️ THIS IS THE ONE 7I READ A PROJECT MANAGER CAN MAKE. Every
+ * `contract_documents` policy is Owner/Admin on SELECT, deliberately: a contract
+ * displays contract value, which the Financial Visibility Floor holds at
+ * Owner/Admin on every surface. Widening that policy to show a warning was
+ * refused. `project_has_unsigned_contract` is SECURITY DEFINER and returns a
+ * bare boolean, so a PM learns that paperwork is outstanding and learns nothing
+ * else — not the value, not the terms, not how many documents exist.
+ *
+ * Fails CLOSED. An error here returns false rather than warning on every
+ * project, because a warning that appears on jobs which do not owe anything is
+ * one users learn to ignore — and then it is not there when it matters.
+ */
+export async function projectHasUnsignedContract(projectId: string): Promise<boolean> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc('project_has_unsigned_contract', {
+    p_project_id: projectId,
+  });
+  if (error) return false;
+  return Boolean(data);
+}
+
+/**
  * §6.1 — the badge state for a subcontract.
  *
  * "Set up" means the stage schedule exists, because §6.3 prints that schedule
