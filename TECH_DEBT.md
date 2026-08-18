@@ -204,6 +204,41 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   Cross-ref: criteria **4** and **16** in the same section were reworded at S150 for
   unrelated reasons, so §12 has recently-touched neighbours.
 
+- **#3-audit — no `viewport` export anywhere in `apps/web/app/`, so nothing controls
+  `viewport-fit=cover` and the shell has no TOP safe-area inset.**
+
+  **Carried out of Gate 4 at its close [Josh, S150].** It was the single row of Gate 4's
+  nine-row S97 inventory that is still true at `54279df`; the gate was closed and this filed
+  rather than holding a gate open for one item. Verified: `grep -rn "export const viewport"
+  apps/web/app` returns nothing, and neither the root layout nor `app/m/layout.tsx` sets
+  `viewport-fit`.
+
+  **Not currently broken, and Gate 4's own text said so** — *"Next 14's default is injected,
+  so nothing is broken, but there is no control over `viewport-fit=cover` (safe area)."* It
+  blocks no install, no push and no notification work.
+
+  **What it actually costs, and why it is not merely cosmetic.** `app/layout.tsx` already
+  reasons about this in a comment that is worth reading before touching it: `appleWebApp`
+  ships `statusBarStyle: 'black'` and **deliberately not** `'black-translucent'`, because
+  translucent renders content **under** the iOS status bar and needs a top safe-area inset —
+  *"the shell is built now [S105] but pads the safe area at the bottom only (the tab bar) —
+  the app bar does not, so translucent would still ship an overlap."* So the missing viewport
+  export is what pins the status-bar style to the more conservative of the two options.
+
+  **Fix shape, and it is two things that must move together, not one:**
+
+  1. `export const viewport: Viewport = { viewportFit: 'cover', themeColor: … }` in
+     `app/layout.tsx` (Next 14 moved these out of `metadata`).
+  2. **Top safe-area padding on the `/m` app bar** — `env(safe-area-inset-top)` — before any
+     switch to `'black-translucent'`. Shipping (1) alone changes nothing visible; shipping
+     the style change without (2) ships the overlap the comment predicts.
+
+  **Re-check `A-26e` when this moves** — `layout.tsx`'s comment names it as the criterion that
+  must still hold, and flags that this pair of metas is the iOS Web Push precondition (D-10):
+  *"losing them silently blocks Gate 4."* Gate 4 is closed, but the dependency is real.
+
+  Observed S150, verifying Gate 4's `[UNVERIFIED]` PWA-install half.
+
 ### Branch-scoped, awaiting real numbers — `feature/7i-stage1-settings` [S150]
 
 > Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.
