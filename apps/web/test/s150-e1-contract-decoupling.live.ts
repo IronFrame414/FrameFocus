@@ -2,10 +2,10 @@
 // proposal; contract_documents.project_id is backfilled at conversion; and a PM
 // can see that a signature is owed without being able to read the contract.
 //
-// ⚠️ RED UNTIL 20261002000000 IS PUSHED. Everything here exercises the sixth
-// redefinition of convert_estimate_to_project and a function that does not
-// exist yet. That is the point: this file is what makes the migration
-// verifiable rather than merely reviewed.
+// Exercises the sixth redefinition of convert_estimate_to_project and the
+// SECURITY DEFINER boolean that ships with it. 20261002000000 is applied to
+// rebuild-test; this file is what makes it verifiable rather than merely
+// reviewed.
 //
 // ⚠️ THE DEFECT THIS PINS DOWN WAS SILENT. Before R16, an estimate that asked
 // for a written contract, whose client signed the PROPOSAL and never signed the
@@ -17,21 +17,47 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { admin, assertRebuildTest } from './live-session';
 
-let companyId: string;
 let estimateId: string;
 
 describe('S150-E1 — R16 decoupling', () => {
   beforeAll(async () => {
     assertRebuildTest();
-    const { data: co } = await admin.from('companies').select('id').limit(1).single();
-    companyId = (co as { id: string }).id;
+
+    // ⚠️ THE COMPANY IS DERIVED FROM THE ESTIMATE, NOT THE OTHER WAY ROUND.
+    //
+    // The first version of this fixture took `companies.select('id').limit(1)`
+    // and then demanded that company have an estimate. rebuild-test holds two:
+    // Bishop Contracting (7 estimates) and Ridgeline Builders (0). With no
+    // ORDER BY, heap order decides which comes back — it returned Ridgeline,
+    // `est` was null, and `beforeAll` died on `.id` with a TypeError that named
+    // nothing useful.
+    //
+    // That is the `.limit(1)`-with-no-ORDER-BY class context100 §6 names three
+    // times: "passes for four runs and then doesn't". Ordering alone would only
+    // have made the wrong pick a STABLE wrong pick — the real defect was
+    // asserting a relationship the query never constrained. Selecting from the
+    // side that must be non-empty removes the assumption instead of pinning it.
+    //
+    // `id` is the tiebreak because `created_at` can collide on seeded rows, and
+    // two rows sharing a timestamp put us straight back in heap order.
     const { data: est } = await admin
       .from('estimates')
       .select('id')
-      .eq('company_id', companyId)
       .eq('is_deleted', false)
+      .order('created_at', { ascending: true })
+      .order('id', { ascending: true })
       .limit(1)
-      .single();
+      .maybeSingle();
+
+    // maybeSingle + an explicit throw, so an empty database says so instead of
+    // failing on a property read three lines later.
+    if (!est) {
+      throw new Error(
+        'No estimates in rebuild-test — seed one before running this harness. ' +
+          '(node scripts/seed-test-identities.mjs)'
+      );
+    }
+
     estimateId = (est as { id: string }).id;
   });
 
