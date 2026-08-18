@@ -7939,6 +7939,10 @@ export type Database = {
       next_project_internal_seq: { Args: never; Returns: number }
       next_project_number: { Args: never; Returns: string }
       owns_open_session: { Args: { p_session_id: string }; Returns: boolean }
+      project_has_unsigned_contract: {
+        Args: { p_project_id: string }
+        Returns: boolean
+      }
       qb_vault_forget: { Args: { p_secret_id: string }; Returns: undefined }
       qb_vault_get: { Args: { p_secret_id: string }; Returns: string }
       qb_vault_put: {
