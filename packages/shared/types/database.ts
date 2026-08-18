@@ -1471,6 +1471,76 @@ export type Database = {
           },
         ]
       }
+      contract_document_attachments: {
+        Row: {
+          attached_after_execution: boolean
+          company_id: string
+          contract_document_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          file_id: string | null
+          id: string
+          is_deleted: boolean | null
+          label: string
+          sort_order: number
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          attached_after_execution?: boolean
+          company_id?: string
+          contract_document_id: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          file_id?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          label: string
+          sort_order?: number
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          attached_after_execution?: boolean
+          company_id?: string
+          contract_document_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          file_id?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          label?: string
+          sort_order?: number
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contract_document_attachments_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contract_document_attachments_document_fkey"
+            columns: ["contract_document_id"]
+            isOneToOne: false
+            referencedRelation: "contract_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contract_document_attachments_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contract_documents: {
         Row: {
           company_id: string
@@ -1486,6 +1556,7 @@ export type Database = {
           id: string
           is_deleted: boolean | null
           project_id: string | null
+          sent_at: string | null
           status: string
           sub_contract_id: string | null
           supersedes_document_id: string | null
@@ -1510,6 +1581,7 @@ export type Database = {
           id?: string
           is_deleted?: boolean | null
           project_id?: string | null
+          sent_at?: string | null
           status?: string
           sub_contract_id?: string | null
           supersedes_document_id?: string | null
@@ -1534,6 +1606,7 @@ export type Database = {
           id?: string
           is_deleted?: boolean | null
           project_id?: string | null
+          sent_at?: string | null
           status?: string
           sub_contract_id?: string | null
           supersedes_document_id?: string | null
@@ -1702,6 +1775,7 @@ export type Database = {
           is_deleted: boolean | null
           kind: string
           page: number
+          party: string | null
           template_id: string
           updated_at: string | null
           updated_by: string | null
@@ -1721,6 +1795,7 @@ export type Database = {
           is_deleted?: boolean | null
           kind: string
           page?: number
+          party?: string | null
           template_id: string
           updated_at?: string | null
           updated_by?: string | null
@@ -1740,6 +1815,7 @@ export type Database = {
           is_deleted?: boolean | null
           kind?: string
           page?: number
+          party?: string | null
           template_id?: string
           updated_at?: string | null
           updated_by?: string | null
