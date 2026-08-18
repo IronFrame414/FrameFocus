@@ -42,8 +42,10 @@ export async function getSubcontractor(id: string): Promise<Subcontractor | null
     .from('subcontractors')
     .select('*')
     .eq('id', id)
-    .eq('is_deleted', false)
-    .single();
+    // ⚠️ No `is_deleted` filter [M2-02, S154] — same convention and same reason
+    // as `getContact()`. A by-id fetch must return a soft-deleted row so a
+    // restore flow can reach it; `getSubcontractors()` filters the list.
+    .maybeSingle();
 
   return data ?? null;
 }
