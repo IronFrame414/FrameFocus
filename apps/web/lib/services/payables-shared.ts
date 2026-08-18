@@ -107,3 +107,127 @@ export function deriveComplianceStatus(
   if (days <= COMPLIANCE_ALERT_DAYS[0]) return 'expiring_soon';
   return 'current';
 }
+
+// ----------------------------------------------------------------------------
+// Retainage held — WHAT THE HELD TOTAL MAY CLAIM ABOUT ITS RATE
+// (B1/Part A [S151], under the prospective-only ruling)
+// ----------------------------------------------------------------------------
+//
+// RULING [Josh, S150/S151]: RETAINAGE RATE CHANGES ARE PROSPECTIVE ONLY. A rate
+// change never reaches back; past accruals stand at the rate in force when they
+// were taken.
+//
+// THE RULE THIS ENCODES:
+//
+//   The line may name a rate only when that rate accounts for the ENTIRE held
+//   total. A multi-rate accrual must not claim a single rate.
+//
+// WHAT WAS WRONG BEFORE. `contracts-panel.tsx` printed
+// `({contract.retainage_percent}% across payments)` whenever the contract
+// carried a percent, reading NEITHER the shape nor the payment history. Two
+// separate faults:
+//
+//   (a) it never consulted `retainage_shape`, so a `final_hold` contract would
+//       be described as withholding across payments; and
+//   (b) — the one reachable through the shipped UI — it printed the CURRENT
+//       rate against a HISTORICAL total. Revise 10% to 5% between two payments
+//       and the line read "$1,500 (5% across payments)" where $1,500 is the sum
+//       of a 10% withhold and a 5% one. **The dollars were right. Only the
+//       explanation beside them was wrong** — which is worse, because someone
+//       reconciling the number against the stated rate finds a discrepancy in a
+//       figure that is actually correct.
+//
+// This lives in `-shared` and not in the panel deliberately: it is a money rule,
+// and CLAUDE.md's PARITY ruling puts the rules below the UI so no second surface
+// can enforce a different version of them. `/m` does not render this line today;
+// when it does, it consumes this.
+//
+// NULL `retainage_percent_applied` means UNKNOWN, not "agrees". Rows written
+// before 20261003000000 carry no rate, and a payment whose rate we cannot name
+// cannot be folded into a claim that one rate explains everything.
+
+export type RetainageExplanation =
+  /** One rate accounts for the whole held total, and we can name it. */
+  | { kind: 'single_rate'; rate: number }
+  /** Two or more distinct rates contributed. Name none of them. */
+  | { kind: 'multi_rate'; currentRate: number | null }
+  /** At least one contributing payment predates the recorded rate. */
+  | { kind: 'rate_unknown'; currentRate: number | null }
+  /** Held at the end, not withheld across payments. */
+  | { kind: 'final_hold' }
+  /** Nothing was withheld — say nothing about a rate. */
+  | { kind: 'none' };
+
+type WithholdShape = Pick<
+  ExpensePayment,
+  'retainage_withheld' | 'retainage_percent_applied' | 'is_deleted'
+>;
+
+/**
+ * @param contract  the sub contract's CURRENT retainage terms
+ * @param stagePayments  payments against the contract's STAGE rows — never the
+ *   accrual row's own payments, which are retainage RELEASES and withhold nothing
+ */
+export function retainageHeldExplanation(
+  contract: { retainage_shape: string | null; retainage_percent: number | null },
+  stagePayments: WithholdShape[]
+): RetainageExplanation {
+  const currentRate =
+    contract.retainage_percent === null ? null : Number(contract.retainage_percent);
+
+  if (contract.retainage_shape === 'final_hold') return { kind: 'final_hold' };
+
+  const withholds = stagePayments.filter(
+    (p) => !p.is_deleted && Number(p.retainage_withheld ?? 0) > 0
+  );
+  if (withholds.length === 0) return { kind: 'none' };
+
+  const rates = new Set<number>();
+  let unknown = false;
+  for (const p of withholds) {
+    if (p.retainage_percent_applied === null || p.retainage_percent_applied === undefined) {
+      unknown = true;
+    } else {
+      rates.add(Number(p.retainage_percent_applied));
+    }
+  }
+
+  // One rate AND nothing unaccounted for is the only case that may name a rate.
+  if (rates.size === 1 && !unknown) return { kind: 'single_rate', rate: [...rates][0] };
+  if (rates.size > 1) return { kind: 'multi_rate', currentRate };
+  return { kind: 'rate_unknown', currentRate };
+}
+
+/** `10` not `10.00` — numeric(5,2) round-trips with trailing zeros. */
+function trimRate(rate: number): string {
+  return String(Number(rate));
+}
+
+/**
+ * The sentence rendered beside the held total, or null for no clause at all.
+ *
+ * "currently N%" is deliberate and is NOT a weakened form of the old sentence:
+ * under prospective-only the current rate is a FORWARD fact — the rate the next
+ * payment will use — not a claim about the total already held. The word
+ * "currently" is what carries that distinction, so do not shorten it away.
+ */
+export function retainageHeldLabel(explanation: RetainageExplanation): string | null {
+  switch (explanation.kind) {
+    case 'none':
+      return null;
+    case 'final_hold':
+      return 'held from the final stage';
+    case 'single_rate':
+      return `${trimRate(explanation.rate)}% withheld across payments`;
+    case 'multi_rate':
+      return (
+        'withheld across payments at more than one rate' +
+        (explanation.currentRate === null ? '' : ` · currently ${trimRate(explanation.currentRate)}%`)
+      );
+    case 'rate_unknown':
+      return (
+        'withheld across payments' +
+        (explanation.currentRate === null ? '' : ` · currently ${trimRate(explanation.currentRate)}%`)
+      );
+  }
+}
