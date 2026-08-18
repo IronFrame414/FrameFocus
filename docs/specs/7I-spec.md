@@ -1111,7 +1111,7 @@ decimals than a legal document should show.
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `contracts.ts`        | `ContractStatus`, `ClientContract`, `SubcontractorContract`, `CONTRACT_STATUS_LABELS` `:17`, `getClientContracts` `:29`, `getSubcontractorContracts` `:44` |
 | `contracts-client.ts` | `createClientContract` `:9`, `updateClientContract` `:29`, `createSubcontractorContract` `:43`, `updateSubcontractorContract` `:65`                        |
-| `contracts-shared.ts` | **does not exist**                                                                                                                                         |
+| `contracts-shared.ts` | **EXISTS — 273 lines [CORRECTED S150].** `CONTRACT_VALUE_CATALOG` `:147`, `minWidthForContractKey` `:223`. See the correction below.                       |
 
 UI exists too — `apps/web/app/dashboard/projects/[id]/contracts/page.tsx` + `contracts-panel.tsx`,
 which **already renders a "Client Contract" block** (`:193`, empty state `:199`) and a void action
@@ -1122,6 +1122,18 @@ import**. That leg guards the client-bundle boundary: a _value_ import from the 
 `next/headers` into the client bundle and **`tsc` does not catch it**. Precedent: `invoices-shared.ts`,
 `payables-shared.ts`, `payments-shared.ts`, `instrument-rates-shared.ts`. **Not in CLAUDE.md** — §0.2
 row 4.
+
+> **⚠️ CORRECTED [S150] — `contracts-shared.ts` was BUILT at S150 and this section still reads as a
+> plan.** _Superseded text, quoted rather than deleted:_ the table row above read
+> _"| `contracts-shared.ts` | **does not exist** |"_, and the paragraph above reads as future tense.
+>
+> **At HEAD it is 273 lines** at `apps/web/lib/services/contracts-shared.ts`, carrying
+> `CONTRACT_VALUE_CATALOG` (`:147`) and `minWidthForContractKey` (`:223`). It is pure, as specified —
+> the no-supabase-import rule held. **The design above is a record of what was built, not of what is
+> owed.** A builder reading it as a to-do will write the file a second time.
+>
+> Found by the S150 Module 7 completion audit (finding #2). The file's own contents are ground truth;
+> this section is not.
 
 ### §11.2 — Per-tenant tables
 
@@ -1222,19 +1234,55 @@ Fallback is the column default `America/New_York`, **never UTC** (`TECH_DEBT.md:
 
 **Hard prerequisites 7I cannot supply:**
 
-1. **7F's document engine** — template CRUD, PDF upload, the box-placement component, the renderer.
-   7I is a **consumer**; it is the first Module 7 sub-module that is not a leaf.
+1. **7F's document engine** — template CRUD, PDF upload, ~~the box-placement component~~, the
+   renderer. 7I is a **consumer**; it is the first Module 7 sub-module that is not a leaf.
+
+   > **⚠️ CORRECTED [S150] — the box-placement component is NOT a 7F prerequisite, and never was an
+   > importable one.** _Superseded text, quoted rather than deleted:_ _"7F's document engine —
+   > template CRUD, PDF upload, **the box-placement component**, the renderer."_
+   >
+   > 7F supplied a box-placement _component_ but not a _reusable_ one: `BoxMapEditor` was a **private
+   > function inside `lien-release-settings-form.tsx`**, with nothing exported. A builder following
+   > this list looks for something to import and finds nothing importable.
+   >
+   > **Superseded by the S150 extraction.** `components/box-map/box-map-editor.tsx` now serves both
+   > modules and is mounted by both; it is deliberately NOT under `components/contracts/`, because
+   > CLAUDE.md's PARITY ruling makes a helper's directory a claim of ownership. 7I **shares** this
+   > component with 7F rather than inheriting it, so it is not a prerequisite in either direction.
+   > Closed as `#1-7i`; see `TECH_DEBT.md`.
+   >
+   > **Still true and unchanged:** template CRUD, PDF upload and the renderer remain 7F's, and 7I is
+   > still a consumer of them. **⚠️ 7F's renderer still shrinks at render** (`fitTextToBox()` reduces
+   > to `MIN_FONT_SIZE` before declaring overflow), so the shared placement warning is advisory on 7F
+   > in a way §2.2 says it will not be on 7I once R10 blocks the send. Reconciling the two render
+   > paths belongs to stage 2.
+
 2. **`companies.signatory_name` / `signatory_title`** — 7F's two columns (§3.4).
 
 **Order:**
 
 | Stage | Contents                                                                                                         | Blocked by                                                 |
 | ----- | ---------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| 1     | Company Settings: toggle, `contract_templates` CRUD, box placement, both kinds; attachments (§7.4)               | 7F                                                         |
+| 1     | Company Settings: toggle, `contract_templates` CRUD, box placement, both kinds. ~~attachments (§7.4)~~ — **moved to stage 2, see below** | 7F                                     |
 | 2     | **Client half** — proposals/send extension, render v1, one email two PDFs, sign, v2, carry-forward at conversion | 7F. **Not Gate 1.**                                        |
 | 3     | **Sub half, notary path** — generate, print, upload executed copy                                                | stage 1. **Not Gate 1.**                                   |
 | 4     | **Sub half, e-signature** — `/sign-contract/[token]`                                                             | **Gate 1** (RESEND secret, domain cutover, login branding) |
 | 5     | **Exhibit B box on client templates**                                                                            | the **payment-schedule spec** (§7.2) — a separate module   |
+
+> **⚠️ CORRECTED [S150] — attachments were MIS-SEQUENCED into stage 1 and belong to stage 2.**
+> _Superseded text, quoted rather than deleted:_ stage 1 read _"Company Settings: toggle,
+> `contract_templates` CRUD, box placement, both kinds; **attachments (§7.4)**"_.
+>
+> **Why it cannot be stage 1.** Every column of `contract_document_attachments` hangs off
+> `contract_documents(id)`, and **no contract document exists until stage 2 generates one**. Stage 1
+> is Company Settings — templates and box maps — and has no document to attach anything to. The
+> sequencing was impossible as written, not merely inconvenient.
+>
+> **State at HEAD:** the **table shipped** at S150 in `20261001000000_7i_party_defaults_attachments.sql` and is in
+> `packages/shared/types/database.ts`; the **UI is unbuilt**. So the schema half is done and the
+> stage-2 work is the surface, not the migration. **Deferred to stage 2 [RULED Josh, S150].**
+>
+> Found by the S150 Module 7 completion audit (finding #5).
 
 **Not a prerequisite:** invoice email (that gates 7F's conditional release, not 7I), and the
 payment-schedule module — which blocks **only** stage 5. Stages 1–4 proceed without it.
