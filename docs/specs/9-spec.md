@@ -1,0 +1,433 @@
+# Module 9 — Client Experience Portal — **BUILD SPEC rev 1**
+
+> **Source of rulings:** `docs/specs/S150-module9-interview.md` (R1–R21).
+> **Repo claims audited in:** `docs/specs/S150-m9-interview-audit.md` — 13 claims, 11 hold, 0 false.
+> **Written:** S150, against `main` @ `30b2a24` plus this session's branch work.
+>
+> **Rulings are Josh's and are not restated loosely.** Where this spec appears to add a rule, it is
+> marked as the spec's own inference and labelled.
+>
+> **`§S` blocks are deliberate holes.** They mark schema that MUST be read live at build time rather
+> than copied from here. This repo has repeatedly shipped defects from specs citing superseded
+> migrations — `7I-spec.md` still names a `convert_estimate_to_project` owner that is two revisions
+> stale. **Do not hardcode a column name from this document.**
+
+---
+
+## §0 — Status of the gate this module sits behind
+
+**The Pre-Module 9 Decision Gate is NOT declared lifted by this spec.**
+
+`STATE.md:518` records it as a HARD BLOCK naming **two** ideas and four questions. The interview
+takes the decision the gate exists to force — **hosted portal with accounts** (R1) — and `GATED.md:43`
+confirms that decision is M9's to take. Three of the four questions are answered.
+
+**Idea 1 — the outbound webhook system (potential Module 12) — is not addressed anywhere in the
+interview.** The audit records this as the one item genuinely open against the interview's "Still
+open: Nothing." It may be deliberately deferred to a future module or it may be an oversight; the
+difference matters, because if it is Module 12's then `STATE.md` should stop listing it as an M9
+blocker.
+
+**What this spec does:** it is written *against a gate that is still formally open*, and building
+from it requires a one-line ruling on Idea 1 plus an edit to `STATE.md`. Nothing here presumes the
+gate is closed.
+
+---
+
+## §1 — Scope
+
+A hosted client portal with real accounts. Clients **read** their project and **write** four things:
+sign a change order (R10), upload a photo with a note (R11), post a question (R11), and select-and-sign
+an allowance option (R21).
+
+**"Clients type into nothing" is comprehensively reversed for the portal.** That was ruled at S124
+about chat specifically and recorded in context100 as dissolved rather than resolved; R10 settles it.
+
+### §1.1 — What this module deletes
+
+`apps/web/app/client-placeholder/page.tsx`, whose own header says **MODULE 9 DELETES THIS FILE**, and
+the `CLIENT_PLACEHOLDER_PATH` redirect at `apps/web/lib/dashboard-access.ts:58,80`. The placeholder's
+promise includes *"approve selections"* — a doing verb, which R21 now makes real.
+
+### §1.2 — Out of scope, with the condition that reopens each
+
+| Scoped out | Reopens when |
+|---|---|
+| Daily logs, punch lists (R14) | a client asks for close-out transparency on punch |
+| A native pay surface (R19) | QB Payments proves insufficient |
+| Client access to sub/vendor identity (R8) | the roster floor changes |
+| Pre-auth company branding (R20) | per-company login URLs are built |
+
+---
+
+## §2 — The finding that governs every test this module writes
+
+**No client can exercise any client policy arm today, and every existing "client reads 0" probe passes
+vacuously.**
+
+Verified live at S150: exactly one `client` profile exists in rebuild-test and it has **zero**
+`company_members` rows. `get_my_member_id()` selects through `company_members`, so it returns NULL;
+`can_view_project()` requires `role IN (owner,admin) OR is_assigned_to_project(...)`, so it returns
+false. **A client is refused today by the absence of a member row, not by any client-specific rule.**
+
+**Consequence, and it is not optional:** every client policy arm M9 writes needs a **real
+counterfactual** — a client identity that genuinely could read the row if the policy were wrong.
+A test asserting "the client read 0 rows" against today's fixtures proves nothing, because *every*
+query returns 0 for that user regardless of the policy.
+
+This is the single highest-risk item in the module. A security floor whose tests are vacuous is
+worse than no tests, because it reports as covered.
+
+---
+
+## §3 — Identity, access and lifecycle
+
+- **Accounts, not magic links** (R1). Username is the email; the client sets their own password.
+  Account creation does not exist today and is net-new.
+  *Reasoning, Josh's:* long-lived magic links do not revoke, and every hard edge here — a client who
+  must lose access, two clients disagreeing, access after completion — is a revocation question.
+- **Invite is contractor-controlled** (R1). No auto-provisioning at project creation. Entry points:
+  the app, or a link on the company's own website.
+- **One timer** (R2): the invite is active until **45 days after project completion**. A company user
+  may resend at any time. There is **no separate invite-expiry clock**.
+- **Several contacts per project** (R3) — the client side is not one person.
+- **The account outlives the project** (R4). The company reactivates and links the new job. Landing
+  depends on count: **one project → straight in; more than one → a list, old and new.**
+- **Deactivation is a switch, not a shredder** (R5). Login deactivates 45 days after completion;
+  project data persists until a company user deletes it. On reactivation she sees old projects **in
+  full** — **nothing narrows with age.** No standing archive access without an active project.
+- **Termination is three states, not a switch** (R17), **Owner and Admin only**: fully deactivate ·
+  limit to signed documents only · limit to documents sent for signature, signed or not.
+  *Reasoning, Josh's:* it survives a lawyer asking what she had access to.
+- **Departed staff change nothing** (R18). Photos a PM ticked stay ticked; replies stay.
+
+**§S — identity storage.** A client today has a `profiles` row with `role = 'client'` and **no**
+`company_members` row. Whether M9 gives clients member rows, a separate `client_accounts` table, or a
+project-scoped junction is a schema decision to take at build time against the live catalog. It has a
+hard constraint either way: `get_my_member_id()` and `can_view_project()` are used across the whole
+app, and **giving clients member rows would silently change what those two functions return for every
+existing policy that calls them.** Read both bodies live before choosing.
+
+---
+
+## §4 — The financial view
+
+This is the part where a plausible implementation is wrong, so it is specified by rule rather than by
+example.
+
+### §4.1 — Three rules that survive every contract type
+
+1. **`deriveCostLine` is the source.** It already produces the marked-up figure; `DerivedCostLine`
+   carries `costBasis`, `markupPercent` and `amount` together. The client view is **a rendering rule
+   over an existing shape, not new math.**
+2. **Rounding is per row, deliberately.** A sum of displayed lines must equal the displayed total.
+   Re-aggregating from raw costs can land a cent off what was billed.
+3. **`rateInForce` is the selector and must never be restated.** Markup is the rate in force at the
+   expense's date, not today's rate.
+4. **Burden never reaches a client bill.** The 7A multiplier is cost-side only —
+   `invoice-derivation.ts` says so in three separate comments.
+
+### §4.2 — Sell derives per instrument, then aggregates ⚠️
+
+A project may hold fixed-price, cost-plus and T&M **at once**, and signed change orders write their
+own budget lines. **A blanket `cost × markup` over a project total produces numbers that look right
+and are wrong** — different lines carry different markups and different in-force dates.
+
+R7b's per-bill sectioning is the *rendering* counterpart of this rule: **the page never merges
+instruments into one total.**
+
+### §4.3 — Cost-plus: transparent (R6)
+
+Client sees **budgeted, actual, markup %, hourly rate, line total with markup, category totals,
+project total to date, and expected.**
+
+**`committed` is REMOVED.** *Reasoning, Josh's:* committed derives from `purchase_orders` and
+`subcontractor_contracts`, from which clients are explicitly excluded in `20260912000000`. Removing it
+avoids either exposing those rows or revisiting that exclusion.
+
+### §4.4 — T&M: transparent too (R7 as overturned, R7a)
+
+> **⚠️ R7 WAS OVERTURNED AT S150. Do not build from the superseded version**, which said T&M shows
+> "one number per material row, markup folded in, pre-markup figure never adjacent." **That rule is
+> gone.**
+
+**T&M is transparent.** The client sees what the company paid, the agreed markup percentage, and the
+total billed — **the pre-markup figure IS shown beside the marked-up one.**
+
+- **Labor: one row per labor type actually billed.** Framing, site prep and material pickup are
+  **three rows, not one**. Each carries title, total hours, hourly rate, total amount billed.
+- **Material: one row per material line**, carrying title, amount the company paid, agreed markup
+  percentage, total billed.
+
+**Consequence:** the asymmetry R7 originally described no longer exists. Cost-plus and T&M are both
+transparent; **lump sum is the only opaque type.**
+
+### §4.5 — Lump sum: sectioned by bill, detail chosen per bill (R7b)
+
+- **A project total billed sits at the top**, above the sections.
+- **Below it, a breakdown by each bill** — not one merged total. The base lump-sum bill is the first
+  section; **each signed change order is its own section** after it.
+  An $84,000 kitchen with a $4,200 sill CO and a $1,900 hood CO shows **a $90,100 header over three
+  sections** — not a merged $90,100 with no breakdown, and not three sections with no header.
+- **Detail level is chosen per bill, by the company user, at billing time.** ⚠️ **Not a project-level
+  or contract-level setting.** The same project can hold sections at different detail levels, and
+  **any derivation that assumes one setting per project will be wrong.**
+
+Two modes per bill:
+
+| Mode | The client sees |
+|---|---|
+| **Billed by category** | the total of each category, shown in the title of each line within it. **No prices on individual lines.** |
+| **Billed as one lump sum** | category and line, but **only one total price** for the full scope under that bill. |
+
+Either way: **no line-level price and no cost basis.**
+
+### §4.6 — Labor is itemised differently by contract type — **INTENTIONAL**
+
+**T&M labor is one row per labor type (R7a). Cost-plus labor is one weekly aggregate (R8).** Both
+were narrated separately and both stand.
+
+**State this wherever the two are near each other in code**, because the natural instinct is to unify
+them into one labor renderer, and doing so silently breaks one of the two rulings.
+
+### §4.7 — No names anywhere (R8)
+
+**Line titles only** — no descriptions, no vendor names, no sub names. Labor carries no crew names and
+no per-person hours. This keeps the S133 roster floor intact.
+
+---
+
+## §5 — What else is visible (R14)
+
+| Surface | Client |
+|---|---|
+| Contracts, invoices, proposals, change orders | **YES** (already established) |
+| Schedule | **YES — event titles only.** No detail, no assignments, no crew. |
+| Files | **YES, but must be tagged** — same gate as photos |
+| Daily logs | **NO** |
+| Punch list | **NO** |
+
+This confirms `20260912000000` was right to leave `daily_logs` and `punch_lists` un-excluded pending
+this ruling. `project_budget_items` stays readable — that is the financial page.
+
+**§S — the file grant.** `STATE.md`'s "Module 9 follow-up" records that a **second SELECT policy on
+`files`** is owed to grant clients read access to shared files, "likely via a `file_shares` junction
+table". `files.client_visible` **exists** (boolean NOT NULL DEFAULT false, verified live), so the flag
+is present and the *policy* is what is missing. Read `files_select_non_client` live before writing the
+client arm — it is a single policy with several OR'd branches and a category gate, and permissive
+policies are **OR'd**, so a new narrow policy does not narrow anything (the S131 roster-floor trap).
+
+---
+
+## §6 — Photos and files: two mechanisms, deliberately
+
+| | Photos | Files |
+|---|---|---|
+| When | nightly batch, after close of business | **at upload**, changeable later |
+| Who | Owner, Admin, PM, **Foreman** | **Owner, Admin only** |
+| How | a prompt → **a sheet, not a new page**, sectioned by job, with thumbnails, open-full-size and markup | a **person icon on the file row** |
+| Flag | `files.client_visible` | `files.client_visible` |
+
+**Josh confirmed the divergence is deliberate** (R15). Two mechanisms, two rosters, one underlying flag.
+
+- The prompt **persists** — it may not be actioned until morning (R9).
+- The sheet shows everything **since the last completed pass**.
+- Default is false, **so nothing leaks by omission**. **Untouched photos stay private indefinitely —
+  no timeout flips them visible.**
+- **Client-added photos are automatically client-visible** (R11) — no tick required on her own uploads.
+
+### §6.1 — Annotation: resolved, not left as `§S`
+
+R9 left `§S — CC reads the current annotation implementation and states whether the marked-up image is
+a new row or a mutation of the original`. **Read at S150; here is the answer.**
+
+**It is a mutation of the same row, plus a separate derivative object, and no second `files` row
+exists.** From `apps/web/lib/services/photos-client.ts`:
+
+- `saveMarkup()` UPDATEs **`files.markup_data`** (JSONB) on the original row. The comment at the write
+  records that the payload touches `markup_data` only — the original's bytes, `file_path`, `file_size`
+  and `mime_type` are never modified by any number of saves.
+- The flattened image is uploaded to a **deterministic derivative path** with `upsert: true`, so N
+  saves leave exactly one derivative.
+- **No `files` row is inserted for the derivative**, deliberately: a second row with
+  `category = 'photos'` would be counted by the Photos badge and rendered as its own tile, so every
+  annotated photo would appear twice.
+
+**Therefore the client read is a path choice, not a row choice.** The client sees the marked-up
+version (R9), which means serving the derivative path when `markup_data` is present and the original
+otherwise. **No new annotation behaviour is introduced by M9** — R9 says markup "is not new", and this
+is what that resolves to.
+
+⚠️ **One row, two images, and `client_visible` is on the row.** Ticking a photo client-visible exposes
+*whichever* image the read path selects. If a future change ever makes the original and the derivative
+diverge in what they disclose, that flag no longer means one thing. Recorded because it is not
+obvious from the schema.
+
+---
+
+## §7 — Client writes
+
+### §7.1 — Signing a change order (R10)
+
+Client can sign a CO **in the portal**. A notification fires when the CO is sent; on sign-in a **sheet
+surfaces pending decisions** and she acts there.
+
+**Both signing surfaces remain valid.** `/sign-co/[token]` continues to ship and a portal client may
+still sign by email link. Neither is deprecated.
+
+> **⚠️ ONE WRITE PATH, THREE ENTRIES.** The portal must call **the same signature write** the
+> tokenised route calls. A second implementation that "does the same thing" **is** the divergence —
+> that is `#129`'s precedent exactly, where two markup editors that both "worked" produced silent data
+> loss. The three entries are: `/sign-co/[token]`, the portal (R10), and immediately after an
+> allowance selection (R21).
+
+**§S — the write path.** Read `completeCoSignature` in `apps/web/lib/services/co-signing-service.ts`
+and reuse it. It is service-role by design (the public signing flow has no `auth.uid()`), so a
+portal caller with a real session is a **different auth context reaching the same write** — check what
+that changes about the audit columns (`signer_ip`, `signer_user_agent`, consent) before reusing it
+blind.
+
+### §7.2 — Photos, notes and questions (R11)
+
+A place for the client to add **photos, notes and questions**. These notify **Owner, Admin and PM** —
+**not Foreman**.
+
+- **Photo and note stay tied together** — one unit, not two records.
+- **Owner/Admin/PM can respond directly.** It is a **thread, not a drop box.**
+
+### §7.3 — One signature binds (R13)
+
+Either client contact can sign; there is **no designated signer**. A signed CO can be **voided by
+Owner/Admin** — that is the remedy, not a second approval.
+
+---
+
+## §8 — Allowance selections (R21)
+
+**Added at the end of S150 after being missed in the first pass.**
+
+- **Every allowance line item carries its own sheet** — per-line, not one project-wide selections page.
+- **The company loads the options**: an image, a link, or a pasted image, plus **the cost** and **the
+  overage, if any**. Josh does this by hand today.
+- **The client must select exactly one option per sheet, and sign it.**
+- **Or deny all options — no signature required for a denial.** Denial is not a signed act; selection is.
+- **The delta becomes a change order, signed immediately after selection.** A $5,000 tile allowance
+  resolved with a $6,200 selection produces a **$1,200 CO presented for signature right after the
+  material is chosen** — not a silent adjustment of the allowance line. Two acts, back to back.
+- **Credits apply in the other direction.** A $4,200 selection against a $5,000 allowance **returns
+  $800 to the client as a credit.** The company does not keep the underage.
+
+### §8.1 — `§S` resolved, and the answer is a blocker ⚠️
+
+R21 says *"CC reads the live allowance representation on the budget line before specifying storage."*
+**Read at S150. There is no allowance representation of any kind.**
+
+Verified live against `information_schema`: **no table and no column anywhere in `public` matches
+`%allowance%`.** `project_budget_items` carries `id, company_id, …, project_id, source_line_row_id,
+source_line_item_id, row_type, cost_code, description, committed_amount, actual_amount,
+source_change_order_id, is_miscellaneous` — and **no allowance flag, no allowance type, nothing.**
+
+**Two consequences.**
+
+1. **R21 is not a rendering feature over existing data. It is a new subsystem** — allowance identity,
+   option sets with images and costs, a selection act, a signature, a CO trigger and a credit path.
+   The interview's own scale note asks whether it "may warrant its own sub-module rather than a
+   section of the portal spec." **Sized here: yes.** It is larger than any other section of this spec
+   and has a money consequence none of the others carry. **Recommend it be specced separately and
+   built after the portal's read surfaces.**
+
+2. **The interview's own note about the gap is now itself stale, in the module's favour.** R21 says
+   *"`project_budget_items` stores only `budgeted_amount` (cost basis)"*. That column **no longer
+   exists on that table** — `20260817000000` dropped it and moved it to **`project_budget_amounts`**
+   (`budget_item_id`, `budgeted_amount`), which is Owner/Admin-only by RLS. So the sell-side gap R21
+   depends on has been *restructured* since the interview, and **the split is itself a constraint on
+   R21**: an allowance overage has a sell consequence, and the sell figure now lives on a table
+   clients are floored out of by design.
+
+**This is the one place where a ruling meets shipped code that cannot satisfy it as written.** It is
+not a conflict in the ruling — it is missing schema plus a floor that was built after the ruling's
+premise. Flagged rather than resolved: **the storage design for allowances needs Josh.**
+
+---
+
+## §9 — Notifications (R12)
+
+- **Email fires regardless of portal use.** COs and the like reach her whether or not she logs in.
+- **Photos are silent** — no client notification when photos are ticked visible. She finds them when
+  she looks. ⚠️ **Deliberate. Recorded so nobody later adds a photo notification thinking it was an
+  oversight.**
+- **Clients get push** when they have the app.
+- **A reply to a client's photo or note DOES notify her** — the one exception to photo silence.
+  Publishing photos to her is silent; **answering something she raised is not.**
+
+**This reverses ND-7's email-only rule for clients**, which reasoned that clients are portal-only and
+would never install a PWA. **Email is the floor; push is added.**
+
+### §9.1 — Known risk, acknowledged not open
+
+**Client push enrolment has never been verified on a handset, and R12 depends on it.** Pre-existing
+across the project; now load-bearing for M9. Josh has acknowledged this.
+
+Compounding it: `GATED.md` Gate 4 records that iOS delivers Web Push **only to an installed PWA**, so
+the install path is a precondition, not a nicety. **[UNVERIFIED at S150]** — I did not audit `public/`
+for a manifest this session, so I cannot say whether that path exists today. **Verify before treating
+push as available**, and note that email being the floor means M9 still functions if it is not.
+
+---
+
+## §10 — Payment (R19)
+
+**A pay button, routing to QuickBooks.** **Companies with no QB connection get no pay option at all** —
+not a disabled button, no option. M9 accepts 7G's design rather than building its own pay surface.
+
+---
+
+## §11 — Branding (R20)
+
+- **The login page is unchanged** — same page, same platform branding, for every user type. No
+  subdomain, no path-carried company, **no tenant identity exposed pre-auth.**
+- **Branding swaps only after authentication, and only when the caller resolves as a client** —
+  company logo and name replace the platform's inside the portal.
+
+*Reasoning, Josh's:* company users see the software name and may promote it; clients virtually never
+will, so this lets companies appear to own the tool.
+
+Because the swap is **post-auth**, the placeholder's "no company info before authentication" principle
+holds intact — **no reconciliation owed.**
+
+**Bishop's own website as a login entry point is a deliberate one-off** — Josh will build it for
+himself and for no other company. It is not a product feature and nothing should generalise it.
+
+---
+
+## §12 — Empty state (R16)
+
+A mostly empty page with a line telling her the **project hasn't started yet.**
+
+---
+
+## §13 — Build sequencing
+
+| Stage | Contents | Blocked by |
+|---|---|---|
+| 0 | **Ruling on Idea 1** (outbound webhooks) + `STATE.md` edit | Josh — see §0 |
+| 1 | Identity, accounts, invite, the three termination states (R1–R5, R17) | §3's `§S`; the counterfactual test identity from §2 |
+| 2 | Read surfaces — schedule titles, files, contracts/invoices/proposals/COs (R14) | the second `files` SELECT policy |
+| 3 | The financial view (R6, R7a, R7b, R8) | stage 2 |
+| 4 | Photo/file tagging, both mechanisms (R9, R15) | stage 2 |
+| 5 | Client writes — CO signing, photos/notes/questions (R10, R11, R13) | stage 1; the shared CO write path |
+| 6 | Notifications (R12) | push enrolment verified on a handset (§9.1) |
+| 7 | Payment (R19) | a live QB connection |
+| **—** | **Allowances (R21)** | **its own spec. See §8.1 — this is not a section, it is a sub-module, and its storage needs a ruling.** |
+
+---
+
+## §14 — Corrections table (carry forward)
+
+| Claim | Status | Correct reading |
+|---|---|---|
+| `project-income.ts` is at `packages/shared/utils/` | **false** | `apps/web/lib/services/project-income.ts` (180 lines). `invoice-derivation.ts` IS at `packages/shared/utils/` (665). |
+| GATED.md M9-D2 says no client-visible flag exists | **false** | GATED.md quotes that as struck-through and states `CORRECTED [S140]: files.client_visible EXISTS`. The brief was stale, not the document. |
+| `project_budget_items` stores `budgeted_amount` | **stale** | Dropped by `20260817000000`; now `project_budget_amounts.budgeted_amount`, Owner/Admin only. See §8.1. |
+| Interview anchor `ab67998` | **stale, harmless** | `main` is at `30b2a24`; 7I stage 1 merged between. No ruling is affected. |
+| "a fresh session starts at Phase 3" | **do not follow** | Run Phase 1 against the schema as it is on the day. This session produced three false findings from inherited or skipped verification. |
