@@ -1187,8 +1187,29 @@ Fallback is the column default `America/New_York`, **never UTC** (`TECH_DEBT.md:
     `:640` — _"'Clear for payment' is a notification, not a gate."_
 15. **A PM cannot** generate, send, or void a contract of either kind. _(UI gate; the DB floor is the
     separate `FINANCIAL-RLS-FLOOR` follow-up — §8.)_
-16. 7I writes no `contract_value`, no `client_contracts.status`, no `expenses` row, no invoice money
-    column.
+16. **7I's own services** write no `contract_value`, no `client_contracts.status`, no `expenses`
+    row, no invoice money column.
+
+    > **⚠️ REWORDED [S150] so E1 does not read as a violation. This is a clarification of
+    > which layer owns the write, not a relaxation of the rule.**
+    >
+    > _Superseded text, quoted rather than deleted:_ _"7I writes no `contract_value`, no
+    > `client_contracts.status`, no `expenses` row, no invoice money column."_
+    >
+    > **What changed under it.** E1 (`20261002000000_7i_e1_contract_status_decoupling.sql`, R16)
+    > makes `convert_estimate_to_project` stop stamping the CONTRACT's status from `v_is_signed` —
+    > the proposal's signature — and write a corrected status instead. That is the **conversion
+    > RPC's** write. §5.1 has always said conversion owns `status` and `executed_date`, and
+    > §11.4 still forbids **7I** from writing either column; neither is loosened here.
+    >
+    > **Why the old wording failed.** It said "7I", and E1 shipped under the 7I banner, so at HEAD
+    > the criterion read as "7I ships a migration that writes `client_contracts.status`" — a
+    > self-contradiction on the face of the document. The criterion was always about the **owning
+    > layer**, never about which sub-module's session the code landed in. "7I's own services" says
+    > that out loud.
+    >
+    > **No 7I service gained a write it did not have.** `contracts-client.ts` still writes neither
+    > column, and criterion 4's "**7I writes neither column**" is unchanged and remains true.
 17. **Attachments** can be added before send (merged into the rendered PDF in `sort_order`) or after
     execution (**linked, never merged** — the executed artifact is frozen).
 18. `substantial_completion_days` prints **both** spelled-out and as a numeral from one stored value.
