@@ -73,14 +73,22 @@ Josh's framing, kept verbatim so it does not drift across eleven passes:
 `platform_admins`, `trial_lifecycle`, `trial_emails`, `deletion_jobs`, `export_jobs`, and the
 role helpers `get_my_role()` / `get_my_company_id()` / `get_my_member_id()` / `is_platform_admin()`.
 
-**⚠️ `companies` is the platform's configuration god-object: 72 columns [LIVE].** Nine modules have
+**⚠️ `companies` is the platform's configuration god-object: 73 columns [LIVE].** Nine modules have
 hung settings on it. This is the single most important structural fact about M1 and it is what
 makes M1 a consumer-of-everything as well as a dependency-of-everything.
 
+> **[S152] 72 → 73.** `updated_by` was added so `companies_set_updated_by` — the trigger CLAUDE.md
+> mandates for every per-tenant table — could exist at all (**M1-06**). The god-object is
+> **recorded and not restructured** [RULED Josh, S152]; the measurement establishes it is a
+> *boundary* problem and not a performance one (the table holds one row per tenant), with the
+> QuickBooks block named as the one seam a side-table split could follow. See
+> `S152-rls-helper-measurement.md` §6.
+
 | Consumer | Reads from M1 | Assumes | Verified S151 |
 | --- | --- | --- | --- |
-| **Every module's RLS** | `get_my_role()`, `get_my_company_id()` | one profile per auth user; a resolvable role | ✅ backed by `profiles_user_id_key`; fails **closed** on soft-delete |
-| **M6/M7 RLS + punch, expenses, time** | `get_my_member_id()` | one member row per profile | ✅ backed by `idx_company_members_profile_id` (UNIQUE, partial) |
+| **Every module's RLS** | `get_my_role()`, `get_my_company_id()` | one profile per auth user; a resolvable role | ✅ backed by `profiles_user_id_key`; fails **closed** on soft-delete. **[S152] COST MEASURED: 11.1–11.3 µs per call, invoked PER ROW in 268 of 273 policies** — see `S152-rls-helper-measurement.md` |
+| **M6/M7 RLS + punch, expenses, time** | `get_my_member_id()` | one member row per profile | ✅ backed by `idx_company_members_profile_id` (UNIQUE, partial). **[S152] 15.7 µs/call** |
+| **31 tables' RLS (58 policies)** | `can_view_project(project_id)` | a per-row visibility test | ⚠️ **[S152] 636.6 µs per call — 67× the others, and NOT hoistable (row-varying argument). 96% of all measured policy cost.** M1 owns the helper; the cost lands in M5/M6/M7. |
 | **M4 estimating** | `default_*_markup_percent`, `default_*_margin_percent`, `default_tax_rate`, `default_pricing_mode`, `default_labor_rate`, `estimate_number_prefix`/`_sequence`, `default_terms_sections`, `default_expiration_days`, `default_proposal_*` | nullable defaults are optional | not re-verified this pass |
 | **M6 time tracking** | `timezone`, `week_starts_on`, `ot_threshold_hours`, `breaks_paid`, `paid_break_cap_minutes`, `gps_clock_mode` | all NOT NULL with defaults | ✅ all NOT NULL [LIVE] |
 | **Platform-wide date logic** | `timezone` (**70 files**) | never UTC; falls back to `America/New_York` | NOT NULL + default ✅; **13 sites still derive UTC** — `#116`, pre-existing |
@@ -96,7 +104,7 @@ makes M1 a consumer-of-everything as well as a dependency-of-everything.
 
 | Writer | Writes | Guarded? |
 | --- | --- | --- |
-| M7I `contracts-client.ts:466` `setClientContractsEnabled` | `companies.client_contracts_enabled` | ✅ row-counted. ⚠️ does **not** set `updated_at` — see **M1-06** |
+| M7I `contracts-client.ts:466` `setClientContractsEnabled` | `companies.client_contracts_enabled` | ✅ row-counted. ~~⚠️ does **not** set `updated_at`~~ — **that was WRONG, corrected [S152]:** `companies_updated_at` has always stamped it. See **M1-06**. |
 | Stripe `api/stripe/checkout/route.ts:70` | `companies.stripe_customer_id` | server route |
 | Stripe `api/stripe/webhook/route.ts:98` | `companies.stripe_customer_id` | server route |
 
@@ -153,7 +161,19 @@ makes M1 a consumer-of-everything as well as a dependency-of-everything.
 > correct. The repo's convention is that superseded text is quoted rather than deleted, and that
 > applies across passes as much as within a document.
 
-*(none yet)*
+**[S152] — a FIX PASS disagreeing with pass 1, recorded here because the shape is the one §3 is
+for, even though S152 is not pass 2.**
+
+| Earlier claim | Where | Corrected reading | Evidence |
+| --- | --- | --- | --- |
+| *"toggling client contracts on or off never advances `updated_at` on the company row"* | S151 **M1-06** | **False.** `companies_updated_at` already existed and stamps `updated_at` unconditionally. Only `companies_set_updated_by` was missing. | `pg_trigger` [LIVE, S152] |
+| *"The direction is not in doubt; the size is"* — i.e. wrap the helpers and the only question is how many | S151 **M1-04** | **The direction WAS in doubt.** `(SELECT …)` cannot hoist `can_view_project(project_id)` because the argument varies per row — 554 ms bare vs 576 ms wrapped. The naive conversion would have left 96% of the cost in place. | `S152-rls-helper-measurement.md` §3 |
+
+**Both had the same root cause, and it is worth naming for later passes:** each was read from a
+*document* (`CLAUDE.md`'s holdover note; the general advice that RLS helpers should be wrapped)
+rather than from the system. §0's standing rule — *verify against `pg_proc`, `pg_policies` and
+`information_schema`, never migration files* — should be read as covering **prose about the system
+as well as migrations**.
 
 ---
 
@@ -162,3 +182,7 @@ makes M1 a consumer-of-everything as well as a dependency-of-everything.
 | Pass | Subject | Session | Findings document | Live evidence |
 | --- | --- | --- | --- | --- |
 | 1 | Module 1 — Settings, Admin & Billing | S151, 2026-08-18 | `docs/specs/S151-m1-audit.md` | `apps/web/test/s151-m1-audit.live.ts` (6/6) |
+| 1-fix | Module 1 — fix pass for pass 1's §4 | S152 | `S151-m1-audit.md` §0a (outcomes) · `S152-rls-helper-measurement.md` (Group D) | `s152-m1-fixes.live.ts` (11/11) · `s152-cron-absence.test.ts` (4/4) |
+
+**A fix pass is not a pass.** It closes an existing pass's findings and does not fill a row or a
+column in §2 — pass 2's subject is still Module 2, and M1's coverage is unchanged by it.
