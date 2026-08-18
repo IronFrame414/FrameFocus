@@ -4,13 +4,16 @@ import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   createContractTemplate,
+  saveContractBoxMap,
   setClientContractsEnabled,
   softDeleteContractTemplate,
   updateContractTemplate,
   uploadContractTemplatePdf,
+  type ContractBoxInput,
 } from '@/lib/services/contracts-client';
 import { getFileSignedUrlClient } from '@/lib/services/files-client';
-import type { DocumentKind } from '@/lib/services/contracts-shared';
+import { catalogForKind, type DocumentKind } from '@/lib/services/contracts-shared';
+import { ContractBoxEditor } from '@/components/contracts/contract-box-editor';
 import { brand } from '@/lib/brand';
 import {
   cardStyle,
@@ -49,6 +52,19 @@ export interface ContractTemplateRow {
   id: string;
   name: string;
   pdf_file_id: string | null;
+  /**
+   * The template's CURRENT box map, read server-side by
+   * `getContractTemplateBoxes()` and handed to the editor as its starting
+   * state.
+   *
+   * ⚠️ THIS PROP IS THE FIX FOR #2-7i AND IS NOT OPTIONAL. 7F's editor opens
+   * with an empty array and presents it as the current map, so re-opening it
+   * and saving replaces a placed map with nothing — silently, on a legal form.
+   * Reads live server-side because `getContractTemplateBoxes` is in
+   * `contracts.ts`, which imports `next/headers` and cannot be called from a
+   * client component.
+   */
+  boxes: ContractBoxInput[];
 }
 
 export function ContractSettingsForm({
@@ -231,6 +247,8 @@ function TemplateSet({
   onError: (message: string | null) => void;
   onDone: () => void;
 }) {
+  const [placing, setPlacing] = useState<ContractTemplateRow | null>(null);
+
   async function run(action: () => Promise<{ success: boolean; error?: string }>, fallback: string) {
     setBusy(true);
     const result = await action();
@@ -247,10 +265,6 @@ function TemplateSet({
       () => createContractTemplate({ name: name.trim(), document_kind: kind }),
       'Could not add.'
     );
-  }
-
-  async function rename(template: ContractTemplateRow, name: string) {
-    await run(() => updateContractTemplate(template.id, { name }), 'Could not save.');
   }
 
   async function upload(template: ContractTemplateRow, file: File) {
@@ -307,33 +321,39 @@ function TemplateSet({
             flexWrap: 'wrap',
           }}
         >
-          <input
-            defaultValue={t.name}
-            onBlur={(e) => {
-              const next = e.target.value.trim();
-              if (!next) {
-                e.target.value = t.name;
-                return onError('A form needs a name.');
-              }
-              if (next !== t.name) void rename(t, next);
-            }}
-            style={{ ...inputStyle, width: '260px', marginTop: 0 }}
-          />
+          {/* READ-ONLY [RULED S150]. Renaming lives on the box-placement
+              screen, as an explicit "Edit title" act on the screen where you
+              are already working on the form — not something changed by
+              clicking past a field on a list. */}
+          <span style={{ fontSize: '13px', color: color.body, fontWeight: 600 }}>{t.name}</span>
 
           <span style={{ flex: 1 }} />
 
           {t.pdf_file_id ? (
-            <button
-              type="button"
-              style={{ ...secondaryButtonStyle, padding: '4px 10px', fontSize: '12px' }}
-              onClick={async () => {
-                const url = await getFileSignedUrlClient(t.pdf_file_id as string);
-                if (url) window.open(url, '_blank', 'noopener');
-                else onError('Could not open that form.');
-              }}
-            >
-              View form
-            </button>
+            <>
+              <button
+                type="button"
+                style={{ ...secondaryButtonStyle, padding: '4px 10px', fontSize: '12px' }}
+                onClick={async () => {
+                  const url = await getFileSignedUrlClient(t.pdf_file_id as string);
+                  if (url) window.open(url, '_blank', 'noopener');
+                  else onError('Could not open that form.');
+                }}
+              >
+                View form
+              </button>
+              {/* Only with a PDF present: a box map describes positions on a
+                  form, so placing boxes before there is a form to place them
+                  on has nothing to mean. */}
+              <button
+                type="button"
+                style={{ ...secondaryButtonStyle, padding: '4px 10px', fontSize: '12px' }}
+                disabled={busy}
+                onClick={() => setPlacing(t)}
+              >
+                Place boxes{t.boxes.length > 0 ? ` (${t.boxes.length})` : ''}
+              </button>
+            </>
           ) : (
             <span style={{ color: color.warningDeep, fontSize: '11.5px' }}>No form uploaded</span>
           )}
@@ -377,6 +397,34 @@ function TemplateSet({
           </button>
         </div>
       ))}
+
+      {/* ⚠️ §2.1 — ONE editor, mounted from BOTH sets. `TemplateSet` renders
+          twice, so this single mount point serves `client_contract` and
+          `sub_contract` alike; everything kind-specific arrives as a prop.
+          `key` forces a remount per template so the editor's initial state is
+          re-read rather than carried over from the last form opened. */}
+      {placing && (
+        <ContractBoxEditor
+          key={placing.id}
+          templateId={placing.id}
+          templateName={placing.name}
+          documentKind={kind}
+          catalog={catalogForKind(kind)}
+          initialBoxes={placing.boxes}
+          onSave={(boxes) => saveContractBoxMap(placing.id, kind, boxes)}
+          onRenameTitle={async (name) => {
+            const result = await updateContractTemplate(placing.id, { name });
+            if (result.success) onDone();
+            return result;
+          }}
+          onClose={() => setPlacing(null)}
+          onSaved={() => {
+            setPlacing(null);
+            onError(null);
+            onDone();
+          }}
+        />
+      )}
     </div>
   );
 }
