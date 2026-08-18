@@ -78,6 +78,91 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
 ## Open Tech Debt
 
+### Branch-scoped, awaiting real numbers — `feature/s150-audit-fixes` [S150]
+
+> Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.
+
+- **#1-audit — the "Retainage held" line asserts "% across payments" without reading
+  `retainage_shape`, and prints the CURRENT rate against a HISTORICAL accrual.**
+
+  Raised by §2 of `docs/specs/S150-m7-completion-audit.md` (7C). Confirmed still present
+  at `54279df`. **7C UI; no ruling covered it, which is why it went unfiled.**
+
+  `apps/web/app/dashboard/projects/[id]/contracts/contracts-panel.tsx:885-886`:
+
+  ```tsx
+  {contract.retainage_percent !== null && (
+    <span style={{ color: '#6b7280' }}>({Number(contract.retainage_percent)}% across payments)</span>
+  )}
+  ```
+
+  The sentence is gated on the PERCENT being non-null and **never consults the shape** —
+  even though the same component reads `retainage_shape` 130 lines below, at `:1016-1017`,
+  to seed the editor. The value is in hand and is not used.
+
+  **Two distinct faults, and they have different reachability. Recorded separately so
+  neither is fixed by accident and the other assumed gone.**
+
+  **(a) Shape-blindness — LATENT, not reachable through the shipped UI today.** The audit's
+  finding, stated as *"for `final_hold` that sentence is false: nothing is withheld across
+  payments"*. That is the right reading of the code, and the reason it does not currently
+  fire is worth writing down, because it is an accident:
+
+  - The block only renders when `retainageRow` exists (`:483`, `:881`) — the `is_retainage`
+    accrual expense. That row is born **only** when `v_withhold > 0`
+    (`20260729010000_7c_accounts_payable.sql:683-696`), which requires
+    `retainage_shape = 'percent_across'` **and** `retainage_percent > 0`. So a pure
+    `final_hold` contract has no accrual row and never reaches `:885`.
+  - Every shipped writer sets shape and percent **together**, and `payables-client.ts`
+    (`:203`, `:285`) suppresses the percent for `final_hold` with
+    `retainage?.shape === 'percent_across' ? retainage.percent : undefined`, so the column
+    lands NULL.
+
+  **What makes it latent rather than dead: that pairing is a client-side ternary, not a
+  constraint.** `setup_payment_schedule` (`20260730010000:1242-1249`) and
+  `revise_sub_contract_schedule` (`20260731060000:121-127`) both validate
+  *`percent_across` ⇒ percent present*. **Neither validates *`final_hold` ⇒ percent absent*,
+  and `subcontractor_contracts` carries no CHECK pairing the two columns.** Any caller that
+  is not `payables-client.ts` — a direct RPC call, a future service, 7I's contract
+  generator reading these columns for Exhibit B — can write `final_hold` with a percent and
+  the false sentence prints. The pass-through trigger
+  (`20260814000000_sub_retainage_passthrough.sql`) is well-behaved here: it sets both, always
+  `percent_across`.
+
+  **(b) Rate-history-blindness — REACHABLE TODAY through the shipped UI, and the sentence is
+  false about the money next to it.** Independent of shape. `revise_sub_contract_schedule`
+  updates `retainage_percent` (`20260731060000:306-310`) and **never touches the accrual row**
+  — stated in that migration's own header, item 5. So:
+
+  1. Sub contract, `percent_across` @ 10%. Pay stage 1 of $10,000 → withhold $1,000; accrual
+     row born at $1,000.
+  2. Revise the schedule, change retainage to 5% (the panel's percent input at `:1295` is
+     editable, and revise submits full state).
+  3. Pay stage 2 of $10,000 → withhold $500; accrual row now $1,500.
+  4. The panel prints **"Retainage held $1,500 (5% across payments)"**. $1,500 is not 5% of
+     $20,000. The accrual is the sum of two rates; the sentence claims one.
+
+  The dollar figure is correct — it is `committedRemaining` over the accrual row, which is the
+  bookkeeping mirror of Σ withheld. **Only the explanation beside it is wrong**, which is the
+  worse failure of the two: a user reconciling the number against the stated rate finds a
+  discrepancy in a figure that is actually right.
+
+  **Fix shape, cheapest first.** (a) alone is one conditional — render the parenthetical only
+  for `retainage_shape === 'percent_across'`, and say "held from the final stage" for
+  `final_hold`. That does **not** fix (b). (b) needs the sentence to stop claiming a rate it
+  cannot substantiate: either drop the rate from the line and show Σ withheld alone, or derive
+  the phrasing from the payment rows (`expense_payments.retainage_withheld`) rather than from
+  the contract's current column. **Decide (b) before writing (a)**, or the shape fix ships and
+  the item reads as closed.
+
+  **Not a candidate for a DB CHECK without a ruling.** Pairing `final_hold` with
+  `retainage_percent IS NULL` would be the tidy backstop for (a), but `subcontractor_contracts`
+  carries live rows and the pass-through trigger writes both columns on every INSERT —
+  a constraint is a migration against shipped money terms, which is #117's and #132's class of
+  decision, not a UI patch. Recorded as the option, not as the recommendation.
+
+  Observed S150, from the Module 7 completion audit.
+
 ### Branch-scoped, awaiting real numbers — `feature/7i-stage1-settings` [S150]
 
 > Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.
