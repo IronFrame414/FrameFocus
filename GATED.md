@@ -298,6 +298,43 @@ read [TECH_DEBT.md #117](TECH_DEBT.md) first; the obvious fix breaks CO authorin
 
 ---
 
+## ⚠️ OPEN AT THE NEXT DEPLOY — which repo migrations are absent from PRODUCTION is UNKNOWN — **[S150, 2026-08-18]**
+
+**Not a gate. Nothing is blocked on it today. It is recorded here because the next person
+who deploys needs it, and there is nowhere else it would be found.**
+
+**What is unknown.** The set of migrations under `supabase/migrations/` that have been
+applied to **rebuild-test** but NOT to **production**. Nobody has enumerated it.
+
+**What IS known [S150, live reads].** Local and rebuild-test match **exactly** — 109
+migration files, 109 rows in `supabase_migrations.schema_migrations`, no orphan and no
+drift in either direction, after `20261002000000_7i_e1_contract_status_decoupling.sql` was
+pushed and `database.ts` regenerated clean. **Rebuild-test is therefore ahead of production
+by an unmeasured amount**, and has been accumulating that lead across many sessions.
+
+**⚠️ DO NOT ATTEMPT TO CLOSE THIS FROM A NORMAL SESSION. Production is not linked, and must
+not be linked** to answer it. The Supabase CLI in this Codespace is linked to
+`framefocus-rebuild-test` (`nmyphyhmfttxkdoposvf`) and every "applied" claim anywhere in
+this repo means *applied to rebuild-test*. `supabase db dump` is also unavailable here —
+it needs Docker, which is not installed in this Codespace.
+
+**Nothing in S150 touched production.** S150 was rebuild-test only, and this item is a
+statement about a pre-existing condition, not about anything that session did.
+
+**What answering it requires — one of:**
+
+- a `schema_migrations` export from production, diffed against `supabase/migrations/`; or
+- a production link established **deliberately, as the deploy**, by whoever is doing the
+  deploy — not incidentally by a session trying to answer this question.
+
+**Why it is recorded and not attempted.** The S150 Module 7 completion audit was asked for
+exactly this and could not produce it; every other claim in that document is verified, and
+this is the single largest gap in it (`docs/specs/S150-m7-completion-audit.md` §0 and §7
+item 1). Leaving it as an audit footnote means the next deploy rediscovers it at the worst
+moment. **Whoever deploys next: enumerate the delta first.**
+
+---
+
 ## Gate 3 — 7D–7H specs (blocked on reconciliation + decisions, not on code)
 
 7E–7H are gated behind 7D's design. **The repo currently disagrees with itself about
