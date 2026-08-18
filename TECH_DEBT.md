@@ -82,74 +82,52 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
 > Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.
 
-- **#2-7i — ⚠️ DEFECT, NOT DEBT. 7F's box editor never loads an existing box map,
-  so re-opening it and saving destroys the placed map. Live, on a legal-document
-  surface.**
+- **#2-7i — ✅ FIXED [S150] — 7F's box editor never loaded the existing map, so
+  saving replaced a placed map with nothing.**
 
-  `BoxMapEditor` (`apps/web/app/dashboard/settings/lien-release-settings-form.tsx:334`)
-  initialises `useState<BoxInput[]>([])` and never reads the boxes back.
-  `getTemplateBoxes()` (`lien-releases.ts:53`) has exactly one caller in the repo:
-  `api/lien-releases/generate/route.ts:171`. Nothing in the settings surface calls it.
+  `BoxMapEditor` initialised `useState<BoxInput[]>([])` and never read the boxes
+  back. `getTemplateBoxes()` (`lien-releases.ts:53`) had exactly ONE caller in the
+  repo — `api/lien-releases/generate/route.ts:171`. No settings surface called it.
 
-  So the sequence is: place boxes on a release form → save → re-open "Place boxes" to
-  adjust one → the table is **empty** → save → `saveBoxMap` REPLACES the map with
-  nothing. The form still renders, now with every blank unfilled. There is no error
-  and no warning; the editor's own footnote ("Saving replaces the whole map for this
-  form") reads as a correct description of intended behaviour, which is what makes it
-  hard to see.
+  So: place boxes → save → re-open to adjust one → the table is **empty** → save →
+  `saveBoxMap` replaced the map with nothing. No error, no warning, and the
+  editor's own footnote ("Saving replaces the whole map for this form") read as a
+  correct description of intended behaviour, which is what made it hard to see.
+  The replace-not-merge semantics were right and were never the bug.
 
-  The replace-not-merge semantics are right and are not the bug. The bug is that the
-  editor opens with an empty map it presents as the current one.
+  Fixed by the #1-7i extraction rather than separately: the shared editor takes
+  `initialBoxes` as a REQUIRED prop, read server-side in
+  `app/dashboard/settings/page.tsx`, so an editor that opens on an empty map is
+  no longer expressible. Same class as `#129` — silent divergence found by
+  reading the save path, not by anything failing.
 
-  **Not fixed in S150, deliberately** [RULED Josh]: it needs its own click-test against
-  lien releases, and this session is scoped to 7I. 7I's own editor loads from
-  `getContractTemplateBoxes()` on open — ruled non-negotiable — so the defect is not
-  propagated, only left standing where it already is.
+  ⚠️ **NOT CLICK-TESTED at S150.** Josh accepted the risk that 7F inherits the
+  shared editor before either surface has been exercised by hand.
 
-  Same class as `#129` (two markup editors, silent loss discovered by reading the save
-  path rather than by anything failing) — see CLAUDE.md's PARITY ruling.
+- **#1-7i — ✅ CLOSED [S150] — one box editor, mounted by both modules.**
 
-- **#3-7i — Box placement is TYPED COORDINATES, not visual. Decided by default at
-  S150, not by ruling.**
+  `components/box-map/box-map-editor.tsx` replaces 7F's private `BoxMapEditor`
+  and 7I's `ContractBoxEditor`. **It is deliberately NOT under
+  `components/contracts/`**: CLAUDE.md's PARITY ruling makes a helper's directory
+  a claim of ownership, and two modules mount this one.
 
-  `ContractBoxEditor` is a numeric table: the user types X/Y/W/H as percentages and
-  reads off where the blanks fall by opening the form in another tab. It matches 7F's
-  shipped interaction exactly, which is the argument for it — but nobody chose it on
-  the merits.
+  Everything module-specific is a prop — catalog, which kinds exist, whether
+  boxes carry a party, the size floor, the save function. 7I passes four kinds
+  and a party (R4/R5); 7F passes three and none. The sizing tables stay separate
+  (`minWidthForContractKey` / `minWidthForReleaseKey`) because the KEYS differ —
+  a release has a claimant and a waiver date, a contract has neither — but both
+  multiply the same shared `FRACTION_PER_CHAR`, so the two floors cannot drift
+  into disagreeing about how wide a character is.
 
-  A visual overlay (drag a box onto the rendered page) needs the PDF rasterised in the
-  browser, and **the repo has no library that can do it**: `pdf-lib` manipulates PDFs
-  without rendering them and `@react-pdf/renderer` generates them. It would mean adding
-  `pdfjs-dist` — a real dependency decision on a legal-document surface, out of scope
-  for a slice scoped to "UI work, no migration", so it was not taken unilaterally.
+  7F inherited visual placement (R6) as a side effect, and its §3.1 overflow
+  question — which `7f2-spec` left open and 7I §2.2 says "propagates to 7F" — is
+  answered on the authoring side by the shared placement warning.
 
-  Worth a ruling before a company maps a 12-page agreement by typing 4 numbers per
-  blank. Closing this alongside #1-7i would upgrade both documents at once.
-
-- **#1-7i — Extract and unify 7F's `BoxMapEditor` with 7I's.**
-
-  7I §2.1's BUILD REQUIREMENT — "build the placement editor once, parameterised by
-  template id and value catalog" — was ruled at S150 to mean **7I's two template sets**
-  (`client_contract`, `sub_contract`), not 7F as well. That is option (a): 7I builds its
-  own parameterised editor; 7F's is left untouched.
-
-  Option (b), the better end state, is one editor serving all three mount points. It
-  needs: `BoxMapEditor` extracted out of `lien-release-settings-form.tsx` (it is a
-  private function there); parameterisation over `{catalog, onSave, kinds}` — 7F's has
-  no `initial` kind, which 7I §7.3d requires; and a re-mount in 7F, which is a shipped
-  legal-document surface. 7I's editor is built parameterised so (b) remains available
-  without rewriting it.
-
-  Fixing #2-7i inside (b) closes the defect for both at once, which is the argument for
-  doing them together.
-
-- **7I acceptance criterion 15's parenthetical is stale [recorded S150].** It reads *"A PM cannot
-  generate, send, or void a contract of either kind. (UI gate; the DB floor is the separate
-  `FINANCIAL-RLS-FLOOR` follow-up — §8.)"* **Both halves of the parenthetical are false at HEAD.**
-  The floor shipped at S97 (`20260806000000`), and `20260926000000` §6 gives all four 7I tables
-  Owner/Admin RLS **including SELECT**, plus `enforce_contract_void_authority` on three tables
-  carrying contract state. It is not a UI gate and there is no outstanding follow-up. Same stale
-  claim §8's own S145 banner already corrected in the body — the criterion was missed.
+  ⚠️ **7F STILL SHRINKS AT RENDER.** `fitTextToBox()` reduces the font to
+  `MIN_FONT_SIZE` before declaring overflow, and that is unchanged — this closed
+  an editor duplication, not a renderer difference. So the placement warning is
+  advisory on 7F in a way it will not be on 7I once R10 blocks the send.
+  Reconciling the two render paths belongs to 7I stage 2.
 
 - **§13's prerequisite list is stale on this point, recorded so it is not re-followed.**
   7I §13 names "the box-placement component" among the hard prerequisites 7F supplies.
