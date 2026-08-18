@@ -179,6 +179,72 @@ export function isKeyValidForKind(key: string, kind: DocumentKind): boolean {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// §2.2 / Q5 — the placement-time size floor
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Josh: "warn user of overflow. we must make all boxes large enough that this is
+// a rare occurrence." §2.2 warns at BOTH ends — while authoring, and at render.
+//
+// ⚠️ A HEURISTIC, AND IT CANNOT BE ANYTHING ELSE. The render-time check is
+// `fitTextToBox()`, which needs `widthPerChar` — measured from the font embedded
+// in the PDF at generate time. The browser has no such measurement while placing
+// boxes, so calling `fitTextToBox()` here would mean inventing a font metric and
+// reporting the guess as a calculation.
+//
+// ⚠️ IT DELIBERATELY OVER-WARNS [RULED S150, Q5]. R10 makes render-time overflow
+// BLOCK the send, so the two must not disagree in the direction that lets an
+// author pass placement and fail at the door. They cannot be made equal — one
+// guesses, one measures — so the guess is the stricter of the two. The cost is
+// warning on boxes that would have been fine, which is the cheaper error.
+//
+// ⚠️ THIS TABLE IS 7I's, AND 7F HAS ITS OWN [#1-7i, S150]. The box EDITOR is now
+// shared between the two modules; the sizing table is not, because the keys are
+// not. Each module owns what its own values look like.
+
+/** Typical rendered length of each catalog value, in characters. */
+const EXPECTED_CHARS: Record<string, number> = {
+  contractor_name: 30,
+  contractor_address: 45,
+  contractor_license_no: 16,
+  counterparty_name: 30,
+  counterparty_address: 45,
+  owner_entity_block: 40,
+  project_name: 32,
+  property_address: 45,
+  legal_description: 90,
+  scope_of_work: 90,
+  contract_value: 14, // "$1,234,567.89"
+  contract_date: 18, // "September 26, 2026"
+  start_date: 18,
+  target_end_date: 18,
+  // §12.18 — prints spelled-out AND as a numeral from one value:
+  // "one hundred twenty (120)".
+  substantial_completion_days: 30,
+  retainage_percent: 6,
+  payment_schedule: 90, // §6.3 — a printed block, not a field
+  terms_text: 90,
+  signer_name: 30,
+  signer_title: 24,
+};
+
+const DEFAULT_EXPECTED_CHARS = 24;
+
+/**
+ * Fraction of page width one character is assumed to occupy.
+ *
+ * A 10pt Helvetica character averages ~5pt on a 612pt US Letter page — about
+ * 0.008. Set well above that per Q5, so the floor sits near 13pt text and fires
+ * before a realistic 10–11pt render would overflow.
+ */
+export const FRACTION_PER_CHAR = 0.011;
+
+/** The width below which a contract value box is likely to overflow at render. */
+export function minWidthForContractKey(valueKey: string | null | undefined): number {
+  const chars = (valueKey && EXPECTED_CHARS[valueKey]) || DEFAULT_EXPECTED_CHARS;
+  return Math.min(0.9, chars * FRACTION_PER_CHAR);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // §5.2 — the two-level toggle
 // ─────────────────────────────────────────────────────────────────────────────
 

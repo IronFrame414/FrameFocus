@@ -12,7 +12,7 @@ import { EstimatingSettingsForm } from './estimating-settings-form';
 import { ProposalSettingsForm } from './proposal-settings-form';
 import { TimeTrackingSettingsForm } from './time-tracking-settings-form';
 import { GLMappingSettingsForm } from './gl-mapping-settings-form';
-import { getTemplates } from '@/lib/services/lien-releases';
+import { getTemplateBoxes, getTemplates } from '@/lib/services/lien-releases';
 import { LienReleaseSettingsForm } from './lien-release-settings-form';
 import { getContractTemplateBoxes, getContractTemplates } from '@/lib/services/contracts';
 import { ContractSettingsForm, type ContractTemplateRow } from './contract-settings-form';
@@ -122,6 +122,34 @@ export default async function SettingsPage() {
   // 7F §4 / §10.2 — release forms and the signatory. Owner/Admin by RLS, which
   // is the same set this page already admits.
   const lienTemplates = await getTemplates('client_outbound');
+  // #2-7i FIXED [S150] — 7F's box editor never loaded the existing map, so
+  // re-opening it and saving wiped what was placed. `getTemplateBoxes` existed
+  // and had exactly one caller (the generate route); no settings surface read
+  // it. Read here for the same reason 7I's is: the function imports
+  // `next/headers` and cannot be called from a client component.
+  const lienTemplatesWithBoxes = await Promise.all(
+    lienTemplates.map(async (t) => ({
+      id: t.id,
+      name: t.name,
+      type: t.type,
+      is_final: t.is_final,
+      jurisdiction_state: t.jurisdiction_state,
+      pdf_file_id: t.pdf_file_id,
+      is_default: t.is_default,
+      boxes: (await getTemplateBoxes(t.id)).map((b) => ({
+        page: b.page,
+        // numeric arrives from PostgREST as a STRING; left as one the size
+        // comparison is lexical and silently stops working.
+        x: Number(b.x),
+        y: Number(b.y),
+        width: Number(b.width),
+        height: Number(b.height),
+        kind: b.kind,
+        value_key: b.value_key,
+        custom_label: b.custom_label,
+      })),
+    }))
+  );
   // 7I §5.2 / §10.2 — TWO sets, keyed on `document_kind`. Read unconditionally:
   // §5.2a keeps forms authorable while the master toggle is off, so this must
   // not be gated on `company.client_contracts_enabled`.
@@ -144,15 +172,7 @@ export default async function SettingsPage() {
       {glMappingSettings && <GLMappingSettingsForm settings={glMappingSettings} />}
       <LienReleaseSettingsForm
         companyId={company.id}
-        templates={lienTemplates.map((t) => ({
-          id: t.id,
-          name: t.name,
-          type: t.type,
-          is_final: t.is_final,
-          jurisdiction_state: t.jurisdiction_state,
-          pdf_file_id: t.pdf_file_id,
-          is_default: t.is_default,
-        }))}
+        templates={lienTemplatesWithBoxes}
         signatoryName={company.signatory_name}
         signatoryTitle={company.signatory_title}
         hasSignature={Boolean(company.contractor_signature_path)}

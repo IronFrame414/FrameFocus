@@ -1,16 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ContractBoxInput } from '@/lib/services/contracts-client';
-import {
-  boxKindNeedsParty,
-  partyOptionsFor,
-  type ContractParty,
-  type ContractValueKey,
-  type DocumentKind,
-} from '@/lib/services/contracts-shared';
 import { getFileSignedUrlClient } from '@/lib/services/files-client';
-import { PdfPageRaster } from '@/components/contracts/pdf-page-raster';
+import { PdfPageRaster } from '@/components/box-map/pdf-page-raster';
 import {
   cardStyle,
   color,
@@ -20,24 +12,28 @@ import {
   secondaryButtonStyle,
 } from '@/lib/theme';
 
-// 7I §2.1, §2.2, R6 [S150] — THE box-placement editor.
+// THE box-placement editor. ONE component, shared by 7F (lien releases) and
+// 7I (contracts) — #1-7i, extracted at S150 [R7].
 //
-// ⚠️ ONE COMPONENT, MOUNTED FROM EVERY TEMPLATE SET. §2.1's BUILD REQUIREMENT:
-// option B gives 7I two template tables keyed on `document_kind`, and "the risk
-// of two box-placement UIs drifting apart" is the cost it names. Everything that
-// differs between a client contract and a subcontract arrives as a PROP
-// (`documentKind`, `catalog`, `onSave`), so there is exactly one implementation
-// of what a box is and how it is edited.
+// ⚠️ THIS FILE IS NOT UNDER `components/contracts/`, AND THAT IS THE POINT.
+// CLAUDE.md's PARITY ruling: a helper under one surface's directory is a claim
+// that the surface owns it. Two modules mount this, so neither does.
 //
-// ⚠️ IT LOADS THE EXISTING MAP. `initialBoxes` comes from
-// `getContractTemplateBoxes()`, read server-side. That is #2-7i stated as a
-// requirement instead of a defect: an editor that opens on an empty array and
-// presents it as the current map replaces a placed map with nothing on save.
+// ⚠️ EVERYTHING MODULE-SPECIFIC ARRIVES AS A PROP. The catalog, which kinds
+// exist, whether boxes carry a party, the size floor, the save function. 7I has
+// four kinds and a party; 7F has three and none. There is exactly one
+// implementation of what a box IS and how it is edited, which is what §2.1's
+// BUILD REQUIREMENT asks for and what #1-7i was open against.
+//
+// ⚠️ IT LOADS THE EXISTING MAP — `initialBoxes` is required, not optional.
+// That is #2-7i stated as a requirement instead of a defect: 7F's old editor
+// opened on an empty array and presented it as the current map, so re-opening
+// it and saving replaced a placed map with NOTHING, silently, on a legal form.
 // Do not "simplify" this to `useState([])`.
 //
 // ⚠️ FRACTIONS, NEVER POINTS. Stored as fractions of page width/height with a
-// top-left origin, multiplied by the PDF's point dimensions at render — which is
-// what lets a form re-scanned at a different DPI keep its map. The raster's
+// top-left origin, multiplied by the PDF's point dimensions at render — which
+// is what lets a form re-scanned at a different DPI keep its map. The raster's
 // pixel size and the panel's percentages are both presentation; neither ever
 // reaches a stored coordinate.
 //
@@ -46,70 +42,41 @@ import {
 // view — it is the FALLBACK when a PDF will not rasterise. An encrypted or
 // corrupt form must not make a template unmappable.
 
-// ─────────────────────────────────────────────────────────────────────────────
-// §2.2 / Q5 — the placement-time size floor
-// ─────────────────────────────────────────────────────────────────────────────
-//
-// Josh: "warn user of overflow. we must make all boxes large enough that this is
-// a rare occurrence." §2.2 warns at BOTH ends — here while authoring, and again
-// at render.
-//
-// ⚠️ THIS IS A HEURISTIC AND CANNOT BE ANYTHING ELSE. The render-time check is
-// `fitTextToBox()`, which needs `widthPerChar` — measured from the font embedded
-// in the PDF at generate time. The browser has no such measurement while placing
-// boxes, so calling `fitTextToBox()` here would mean inventing a font metric and
-// reporting the guess as a calculation.
-//
-// ⚠️ AND IT DELIBERATELY OVER-WARNS [RULED S150, Q5]. R10 makes render-time
-// overflow BLOCK the send, so the two checks must not disagree in the direction
-// that lets an author pass placement and fail at the door. They cannot be made
-// equal — one guesses, one measures — so the guess is made STRICTLY more
-// conservative than any realistic render. The cost is warning on some boxes that
-// would have been fine, which is the cheaper error: Josh's ruling is that boxes
-// should be ample anyway.
-
-/** Typical rendered length of each catalog value, in characters. */
-const EXPECTED_CHARS: Record<string, number> = {
-  contractor_name: 30,
-  contractor_address: 45,
-  contractor_license_no: 16,
-  counterparty_name: 30,
-  counterparty_address: 45,
-  owner_entity_block: 40,
-  project_name: 32,
-  property_address: 45,
-  legal_description: 90,
-  scope_of_work: 90,
-  contract_value: 14, // "$1,234,567.89"
-  contract_date: 18, // "September 26, 2026"
-  start_date: 18,
-  target_end_date: 18,
-  // §12.18 — prints spelled-out AND as a numeral from one value:
-  // "one hundred twenty (120)".
-  substantial_completion_days: 30,
-  retainage_percent: 6,
-  payment_schedule: 90, // §6.3 — a printed block, not a field
-  terms_text: 90,
-  signer_name: 30,
-  signer_title: 24,
-};
-
-const DEFAULT_EXPECTED_CHARS = 24;
-
 /**
- * Fraction of page width one character is assumed to occupy.
+ * The shape every box map shares.
  *
- * A 10pt Helvetica character averages ~5pt on a 612pt US Letter page — about
- * 0.008. This is deliberately set well above that (Q5), so the floor sits near
- * 13pt text and warns before a realistic 10–11pt render would overflow.
+ * 7F's `BoxInput` and 7I's `ContractBoxInput` are both structurally this;
+ * `party` is simply absent on 7F's. `kind` and `party` are plain strings here
+ * because their legal values are a per-module fact carried by the `kinds` and
+ * `parties` props — the caller narrows them back at its own boundary, which is
+ * the one place that knows the union.
  */
-const FRACTION_PER_CHAR = 0.011;
-
-/** The width below which a value box is likely to overflow at render. */
-export function minWidthForKey(valueKey: string | null | undefined): number {
-  const chars = (valueKey && EXPECTED_CHARS[valueKey]) || DEFAULT_EXPECTED_CHARS;
-  return Math.min(0.9, chars * FRACTION_PER_CHAR);
+export interface EditorBox {
+  page: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  kind: string;
+  value_key?: string | null;
+  custom_label?: string | null;
+  party?: string | null;
 }
+
+export interface EditorCatalogEntry {
+  key: string;
+  label: string;
+}
+
+export interface EditorOption {
+  value: string;
+  label: string;
+}
+
+// The size floor is a PROP (`minWidthFor`), not a table in here. The keys are
+// per-module — a release has a claimant and a waiver date, a contract has
+// neither — so each module owns what its own values look like. See
+// `minWidthForContractKey` and `minWidthForReleaseKey`.
 
 /**
  * The boxes too small for what they will hold.
@@ -119,18 +86,14 @@ export function minWidthForKey(valueKey: string | null | undefined): number {
  * company writes on its own form; neither has an expected character count to
  * reason from.
  */
-function undersized(boxes: ContractBoxInput[]): { index: number; box: ContractBoxInput }[] {
+function undersized(
+  boxes: EditorBox[],
+  minWidthFor: (key: string | null | undefined) => number
+): { index: number; box: EditorBox }[] {
   return boxes
     .map((box, index) => ({ index, box }))
-    .filter(({ box }) => box.kind === 'value' && box.width < minWidthForKey(box.value_key));
+    .filter(({ box }) => box.kind === 'value' && box.width < minWidthFor(box.value_key));
 }
-
-const KIND_LABELS: { value: ContractBoxInput['kind']; label: string }[] = [
-  { value: 'value', label: 'Value' },
-  { value: 'signature', label: 'Signature' },
-  { value: 'initial', label: 'Initials' },
-  { value: 'custom', label: 'Custom' },
-];
 
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
 
@@ -144,36 +107,51 @@ interface Drag {
   index: number;
   startX: number;
   startY: number;
-  origin: ContractBoxInput;
+  origin: EditorBox;
 }
 
-export function ContractBoxEditor({
-  templateId,
+export function BoxMapEditor({
   templateName,
-  documentKind,
+  subtitle,
   catalog,
+  kinds,
+  parties,
+  partyKinds = [],
+  minWidthFor,
   pdfFileId,
   initialBoxes,
   onSave,
   onRenameTitle,
   onClose,
   onSaved,
+  footnote,
 }: {
-  templateId: string;
   templateName: string;
-  documentKind: DocumentKind;
-  /** `catalogForKind(documentKind)` — the keys THIS kind may place. */
-  catalog: ContractValueKey[];
+  /** Small label above the title, e.g. "client agreement". */
+  subtitle: string;
+  /** The value keys this template may place. */
+  catalog: EditorCatalogEntry[];
+  /** The box kinds this module offers. 7I has four; 7F has three. */
+  kinds: EditorOption[];
+  /** Party choices, already labelled for this document. Omit for a module
+   *  whose boxes have no party (7F). */
+  parties?: EditorOption[];
+  /** Which kinds REQUIRE a party. Empty when `parties` is omitted. */
+  partyKinds?: string[];
+  /** Placement-time size floor for a value key, as a fraction of page width. */
+  minWidthFor: (valueKey: string | null | undefined) => number;
   /** The uploaded form. Null means there is nothing to rasterise. */
   pdfFileId: string | null;
-  /** From `getContractTemplateBoxes(templateId)`. See #2-7i above. */
-  initialBoxes: ContractBoxInput[];
-  onSave: (boxes: ContractBoxInput[]) => Promise<{ success: boolean; error?: string }>;
-  onRenameTitle: (name: string) => Promise<{ success: boolean; error?: string }>;
+  /** The CURRENT map. Required — see the #2-7i note above. */
+  initialBoxes: EditorBox[];
+  onSave: (boxes: EditorBox[]) => Promise<{ success: boolean; error?: string }>;
+  /** Omit on a surface that renames elsewhere (7F renames on its list). */
+  onRenameTitle?: (name: string) => Promise<{ success: boolean; error?: string }>;
   onClose: () => void;
   onSaved: () => void;
+  footnote?: string;
 }) {
-  const [boxes, setBoxes] = useState<ContractBoxInput[]>(initialBoxes);
+  const [boxes, setBoxes] = useState<EditorBox[]>(initialBoxes);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
@@ -224,19 +202,21 @@ export function ContractBoxEditor({
   );
 
   const firstKey = catalog[0]?.key ?? null;
-  const tooSmall = undersized(boxes);
+  const firstParty = parties?.[0]?.value ?? null;
+  const needsParty = (kind: string) => partyKinds.includes(kind);
+  const tooSmall = undersized(boxes, minWidthFor);
 
-  const set = (i: number, patch: Partial<ContractBoxInput>) =>
+  const set = (i: number, patch: Partial<EditorBox>) =>
     setBoxes((b) => b.map((box, j) => (j === i ? { ...box, ...patch } : box)));
 
-  function newBox(patch: Partial<ContractBoxInput> = {}): ContractBoxInput {
+  function newBox(patch: Partial<EditorBox> = {}): EditorBox {
     return {
       page: pageIndex,
       x: 0.1,
       y: 0.1,
       width: 0.3,
       height: 0.03,
-      kind: 'value',
+      kind: kinds[0]?.value ?? 'value',
       value_key: firstKey,
       ...patch,
     };
@@ -255,16 +235,16 @@ export function ContractBoxEditor({
    * party — so a leftover field is a write the database rejects, not a stray
    * value. Cleared here so the shape is always legal before it is sent.
    */
-  function setKind(i: number, kind: ContractBoxInput['kind']) {
+  function setKind(i: number, kind: string) {
     set(i, {
       kind,
       value_key: kind === 'value' ? firstKey : null,
       custom_label: null,
-      // R4/R5 — a signature/initials box must carry a party, so one is chosen
-      // rather than left blank for the user to discover at save. `recipient` is
-      // the default because the counterparty's signature is what a contract is
-      // sent to collect; ours is stamped before it goes out.
-      party: boxKindNeedsParty(kind) ? 'recipient' : null,
+      // R4/R5 — a box that requires a party gets one chosen rather than left
+      // blank for the user to discover at save. The caller orders `parties` so
+      // the sensible default is first: on a contract that is the counterparty,
+      // whose signature is what the document is sent to collect.
+      party: needsParty(kind) ? firstParty : null,
     });
   }
 
@@ -370,6 +350,7 @@ export function ContractBoxEditor({
       return;
     }
     setBusy(true);
+    if (!onRenameTitle) return setEditingTitle(false);
     const result = await onRenameTitle(next);
     setBusy(false);
     if (!result.success) return setError(result.error ?? 'Could not rename.');
@@ -429,7 +410,7 @@ export function ContractBoxEditor({
       <div style={{ ...cardStyle, padding: '20px', maxWidth: '1040px', width: '100%' }}>
         {/* ── Title ──────────────────────────────────────────────────────── */}
         <p style={{ ...microLabelStyle, marginBottom: '6px' }}>
-          Boxes — {documentKind === 'client_contract' ? 'client agreement' : 'subcontract'}
+          Boxes — {subtitle}
         </p>
 
         {editingTitle ? (
@@ -459,17 +440,21 @@ export function ContractBoxEditor({
         ) : (
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center', marginBottom: '10px' }}>
             <span style={{ fontSize: '16px', fontWeight: 700, color: color.navy }}>{title}</span>
-            <button
-              type="button"
-              style={{ ...secondaryButtonStyle, padding: '3px 9px', fontSize: '12px' }}
-              disabled={busy}
-              onClick={() => {
-                setDraftTitle(title);
-                setEditingTitle(true);
-              }}
-            >
-              Edit title
-            </button>
+            {/* Only where this surface OWNS renaming. 7F renames on its list,
+                and two rename affordances for one field is how they disagree. */}
+            {onRenameTitle && (
+              <button
+                type="button"
+                style={{ ...secondaryButtonStyle, padding: '3px 9px', fontSize: '12px' }}
+                disabled={busy}
+                onClick={() => {
+                  setDraftTitle(title);
+                  setEditingTitle(true);
+                }}
+              >
+                Edit title
+              </button>
+            )}
           </div>
         )}
 
@@ -573,7 +558,7 @@ export function ContractBoxEditor({
               {/* Boxes for THIS page only. A box on page 3 is not on page 1. */}
               {onThisPage.map(({ box, index }) => {
                 const small =
-                  box.kind === 'value' && box.width < minWidthForKey(box.value_key);
+                  box.kind === 'value' && box.width < minWidthFor(box.value_key);
                 const isSelected = selected === index;
                 return (
                   <div
@@ -655,7 +640,7 @@ export function ContractBoxEditor({
             </thead>
             <tbody>
               {boxes.map((b, i) => {
-                const small = b.kind === 'value' && b.width < minWidthForKey(b.value_key);
+                const small = b.kind === 'value' && b.width < minWidthFor(b.value_key);
                 return (
                   <tr
                     key={i}
@@ -677,10 +662,10 @@ export function ContractBoxEditor({
                     <td style={cell}>
                       <select
                         value={b.kind}
-                        onChange={(e) => setKind(i, e.target.value as ContractBoxInput['kind'])}
+                        onChange={(e) => setKind(i, e.target.value)}
                         style={{ ...inputStyle, width: 'auto', marginTop: 0 }}
                       >
-                        {KIND_LABELS.map((k) => (
+                        {kinds.map((k) => (
                           <option key={k.value} value={k.value}>
                             {k.label}
                           </option>
@@ -712,13 +697,13 @@ export function ContractBoxEditor({
                       {/* R4/R5 — WHO signs. Options are labelled from
                           `document_kind` ("The client" / "The subcontractor")
                           while the stored value stays kind-neutral. */}
-                      {boxKindNeedsParty(b.kind) && (
+                      {needsParty(b.kind) && parties && (
                         <select
-                          value={b.party ?? 'recipient'}
-                          onChange={(e) => set(i, { party: e.target.value as ContractParty })}
+                          value={b.party ?? firstParty ?? ''}
+                          onChange={(e) => set(i, { party: e.target.value })}
                           style={{ ...inputStyle, width: '210px', marginTop: 0 }}
                         >
-                          {partyOptionsFor(documentKind).map((p) => (
+                          {parties.map((p) => (
                             <option key={p.value} value={p.value}>
                               {p.label}
                             </option>
@@ -735,7 +720,7 @@ export function ContractBoxEditor({
                           step={0.1}
                           value={Math.round(b[k] * 1000) / 10}
                           onChange={(e) =>
-                            set(i, { [k]: Number(e.target.value) / 100 } as Partial<ContractBoxInput>)
+                            set(i, { [k]: Number(e.target.value) / 100 } as Partial<EditorBox>)
                           }
                           style={{
                             ...inputStyle,
@@ -806,7 +791,7 @@ export function ContractBoxEditor({
 
         <p style={{ fontSize: '11px', color: color.faint, margin: '12px 0 0', fontFamily: font.sans }}>
           Saving replaces the whole map for this form — a box you removed here is gone, not merged
-          back in. Template {templateId.slice(0, 8)}.
+          back in.{footnote ? ` ${footnote}` : ''}
         </p>
       </div>
     </div>
@@ -814,13 +799,14 @@ export function ContractBoxEditor({
 }
 
 /** The one-line name shown on a box and in its tooltip. */
-function boxTitle(box: ContractBoxInput, catalog: ContractValueKey[]): string {
+function boxTitle(box: EditorBox, catalog: EditorCatalogEntry[]): string {
   if (box.kind === 'value') {
     return catalog.find((v) => v.key === box.value_key)?.label ?? box.value_key ?? 'Value';
   }
   if (box.kind === 'custom') return box.custom_label?.trim() || 'Custom';
-  const who = box.party === 'contractor' ? 'Our' : 'Their';
-  return box.kind === 'initial' ? `${who} initials` : `${who} signature`;
+  // 7F's boxes carry no party, so the prefix is dropped rather than guessed.
+  const who = box.party ? (box.party === 'contractor' ? 'Our ' : 'Their ') : '';
+  return box.kind === 'initial' ? `${who}initials` : `${who}signature`;
 }
 
 const inputStyle: React.CSSProperties = {

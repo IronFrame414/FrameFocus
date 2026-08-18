@@ -12,8 +12,43 @@ import {
   type ContractBoxInput,
 } from '@/lib/services/contracts-client';
 import { getFileSignedUrlClient } from '@/lib/services/files-client';
-import { catalogForKind, type DocumentKind } from '@/lib/services/contracts-shared';
-import { ContractBoxEditor } from '@/components/contracts/contract-box-editor';
+import {
+  catalogForKind,
+  minWidthForContractKey,
+  partyOptionsFor,
+  type ContractParty,
+  type DocumentKind,
+} from '@/lib/services/contracts-shared';
+import { BoxMapEditor, type EditorBox } from '@/components/box-map/box-map-editor';
+
+// 7I's configuration of the SHARED box editor (#1-7i, extracted at S150). The
+// four kinds and the party are 7I's; 7F passes three kinds and no party.
+const CONTRACT_BOX_KINDS = [
+  { value: 'value', label: 'Value' },
+  { value: 'signature', label: 'Signature' },
+  { value: 'initial', label: 'Initials' },
+  { value: 'custom', label: 'Custom' },
+];
+
+/** Kinds that must name a signer — R5 puts `initial` here alongside `signature`. */
+const CONTRACT_PARTY_KINDS = ['signature', 'initial'];
+
+/**
+ * Narrow the editor's structural boxes back to 7I's union.
+ *
+ * ⚠️ THE ONE PLACE THE CAST LIVES, deliberately. The editor is shared, so its
+ * `kind` and `party` are plain strings — their legal values are a per-module
+ * fact. This boundary knows the union because it is the same module that
+ * supplied `kinds` and `parties`, so the values cannot be anything else. The
+ * database refuses them anyway if this is ever wrong.
+ */
+function toContractBoxes(boxes: EditorBox[]): ContractBoxInput[] {
+  return boxes.map((b) => ({
+    ...b,
+    kind: b.kind as ContractBoxInput['kind'],
+    party: (b.party ?? null) as ContractParty | null,
+  }));
+}
 import { brand } from '@/lib/brand';
 import {
   cardStyle,
@@ -448,15 +483,19 @@ function TemplateSet({
           `key` forces a remount per template so the editor's initial state is
           re-read rather than carried over from the last form opened. */}
       {placing && (
-        <ContractBoxEditor
+        <BoxMapEditor
           key={placing.id}
-          templateId={placing.id}
           templateName={placing.name}
-          documentKind={kind}
+          subtitle={kind === 'client_contract' ? 'client agreement' : 'subcontract'}
           catalog={catalogForKind(kind)}
+          kinds={CONTRACT_BOX_KINDS}
+          parties={partyOptionsFor(kind)}
+          partyKinds={CONTRACT_PARTY_KINDS}
+          minWidthFor={minWidthForContractKey}
           pdfFileId={placing.pdf_file_id}
           initialBoxes={placing.boxes}
-          onSave={(boxes) => saveContractBoxMap(placing.id, kind, boxes)}
+          footnote={`Template ${placing.id.slice(0, 8)}.`}
+          onSave={(boxes) => saveContractBoxMap(placing.id, kind, toContractBoxes(boxes))}
           onRenameTitle={async (name) => {
             const result = await updateContractTemplate(placing.id, { name });
             if (result.success) onDone();
