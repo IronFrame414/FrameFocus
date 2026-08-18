@@ -22,7 +22,19 @@ export type {
 };
 
 /**
- * R17 [S150] — a write RLS discarded, reported as the failure it is.
+ * R17 [S150], extended to EVERY writer in this file [M1-01, S152].
+ *
+ * ⚠️ THE RULE FOR THIS FILE: every UPDATE against `companies` ends
+ * `.select('id')` and goes through `applied()`. No exceptions. S150 added the
+ * guard to `updateCompany` and to none of its seven siblings, so the file
+ * taught both patterns and the next person to copy a neighbouring function
+ * copied the unguarded one — which is exactly how it was found (S151 M1-01).
+ *
+ * Two of those seven wrote `contractor_signature_path`, the image stamped onto
+ * change orders and lien releases. A silent failure there leaves a
+ * legal-document surface believing it has a signature on file.
+ *
+ * A write RLS discarded, reported as the failure it is.
  *
  * ⚠️ ZERO AFFECTED ROWS IS NOT AN ERROR IN POSTGRES. When a policy matches
  * nothing, the UPDATE is valid and changes nothing; PostgREST returns no error,
@@ -58,15 +70,17 @@ export async function updateTimeTrackingSettings(
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = createClient();
 
-  // companies pre-trigger holdover (CLAUDE.md): set updated_at
-  // explicitly — companies_set_updated_by trigger does not exist.
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('companies')
-    .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq('id', companyId);
+    .update(updates)
+    .eq('id', companyId)
+    .select('id');
 
   if (error) {
     return { success: false, error: error.message };
+  }
+  if (!applied(data)) {
+    return { success: false, error: DISCARDED };
   }
   return { success: true };
 }
@@ -83,15 +97,17 @@ export async function updateGLMappingSettings(
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = createClient();
 
-  // companies pre-trigger holdover (CLAUDE.md): set updated_at
-  // explicitly — companies_set_updated_by trigger does not exist.
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('companies')
-    .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq('id', companyId);
+    .update(updates)
+    .eq('id', companyId)
+    .select('id');
 
   if (error) {
     return { success: false, error: error.message };
+  }
+  if (!applied(data)) {
+    return { success: false, error: DISCARDED };
   }
   return { success: true };
 }
@@ -102,13 +118,9 @@ export async function updateCompany(
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = createClient();
 
-  // R17 [S150] — `.select('id')` so a discarded write is visible. `updated_at`
-  // is still set explicitly here: `companies` has no `set_updated_by` trigger
-  // and no `updated_at` trigger, which CLAUDE.md records as a known holdover.
-  // Fixing THAT is a migration and is not this change.
   const { data, error } = await supabase
     .from('companies')
-    .update({ ...updates, updated_at: new Date().toISOString() })
+    .update(updates)
     .eq('id', companyId)
     .select('id');
 
@@ -140,15 +152,17 @@ export async function updateEstimatingSettings(
     payload.estimate_number_prefix = payload.estimate_number_prefix.trim().toUpperCase();
   }
 
-  // companies pre-trigger holdover (CLAUDE.md): set updated_at
-  // explicitly — companies_set_updated_by trigger does not exist.
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('companies')
-    .update({ ...payload, updated_at: new Date().toISOString() })
-    .eq('id', companyId);
+    .update(payload)
+    .eq('id', companyId)
+    .select('id');
 
   if (error) {
     return { success: false, error: error.message };
+  }
+  if (!applied(data)) {
+    return { success: false, error: DISCARDED };
   }
   return { success: true };
 }
@@ -197,13 +211,19 @@ export async function uploadCompanyLogo(
     data: { publicUrl },
   } = supabase.storage.from('company-logos').getPublicUrl(filePath);
 
-  const { error: updateError } = await supabase
+  const { data: updated, error: updateError } = await supabase
     .from('companies')
-    .update({ logo_url: publicUrl, updated_at: new Date().toISOString() })
-    .eq('id', companyId);
+    .update({ logo_url: publicUrl })
+    .eq('id', companyId)
+    .select('id');
 
   if (updateError) {
     return { success: false, error: updateError.message };
+  }
+  // The BLOB is already uploaded at this point. A discarded row update means the
+  // stored logo and `logo_url` disagree, so this must not report success.
+  if (!applied(updated)) {
+    return { success: false, error: DISCARDED };
   }
 
   return { success: true, url: publicUrl };
@@ -233,12 +253,19 @@ export async function uploadContractorSignature(
     return { success: false, error: uploadError.message };
   }
 
-  const { error: updateError } = await supabase
+  const { data: updated, error: updateError } = await supabase
     .from('companies')
-    .update({ contractor_signature_path: filePath, updated_at: new Date().toISOString() })
-    .eq('id', companyId);
+    .update({ contractor_signature_path: filePath })
+    .eq('id', companyId)
+    .select('id');
   if (updateError) {
     return { success: false, error: updateError.message };
+  }
+  // ⚠️ The signature BYTES are in storage by now. Reporting success over a
+  // discarded row update would leave the CO and lien-release send paths reading
+  // a NULL path while the user believes a signature is on file.
+  if (!applied(updated)) {
+    return { success: false, error: DISCARDED };
   }
 
   return { success: true, path: filePath };
@@ -248,12 +275,18 @@ export async function clearContractorSignature(
   companyId: string
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = createClient();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('companies')
-    .update({ contractor_signature_path: null, updated_at: new Date().toISOString() })
-    .eq('id', companyId);
+    .update({ contractor_signature_path: null })
+    .eq('id', companyId)
+    .select('id');
   if (error) {
     return { success: false, error: error.message };
+  }
+  // A silent no-op here tells the user the signature is gone while every send
+  // path still stamps it.
+  if (!applied(data)) {
+    return { success: false, error: DISCARDED };
   }
   return { success: true };
 }
@@ -266,8 +299,8 @@ export async function getContractorSignatureUrl(path: string): Promise<string | 
 }
 
 
-// Spec 2 — proposals & email defaults. Same autosave path as the
-// estimating settings; companies pre-trigger holdover applies.
+// Spec 2 — proposals & email defaults. Same autosave path as the estimating
+// settings.
 export type UpdateProposalSettingsInput = Partial<Omit<ProposalSettings, 'id'>>;
 
 export async function updateProposalSettings(
@@ -276,13 +309,17 @@ export async function updateProposalSettings(
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = createClient();
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('companies')
-    .update({ ...updates, updated_at: new Date().toISOString() })
-    .eq('id', companyId);
+    .update(updates)
+    .eq('id', companyId)
+    .select('id');
 
   if (error) {
     return { success: false, error: error.message };
+  }
+  if (!applied(data)) {
+    return { success: false, error: DISCARDED };
   }
   return { success: true };
 }

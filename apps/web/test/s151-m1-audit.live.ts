@@ -1,13 +1,20 @@
 /**
  * S151 — Module 1 audit probes (pass 1 of the eleven-pass system audit).
  *
- * ⚠️ THIS FILE ASSERTS DEFECTS THAT ARE STILL OPEN. Several tests below assert
- * the CURRENT (wrong-ish) behaviour on purpose, each saying in its own message
- * what a fix would look like and which finding to invert it against. That is
- * deliberate: the audit was scoped "findings and proposals only — Josh rules on
- * each before anything is written", so the evidence is committed and the fixes
- * are not. `s146-contract-services.live.ts` S146-C4 set this precedent
- * ("if this is now false, #1-s146 has been fixed — invert it").
+ * ⚠️ WRITTEN TO ASSERT OPEN DEFECTS; PARTLY INVERTED AT S152 AS THEY WERE FIXED.
+ *
+ * Pass 1 committed the evidence and not the fixes, so several tests here
+ * asserted the CURRENT (wrong) behaviour on purpose, each naming in its own
+ * message what a fix would look like. `s146-contract-services.live.ts` S146-C4
+ * set that precedent ("if this is now false, #1-s146 has been fixed — invert
+ * it").
+ *
+ * STATUS AT S152:
+ *   F1/F1b — still describe live behaviour. The RLS mechanism is unchanged; what
+ *            changed is that the SERVICE layer now reports it (M1-01 fixed).
+ *            Fuller coverage: `s152-m1-fixes.live.ts` A1/A2.
+ *   F2/F2b — ✅ INVERTED. M1-02 fixed by `20261004000000`.
+ *   F3/F3b — unchanged; they always asserted sound behaviour.
  *
  * Nothing here changes application code, a service, or the schema.
  */
@@ -96,9 +103,20 @@ describe('S151-M1 — cross-system findings on Module 1', () => {
   });
 
   // --------------------------------------------------------------------------
-  // F2 — `companies_insert_authenticated` is WITH CHECK (true).
+  // F2 — ✅ FIXED [S152]. INVERTED, exactly as this test asked to be.
+  //
+  // The original asserted the DEFECT: `companies_insert_authenticated` was
+  // `WITH CHECK (true)`, so any authenticated user of any role could insert
+  // unlimited company rows. Its own message said "F2 may be fixed; if so, invert
+  // this". `20261004000000` replaced that policy with
+  // `companies_insert_unaffiliated` — `WITH CHECK (get_my_company_id() IS NULL)`
+  // — so the assertion is turned over rather than deleted.
+  //
+  // The fuller coverage is `s152-m1-fixes.live.ts` B1/B1b/B2, which also proves
+  // the other arm (an unaffiliated caller CAN still insert, so signup is safe).
+  // This stays as the regression guard at the point the defect was found.
   // --------------------------------------------------------------------------
-  it('F2 — ANY authenticated user can INSERT a company row, including crew', async () => {
+  it('F2 — a crew member can NO LONGER insert a company row [fixed S152]', async () => {
     // Live policy: companies_insert_authenticated, cmd INSERT, qual NULL,
     // with_check "true". No role floor, no tenant scoping, no rate limit.
     // The signup path needs an INSERT (a new Owner creates their company), but
@@ -117,27 +135,28 @@ describe('S151-M1 — cross-system findings on Module 1', () => {
       .from('companies')
       .insert({ name, slug: `${MARKER.toLowerCase()}-crew-${Date.now()}` });
 
-    expect(
-      error,
-      'crew was refused the INSERT itself — F2 may be fixed; if so, invert this'
-    ).toBeNull();
+    void error; // the row count is the fact; the error code is not (see above).
 
-    // Confirm through the service role, since the creator cannot see it.
+    // Confirm through the service role — the creator could never see it anyway.
     const { data: landed } = await admin
       .from('companies').select('id, name').eq('name', name);
     for (const row of landed ?? []) strayCompanies.push(row.id as string);
-    expect(landed, 'no company row landed — F2 may be fixed').toHaveLength(1);
+    expect(
+      landed,
+      'a crew member created a company — companies_insert_unaffiliated has been widened again'
+    ).toHaveLength(0);
   });
 
-  it('F2b — the crew member cannot READ the company they just created', async () => {
-    // Scopes the finding honestly. `companies_select_own` is
-    // `id = get_my_company_id() OR is_platform_admin()`, so the inserted row is
-    // invisible to its own creator. This is WRITE amplification and orphan-row
-    // pollution, NOT a data leak — and the difference decides the severity.
-    if (!strayCompanies.length) return; // F2 was fixed; nothing to scope.
-    const { data } = await crew
-      .from('companies').select('id').eq('id', strayCompanies[0]);
-    expect(data, 'the creator could read it back — the finding is wider than recorded').toEqual([]);
+  it('F2b — companies_select_own still scopes reads to the caller\'s own company', async () => {
+    // Originally this scoped F2's severity: the creator could not read the row
+    // back, so the defect was write amplification and orphan pollution rather
+    // than a leak. With F2 fixed there is no stray row to test against, so the
+    // assertion is re-aimed at the property that made that judgement true —
+    // which is worth keeping, because it is what a future widening of
+    // `companies_select_own` would break.
+    const { data } = await crew.from('companies').select('id');
+    const ids = ((data ?? []) as { id: string }[]).map((c) => c.id);
+    expect(ids, 'a crew member can read a company that is not theirs').toEqual([companyId]);
   });
 
   // --------------------------------------------------------------------------
