@@ -27,7 +27,12 @@ import {
   softDeletePayment,
   voidContractWithCloseout,
 } from '@/lib/services/payables-client';
-import { committedRemaining, grossPaid } from '@/lib/services/payables-shared';
+import {
+  committedRemaining,
+  grossPaid,
+  retainageHeldExplanation,
+  retainageHeldLabel,
+} from '@/lib/services/payables-shared';
 import {
   approveExpense,
   listExpenseAllocations,
@@ -482,6 +487,13 @@ function SubSchedulePanel({
   const stages = rows.filter((r) => !r.is_retainage && !r.is_deleted);
   const retainageRow = rows.find((r) => r.is_retainage && !r.is_deleted) ?? null;
 
+  // Derived from the STAGE payments — where the withholds actually live. The
+  // accrual row's own payments are retainage RELEASES and withhold nothing, so
+  // feeding them here would always answer "none".
+  const retainageExplanationLabel = retainageHeldLabel(
+    retainageHeldExplanation(contract, stages.flatMap((s) => s.payments ?? []))
+  );
+
   const [paying, setPaying] = useState<PayableListItem | null>(null);
   const [closingOut, setClosingOut] = useState<PayableListItem | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -882,8 +894,16 @@ function SubSchedulePanel({
         <div style={{ padding: '0.375rem 0', fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
           <span style={{ fontWeight: 600, color: '#374151' }}>Retainage held</span>
           <span>{fmtMoney(committedRemaining(retainageRow, retainageRow.payments))}</span>
-          {contract.retainage_percent !== null && (
-            <span style={{ color: '#6b7280' }}>({Number(contract.retainage_percent)}% across payments)</span>
+          {/* B1/Part A [S151] — the line may name a rate ONLY when that rate
+              accounts for the whole held total. The old version printed
+              `({contract.retainage_percent}% across payments)` off the CURRENT
+              percent alone, reading neither the shape nor the payment history:
+              revise 10% to 5% between two payments and it described a $1,500
+              two-rate total as 5%. The dollars beside it were right, which is
+              what made it worth fixing. Rule and wording: retainageHeldLabel in
+              payables-shared.ts. */}
+          {retainageExplanationLabel && (
+            <span style={{ color: '#6b7280' }}>({retainageExplanationLabel})</span>
           )}
           {/* Release is Owner-ONLY (CLAUDE.md owner-only #5) — rendered so. */}
           {isOwner &&
