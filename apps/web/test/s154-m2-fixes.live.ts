@@ -25,6 +25,7 @@ vi.mock('@/lib/supabase-browser', () => ({ createClient: () => state.client }));
 vi.mock('@/lib/supabase-server', () => ({ createClient: async () => state.client }));
 
 import { deleteContact, updateContact } from '@/lib/services/contacts-client';
+import { formatSiteAddress, getProjectSiteAddress } from '@/lib/services/contact-addresses';
 
 const MARKER = 'S154M2';
 const OWNER = 'josh+test50@worthprop.com';
@@ -377,5 +378,42 @@ describe('S154-C — a discarded M2 write is reported as refused', () => {
 
     must('restore', (await admin
       .from('contacts').update({ last_name: 'Client' }).eq('id', contactId)).error);
+  });
+});
+
+// ============================================================================
+// GROUP B, the surface — getProjectSiteAddress() through the REAL service.
+// ============================================================================
+
+describe('S154-B3 — the site address reaches the sub through the shipped service', () => {
+  it('B3a — an ASSIGNED sub gets the site address from getProjectSiteAddress()', async () => {
+    // The policy tests above prove the row is readable. This proves the SERVICE
+    // the mobile Overview actually calls returns it — a PostgREST probe cannot
+    // establish that, which is why this runs the real function.
+    state.client = sub;
+    const addr = await getProjectSiteAddress(assignedProjectId);
+    expect(addr, 'the assigned sub got no site address from the service').not.toBeNull();
+    expect(addr!.address_line1).toBe(`${MARKER} 1 Site Lane`);
+    expect(formatSiteAddress(addr!)).toBe(`${MARKER} 1 Site Lane · Ridgefield, CT 06877`);
+  });
+
+  it('B3b — the same sub gets NULL for a project they are not assigned to', async () => {
+    // Which is what makes the Overview render no section at all rather than a
+    // heading over an em-dash — a blank slot would advertise that an address
+    // exists and is being withheld.
+    state.client = sub;
+    expect(await getProjectSiteAddress(otherProjectId)).toBeNull();
+  });
+
+  it('B3c — a CLIENT gets NULL, and an OWNER gets both', async () => {
+    state.client = client;
+    expect(await getProjectSiteAddress(assignedProjectId)).toBeNull();
+
+    state.client = owner;
+    expect(await getProjectSiteAddress(assignedProjectId)).not.toBeNull();
+    expect(
+      await getProjectSiteAddress(otherProjectId),
+      'the Owner lost access to an unassigned project address'
+    ).not.toBeNull();
   });
 });

@@ -108,6 +108,35 @@ hard constraint either way: `get_my_member_id()` and `can_view_project()` are us
 app, and **giving clients member rows would silently change what those two functions return for every
 existing policy that calls them.** Read both bodies live before choosing.
 
+**§S.1 — ⚠️ PORTAL-INVITE PRECONDITION: the contact must have an email. M2 does not guarantee one,
+and by ruling it never will.** [RULED Josh, S154; finding `S153-m2-audit.md` M2-04]
+
+R1 above says *"username is the email"*. `contacts.email` is **nullable, has no CHECK, no NOT NULL
+and no Zod schema** — there is no contact validation file at all — and `contact-form.tsx:68` writes
+`form.email.trim() || null`, so **an empty box is stored as NULL by design**. 22 of 22 live rows
+happen to have one, which is luck rather than a guarantee.
+
+**A constraint was considered and REJECTED [Josh, S154]:** *"not required, but portal access will
+require it."* A lead with only a phone number must be able to save, and a schema rule that locked a
+contractor out of recording their own lead would be the wrong trade. **This is the same boundary
+R20 draws for branding — required where it matters, never a rule that blocks people from their own
+data.**
+
+**So the requirement lands HERE, at the point of use, and it is M9's to build:**
+
+- The invite path **refuses** a contact with no email and **names what is missing** — "add an email
+  address for this contact before inviting them to the portal" — rather than failing at the send, or
+  worse, creating an account that can never be signed into.
+- The refusal belongs on the **invite action**, not on contact creation and not on the contact form.
+- ⚠️ **Do not add a CHECK constraint or a NOT NULL when building this.** It was ruled out
+  deliberately; a later session finding a null email and "fixing the schema" would be undoing a
+  decision.
+
+**Second-order, and unresolved:** a client will then have an email in **two** places — `contacts.email`
+(the counterparty record) and `profiles.email` (the account). Nothing keeps them in sync, and §S's
+open schema decision above is where that gets settled. Whichever shape wins, **name which of the two
+is authoritative for login**, because "username is the email" is ambiguous the moment there are two.
+
 ---
 
 ## §4 — The financial view

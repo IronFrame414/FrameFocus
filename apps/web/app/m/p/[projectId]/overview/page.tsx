@@ -1,5 +1,6 @@
 import { getProject, PROJECT_TYPE_LABELS } from '@/lib/services/projects';
 import { getPhases, getTasks } from '@/lib/services/tasks';
+import { formatSiteAddress, getProjectSiteAddress } from '@/lib/services/contact-addresses';
 import { rollupPhases } from '@/lib/services/tasks-shared';
 import { SectionHeader } from '../section-header';
 import { EmptyState, SectionLabel } from '../../../mobile-ui';
@@ -27,10 +28,15 @@ export default async function ProjectOverviewPage({
 }: {
   params: { projectId: string };
 }) {
-  const [project, phases, tasks] = await Promise.all([
+  // B2 [S154] — the site address, fetched alongside the rest rather than after
+  // it. Who may see it is `contact_addresses_select_scoped`'s decision, not this
+  // page's: staff always, an ASSIGNED subcontractor for this project only, a
+  // client never. A caller with no claim gets null and the block is not drawn.
+  const [project, phases, tasks, siteAddress] = await Promise.all([
     getProject(params.projectId),
     getPhases(params.projectId),
     getTasks(params.projectId),
+    getProjectSiteAddress(params.projectId),
   ]);
 
   if (!project) {
@@ -76,6 +82,23 @@ export default async function ProjectOverviewPage({
           </li>
         ))}
       </ul>
+
+      {/* B2 [S154] — "sub can see site address". Rendered only when the database
+          returned one, so a role without the grant sees NO section rather than a
+          heading over an em-dash, which would advertise that an address exists. */}
+      {siteAddress ? (
+        <>
+          <SectionLabel>Site address</SectionLabel>
+          <div
+            data-testid="m-site-address"
+            className="rounded-[15px] border border-m6m-border bg-m6m-card p-[14px]"
+          >
+            <p className="text-[15px] leading-snug text-m6m-navy">
+              {formatSiteAddress(siteAddress)}
+            </p>
+          </div>
+        </>
+      ) : null}
 
       <SectionLabel>Schedule</SectionLabel>
       {rollups.length === 0 ? (
