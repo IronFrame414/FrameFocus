@@ -108,9 +108,38 @@ makes M1 a consumer-of-everything as well as a dependency-of-everything.
 | Stripe `api/stripe/checkout/route.ts:70` | `companies.stripe_customer_id` | server route |
 | Stripe `api/stripe/webhook/route.ts:98` | `companies.stripe_customer_id` | server route |
 
-### §1.2 — Modules 2–11
+### §1.2 — Module 2 (Contacts & CRM) — filled S153
 
-*Not yet mapped. Each pass fills its own subsection here.*
+**M2 owns:** `contacts`, `contact_addresses`, and `project_contacts` (the project↔contact junction).
+
+**⚠️ If M1 is the table everything writes config INTO, M2 is the table everything POINTS AT.**
+Contacts are the counterparty identity for estimating, projects, invoicing, contracts and the
+unbuilt portal. **Nine foreign keys land on M2 [LIVE].**
+
+| Consumer | Points at | Assumes | Verified S153 |
+| --- | --- | --- | --- |
+| **M4 estimating** | `estimates.contact_id` (NOT NULL), `estimates.contact_address_id` (nullable) | a contact exists and has an address | FK `NO ACTION` both ✅. Address picker feeds `contact_address_id` from `listAddressesForContact()`, which **returns `[]` on error** — M2-07 |
+| **M5 projects** | `projects.contact_id` (NOT NULL), `projects.contact_address_id` (nullable), `project_contacts.contact_id` | same | FK `NO ACTION` ✅ |
+| **M5 change orders / proposals** | `contacts.email` via `proposal-data.ts:272` | **an email exists** | ⚠️ **nullable, unconstrained — M2-04.** Printed unguarded into a client-facing PDF |
+| **M4 proposal SEND** | `contacts.email` | an email exists | ✅ **guarded** — `api/proposals/send/route.ts:79` refuses first |
+| **M7D invoicing** | `client_payments.contact_id`, `client_refunds.contact_id` (both NOT NULL) | contact is durable | FK `NO ACTION` ✅ |
+| **M7D reminders** | `client_reminder_settings.contact_id` | — | FK **CASCADE** |
+| **M7F lien releases** | `projects.contact_address_id` → address block | address may be NULL | reads by id without an `is_deleted` filter — **correct** per the trash-bin convention (V6) |
+| **M7I contracts** | `estimates`/`projects.contact_address_id` | may be NULL | ✅ **refuses to render** rather than printing a blank required field (`contracts-shared.ts:129`) — the discipline other consumers lack |
+| **M9 client portal** *(unbuilt)* | `contacts` as the client counterparty; `9-spec.md` §3 R1 *"username is the email"*, R3 *"several contacts per project"* | **every client contact has an email** | ⚠️ **M2-04.** A client contact with no email cannot be invited, and nothing prevents one |
+| **M7G QuickBooks** | `contacts.qb_customer_id` | — | column exists with **zero application writers** [REPO] — scaffolding |
+
+**Downstream WRITES into M2's tables:**
+
+| Writer | Writes | Guarded? |
+| --- | --- | --- |
+| M5 `project-contacts-client.ts:50` | inserts a `contacts` row (inline contact-create) | ✅ `.insert(...).select('id').single()` — an RLS refusal surfaces |
+
+**One write, and it is guarded — M2's ratio is 1 of 1**, against M1's 1 of 8.
+
+**⚠️ M2's own writers are the problem, not its consumers': 0 of 3 UPDATE-shaped writers carry a
+row-count guard** (M2-03), and **soft delete does not work at all** on `contacts` or
+`subcontractors` (M2-02).
 
 ---
 
@@ -126,8 +155,8 @@ makes M1 a consumer-of-everything as well as a dependency-of-everything.
 
 | subject ↓ / vs → | M1 | M2 | M3 | M4 | M5 | M6 | M7 | M8 | M9 | M10 | M11 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| **M1 Settings/Admin/Billing** | — | S | — | S | S | S | S | n/a | S | — | — |
-| **M2 Contacts & CRM** | — | — | — | — | — | — | — | — | — | — | — |
+| **M1 Settings/Admin/Billing** | — | **✓** | — | S | S | S | S | n/a | S | — | — |
+| **M2 Contacts & CRM** | **✓** | — | — | **S** | **S** | — | **S** | n/a | **S** | — | — |
 | **M3 Documents & Files** | — | — | — | — | — | — | — | — | — | — | — |
 | **M4 Sales & Estimating** | — | — | — | — | — | — | — | — | — | — | — |
 | **M5 Project Management** | — | — | — | — | — | — | — | — | — | — | — |
@@ -137,6 +166,20 @@ makes M1 a consumer-of-everything as well as a dependency-of-everything.
 | **M9 Client Portal** | — | — | — | — | — | — | — | — | — | — | — |
 | **M10 Reporting** | — | — | — | — | — | — | — | — | — | — | — |
 | **M11 AI Marketing** | — | — | — | — | — | — | — | — | — | — | — |
+
+**Pass 2 (M2, S153) notes on its own row:**
+
+- **M1↔M2 is `✓` — examined from both sides.** From M2's side: `contacts`' policies are the one
+  place in the repo that **inlines** `get_my_company_id()`/`get_my_role()` instead of calling them,
+  which both duplicates M1's logic (a drift risk) and, by accident, runs ~65× faster (§1's M2 row,
+  and `S153-m2-audit.md` §5). M2 also inherits M1's `#1-s146` defect shape wholesale — the guard
+  S152 added to all eight `companies` writers reached none of M2's three.
+- **M3, M6, M10, M11 are `—`.** No M2 dependency was established for them, which is weaker evidence
+  than having looked. **M6 in particular is not obviously empty** — field surfaces may reach a
+  contact — and its own pass should close this from the consumer side.
+- **M9 is `S`, as it was for M1** — read from `9-spec.md` only, since there is no consumer code.
+  M9's dependency on M2 is sharper than its dependency on M1: **its entire identity model rests on
+  a contact having an email.**
 
 **Pass 1 (M1, S151) notes on its own row:**
 
@@ -161,6 +204,25 @@ makes M1 a consumer-of-everything as well as a dependency-of-everything.
 > correct. The repo's convention is that superseded text is quoted rather than deleted, and that
 > applies across passes as much as within a document.
 
+**[S153] — PASS 2 REFINING PASS 1. Not a contradiction of fact; a contradiction of implication,
+which is the more dangerous kind because nobody goes looking for it.**
+
+| Pass 1 said | Pass 2 found | Evidence |
+| --- | --- | --- |
+| *"266 of 273 policies call a `get_my_*` helper and **NONE** uses the hoistable `(SELECT …)` form."* — literally true, and it reads as *"no policy anywhere is hoisted."* | **M2's INSERT and UPDATE policies are already hoisted**, because they **inline the `profiles` lookup as an uncorrelated subquery** instead of calling the helper. Measured 10k rows: **2.36 ms inline vs 153.9 ms helper** — Postgres evaluates it once per query. | `S153-m2-audit.md` §5 [LIVE] |
+
+**Why this matters rather than being trivia:** pass 1's conversion plan was written as though the
+fast pattern did not exist anywhere in the repo. **It does, it shipped, and it is the precedent to
+copy.** It also shows the cost is not evenly spread — `contacts` carries the **slow** form on its
+SELECT policy (the hot path) and the **fast** form on its writes.
+
+⚠️ **And it does not make the duplication acceptable.** M2's policies restate M1's helper logic, so
+a change to `get_my_role()` will never reach them. The right end state is the helper **wrapped**,
+`(SELECT get_my_role())` — fast *and* single-sourced. M2 demonstrates the speed; it is not the
+model for how to get it.
+
+---
+
 **[S152] — a FIX PASS disagreeing with pass 1, recorded here because the shape is the one §3 is
 for, even though S152 is not pass 2.**
 
@@ -184,5 +246,7 @@ as well as migrations**.
 | 1 | Module 1 — Settings, Admin & Billing | S151, 2026-08-18 | `docs/specs/S151-m1-audit.md` | `apps/web/test/s151-m1-audit.live.ts` (6/6) |
 | 1-fix | Module 1 — fix pass for pass 1's §4 | S152 | `S151-m1-audit.md` §0a (outcomes) · `S152-rls-helper-measurement.md` (Group D) | `s152-m1-fixes.live.ts` (11/11) · `s152-cron-absence.test.ts` (4/4) |
 
+| 2 | Module 2 — Contacts & CRM | S153, 2026-08-18 | `docs/specs/S153-m2-audit.md` | `apps/web/test/s153-m2-audit.live.ts` (13/13) |
+
 **A fix pass is not a pass.** It closes an existing pass's findings and does not fill a row or a
-column in §2 — pass 2's subject is still Module 2, and M1's coverage is unchanged by it.
+column in §2.
