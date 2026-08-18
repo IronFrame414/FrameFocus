@@ -9,6 +9,11 @@
 // this triple for the same reason (7F §11.1). Nothing here may import supabase,
 // server-only, or anything under app/.
 
+// The character-width constant is shared with 7I so the two placement floors
+// cannot drift into disagreeing about how wide a character is. Both files are
+// pure — no supabase, no server-only — so this crosses no boundary.
+import { FRACTION_PER_CHAR } from '@/lib/services/contracts-shared';
+
 export type ReleaseType = 'conditional' | 'unconditional';
 export type ReleaseDirection = 'client_outbound' | 'sub_inbound';
 export type ReleaseStatus = 'draft' | 'signed' | 'notarized' | 'sent' | 'voided';
@@ -170,6 +175,54 @@ export interface FitResult {
 
 /** Below this a stamped value stops being legible on a printed instrument. */
 export const MIN_FONT_SIZE = 6;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Placement-time size floor — 7F's half of #1-7i [S150]
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// The box EDITOR is now shared with 7I (`components/box-map/`). The sizing table
+// is NOT shared, because the keys are not: a release has a claimant and a waiver
+// date; a contract has neither. Each module owns what its own values look like,
+// and the editor takes `minWidthFor` as a prop.
+//
+// 7F's §3.1 overflow question was open and was answered by 7I §2.2's ruling,
+// which the spec notes "propagates to 7F". This is that propagation, on the
+// authoring side: warn while placing rather than discover it at render.
+//
+// ⚠️ 7F STILL SHRINKS AT RENDER. `fitTextToBox()` reduces the font down to
+// MIN_FONT_SIZE before declaring overflow, and that behaviour is UNCHANGED here
+// — this slice moved an editor, not a renderer. So on 7F this warning is
+// advisory in a way it is not on 7I, where R10 will block the send. Reconciling
+// the two render paths is 7I's stage 2 work, not this slice's.
+
+const RELEASE_EXPECTED_CHARS: Record<string, number> = {
+  claimant_name: 30,
+  claimant_address: 45,
+  claimant_license_no: 16,
+  contractor_furnished_to: 32,
+  owner_name: 30,
+  project_name: 32,
+  property_address: 45,
+  legal_description: 90,
+  contract_date: 18,
+  contract_value: 14,
+  scope_of_work: 90,
+  release_amount: 14,
+  invoice_no: 14,
+  retainage_released: 14,
+  through_date: 18,
+  waiver_date: 18,
+  signer_name: 30,
+  signer_title: 24,
+};
+
+/** The width below which a release value box is likely to overflow at render. */
+export function minWidthForReleaseKey(valueKey: string | null | undefined): number {
+  const chars = (valueKey && RELEASE_EXPECTED_CHARS[valueKey]) || 24;
+  // Same constant as 7I's, imported rather than re-declared so the two floors
+  // cannot drift into disagreeing about how wide a character is.
+  return Math.min(0.9, chars * FRACTION_PER_CHAR);
+}
 
 /**
  * SHRINK-TO-FIT WITH A FLOOR, and flag anything that shrank (§7 step 4).

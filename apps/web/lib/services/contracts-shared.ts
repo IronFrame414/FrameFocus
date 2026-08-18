@@ -23,6 +23,46 @@ export type ContractDocumentStatus =
 export type DeliveryMode = 'esignature' | 'notary';
 export type ContractBoxKind = 'value' | 'signature' | 'initial' | 'custom';
 
+/**
+ * R4 / R5 [S150] — which side a signature or initials box belongs to.
+ *
+ * ⚠️ `recipient`, NOT `client` OR `counterparty`, AND THAT IS THE POINT. One
+ * editor serves both `document_kind`s (§2.1), so a stored value that reads
+ * correctly on a client contract and wrongly on a subcontract would drag the UI
+ * back into per-kind special-casing. The value stays kind-neutral; the LABEL is
+ * derived from `document_kind` by `partyOptionsFor()` below.
+ *
+ * R5: this applies to `initial` as well as `signature`. §7.3d needs the
+ * recipient's initials on the Chapter 558 clause, and a contractor may need to
+ * initial elsewhere on the same form. Both are placeable.
+ */
+export type ContractParty = 'contractor' | 'recipient';
+
+/** Whether this box kind carries a party at all — the payload CHECK's rule,
+ *  stated once so the service, the editor and the database agree. */
+export function boxKindNeedsParty(kind: ContractBoxKind): boolean {
+  return kind === 'signature' || kind === 'initial';
+}
+
+/**
+ * The party choices for a template of this kind, labelled for a human.
+ *
+ * Lives here rather than in the editor because the vocabulary is a domain fact,
+ * not a presentation detail: "recipient" means the client on one side and the
+ * subcontractor on the other, and exactly one place should know that.
+ */
+export function partyOptionsFor(
+  kind: DocumentKind
+): { value: ContractParty; label: string }[] {
+  return [
+    { value: 'contractor', label: 'Us (the contractor)' },
+    {
+      value: 'recipient',
+      label: kind === 'client_contract' ? 'The client' : 'The subcontractor',
+    },
+  ];
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // §7 — the contract value catalog
 // ─────────────────────────────────────────────────────────────────────────────
@@ -136,6 +176,72 @@ export function catalogForKind(kind: DocumentKind): ContractValueKey[] {
 export function isKeyValidForKind(key: string, kind: DocumentKind): boolean {
   const entry = CONTRACT_VALUE_CATALOG.find((v) => v.key === key);
   return entry ? entry.sides.includes(kind) : false;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// §2.2 / Q5 — the placement-time size floor
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Josh: "warn user of overflow. we must make all boxes large enough that this is
+// a rare occurrence." §2.2 warns at BOTH ends — while authoring, and at render.
+//
+// ⚠️ A HEURISTIC, AND IT CANNOT BE ANYTHING ELSE. The render-time check is
+// `fitTextToBox()`, which needs `widthPerChar` — measured from the font embedded
+// in the PDF at generate time. The browser has no such measurement while placing
+// boxes, so calling `fitTextToBox()` here would mean inventing a font metric and
+// reporting the guess as a calculation.
+//
+// ⚠️ IT DELIBERATELY OVER-WARNS [RULED S150, Q5]. R10 makes render-time overflow
+// BLOCK the send, so the two must not disagree in the direction that lets an
+// author pass placement and fail at the door. They cannot be made equal — one
+// guesses, one measures — so the guess is the stricter of the two. The cost is
+// warning on boxes that would have been fine, which is the cheaper error.
+//
+// ⚠️ THIS TABLE IS 7I's, AND 7F HAS ITS OWN [#1-7i, S150]. The box EDITOR is now
+// shared between the two modules; the sizing table is not, because the keys are
+// not. Each module owns what its own values look like.
+
+/** Typical rendered length of each catalog value, in characters. */
+const EXPECTED_CHARS: Record<string, number> = {
+  contractor_name: 30,
+  contractor_address: 45,
+  contractor_license_no: 16,
+  counterparty_name: 30,
+  counterparty_address: 45,
+  owner_entity_block: 40,
+  project_name: 32,
+  property_address: 45,
+  legal_description: 90,
+  scope_of_work: 90,
+  contract_value: 14, // "$1,234,567.89"
+  contract_date: 18, // "September 26, 2026"
+  start_date: 18,
+  target_end_date: 18,
+  // §12.18 — prints spelled-out AND as a numeral from one value:
+  // "one hundred twenty (120)".
+  substantial_completion_days: 30,
+  retainage_percent: 6,
+  payment_schedule: 90, // §6.3 — a printed block, not a field
+  terms_text: 90,
+  signer_name: 30,
+  signer_title: 24,
+};
+
+const DEFAULT_EXPECTED_CHARS = 24;
+
+/**
+ * Fraction of page width one character is assumed to occupy.
+ *
+ * A 10pt Helvetica character averages ~5pt on a 612pt US Letter page — about
+ * 0.008. Set well above that per Q5, so the floor sits near 13pt text and fires
+ * before a realistic 10–11pt render would overflow.
+ */
+export const FRACTION_PER_CHAR = 0.011;
+
+/** The width below which a contract value box is likely to overflow at render. */
+export function minWidthForContractKey(valueKey: string | null | undefined): number {
+  const chars = (valueKey && EXPECTED_CHARS[valueKey]) || DEFAULT_EXPECTED_CHARS;
+  return Math.min(0.9, chars * FRACTION_PER_CHAR);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

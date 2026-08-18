@@ -62,3 +62,8 @@ apps/web/e2e/.auth/
 .serena/
 prod_backup_*.sql
 .claude/settings.json
+
+# 7I R6 [S150] — pdf.js worker, copied from node_modules by
+# apps/web/scripts/copy-pdf-worker.mjs (prebuild). A build artifact that must
+# match the installed pdfjs-dist; vendoring it is how the two drift apart.
+apps/web/public/pdf.worker.min.mjs

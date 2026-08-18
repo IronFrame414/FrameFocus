@@ -78,6 +78,68 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
 ## Open Tech Debt
 
+### Branch-scoped, awaiting real numbers — `feature/7i-stage1-settings` [S150]
+
+> Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.
+
+- **#2-7i — ✅ FIXED [S150] — 7F's box editor never loaded the existing map, so
+  saving replaced a placed map with nothing.**
+
+  `BoxMapEditor` initialised `useState<BoxInput[]>([])` and never read the boxes
+  back. `getTemplateBoxes()` (`lien-releases.ts:53`) had exactly ONE caller in the
+  repo — `api/lien-releases/generate/route.ts:171`. No settings surface called it.
+
+  So: place boxes → save → re-open to adjust one → the table is **empty** → save →
+  `saveBoxMap` replaced the map with nothing. No error, no warning, and the
+  editor's own footnote ("Saving replaces the whole map for this form") read as a
+  correct description of intended behaviour, which is what made it hard to see.
+  The replace-not-merge semantics were right and were never the bug.
+
+  Fixed by the #1-7i extraction rather than separately: the shared editor takes
+  `initialBoxes` as a REQUIRED prop, read server-side in
+  `app/dashboard/settings/page.tsx`, so an editor that opens on an empty map is
+  no longer expressible. Same class as `#129` — silent divergence found by
+  reading the save path, not by anything failing.
+
+  ⚠️ **NOT CLICK-TESTED at S150.** Josh accepted the risk that 7F inherits the
+  shared editor before either surface has been exercised by hand.
+
+- **#1-7i — ✅ CLOSED [S150] — one box editor, mounted by both modules.**
+
+  `components/box-map/box-map-editor.tsx` replaces 7F's private `BoxMapEditor`
+  and 7I's `ContractBoxEditor`. **It is deliberately NOT under
+  `components/contracts/`**: CLAUDE.md's PARITY ruling makes a helper's directory
+  a claim of ownership, and two modules mount this one.
+
+  Everything module-specific is a prop — catalog, which kinds exist, whether
+  boxes carry a party, the size floor, the save function. 7I passes four kinds
+  and a party (R4/R5); 7F passes three and none. The sizing tables stay separate
+  (`minWidthForContractKey` / `minWidthForReleaseKey`) because the KEYS differ —
+  a release has a claimant and a waiver date, a contract has neither — but both
+  multiply the same shared `FRACTION_PER_CHAR`, so the two floors cannot drift
+  into disagreeing about how wide a character is.
+
+  7F inherited visual placement (R6) as a side effect, and its §3.1 overflow
+  question — which `7f2-spec` left open and 7I §2.2 says "propagates to 7F" — is
+  answered on the authoring side by the shared placement warning.
+
+  ⚠️ **7F STILL SHRINKS AT RENDER.** `fitTextToBox()` reduces the font to
+  `MIN_FONT_SIZE` before declaring overflow, and that is unchanged — this closed
+  an editor duplication, not a renderer difference. So the placement warning is
+  advisory on 7F in a way it will not be on 7I once R10 blocks the send.
+  Reconciling the two render paths belongs to 7I stage 2.
+
+- **§13's prerequisite list is stale on this point, recorded so it is not re-followed.**
+  7I §13 names "the box-placement component" among the hard prerequisites 7F supplies.
+  7F supplies a box-placement *component*, but not a *reusable* one — see #1-7i. A
+  builder reading §13 will look for something to import and find nothing importable.
+
+- **`contract_document_attachments` (§7.4) is owed, and is mis-sequenced in §13.**
+  The table was never created — absent from `20260926000000_7i_contracts.sql` and from
+  `packages/shared/types/database.ts`. §13 lists attachments under stage 1, but every
+  column hangs off `contract_documents(id)` and no contract document exists until stage
+  2 generates one. **Deferred to stage 2** [RULED Josh, S150]. Not created at S150.
+
 ### Branch-scoped, awaiting real numbers — `feature/s143-void-guard-qb-reconcile` [S143]
 
 > Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.

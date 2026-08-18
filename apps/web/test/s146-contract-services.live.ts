@@ -267,13 +267,36 @@ describe('S146-C2 — the box map REPLACES, and is validated per document_kind',
 
     const res = await saveContractBoxMap(clientTemplateId, 'client_contract', [
       { page: 0, x: 0.1, y: 0.1, width: 0.3, height: 0.04, kind: 'value', value_key: key },
-      { page: 0, x: 0.1, y: 0.2, width: 0.3, height: 0.06, kind: 'signature' },
+      { page: 0, x: 0.1, y: 0.2, width: 0.3, height: 0.06, kind: 'signature', party: 'contractor' },
     ]);
     expect(res.error).toBeUndefined();
 
     const boxes = await getContractTemplateBoxes(clientTemplateId);
     expect(boxes).toHaveLength(2);
     expect(boxes.filter((b) => b.kind === 'value')[0].value_key).toBe(key);
+    // R4/R5 [S150] — the party round-trips, and a value box carries none.
+    expect(boxes.filter((b) => b.kind === 'signature')[0].party).toBe('contractor');
+    expect(boxes.filter((b) => b.kind === 'value')[0].party).toBeNull();
+  });
+
+  // R4/R5 [S150] — added when `party` landed. Before it, a signature box knew
+  // it was a signature but not WHOSE, so only one of the two parties on a
+  // two-party instrument could ever be stamped.
+  it('a signature or initials box with NO party is refused before any write', async () => {
+    state.client = ownerC;
+    const before = await getContractTemplateBoxes(clientTemplateId);
+
+    for (const kind of ['signature', 'initial'] as const) {
+      const res = await saveContractBoxMap(clientTemplateId, 'client_contract', [
+        { page: 0, x: 0.1, y: 0.1, width: 0.2, height: 0.04, kind },
+      ]);
+      expect(res.success, `${kind} with no party must be refused`).toBe(false);
+      expect(res.error).toMatch(/who signs it/i);
+    }
+
+    // Refused BEFORE the clear, exactly like the key-vs-kind guard — otherwise
+    // an invalid save would wipe a good map on its way to failing.
+    expect(await getContractTemplateBoxes(clientTemplateId)).toHaveLength(before.length);
   });
 
   it('a second save REPLACES the map — it does not merge', async () => {
@@ -284,7 +307,7 @@ describe('S146-C2 — the box map REPLACES, and is validated per document_kind',
     // asserted on the count rather than on the call's success flag.
     state.client = ownerC;
     const res = await saveContractBoxMap(clientTemplateId, 'client_contract', [
-      { page: 0, x: 0.5, y: 0.5, width: 0.2, height: 0.04, kind: 'initial' },
+      { page: 0, x: 0.5, y: 0.5, width: 0.2, height: 0.04, kind: 'initial', party: 'recipient' },
     ]);
     expect(res.error).toBeUndefined();
 
@@ -303,7 +326,7 @@ describe('S146-C2 — the box map REPLACES, and is validated per document_kind',
     // Seed a box so "nothing was written" is distinguishable from "nothing was
     // there". If the guard ran AFTER the clear, this box would be gone.
     await saveContractBoxMap(subTemplateId, 'sub_contract', [
-      { page: 0, x: 0.1, y: 0.1, width: 0.2, height: 0.04, kind: 'signature' },
+      { page: 0, x: 0.1, y: 0.1, width: 0.2, height: 0.04, kind: 'signature', party: 'contractor' },
     ]);
 
     const res = await saveContractBoxMap(subTemplateId, 'sub_contract', [

@@ -765,6 +765,7 @@ export type Database = {
           payment_date: string
           qb_payment_id: string | null
           qb_push_status: string
+          qb_synced_at: string | null
           updated_at: string | null
           updated_by: string | null
         }
@@ -783,6 +784,7 @@ export type Database = {
           payment_date: string
           qb_payment_id?: string | null
           qb_push_status?: string
+          qb_synced_at?: string | null
           updated_at?: string | null
           updated_by?: string | null
         }
@@ -801,6 +803,7 @@ export type Database = {
           payment_date?: string
           qb_payment_id?: string | null
           qb_push_status?: string
+          qb_synced_at?: string | null
           updated_at?: string | null
           updated_by?: string | null
         }
@@ -838,6 +841,7 @@ export type Database = {
           qb_object_type: string | null
           qb_push_status: string
           qb_refund_id: string | null
+          qb_synced_at: string | null
           reason: string | null
           refund_date: string
           source: string
@@ -862,6 +866,7 @@ export type Database = {
           qb_object_type?: string | null
           qb_push_status?: string
           qb_refund_id?: string | null
+          qb_synced_at?: string | null
           reason?: string | null
           refund_date: string
           source: string
@@ -886,6 +891,7 @@ export type Database = {
           qb_object_type?: string | null
           qb_push_status?: string
           qb_refund_id?: string | null
+          qb_synced_at?: string | null
           reason?: string | null
           refund_date?: string
           source?: string
@@ -1122,6 +1128,16 @@ export type Database = {
           paid_break_cap_minutes: number
           phone: string | null
           project_internal_sequence: number
+          qb_connected_at: string | null
+          qb_connection_state: string
+          qb_income_item_id: string | null
+          qb_income_item_name: string | null
+          qb_last_refresh_at: string | null
+          qb_payments_enabled: boolean
+          qb_realm_id: string | null
+          qb_reauth_required_after: string | null
+          qb_refresh_rotated_at: string | null
+          qb_token_secret_id: string | null
           signatory_name: string | null
           signatory_title: string | null
           slug: string
@@ -1185,6 +1201,16 @@ export type Database = {
           paid_break_cap_minutes?: number
           phone?: string | null
           project_internal_sequence?: number
+          qb_connected_at?: string | null
+          qb_connection_state?: string
+          qb_income_item_id?: string | null
+          qb_income_item_name?: string | null
+          qb_last_refresh_at?: string | null
+          qb_payments_enabled?: boolean
+          qb_realm_id?: string | null
+          qb_reauth_required_after?: string | null
+          qb_refresh_rotated_at?: string | null
+          qb_token_secret_id?: string | null
           signatory_name?: string | null
           signatory_title?: string | null
           slug: string
@@ -1248,6 +1274,16 @@ export type Database = {
           paid_break_cap_minutes?: number
           phone?: string | null
           project_internal_sequence?: number
+          qb_connected_at?: string | null
+          qb_connection_state?: string
+          qb_income_item_id?: string | null
+          qb_income_item_name?: string | null
+          qb_last_refresh_at?: string | null
+          qb_payments_enabled?: boolean
+          qb_realm_id?: string | null
+          qb_reauth_required_after?: string | null
+          qb_refresh_rotated_at?: string | null
+          qb_token_secret_id?: string | null
           signatory_name?: string | null
           signatory_title?: string | null
           slug?: string
@@ -1413,6 +1449,7 @@ export type Database = {
           mobile: string | null
           notes: string | null
           phone: string | null
+          qb_customer_id: string | null
           source: string | null
           status: string
           tags: string[] | null
@@ -1434,6 +1471,7 @@ export type Database = {
           mobile?: string | null
           notes?: string | null
           phone?: string | null
+          qb_customer_id?: string | null
           source?: string | null
           status?: string
           tags?: string[] | null
@@ -1455,6 +1493,7 @@ export type Database = {
           mobile?: string | null
           notes?: string | null
           phone?: string | null
+          qb_customer_id?: string | null
           source?: string | null
           status?: string
           tags?: string[] | null
@@ -1467,6 +1506,76 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contract_document_attachments: {
+        Row: {
+          attached_after_execution: boolean
+          company_id: string
+          contract_document_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          file_id: string | null
+          id: string
+          is_deleted: boolean | null
+          label: string
+          sort_order: number
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          attached_after_execution?: boolean
+          company_id?: string
+          contract_document_id: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          file_id?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          label: string
+          sort_order?: number
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          attached_after_execution?: boolean
+          company_id?: string
+          contract_document_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          file_id?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          label?: string
+          sort_order?: number
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contract_document_attachments_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contract_document_attachments_document_fkey"
+            columns: ["contract_document_id"]
+            isOneToOne: false
+            referencedRelation: "contract_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contract_document_attachments_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
             referencedColumns: ["id"]
           },
         ]
@@ -1486,6 +1595,7 @@ export type Database = {
           id: string
           is_deleted: boolean | null
           project_id: string | null
+          sent_at: string | null
           status: string
           sub_contract_id: string | null
           supersedes_document_id: string | null
@@ -1510,6 +1620,7 @@ export type Database = {
           id?: string
           is_deleted?: boolean | null
           project_id?: string | null
+          sent_at?: string | null
           status?: string
           sub_contract_id?: string | null
           supersedes_document_id?: string | null
@@ -1534,6 +1645,7 @@ export type Database = {
           id?: string
           is_deleted?: boolean | null
           project_id?: string | null
+          sent_at?: string | null
           status?: string
           sub_contract_id?: string | null
           supersedes_document_id?: string | null
@@ -1702,6 +1814,7 @@ export type Database = {
           is_deleted: boolean | null
           kind: string
           page: number
+          party: string | null
           template_id: string
           updated_at: string | null
           updated_by: string | null
@@ -1721,6 +1834,7 @@ export type Database = {
           is_deleted?: boolean | null
           kind: string
           page?: number
+          party?: string | null
           template_id: string
           updated_at?: string | null
           updated_by?: string | null
@@ -1740,6 +1854,7 @@ export type Database = {
           is_deleted?: boolean | null
           kind?: string
           page?: number
+          party?: string | null
           template_id?: string
           updated_at?: string | null
           updated_by?: string | null
@@ -3359,6 +3474,7 @@ export type Database = {
           purchase_order_id: string | null
           qb_bill_id: string | null
           qb_push_status: string
+          qb_synced_at: string | null
           rejected_at: string | null
           rejected_by: string | null
           rejection_note: string | null
@@ -3395,6 +3511,7 @@ export type Database = {
           purchase_order_id?: string | null
           qb_bill_id?: string | null
           qb_push_status?: string
+          qb_synced_at?: string | null
           rejected_at?: string | null
           rejected_by?: string | null
           rejection_note?: string | null
@@ -3431,6 +3548,7 @@ export type Database = {
           purchase_order_id?: string | null
           qb_bill_id?: string | null
           qb_push_status?: string
+          qb_synced_at?: string | null
           rejected_at?: string | null
           rejected_by?: string | null
           rejection_note?: string | null
@@ -4229,6 +4347,7 @@ export type Database = {
           qb_invoice_id: string | null
           qb_push_status: string
           qb_synced_at: string | null
+          qb_void_memo: string | null
           reminder_count: number
           retainage_percent: number | null
           retainage_withheld: number
@@ -4267,6 +4386,7 @@ export type Database = {
           qb_invoice_id?: string | null
           qb_push_status?: string
           qb_synced_at?: string | null
+          qb_void_memo?: string | null
           reminder_count?: number
           retainage_percent?: number | null
           retainage_withheld?: number
@@ -4305,6 +4425,7 @@ export type Database = {
           qb_invoice_id?: string | null
           qb_push_status?: string
           qb_synced_at?: string | null
+          qb_void_memo?: string | null
           reminder_count?: number
           retainage_percent?: number | null
           retainage_withheld?: number
@@ -5332,6 +5453,7 @@ export type Database = {
           project_internal_seq: number
           project_number: string
           project_type: string
+          qb_sub_customer_id: string | null
           retainage_percent: number | null
           scope_sections: Json | null
           scope_summary: string | null
@@ -5362,6 +5484,7 @@ export type Database = {
           project_internal_seq?: number
           project_number?: string
           project_type?: string
+          qb_sub_customer_id?: string | null
           retainage_percent?: number | null
           scope_sections?: Json | null
           scope_summary?: string | null
@@ -5392,6 +5515,7 @@ export type Database = {
           project_internal_seq?: number
           project_number?: string
           project_type?: string
+          qb_sub_customer_id?: string | null
           retainage_percent?: number | null
           scope_sections?: Json | null
           scope_summary?: string | null
@@ -5850,6 +5974,178 @@ export type Database = {
             columns: ["profile_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      qb_read_budget: {
+        Row: {
+          company_id: string
+          coreplus_reads: number
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          is_deleted: boolean | null
+          last_read_at: string | null
+          period_month: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          coreplus_reads?: number
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          last_read_at?: string | null
+          period_month: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          coreplus_reads?: number
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          last_read_at?: string | null
+          period_month?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qb_read_budget_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      qb_sync_queue: {
+        Row: {
+          attempts: number
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          depends_on_id: string | null
+          entity_id: string
+          entity_type: string
+          id: string
+          is_deleted: boolean | null
+          last_error: string | null
+          next_attempt_at: string | null
+          operation: string
+          realm_id: string | null
+          status: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          attempts?: number
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          depends_on_id?: string | null
+          entity_id: string
+          entity_type: string
+          id?: string
+          is_deleted?: boolean | null
+          last_error?: string | null
+          next_attempt_at?: string | null
+          operation: string
+          realm_id?: string | null
+          status?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          attempts?: number
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          depends_on_id?: string | null
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          is_deleted?: boolean | null
+          last_error?: string | null
+          next_attempt_at?: string | null
+          operation?: string
+          realm_id?: string | null
+          status?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qb_sync_queue_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "qb_sync_queue_depends_on_id_fkey"
+            columns: ["depends_on_id"]
+            isOneToOne: false
+            referencedRelation: "qb_sync_queue"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      qb_webhook_events: {
+        Row: {
+          company_id: string | null
+          created_at: string | null
+          entity_id: string
+          entity_last_updated: string | null
+          entity_name: string
+          id: string
+          intuit_event_id: string
+          operation: string
+          realm_id: string
+          received_at: string | null
+        }
+        Insert: {
+          company_id?: string | null
+          created_at?: string | null
+          entity_id: string
+          entity_last_updated?: string | null
+          entity_name: string
+          id?: string
+          intuit_event_id: string
+          operation: string
+          realm_id: string
+          received_at?: string | null
+        }
+        Update: {
+          company_id?: string | null
+          created_at?: string | null
+          entity_id?: string
+          entity_last_updated?: string | null
+          entity_name?: string
+          id?: string
+          intuit_event_id?: string
+          operation?: string
+          realm_id?: string
+          received_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qb_webhook_events_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
         ]
@@ -7042,6 +7338,7 @@ export type Database = {
           is_deleted: boolean | null
           member_id: string
           qb_push_status: string
+          qb_synced_at: string | null
           qb_time_activity_id: string | null
           status: string | null
           updated_at: string | null
@@ -7062,6 +7359,7 @@ export type Database = {
           is_deleted?: boolean | null
           member_id?: string
           qb_push_status?: string
+          qb_synced_at?: string | null
           qb_time_activity_id?: string | null
           status?: string | null
           updated_at?: string | null
@@ -7082,6 +7380,7 @@ export type Database = {
           is_deleted?: boolean | null
           member_id?: string
           qb_push_status?: string
+          qb_synced_at?: string | null
           qb_time_activity_id?: string | null
           status?: string | null
           updated_at?: string | null
@@ -7640,6 +7939,12 @@ export type Database = {
       next_project_internal_seq: { Args: never; Returns: number }
       next_project_number: { Args: never; Returns: string }
       owns_open_session: { Args: { p_session_id: string }; Returns: boolean }
+      qb_vault_forget: { Args: { p_secret_id: string }; Returns: undefined }
+      qb_vault_get: { Args: { p_secret_id: string }; Returns: string }
+      qb_vault_put: {
+        Args: { p_company_id: string; p_payload: string; p_secret_id?: string }
+        Returns: string
+      }
       recompute_budget_item: {
         Args: { p_budget_item_id: string }
         Returns: undefined

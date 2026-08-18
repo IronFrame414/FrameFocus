@@ -1,11 +1,13 @@
 import { createClient } from '@/lib/supabase-browser';
 import { uploadFile } from '@/lib/services/files-client';
 import {
+  boxKindNeedsParty,
   canManageContracts,
   canVoidContract,
   isKeyValidForKind,
   type ContractBoxKind,
   type ContractDocumentStatus,
+  type ContractParty,
   type DocumentKind,
 } from '@/lib/services/contracts-shared';
 import type { Database } from '@framefocus/shared/types/database';
@@ -193,7 +195,15 @@ function friendlyContract(message: string): string {
     return 'That box falls outside the page.';
   }
   if (/contract_template_boxes_payload_check/i.test(message)) {
-    return 'A value box needs a field, and a custom box needs a label.';
+    return 'A value box needs a field, a custom box needs a label, and a signature or initials box needs to say who signs it.';
+  }
+  if (/contract_template_boxes_party_check/i.test(message)) {
+    return 'A signature is either ours or the other party’s — nothing else.';
+  }
+  if (/contract_templates_one_default_per_kind/i.test(message)) {
+    // Should be unreachable: the BEFORE trigger clears the previous default in
+    // the same transaction. If a user ever sees this, the trigger is missing.
+    return 'Only one form of each kind can be the default.';
   }
   return message;
 }
@@ -282,6 +292,8 @@ export interface ContractBoxInput {
   kind: ContractBoxKind;
   value_key?: string | null;
   custom_label?: string | null;
+  /** R4/R5 — required on `signature` and `initial`, forbidden on the others. */
+  party?: ContractParty | null;
 }
 
 /**
@@ -315,6 +327,15 @@ export async function saveContractBoxMap(
     }
     if (b.kind === 'custom' && !b.custom_label?.trim()) {
       return { success: false, error: 'Every custom box needs a label.' };
+    }
+    // R4/R5 — a signature box with no party stamps nothing. Refused here for a
+    // sentence the user can act on; `contract_template_boxes_payload_check`
+    // refuses it again in the database, which is the gate that actually binds.
+    if (boxKindNeedsParty(b.kind) && !b.party) {
+      return {
+        success: false,
+        error: `Every ${b.kind === 'initial' ? 'initials' : 'signature'} box needs to say who signs it.`,
+      };
     }
   }
 
@@ -356,6 +377,9 @@ export async function saveContractBoxMap(
     kind: b.kind,
     value_key: b.kind === 'value' ? (b.value_key ?? null) : null,
     custom_label: b.kind === 'custom' ? (b.custom_label ?? null) : null,
+    // Nulled rather than passed through, so a party left over from a box the
+    // user switched away from `signature` cannot reach the payload CHECK.
+    party: boxKindNeedsParty(b.kind) ? (b.party ?? null) : null,
   }));
 
   const { error } = await supabase.from('contract_template_boxes').insert(rows);
@@ -416,12 +440,49 @@ export async function voidContractDocument(
   return { success: true };
 }
 
+// ── The two-level toggle (§5.2) ─────────────────────────────────────────────
+//
+// Both halves live here so the pair cannot drift. `clientContractApplies()` in
+// contracts-shared.ts is the only place they are combined.
+
+/**
+ * §5.2 — the MASTER half of the toggle, written from Company Settings.
+ *
+ * ⚠️ DELIBERATELY NOT `updateCompany()` [RULED S150, Q2], even though this is a
+ * `companies` column and `updateCompany` is right there. That writer does not
+ * `.select()`, so a write RLS discards returns `{ success: true }` — the exact
+ * `#1-s146` failure every other write in this file was hardened against. It
+ * also sets `updated_at` explicitly, which CLAUDE.md flags as the `companies`
+ * holdover not to copy. Routing a contracts write through it would import both.
+ *
+ * `companies_update_owner_admin` (baseline `:3208`) is the database's opinion —
+ * Owner/Admin, same floor as the four 7I tables. The check below is the
+ * friendly message over that gate, not a substitute for it.
+ *
+ * §12.1 — OFF IS THE DEFAULT AND OFF MUST CHANGE NOTHING. Turning this off
+ * cannot destroy a template or a placed box map; it only stops the send flow
+ * from offering a contract. §5.2a keeps templates authorable either way.
+ */
+export async function setClientContractsEnabled(
+  companyId: string,
+  enabled: boolean
+): Promise<ContractResult> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('companies')
+    .update({ client_contracts_enabled: enabled })
+    .eq('id', companyId)
+    .select('id');
+  if (error) return { success: false, error: friendlyContract(error.message) };
+  if (!applied(data)) return { success: false, error: DISCARDED };
+  return { success: true };
+}
+
 /**
  * §5.2 — the per-proposal half of the toggle.
  *
- * The master lives in Company Settings and is written through
- * `updateCompany()`; this is the estimate-level choice the user makes when
- * sending a proposal.
+ * The master is `setClientContractsEnabled()` above; this is the estimate-level
+ * choice the user makes when sending a proposal. Both must be on.
  */
 export async function setEstimateContractToggle(
   estimateId: string,

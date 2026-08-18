@@ -4,6 +4,7 @@ import {
   subContractBadge,
   type ContractBoxKind,
   type ContractDocumentStatus,
+  type ContractParty,
   type DeliveryMode,
   type DocumentKind,
   type SubContractBadge,
@@ -90,10 +91,12 @@ export type ContractDocument = Omit<
   delivery_mode: DeliveryMode;
 };
 
+// `party` is CHECK-constrained and the generator emits loose `string`; the
+// union is restored here per CLAUDE.md rather than widened at the call sites.
 export type ContractTemplateBox = Omit<
   Database['public']['Tables']['contract_template_boxes']['Row'],
-  'kind'
-> & { kind: ContractBoxKind };
+  'kind' | 'party'
+> & { kind: ContractBoxKind; party: ContractParty | null };
 
 export async function getContractTemplates(
   kind?: DocumentKind

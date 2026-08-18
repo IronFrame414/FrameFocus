@@ -13,7 +13,12 @@ import {
 import { updateCompany } from '@/lib/services/company-client';
 import { brand } from '@/lib/brand';
 import { getFileSignedUrlClient } from '@/lib/services/files-client';
-import { VALUE_CATALOG, type ReleaseType } from '@/lib/services/lien-releases-shared';
+import {
+  VALUE_CATALOG,
+  minWidthForReleaseKey,
+  type ReleaseType,
+} from '@/lib/services/lien-releases-shared';
+import { BoxMapEditor, type EditorBox } from '@/components/box-map/box-map-editor';
 import {
   cardStyle,
   color,
@@ -45,6 +50,16 @@ export interface TemplateRow {
   jurisdiction_state: string | null;
   pdf_file_id: string | null;
   is_default: boolean;
+  /**
+   * The template's CURRENT box map.
+   *
+   * ⚠️ THIS PROP IS THE FIX FOR #2-7i. Until S150 this editor opened on
+   * `useState([])` and presented it as the current map, so re-opening it and
+   * saving replaced a placed map with NOTHING — silently, on a legal
+   * instrument. `getTemplateBoxes` existed and had exactly one caller, the
+   * generate route; no settings surface read it.
+   */
+  boxes: BoxInput[];
 }
 
 export function LienReleaseSettingsForm({
@@ -293,211 +308,60 @@ export function LienReleaseSettingsForm({
         </div>
       ))}
 
+      {/* #1-7i CLOSED [S150] — the SHARED editor, the same component 7I mounts.
+          7F passes three kinds and no party; 7I passes four and a party. The
+          local copy this replaces is gone, along with its empty-map defect. */}
       {placing && (
         <BoxMapEditor
-          template={placing}
+          key={placing.id}
+          templateName={placing.name}
+          subtitle="release form"
+          catalog={VALUE_CATALOG}
+          kinds={RELEASE_BOX_KINDS}
+          minWidthFor={minWidthForReleaseKey}
+          pdfFileId={placing.pdf_file_id}
+          initialBoxes={placing.boxes}
+          footnote={`Form ${placing.id.slice(0, 8)}.`}
+          onSave={(boxes) => saveBoxMap(placing.id, toReleaseBoxes(boxes))}
           onClose={() => setPlacing(null)}
           onSaved={() => {
             setPlacing(null);
+            setError(null);
             refresh();
           }}
-          onError={setError}
         />
       )}
     </div>
   );
 }
 
+// 7F's configuration of the shared editor. No `initial` kind and no party: a
+// release carries the company's signature only, where a contract is executed by
+// two parties (7I R4/R5).
+const RELEASE_BOX_KINDS = [
+  { value: 'value', label: 'Value' },
+  { value: 'signature', label: 'Signature' },
+  { value: 'custom', label: 'Custom' },
+];
+
 /**
- * §3 — the box map.
+ * Narrow the editor's structural boxes back to 7F's union.
  *
- * Boxes are stored as FRACTIONS of page width/height with a TOP-LEFT origin,
- * so a form re-scanned at a different DPI keeps its map. This editor works in
- * percentages for the same reason — nothing here is in points.
- *
- * ⚠️ Three kinds, and the third is not optional. A CUSTOM box is a blank on the
- * company's own form that the product has no source for — a bank name, a lender
- * file number, a DISPUTED line. Without it the user would have to leave those
- * blank or, worse, the product would be tempted to invent a value for them.
+ * The shared editor's `kind` is a plain string — its legal values are a
+ * per-module fact. This boundary knows the union because it is the same module
+ * that supplied `kinds`.
  */
-function BoxMapEditor({
-  template,
-  onClose,
-  onSaved,
-  onError,
-}: {
-  template: TemplateRow;
-  onClose: () => void;
-  onSaved: () => void;
-  onError: (message: string) => void;
-}) {
-  const [boxes, setBoxes] = useState<BoxInput[]>([]);
-  const [busy, setBusy] = useState(false);
-
-  function addBox() {
-    setBoxes((b) => [
-      ...b,
-      { page: 0, x: 0.1, y: 0.1, width: 0.3, height: 0.03, kind: 'value', value_key: 'claimant_name' },
-    ]);
-  }
-
-  async function save() {
-    for (const b of boxes) {
-      if (b.kind === 'value' && !b.value_key) return onError('Every value box needs a field.');
-      if (b.kind === 'custom' && !b.custom_label?.trim()) {
-        return onError('Every custom box needs a label.');
-      }
-    }
-    setBusy(true);
-    const result = await saveBoxMap(template.id, boxes);
-    setBusy(false);
-    if (!result.success) return onError(result.error ?? 'Could not save the box map.');
-    onSaved();
-  }
-
-  const set = (i: number, patch: Partial<BoxInput>) =>
-    setBoxes((b) => b.map((box, j) => (j === i ? { ...box, ...patch } : box)));
-
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(20,33,61,0.45)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 50,
-        padding: '20px',
-        overflowY: 'auto',
-      }}
-    >
-      <div style={{ ...cardStyle, padding: '20px', maxWidth: '760px', width: '100%' }}>
-        <p style={{ ...microLabelStyle, marginBottom: '4px' }}>Boxes — {template.name}</p>
-        <p style={{ fontSize: '12px', color: color.muted, margin: '0 0 14px' }}>
-          Positions are percentages of the page, measured from the top-left, so they survive the
-          form being re-scanned at a different size.
-        </p>
-
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-            <thead>
-              <tr style={{ background: color.tableHeadBg }}>
-                {['Page', 'Kind', 'Field / label', 'X%', 'Y%', 'W%', 'H%', ''].map((h) => (
-                  <th key={h} style={{ padding: '6px 8px', textAlign: 'left', color: color.muted }}>
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {boxes.map((b, i) => (
-                <tr key={i} style={{ borderTop: `1px solid ${color.rowDivider}` }}>
-                  <td style={cell}>
-                    <input
-                      type="number"
-                      min={0}
-                      value={b.page}
-                      onChange={(e) => set(i, { page: Number(e.target.value) })}
-                      style={{ ...inputStyle, width: '54px', marginTop: 0 }}
-                    />
-                  </td>
-                  <td style={cell}>
-                    <select
-                      value={b.kind}
-                      onChange={(e) =>
-                        set(i, {
-                          kind: e.target.value as BoxInput['kind'],
-                          value_key: null,
-                          custom_label: null,
-                        })
-                      }
-                      style={{ ...inputStyle, width: 'auto', marginTop: 0 }}
-                    >
-                      <option value="value">Value</option>
-                      <option value="signature">Signature</option>
-                      <option value="custom">Custom</option>
-                    </select>
-                  </td>
-                  <td style={cell}>
-                    {b.kind === 'value' && (
-                      <select
-                        value={b.value_key ?? ''}
-                        onChange={(e) => set(i, { value_key: e.target.value })}
-                        style={{ ...inputStyle, width: '200px', marginTop: 0 }}
-                      >
-                        {VALUE_CATALOG.map((v) => (
-                          <option key={v.key} value={v.key}>
-                            {v.label}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                    {b.kind === 'custom' && (
-                      <input
-                        value={b.custom_label ?? ''}
-                        placeholder="e.g. Lender file no."
-                        onChange={(e) => set(i, { custom_label: e.target.value })}
-                        style={{ ...inputStyle, width: '200px', marginTop: 0 }}
-                      />
-                    )}
-                    {b.kind === 'signature' && (
-                      <span style={{ color: color.faint }}>company signature</span>
-                    )}
-                  </td>
-                  {(['x', 'y', 'width', 'height'] as const).map((k) => (
-                    <td key={k} style={cell}>
-                      <input
-                        type="number"
-                        min={0}
-                        max={100}
-                        step={0.1}
-                        value={Math.round(b[k] * 1000) / 10}
-                        onChange={(e) => set(i, { [k]: Number(e.target.value) / 100 } as Partial<BoxInput>)}
-                        style={{ ...inputStyle, width: '68px', marginTop: 0 }}
-                      />
-                    </td>
-                  ))}
-                  <td style={cell}>
-                    <button
-                      type="button"
-                      onClick={() => setBoxes((all) => all.filter((_, j) => j !== i))}
-                      style={{
-                        ...secondaryButtonStyle,
-                        padding: '3px 8px',
-                        fontSize: '11px',
-                        color: color.danger,
-                      }}
-                    >
-                      ×
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div style={{ display: 'flex', gap: '8px', marginTop: '14px' }}>
-          <button type="button" style={secondaryButtonStyle} onClick={addBox}>
-            Add a box
-          </button>
-          <span style={{ flex: 1 }} />
-          <button type="button" style={secondaryButtonStyle} disabled={busy} onClick={onClose}>
-            Cancel
-          </button>
-          <button type="button" style={primaryButtonStyle} disabled={busy} onClick={save}>
-            {busy ? 'Saving…' : 'Save boxes'}
-          </button>
-        </div>
-
-        <p style={{ fontSize: '11px', color: color.faint, margin: '12px 0 0', fontFamily: font.sans }}>
-          Saving replaces the whole map for this form — a box you removed here is gone, not merged
-          back in.
-        </p>
-      </div>
-    </div>
-  );
+function toReleaseBoxes(boxes: EditorBox[]): BoxInput[] {
+  return boxes.map((b) => ({
+    page: b.page,
+    x: b.x,
+    y: b.y,
+    width: b.width,
+    height: b.height,
+    kind: b.kind as BoxInput['kind'],
+    value_key: b.value_key ?? null,
+    custom_label: b.custom_label ?? null,
+  }));
 }
 
 const inputStyle: React.CSSProperties = {
@@ -511,4 +375,3 @@ const inputStyle: React.CSSProperties = {
   fontFamily: font.sans,
 };
 
-const cell: React.CSSProperties = { padding: '6px 8px' };
