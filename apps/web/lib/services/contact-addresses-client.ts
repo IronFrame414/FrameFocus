@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase-browser';
+import { applied, DISCARDED } from '@/lib/services/mutation-result';
 import type { Database } from '@framefocus/shared/types/database';
 import type { PrimaryAddress } from './contact-addresses';
 
@@ -56,12 +57,15 @@ export async function updatePrimaryAddress(
   if (existing) {
     // BEFORE UPDATE trigger `contact_addresses_set_updated_by` handles updated_by.
     // updated_at is handled by the existing updated_at trigger.
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('contact_addresses')
       .update(input)
-      .eq('id', existing.id);
+      .eq('id', existing.id)
+      .select('id');
 
     if (error) return { success: false, error: error.message };
+    // M2-03 [S154]. `contact_addresses_update_authorized` is owner/admin/PM.
+    if (!applied(data)) return { success: false, error: DISCARDED };
     return { success: true };
   }
 
@@ -90,7 +94,7 @@ export interface ContactAddressOption {
 
 export async function listAddressesForContact(
   contactId: string
-): Promise<ContactAddressOption[]> {
+): Promise<{ addresses: ContactAddressOption[]; error: string | null }> {
   const supabase = createClient();
 
   const { data, error } = await supabase
@@ -101,6 +105,11 @@ export async function listAddressesForContact(
     .order('is_primary', { ascending: false })
     .order('created_at', { ascending: true });
 
-  if (error) return [];
-  return data ?? [];
+  // M2-07 [S154]. See listContactOptions — an empty list here is the input to
+  // the address a proposal and a lien release later print.
+  if (error) {
+    console.error('listAddressesForContact: query failed', { contactId, error });
+    return { addresses: [], error: error.message };
+  }
+  return { addresses: data ?? [], error: null };
 }

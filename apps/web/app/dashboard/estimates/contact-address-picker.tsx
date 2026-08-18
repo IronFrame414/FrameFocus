@@ -37,9 +37,18 @@ export function ContactAddressPicker({
   const [addresses, setAddresses] = useState<ContactAddressOption[]>([]);
   const [search, setSearch] = useState('');
   const [showResults, setShowResults] = useState(false);
+  // M2-07 [S154] — a failed lookup used to render as "no contacts" / "no
+  // addresses", which is indistinguishable from the truth. This picker chooses
+  // the `contact_address_id` a proposal and a lien release later print, so an
+  // empty list that is really a failure is how a document ends up with no
+  // job-site address on it.
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
-    listContactOptions().then(setContacts);
+    listContactOptions().then(({ options, error }) => {
+      setContacts(options);
+      setLoadError(error);
+    });
   }, []);
 
   useEffect(() => {
@@ -47,7 +56,10 @@ export function ContactAddressPicker({
       setAddresses([]);
       return;
     }
-    listAddressesForContact(contactId).then(setAddresses);
+    listAddressesForContact(contactId).then(({ addresses: rows, error }) => {
+      setAddresses(rows);
+      setLoadError(error);
+    });
   }, [contactId]);
 
   const selectedContact = contacts.find((c) => c.id === contactId) ?? null;
@@ -77,6 +89,25 @@ export function ContactAddressPicker({
 
   return (
     <div>
+      {/* M2-07 [S154] — say that the lookup failed, rather than showing an
+          empty list that looks like an answer. */}
+      {loadError && (
+        <div
+          role="alert"
+          style={{
+            marginBottom: '0.75rem',
+            padding: '0.5rem 0.75rem',
+            border: '1px solid #fecaca',
+            background: '#fef2f2',
+            color: '#991b1b',
+            borderRadius: '0.375rem',
+            fontSize: '0.8125rem',
+          }}
+        >
+          Contacts could not be loaded, so this list may be incomplete. Reload the page before
+          choosing a client and job-site address.
+        </div>
+      )}
       <div style={{ marginBottom: '1rem', position: 'relative' }}>
         <label style={labelStyle}>Client *</label>
         {selectedContact ? (

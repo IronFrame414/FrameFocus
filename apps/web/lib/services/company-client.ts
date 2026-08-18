@@ -21,41 +21,13 @@ export type {
   TimeTrackingSettings,
 };
 
-/**
- * R17 [S150], extended to EVERY writer in this file [M1-01, S152].
- *
- * ⚠️ THE RULE FOR THIS FILE: every UPDATE against `companies` ends
- * `.select('id')` and goes through `applied()`. No exceptions. S150 added the
- * guard to `updateCompany` and to none of its seven siblings, so the file
- * taught both patterns and the next person to copy a neighbouring function
- * copied the unguarded one — which is exactly how it was found (S151 M1-01).
- *
- * Two of those seven wrote `contractor_signature_path`, the image stamped onto
- * change orders and lien releases. A silent failure there leaves a
- * legal-document surface believing it has a signature on file.
- *
- * A write RLS discarded, reported as the failure it is.
- *
- * ⚠️ ZERO AFFECTED ROWS IS NOT AN ERROR IN POSTGRES. When a policy matches
- * nothing, the UPDATE is valid and changes nothing; PostgREST returns no error,
- * so a caller that only checks `error` returns success over a row it never
- * touched. `companies_update_owner_admin` is the policy in question — a caller
- * whose role or company no longer matches gets "Settings saved successfully."
- * over an unchanged row.
- *
- * `.select('id')` is what makes the affected rows observable at all.
- *
- * The message names no cause it has not verified (CLAUDE.md): an empty result
- * cannot distinguish "policy refused you" from "the row is gone", so it says
- * both. Same helper and same wording as `contracts-client.ts`, where this
- * defect (`#1-s146`) was first fixed.
- */
-const DISCARDED =
-  'That change was not applied. You may not have permission to make it, or the record no longer exists.';
+// The row-count guard lives in ONE place now [M2-03, S154] — this file's
+// long-form explanation moved with it. The rule it states is unchanged:
+// every UPDATE against `companies` ends `.select('id')` and goes through
+// `applied()`. Two of these writers set `contractor_signature_path`, the
+// image stamped onto change orders and lien releases.
+import { applied, DISCARDED } from '@/lib/services/mutation-result';
 
-function applied(rows: unknown[] | null): boolean {
-  return Array.isArray(rows) && rows.length > 0;
-}
 
 // ── Company Settings pass [S86] — time-tracking settings ──
 // timezone is excluded: it predates this pass and has no UI control yet;

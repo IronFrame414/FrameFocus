@@ -2,11 +2,23 @@
  * S153 — Module 2 (Contacts & CRM) audit probes. Pass 2 of the eleven-pass
  * system audit.
  *
- * ⚠️ THIS FILE ASSERTS DEFECTS THAT ARE STILL OPEN. Several tests assert the
- * CURRENT (wrong) behaviour on purpose, each naming in its own message what a
- * fix would look like so the test is INVERTED rather than deleted when Josh
- * rules. Precedent: `s146-contract-services.live.ts` S146-C4, and pass 1's
- * `s151-m1-audit.live.ts` F2, which was duly inverted at S152.
+ * ⚠️ WRITTEN TO ASSERT OPEN DEFECTS; INVERTED AT S154 AS THEY WERE FIXED.
+ *
+ * Pass 2 committed the evidence and not the fixes, so these tests asserted the
+ * CURRENT (wrong) behaviour on purpose, each naming what a fix would look like.
+ * Precedent: `s146-contract-services.live.ts` S146-C4, and pass 1's
+ * `s151-m1-audit.live.ts` F2, duly inverted at S152.
+ *
+ * STATUS AT S154 — all four findings fixed:
+ *   F1 ✅ INVERTED. M2-01: the roster floor now covers contact_addresses, and an
+ *        ASSIGNED sub additionally sees the one site address their project
+ *        points at (`20261006000000`). Fuller coverage: `s154-m2-fixes.live.ts`
+ *        B1/B2.
+ *   F2 ✅ INVERTED. M2-02: soft delete works and the row is restorable
+ *        (`20261005000000`). Fuller coverage: S154 A1-A4.
+ *   F3 ✅ INVERTED. M2-03: the row-count guard reached M2. S154 C1-C3.
+ *   F4    unchanged — M2-04 was RULED no-constraint [Josh, S154]; a contact with
+ *        no email must still save. The requirement moved to M9's invite path.
  *
  * Nothing here changes application code, a service, or the schema.
  *
@@ -116,7 +128,8 @@ describe('S153-F1 — the roster floor stops at the contact and not at its addre
     // with NO role floor, while `contacts_select_authenticated` excludes
     // subcontractor and client. The name is withheld and the address is not.
     //
-    // ⚠️ ASSERTS THE DEFECT. When floored, invert to .toEqual([]).
+    // ✅ INVERTED [S154]. The fixture contact has no project, so this sub has no
+    // assignment reaching it — the B2 grant does not apply and the floor bites.
     const { data } = await sub
       .from('contact_addresses')
       .select('address_line1, city, state, zip')
@@ -124,9 +137,8 @@ describe('S153-F1 — the roster floor stops at the contact and not at its addre
 
     expect(
       data,
-      'the subcontractor was refused — F1b may be fixed; if so, invert this'
-    ).toHaveLength(1);
-    expect(data![0].address_line1).toBe(`${MARKER} 1 Secret Lane`);
+      'the subcontractor can still read an unassigned address — M2-01 has regressed'
+    ).toEqual([]);
   });
 
   it('F1c — and so can a CLIENT, who is floored out of contacts entirely', async () => {
@@ -135,24 +147,26 @@ describe('S153-F1 — the roster floor stops at the contact and not at its addre
     const { data: contacts } = await client.from('contacts').select('id').eq('id', contactId);
     expect(contacts, 'a client can read contacts — the S131 floor has regressed').toEqual([]);
 
+    // ✅ INVERTED [S154]. A client gets NO addresses under any circumstance —
+    // the B2 grant is assignment-scoped and clients hold no assignments.
     const { data: addrs } = await client
       .from('contact_addresses').select('address_line1').eq('id', addressId);
-    expect(
-      addrs,
-      'the client was refused — F1c may be fixed; if so, invert this'
-    ).toHaveLength(1);
+    expect(addrs, 'a client can still read contact addresses — M2-01 has regressed').toEqual([]);
   });
 
   it('F1d — the exposure is COMPANY-WIDE, not one row: a sub reads every address', async () => {
     // Scopes the finding. One readable row could be an artefact of the fixture;
     // the whole table is the actual shape.
+    // ✅ INVERTED [S154]. Was "the sub sees every company address". Now the sub
+    // sees only addresses reached by an assignment — strictly fewer than all,
+    // and this fixture creates none for them.
     const { data } = await sub.from('contact_addresses').select('id');
     const { data: all } = await admin
       .from('contact_addresses').select('id').eq('company_id', companyId);
     expect(
       (data ?? []).length,
-      'a subcontractor does not see every company address — re-scope F1'
-    ).toBe((all ?? []).length);
+      'the subcontractor still sees every company address — M2-01 has regressed'
+    ).toBeLessThan((all ?? []).length);
   });
 });
 
@@ -190,17 +204,12 @@ describe('S153-F2 — a contact cannot be deleted at all', () => {
     state.client = owner;
     const result = await deleteContact(probe!.id);
 
-    expect(
-      result.success,
-      'deleteContact() now succeeds — F2 may be fixed; if so, invert this'
-    ).toBe(false);
-    expect(result.error).toMatch(/row-level security/i);
+    // ✅ INVERTED [S154]. Was: refused with a raw RLS error for every role.
+    expect(result.success, `deleteContact still fails: ${result.error}`).toBe(true);
 
-    // The row is untouched, and the user was told the delete failed with a
-    // Postgres string they cannot act on (`contacts-list.tsx:44` alerts it raw).
     const { data: after } = await admin
       .from('contacts').select('is_deleted').eq('id', probe!.id).single();
-    expect(after!.is_deleted).toBe(false);
+    expect(after!.is_deleted, 'the soft delete did not happen').toBe(true);
   });
 
   it('F2b — deleteSubcontractor() is broken the SAME way, so this is a pattern', async () => {
@@ -219,11 +228,8 @@ describe('S153-F2 — a contact cannot be deleted at all', () => {
       .update({ is_deleted: true, deleted_at: new Date().toISOString() })
       .eq('id', sc!.id);
 
-    expect(
-      error,
-      'a subcontractor CAN now be soft-deleted — F2b may be fixed; if so, invert this'
-    ).not.toBeNull();
-    expect(error!.message).toMatch(/row-level security/i);
+    // ✅ INVERTED [S154]. Was: refused identically to contacts.
+    expect(error, `subcontractor soft delete still fails: ${error?.message}`).toBeNull();
 
     await admin.from('subcontractors').delete().eq('id', sc!.id);
   });
@@ -250,15 +256,20 @@ describe('S153-F2 — a contact cannot be deleted at all', () => {
       .eq('id', addressId)).error);
   });
 
-  it('F2d — corroboration: NO contact has ever been soft-deleted on this database', async () => {
-    // A count, not a code path. If the feature had ever worked, some row would
-    // carry is_deleted = true. 0 of 22 do — consistent with a delete button that
-    // has never once succeeded.
+  it('F2d — ✅ INVERTED [S154]: a soft-deleted contact now EXISTS', async () => {
+    // ⚠️ THIS TEST'S PREMISE IS OBSOLETE, AND THAT IS THE POINT. It was
+    // corroboration FOR the defect: a count, not a code path — if the feature had
+    // ever worked, some row would carry is_deleted = true, and 0 of 22 did.
+    //
+    // It is inverted rather than deleted because the count is still the honest
+    // check. F2a above just soft-deleted one through the shipped service, so at
+    // least one must be here. If this returns empty again, the delete silently
+    // stopped working and F2a is passing on something other than a real write.
     const { data } = await admin.from('contacts').select('id').eq('is_deleted', true);
     expect(
-      data,
-      'soft-deleted contacts exist — some path CAN do it, and F2 needs re-scoping'
-    ).toEqual([]);
+      (data ?? []).length,
+      'no soft-deleted contact exists — F2a did not actually delete anything'
+    ).toBeGreaterThan(0);
   });
 });
 
@@ -277,10 +288,8 @@ describe('S153-F3 — a discarded write is reported as success', () => {
     state.client = crew;
     const result = await updateContact(contactId, { last_name: 'Overwritten' });
 
-    expect(
-      result.success,
-      'updateContact() now reports the refusal — F3 may be fixed; if so, invert this'
-    ).toBe(true);
+    // ✅ INVERTED [S154]. Was: reported success over a write RLS discarded.
+    expect(result.success, 'updateContact still reports success for crew').toBe(false);
 
     // And nothing moved, which is what makes the report a lie.
     const { data } = await admin
@@ -293,10 +302,9 @@ describe('S153-F3 — a discarded write is reported as success', () => {
     state.client = crew;
     const result = await deleteContact(contactId);
 
-    expect(
-      result.success,
-      'deleteContact() now reports the refusal — F3 may be fixed; if so, invert this'
-    ).toBe(true);
+    // ✅ INVERTED [S154]. Was the perverse half: crew told "deleted", Owner
+    // given a raw RLS error. Both are correct now.
+    expect(result.success, 'deleteContact still reports success for crew').toBe(false);
 
     const { data } = await admin
       .from('contacts').select('is_deleted').eq('id', contactId).single();
