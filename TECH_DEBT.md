@@ -129,16 +129,84 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   advisory on 7F in a way it will not be on 7I once R10 blocks the send.
   Reconciling the two render paths belongs to 7I stage 2.
 
+- **#3-7i — ✅ CLOSED [S150] — superseded. Box placement is no longer typed-only.**
+
+  **Read this before trusting a search of this file: `#3-7i` was DELETED from
+  `TECH_DEBT.md` by `53c7353`, not closed.** Between `35c4927` (which filed it) and
+  HEAD it is recoverable only from git. It is restored here as a closure so the
+  decision has a record where a reader will look for it. Two sibling records went
+  the same way in that commit — see the note at the end of this entry.
+
+  _Original entry, quoted rather than paraphrased (`35c4927`):_
+
+  > **#3-7i — Box placement is TYPED COORDINATES, not visual. Decided by default at
+  > S150, not by ruling.**
+  >
+  > `ContractBoxEditor` is a numeric table: the user types X/Y/W/H as percentages and
+  > reads off where the blanks fall by opening the form in another tab. It matches 7F's
+  > shipped interaction exactly, which is the argument for it — but nobody chose it on
+  > the merits.
+  >
+  > A visual overlay (drag a box onto the rendered page) needs the PDF rasterised in the
+  > browser, and **the repo has no library that can do it**: `pdf-lib` manipulates PDFs
+  > without rendering them and `@react-pdf/renderer` generates them. It would mean adding
+  > `pdfjs-dist` — a real dependency decision on a legal-document surface, out of scope
+  > for a slice scoped to "UI work, no migration", so it was not taken unilaterally.
+  >
+  > Worth a ruling before a company maps a 12-page agreement by typing 4 numbers per
+  > blank. Closing this alongside #1-7i would upgrade both documents at once.
+
+  **Why it is closed.** Its own closing sentence named the condition — *"closing this
+  alongside #1-7i would upgrade both documents at once"* — and that is what happened.
+  The `#1-7i` extraction shipped `components/box-map/box-map-editor.tsx`, which **7F
+  inherited visual placement (R6) from as a side effect**. Box placement is no longer
+  typed-only on either surface, so the question this item held open — whether to accept
+  a numeric table by default — no longer has a subject. **Superseded, not deferred and
+  not decided against.**
+
+  **The dependency decision it was protecting was never taken, and did not need to be.**
+  No `pdfjs-dist` was added. Whatever the shared editor does for placement, it does
+  without rasterising a PDF in the browser — which is the reason the original item
+  existed. Anyone reopening the visual-placement question starts from the shared editor,
+  not from `ContractBoxEditor`, which no longer exists.
+
+  ⚠️ **Closed on the extraction, NOT on a click-test.** `#1-7i` and `#2-7i` both carry
+  the same caveat: neither surface has been exercised by hand since the swap, and Josh
+  accepted that risk explicitly at S150. This closure inherits it.
+
+  **⚠️ `53c7353` dropped three records, not one.** It replaced `#2-7i` and `#1-7i` with
+  their closed forms — correct — but also deleted `#3-7i` (restored above) **and the
+  unnumbered "7I acceptance criterion 15's parenthetical is stale" bullet, which is
+  recorded nowhere at HEAD.** That one is NOT restored here, deliberately: it is a live
+  finding, not a closure, and re-filing it is a decision rather than bookkeeping. The
+  finding itself still holds — `7I-spec.md` §12 criterion 15 still reads *"(UI gate; the
+  DB floor is the separate `FINANCIAL-RLS-FLOOR` follow-up — §8.)"*, and **both halves
+  are false**: the floor landed at S97 (`20260806000000`) and `20260926000000` §6 gives
+  all four 7I tables Owner/Admin RLS **including SELECT**. The S150 completion audit
+  (finding #1) recorded it as "already recorded in `TECH_DEBT.md` this session"; that is
+  no longer true of the file, and the audit's claim should not be relied on. **Owed:
+  either re-file it or correct §12 criterion 15 in place.**
+
 - **§13's prerequisite list is stale on this point, recorded so it is not re-followed.**
   7I §13 names "the box-placement component" among the hard prerequisites 7F supplies.
   7F supplies a box-placement *component*, but not a *reusable* one — see #1-7i. A
   builder reading §13 will look for something to import and find nothing importable.
 
-- **`contract_document_attachments` (§7.4) is owed, and is mis-sequenced in §13.**
-  The table was never created — absent from `20260926000000_7i_contracts.sql` and from
-  `packages/shared/types/database.ts`. §13 lists attachments under stage 1, but every
-  column hangs off `contract_documents(id)` and no contract document exists until stage
-  2 generates one. **Deferred to stage 2** [RULED Josh, S150]. Not created at S150.
+- **`contract_document_attachments` (§7.4) — the TABLE shipped; the UI is stage 2's.**
+
+  > **⚠️ CORRECTED [S150, later the same session].** _Superseded text, quoted rather than
+  > rewritten:_ _"The table was never created — absent from `20260926000000_7i_contracts.sql`
+  > and from `packages/shared/types/database.ts`. … Not created at S150."_
+  >
+  > **It was created at S150**, in `20261001000000_7i_party_defaults_attachments.sql:179`,
+  > and it IS in `packages/shared/types/database.ts`. The S150 completion audit read it live
+  > with select/insert/update policies. The bullet was written before that migration landed
+  > and was never revisited.
+
+  The mis-sequencing half stands and is unchanged: §13 listed attachments under stage 1,
+  but every column hangs off `contract_documents(id)` and no contract document exists until
+  stage 2 generates one. **Deferred to stage 2** [RULED Josh, S150]. What remains owed is the
+  **UI**, not the migration. §13 is corrected in place as of this session.
 
 ### Branch-scoped, awaiting real numbers — `feature/s143-void-guard-qb-reconcile` [S143]
 
