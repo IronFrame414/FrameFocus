@@ -35,6 +35,30 @@ and the button is wired to a live UI. Separately, the S131 Roster Visibility Flo
 
 ---
 
+## §0a — STATUS AFTER S154 — every finding closed out
+
+> **This audit was written findings-only. S154 is the fix pass.** Each finding carries its own
+> **`✅ / 📌 S154`** block below. **Original text is left intact above each block** — this repo lost
+> a live TECH_DEBT record at `53c7353` by deleting an entry instead of closing it.
+
+| # | S153 severity | S154 outcome | Commit |
+| --- | --- | --- | --- |
+| **M2-01** | REACHABLE | ✅ **FIXED, and widened into a feature** — floor applied, plus a new assignment-scoped site-address grant | `4749a41`, `acd1f1b` |
+| **M2-02** | REACHABLE | ✅ **FIXED** — soft delete works and the row is restorable | `92d1fd7` |
+| **M2-03** | REACHABLE | ✅ **FIXED** — and `applied()`/`DISCARDED` now has ONE home | `04853e7` |
+| **M2-04** | LATENT | 📌 **RULED: NO CONSTRAINT.** Requirement moved to M9's invite path | `acd1f1b` |
+| **M2-05** | LATENT | 📌 **DEFERRED**, to be decided with `#105` — unchanged | — |
+| **M2-06** | LATENT | 📌 **NOT ACTIONED** — out of scope this pass; see its block | — |
+| **M2-07** | LATENT | ✅ **FIXED** — two pickers surface the error; `getContacts` logs it | `04853e7` |
+| **M2-08** | LATENT | 📌 **RULED: the asymmetry is DELIBERATE.** Not a defect | `92d1fd7` |
+| **M2-09** | THEORETICAL | 📌 **CLOSED as recorded** — the database already catches it | — |
+
+**Sequencing mattered and was followed: A → B → C.** Group B's policy is written from Group A's
+corrected shape; had it gone first it would have copied `contacts`' `is_deleted` clause onto a
+second table.
+
+---
+
 ## §1 — Findings, most severe first
 
 Severity: **REACHABLE TODAY** · **LATENT** (mechanism real, something incidental prevents it) ·
@@ -78,6 +102,36 @@ assigned subcontractor should see the job-site address of a project they are wor
 answer is "yes, and every other address too". A narrower answer exists (`project_id`-scoped) and is
 a bigger change. **Recommend: apply the S131 floor as-is now, and treat job-site visibility for
 assigned subs as a separate question** — it is M6/M7 territory, not M2's.
+
+> ### ✅ FIXED [S154] — `4749a41` + `acd1f1b` — **and the recommendation was overruled, correctly**
+>
+> _Superseded recommendation, quoted rather than deleted:_ *"treat job-site visibility for assigned
+> subs as a separate question."* **Josh ruled BOTH, in one pass:** *"sub can see site address."*
+> Deferring it would have shipped a floor that took something away in principle and left the real
+> need unmet — and the audit had itself verified subs can see no site address anywhere today, so
+> "separate question" would have meant "no answer for another pass".
+>
+> **B1 — the leak is shut.** `contact_addresses_select_scoped` carries the S131 floor.
+> **B2 — a new capability.** An **assigned** subcontractor additionally sees the **one** address row
+> `projects.contact_address_id` points at.
+>
+> **⚠️ The scoping trap, and how it was avoided.** `contact_addresses` hangs off the CONTACT, not the
+> project. A grant written as *"the assigned sub sees this contact's addresses"* would hand over the
+> client's **home** address too — this finding's own leak through a narrower door. The grant resolves
+> **through `projects.contact_address_id`**, so exactly one row qualifies. **`s154-m2-fixes.live.ts`
+> B2b is the assertion the whole design hinges on** — same contact, home address, refused — and it is
+> mutation-proved.
+>
+> **Enforced in the database, deliberately.** `app/m/detail-access.ts` states in its own header that
+> the sub exclusion on the detail routes is UI-only and *"RLS will not catch a bypass"*. B2 is not
+> built on that guard, and `getProjectSiteAddress()` adds no role check of its own.
+>
+> **Cost, measured not assumed** — see §5 below.
+>
+> **Surface:** a "Site address" block on the mobile project **Overview** (M-11), not the M-3 hub whose
+> geometry `A-11e`/`A-12` pin. Rendered only when the database returns one, so a role without the
+> grant sees **no section**, not a heading over an em-dash — a blank slot advertises that an address
+> exists and is being withheld.
 
 ---
 
@@ -145,6 +199,32 @@ restore into.
 **Needs a ruling**, because step 1 widens a SELECT policy on a shipped table and step 2 is the part
 that makes that safe. **This is one decision covering both tables** — see §4 Group A.
 
+> ### ✅ FIXED [S154] — `92d1fd7` + `20261005000000`
+>
+> All three parts done, **in the order this finding specified**, which was the whole risk.
+>
+> **Step 2 first — the sweep is discharged, not assumed.** Every read of both tables was enumerated
+> **[REPO]**: `contacts` has **2 list reads** (`getContacts`, `listContactOptions`), both already
+> filtering, and **10 by-id consumers** (proposal, invoice, CO, lien-release, four send routes) which
+> **must not** filter — a document resolving the counterparty it was made out to is the same
+> convention. `subcontractors` has **2 list reads**, both filtering, and 5 lookups, all filtering.
+> **No surface depended on the RLS filter**, so nothing began rendering deleted rows.
+>
+> Step 1: both policies keep company scoping and the S131 role floor, and lose the `is_deleted`
+> clause. Step 3: `getContact(id)` drops its filter and moves to `maybeSingle()`.
+>
+> **`getSubcontractor(id)` was included although the ruling named only `getContact`.** Group A covers
+> both tables, and leaving one filtering would have shipped a half-working restore — M1-06's shape.
+> Flagged rather than done silently.
+>
+> **Proved by `s154-m2-fixes.live.ts` A1-A4.** A4 is the one that matters: a deleted contact stays out
+> of the filtered list **while being visible unfiltered**, so the sweep is verified rather than
+> trusted.
+>
+> **One consequence worth carrying:** `/api/cron/invoice-reminders` resolves contacts by id and would
+> now email a soft-deleted client. It is **not scheduled** (M1-07, asserted in CI at S152), so this is
+> moot today — but whoever schedules it should decide that deliberately.
+
 ---
 
 ### **M2-03 — `updateContact()` and `deleteContact()` report a refused write as success** — REACHABLE TODAY
@@ -174,6 +254,25 @@ is told it worked; the role that should be able to is told it failed.**
 `contracts-client.ts`. **It is now written twice; a third copy is the wrong answer** — lift it into
 a shared module and have all three import it. **Unambiguous; no ruling needed** beyond where the
 shared helper should live.
+
+> ### ✅ FIXED [S154] — `04853e7`
+>
+> Guards added to `updateContact`, `deleteContact` and `updatePrimaryAddress`'s UPDATE branch.
+>
+> **`applied()`/`DISCARDED` now lives at `apps/web/lib/services/mutation-result.ts`**, and
+> `company-client.ts` and `contracts-client.ts` import it. It is in `lib/services/` and not under
+> `app/dashboard/` or `app/m/` because CLAUDE.md's PARITY ruling makes a helper's directory a claim of
+> ownership and this belongs to no surface; it is **pure, no supabase import**, so server files,
+> client files and future modules reach it without dragging `next/headers` into a client bundle.
+>
+> Its header carries the **three-incident history** (`#1-s146` → `M1-01` → `M2-03`) and states the
+> rule once: *an UPDATE-shaped write ends `.select('id')` and goes through `applied()`* — plus the
+> counter-rule, that INSERT-shaped writes do **not** need it, with the `INSERT … RETURNING` trap noted
+> so the inverse mistake is not made either.
+>
+> **The perverse interaction is resolved.** Before: `deleteContact()` errored for an Owner (M2-02's
+> WITH CHECK) and reported success to crew (zero rows, never reached it). Now the Owner's succeeds and
+> everyone else is told the truth. `s154` C1-C3, with C3 proving C1/C2 are not vacuous.
 
 ---
 
@@ -213,6 +312,30 @@ lead or an inspector genuinely may have no email, and a partial CHECK expresses 
 ⚠️ **(b) and (c) must be `NOT VALID`** or they will fail against any existing row that violates them;
 none does today, but that is luck, not a guarantee, and production has not been read.
 
+> ### 📌 RULED [Josh, S154] — **NO CONSTRAINT. The recommendation was overruled.** — `acd1f1b`
+>
+> _Superseded recommendation, quoted rather than deleted:_ *"Recommend (b) — a partial CHECK in the
+> database."*
+>
+> **Josh's ruling:** *"not required, but portal access will require it."* A lead with only a phone
+> number must be able to save, and a schema rule that locked a contractor out of recording their own
+> lead is the wrong trade — **the same boundary R20 draws for branding: required where it matters,
+> never a rule that blocks people from their own data.**
+>
+> **Where the recommendation went wrong, since the principle it invoked is real.** *Authority belongs
+> in the database* answers **who may do a thing**. This is **when a thing is required**, which is a
+> workflow question, and the two are not the same. A CHECK would have made the database the authority
+> on a rule that only one workflow cares about.
+>
+> **Recorded as `9-spec.md` §S.1** — a portal-invite precondition. The invite path refuses and names
+> what is missing; the refusal sits on the **invite action**, not on contact creation. That note also
+> warns a later session **not** to "fix the schema" with a CHECK, because it was ruled out on purpose.
+>
+> **Second-order, recorded and unresolved:** a client will then hold an email in **two** places —
+> `contacts.email` and `profiles.email` — with nothing syncing them. §S.1 requires M9's schema decision
+> to name which is **authoritative for login**, since *"username is the email"* is ambiguous once
+> there are two.
+
 ---
 
 ### **M2-05 — two unreconciled `vendor` concepts** — LATENT (modelling), **flagged by the M9 audit and still open**
@@ -250,6 +373,12 @@ the cheapest to state and the easiest to enforce** (a partial CHECK excluding `'
 `#105` — "prohibit exact duplicate names platform-wide" — points at a broader answer**, and this
 should be decided with `#105` rather than before it.
 
+> ### 📌 DEFERRED [S154], as recommended — no change
+>
+> **RULED: stays deferred, to be decided with `#105`.** Nothing was resolved and nothing should be.
+> Still 1 vendor in each table with no name overlap — **true by luck, and the luck has not run out
+> yet.**
+
 ---
 
 ### **M2-06 — `getContacts()` is an unbounded `select('*')` and the list is filtered in the browser** — LATENT (efficiency)
@@ -276,6 +405,18 @@ the query is bounded — **fixing the pagination first is the right order.**
 instead of `*`. **Unambiguous; no ruling needed** — but it is a UI change as much as a query change,
 so it is larger than it looks.
 
+> ### 📌 NOT ACTIONED [S154] — still open
+>
+> Not in any of the four ruled groups, and it is the UI change this finding warned it was rather than
+> the query change it looks like. `getContacts()` is still `select('*')` with no bound, and
+> `contacts-list.tsx` still filters in the browser.
+>
+> **What DID change here:** `getContacts()` no longer swallows its error (M2-07). The unbounded read
+> is untouched.
+>
+> **Still latent, and the trigger is unchanged:** invisible at 22 rows, a full-table RSC payload at
+> 10,000.
+
 ---
 
 ### **M2-07 — three read paths return `[]` on error, so a failure is indistinguishable from "none"** — LATENT (robustness)
@@ -291,6 +432,19 @@ about data it *has*; it lies about data it *could not fetch*, which is the same 
 **Proposed fix.** Return the error and let the caller decide, or at minimum log server-side with the
 route and failing check, per CLAUDE.md's API rule (*"Every error response logs the real cause
 server-side … The client message may be generic; the log never is"*). **Unambiguous.**
+
+> ### ✅ FIXED [S154] — `04853e7`
+>
+> **The two pickers return the error.** `listContactOptions()` and `listAddressesForContact()` now
+> return `{ rows, error }` and `contact-address-picker.tsx` renders a banner. These two mattered most:
+> they choose the `contact_address_id` a proposal and a lien release later print, so a silent empty
+> list is how a document ends up with no job-site address on it.
+>
+> **`getContacts()` keeps its array return, deliberately.** Four server-component callers and **no
+> `error.tsx` boundaries exist** (TECH_DEBT `#2`), so throwing would render a raw Next error page.
+> What is fixed there is the **silence** — the real cause is logged with the failing filters, per
+> CLAUDE.md. **Surface it in the UI when `#2` lands**; that is the remaining half and it is recorded
+> here rather than closed.
 
 ---
 
@@ -309,6 +463,21 @@ bypassing the trash-bin pattern entirely.
 **Needs a one-line ruling** — it is possible the policy is deliberate, though nothing in the repo
 says so.
 
+> ### 📌 RULED [Josh, S154] — **the asymmetry is DELIBERATE. This is not a defect.** — `92d1fd7`
+>
+> _Superseded recommendation, quoted rather than deleted:_ *"Drop the DELETE policy, matching
+> `contacts`."* **Overruled.** Josh: *"just hard delete, no reason for those to stay."*
+>
+> **Addresses hard delete; contacts and subcontractors soft delete**, and the difference is reasoned:
+> an address is a detail of a contact, cheap to re-enter, and `estimates.contact_address_id` /
+> `projects.contact_address_id` are both `ON DELETE NO ACTION` — **the FK is the guard**, so one a
+> document actually references cannot be removed. Extending hard delete to `contacts` was explicitly
+> rejected: they carry FKs from estimates, projects, invoices, payments, refunds and contracts.
+>
+> **Recorded in `COMMENT ON TABLE contact_addresses` as well as in the migration**, precisely because
+> this finding filed it as an inconsistency. **A later pass that "harmonises" these two is undoing a
+> decision.**
+
 ---
 
 ### **M2-09 — `updatePrimaryAddress()` is a lookup-then-write race** — THEORETICAL
@@ -323,6 +492,8 @@ reports it as a raw error.
 
 **No fix proposed.** Recorded so a later pass does not re-derive it, and so nobody "fixes" the race
 by removing the index.
+
+> ### 📌 CLOSED as recorded [S154] — no change, and none wanted.
 
 ---
 
@@ -365,9 +536,10 @@ by removing the index.
 
 ---
 
-## §4 — Grouped for ruling
+## §4 — Grouped for ruling — **ALL FOUR RULED AND DISCHARGED [S154]**
 
-Nine findings, **four decisions**.
+Nine findings, **four decisions**. All four ruled at S154; outcomes in §0a. **Two recommendations in
+this section were overruled and both overrulings were right** — see M2-01's and M2-04's blocks.
 
 | Group | Findings | Decision needed |
 | --- | --- | --- |
@@ -407,6 +579,26 @@ Measured **[LIVE]**, 10,000 rows:
 | **inline `EXISTS` role check (M2's form)** | **2.48 ms** |
 | `get_my_company_id()` | 153.9 ms |
 | `get_my_role()` | 128.6 ms |
+
+> ### 📌 EXTENDED [S154] — a third data point, from writing a NEW predicate
+>
+> B2's grant needed a per-row visibility test, which is exactly the shape pass 1 measured at 203–636 µs
+> per row. It was written **set-based instead**: `my_assigned_site_address_ids()` takes no argument and
+> returns a set, so `id IN (SELECT …)` is uncorrelated and Postgres evaluates it **once per query**.
+>
+> | rows | control | with the B2 predicate | **delta** |
+> | --- | --- | --- | --- |
+> | 1,002 | 0.52 ms | 5.36 ms | **4.85 ms** |
+> | 10,002 | 3.15 ms | 6.83 ms | **3.69 ms** |
+> | 30,000 | 9.40 ms | 13.36 ms | **3.96 ms** |
+>
+> **The delta is FLAT across a 30× row increase** — the hoisting proof, from the other direction to
+> §5's. For contrast, `is_assigned_to_project()` called per row measured **71 µs each** on this
+> database (lower than pass 1's 203 µs because `auth.uid()` is NULL here, so it takes its cheapest
+> path). Written the naive way, B2 would have cost roughly **2.1 seconds** on a 30,000-row scan.
+>
+> **This is the first policy in the repo written set-based from the start** rather than retrofitted,
+> and it is the working precedent for the conversion pass 1 recommended.
 
 **Three things follow.**
 

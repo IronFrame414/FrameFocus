@@ -137,9 +137,34 @@ unbuilt portal. **Nine foreign keys land on M2 [LIVE].**
 
 **One write, and it is guarded — M2's ratio is 1 of 1**, against M1's 1 of 8.
 
-**⚠️ M2's own writers are the problem, not its consumers': 0 of 3 UPDATE-shaped writers carry a
+~~**⚠️ M2's own writers are the problem, not its consumers': 0 of 3 UPDATE-shaped writers carry a
 row-count guard** (M2-03), and **soft delete does not work at all** on `contacts` or
-`subcontractors` (M2-02).
+`subcontractors` (M2-02).~~ **✅ BOTH FIXED [S154].** All three writers row-count through the shared
+`applied()`/`DISCARDED`, and soft delete works on both tables with the row restorable.
+
+### §1.2a — NEW EDGE [S154]: M2 → M5/M6, the assignment-scoped site address
+
+**`contact_addresses` is no longer read by role alone.** `contact_addresses_select_scoped` now has a
+second arm that reaches **through M5 and M6** to decide visibility:
+
+| Reader | Sees | Resolved through |
+| --- | --- | --- |
+| owner / admin / PM / foreman / crew | every company address | `get_my_role()` — the S131 floor |
+| **`subcontractor`, ASSIGNED** | **exactly `projects.contact_address_id` for their assigned projects** | `my_assigned_site_address_ids()` → `project_assignments` (M6) ⋈ `projects` (M5) |
+| `subcontractor`, unassigned · `client` | nothing | — |
+
+**⚠️ What this means for M5 and M6's own passes.** A change to either table now moves an M2
+visibility boundary:
+
+- **`project_assignments` (M6)** — adding, soft-deleting or re-scoping an assignment grants or
+  revokes an address. `s154-m2-fixes.live.ts` **B2d** pins that it tracks assignment rather than
+  having been satisfied once.
+- **`projects.contact_address_id` (M5)** — repointing a project's site address moves what its
+  assigned subs can read. It is nullable; null means the sub sees nothing, which is the correct
+  degradation.
+- **The grant deliberately does NOT go through `can_view_project()`**, which would have cost 636 µs
+  per row. It is a 0-argument set-returning function so `id IN (SELECT …)` hoists — see §3's S154
+  entry.
 
 ---
 
@@ -204,6 +229,26 @@ row-count guard** (M2-03), and **soft delete does not work at all** on `contacts
 > correct. The repo's convention is that superseded text is quoted rather than deleted, and that
 > applies across passes as much as within a document.
 
+**[S154] — A FIX PASS CONFIRMING PASS 1's CORRECTED READING, from the other direction.**
+
+Pass 1 established that `(SELECT helper())` hoists a zero-argument helper and that
+`can_view_project(project_id)` cannot hoist because its argument varies per row. **S154 is the first
+chance anyone has had to write a new visibility predicate with that knowledge in hand**, and it holds:
+
+| rows | control | B2's `id IN (SELECT my_assigned_site_address_ids())` | delta |
+| --- | --- | --- | --- |
+| 1,002 | 0.52 ms | 5.36 ms | **4.85 ms** |
+| 10,002 | 3.15 ms | 6.83 ms | **3.69 ms** |
+| 30,000 | 9.40 ms | 13.36 ms | **3.96 ms** |
+
+**Flat across a 30× row increase.** The naive form — `is_assigned_to_project(project_id)` per row,
+measured at 71 µs each here — would have cost roughly **2.1 s** on a 30,000-row scan.
+
+**Not a contradiction; a confirmation, and the first worked example.** Recorded here because §3 is
+where a later session looks for how an earlier reading held up.
+
+---
+
 **[S153] — PASS 2 REFINING PASS 1. Not a contradiction of fact; a contradiction of implication,
 which is the more dangerous kind because nobody goes looking for it.**
 
@@ -247,6 +292,7 @@ as well as migrations**.
 | 1-fix | Module 1 — fix pass for pass 1's §4 | S152 | `S151-m1-audit.md` §0a (outcomes) · `S152-rls-helper-measurement.md` (Group D) | `s152-m1-fixes.live.ts` (11/11) · `s152-cron-absence.test.ts` (4/4) |
 
 | 2 | Module 2 — Contacts & CRM | S153, 2026-08-18 | `docs/specs/S153-m2-audit.md` | `apps/web/test/s153-m2-audit.live.ts` (13/13) |
+| 2-fix | Module 2 — fix pass for pass 2's §4 | S154 | `S153-m2-audit.md` §0a (outcomes) | `s154-m2-fixes.live.ts` (18/18) |
 
 **A fix pass is not a pass.** It closes an existing pass's findings and does not fill a row or a
 column in §2.
