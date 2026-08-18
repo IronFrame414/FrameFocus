@@ -23,6 +23,46 @@ export type ContractDocumentStatus =
 export type DeliveryMode = 'esignature' | 'notary';
 export type ContractBoxKind = 'value' | 'signature' | 'initial' | 'custom';
 
+/**
+ * R4 / R5 [S150] — which side a signature or initials box belongs to.
+ *
+ * ⚠️ `recipient`, NOT `client` OR `counterparty`, AND THAT IS THE POINT. One
+ * editor serves both `document_kind`s (§2.1), so a stored value that reads
+ * correctly on a client contract and wrongly on a subcontract would drag the UI
+ * back into per-kind special-casing. The value stays kind-neutral; the LABEL is
+ * derived from `document_kind` by `partyOptionsFor()` below.
+ *
+ * R5: this applies to `initial` as well as `signature`. §7.3d needs the
+ * recipient's initials on the Chapter 558 clause, and a contractor may need to
+ * initial elsewhere on the same form. Both are placeable.
+ */
+export type ContractParty = 'contractor' | 'recipient';
+
+/** Whether this box kind carries a party at all — the payload CHECK's rule,
+ *  stated once so the service, the editor and the database agree. */
+export function boxKindNeedsParty(kind: ContractBoxKind): boolean {
+  return kind === 'signature' || kind === 'initial';
+}
+
+/**
+ * The party choices for a template of this kind, labelled for a human.
+ *
+ * Lives here rather than in the editor because the vocabulary is a domain fact,
+ * not a presentation detail: "recipient" means the client on one side and the
+ * subcontractor on the other, and exactly one place should know that.
+ */
+export function partyOptionsFor(
+  kind: DocumentKind
+): { value: ContractParty; label: string }[] {
+  return [
+    { value: 'contractor', label: 'Us (the contractor)' },
+    {
+      value: 'recipient',
+      label: kind === 'client_contract' ? 'The client' : 'The subcontractor',
+    },
+  ];
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // §7 — the contract value catalog
 // ─────────────────────────────────────────────────────────────────────────────
