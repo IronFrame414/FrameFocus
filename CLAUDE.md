@@ -1,6 +1,6 @@
 # CLAUDE.md — FrameFocus Development Guide
 
-> **Last updated:** August 18, 2026 (Session 150 — **Financial Visibility Floor: FOREMAN sees ACTUAL COST ONLY, RULED [Josh], `#1-m7cpl` resolved in favour of the shipped code.** A deliberate ruling change, narrowing `7h1-spec.md` §7H.2 #10's S97 grant — not a discovered drift. The S140 banner's attribution to money-rep P9 is corrected in the same pass: P9 widens the PM only. `7h1-spec.md` is still unamended, so `#1-m7cpl` stays open.)
+> **Last updated:** August 18, 2026 (Session 150 — **Financial Visibility Floor: FOREMAN sees ACTUAL COST ONLY, RULED [Josh], `#1-m7cpl` resolved in favour of the shipped code.** A deliberate ruling change, narrowing `7h1-spec.md` §7H.2 #10's S97 grant — not a discovered drift. The S140 banner's attribution to money-rep P9 is corrected in the same pass: P9 widens the PM only. `7h1-spec.md` amended at nine sites, argument withdrawn as well as conclusion; `#1-m7cpl` CLOSED.)
 > **Previously:** August 2, 2026 (Session 97 — Financial Visibility Floor enforcement status corrected: contract value, budgeted amount and instrument rates are DB-enforced; `change_orders.net_delta` is UI-only by ruling, filed as TECH_DEBT #117)
 > **Purpose:** This file is the single source of truth for all development conversations. Read this before every session.
 
@@ -592,17 +592,23 @@ redirected to.
 > `s97ct-budget-floor.live.ts`, and `money-representation.md` §7.3 all already assert this
 > shape and need no change.
 >
-> ### ⚠️ ONE document still asserts the superseded position — OWED, not done
+> ### ✅ Every document now agrees — `#1-m7cpl` is CLOSED
 >
-> **`7h1-spec.md` §7H.2 #10** (`:164`, `:184-185`, `:193-199`, `:501`, `:526-528`) is the
-> sole remaining outlier. It does not merely state that foreman sees committed — it argues
-> for it, warning at `:199` that an un-corrected `CLAUDE.md` _"would gate committed cost
-> from the two roles that are supposed to see it"_. Amending it means retiring that
-> argument with the superseded text quoted, not deleting it. **Not done at S150.**
-> `#1-m7cpl` stays open on that ground alone; see `TECH_DEBT.md`.
+> **`7h1-spec.md` §7H.2 #10 was amended at S150**, at all nine sites that stated or relied
+> on the foreman grant, with the superseded text quoted rather than deleted. **Its argument
+> was withdrawn, not just its conclusion** — including §7H.12 A.1's warning at `:199` that
+> an un-corrected `CLAUDE.md` _"would gate committed cost from the two roles that are
+> supposed to see it"_. That warning was **right for the PM and inverted for the foreman**:
+> on foreman the un-corrected `CLAUDE.md` agreed with P9, with `money-representation.md`
+> §7.3, and with the code that had already shipped.
 >
-> **This section is the authority in the meantime.** Where it and `7h1-spec.md` conflict
-> about foreman, this section wins.
+> **The lesson recorded there, because it is the one that generalises:** §7H.12 A.1 is what
+> *changed* this file at S140, on a citation nobody checked. An obliged amendment to
+> `CLAUDE.md` is only as good as the citation behind it.
+>
+> Document set as of S150 — **`CLAUDE.md`, `money-representation.md`, `7h1-spec.md`,
+> `ui-05` §7.1, `s97ct-budget-floor.live.ts` and `budgetColumnsFor()` all agree.**
+> `#1-m7cpl` closed; see `TECH_DEBT.md`.
 
 - **Gated from PM/foreman/crew:** contract value (`project_financials.contract_value`), original/revised contract, budgeted and sell/price amounts (`project_budget_amounts.budgeted_amount` and any future sell column), labor/burden rates (`instrument_rates`), variance, projected margin, and **change-order dollar amounts** (`change_orders.net_delta` and any `$` sum derived from it). Both money columns moved to 1:1 side tables to get this enforced — see the status table below; the old `projects.contract_value` and `project_budget_items.budgeted_amount` no longer exist.
 - **Visible to all roles:** actual and committed cost (`project_budget_items.actual_amount` and `committed_amount`), and non-dollar facts — CO counts/statuses, project status, dates, punch counts, schedule. **This is deliberate, not an oversight:** the budgeted figure was split off onto `project_budget_amounts` precisely so actual and committed could stay on a row Foreman and Crew can still read. A role floor on `project_budget_items` itself would over-reach — `s97ct-roles.live.ts` **8b-ii** and `s97ct-budget-floor.live.ts` **7-foreman/7-crew_member** exist to fail loudly if anyone adds one.

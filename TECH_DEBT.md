@@ -687,8 +687,8 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 > convert to the next free numbers from main's file when this branch lands, and any
 > cross-reference updates in the same commit.
 
-- **#1-m7cpl — ⚖️ RULED [Josh, S150] IN FAVOUR OF THE SHIPPED CODE. Foreman stays
-  `actual_only`. STILL OPEN — one document has not been amended.**
+- **#1-m7cpl — ✅ CLOSED [Josh, S150]. RULED IN FAVOUR OF THE SHIPPED CODE: foreman stays
+  `actual_only`, and every document now says so.**
 
   **The ruling.** A foreman does **not** see committed cost. `budgetColumnsFor()` keeps
   `actual_only`, 3 columns, `seesCommitted: false`. No code changes; `ui-05` §7.1's column
@@ -716,22 +716,25 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   with it.** `money-representation.md` and the shipped code never disagreed about foreman.
   Only `7h1` and (following it) `CLAUDE.md` did.
 
-  **Why this item is NOT closed.** Its filed closing condition is that the ruling and every
-  document stating it move together — *"doing one without the others is how this drifted in
-  the first place"*. One document still asserts the superseded position and was **not**
-  amended at S150:
+  **Why it is closed.** Its filed closing condition was that the ruling and every document
+  stating it move together — *"doing one without the others is how this drifted in the first
+  place"*. **`7h1-spec.md` §7H.2 #10 was amended at S150 at all nine sites** that stated or
+  relied on the foreman grant: the floor banner, the role table, the S140 correction note,
+  the two-gates note, the provenance list, §7H.12 A.1 and its argument, and the
+  build-artifact role scope. Superseded text quoted at every one.
 
-  | Document | Where | Says |
-  | --- | --- | --- |
-  | `docs/specs/7h1-spec.md` | §7H.2 **#10** — `:164`, `:184-185`, `:193-199`, `:501`, `:526-528` | PM **and foreman** see actual and committed |
+  **The argument was withdrawn, not just the conclusion** — as ruled. §7H.12 A.1 warned that
+  an un-corrected `CLAUDE.md` *"would gate committed cost from the two roles that are
+  supposed to see it"*. **Right for the PM, inverted for the foreman:** there, the
+  un-corrected `CLAUDE.md` agreed with P9, with `money-representation.md` §7.3, and with the
+  shipped code. That paragraph is what changed `CLAUDE.md` at S140 and created this item.
 
-  It does not merely state the position, it **argues** for it — `:199` warns that an
-  un-corrected `CLAUDE.md` *"would gate committed cost from the two roles that are supposed
-  to see it"*. Amending means retiring that argument with the superseded text quoted, not
-  deleting it.
+  **Full agreement as of S150:** `CLAUDE.md`, `money-representation.md`, `7h1-spec.md`,
+  `ui-05` §7.1, `s97ct-budget-floor.live.ts`, `budgetColumnsFor()`.
 
-  **Close this item when `7h1-spec.md` is amended.** Not before — a reader starting there
-  reconstructs the overturned position and finds `CLAUDE.md` apparently wrong.
+  **No code, test or migration changed at any point in this item's life** — it was a
+  documentation divergence from first filing to close, which is exactly why it survived
+  three sessions without anything failing.
 
   _Original entry retained below. Note its authority column is the mis-attribution corrected
   above._

@@ -159,12 +159,17 @@ It answers, per job: **what did this cost, what will it earn, are we on budget, 
     > 'enforces nothing'" is withdrawn: **7H enforces nothing, owns nothing and
     > writes nothing**, which is what §S always claimed and is now simply true.
     >
-    > **The `CLAUDE.md` correction this decision obliges is still owed and still
+    > ~~**The `CLAUDE.md` correction this decision obliges is still owed and still
     > wanted** — it is independent of the migration. Ruled: **PM and foreman see
     > actual AND committed cost; crew sees actual only.** `CLAUDE.md`'s Financial
     > Visibility Floor still says PM/foreman/crew see "ACTUAL COST ONLY" and lists
     > committed among the figures gated from PM, which contradicts money-rep P9 and
-    > the shipped policies. Applied at S140 — see §7H.12.
+    > the shipped policies. Applied at S140 — see §7H.12.~~
+    >
+    > **⚠️ CORRECTED [S150].** The amendment above was applied at S140 and **the foreman half of
+    > it has since been reversed** [Josh, S150]: **PM sees actual and committed; foreman and crew
+    > see actual only.** The claim that `CLAUDE.md` _"contradicts money-rep P9"_ on foreman is
+    > false — P9 addresses the PM only. See the banner at #10.
 
 
         The floor is enforced **in the UI only** today. **[S97 — verified]** `can_view_project()`
@@ -176,13 +181,58 @@ It answers, per job: **what did this cost, what will it earn, are we on budget, 
     **UI-gated only** until the `FINANCIAL-RLS-FLOOR` migration lands."\_ 7H is the platform's most
     margin-dense screen, so the migration ships **with** it.
 
+        > # ⚠️⚠️ **OVERTURNED IN PART [Josh, S150] — FOREMAN SEES ACTUAL COST ONLY.**
+        >
+        > **This section's S97 extension of the floor to foreman is REVERSED. Everything below is
+        > retained as the record of the superseded position; do not build from it.** The ruling in
+        > force is in `CLAUDE.md` → Financial Visibility Floor, and where the two conflict about
+        > foreman, `CLAUDE.md` wins.
+        >
+        > | Role | S97 (below, superseded for foreman) | **RULED [Josh, S150]** |
+        > | --- | --- | --- |
+        > | Owner / Admin | everything | everything |
+        > | Project Manager | actual + committed | **actual + committed** — unchanged |
+        > | **Foreman** | **actual + committed** | **ACTUAL ONLY** |
+        > | Crew | actual only | actual only — unchanged |
+        >
+        > **This is a DELIBERATE RULING CHANGE, not a discovered drift.** The shipped
+        > `budgetColumnsFor()` (`apps/web/lib/services/invoices-shared.ts:460-472`) has always given
+        > foreman `actual_only` / 3 columns / `seesCommitted: false`, and S150 ruled the code correct
+        > rather than changing it. Filed and closed as `#1-m7cpl`.
+        >
+        > ### ⚠️ AND THIS SECTION'S CITED AUTHORITY DOES NOT SAY WHAT IT CLAIMS
+        >
+        > **#10 rests on money-rep P9, and P9 says nothing about foreman.** P9
+        > (`money-representation.md:113`) widens the **PM** only — _"Owner/Admin see everything. PM
+        > sees **actual AND committed** (widens today's actual-only floor)"_. The same document then
+        > puts foreman at **actual-only twice more**, explicitly:
+        >
+        > - `:863` — _"**Foreman — actual only**, matching today's gated reflow
+        >   (`budget/page.tsx:57-88`)."_
+        > - `:1046` — §7.3's per-screen role matrix, row _"S-1 committed (remaining)"_: foreman is
+        >   **—**, while _"S-1 actual / cost to date"_ (`:1047`) is **✓**.
+        >
+        > This section is candid about the extension being its own — _"P9's widening stands, **and
+        > extends to foreman**"_ — but it presented the result as *resolving* a conflict between
+        > `CLAUDE.md` and P9, when on foreman **P9 and `CLAUDE.md` already agreed** and #10 departed
+        > from both. `CLAUDE.md` [S140] then adopted #10's position and mis-cited P9 as its source,
+        > and `TECH_DEBT.md` `#1-m7cpl` repeated the mis-citation. All three are corrected at S150.
+        >
+        > **So the S150 ruling does not overturn the money model of record — it restores agreement
+        > with it.** `money-representation.md` and the shipped code never disagreed about foreman.
+        >
+        > **What is NOT overturned:** the PM's widening to committed (that IS P9, and it shipped);
+        > crew at actual-only; and budgeted / sell / margin / contract value / CO dollar amounts
+        > remaining Owner/Admin-only for everyone below. Only the **foreman** row moves.
+
         **[S97] What the floor enforces — RULED, because its two source documents disagreed.**
+        ~~Superseded for FOREMAN [S150] — see the banner above.~~
 
         | Role                | Sees                        |
         | ------------------- | --------------------------- |
         | **Owner / Admin**   | Everything                  |
         | **Project Manager** | **Actual + committed** cost |
-        | **Foreman**         | **Actual + committed** cost |
+        | **Foreman**         | ~~**Actual + committed** cost~~ → **ACTUAL COST ONLY [RULED Josh, S150]** |
         | **Crew**            | **Actual** cost only        |
 
         **Budgeted, sell, margin, contract value and CO dollar amounts remain Owner/Admin-only** for
@@ -194,10 +244,31 @@ It answers, per job: **what did this cost, what will it earn, are we on budget, 
         > opposite — _"PM sees **actual AND committed** (widens today's actual-only floor)"_ — and knows it
         > is a revision. Neither document acknowledges the other, and `CLAUDE.md` was never updated.
         >
-        > **Ruled [S97]: P9's widening stands, and extends to foreman.** Crew stays at actual-only.
+        > ~~**Ruled [S97]: P9's widening stands, and extends to foreman.** Crew stays at actual-only.
         > **`CLAUDE.md` must be corrected in the same pass** — see §7H.12. A migration written from the
         > un-corrected `CLAUDE.md` would gate committed cost from the two roles that are supposed to see
-        > it, and nothing in the specs would catch it.
+        > it, and nothing in the specs would catch it.~~
+        >
+        > **⚠️ THE ARGUMENT ABOVE IS WITHDRAWN, NOT JUST ITS CONCLUSION [Josh, S150].** It is quoted
+        > rather than deleted because it is the reasoning a later reader would otherwise reconstruct.
+        >
+        > **Where it went wrong.** The premise was that `CLAUDE.md` and money-rep P9 were in conflict
+        > and one had to win. **On the PM that was true, and P9 won — correctly.** On the **foreman**
+        > there was no conflict to resolve: P9 is silent about foreman, and
+        > `money-representation.md:863` and `:1046` put foreman at actual-only. #10 did not adjudicate
+        > between two documents there; it **extended** one of them past what it said, and then
+        > required `CLAUDE.md` to follow.
+        >
+        > **And the warning inverted the risk.** It said a migration written from the un-corrected
+        > `CLAUDE.md` _"would gate committed cost from the two roles that are supposed to see it"_.
+        > For the PM, fair. **For the foreman, the un-corrected `CLAUDE.md` was right** — it agreed
+        > with P9, with `money-representation.md` §7.3, and with the code that had already shipped.
+        > The correction this paragraph demanded is what introduced the divergence that became
+        > `#1-m7cpl`.
+        >
+        > **The real lesson, recorded so it is not lost with the argument:** an obliged amendment to
+        > `CLAUDE.md` is only as good as the citation behind it, and this one was never checked
+        > against P9's actual words. See §7H.12 A.1.
 
         > **What this scopes in.** The migration is **not 7H-shaped** — the fix touches budget, job-cost
         > and estimate figures **platform-wide**. Landing it here closes the gap everywhere at once, which
@@ -320,7 +391,8 @@ floor is enforced at the database, not just the interface.
 
 > **[S97] Do not confuse the two gates.** **7H's own screens are Owner/Admin only** — that is this
 > section. **The FINANCIAL-RLS-FLOOR migration 7H ships** governs figures _elsewhere in the platform_,
-> where PM and foreman legitimately see actual and committed cost (#10). One is a screen gate; the
+> where a **PM** legitimately sees actual and committed cost (#10 as ruled at S150 — **foreman is
+> actual-only**; the S97 text said "PM and foreman"). One is a screen gate; the
 > other is a platform-wide column-level floor. 7H happens to carry both.
 
 ---
@@ -498,9 +570,12 @@ in the headline/pairing. Opposite direction, different number. (§7H.3)
 - Decisions §7H.2 #2, #4–#9: interviewed and confirmed by Josh at S92.
 - **#1, #3, #10 and §7H.3's retainage row: Josh's rulings [S96]**, reconciling 7H against
   `money-representation.md` (P1/P2/P4/P6/P9/P11, §4.5) and the 7D/7E rulings.
-- **[S97] rulings:** the **financial floor's role scope** — PM and foreman see actual + committed,
-  crew actual only, everything else Owner/Admin (#10) — resolving a direct conflict between
-  `CLAUDE.md` and money-rep P9.
+- **[S97] rulings:** the **financial floor's role scope** — ~~PM and foreman see actual +
+  committed,~~ crew actual only, everything else Owner/Admin (#10) — ~~resolving a direct conflict
+  between `CLAUDE.md` and money-rep P9.~~
+  **⚠️ SUPERSEDED IN PART [Josh, S150]: PM sees actual + committed; FOREMAN IS ACTUAL-ONLY.** And
+  the stated rationale does not hold for foreman — there was no `CLAUDE.md`-vs-P9 conflict to
+  resolve there, because P9 addresses only the PM. See the banner at #10.
 - **[S97] corrections:** the cost-plus earned row and #3's M6 dependency widened to cover labor on
   **every** non-fixed instrument (7D §6.1's four rates); trace D rebuilt accordingly; §7H.10-B's
   stale _"(S94-a, if adopted)"_ conditional removed — backlog was ruled in.
@@ -522,16 +597,40 @@ in the headline/pairing. Opposite direction, different number. (§7H.3)
 > 7H is a leaf and normally obliges nothing. #10 changes that: it ships a platform-wide policy, and
 > two documents must agree with it before the migration is written.
 
-**A.1 — `CLAUDE.md`, Financial Visibility Floor — REQUIRED before the migration.** It currently reads
-_"Project Manager, Foreman, and Crew see **ACTUAL COST ONLY**"_ and lists **committed amounts** among
-the figures gated from PM/foreman/crew. **Per #10 that is superseded:** PM and foreman see actual
-**and** committed; crew stays actual-only. Budgeted, sell, margin, contract value and CO dollar
-amounts remain Owner/Admin-only. Amend the floor section and its "Gated from PM/foreman/crew" list.
+**A.1 — `CLAUDE.md`, Financial Visibility Floor — ✅ APPLIED [S140], and its FOREMAN half
+REVERSED [Josh, S150].**
 
-> This is the single most important amendment in the 7-series, because it is the one a builder would
+> _Superseded text, quoted rather than rewritten:_ _"**A.1 — `CLAUDE.md`, Financial Visibility
+> Floor — REQUIRED before the migration.** It currently reads "Project Manager, Foreman, and Crew
+> see **ACTUAL COST ONLY**" and lists **committed amounts** among the figures gated from
+> PM/foreman/crew. **Per #10 that is superseded:** PM and foreman see actual **and** committed;
+> crew stays actual-only. … Amend the floor section and its "Gated from PM/foreman/crew" list."_
+
+**What actually happened.** The amendment was applied at S140. It widened **both** PM and foreman,
+which put `CLAUDE.md` at odds with the shipped `budgetColumnsFor()` for foreman — filed as
+`#1-m7cpl`, and **ruled at S150 in favour of the code**. The floor now reads: **PM sees actual and
+committed; foreman and crew see actual only.**
+
+**The PM half of this amendment stands and was correct.** Only the foreman half is reversed.
+Budgeted, sell, margin, contract value and CO dollar amounts remain Owner/Admin-only, unchanged.
+
+> ~~This is the single most important amendment in the 7-series, because it is the one a builder would
 > follow into a wrong RLS policy. `CLAUDE.md` is described as _"the single source of truth for all
 > development conversations"_ — a migration written from it as it stands would gate committed cost
-> from the two roles that are supposed to see it.
+> from the two roles that are supposed to see it.~~
+>
+> **⚠️ WITHDRAWN [Josh, S150] — and it was right about its own importance for the wrong reason.**
+> Quoted rather than deleted.
+>
+> It **was** the most consequential amendment in the 7-series, but not because `CLAUDE.md` was
+> about to mislead a builder. It is because **this paragraph is what changed `CLAUDE.md`**, on a
+> citation nobody checked: P9 says nothing about foreman, and `money-representation.md` `:863` /
+> `:1046` put foreman at actual-only. The amendment landed at S140, `CLAUDE.md` and
+> `budgetColumnsFor()` diverged, and that divergence is `#1-m7cpl`.
+>
+> **The risk it named was real for the PM and inverted for the foreman.** For foreman, a migration
+> written from the *un-corrected* `CLAUDE.md` would have been **correct**. Nothing in the specs
+> caught it — which is the actual lesson, and the reason this is retained rather than removed.
 
 **A.2 — `module7-architecture.md` §7.1, debt #7 — mark RESOLVED by derivation.** money-rep **P2**
 resolved it by deriving sell at read; no sell column was added. Per-category margin ships in #3. Debt
@@ -563,8 +662,9 @@ _what is read and derived_, not table or column names.
 - CC decides whether the **portfolio roll-up** computes on read or needs a materialized/cached
   aggregate — do not assume; measure against the live rollup, now heavier per #3.
 - **Export** (per-job + portfolio → PDF) reuses existing PDF tooling; no new storage.
-- **[S96; scoped S97] Build artifact:** the **FINANCIAL-RLS-FLOOR** migration (#10). Its **role scope
-  is ruled** — PM + foreman see actual and committed; crew actual only; budgeted/sell/margin/contract
+- **[S96; scoped S97; foreman REVERSED S150] Build artifact:** the **FINANCIAL-RLS-FLOOR** migration
+  (#10). Its **role scope is ruled** — ~~PM + foreman see actual and committed~~ **PM sees actual and
+  committed; FOREMAN AND CREW SEE ACTUAL ONLY [Josh, S150]**; budgeted/sell/margin/contract
   Owner/Admin only. What CC must still do is **enumerate every table and column** the floor covers
   platform-wide, and **land `CLAUDE.md`'s correction (§7H.12 A.1) in the same commit**, so the
   authoritative doc and the policy agree.
