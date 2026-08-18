@@ -454,6 +454,7 @@ function TemplateSet({
           templateName={placing.name}
           documentKind={kind}
           catalog={catalogForKind(kind)}
+          pdfFileId={placing.pdf_file_id}
           initialBoxes={placing.boxes}
           onSave={(boxes) => saveContractBoxMap(placing.id, kind, boxes)}
           onRenameTitle={async (name) => {

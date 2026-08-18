@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ContractBoxInput } from '@/lib/services/contracts-client';
 import {
   boxKindNeedsParty,
@@ -9,6 +9,8 @@ import {
   type ContractValueKey,
   type DocumentKind,
 } from '@/lib/services/contracts-shared';
+import { getFileSignedUrlClient } from '@/lib/services/files-client';
+import { PdfPageRaster } from '@/components/contracts/pdf-page-raster';
 import {
   cardStyle,
   color,
@@ -18,51 +20,53 @@ import {
   secondaryButtonStyle,
 } from '@/lib/theme';
 
-// 7I §2.1, §2.2 — THE box-placement editor. Stage 1, slice 3.
+// 7I §2.1, §2.2, R6 [S150] — THE box-placement editor.
 //
-// ⚠️ ONE COMPONENT, MOUNTED TWICE. §2.1's BUILD REQUIREMENT: option B gives 7I
-// two template tables keyed on `document_kind`, and "the risk of two
-// box-placement UIs drifting apart" is the cost it names. This component is the
-// answer — everything that differs between a client contract and a subcontract
-// arrives as a PROP (`documentKind`, `catalog`, `onSave`), so there is exactly
-// one implementation of what a box is and how it is edited.
+// ⚠️ ONE COMPONENT, MOUNTED FROM EVERY TEMPLATE SET. §2.1's BUILD REQUIREMENT:
+// option B gives 7I two template tables keyed on `document_kind`, and "the risk
+// of two box-placement UIs drifting apart" is the cost it names. Everything that
+// differs between a client contract and a subcontract arrives as a PROP
+// (`documentKind`, `catalog`, `onSave`), so there is exactly one implementation
+// of what a box is and how it is edited.
 //
-// ⚠️ AND IT IS PARAMETERISED FURTHER THAN 7I STRICTLY NEEDS, ON PURPOSE. `catalog`
-// and `onSave` are props rather than imports so that #1-7i — folding 7F's
-// `BoxMapEditor` into this one — stays a re-mount rather than a rewrite. 7F is
-// NOT edited here [RULED S150]; #1-7i stays open.
-//
-// ⚠️ THIS EDITOR LOADS THE EXISTING MAP. `initialBoxes` comes from
-// `getContractTemplateBoxes()`, read server-side in the settings page. That is
-// #2-7i stated as a requirement instead of a defect: 7F's editor opens with an
-// empty array it presents as the current map, so re-opening it and saving
-// replaces a placed map with nothing. Do not "simplify" this to `useState([])`.
+// ⚠️ IT LOADS THE EXISTING MAP. `initialBoxes` comes from
+// `getContractTemplateBoxes()`, read server-side. That is #2-7i stated as a
+// requirement instead of a defect: an editor that opens on an empty array and
+// presents it as the current map replaces a placed map with nothing on save.
+// Do not "simplify" this to `useState([])`.
 //
 // ⚠️ FRACTIONS, NEVER POINTS. Stored as fractions of page width/height with a
-// top-left origin, multiplied by the PDF's point dimensions at render. That is
-// what lets a form re-scanned at a different DPI keep its map. The inputs below
-// show percentages purely as a human unit and convert on both edges — nothing
-// is stored in the units the user types.
+// top-left origin, multiplied by the PDF's point dimensions at render — which is
+// what lets a form re-scanned at a different DPI keep its map. The raster's
+// pixel size and the panel's percentages are both presentation; neither ever
+// reaches a stored coordinate.
+//
+// ⚠️ TWO SURFACES, ONE STATE [R6]. Drag on the page and type in the panel edit
+// the same `boxes` array, so they cannot disagree. The panel is NOT a debug
+// view — it is the FALLBACK when a PDF will not rasterise. An encrypted or
+// corrupt form must not make a template unmappable.
 
 // ─────────────────────────────────────────────────────────────────────────────
-// §2.2 — the placement-time size floor
+// §2.2 / Q5 — the placement-time size floor
 // ─────────────────────────────────────────────────────────────────────────────
 //
 // Josh: "warn user of overflow. we must make all boxes large enough that this is
-// a rare occurrence." §2.2 puts a warning at BOTH ends — at render, and here at
-// placement, before a too-small box is ever filled.
+// a rare occurrence." §2.2 warns at BOTH ends — here while authoring, and again
+// at render.
 //
-// ⚠️ THIS IS A HEURISTIC AND CANNOT BE ANYTHING ELSE [RULED S150]. The render-time
-// check is `fitTextToBox()`, which needs `widthPerChar` — a measurement taken
-// from the font embedded in the PDF at generate time. The browser has no such
-// measurement while placing boxes, so calling `fitTextToBox()` here would mean
-// inventing a font metric and reporting the guess as a calculation. Instead we
-// estimate from expected CONTENT LENGTH per key and say plainly that it is an
-// estimate.
+// ⚠️ THIS IS A HEURISTIC AND CANNOT BE ANYTHING ELSE. The render-time check is
+// `fitTextToBox()`, which needs `widthPerChar` — measured from the font embedded
+// in the PDF at generate time. The browser has no such measurement while placing
+// boxes, so calling `fitTextToBox()` here would mean inventing a font metric and
+// reporting the guess as a calculation.
 //
-// The warning never blocks. §2.2 gives the user three outs — resize the box,
-// edit the value before render, or accept — so refusing the save would remove a
-// choice the ruling grants.
+// ⚠️ AND IT DELIBERATELY OVER-WARNS [RULED S150, Q5]. R10 makes render-time
+// overflow BLOCK the send, so the two checks must not disagree in the direction
+// that lets an author pass placement and fail at the door. They cannot be made
+// equal — one guesses, one measures — so the guess is made STRICTLY more
+// conservative than any realistic render. The cost is warning on some boxes that
+// would have been fine, which is the cheaper error: Josh's ruling is that boxes
+// should be ample anyway.
 
 /** Typical rendered length of each catalog value, in characters. */
 const EXPECTED_CHARS: Record<string, number> = {
@@ -93,13 +97,13 @@ const EXPECTED_CHARS: Record<string, number> = {
 const DEFAULT_EXPECTED_CHARS = 24;
 
 /**
- * Fraction of page width one character occupies at a readable size.
+ * Fraction of page width one character is assumed to occupy.
  *
- * ~5pt average advance for 10pt Helvetica over a 612pt US Letter page. Any
- * common page size lands close enough for a warning threshold — this decides
- * whether to show a caution, not what gets rendered.
+ * A 10pt Helvetica character averages ~5pt on a 612pt US Letter page — about
+ * 0.008. This is deliberately set well above that (Q5), so the floor sits near
+ * 13pt text and warns before a realistic 10–11pt render would overflow.
  */
-const FRACTION_PER_CHAR = 0.008;
+const FRACTION_PER_CHAR = 0.011;
 
 /** The width below which a value box is likely to overflow at render. */
 export function minWidthForKey(valueKey: string | null | undefined): number {
@@ -108,12 +112,12 @@ export function minWidthForKey(valueKey: string | null | undefined): number {
 }
 
 /**
- * The boxes that are too small for what they will hold.
+ * The boxes too small for what they will hold.
  *
- * Only `value` boxes — they are the ones with content whose length is
- * predictable. A signature or initial box holds an image, and a custom box
- * holds whatever the company writes on its own form; neither has an expected
- * character count to reason from.
+ * Only `value` boxes — they are the ones whose content length is predictable. A
+ * signature or initial box holds an image and a custom box holds whatever the
+ * company writes on its own form; neither has an expected character count to
+ * reason from.
  */
 function undersized(boxes: ContractBoxInput[]): { index: number; box: ContractBoxInput }[] {
   return boxes
@@ -128,11 +132,27 @@ const KIND_LABELS: { value: ContractBoxInput['kind']; label: string }[] = [
   { value: 'custom', label: 'Custom' },
 ];
 
+const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
+
+/** Smallest box the drag surface will create, as a fraction. Below this a
+ *  stray click becomes an invisible box the user cannot grab again. */
+const MIN_DRAWN = 0.01;
+
+type DragMode = 'move' | 'resize' | 'create';
+interface Drag {
+  mode: DragMode;
+  index: number;
+  startX: number;
+  startY: number;
+  origin: ContractBoxInput;
+}
+
 export function ContractBoxEditor({
   templateId,
   templateName,
   documentKind,
   catalog,
+  pdfFileId,
   initialBoxes,
   onSave,
   onRenameTitle,
@@ -144,6 +164,8 @@ export function ContractBoxEditor({
   documentKind: DocumentKind;
   /** `catalogForKind(documentKind)` — the keys THIS kind may place. */
   catalog: ContractValueKey[];
+  /** The uploaded form. Null means there is nothing to rasterise. */
+  pdfFileId: string | null;
   /** From `getContractTemplateBoxes(templateId)`. See #2-7i above. */
   initialBoxes: ContractBoxInput[];
   onSave: (boxes: ContractBoxInput[]) => Promise<{ success: boolean; error?: string }>;
@@ -154,35 +176,84 @@ export function ContractBoxEditor({
   const [boxes, setBoxes] = useState<ContractBoxInput[]>(initialBoxes);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<number | null>(null);
 
-  // The title lives here rather than on the settings list [RULED S150] — it is
-  // an explicit act on the screen where you are already working on the form,
-  // not something you can change by clicking past a field.
+  // Title lives here rather than on the settings list [RULED S150] — an explicit
+  // act on the screen where you are already working on the form.
   const [title, setTitle] = useState(templateName);
   const [editingTitle, setEditingTitle] = useState(false);
   const [draftTitle, setDraftTitle] = useState(templateName);
 
+  // ── Raster ────────────────────────────────────────────────────────────────
+  const [fileUrl, setFileUrl] = useState<string | null>(null);
+  const [pageIndex, setPageIndex] = useState(0);
+  const [pageCount, setPageCount] = useState(1);
+  const [raster, setRaster] = useState<'loading' | 'ready' | 'failed'>(
+    pdfFileId ? 'loading' : 'failed'
+  );
+  const [rasterMessage, setRasterMessage] = useState<string | null>(
+    pdfFileId ? null : 'No form is attached to this template yet.'
+  );
+
+  useEffect(() => {
+    if (!pdfFileId) return;
+    let cancelled = false;
+    (async () => {
+      const url = await getFileSignedUrlClient(pdfFileId, 900);
+      if (cancelled) return;
+      if (!url) {
+        setRaster('failed');
+        setRasterMessage('The uploaded form could not be opened.');
+        return;
+      }
+      setFileUrl(url);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [pdfFileId]);
+
+  // Stable callbacks — the raster re-downloads the PDF if these change identity.
+  const handlePageCount = useCallback((count: number) => setPageCount(count), []);
+  const handleRasterState = useCallback(
+    (state: 'loading' | 'ready' | 'failed', message?: string) => {
+      setRaster(state);
+      setRasterMessage(message ?? null);
+    },
+    []
+  );
+
   const firstKey = catalog[0]?.key ?? null;
   const tooSmall = undersized(boxes);
 
-  function addBox() {
-    setBoxes((b) => [
-      ...b,
-      { page: 0, x: 0.1, y: 0.1, width: 0.3, height: 0.03, kind: 'value', value_key: firstKey },
-    ]);
-  }
-
   const set = (i: number, patch: Partial<ContractBoxInput>) =>
     setBoxes((b) => b.map((box, j) => (j === i ? { ...box, ...patch } : box)));
+
+  function newBox(patch: Partial<ContractBoxInput> = {}): ContractBoxInput {
+    return {
+      page: pageIndex,
+      x: 0.1,
+      y: 0.1,
+      width: 0.3,
+      height: 0.03,
+      kind: 'value',
+      value_key: firstKey,
+      ...patch,
+    };
+  }
+
+  function addBox() {
+    setBoxes((b) => [...b, newBox()]);
+    setSelected(boxes.length);
+  }
 
   /**
    * Switching kind clears the payload columns.
    *
    * `contract_template_boxes_payload_check` refuses a value box with no key, a
-   * custom box with no label, and a signature/initial box carrying either — so
-   * a leftover `value_key` on a box switched to `signature` is a write the
-   * database rejects, not a stray field. Cleared here so the shape is always
-   * legal before it is sent.
+   * custom box with no label, and a signature/initial box carrying either or no
+   * party — so a leftover field is a write the database rejects, not a stray
+   * value. Cleared here so the shape is always legal before it is sent.
    */
   function setKind(i: number, kind: ContractBoxInput['kind']) {
     set(i, {
@@ -191,10 +262,104 @@ export function ContractBoxEditor({
       custom_label: null,
       // R4/R5 — a signature/initials box must carry a party, so one is chosen
       // rather than left blank for the user to discover at save. `recipient` is
-      // the default because the counterparty's signature is the one a contract
-      // is sent to collect; ours is stamped before it goes out.
+      // the default because the counterparty's signature is what a contract is
+      // sent to collect; ours is stamped before it goes out.
       party: boxKindNeedsParty(kind) ? 'recipient' : null,
     });
+  }
+
+  // ── Dragging ──────────────────────────────────────────────────────────────
+  //
+  // Pointer events rather than mouse events so a stylus or touch works. Movement
+  // is tracked on `window`: a fast drag leaves the box (and sometimes the
+  // overlay) behind, and listeners bound to the element would drop the gesture
+  // mid-way and strand the box under the cursor.
+  const surfaceRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<Drag | null>(null);
+
+  const fractionAt = (clientX: number, clientY: number) => {
+    const rect = surfaceRef.current?.getBoundingClientRect();
+    if (!rect || rect.width === 0 || rect.height === 0) return null;
+    return { fx: (clientX - rect.left) / rect.width, fy: (clientY - rect.top) / rect.height };
+  };
+
+  useEffect(() => {
+    function onMove(e: PointerEvent) {
+      const drag = dragRef.current;
+      const at = fractionAt(e.clientX, e.clientY);
+      if (!drag || !at) return;
+      const dx = at.fx - drag.startX;
+      const dy = at.fy - drag.startY;
+      const o = drag.origin;
+
+      if (drag.mode === 'move') {
+        setBoxes((all) =>
+          all.map((b, j) =>
+            j === drag.index
+              ? // Clamped so a box cannot be dragged off the page — the bounds
+                // CHECK would refuse the write, and a box at x=1 is invisible.
+                { ...b, x: clamp01(Math.min(o.x + dx, 1 - o.width)), y: clamp01(Math.min(o.y + dy, 1 - o.height)) }
+              : b
+          )
+        );
+        return;
+      }
+
+      // resize and create share the same maths: the anchor corner stays put and
+      // the opposite corner follows the pointer.
+      const width = Math.max(MIN_DRAWN, Math.min(o.width + dx, 1 - o.x));
+      const height = Math.max(MIN_DRAWN, Math.min(o.height + dy, 1 - o.y));
+      setBoxes((all) => all.map((b, j) => (j === drag.index ? { ...b, width, height } : b)));
+    }
+
+    function onUp() {
+      dragRef.current = null;
+    }
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+  }, []);
+
+  function beginMove(e: React.PointerEvent, index: number) {
+    e.preventDefault();
+    e.stopPropagation();
+    const at = fractionAt(e.clientX, e.clientY);
+    if (!at) return;
+    setSelected(index);
+    dragRef.current = { mode: 'move', index, startX: at.fx, startY: at.fy, origin: boxes[index] };
+  }
+
+  function beginResize(e: React.PointerEvent, index: number) {
+    e.preventDefault();
+    e.stopPropagation();
+    const at = fractionAt(e.clientX, e.clientY);
+    if (!at) return;
+    setSelected(index);
+    dragRef.current = { mode: 'resize', index, startX: at.fx, startY: at.fy, origin: boxes[index] };
+  }
+
+  /** Drag on blank page area draws a new box where the user drew it. */
+  function beginCreate(e: React.PointerEvent) {
+    const at = fractionAt(e.clientX, e.clientY);
+    if (!at) return;
+    e.preventDefault();
+    const created = newBox({
+      page: pageIndex,
+      x: clamp01(at.fx),
+      y: clamp01(at.fy),
+      width: MIN_DRAWN,
+      height: MIN_DRAWN,
+    });
+    const index = boxes.length;
+    setBoxes((all) => [...all, created]);
+    setSelected(index);
+    dragRef.current = { mode: 'create', index, startX: at.fx, startY: at.fy, origin: created };
   }
 
   async function saveTitle() {
@@ -214,13 +379,14 @@ export function ContractBoxEditor({
   }
 
   async function save() {
-    // ⚠️ NO KEY-vs-KIND VALIDATION HERE, DELIBERATELY. `saveContractBoxMap`
-    // already refuses a client-only key on a subcontract template, with a
-    // message naming the key — and it does so BEFORE the write. A second copy
-    // of that rule in the UI is the divergence CLAUDE.md's PARITY ruling warns
-    // about, written in a form that looks like agreement.
+    // ⚠️ NO KEY-vs-KIND OR PARTY VALIDATION HERE, DELIBERATELY.
+    // `saveContractBoxMap` already refuses a client-only key on a subcontract
+    // template and a signature box with no party, both BEFORE anything is
+    // written, with messages naming what is wrong. A second copy of those rules
+    // in the UI is the divergence CLAUDE.md's PARITY ruling warns about, written
+    // in a form that looks like agreement.
     //
-    // The size warning below is NOT a duplicate: it exists only at placement
+    // The size warning below is NOT a duplicate — it exists only at placement
     // time and the service has no opinion on it.
     if (tooSmall.length > 0) {
       const names = tooSmall
@@ -228,8 +394,9 @@ export function ContractBoxEditor({
         .join(', ');
       const proceed = confirm(
         `These boxes look too small for what they will hold: ${names}.\n\n` +
-          `Nothing will be shrunk or cut short to fit — if a value does not fit at render, ` +
-          `you will be warned again then.\n\nSave anyway?`
+          `Nothing will be shrunk or cut short to fit. This check errs on the ` +
+          `cautious side, so a box flagged here may still be fine — but a value ` +
+          `that genuinely does not fit will stop the send.\n\nSave anyway?`
       );
       if (!proceed) return;
     }
@@ -241,6 +408,10 @@ export function ContractBoxEditor({
     onSaved();
   }
 
+  const onThisPage = boxes
+    .map((box, index) => ({ box, index }))
+    .filter(({ box }) => box.page === pageIndex);
+
   return (
     <div
       style={{
@@ -248,14 +419,14 @@ export function ContractBoxEditor({
         inset: 0,
         background: 'rgba(20,33,61,0.45)',
         display: 'flex',
-        alignItems: 'center',
+        alignItems: 'flex-start',
         justifyContent: 'center',
         zIndex: 50,
         padding: '20px',
         overflowY: 'auto',
       }}
     >
-      <div style={{ ...cardStyle, padding: '20px', maxWidth: '820px', width: '100%' }}>
+      <div style={{ ...cardStyle, padding: '20px', maxWidth: '1040px', width: '100%' }}>
         {/* ── Title ──────────────────────────────────────────────────────── */}
         <p style={{ ...microLabelStyle, marginBottom: '6px' }}>
           Boxes — {documentKind === 'client_contract' ? 'client agreement' : 'subcontract'}
@@ -302,15 +473,175 @@ export function ContractBoxEditor({
           </div>
         )}
 
-        <p style={{ fontSize: '12px', color: color.muted, margin: '0 0 14px', maxWidth: '640px' }}>
-          Positions are percentages of the page, measured from the top-left, so they survive the
-          form being re-scanned at a different size. Open the form in another tab to read off where
-          its blanks fall.
-        </p>
-
         {error && <p style={{ color: color.danger, fontSize: '13px', margin: '0 0 10px' }}>{error}</p>}
 
-        {/* ── The map ────────────────────────────────────────────────────── */}
+        {/* ── The page ───────────────────────────────────────────────────── */}
+        {raster === 'failed' ? (
+          <div
+            style={{
+              border: `1px solid ${color.cardBorder}`,
+              borderRadius: '10px',
+              background: color.tableHeadBg,
+              padding: '14px',
+              marginBottom: '14px',
+            }}
+          >
+            <p style={{ fontSize: '12.5px', color: color.warningDeep, margin: 0 }}>
+              The form cannot be shown here{rasterMessage ? ` — ${rasterMessage}` : '.'}
+            </p>
+            <p style={{ fontSize: '11.5px', color: color.muted, margin: '6px 0 0' }}>
+              Boxes can still be placed using the positions below, and they work exactly the same.
+              Open the form in another tab to read off where its blanks fall.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                marginBottom: '8px',
+                fontSize: '12px',
+                color: color.muted,
+              }}
+            >
+              <button
+                type="button"
+                style={{ ...secondaryButtonStyle, padding: '3px 9px', fontSize: '12px' }}
+                disabled={pageIndex === 0}
+                onClick={() => setPageIndex((p) => Math.max(0, p - 1))}
+              >
+                ‹ Previous
+              </button>
+              <span>
+                Page {pageIndex + 1} of {pageCount}
+              </span>
+              <button
+                type="button"
+                style={{ ...secondaryButtonStyle, padding: '3px 9px', fontSize: '12px' }}
+                disabled={pageIndex >= pageCount - 1}
+                onClick={() => setPageIndex((p) => Math.min(pageCount - 1, p + 1))}
+              >
+                Next ›
+              </button>
+              <span style={{ flex: 1 }} />
+              <span style={{ fontSize: '11.5px', color: color.faint }}>
+                Drag on the page to draw a box · drag a box to move it · drag its corner to resize
+              </span>
+            </div>
+
+            <div
+              ref={surfaceRef}
+              onPointerDown={beginCreate}
+              style={{
+                position: 'relative',
+                border: `1px solid ${color.cardBorder}`,
+                borderRadius: '6px',
+                overflow: 'hidden',
+                marginBottom: '14px',
+                cursor: 'crosshair',
+                touchAction: 'none',
+                background: '#fff',
+                minHeight: raster === 'loading' ? '260px' : undefined,
+              }}
+            >
+              <PdfPageRaster
+                fileUrl={fileUrl}
+                pageIndex={pageIndex}
+                onPageCount={handlePageCount}
+                onStateChange={handleRasterState}
+              />
+
+              {raster === 'loading' && (
+                <p
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '12.5px',
+                    color: color.muted,
+                    margin: 0,
+                  }}
+                >
+                  Loading the form…
+                </p>
+              )}
+
+              {/* Boxes for THIS page only. A box on page 3 is not on page 1. */}
+              {onThisPage.map(({ box, index }) => {
+                const small =
+                  box.kind === 'value' && box.width < minWidthForKey(box.value_key);
+                const isSelected = selected === index;
+                return (
+                  <div
+                    key={index}
+                    onPointerDown={(e) => beginMove(e, index)}
+                    style={{
+                      position: 'absolute',
+                      left: `${box.x * 100}%`,
+                      top: `${box.y * 100}%`,
+                      width: `${box.width * 100}%`,
+                      height: `${box.height * 100}%`,
+                      border: `1.5px solid ${
+                        small ? color.warningDeep : isSelected ? color.primary : color.primaryHover
+                      }`,
+                      background: small
+                        ? 'rgba(217,119,6,0.16)'
+                        : isSelected
+                          ? 'rgba(47,73,209,0.22)'
+                          : 'rgba(47,73,209,0.12)',
+                      cursor: 'move',
+                      boxSizing: 'border-box',
+                      touchAction: 'none',
+                    }}
+                    title={boxTitle(box, catalog)}
+                  >
+                    <span
+                      style={{
+                        position: 'absolute',
+                        top: '-16px',
+                        left: 0,
+                        fontSize: '9.5px',
+                        fontFamily: font.mono,
+                        color: small ? color.warningDeep : color.primaryHover,
+                        whiteSpace: 'nowrap',
+                        pointerEvents: 'none',
+                      }}
+                    >
+                      {boxTitle(box, catalog)}
+                    </span>
+                    {/* Bottom-right resize handle. */}
+                    <span
+                      onPointerDown={(e) => beginResize(e, index)}
+                      style={{
+                        position: 'absolute',
+                        right: '-5px',
+                        bottom: '-5px',
+                        width: '10px',
+                        height: '10px',
+                        borderRadius: '2px',
+                        background: color.primary,
+                        cursor: 'nwse-resize',
+                        touchAction: 'none',
+                      }}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+
+        {/* ── The coordinate panel ───────────────────────────────────────── */}
+        <p style={{ ...microLabelStyle, marginBottom: '6px' }}>Positions</p>
+        <p style={{ fontSize: '11.5px', color: color.muted, margin: '0 0 8px' }}>
+          Percentages of the page from the top-left, so they survive the form being re-scanned at a
+          different size. Editing here moves the box on the page, and moving it there updates these.
+        </p>
+
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
             <thead>
@@ -326,7 +657,14 @@ export function ContractBoxEditor({
               {boxes.map((b, i) => {
                 const small = b.kind === 'value' && b.width < minWidthForKey(b.value_key);
                 return (
-                  <tr key={i} style={{ borderTop: `1px solid ${color.rowDivider}` }}>
+                  <tr
+                    key={i}
+                    onFocus={() => setSelected(i)}
+                    style={{
+                      borderTop: `1px solid ${color.rowDivider}`,
+                      background: selected === i ? color.blueTint : undefined,
+                    }}
+                  >
                     <td style={cell}>
                       <input
                         type="number"
@@ -412,7 +750,10 @@ export function ContractBoxEditor({
                     <td style={cell}>
                       <button
                         type="button"
-                        onClick={() => setBoxes((all) => all.filter((_, j) => j !== i))}
+                        onClick={() => {
+                          setBoxes((all) => all.filter((_, j) => j !== i));
+                          setSelected(null);
+                        }}
                         style={{
                           ...secondaryButtonStyle,
                           padding: '3px 8px',
@@ -438,15 +779,15 @@ export function ContractBoxEditor({
         )}
 
         {/* §2.2 — named, not counted. "Three boxes are small" tells the user
-            nothing about which blank to go fix. */}
+            nothing about which blank to go and fix. */}
         {tooSmall.length > 0 && (
           <p style={{ fontSize: '12px', color: color.warningDeep, margin: '12px 0 0' }}>
             Likely too small for what they will hold:{' '}
             {tooSmall
               .map(({ box }) => catalog.find((v) => v.key === box.value_key)?.label ?? box.value_key)
               .join(', ')}
-            . This is an estimate from typical content length — nothing is shrunk or cut short to
-            fit, so a value that still does not fit will be flagged again at render.
+            . This errs on the cautious side — nothing is shrunk or cut short to fit, so a value that
+            genuinely does not fit will stop the send rather than print badly.
           </p>
         )}
 
@@ -470,6 +811,16 @@ export function ContractBoxEditor({
       </div>
     </div>
   );
+}
+
+/** The one-line name shown on a box and in its tooltip. */
+function boxTitle(box: ContractBoxInput, catalog: ContractValueKey[]): string {
+  if (box.kind === 'value') {
+    return catalog.find((v) => v.key === box.value_key)?.label ?? box.value_key ?? 'Value';
+  }
+  if (box.kind === 'custom') return box.custom_label?.trim() || 'Custom';
+  const who = box.party === 'contractor' ? 'Our' : 'Their';
+  return box.kind === 'initial' ? `${who} initials` : `${who} signature`;
 }
 
 const inputStyle: React.CSSProperties = {
