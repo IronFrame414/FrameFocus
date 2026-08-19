@@ -572,3 +572,123 @@ Findings 1 and 2 both change list behaviour, so the sweep was run before finishi
 guarded by `if (n === 0) test.skip(…, 'no change orders on this project' / 'no documents on this
 project')`. Data-conditional on the shared rebuild-test project, in Change Orders, Deliveries, Files
 and Safety — none of which this branch touches.
+
+---
+
+### S159 — two harness fixes, subs matched to contacts, one investigation. Verified 2026-08-19.
+
+> **The red-harness ledger is empty again, and this time nothing is skipped either.** S158 closed
+> with three reds it had diagnosed and deliberately left; all three are now closed by ruling, and
+> the 25 tests `s133` had been skipping run again.
+
+| # | Check | Result |
+| --- | --- | --- |
+| 1 | `npx turbo run type-check` (all packages) | **exit 0** |
+| 2 | `next lint` | **exit 0** — 16 warnings, **0 introduced**; same list as S155/S156 and S158 |
+| 3 | `npm run build --force` | **exit 0** — `Compiled successfully`; `/dashboard/subcontractors` 4.68 kB, `[id]` 2.17 kB, `trash` 1.78 kB |
+| 4 | Committed vitest suite | **818/818 passed**, 57 files — 806/56 plus this session's 12 in one new file |
+| 5 | Every live harness (`test/*.live.ts`, 77 files) | **904 passed, 0 skipped, 0 failed.** Was 877 / 25 / 2 + 1 failed suite at S158 |
+| 6 | Playwright, four chunks | **517 passed, 9 skipped, 0 failed** — `m-shell` 54 · `m-sections` 59 (+4) · `m-photos` 42 · rest 362 (+5) |
+| 7 | `npx supabase migration list` | **115 files = 115 local = 115 applied**, zero rows where `local <> remote`. **No migration this session** |
+| 8 | Fixture leakage | **companies 2 → 2**; zero `S158TRASH` and zero `S133` rows after the run |
+
+**⚠️ `supabase migration list` must run from the REPO ROOT.** From `apps/web` it fails with
+`LegacyProjectNotLinkedError: Cannot find project ref` — the link lives in `supabase/.temp/` at the
+root. It is an unlinked-CLI error, not a drift report, and it would be easy to read as one.
+
+#### The three S158 reds, closed
+
+| Was red | Closed by | Note |
+| --- | --- | --- |
+| `s123-cron-loops` ×2 | **APPROVED [Josh]** — scope §3j to the seeded session | See below. Verified green **with the Owner still clocked in**: `clock_out` re-checked after the run and still NULL, so 9/9 is the fix and not the weather |
+| `s133-subcontractor-read-floor` (suite, 25 skipped) | **APPROVED [Josh]** — delete the leaked identity | See below |
+
+**`s123-cron-loops` — the fix, and why it generalises.** Both §3j assertions built their recipient
+set from every `still_clocked_in` row the run produced and read the Owner's presence in it as
+*"management was told about the crew member's session"*. It does not mean that:
+`runStillClockedIn` nudges the worker of **every open session in the company**, so an Owner who is
+himself clocked in appears as a recipient **on his own account**. `notify()` already writes
+`source_id` from the cron's `source: { table: 'time_clock_sessions', id: session.id }`, so every row
+states which session produced it — and **the last test in that block has scoped by `source_id`
+since S131.** These two were never brought into line with it. Both now filter to the seeded session
+and both assert the scoped set is non-empty first, so a scoping bug cannot pass on an empty array.
+
+> **`source_id` does not replace `since`.** They narrow different axes: `since` separates this run
+> from earlier ones on the same session, which the 16:00 and 17:00 tests reuse by design because
+> `idx_time_clock_sessions_one_open_per_member` allows exactly one open session per member.
+
+**`s133-subcontractor-read-floor` — what was actually removed.** The guard that refused to start
+(*"josh+s133-pm2@worthprop.com already exists"*) was the visible tip. The full residue of the
+aborted 10:18 UTC run, all of it stamped by the harness's own marker and all of it deleted in that
+harness's own `afterAll` order:
+
+| Removed | Count |
+| --- | --- |
+| `project_assignments` (deleted FIRST — `NO ACTION`, it pins the member) | 1 |
+| `tasks` / `deliveries` / `inspections` / `purchase_orders` / `project_budget_items` / `subcontractor_contracts` — `STAMP = 'S133 read-floor probe'` | 7 |
+| `company_members`, `profiles`, the `auth.users` identity, the `invitations` row | 4 |
+
+Read-then-delete-then-read, every step error-checked, rebuild-test asserted before anything ran.
+The harness now passes **25/25 and leaves zero rows behind**, verified by re-querying after it.
+
+> **Worth carrying: a leaked fixture is rarely one row.** The guard names the one that blocks
+> startup; seven more sat on the sub's own project, inflating exactly the counts other harnesses
+> assert against.
+
+#### §1.2 amendment — Subs & Vendors now matches Contacts
+
+**RULED [Josh, S159]: *"subs should match contacts with a panel."*** S158 gave Contacts a row-click
+sheet; the sub list still had a name link to `/dashboard/subcontractors/[id]` (S140 ruling A1) plus
+an Edit link and a Delete button. **Two interaction models under one nav group is the defect** —
+and S140's name link was solving exactly the problem S158 solved for contacts, a session apart and
+in a different shape.
+
+**The one thing that did NOT move, decided and reported rather than defaulted: the compliance
+section.** The S140 page holds a header, a six-field contact card, and `ComplianceSection`.
+**Contracts and bids are not on it** — checked at S159: `subcontractor_contracts` render on the
+project contracts panel and bids on the estimate. The header and card are reproduced in the sheet
+field for field, plus Rating. Compliance stays on the page and the sheet links out to it, because:
+
+- `getComplianceStatus()` is a **server** service and a sheet is a client component, so mounting it
+  there needs a **client-side read of compliance documents that does not exist** — a second
+  implementation of one read, which is `#129`;
+- the page does not merely hide the section from a PM, it **declines to run the query**, because
+  "RLS returned nothing" and "this sub has no documents" render identically and only one is true —
+  reasoning worth having exactly one copy of;
+- a 304-line document manager is not a card of facts.
+
+The link is Owner/Admin only. `s159-subs-sheet.test.tsx` reads the page's `<Field label="…">` labels
+**out of its source** and requires each to render in the sheet, so a field added to the page later
+and not mirrored goes red — the realistic way this diverges, which a hardcoded list would miss.
+
+#### A source-level test that reads its own explanation — third instance
+
+`not.toContain('deleteContact')` reddened on a **correct** file, because the comment saying the
+function is no longer imported **names it**. Same shape as S158's `mt-auto` and `Sign out`. Anchored
+on the import statement instead, and paired with a positive assertion that both SHEETS do import it.
+
+> **The rule, now that it has happened three times: a source-level assertion must match a syntactic
+> anchor — an import statement, a `className="…"`, a JSX attribute — never a bare identifier or an
+> English phrase.** These files are written to explain themselves, so the prose reliably contains
+> every term the assertion is looking for.
+
+#### Investigation — invite email deliverability
+
+Full findings: **[`S159-invite-email-investigation.md`](S159-invite-email-investigation.md)**. Not a
+pass, not a fix; no code, schema or configuration changed.
+
+**The hypothesis — that the invite flow calls Supabase Auth's mailer — is disproven.** The message
+went through Resend; its Amazon-SES fingerprints are what a healthy Resend send looks like, because
+Resend runs on SES and Google Workspace's Sender column shows the **envelope** sender.
+
+**The real finding is next door.** Four surfaces — sign-up, **invite acceptance**,
+forgot-password, and the team page's reset — call GoTrue's mailer, which on production has
+`smtp_host: null`, `hook_send_email_enabled: false` and `rate_limit_email_sent: 2` per hour
+project-wide, with `mailer_autoconfirm: false`. **The invite flow therefore needs two emails on two
+providers**, and the second — the one that can block an invitee entirely — is unaligned, capped, and
+absent from `email_logs`.
+
+⚠️ **One check remains and it was deliberately not run: production's `email_logs`.**
+`scripts/live-sql.mjs` refuses any project but rebuild-test and that guard was not bypassed. The
+query, and what each of its three outcomes means — including the one that would prove the finding
+wrong — is §6 of the investigation.
