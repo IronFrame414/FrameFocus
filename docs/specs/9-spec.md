@@ -600,6 +600,32 @@ A mostly empty page with a line telling her the **project hasn't started yet.**
 | 7 | Payment (R19) | a live QB connection |
 | **—** | **Allowances (R21)** | **its own spec. See §8.1 — this is not a section, it is a sub-module, and its storage needs a ruling.** |
 
+> ### ⚠️ STAGES 2 AND 3 ARE ONE DATABASE CHANGE IN TWO PARTS — built [S164]
+>
+> The table above splits "read surfaces" from "the financial view", and that split does not survive
+> contact with RLS. **Every financial fact a client sees is a policy on a table she either can or
+> cannot read**, so the money half is not a rendering layer over stage 2 — it is more arms on the
+> same wall. Both shipped together:
+>
+> | Migration | Arms |
+> | --- | --- |
+> | `20261019000000_m9_client_read_arms.sql` | `projects`, `client_contracts`, `contract_documents`, `change_orders`, `change_order_line_items`, `files`, `storage.objects` (**incl. the markup-derivative branch**), and `client_schedule()` |
+> | `20261020000000_m9_client_financial_arms.sql` | `invoices`, `invoice_lines` (**RESTRICTIVE `presentation_level` gate**), `instrument_rates` (by containment), `client_invoice_sections()`, `client_proposals()`, and RESTRICTIVE closures on `invoice_cost_claims` / `invoice_hour_claims` |
+>
+> **The instrument is per-bill and there was never anywhere to write it otherwise.** Verified live:
+> **`projects` carries no contract-type column at all.** `contract_type` is on `estimates`, `co_type`
+> on `change_orders`, and `instrument_rates` CHECKs exactly one of `estimate_id` / `change_order_id`.
+> Josh's "a lump-sum contract can carry a T&M change order" is therefore not a case to handle — it is
+> the only shape the schema can express.
+>
+> **§4.3's "budgeted" does NOT resolve to `project_budget_amounts`, and that table stays closed.**
+> It is the company's internal per-project budget line, revised and re-forecast as the job runs; the
+> figure the client agreed is on the instrument she signed. See `20261020000000` §6.
+>
+> **Two surfaces in §5's list were deliberately NOT opened**: `co_signing_sessions` (S163's M5-01
+> floor — the portal signs through the service role, as `/sign-co/[token]` already does) and
+> `signing_sessions`. Proved shut, with rows present, in `s164-m9-financial-arms.live.ts` ARM 16.
+
 ---
 
 ## §14 — Corrections table (carry forward)

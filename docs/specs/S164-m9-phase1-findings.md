@@ -97,17 +97,30 @@ Owner/Admin-only table, but §4.3 was never reconciled with that correction.)*
 `storage.objects` carries its own hard client exclusion, added by M3-01's storage alignment **after**
 the interview:
 
+> ⚠️ **CORRECTED [S164 stage 3].** The version first written here paraphrased the company check as
+> `(SELECT company_id FROM profiles WHERE **id** = auth.uid())`. That is not what the policy says,
+> and the difference matters: `profiles.id` is the profile PK and `profiles.user_id` is the auth
+> user — **they are never equal (0 of 10 live rows)** — so the paraphrase described a policy that
+> matches nothing and would have read as a live bug. The real policy uses `user_id` and is correct.
+> The exact text, from `pg_policies`:
+
 ```
 project_files_select_non_client:
   bucket_id = 'project-files'
-  AND (storage.foldername(name))[1]::uuid = (SELECT company_id FROM profiles WHERE id = auth.uid())
-  AND get_my_role() <> 'client'                                   ← hard exclusion
+  AND (storage.foldername(name))[1] = (SELECT profiles.company_id::text FROM profiles
+                                       WHERE profiles.user_id = auth.uid()
+                                         AND profiles.is_deleted = false)
+  AND get_my_role() <> 'client'                                   <- hard exclusion
   AND ( owner/admin
         OR EXISTS (SELECT 1 FROM files f WHERE f.file_path = objects.name)
         OR ( name LIKE '%.markup.jpg'
              AND EXISTS (SELECT 1 FROM files f
                          WHERE f.file_path = left(objects.name, length(objects.name)-11)) ) )
 ```
+
+**Note the comparison is `text`, not `uuid`** — the folder segment is compared to `company_id::text`.
+A client arm written with a `::uuid` cast on the left would not match, and would fail as a 403 on
+every image rather than as an error.
 
 **Two policies are owed, not one**, and the client arm must mirror the **markup-derivative branch**
 (the `left(name, len-11)` clause) or §6.1's ruling — the client sees the *marked-up* image — fails at

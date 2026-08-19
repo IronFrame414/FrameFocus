@@ -7904,6 +7904,44 @@ export type Database = {
           unread_count: number
         }[]
       }
+      client_document_visible: { Args: { p_status: string }; Returns: boolean }
+      client_has_full_access: { Args: never; Returns: boolean }
+      client_invoice_sections: {
+        Args: { p_invoice_id: string }
+        Returns: {
+          billed_subtotal: number
+          category: string
+          invoice_id: string
+        }[]
+      }
+      client_proposals: {
+        Args: { p_project_id: string }
+        Returns: {
+          accepted_at: string
+          contract_type: string
+          declined_at: string
+          estimate_number: string
+          expires_at: string
+          grand_total: number
+          id: string
+          name: string
+          sent_at: string
+          status: string
+          viewed_at: string
+        }[]
+      }
+      client_schedule: {
+        Args: { p_project_id: string }
+        Returns: {
+          due_date: string
+          id: string
+          phase_name: string
+          project_id: string
+          start_date: string
+          status: string
+          title: string
+        }[]
+      }
       client_window_open: {
         Args: { p_actual_end: string; p_cancelled_at: string; p_status: string }
         Returns: boolean
@@ -8033,6 +8071,7 @@ export type Database = {
       my_assigned_site_address_ids: { Args: never; Returns: string[] }
       my_client_access_level: { Args: never; Returns: string }
       my_client_site_address_ids: { Args: never; Returns: string[] }
+      my_company_id_flat: { Args: never; Returns: string }
       next_co_number: { Args: { p_project_id: string }; Returns: string }
       next_estimate_number: { Args: never; Returns: string }
       next_invoice_number: { Args: never; Returns: string }
