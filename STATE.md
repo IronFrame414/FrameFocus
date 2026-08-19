@@ -382,6 +382,7 @@ platform gates on:
 | `subcontractor`   | **josh+qa-sub@worthprop.com**    | QA Sub A      |
 | `client`          | **josh+qa-client@worthprop.com** | QA Client A   |
 | `client` (linked) | **josh+qa-client-linked@worthprop.com** | QA Client Linked |
+| `client` (closed window) | **josh+qa-client-closed@worthprop.com** | QA Client Closed |
 
 > **The two added S113 (#127) are not shaped like the other five, and the difference matters.**
 > `create_member_for_new_profile()` (`20260704210000`) returns early for both `client` and
@@ -423,6 +424,20 @@ platform gates on:
 >   and `Home`; the site address is reachable and **the home address must never be**, which is the
 >   only assertion that distinguishes a correct grant from one that unlocked the contact's whole
 >   address list.
+> - **[S164 stage 2] A THIRD client exists, and it proves R5's account-level rule.**
+>   `josh+qa-client-closed@` is linked to `QA A — M9 completed 200d` (status `complete`,
+>   `actual_end_date` re-stamped to 200 days ago on **every** seed run, because a fixture written
+>   once would drift back inside the 45-day window and quietly stop testing anything) — **and to
+>   nothing else**, so her account is dark.
+>
+>   ⚠️ **The linked client is on that same completed project too**, via `project_contacts`. That
+>   is the whole design: the same query about the same project returns **true** for her (she has
+>   other, active projects — "nothing narrows with age") and **false** for the closed client
+>   ("no standing archive access without an active project"). A per-project window implementation
+>   passes the second and fails the first, and that is the only place it fails.
+>
+>   `QA ClientNoEmail` is a contact with `email IS NULL`, for the §S.1 invite refusal. Do not
+>   "fix" it by adding an address.
 >
 > **⚠️ Do not substitute the 32 roster rows.** `company_members` holds 33 rows with
 > `member_type = 'subcontractor'`; **32 have `profile_id IS NULL`** — domain roster entries with no
@@ -436,7 +451,7 @@ solely so cross-company isolation can be *proved* rather than asserted from code
 | ------- | -------------------------------- | ------------ |
 | `owner` | **josh+qa-b-owner@worthprop.com**| QA Owner B   |
 
-**Password (all nine): `FrameFocusTest!2026`**
+**Password (all ten): `FrameFocusTest!2026`**
 
 > Committed deliberately, and only defensible because of what it protects: a disposable test
 > database with no real customer data, in a private repo. **Never reuse it anywhere else, never
