@@ -10,6 +10,8 @@ import { InvoiceEmail } from '@/lib/email/templates/invoice-email';
 import { ChangeOrderEmail } from '@/lib/email/templates/change-order-email';
 import { ReminderEmail } from '@/lib/email/templates/reminder-email';
 import { NotificationEmail } from '@/lib/email/templates/notification-email';
+import { AuthEmail, AUTH_EMAIL_COPY, type AuthEmailKind } from '@/lib/email/templates/auth-email';
+import { subjectFor } from '@/lib/services/auth-email';
 
 // Renders the five transactional emails through @react-email/render — the SAME
 // function email-service.ts's Resend call uses to turn the component into the
@@ -114,6 +116,10 @@ const COVERED = new Set([
   'reminder-email.tsx',
   'notification-email.tsx',
   'invite-email.tsx',
+  // S160 — the six Supabase Auth emails, one template with a `kind`. Its brand
+  // contract is the same as the invite's and for the same reason: the reader is
+  // being asked about an ACCOUNT on this product, so the product must be named.
+  'auth-email.tsx',
 ]);
 
 describe('every email template is covered by this file', () => {
@@ -226,6 +232,58 @@ describe('transactional emails carry the rebranded footer', () => {
       const text = await render(make(), { plainText: true });
       expect(text).toContain(brand.name);
       expect(text).not.toContain('FrameFocus');
+    });
+  });
+
+  // ==========================================================================
+  // S160 — the Supabase Auth emails. ONE template, SIX kinds.
+  // ==========================================================================
+  //
+  // Every kind is rendered, not a representative one: the whole reason this
+  // file walks the directory rather than trusting a list is that "the one
+  // nobody rendered" is where the stale name shipped. A `kind` discriminator
+  // makes six messages out of one file, so six is what gets rendered.
+  //
+  // ⚠️ NOT WHITE-LABEL, AND THE INVERSE OF THE CLIENT-FACING RULE. These say
+  // the product's name and carry NO tenant logo — a "reset your password" mail
+  // dressed as the contractor invites the reader to believe the contractor can
+  // see or set their password. The From line still carries the company, because
+  // the sending domain is per-tenant and alignment depends on it; the BODY says
+  // who is really talking.
+  describe.each(
+    Object.keys(AUTH_EMAIL_COPY).map((k) => [k]) as Array<[AuthEmailKind]>
+  )('auth email — %s (account security)', (kind) => {
+    const make = () => (
+      <AuthEmail
+        kind={kind}
+        actionUrl="https://ref.supabase.co/auth/v1/verify?token=hash"
+        token="87654321"
+      />
+    );
+
+    it('names the current product and no stale one', async () => {
+      const html = readable(await render(make()));
+      expect(html).toContain(brand.name);
+      expect(html).not.toContain('FrameFocus');
+    });
+
+    it('plain-text alternative carries it too', async () => {
+      const text = await render(make(), { plainText: true });
+      expect(text).toContain(brand.name);
+      expect(text).not.toContain('FrameFocus');
+    });
+
+    it('carries NO tenant logo — the inverse of the client-facing rule', async () => {
+      const html = await render(make());
+      expect(html).not.toContain(LOGO);
+    });
+
+    it('its SUBJECT names the product too — S136’s hole, for the new sender', async () => {
+      // Subjects are not templates. `buildInviteSubject` was extracted so this
+      // assertion could exist without a database; `subjectFor` is its twin, and
+      // it exists for exactly the same reason.
+      expect(subjectFor(kind)).toContain(brand.name);
+      expect(subjectFor(kind)).not.toContain('FrameFocus');
     });
 
     it('carries no tenant logo — the tenant is named, not branded', async () => {
