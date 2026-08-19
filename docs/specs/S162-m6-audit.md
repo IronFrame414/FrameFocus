@@ -27,6 +27,66 @@ the four surfaces it names.
 
 ---
 
+## §0a — Outcomes [S163]
+
+Every finding below is left as written. This section records what happened to each.
+
+| # | Severity | Outcome at S163 | Where |
+| --- | --- | --- | --- |
+| **M6-01** | reachable | ✅ **FIXED** — header corrected, superseded text quoted not deleted | `app/m/detail-access.ts` · `s162` A1 inverted |
+| **M6-02** | reachable | ✅ **FIXED** — all three logs are system-write-only | `20261012000000` · `s163` D1–D3 |
+| **M6-03** | reachable | ✅ **FIXED** — the floor went on the CHILDREN, not the parent | `20261015000000` · `s163` B1–B3 |
+| **M6-04** | latent / fragile | ✅ **FIXED FIRST** — containment made explicit, as a no-op | `20261010000000` · `s163` A1–A3 |
+| **M6-05 … M6-12** | various | ⏸ not in the approved set | — |
+
+### ⚠️ M6-02 — the ruling's premise held for two of three, and the third was made true
+
+The ruling says these logs are *"written by the system (service-role or `SECURITY DEFINER`), never by
+users."* Verified before dropping anything:
+
+| log | writer | premise |
+| --- | --- | --- |
+| `time_edit_logs` | `audit_time_segment_edit()`, `audit_time_clock_session_edit()` — SECDEF triggers | ✅ held |
+| `time_session_rate_snapshots` | `snapshot_session_rate()` — SECDEF trigger | ✅ held |
+| `ai_tag_logs` | ⚠️ **`ai-tagging.ts:191`, through the CALLER's session client** | ❌ **did not hold** |
+
+`ai-tagging.ts` moved to `getSupabaseAdmin()` in the same commit. **Without that, the migration would
+have silently stopped the AI cost log** — the insert discarded its result, so nothing would have
+surfaced the failure. It now reports a failed log to the server console while still never failing
+the tagging call the user asked for.
+
+**And the reason the triggers keep working with no INSERT policy at all was checked, not assumed:**
+all three functions are `SECURITY DEFINER` owned by `postgres`, which owns these tables, and
+`relforcerowsecurity` is **false** on all three. A table owner bypasses RLS unless FORCE is set.
+**With FORCE on, this migration would have broken every time edit and every rate snapshot.**
+`s163` D3 asserts the trigger still fires, so a future FORCE would be caught.
+
+### M6-03 — the floor went on the children, and the UI is why
+
+The finding put both options and said the product question was unanswered. The ruling — *"floor the
+safety **fields**… The UI already knows the answer"* — and the UI agree:
+`app/m/p/[projectId]/safety/page.tsx` says *"INJURIES ARE INDICATED BY PRESENCE, NOT DETAIL… every
+role reaches this screen (D-11), and a name on a list is a different disclosure from a name on a
+record someone deliberately opened."*
+
+So `safety_incidents` stays readable by an assigned subcontractor **on purpose**, and the two child
+tables carrying the person and the medical detail are floored. `client` was excluded alongside
+`subcontractor`, which closes one of the 51 policies `S161-m5-audit.md` M5-10 counts as refusing a
+client *by absence rather than by rule*.
+
+### M6-04 landed FIRST, and it is the one that gated everything else
+
+`SYSTEM-AUDIT.md` §1.6a records why: the child tables were contained only because Postgres applies
+the parent's RLS inside a policy sub-query, and `SECURITY DEFINER` bypasses exactly that. The
+`SECURITY DEFINER` remedy M5-07 was heading toward would have opened them with no policy edit
+anywhere near them.
+
+**It is now a no-op that stays a no-op** — `s163` A2/A3 assert the owner's access is unchanged and
+that no child row is readable for an incident its reader cannot see. **S163's M5-07 investigation
+was written only after this landed**, per the session brief's sequencing.
+
+---
+
 ## §1 — Findings, most severe first
 
 ---

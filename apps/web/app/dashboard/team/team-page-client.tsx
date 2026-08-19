@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase-browser';
 import {
@@ -13,7 +13,12 @@ import {
 import { ROLE_LABELS, type CompanyRole } from '@framefocus/shared';
 
 export default function TeamPageClient({ userRole }: { userRole: string }) {
-  const supabase = createClient();
+  // ⚠️ MEMOISED [S163]. `createClient()` returns a NEW object on every call —
+  // `@supabase/ssr`'s `createBrowserClient` does not memoise the instance — so a
+  // client created in render cannot go in a dependency array without re-running
+  // the effect forever. Stabilising it here is what lets `loadData` list its
+  // real dependencies instead of silencing the rule.
+  const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
@@ -26,11 +31,13 @@ export default function TeamPageClient({ userRole }: { userRole: string }) {
 
   const canManageTeam = userRole === 'owner' || userRole === 'admin';
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  async function loadData() {
+  // ⚠️ WAS `useEffect(() => { loadData(); }, [])` WITH AN EMPTY ARRAY [S163].
+  // `loadData` closes over `canManageTeam`, which is derived from the `userRole`
+  // PROP — so the empty array said "this data never depends on the role" and it
+  // does: a page rendered for an owner and then for a non-owner would keep the
+  // owner's invitation list. Mount-once was the intent; mount-once-per-role is
+  // the truth, and that is what listing the dependency expresses.
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -45,7 +52,11 @@ export default function TeamPageClient({ userRole }: { userRole: string }) {
     } finally {
       setLoading(false);
     }
-  }
+  }, [supabase, canManageTeam]);
+
+  useEffect(() => {
+    void loadData();
+  }, [loadData]);
 
   // D4 — the link, retrievable again. `token` comes back on the row now
   // (getPendingInvitations); the policy always allowed it.

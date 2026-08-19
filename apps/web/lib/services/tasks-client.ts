@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase-browser';
+import { applied, DISCARDED } from '@/lib/services/mutation-result';
 import type {
   DependencyType,
   Phase,
@@ -45,20 +46,25 @@ export async function updateTask(
 
   // BEFORE UPDATE trigger `tasks_set_updated_by` handles updated_by.
   // updated_at is handled by the existing updated_at trigger.
-  const { error } = await supabase.from('tasks').update(updates).eq('id', id);
+  const { data, error } = await supabase.from('tasks').update(updates).eq('id', id)
+    .select('id');
+
   if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 
 export async function deleteTask(id: string): Promise<{ success: boolean; error?: string }> {
   const supabase = createClient();
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('tasks')
     .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
 
   if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 
@@ -91,12 +97,14 @@ export async function deletePhase(id: string): Promise<{ success: boolean; error
     .eq('phase_id', id);
   if (detachError) return { success: false, error: detachError.message };
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('phases')
     .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
 
   if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 
@@ -158,7 +166,7 @@ export async function createDependency(
     for (const next of graph.get(node) ?? []) stack.push(next);
   }
 
-  const { error } = await supabase.from('task_dependencies').insert({
+  const { data, error } = await supabase.from('task_dependencies').insert({
     predecessor_id: predecessorId,
     successor_id: successorId,
     dependency_type: dependencyType,
@@ -176,11 +184,13 @@ export async function createDependency(
 export async function deleteDependency(id: string): Promise<{ success: boolean; error?: string }> {
   const supabase = createClient();
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('task_dependencies')
     .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
 
   if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }

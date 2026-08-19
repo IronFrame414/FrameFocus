@@ -164,15 +164,12 @@ describe('S161-A — M5-01: co_signing_sessions leaks the signing credential', (
     const readable = new Set(((readableCos ?? []) as { id: string }[]).map((r) => r.id));
     const orphaned = sess.filter((s) => !readable.has(s.change_order_id));
 
-    // WHEN FIXED, INVERT: expect(orphaned).toHaveLength(0).
-    expect(
-      orphaned.length,
-      'a PM no longer reads signing sessions for change orders it cannot see — invert this test'
-    ).toBeGreaterThan(0);
-    expect(
-      sess.length,
-      'the PM reads no sessions at all — re-read A1, the fixture may have gone'
-    ).toBeGreaterThan(readable.size);
+    // ✅ INVERTED [S163]. Was: 19 sessions for change orders the PM cannot see.
+    // `20261011000000` narrowed `co_signing_sessions_select_manager` to
+    // owner/admin, so a PM now reads NONE — orphaned or otherwise.
+    expect(orphaned.length, 'a PM reads signing sessions for unreadable change orders again').toBe(0);
+    expect(sess.length, 'a PM reads signing sessions at all').toBe(0);
+    void readable;
   });
 
   it('⚠️ A3 — and every one of those rows carries a usable `token`', async () => {
@@ -183,7 +180,8 @@ describe('S161-A — M5-01: co_signing_sessions leaks the signing credential', (
     const withToken = ((sessions ?? []) as { token: string | null }[]).filter(
       (s) => typeof s.token === 'string' && s.token.length > 0
     );
-    expect(withToken.length, 'no tokens are exposed — invert this test').toBeGreaterThan(0);
+    // ✅ INVERTED [S163]. Was: 20 tokens exposed to a PM.
+    expect(withToken.length, 'signing tokens are exposed to a PM again').toBe(0);
   });
 
   it('A4 — the counterfactual: foreman, crew and subcontractor read ZERO', async () => {
@@ -204,7 +202,9 @@ describe('S161-A — M5-01: co_signing_sessions leaks the signing credential', (
     // M4's `signing_sessions_select_manager` and M7I's
     // `contract_signing_sessions_select_owner_admin` are both owner/admin.
     // Three signing flows, three tables, one of them wider by exactly one role.
-    for (const t of ['signing_sessions', 'contract_signing_sessions']) {
+    // ✅ EXTENDED [S163]: `co_signing_sessions` joins the list it used to be the
+    // exception to. All three signing flows are owner/admin.
+    for (const t of ['signing_sessions', 'contract_signing_sessions', 'co_signing_sessions']) {
       const { data } = await pm.from(t).select('id');
       expect((data ?? []).length, `${t} is also readable by a PM`).toBe(0);
     }
@@ -234,19 +234,20 @@ describe('S161-B — M5-02: the DB does not backstop the status rules', () => {
       );
     }
 
-    const { data: reopened, error } = await pm
+    const { error } = await pm
       .from('projects')
       .update({ status: 'active' })
-      .eq('id', target.id)
-      .select('id, status');
+      .eq('id', target.id);
 
-    // WHEN FIXED, INVERT: expect the write to affect zero rows, or to raise.
-    expect(error, `the reopen errored: ${error?.message}`).toBeNull();
-    expect(
-      (reopened ?? []).length,
-      'a PM can no longer reopen a completed project at the database — invert this test'
-    ).toBe(1);
-    expect((reopened as { status: string }[])[0].status).toBe('active');
+    // ✅ INVERTED [S163]. Was: 1 row, status 'active'. `20261013000000` put the
+    // Owner/Admin-only reopen into `enforce_projects_column_scope`, so the
+    // trigger raises instead.
+    expect(error, 'a PM reopened a completed project again').not.toBeNull();
+    expect(error!.message).toMatch(/Owner or Admin can reopen/i);
+
+    const { data: unchanged } = await admin
+      .from('projects').select('status').eq('id', target.id).single();
+    expect((unchanged as { status: string }).status, 'the project moved anyway').toBe('complete');
 
     must(
       'restore status',
@@ -276,18 +277,16 @@ describe('S161-B — M5-02: the DB does not backstop the status rules', () => {
 
     const target = candidates[0];
     const original = target.status;
-    const { data: completed, error } = await pm
+    const { error } = await pm
       .from('projects')
       .update({ status: 'complete' })
-      .eq('id', target.id)
-      .select('id, status');
+      .eq('id', target.id);
 
-    // WHEN FIXED, INVERT: a trigger should refuse this.
-    expect(error, 'the gate now refuses at the database').toBeNull();
-    expect(
-      (completed ?? []).length,
-      'the punch gate is now enforced in the database — invert this test'
-    ).toBe(1);
+    // ✅ INVERTED [S163]. Was: 1 row, status 'complete', over open punch items.
+    // The gate now lives in `enforce_projects_column_scope` and binds every
+    // role including owner — see `s163-m5-m6-fixes.live.ts` E3.
+    expect(error, 'the punch gate is bypassable again').not.toBeNull();
+    expect(error!.message).toMatch(/punch list item/i);
 
     must(
       'restore status',
@@ -366,31 +365,28 @@ describe('S161-C — M5-04: schedule_entries ignores project assignment', () => 
       notes: `${MARKER} unassigned-project`,
     });
 
-    // WHEN FIXED, INVERT: expect an RLS refusal.
-    expect(error, `the insert was refused: ${error?.code}`).toBeNull();
+    // ✅ INVERTED [S163]. Was: accepted, and the row landed. `20261014000000`
+    // added `(project_id IS NULL OR can_view_project(project_id))` to the
+    // INSERT and UPDATE policies.
+    expect(error, 'a foreman can schedule onto an unassigned project again').not.toBeNull();
 
     const { data: landed } = await admin
       .from('schedule_entries')
       .select('id, project_id')
       .eq('notes', `${MARKER} unassigned-project`);
-    expect((landed ?? []).length, 'the row did not land — re-read C1').toBe(1);
-    expect((landed as { project_id: string }[])[0].project_id).toBe(foreign!.id);
+    expect((landed ?? []).length, 'a row landed despite the refusal').toBe(0);
   });
 
   it('⚠️ C2 — and the foreman can read it back and edit it', async () => {
+    // ✅ INVERTED [S163]. C1's row no longer exists, so there is nothing to read
+    // back or edit. The SELECT policy is deliberately UNCHANGED — the company
+    // calendar depends on it — so this asserts the absence of the ROW, not a
+    // read refusal. That distinction is the open question S163 reports.
     const { data: readBack } = await foreman
       .from('schedule_entries')
       .select('id')
       .eq('notes', `${MARKER} unassigned-project`);
-    expect((readBack ?? []).length, 'the foreman cannot read it — invert C1/C2 together').toBe(1);
-
-    const id = (readBack as { id: string }[])[0].id;
-    const { data: updated } = await foreman
-      .from('schedule_entries')
-      .update({ notes: `${MARKER} unassigned-project edited` })
-      .eq('id', id)
-      .select('id');
-    expect((updated ?? []).length, 'the foreman cannot edit it').toBe(1);
+    expect((readBack ?? []).length, 'C1 let a row through after all').toBe(0);
   });
 
   it('C3 — the counterfactual: the SAME foreman is refused on a table that DOES scope', async () => {
@@ -423,7 +419,24 @@ describe('S161-C — M5-04: schedule_entries ignores project assignment', () => 
 // GROUP D — M5-05. punch_lists is write-without-read for a subcontractor.
 // ============================================================================
 
-describe('S161-D — M5-05: a subcontractor creates punch data it cannot see', () => {
+// ⚠️ M5-05 WAS WITHDRAWN AT S163 — THE FINDING WAS WRONG, AND THESE TESTS STAY
+// GREEN BECAUSE THE BEHAVIOUR THEY DESCRIBE IS THE SHIPPED DESIGN.
+//
+// The S163 sweep found the opposite already written down, on purpose, twice:
+//
+//   * `s114-subcontractor-surfaces.live.ts` A-59 — "a subcontractor creates
+//     punch lists and items, and completes them" — whose header says S133
+//     "did not touch INSERT, and **this is the criterion that would catch
+//     someone 'finishing' the narrowing by flooring INSERT too**."
+//   * `lib/services/punch-client.ts:70` — `createPunchList()` generates the id
+//     CLIENT-SIDE and does not read back, precisely because the author cannot
+//     SELECT the row. The `deliveries` offline pattern, applied deliberately.
+//
+// So a sub owning their ITEMS and never the container is the design, and this
+// pass filed it as a defect because it did not sweep A-59 first. The tests
+// below are LEFT AS THEY ARE — they describe what the system does, and they are
+// now a second record of it. `S161-m5-audit.md` M5-05 carries the withdrawal.
+describe('S161-D — M5-05 (WITHDRAWN): a subcontractor creates punch data it cannot see', () => {
   it('⚠️ D1 — ASSERTS THE DEFECT: sub INSERTs a punch list, then reads zero', async () => {
     // `punch_lists_insert_authenticated` is `company_id AND can_view_project()`
     // with NO role floor, and an assigned subcontractor passes

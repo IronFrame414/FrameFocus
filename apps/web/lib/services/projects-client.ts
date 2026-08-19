@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase-browser';
 import type { Project, ProjectStatus, ProjectType } from '@/lib/services/projects';
+import { applied, DISCARDED } from '@/lib/services/mutation-result';
 export type { Project, ProjectStatus, ProjectType };
 
 /**
@@ -111,9 +112,11 @@ export async function updateProject(
 
   // BEFORE UPDATE trigger `projects_set_updated_by` handles updated_by.
   // updated_at is handled by the existing updated_at trigger.
-  const { error } = await supabase.from('projects').update(updates).eq('id', id);
+  const { data, error } = await supabase.from('projects').update(updates).eq('id', id)
+    .select('id');
 
   if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 
@@ -185,8 +188,11 @@ export async function transitionProjectStatus(
     }
   }
 
-  const { error } = await supabase.from('projects').update(updates).eq('id', id);
+  const { data, error } = await supabase.from('projects').update(updates).eq('id', id)
+    .select('id');
+
   if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 
@@ -240,12 +246,14 @@ export async function deleteProject(
   }
   const supabase = createClient();
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('projects')
     .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
 
   if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 
@@ -258,12 +266,14 @@ export async function restoreProject(
   }
   const supabase = createClient();
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('projects')
     .update({ is_deleted: false, deleted_at: null })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
 
   if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 

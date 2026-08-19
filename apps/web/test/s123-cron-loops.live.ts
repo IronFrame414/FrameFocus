@@ -105,26 +105,17 @@ function instantAt(timeZone: string, hour: number, weekday: number | null): Date
 const hourOf = (clock: string | null, fallback: number) =>
   clock ? Number(clock.slice(0, 2)) : fallback;
 
-/** Notification rows this run produced, registered for teardown. */
-async function rowsOfType(type: string, since: string) {
-  const { data } = await admin
-    .from('notifications')
-    // `source_id` [S159] — the row's originating record. §3j's assertions need
-    // it to tell THIS harness's seeded session apart from a real one; see the
-    // block comment there.
-    .select(
-      'id, recipient_profile_id, type, title, body, link_key, link_params, project_id, source_id'
-    )
-    .eq('company_id', company.id)
-    .eq('type', type)
-    .gte('created_at', since);
-  for (const r of data ?? []) if (!madeNotifications.includes(r.id)) madeNotifications.push(r.id);
-  return data ?? [];
-}
-
 /**
- * ⚠️ THE NEGATIVES USE THIS AND NOT `rowsOfType`, BECAUSE `since` WAS A LIE.
- * [S131 — pre-existing defect, unrelated to Rulings A and B]
+ * ⚠️ EVERY ASSERTION USES THIS NOW, BECAUSE `since` WAS A LIE.
+ * [S131 for the negatives; S163 finished the job for the positives]
+ *
+ * ✅ [S163] `rowsOfType(type, since)` IS GONE. S131 converted the NEGATIVES to
+ * id-diffing and left the POSITIVES comparing a Node `since` against a database
+ * `created_at` — and §3h then failed on one full live run of S161/S162, passed
+ * on a second, and passed in isolation. S131 measured the skew in the direction
+ * that ADDS rows; the opposite direction DROPS one, which is what that looked
+ * like. The clock is now out of every assertion in this file rather than half
+ * of them, and the helper is deleted so it cannot be reached for again.
  *
  * Every "writes nothing" test used to mint `const since = new Date()` in NODE
  * and then filter `.gte('created_at', since)` against a stamp Postgres wrote.
@@ -302,7 +293,7 @@ describe('§3h — runTimesheetsReady', () => {
     const weekClockIn = new Date(closed.weekStart.getTime() + 36 * 3_600_000);
     await seedSession(weekClockIn, new Date(weekClockIn.getTime() + 8 * 3_600_000));
 
-    const since = new Date().toISOString();
+    const before = await idsOfType('timesheet_ready');
     const outcome = await runTimesheetsReady(admin as SupabaseClient<Database>, now);
 
     // THE POSITIVE. `fired > 0` alone would pass on another company's row, so
@@ -310,7 +301,7 @@ describe('§3h — runTimesheetsReady', () => {
     expect(outcome.fired).toBeGreaterThan(0);
     expect(outcome.errors).toEqual([]);
 
-    const rows = await rowsOfType('timesheet_ready', since);
+    const rows = await rowsAddedSince('timesheet_ready', before);
     const recipients = new Set(rows.map((r) => r.recipient_profile_id));
     expect(recipients.has(ownerProfileId)).toBe(true);
     expect(recipients.has(adminProfileId)).toBe(true);
@@ -368,13 +359,13 @@ describe('§3i — runDailyLogMissing', () => {
       .eq('is_deleted', false);
     expect(existing ?? [], 'fixture expects NO daily log for this project-day').toHaveLength(0);
 
-    const since = new Date().toISOString();
+    const before = await idsOfType('daily_log_missing');
     const outcome = await runDailyLogMissing(admin as SupabaseClient<Database>, now);
 
     expect(outcome.fired).toBeGreaterThan(0);
     expect(outcome.errors).toEqual([]);
 
-    const rows = await rowsOfType('daily_log_missing', since);
+    const rows = await rowsAddedSince('daily_log_missing', before);
     const mine = rows.filter((r) => r.project_id === projectId);
     expect(mine.length).toBeGreaterThan(0);
 
@@ -417,10 +408,10 @@ describe('§3i — runDailyLogMissing', () => {
       altProjectId
     );
 
-    const since = new Date().toISOString();
+    const before = await idsOfType('daily_log_missing');
     await runDailyLogMissing(admin as SupabaseClient<Database>, now);
 
-    const rows = await rowsOfType('daily_log_missing', since);
+    const rows = await rowsAddedSince('daily_log_missing', before);
     expect(rows.filter((r) => r.project_id === altProjectId)).toHaveLength(0);
   });
 
@@ -490,11 +481,11 @@ describe('§3j — runStillClockedIn', () => {
 
   it('16:00 nudges the WORKER and nobody else', async () => {
     const now = instantAt(tz, 16, null);
-    const since = new Date().toISOString();
+    const before = await idsOfType('still_clocked_in');
     const outcome = await runStillClockedIn(admin as SupabaseClient<Database>, now);
 
     expect(outcome.fired).toBeGreaterThan(0);
-    const rows = forSeededSession(await rowsOfType('still_clocked_in', since));
+    const rows = forSeededSession(await rowsAddedSince('still_clocked_in', before));
     // Not vacuous: if the scoping filtered everything away, the three
     // membership assertions below would all pass on an empty set.
     expect(rows.length, 'the seeded session produced no notification at all').toBeGreaterThan(0);
@@ -515,10 +506,10 @@ describe('§3j — runStillClockedIn', () => {
 
   it('17:00 adds Owner and Admin — the overtime event', async () => {
     const now = instantAt(tz, 17, null);
-    const since = new Date().toISOString();
+    const before = await idsOfType('still_clocked_in');
     await runStillClockedIn(admin as SupabaseClient<Database>, now);
 
-    const rows = forSeededSession(await rowsOfType('still_clocked_in', since));
+    const rows = forSeededSession(await rowsAddedSince('still_clocked_in', before));
     expect(rows.length, 'the seeded session produced no notification at all').toBeGreaterThan(0);
     const recipients = new Set(rows.map((r) => r.recipient_profile_id));
     expect(recipients.has(crewProfileId)).toBe(true);

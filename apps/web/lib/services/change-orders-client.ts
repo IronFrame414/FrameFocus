@@ -11,6 +11,7 @@ import {
   type RowPricingInput,
 } from '@framefocus/shared/utils/estimate-totals';
 import { loadInstrumentPricingContext } from '@/lib/services/estimate-items-client';
+import { applied } from '@/lib/services/mutation-result';
 import type {
   ChangeOrder,
   ChangeOrderLineItem,
@@ -152,6 +153,19 @@ export type UpdateChangeOrderInput = Partial<
 >;
 
 /** Draft-detail edits. Lifecycle moves go through send/void, never here. */
+// ⚠️ M5-03 [S163] — THESE SIX WERE ALREADY GUARDED, BY HAND. They now go
+// through the SAME `applied()` the rest of the platform uses, because
+// `mutation-result.ts` says so without an exception and a fifth private copy of
+// a row-count check is how the four earlier ones drifted apart.
+//
+// **The MESSAGES are deliberately kept.** `DISCARDED` says "you may not have
+// permission, or the record no longer exists" — correct, and deliberately
+// vague, for a caller who cannot tell those apart. These call sites CAN:
+// `change_orders_update_authorized` admits owner/admin/PM, so a discarded write
+// here means the row is gone or not editable, and "Change order not found or
+// not editable" is the more truthful sentence. The shared helper is the
+// mechanism; the wording is still the caller's to choose.
+
 export async function updateChangeOrder(
   id: string,
   input: UpdateChangeOrderInput
@@ -167,9 +181,7 @@ export async function updateChangeOrder(
     .select('id');
 
   if (error) return { success: false, error: error.message };
-  if (!data || data.length === 0) {
-    return { success: false, error: 'Change order not found or not editable' };
-  }
+  if (!applied(data)) return { success: false, error: 'Change order not found or not editable' };
   return { success: true };
 }
 
@@ -184,9 +196,7 @@ export async function softDeleteChangeOrder(id: string): Promise<Result> {
     .select('id');
 
   if (error) return { success: false, error: error.message };
-  if (!data || data.length === 0) {
-    return { success: false, error: 'Change order not found' };
-  }
+  if (!applied(data)) return { success: false, error: 'Change order not found' };
   return { success: true };
 }
 
@@ -269,9 +279,7 @@ export async function updateCoLineItem(
     .select('id');
 
   if (error) return { success: false, error: error.message };
-  if (!data || data.length === 0) {
-    return { success: false, error: 'Line item not found or not editable' };
-  }
+  if (!applied(data)) return { success: false, error: 'Line item not found or not editable' };
   return { success: true };
 }
 
@@ -293,9 +301,7 @@ export async function deleteCoLineItem(id: string): Promise<Result> {
     .select('id');
 
   if (error) return { success: false, error: error.message };
-  if (!data || data.length === 0) {
-    return { success: false, error: 'Line item not found or not editable' };
-  }
+  if (!applied(data)) return { success: false, error: 'Line item not found or not editable' };
   return { success: true };
 }
 
@@ -396,9 +402,7 @@ export async function updateCoLineRow(id: string, input: UpdateCoLineRowInput): 
     .select('id');
 
   if (error) return { success: false, error: error.message };
-  if (!data || data.length === 0) {
-    return { success: false, error: 'Row not found or not editable' };
-  }
+  if (!applied(data)) return { success: false, error: 'Row not found or not editable' };
   return { success: true };
 }
 
@@ -412,9 +416,7 @@ export async function deleteCoLineRow(id: string): Promise<Result> {
     .select('id');
 
   if (error) return { success: false, error: error.message };
-  if (!data || data.length === 0) {
-    return { success: false, error: 'Row not found or not editable' };
-  }
+  if (!applied(data)) return { success: false, error: 'Row not found or not editable' };
   return { success: true };
 }
 

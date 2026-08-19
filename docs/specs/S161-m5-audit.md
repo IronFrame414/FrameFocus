@@ -30,6 +30,90 @@ conclusion rather than its numbers.
 
 ---
 
+## §0a — Outcomes [S163]
+
+Every finding below is left as written. This section records what happened to each.
+
+| # | Severity | Outcome at S163 | Where |
+| --- | --- | --- | --- |
+| **M5-01** | reachable | ✅ **FIXED** — `co_signing_sessions` narrowed to Owner/Admin | `20261011000000` · `s163` C1–C3 |
+| **M5-02** | reachable | ✅ **FIXED** — the reopen rule and the punch gate joined `enforce_projects_column_scope` | `20261013000000` · `s163` E1–E5 |
+| **M5-03** | reachable | ✅ **FIXED** — 25 of 25 writers on `applied()`/`DISCARDED`, revive branch first | `s163` G1–G3 |
+| **M5-04** | reachable | ✅ **FIXED, WRITES ONLY** — SELECT left open deliberately; see below | `20261014000000` · `s163` F1–F4 |
+| **M5-05** | reachable | ⛔ **WITHDRAWN — THE FINDING WAS WRONG** | see below |
+| **M5-06** | latent | ⏸ not in the approved set | — |
+| **M5-07** | efficiency | 🔬 **INVESTIGATED, NOT BUILT — and it corrects this document's own number** | `S163-can-view-project-mechanism.md` |
+| **M5-08 … M5-11** | efficiency / latent | ⏸ not in the approved set | — |
+| **M5-12** | drift | partially corrected — see below | — |
+
+### ⛔ M5-05 IS WITHDRAWN. THE FINDING CONTRADICTED A DELIBERATE, GUARDED DESIGN.
+
+M5-05 below reports that a subcontractor can create a `punch_lists` row it can never read, and
+proposes flooring the INSERT. **The S163 sweep found the opposite already written down, twice, and
+written down on purpose:**
+
+- **`test/s114-subcontractor-surfaces.live.ts` A-59** — *"a subcontractor creates punch lists and
+  items, and completes them"* — whose header says S133 *"did not touch INSERT, and **this is the
+  criterion that would catch someone 'finishing' the narrowing by flooring INSERT too**."*
+- **`lib/services/punch-client.ts:70`** — `createPunchList()` generates the id **client-side** and
+  does not read back, precisely because the author cannot SELECT the row. That is the `deliveries`
+  offline pattern, applied deliberately.
+
+**So "write without read" is the shipped design here**: a sub owns their ITEMS and never the
+container. Applying the ruling would have broken a criterion written to stop exactly that change.
+**The migration was written, then deleted before it was applied.**
+
+> **What this pass got wrong, and it is the pass's own rule:** S161 did not sweep A-59 before filing
+> M5-05. CLAUDE.md requires a **fix** session to sweep for tests encoding the behaviour it
+> overturns; this is the same failure one step earlier — **an AUDIT session should sweep before
+> filing, not only a fix session before shipping.** The finding looked like a defect because the
+> policy pair reads like one in isolation.
+>
+> **Open for a ruling:** whether the design is right. A sub creating a record they cannot see or
+> correct is defensible as "items are yours, lists are the company's" and is odd on its face. That
+> is a product question, and nothing in this session decides it.
+
+### ⚠️ M5-04 is fixed on the WRITE side only, and the read is an open ruling
+
+The finding proposed all three policies and flagged the question. **The ruling approved the finding
+without answering it.** `app/dashboard/schedule/company-calendar.tsx` is a company-wide board, and
+`getScheduleEntries()` takes an optional `projectId` it does not pass — **narrowing SELECT would
+break a shipped screen.** So INSERT and UPDATE are scoped and SELECT is untouched.
+
+**Needs a ruling:** should a foreman or PM see schedule entries for projects they are not assigned
+to? Today they do, by design of that screen.
+
+### ⚠️ M5-07's headline in this document is WRONG, and S163 corrects it
+
+§M5-07 below reports **148×** — `can_view_project()` at 660 µs/row against 4.4 µs inlined.
+**The 4.4 µs is an artefact.** `EXPLAIN (ANALYZE, VERBOSE)` shows the planner collapsed the inlined
+`EXISTS` into a hashed subplan running `loops=1` — one evaluation amortised over 10,000 rows — and
+**a real policy cannot use that collapse, because its argument varies per row.**
+
+Corrected, with everything varying per row: **566 µs/row as a function against 27.9 µs/row inlined
+— ~20×.** The finding survives; the reward for the remedy is an order of magnitude smaller than
+this document claims. Full working: `S163-can-view-project-mechanism.md`.
+
+### M5-12 drift, corrected
+
+- **(a)** the stale *"no path out of `complete`"* claim: confirmed stale, and the reopen path now
+  has a database rule behind it (M5-02).
+- **(b)/(c)** `SYSTEM-AUDIT.md` §1.1's `companies` column count and policy census: recorded in that
+  file's §3 at S162 and left for M1's next pass, which owns that row.
+
+### ⚠️ And one premise in the S163 brief was wrong: there are ZERO invalid projects
+
+The brief instructed that *"the 3 projects already in an invalid state are LEFT ALONE"* and asked for
+them to be listed. **There are none.** The phrase traces to M5-02's own wording below — *"Three
+projects are in that state right now and are PM-writable"* — which meant three projects had OPEN
+PUNCH ITEMS and were therefore TARGETS for the bypass, not three already-wrong records.
+
+Measured after the migration: **one `complete` project (PRJ-100), with zero blocking punch items —
+legitimately complete.** Four `active` projects carry open punch items, which is a normal state and
+simply means they cannot be completed until those items close. **Nothing needs manual correction.**
+
+---
+
 ## §1 — Findings, most severe first
 
 Severity is **reachable today** (a normal role can do it now, with the shipped API), **latent**

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { RotateCw } from 'lucide-react';
 import { color, font } from '@/lib/theme';
 import type { ChatMessageWithPhotos } from '@/lib/chat/photos';
@@ -76,7 +76,10 @@ export function ChatThreadView({
   // Older pages live beside the live list rather than inside it: the poll's
   // watermark is built from the END of `messages`, and prepending history to
   // that array would leave the watermark correct only by luck.
-  const all = [...older, ...messages];
+  // `useMemo` [S163] — this array is `loadOlder`'s first dependency, and a fresh
+  // array every render made that callback change every render too. Memoising it
+  // is what lets `loadOlder` list its real inputs, `projectId` included.
+  const all = useMemo(() => [...older, ...messages], [older, messages]);
 
   // §7.2 — scrolled to bottom on open, and kept there as messages arrive.
   useEffect(() => {
@@ -115,7 +118,14 @@ export function ChatThreadView({
     } finally {
       setLoadingOlder(false);
     }
-  }, [all, thread, loadingOlder, surface, pageSize, setHasOlder]);
+    // ⚠️ `projectId` ADDED [S163]. It is used in the URL four lines above and
+    // was NOT in this list, so a mounted thread whose project changed kept
+    // paging the OLD project — the one exhaustive-deps warning in this repo
+    // that could actually show a user the wrong data rather than merely stale
+    // data. The chat panel mounts once for the whole dashboard (ND-33) and its
+    // project switcher changes `projectId` in place, so the stale-closure case
+    // is the normal one here, not the exotic one.
+  }, [all, thread, loadingOlder, surface, pageSize, setHasOlder, projectId]);
 
   if (status === 'loading' || status === 'idle') {
     return <Centered>Opening…</Centered>;

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase-browser';
 
@@ -23,7 +23,9 @@ interface InvitationDetails {
 export default function AcceptInviteContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const supabase = createClient();
+  // Memoised so `lookupInvitation` can list it — see the note in
+  // `team-page-client.tsx`: `createBrowserClient` returns a new object each call.
+  const supabase = useMemo(() => createClient(), []);
   const token = searchParams.get('token');
 
   const [invitation, setInvitation] = useState<InvitationDetails | null>(null);
@@ -36,15 +38,6 @@ export default function AcceptInviteContent() {
   const [lastName, setLastName] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-
-  useEffect(() => {
-    if (!token) {
-      setError('No invitation token provided.');
-      setLoading(false);
-      return;
-    }
-    lookupInvitation();
-  }, [token]);
 
   /**
    * D1 [S135] — WHY, not just "no".
@@ -77,12 +70,13 @@ export default function AcceptInviteContent() {
     }
   }
 
-  async function reasonFor(): Promise<string> {
+  // `useCallback` so `lookupInvitation` can list it [S163]. Same two inputs.
+  const reasonFor = useCallback(async (): Promise<string> => {
     const { data } = await supabase.rpc('get_invitation_status', { invite_token: token });
     return typeof data === 'string' ? data : 'unknown';
-  }
+  }, [supabase, token]);
 
-  async function lookupInvitation() {
+  const lookupInvitation = useCallback(async () => {
     try {
       const { data, error: rpcError } = await supabase.rpc('get_invitation_by_token', {
         invite_token: token,
@@ -101,7 +95,22 @@ export default function AcceptInviteContent() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [supabase, token, reasonFor]);
+
+  useEffect(() => {
+    if (!token) {
+      setError('No invitation token provided.');
+      setLoading(false);
+      return;
+    }
+    void lookupInvitation();
+    // ⚠️ `lookupInvitation` NOW LISTED [S163]. It was omitted while `token` was
+    // listed, which happened to be correct — the token is the only input the
+    // lookup has — but it was correct BY COINCIDENCE. Adding a second input to
+    // the function would have made this effect silently stale, and the RPC it
+    // calls decides whether somebody may create an account.
+  }, [token, lookupInvitation]);
+
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

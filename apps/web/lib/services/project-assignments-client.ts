@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase-browser';
 import type { ProjectAssignment } from '@/lib/services/project-assignments';
+import { applied, DISCARDED } from '@/lib/services/mutation-result';
 export type { ProjectAssignment };
 
 /**
@@ -57,12 +58,14 @@ export async function unassignMember(
 
   // Soft delete per trash-bin pattern; the UNIQUE (project_id, member_id)
   // constraint means re-assignment restores by un-deleting instead.
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('project_assignments')
     .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-    .eq('id', assignmentId);
+    .eq('id', assignmentId)
+    .select('id');
 
   if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 
