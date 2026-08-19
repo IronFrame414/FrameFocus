@@ -296,6 +296,14 @@ anywhere near them.
 as `change_order_line_items_select_visible` already does; that is a no-op today and a precondition
 for any M5-07 work.
 
+> **✅ CLOSED [S163].** `20261010000000_m6_04_safety_child_containment.sql` landed **first in the
+> session and first in the migration order**, restating the parent's predicate verbatim inside both
+> child policies. Verified a no-op: the owner still reads both injury rows and no child row is
+> readable for an incident its reader cannot see (`s163-m5-m6-fixes.live.ts` A2/A3).
+> **The M5-07 investigation was written only after it applied.** The coupling itself does not go
+> away — any future change to how these helpers are evaluated must still be checked against every
+> policy leaning on an implicit filter — but this pair no longer leans on one.
+
 
 ---
 
@@ -404,6 +412,48 @@ for any M5-07 work.
 > pass's finding.** State both readings, which evidence each rests on, and which is believed
 > correct. The repo's convention is that superseded text is quoted rather than deleted, and that
 > applies across passes as much as within a document.
+
+**[S163] — ⚠️ A FIX SESSION CORRECTING THE PASS THAT PRECEDED IT, ON ITS OWN HEADLINE NUMBER.**
+
+S161 (below) reported `can_view_project()` at **148×** the inlined predicate and S163 was sent to
+explain the mechanism before anything was inlined. **The mechanism turned out to be that the
+measurement was wrong.**
+
+`EXPLAIN (ANALYZE, VERBOSE)` on S161's inlined form shows the planner rewrote the correlated
+`EXISTS` into a **hashed SubPlan running `loops=1`** — one evaluation for the whole query. The
+"4.4 µs per row" was that single evaluation amortised over 10,000 rows. **A real RLS policy cannot
+use that collapse, because `can_view_project(project_id)` takes a row-varying argument.**
+
+Re-measured with everything varying per row: **566 µs/row as a function against 27.9 µs/row fully
+inlined — ~20×, not 148×.** The finding survives and the helper is genuinely expensive; the reward
+for editing 68 policies across 32 tables is an order of magnitude smaller than the document
+proposing it claimed.
+
+> **Three passes in a row have now produced a confident conclusion from a correct measurement.**
+> S152: *"row-varying, therefore unavoidable"* — wrong about the remedy. S161: *"148×, inlining
+> recovers 99.3%"* — wrong about the size. S163 corrects the second and is itself explicit about
+> what it has **not** established: why one nested user-function call costs +185 µs and not +16 is
+> unexplained, and the distinguishing experiment needs a new function, which is a migration.
+> **The pattern is not carelessness; it is that this helper defeats measurement in a new way each
+> time.** Check `loops=` in the plan before believing any per-row figure about it.
+
+---
+
+**[S163] — A FINDING WITHDRAWN: M5-05 CONTRADICTED A DELIBERATE DESIGN.**
+
+S161's M5-05 reported that a subcontractor can create a `punch_lists` row it can never read, and the
+ruling approved flooring the INSERT. **The fix session's sweep found the opposite already written
+down, twice, on purpose** — `s114-subcontractor-surfaces.live.ts` A-59, whose header names *"someone
+'finishing' the narrowing by flooring INSERT too"* as the thing it exists to catch, and
+`createPunchList()`, which generates the id client-side specifically because the author cannot
+SELECT the row. The migration was written and deleted before it applied.
+
+> **The rule this extends.** CLAUDE.md requires a **fix** session to sweep for tests encoding the
+> behaviour it overturns. This is the same failure one step earlier: **an AUDIT session should sweep
+> before FILING, not only a fix session before shipping.** A policy pair that reads like a defect in
+> isolation may be a decision recorded somewhere else.
+
+---
 
 **[S161] — ⚠️ PASS 5 REVISING PASS 1's CONCLUSION ABOUT `can_view_project()`. The numbers stand;
 the inference does not.**
@@ -1000,3 +1050,69 @@ The printed line was read.
 - **A measurement can be constant-folded away.** S161's first helper measurement used a literal
   argument and reported the visibility predicate as free. Varying the argument per row is what
   produced the 148× figure.
+
+---
+
+### S163 — the M5 and M6 fix pass. Verified 2026-08-19.
+
+> **A fix pass is not a pass** (§4) — it fills no row or column in §2. It closes S161's and S162's
+> findings and records what changed.
+
+| # | Check | Result |
+| --- | --- | --- |
+| 1 | `npx turbo run type-check` | **exit 0** |
+| 2 | `next lint` | **exit 0 — "No ESLint warnings or errors".** Was 16 warnings |
+| 3 | `npm run build --force` | **exit 0**, `Compiled successfully`, **zero `FULL TURBO`** in the log |
+| 4 | Committed vitest suite | **866/866**, 58 files |
+| 5 | Every live harness (`test/*.live.ts`, 82 files) | **989/989, 0 failed, 0 skipped** |
+| 6 | Playwright, four chunks from `apps/web` | **517 passed, 9 skipped, 0 failed** |
+| 7 | `npx supabase migration list` (repo root) | **122 files = 122 local = 122 applied**, zero mismatches. **6 added** |
+| 8 | Fixture leakage | **companies 2 → 2 · projects 9 → 9 · project_assignments 26 → 26**, zero probe rows, zero soft-deleted assignments left behind |
+
+**`s123-cron-loops` §3h is green in a full run.** It failed on one of two full runs at S161/S162 and
+was filed flaky; the positives now use the same id-diffing pair as the negatives and the
+`rowsOfType(type, since)` helper is **deleted** so it cannot be reached for again.
+
+#### Six migrations, in the order the sequencing required
+
+| # | Migration | What |
+| --- | --- | --- |
+| 1 | `20261010000000` | **M6-04 — first, and it gates M5-07.** Containment made explicit. No-op |
+| 2 | `20261011000000` | M5-01 — `co_signing_sessions` to Owner/Admin |
+| 3 | `20261012000000` | M6-02 — three append-only logs to system-write-only |
+| 4 | `20261013000000` | M5-02 — `status` joins `enforce_projects_column_scope` |
+| 5 | `20261014000000` | M5-04 — schedule WRITES project-scoped |
+| 6 | `20261015000000` | M6-03 — the injured person's name floored, on the children |
+
+#### Three premises in the brief that did not survive contact, all reported rather than worked around
+
+1. **M6-02's *"written by the system, never by users"* was true for two of three.** `ai_tag_logs` was
+   written through the **caller's** session; dropping its policy alone would have silently stopped
+   the AI cost log, because the insert discarded its result. `ai-tagging.ts` moved to the service
+   role in the same commit.
+2. **M5-05's finding was wrong** — see §3 above. Not applied.
+3. **"The 3 projects already in an invalid state" — there are none.** The phrase traces to S161's
+   own wording; three projects had *open punch items* and were therefore *targets* for the bypass,
+   not three already-wrong records. One `complete` project, zero blocking items.
+
+#### Two open rulings this session deliberately did not decide
+
+- **M5-04's SELECT.** Writes are scoped; the company-wide read is untouched because
+  `company-calendar.tsx` depends on it. Should a foreman or PM see schedule entries for projects
+  they are not on?
+- **M5-05's design.** Should a subcontractor be able to create a record they can never see or
+  correct? The current answer is a decision, not an accident — but it is odd on its face.
+
+#### Method notes
+
+- **A "no-op" migration must be proved to be one.** M6-04's verification is that the owner's access
+  is *unchanged*, not that the policy parses.
+- **The trigger-still-fires assertion is the one that would have caught a silent break.** Dropping an
+  INSERT policy relies on `SECURITY DEFINER` + owner + `relforcerowsecurity = false`. All three were
+  checked before the drop, and `s163` D3 pins the outcome.
+- **A service-role write is not a superuser write.** Restoring a segment note in teardown was refused
+  by a 6A *trigger*, which sees `auth.uid() IS NULL` and denies. RLS is bypassed by the service key;
+  triggers are not.
+- **A tooling failure can read as a pass.** The first `.eslintrc` rewrite used an unsupported key,
+  ESLint exited with a config error, and a `grep -c Warning` returned 0 — a false green produced by
+  the tool not running. Read the exit line and the output, never the count alone.
