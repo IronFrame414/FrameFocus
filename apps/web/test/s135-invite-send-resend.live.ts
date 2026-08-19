@@ -169,10 +169,19 @@ describe('D4 — the link is retrievable, and resend resets the clock', () => {
     );
   });
 
-  it('⚠️ resetting expires_at REVIVES an expired invitation — the token is reused', async () => {
+  it('⚠️ resetting expires_at REVIVES an expired STAFF invitation — the token is reused', async () => {
     // The D4 requirement in one assertion: a resend that hands back an expired
     // link solves nothing. Driven through get_invitation_status() because that
     // is what the accept screen and the D1 trigger both consult.
+    //
+    // ⚠️ TITLE QUALIFIED AT S164, and the fixture is why it still passes:
+    // `makeInvitation()` uses `role: 'crew_member'`. For a **client**
+    // invitation this is NO LONGER TRUE — M9's R2 rules that there is "no
+    // separate invite-expiry clock", so `get_invitation_status()` ignores
+    // `expires_at` entirely and reads the project's 45-day window instead.
+    // Resetting `expires_at` on a client invite revives nothing.
+    // See `20261017000000_m9_client_lifecycle.sql` §1 and
+    // `s164-m9-client-lifecycle.live.ts` group E, which asserts both halves.
     const past = new Date(Date.now() - 86_400_000).toISOString();
     const id = await makeInvitation(`josh+s135-revive-${stamp}@worthprop.com`, past);
 

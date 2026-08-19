@@ -808,6 +808,154 @@ for (const email of [CLIENT_LINKED_EMAIL, CLIENT_EMAIL]) {
 }
 note('M9 addresses', 'exists', `site=${siteAddressId} home=${homeAddressId} (home must never be readable)`);
 
+// ── M9 stage 2 [S164] — THE LIFECYCLE FIXTURES ──────────────────────────────
+//
+// R5 is an ACCOUNT-level rule and the obvious per-project reading of it is
+// wrong, so the fixtures have to be able to tell the two apart:
+//
+//   > Login deactivates 45 days after completion ... On reactivation she sees
+//   > old projects IN FULL — nothing narrows with age. No standing archive
+//   > access without an active project.
+//
+// One long-completed project, shared by two clients, proves both halves:
+//
+//   LINKED client  — also has ACTIVE projects -> account live -> she SEES the
+//                    old one. ("nothing narrows with age")
+//   CLOSED client  — has nothing else         -> account dark -> she sees
+//                    NOTHING. ("no standing archive access")
+//
+// ⚠️ Same query, same project, opposite answers, and the ONLY difference is
+// what else the account holds. A per-project implementation of the window
+// passes the second and fails the first — which is why the old project is
+// deliberately shared rather than given to the closed client alone.
+console.log('\nM9 stage 2 — lifecycle fixtures:');
+
+const CLIENT_CLOSED_EMAIL = 'josh+qa-client-closed@worthprop.com';
+
+const closedContactId = await ensureRow(
+  'contact for the closed-window client', 'contacts',
+  { company_id: companyA.id, last_name: 'ClientClosed' },
+  {
+    company_id: companyA.id, contact_type: 'client',
+    first_name: 'QA', last_name: 'ClientClosed',
+    email: 'qa-client-closed@example.invalid',
+  }
+);
+
+// A contact with NO email — the §S.1 refusal has nothing to refuse without it.
+const noEmailContactId = await ensureRow(
+  'contact with NO email (§S.1 refusal fixture)', 'contacts',
+  { company_id: companyA.id, last_name: 'ClientNoEmail' },
+  {
+    company_id: companyA.id, contact_type: 'client',
+    first_name: 'QA', last_name: 'ClientNoEmail',
+    email: null,
+  }
+);
+
+// The completed project. 200 days past its end date, so it is far outside the
+// 45-day window under any reading and no test depends on today's date.
+const CLOSED_PROJECT_NAME = 'QA A — M9 completed 200d';
+let closedProjectId;
+{
+  const { data: found } = await db
+    .from('projects').select('id')
+    .eq('company_id', companyA.id).eq('name', CLOSED_PROJECT_NAME).maybeSingle();
+  if (found) {
+    closedProjectId = found.id;
+    note('closed-window project', 'exists', found.id);
+  } else {
+    const { data: counters } = await db
+      .from('companies')
+      .select('estimate_number_sequence, project_internal_sequence')
+      .eq('id', companyA.id).single();
+    const seq = counters.estimate_number_sequence + 1;
+    const internal = counters.project_internal_sequence + 1;
+    const { data, error } = await db
+      .from('projects')
+      .insert({
+        company_id: companyA.id, name: CLOSED_PROJECT_NAME, contact_id: closedContactId,
+        project_type: 'fixed_price', retainage_percent: 5,
+        project_number: `PRJ-${String(seq).padStart(3, '0')}`,
+        project_internal_seq: internal,
+        status: 'complete',
+      })
+      .select('id').single();
+    must('closed-window project', error);
+    closedProjectId = data.id;
+    must('counters after closed project', (await db.from('companies').update({
+      estimate_number_sequence: seq, project_internal_sequence: internal,
+    }).eq('id', companyA.id)).error);
+    note('closed-window project', 'CREATED', data.id);
+  }
+}
+
+// The end date is re-asserted every run rather than only on creation: it is
+// RELATIVE to today, and a fixture written once would drift back inside the
+// window as time passed and quietly stop testing anything.
+{
+  const twoHundredDaysAgo = new Date(Date.now() - 200 * 86400000).toISOString().slice(0, 10);
+  const { data: cur } = await db
+    .from('projects').select('actual_end_date, status').eq('id', closedProjectId).single();
+  if (cur.actual_end_date !== twoHundredDaysAgo || cur.status !== 'complete') {
+    must('closed project end date', (await db.from('projects')
+      .update({ status: 'complete', actual_end_date: twoHundredDaysAgo })
+      .eq('id', closedProjectId)).error);
+    note('closed project end date', 'SET', `${twoHundredDaysAgo} (200 days ago, status=complete)`);
+  } else {
+    note('closed project end date', 'exists', twoHundredDaysAgo);
+  }
+}
+
+// The LINKED client is on the old project too — this is the "sees old projects
+// in full" half, and without this row that half is untested.
+await ensureRow(
+  'linked client → closed project (R5: old projects in full)', 'project_contacts',
+  { project_id: closedProjectId, contact_id: fixtureContact.id },
+  {
+    company_id: companyA.id, project_id: closedProjectId,
+    contact_id: fixtureContact.id, role: 'client',
+  }
+);
+
+const closedClientProfile = await ensureIdentity(
+  { email: CLIENT_CLOSED_EMAIL, role: 'client', first: 'QA', last: 'Client Closed' },
+  companyA.id
+);
+{
+  const { error: linkErr } = await db
+    .from('profiles')
+    .update({ contact_id: closedContactId })
+    .eq('id', closedClientProfile.id)
+    .is('contact_id', null);
+  must('link closed client → contact', linkErr);
+  note('closed client ↔ contact link', 'ok', `${closedClientProfile.id} -> ${closedContactId}`);
+}
+
+// Same invariant as the other two clients — no member row, ever.
+{
+  const { data: strays, error: sErr } = await db
+    .from('company_members').delete().eq('profile_id', closedClientProfile.id).select('id');
+  must(`clear member rows(${CLIENT_CLOSED_EMAIL})`, sErr);
+  note(
+    `client has no member row — ${CLIENT_CLOSED_EMAIL}`,
+    strays.length ? 'REPAIRED' : 'exists',
+    strays.length ? `deleted ${strays.length}` : 'none, as required'
+  );
+}
+
+// Every client starts 'active'; R17 tests set and restore it themselves. If a
+// previous run died mid-test, this puts them back.
+for (const email of [CLIENT_LINKED_EMAIL, CLIENT_EMAIL, CLIENT_CLOSED_EMAIL]) {
+  const { data: restored } = await db
+    .from('profiles').update({ client_access_state: 'active' })
+    .eq('email', email).neq('client_access_state', 'active').select('id');
+  if (restored?.length) note(`client_access_state ${email}`, 'REPAIRED', 'reset to active');
+}
+
+note('M9 lifecycle fixtures', 'exists',
+  `closedProject=${closedProjectId} closedContact=${closedContactId} noEmailContact=${noEmailContactId}`);
+
 // ── D-57 / D-58 punch fixtures — the three items the proof needs ────────────
 //
 // Permanent and idempotent so the migration proof is REPRODUCIBLE by anyone,

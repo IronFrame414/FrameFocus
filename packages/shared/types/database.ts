@@ -618,6 +618,54 @@ export type Database = {
           },
         ]
       }
+      client_access_events: {
+        Row: {
+          actor_id: string | null
+          company_id: string
+          created_at: string | null
+          from_state: string
+          id: string
+          profile_id: string
+          reason: string | null
+          to_state: string
+        }
+        Insert: {
+          actor_id?: string | null
+          company_id?: string
+          created_at?: string | null
+          from_state: string
+          id?: string
+          profile_id: string
+          reason?: string | null
+          to_state: string
+        }
+        Update: {
+          actor_id?: string | null
+          company_id?: string
+          created_at?: string | null
+          from_state?: string
+          id?: string
+          profile_id?: string
+          reason?: string | null
+          to_state?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_access_events_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_access_events_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_contracts: {
         Row: {
           company_id: string
@@ -3996,6 +4044,7 @@ export type Database = {
       invitations: {
         Row: {
           company_id: string
+          contact_id: string | null
           created_at: string | null
           created_by: string | null
           deleted_at: string | null
@@ -4005,6 +4054,7 @@ export type Database = {
           invited_by: string
           is_deleted: boolean | null
           member_id: string | null
+          project_id: string | null
           role: string
           status: string
           token: string
@@ -4013,6 +4063,7 @@ export type Database = {
         }
         Insert: {
           company_id: string
+          contact_id?: string | null
           created_at?: string | null
           created_by?: string | null
           deleted_at?: string | null
@@ -4022,6 +4073,7 @@ export type Database = {
           invited_by: string
           is_deleted?: boolean | null
           member_id?: string | null
+          project_id?: string | null
           role: string
           status?: string
           token?: string
@@ -4030,6 +4082,7 @@ export type Database = {
         }
         Update: {
           company_id?: string
+          contact_id?: string | null
           created_at?: string | null
           created_by?: string | null
           deleted_at?: string | null
@@ -4039,6 +4092,7 @@ export type Database = {
           invited_by?: string
           is_deleted?: boolean | null
           member_id?: string | null
+          project_id?: string | null
           role?: string
           status?: string
           token?: string
@@ -4054,10 +4108,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "invitations_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "invitations_member_id_fkey"
             columns: ["member_id"]
             isOneToOne: false
             referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invitations_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
         ]
@@ -5052,6 +5120,7 @@ export type Database = {
       profiles: {
         Row: {
           avatar_url: string | null
+          client_access_state: string
           company_id: string
           contact_id: string | null
           created_at: string | null
@@ -5071,6 +5140,7 @@ export type Database = {
         }
         Insert: {
           avatar_url?: string | null
+          client_access_state?: string
           company_id: string
           contact_id?: string | null
           created_at?: string | null
@@ -5090,6 +5160,7 @@ export type Database = {
         }
         Update: {
           avatar_url?: string | null
+          client_access_state?: string
           company_id?: string
           contact_id?: string | null
           created_at?: string | null
@@ -7830,6 +7901,10 @@ export type Database = {
           unread_count: number
         }[]
       }
+      client_window_open: {
+        Args: { p_actual_end: string; p_status: string }
+        Returns: boolean
+      }
       clone_estimate: {
         Args: {
           p_contact_address_id: string
@@ -7907,6 +7982,7 @@ export type Database = {
         Args: { invite_token: string }
         Returns: {
           company_id: string
+          contact_id: string
           id: string
           member_id: string
           role: string
@@ -7952,6 +8028,7 @@ export type Database = {
       is_project_creator: { Args: { p_project_id: string }; Returns: boolean }
       member_profile_role: { Args: { p_member_id: string }; Returns: string }
       my_assigned_site_address_ids: { Args: never; Returns: string[] }
+      my_client_access_level: { Args: never; Returns: string }
       my_client_site_address_ids: { Args: never; Returns: string[] }
       next_co_number: { Args: { p_project_id: string }; Returns: string }
       next_estimate_number: { Args: never; Returns: string }
