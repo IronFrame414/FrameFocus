@@ -27,6 +27,73 @@ and one compare-and-swap does not read its own result.
 
 ---
 
+## §0a — STATUS AFTER S157 — every finding closed out
+
+> **This audit was written findings-only. S157 is the fix pass.** **Original text is left intact
+> below**, per the `53c7353` lesson: close a record, never delete it.
+
+| # | S156 severity | S157 outcome | Commit |
+| --- | --- | --- | --- |
+| **M4-01** | REACHABLE | ✅ **FIXED, and the sweep found four more** — zero bare `sendEmail` sites remain | `961437a` |
+| **M4-02** | REACHABLE | ✅ **FIXED** — the CAS is read; the loser is told success and stops | `961437a` |
+| **M4-03** | LATENT | ✅ **FIXED WITH IT** — all **four** CAS sites, not one | `961437a` |
+| **M4-04** | LATENT | ✅ **DONE** — six writers import the shared guard, and four error strings corrected | `3a05fa4` |
+| **M4-05** | REACHABLE | ✅ **FIXED** — `s150` given a teardown, and the residue itself cleared | `3eab640` |
+
+### §0b — the M4-01 sweep, in full
+
+The finding existed because S150 fixed one file when the pattern spanned several, so the fix pass
+checked **all fourteen** `sendEmail` call sites. **Five were bare. All five are wrapped.**
+
+| Site | Mints a token? | Was |
+| --- | --- | --- |
+| `api/proposals/resend/route.ts` | **YES** | the finding |
+| `lib/services/signing-service.ts` `notifyManagers` | no | bare, **inside a loop** |
+| `lib/services/co-signing-service.ts` `notifyCoSigned` | no | bare, **inside a loop** |
+| `lib/services/co-signing-service.ts` `notifyCoDeclined` | no | bare, **inside a loop** |
+| `api/cron/co-reminders/route.ts` | no | bare, **inside a loop** |
+
+**Why the four notification sites were fixed without waiting for the ruling the audit asked for.**
+The audit was right that "should a failed notification fail the operation that triggered it" needs
+a decision — **and these functions had already made it.** Each returns `void` and each already has a
+`logEmail` call with a `status: 'failed'` + `metadata.error` branch for a **returned** error. Only a
+**throw** bypassed that branch, aborting the loop partway so some recipients were notified, some
+were not, and **no record existed of which** — because the per-recipient `logEmail` never ran for
+the rest. Folding the throw into the same `error` variable makes the code do what it was written to
+do. **It does not decide the deeper question**, which stays open: if Josh wants a failed
+notification to fail the signature, that is a separate change and a real ruling.
+
+### §0c — M4-02/03: what the loser is told
+
+`.select('id')` on all four compare-and-swaps, through `applied()`. **The loser returns
+`{ success: true }`**, deliberately — the client *did* sign, and `DISCARDED` would be a different
+lie. What it must not do is re-point the estimate at its own PDF or send a duplicate notification,
+so it returns before both.
+
+All four together — `completeSignature`, `declineEstimate`, `completeCoSignature`, `declineCo` —
+because M4-03 was filed precisely so the fix would not be applied to one function and called done.
+
+> **⚠️ Still [UNVERIFIED], and stated rather than implied.** The audit did not execute two
+> concurrent completions end to end, and **neither did the fix pass.** What is proven live is the
+> database half: `s157-m3-m4-fixes.live.ts` **D1** shows the winning CAS returning its row and **D2**
+> shows the losing one returning **zero rows and no error** — exactly what the second request sees
+> and exactly what the code used to discard. The service now reads that result. The full two-request
+> race remains untested.
+
+### §0d — M4-04 corrected an error-message rule as well
+
+The six writers were already correct, so this was hygiene. But **four of them answered a zero-row
+write with `'Estimate not found'`** — naming a cause nobody verified, since an empty result cannot
+tell "the policy refused you" from "the row is gone". `DISCARDED` says both. The remaining
+`'Estimate not found'` strings in that file are untouched **on purpose**: they guard a FETCH that
+really did come back empty, where the cause *is* verified.
+
+`s156-m4-audit.live.ts` **F4c** — the structural guard that goes red if a new writer skips the row
+count — was **widened, not inverted**: it now recognises `applied(` alongside the hand-rolled
+spelling, and lists it first as the form new code should use.
+
+---
+
 ## §1 — Findings, most severe first
 
 ---

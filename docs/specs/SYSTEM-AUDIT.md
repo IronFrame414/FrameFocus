@@ -431,3 +431,35 @@ invert the probes it wrote.
 in PDF templates (`co-template.tsx`, `invoice-template.tsx`, `proposal-template.tsx`) and auth
 screens, plus one `react-hooks/exhaustive-deps` in `chat-thread.tsx`. **None is in a file this
 branch touches** — the branch adds only `test/` and `docs/`.
+
+---
+
+### S157 — the fix pass. **ALL 11 REDS CLEARED**, and none of them was the product.
+
+> **Recorded here rather than in a new section, because §5's job is the red-harness ledger and the
+> ledger is now empty.** Every one of the 11 was a defect in a TEST or in fixture residue.
+
+| Harness | Was | Cause, and what it teaches |
+| --- | --- | --- |
+| `s121-contact-addresses-floor` | 1 | ⚠️ **A test asserting the OPPOSITE of a shipped ruling, while passing.** S154 floored the SELECT this file's describe block was titled to protect. Only the `subcontractor` case reddened, so the file read as healthy. **Inverted.** This is why `CLAUDE.md` now carries the sweep rule. |
+| `s138-trial-deletion-run` | 7 | **One cause, not seven.** `nuke()` deleted `trial_emails` INSIDE a loop over auth users — but this file's whole point is that `runTrialDeletion` DELETES THE AUTH USER, and succeeds. So a PASSING run left a row; three passes left three; the fourth got no `trial_lifecycle` row (the signup trigger only creates one below three prior trials) and the safety gate read `[]`. A FAILING run cleaned up, making it a **self-resetting four-run cycle — three passes per failure**, which is why it was never explained. **The cleanup depended on a handle the run destroys** — the same trap this file's own `MARKERS` comment already documents for companies. Proven fixed by three consecutive 9/9 runs leaving zero rows. |
+| `s140-lien-releases` | 1 | The test **forbade a supported action**: "NONE of them carries a PDF" went red when a PDF was uploaded to a default template, which is the feature (`7f2` §2). Rewritten to the real invariant — `seed_lien_release_templates()` never sets `pdf_file_id`, so any PDF present must be a real upload owned by this company. That also catches a dangling FK and a cross-tenant file, which the old loop could not. |
+| `s145-contracts` | 2 | **One wrong test, one state-inheriting test.** (a) an `initial` box insert expected success and got CHECK `23514` — **the schema is right**: `payload_check` requires `party IS NOT NULL` for signature/initial boxes, and the test was written from `7I` §10.2's sketch, which predates the column. Fixed, plus the missing negative case. (b) "defaults it OFF" asserted a **column default by reading a row**; the default really is `false NOT NULL`, and it could not self-heal because `s146` restores the PRIOR value — once left on, restored on forever. |
+
+**Fixture residue cleared on rebuild-test, all to schema defaults:** `EST-100.include_client_contract`
+(M4-05, and `s150-e1-contract-decoupling` had **no teardown at all** — given one),
+`Bishop Contracting.client_contracts_enabled`, and **7 leaked `s152` `trial_emails` rows** found
+while diagnosing `s138` — those inflate every trial count and are the same mechanism that broke it.
+Company count unchanged at 2.
+
+**The generalisable lesson, which is now `CLAUDE.md`'s sweep rule.** Three of the four causes are the
+same shape: **an assertion that describes the freshly-seeded world and is then tested forever against
+live, shared, mutable data.** If an assertion's name says *default*, *none* or *never*, check that it
+reads the schema and not a row.
+
+**⚠️ And a trap for whoever writes the next storage probe.** The bucket holds **105 objects against
+108 `files` rows** [LIVE, S157], so some rows are dangling — and `createSignedUrl` fails on a
+dangling row with **the same error as a policy refusal** (Storage conflates "you may not" with "it is
+not there", deliberately, as anti-enumeration). Two probes in this session failed that way and read
+as policy denials. **Pair every refusal assertion with a caller who DOES get the bytes**, or use a
+fixture you uploaded yourself.
