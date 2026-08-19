@@ -37,7 +37,7 @@ incidents, punch items, compliance documents, chat photos and AI tag logs.
 
 | # | S155 severity | S157 outcome | Commit |
 | --- | --- | --- | --- |
-| **M3-01** | REACHABLE | ✅ **FIXED, and WIDER than the finding** — storage RLS now delegates to `files` RLS on **SELECT and UPDATE** | `c05ded0` |
+| **M3-01** | REACHABLE | ✅ **FIXED, and WIDER than the finding** — storage RLS now delegates to `files` RLS on **SELECT and UPDATE**. ⚠️ A follow-up was needed for the markup derivative — see §0c | `c05ded0`, `77f43ec` |
 | **M3-02** | REACHABLE | ✅ **FIXED** — both halves row-counted, and a real delete proven to still succeed | `39f8f14` |
 | **M3-03** | REACHABLE | ✅ **FIXED** — all four writers import `applied()`/`DISCARDED`; **fourth module, first to import rather than copy** | `39f8f14` |
 | **M3-04** | LATENT | ✅ **RULED AND APPLIED** — `SIGNED_URL_TTL_SECONDS = 7200`, one home, sweep clean | `39f8f14` |
@@ -104,12 +104,36 @@ nor the storage policy mentions it [LIVE], and `9-spec.md` §S records that the 
 > warns that permissive policies are **OR'd** so a new narrow policy narrows nothing (the S131
 > roster-floor trap); with delegation in place that warning now covers storage too.
 >
-> **Note also the interaction with §6.1's derivative-path finding.** One `files` row can resolve to
-> two images (the original and the flattened markup derivative), and **the derivative has no `files`
-> row of its own**. Under delegation, an `EXISTS` on `file_path` will therefore match the original
-> and **not** the derivative — so a client granted the row would get the original's bytes and be
-> refused the marked-up image M9 says they should see. **Whoever builds M9's file grant must decide
-> how the derivative path is authorised.** Recorded here, not solved.
+> ### ⚠️ AND THE DERIVATIVE PROBLEM WAS NOT HYPOTHETICAL — IT WAS ALREADY BREAKING M6.
+>
+> This section originally read *"whoever builds M9's file grant must decide how the derivative path
+> is authorised — recorded here, not solved."* **Playwright disagreed within the hour.**
+>
+> One `files` row resolves to TWO images — the original and the flattened markup derivative at
+> `{original}.markup.jpg` — and **the derivative has no `files` row of its own**, deliberately
+> (§6.1: a second `category='photos'` row would make every annotated photo appear twice). So the
+> first delegation could not see it, and `m-photos.spec.ts` went from 42 passed to **5 failed**.
+>
+> **The symptom is the one that matters.** A-23f and A-23g did not error — they **fell back to the
+> unannotated original**. A photo annotated on one surface rendering as a plain photo with no
+> indication the markup existed is *exactly* the silent loss `CLAUDE.md`'s PARITY ruling was written
+> about (`#129`). The markup save also failed on the SECOND save, because overwriting an existing
+> derivative object is an UPDATE on storage.
+>
+> **Fixed by `20261008000000_m3_storage_markup_derivatives.sql`:** a caller reaches the derivative
+> exactly when they reach the ORIGINAL it was flattened from. The path is deterministic, so
+> stripping the 11-character suffix yields the original's `file_path` and the check stays an
+> equality lookup on `idx_files_file_path`. **Not a blanket exemption for the suffix** — `A8` proves
+> the derivative of an *invoice* is still refused.
+>
+> **So M9's precondition is now half-met rather than open.** The mechanism exists and is proven; what
+> remains M9's is the *client* arm on `files`, and it inherits the derivative clause for free. Had
+> this not surfaced here, M9 would have granted a client the row and served them the **unannotated**
+> photo — the same silent-loss shape, on the surface where it matters most.
+>
+> **The lesson, recorded because it generalises past this bug:** the audit reasoned correctly to a
+> risk and filed it for a future module, while the same defect was live in a shipped one. **A risk
+> that a future module will hit is worth checking against the modules that already exist.**
 
 ### §0d — the signed-URL sweep Josh asked for, in full
 
