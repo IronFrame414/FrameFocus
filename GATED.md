@@ -40,9 +40,17 @@
 
 **What this gate actually protects, stated positively:**
 
-1. **The Pre-Module 9 product decision** — hosted client portal vs. email plus
+1. ~~**The Pre-Module 9 product decision** — hosted client portal vs. email plus
    magic-link tokenised pages vs. both. This is unresolved and blocks Module 9's
-   shape. See "Pre-Module 9 Decision Gate" in `STATE.md`.
+   shape. See "Pre-Module 9 Decision Gate" in `STATE.md`.~~ **✅ RESOLVED [Josh,
+   S164]. This item no longer blocks anything.** Ruled: **FrameFocus hosts the
+   portal, with accounts** (R1 — long-lived magic links do not revoke, and every
+   hard edge in M9 is a revocation question); **outbound webhooks become Module
+   12**, after M9 rather than before it. `/sign/[token]` and `/sign-co/[token]`
+   continue to ship for every tier and are **not** deprecated — the portal is a
+   second entry to the same write, not a replacement. Full ruling and the quoted
+   original: "Pre-Module 9 Decision Gate" in `STATE.md`. **Items 2 and 3 below are
+   untouched and still in force.**
 2. **Identity and branding on anything a client receives** — sender domain, login
    branding, the RESEND secret actually being deliverable.
 3. **NEW, RECURRING external surfaces** — a surface aimed at a party the platform

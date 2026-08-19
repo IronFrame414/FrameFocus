@@ -101,9 +101,26 @@ worse than no tests, because it reports as covered.
   *Reasoning, Josh's:* it survives a lawyer asking what she had access to.
 - **Departed staff change nothing** (R18). Photos a PM ticked stay ticked; replies stay.
 
-**§S — identity storage.** A client today has a `profiles` row with `role = 'client'` and **no**
-`company_members` row. Whether M9 gives clients member rows, a separate `client_accounts` table, or a
-project-scoped junction is a schema decision to take at build time against the live catalog. It has a
+**§S — identity storage. ✅ RESOLVED [Josh, S164 Q1]: `profiles.contact_id`, nullable + UNIQUE.**
+Client policy arms use the SECURITY DEFINER helpers `get_my_contact_id()`, `is_client_of_project()`
+and `my_client_site_address_ids()`, and **never `can_view_project()`**. Shipped in
+`20261016000000_m9_client_identity.sql`.
+
+> **The member-row option was measured and rejected.** A client holding a `company_members` row plus
+> an assignment satisfies **21 policies across 18 tables** that mention no client rule at all — six
+> of them WRITES, including `punch_lists` INSERT **and UPDATE**, which §5 (R14) rules **NO** for
+> clients. The shape would have granted, as a side effect, write access to the exact surface the
+> requirements withhold.
+>
+> **Two sub-questions ruled with it.** *One person, one contractor* — a client cannot hold accounts
+> with two contractors, so `profiles.company_id NOT NULL` is already correct rather than a constraint
+> to work around. *The authoritative login email is `profiles.email`* — Supabase owns it and password
+> reset keys off it; `contacts.email` stays the **business** record the invite is sent to and **is
+> not a fallback credential**, because two sources of truth for a login is how they drift.
+
+_Superseded text, quoted rather than deleted:_ _"Whether M9 gives clients member rows, a separate
+`client_accounts` table, or a project-scoped junction is a schema decision to take at build time
+against the live catalog."_ It has a
 hard constraint either way: `get_my_member_id()` and `can_view_project()` are used across the whole
 app, and **giving clients member rows would silently change what those two functions return for every
 existing policy that calls them.** Read both bodies live before choosing.
@@ -211,6 +228,24 @@ Two modes per bill:
 
 Either way: **no line-level price and no cost basis.**
 
+> ### The sentence that resolves this class of question — **RULED [Josh, S164 Q3]**
+>
+> > **"The easy way to understand what a client will see is that they see what is on the invoice. In
+> > the portal, they see all of it on one page and totals added."**
+>
+> **The portal shows what the invoice shows.** `invoices.presentation_level` is the single source of
+> truth for detail; the portal aggregates those per-bill decisions and adds totals. It does **not**
+> apply a second, separate visibility model on top.
+>
+> **R7b needs NO new column** — `invoices.presentation_level` already ships with exactly these three
+> values (`CHECK IN ('full_detail','by_section','lump_sum')`), verified live at S164.
+>
+> **And the suppression is enforced in the DATABASE, not the renderer** [Josh, S164 Q3]: the client's
+> `invoice_lines` arm is gated on the parent's `presentation_level = 'full_detail'`. `invoice_lines`
+> has no role or project check of its own — it is safe purely by RLS containment on `invoices` — so a
+> client arm on `invoices` opens the lines **automatically and silently**. Hiding prices in the UI
+> would leave this rule defeatable with one PostgREST call.
+
 ### §4.6 — Labor is itemised differently by contract type — **INTENTIONAL**
 
 **T&M labor is one row per labor type (R7a). Cost-plus labor is one weekly aggregate (R8).** Both
@@ -230,11 +265,30 @@ no per-person hours. This keeps the S133 roster floor intact.
 
 | Surface | Client |
 |---|---|
-| Contracts, invoices, proposals, change orders | **YES** (already established) |
+| Contracts, invoices, proposals, change orders | **YES — but "already established" is FALSE; see ⚠️ below.** |
 | Schedule | **YES — event titles only.** No detail, no assignments, no crew. |
 | Files | **YES, but must be tagged** — same gate as photos |
 | Daily logs | **NO** |
 | Punch list | **NO** |
+
+> ### ⚠️ "ALREADY ESTABLISHED" IS FALSE ON ALL FOUR SURFACES — corrected [S164, verified live]
+>
+> Not one of the four is established. **Every one is a net-new grant, and three were narrowed
+> deliberately AFTER this spec was written**, so building them re-opens floors prior sessions closed
+> on purpose — that is not a rendering change.
+>
+> | Surface | Live SELECT policy | Client today |
+> | --- | --- | --- |
+> | Contracts | `client_contracts_select_visible` — `role <> ALL('subcontractor','client')` | **excluded by name** |
+> | Contract docs | `contract_documents_select_owner_admin` | excluded |
+> | Invoices | `invoices_select_visible` — owner/admin/PM + `can_view_project()` | excluded |
+> | Proposals | `estimates_select_visible` — owner/admin OR PM-author | excluded |
+> | Change orders | `change_orders_select_visible` — **the S121 read floor** | excluded |
+> | CO signing | `co_signing_sessions_select_manager` — **owner/admin since S163's M5-01** | excluded |
+> | Proposal signing | `signing_sessions` — owner/admin | excluded |
+>
+> **`client_contracts` is the sharpest instance: the table named for the client excludes them by
+> name.** §13 stage 2 is therefore **seven new policy arms, not one**.
 
 This confirms `20260912000000` was right to leave `daily_logs` and `punch_lists` un-excluded pending
 this ruling. `project_budget_items` stays readable — that is the financial page.
@@ -245,6 +299,27 @@ table". `files.client_visible` **exists** (boolean NOT NULL DEFAULT false, verif
 is present and the *policy* is what is missing. Read `files_select_non_client` live before writing the
 client arm — it is a single policy with several OR'd branches and a category gate, and permissive
 policies are **OR'd**, so a new narrow policy does not narrow anything (the S131 roster-floor trap).
+
+> ### ⚠️ TWO POLICIES ARE OWED, NOT ONE — added [S164, verified live]
+>
+> This section predates M3-01's storage alignment. **`storage.objects` carries its own hard client
+> exclusion**, and the `files` grant alone leaves it standing:
+>
+> ```
+> project_files_select_non_client:
+>   bucket_id = 'project-files'
+>   AND (storage.foldername(name))[1]::uuid = (SELECT company_id FROM profiles WHERE id = auth.uid())
+>   AND get_my_role() <> 'client'                                   <- hard exclusion
+>   AND ( owner/admin
+>         OR EXISTS (SELECT 1 FROM files f WHERE f.file_path = objects.name)
+>         OR ( name LIKE '%.markup.jpg'
+>              AND EXISTS (SELECT 1 FROM files f
+>                          WHERE f.file_path = left(objects.name, length(objects.name)-11)) ) )
+> ```
+>
+> **The client arm MUST mirror the markup-derivative branch** — the `left(name, length-11)` clause —
+> or §6.1's ruling breaks at the storage layer: the `files` row reads fine and the image 403s. That
+> presents as a broken image rather than a policy gap, which is why it is recorded here.
 
 ---
 
@@ -304,11 +379,18 @@ surfaces pending decisions** and she acts there.
 **Both signing surfaces remain valid.** `/sign-co/[token]` continues to ship and a portal client may
 still sign by email link. Neither is deprecated.
 
-> **⚠️ ONE WRITE PATH, THREE ENTRIES.** The portal must call **the same signature write** the
+> **⚠️ ONE WRITE PATH, ~~THREE~~ TWO ENTRIES [S164 — R21 deferred out of M9].** The portal must call **the same signature write** the
 > tokenised route calls. A second implementation that "does the same thing" **is** the divergence —
 > that is `#129`'s precedent exactly, where two markup editors that both "worked" produced silent data
-> loss. The three entries are: `/sign-co/[token]`, the portal (R10), and immediately after an
-> allowance selection (R21).
+> loss. _Superseded:_ _"The three entries are: `/sign-co/[token]`, the portal (R10), and immediately after an
+> allowance selection (R21)."_ **R21 is deferred out of M9, so there are TWO:** `/sign-co/[token]`
+> and the portal. **The warning is not weakened by losing an entry — with two implementations the
+> temptation to write a second one is higher, not lower.**
+>
+> **And the callers must be DISTINGUISHABLE [Josh, S164 Q6].** `completeCoSignature` takes a
+> caller-context parameter: an authenticated portal session and an anonymous token holder are
+> materially different evidence, and `signer_ip`, `signer_user_agent` and the consent record must be
+> able to say which. **One write path, distinguishable callers.**
 
 **§S — the write path.** Read `completeCoSignature` in `apps/web/lib/services/co-signing-service.ts`
 and reuse it. It is service-role by design (the public signing flow has no `auth.uid()`), so a

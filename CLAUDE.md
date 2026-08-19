@@ -536,8 +536,11 @@ Two separate changes, because one is routing and one is data:
 - **Ruling A — the route.** `middleware.ts` and `app/dashboard/layout.tsx` both guard `/dashboard`
   via `apps/web/lib/dashboard-access.ts` (M6M D-54: hidden **and** route-guarded). A
   `subcontractor` goes to `/m/projects`; a `client` goes to a **placeholder** that Module 9
-  replaces. ⚠️ **The Pre-Module 9 gate — hosted portal vs. email plus magic-link tokenised pages —
-  is OPEN and untouched.** A placeholder is not a portal.
+  replaces. ⚠️ ~~**The Pre-Module 9 gate — hosted portal vs. email plus magic-link tokenised pages —
+  is OPEN and untouched.**~~ **RESOLVED [Josh, S164]: FrameFocus hosts the portal, with accounts**
+  (R1); outbound webhooks become **Module 12**. See "Pre-Module 9 Decision Gate" in `STATE.md`.
+  **The placeholder itself is still a placeholder** — that half of the sentence stands until M9
+  stage 1 replaces it. A placeholder is not a portal.
 - **Ruling B — the data.** `20260911000000_roster_visibility_floor.sql`. **A redirect protects no
   data**, since `/m`, every API route and any direct PostgREST call bypass routing entirely.
 
@@ -668,6 +671,53 @@ redirected to.
   Both split tables carry SELECT/INSERT/UPDATE for Owner/Admin and **no DELETE policy at all**, so DELETE is denied to every role. `can_view_project()` still has no role floor of its own — the gating comes from the side tables, which is why the columns were moved rather than the helper changed.
 
   **Do not "finish" this by flooring `change_orders`** without reading #117 first — the obvious fix breaks CO authoring for PMs.
+
+### ⚠️ THE FLOOR GOVERNS STAFF. A CLIENT IS A COUNTERPARTY. — **RULED [Josh, S164]**
+
+**Everything above this line is about the internal hierarchy. A client is not in it.** The Floor was
+written to answer "which of my own people may see this", and it never contemplated the person paying
+the bill. Module 9 forced the question and it is ruled here.
+
+**A client sees MORE than a Project Manager on cost-plus and T&M, and LESS on lump sum.** Josh:
+*"client can see more than a PM except for lump sum contracts. During the interview I broke down what
+the client can see with each form of billing."*
+
+| Instrument | The client sees | Note |
+| --- | --- | --- |
+| **Cost-plus** | budgeted, actual, **markup %**, **hourly rate**, line total with markup, category totals, project total to date, expected | `committed` is REMOVED — it derives from `purchase_orders` / `subcontractor_contracts`, which clients are excluded from |
+| **T&M** | what the company paid, the agreed **markup %**, the total billed — **the pre-markup figure IS shown beside the marked-up one** | one row per labor type, one row per material line |
+| **Lump sum** | the total billed, sectioned by bill; **no line-level price and no cost basis** | the only opaque instrument |
+
+**Why this is not a hole in the Floor.** The client pays against actuals on cost-plus and T&M, so
+the cost basis is *theirs*. On lump sum they agreed a price and the cost basis is not. The Floor's
+own doctrine already says this: **sell derives per instrument, then aggregates.**
+
+> ### ⚠️ AND THE CONSEQUENCE THAT SHAPES THE BUILD
+>
+> **A lump-sum contract can carry a T&M change order.** Josh: *"that means sometimes the original
+> contract will be different from COs."* One project then renders **two visibility rules at once**,
+> and **the CO's rule follows the CO, not the contract.**
+>
+> **Any derivation that assumes one visibility setting per project is wrong**, and it will be wrong
+> in a way that looks right on every single-instrument project you test it against. The mechanism
+> already exists and is per-bill: **`invoices.presentation_level`** (`full_detail` / `by_section` /
+> `lump_sum`), shipped before M9 and needing no new column.
+
+**The rule that makes this simple to reason about, and it resolves a class of questions rather than
+one** — Josh, S164 Q3:
+
+> **"The easy way to understand what a client will see is that they see what is on the invoice. In
+> the portal, they see all of it on one page and totals added."**
+
+The portal shows what the invoice shows. `presentation_level` is the single source of truth for
+detail; the portal aggregates those per-bill decisions and adds totals. **It does not apply a
+second, separate visibility model on top.**
+
+**Enforced in the DATABASE, not the renderer** [Josh, S164 Q3]: the client's `invoice_lines` arm is
+gated on the parent invoice's `presentation_level = 'full_detail'`. `invoice_lines` has no role or
+project check of its own — it is safe purely by RLS containment on `invoices` — so a client arm on
+`invoices` opens the lines **automatically and silently**, and hiding prices in the UI would leave
+the whole lump-sum rule defeatable with one PostgREST call.
 
 ### The Admin Role Principle (authoritative)
 
