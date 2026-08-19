@@ -14,10 +14,11 @@
 // The record simply said the paperwork was done when it was not — which is the
 // kind of wrong that is only discovered in a dispute.
 
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { admin, assertRebuildTest } from './live-session';
 
 let estimateId: string;
+let priorIncludeClientContract = false;
 
 describe('S150-E1 — R16 decoupling', () => {
   beforeAll(async () => {
@@ -59,6 +60,35 @@ describe('S150-E1 — R16 decoupling', () => {
     }
 
     estimateId = (est as { id: string }).id;
+
+    // [M4-05, S157] Remember what the flag was, so the R16 test below can put it
+    // back. See the afterAll.
+    const { data: flag } = await admin
+      .from('estimates')
+      .select('include_client_contract')
+      .eq('id', estimateId)
+      .single();
+    priorIncludeClientContract = (flag as { include_client_contract: boolean })
+      .include_client_contract;
+  });
+
+  // ⚠️ ADDED AT S157 — M4-05. THIS FILE HAD NO TEARDOWN AT ALL.
+  //
+  // The R16 test sets `include_client_contract = true` on a REAL, PRE-EXISTING
+  // estimate (EST-100) chosen from seeded data, and never put it back. The S156
+  // audit found the flag still true and traced it here.
+  //
+  // Small, and not a product defect — but it is exactly the residue that makes a
+  // later "the toggle is off everywhere" assumption false, and it was FOUND by
+  // an assertion making that assumption. The same session's s145 failure was the
+  // company-level twin. A harness that mutates shared seeded data owns putting
+  // it back.
+  afterAll(async () => {
+    if (!estimateId) return;
+    await admin
+      .from('estimates')
+      .update({ include_client_contract: priorIncludeClientContract })
+      .eq('id', estimateId);
   });
 
   it('the live function body is the one the E1 migration was built from', async () => {
