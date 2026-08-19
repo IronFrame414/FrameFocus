@@ -78,6 +78,61 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
 ## Open Tech Debt
 
+### Branch-scoped, awaiting real numbers — `feature/s164-m9-client-portal` [S164]
+
+> Provisional ids per the S136 rule: never allocate a bare `#N` on a branch. Tag `m9`.
+> **Both were found while auditing Module 9's client surface and NEITHER is Module 9's.**
+> Filed rather than fixed, on Josh's ruling [S164 Q-findings]: they belong to the M1 and M7 passes.
+
+- **#1-m9 — `subscriptions_select_owner_admin` HAS NO ROLE CHECK. Its name asserts a floor its
+  predicate does not contain.** Raised S164 (2026-08-19).
+
+  ```
+  subscriptions_select_owner_admin  SELECT  PERMISSIVE
+    (company_id = get_my_company_id())
+  ```
+
+  It is the **only** SELECT policy on the table, so nothing narrows it — permissive policies are
+  OR'd. Every role in the company reads the subscription row: crew, foreman, **subcontractor and
+  client** included. Source: `20260101000000_baseline_schema.sql`.
+
+  `CLAUDE.md`'s Admin Role Principle makes billing **Owner-only** and is explicit that it is
+  stronger than owner+admin — *"Admin cannot see the Billing page at all."* The policy admits
+  everyone and its name says the opposite.
+
+  ⚠️ **IT IS NOT CURRENTLY LEAKING, AND THAT IS THE DANGEROUS PART.** The QA company has **0
+  `subscriptions` rows**, so a probe reading `subscriptions` as a client returns `[]` and passes.
+  That is `9-spec.md` §2's vacuity trap in a new place: the zero has nothing to do with the policy.
+  **Do not close this on the strength of a green probe** — seed a row first.
+
+  This is the S157 rule (*"a test that passes while contradicting a shipped rule is worse than a
+  failing one"*) applied to a **policy name** rather than a test title. Same failure, same reason it
+  survived four audit passes: nothing reads the name against the body.
+
+  **Belongs to the M1 pass** (billing/subscription is M1's surface).
+
+- **#2-m9 — `cost_catalog` SELECT has no role check, and a client and a subcontractor can read the
+  company's unit-cost book TODAY.** Raised S164 (2026-08-19).
+
+  ```
+  cost_catalog_select_authenticated  SELECT  (company_id = get_my_company_id())
+  ```
+
+  **Confirmed live, with rows, unlike #1-m9: 2 rows readable by `josh+qa-client@worthprop.com` and
+  2 by `josh+qa-sub@worthprop.com`.** `cost_catalog_update_manager` correctly floors WRITES to
+  owner/admin/PM — SELECT was simply never given the same treatment.
+
+  Same shape as the leak S154 closed on `contact_addresses`, and **the subcontractor half is the
+  sharper one**: a sub reading the cost book they are bidding against is a commercial exposure, not
+  just a privacy one.
+
+  ⚠️ **Check `estimate_*` before assuming this generalises.** The six `estimate_*` tables carry the
+  same bare `company_id` shape but are contained by an `EXISTS` against `estimates`, whose own
+  policy floors to owner/admin-or-PM-author. They are safe *by containment*. `cost_catalog` has no
+  parent to be contained by, which is why it is the one that is actually open.
+
+  **Belongs to the M7 pass** (cost/financial surface).
+
 ### Branch-scoped, awaiting real numbers — `feature/s150-audit-fixes` [S150]
 
 > Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.
