@@ -2,20 +2,53 @@
 
 import { useState } from 'react';
 import type { Subcontractor } from '@/lib/services/subcontractors';
-import { deleteSubcontractor } from '@/lib/services/subcontractors-client';
-import { useRouter } from 'next/navigation';
+import { SubcontractorDetailSheet } from './subcontractor-detail-sheet';
+
+// ===========================================================================
+// THE ROW IS THE WAY IN — SAME AS CONTACTS. [S159 · RULED Josh]
+// ===========================================================================
+//
+// _Superseded, quoted rather than rewritten._ The row used to offer THREE
+// different ways out, and all three were different from the contacts list one
+// nav item away:
+//
+//   * the company name was a link to `/dashboard/subcontractors/[id]` — added
+//     at S140 with the comment *"the name is now the way IN to the sub record.
+//     Until this run the only link on the row was 'Edit', so looking at a sub
+//     meant opening the form that changes them (TECH_DEBT #13 / #108(c))"*;
+//   * an `Edit` link in an Actions cell;
+//   * a `Delete` button beside it.
+//
+// **S140's fix was right and is not being undone — it is being finished.** The
+// name link solved exactly the problem S158's Finding 1 solved for contacts, a
+// session apart and in a different shape, and the result was two interaction
+// models sitting next to each other under one nav group. That is the defect
+// Josh ruled on: *"subs should match contacts with a panel."*
+//
+// So the whole row opens the SHEET, and Edit and Delete live inside it. The
+// detail page keeps its job — the Owner/Admin compliance section — and the
+// sheet links out to it. See `subcontractor-detail-sheet.tsx` for why that one
+// piece did NOT move, which is the only real difference from Contacts.
+//
+// ⚠️ `deleteSubcontractor` IS NO LONGER IMPORTED HERE. One home for the delete,
+// same as contacts.
 
 interface SubcontractorsListProps {
   subcontractors: Subcontractor[];
   canEdit: boolean;
+  /** owner / admin — gates the sheet's link to the compliance section. */
+  canSeeCompliance: boolean;
 }
 
-export function SubcontractorsList({ subcontractors, canEdit }: SubcontractorsListProps) {
-  const router = useRouter();
+export function SubcontractorsList({
+  subcontractors,
+  canEdit,
+  canSeeCompliance,
+}: SubcontractorsListProps) {
   const [filterType, setFilterType] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('active');
   const [search, setSearch] = useState('');
-  const [deleting, setDeleting] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const filtered = subcontractors.filter((s) => {
     if (filterType !== 'all' && s.sub_type !== filterType) return false;
@@ -33,17 +66,9 @@ export function SubcontractorsList({ subcontractors, canEdit }: SubcontractorsLi
     return true;
   });
 
-  async function handleDelete(id: string, name: string) {
-    if (!confirm(`Are you sure you want to delete ${name}?`)) return;
-    setDeleting(id);
-    const result = await deleteSubcontractor(id);
-    if (result.success) {
-      router.refresh();
-    } else {
-      alert(result.error || 'Failed to delete');
-    }
-    setDeleting(null);
-  }
+  // Resolved from the full list, not the filtered one, so changing a filter
+  // while the sheet is open does not blink it out. Same as contacts.
+  const openSub = openId ? (subcontractors.find((s) => s.id === openId) ?? null) : null;
 
   const selectStyle: React.CSSProperties = {
     padding: '0.375rem 0.5rem',
@@ -82,6 +107,9 @@ export function SubcontractorsList({ subcontractors, canEdit }: SubcontractorsLi
           <option value="subcontractor">Subcontractors</option>
           <option value="vendor">Vendors</option>
         </select>
+        {/* Walks `subcontractors.status` only — "All Statuses" is all THREE of
+            these, not "including deleted". A deleted sub is in Trash. Same note
+            as the contacts list, and for the same reason [S158]. */}
         <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} style={selectStyle}>
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
@@ -117,24 +145,31 @@ export function SubcontractorsList({ subcontractors, canEdit }: SubcontractorsLi
                 <th style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>Trade</th>
                 <th style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>Rating</th>
                 <th style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>Phone</th>
-                {canEdit && <th style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>Actions</th>}
               </tr>
             </thead>
             <tbody>
               {filtered.map((s) => (
-                <tr key={s.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                  <td style={{ padding: '0.75rem 0.5rem', fontWeight: 500 }}>
-                    {/* [S140] The name is now the way IN to the sub record.
-                        Until this run the only link on the row was "Edit", so
-                        looking at a sub meant opening the form that changes
-                        them (TECH_DEBT #13 / #108(c)). */}
-                    <a
-                      href={`/dashboard/subcontractors/${s.id}`}
-                      style={{ color: '#2563eb', textDecoration: 'none' }}
-                    >
-                      {s.company_name}
-                    </a>
-                  </td>
+                <tr
+                  key={s.id}
+                  onClick={() => setOpenId(s.id)}
+                  // A clickable `<tr>` is invisible to the keyboard without
+                  // these three. Same as the contacts list.
+                  tabIndex={0}
+                  role="button"
+                  aria-label={`Open ${s.company_name}`}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setOpenId(s.id);
+                    }
+                  }}
+                  data-testid={`sub-row-${s.id}`}
+                  style={{ borderBottom: '1px solid #f3f4f6', cursor: 'pointer' }}
+                >
+                  {/* The company name is PLAIN TEXT now. It was an <a> to the
+                      detail page; a link inside a row that is itself a control
+                      gives the same click two meanings. */}
+                  <td style={{ padding: '0.75rem 0.5rem', fontWeight: 500 }}>{s.company_name}</td>
                   <td style={{ padding: '0.75rem 0.5rem', color: '#6b7280' }}>
                     {s.contact_first_name || s.contact_last_name
                       ? `${s.contact_first_name ?? ''} ${s.contact_last_name ?? ''}`.trim()
@@ -154,38 +189,20 @@ export function SubcontractorsList({ subcontractors, canEdit }: SubcontractorsLi
                   <td style={{ padding: '0.75rem 0.5rem', color: '#6b7280' }}>
                     {s.phone || '—'}
                   </td>
-                  {canEdit && (
-                    <td style={{ padding: '0.75rem 0.5rem' }}>
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        
-                          <a
-                          href={`/dashboard/subcontractors/${s.id}/edit`}
-                          style={{ color: '#2563eb', textDecoration: 'none', fontSize: '0.875rem' }}
-                        >
-                          Edit
-                        </a>
-                        <button
-                          onClick={() => handleDelete(s.id, s.company_name)}
-                          disabled={deleting === s.id}
-                          style={{
-                            color: '#dc2626',
-                            background: 'none',
-                            border: 'none',
-                            cursor: 'pointer',
-                            fontSize: '0.875rem',
-                            padding: 0,
-                          }}
-                        >
-                          {deleting === s.id ? '...' : 'Delete'}
-                        </button>
-                      </div>
-                    </td>
-                  )}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      )}
+
+      {openSub && (
+        <SubcontractorDetailSheet
+          subcontractor={openSub}
+          canEdit={canEdit}
+          canSeeCompliance={canSeeCompliance}
+          onClose={() => setOpenId(null)}
+        />
       )}
     </div>
   );
