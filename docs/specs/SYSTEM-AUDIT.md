@@ -227,6 +227,76 @@ unauthenticated write path in the platform** — `/sign/[token]`.
 M2 0 of 3, M3 0 of 4 — **M4 is 6 of 6.** Recorded here because four passes of the same finding would
 otherwise read as a platform-wide indictment. It is three modules and one counter-example.
 
+### §1.5 — Module 5 (Project Management) — filled S161
+
+**M5 owns:** `projects`, `project_assignments`, `project_contacts`, `phases`, `tasks`,
+`task_dependencies`, `schedule_entries`, `inspections`, `punch_lists`, `punch_list_items`,
+`change_orders` + `change_order_line_items` + `change_order_line_rows`, `co_signing_sessions`,
+`client_contracts`, `subcontractor_contracts` — **16 tables**.
+
+**⚠️ M5 is the module the whole platform's visibility is ABOUT.** `can_view_project()` and
+`is_assigned_to_project()` are declared in M1 but every one of their predicates reads M5's tables.
+**68 policies across 32 tables call them** [LIVE, S161] — up from the 58/31 §1.1 recorded at S152,
+which nobody had re-counted.
+
+| Consumer | Reads from M5 | Assumes | Verified S161 |
+| --- | --- | --- | --- |
+| **31 other tables' RLS** | `can_view_project(project_id)` → `projects` ⋈ `project_assignments` | a per-row visibility test that is cheap enough to run per row | ⚠️ **It is not.** 660 µs/row against 4.4 µs for the same predicate inlined — **148×** (M5-07). Blast radius: `files_update_non_client` calls it **four times in one policy** |
+| **M4 estimating** | `convert_estimate_to_project` writes `projects`, `project_assignments`, `project_budget_items` | the function has not drifted across six redefinitions | ✅ live `md5 = 13b0a5a4…`, byte-identical to S156's record |
+| **M2 addresses** | `my_assigned_site_address_ids()` → `project_assignments` ⋈ `projects.contact_address_id` | assignment and project soft-delete revoke the grant | ✅ both filtered. ⚠️ **project STATUS is not** — an assigned sub keeps the site address of a `cancelled` or `archived` project |
+| **M6 field ops** | `project_assignments` is the membership chat threads, notifications, deliveries and time all resolve through | assignment means "works on this job" | ⚠️ **role-blind.** An assigned SUBCONTRACTOR passes `can_view_project()`, which is why `phases` (no role floor) and `punch_lists` (write-without-read) behave as they do |
+| **M7 job finances** | `expenses`, `invoices`, `purchase_orders`, `project_budget_items` all gated by `can_view_project` | same | cost and client-precondition findings apply unchanged |
+| **M9 client portal** *(unbuilt)* | `can_view_project()` | a client is refused by a **rule** | ⚠️ **No — by ABSENCE.** **51 of the 68 policies never mention `client`**; they refuse only because a client has no `company_members` row (M5-10) |
+
+**Downstream WRITES into M5's tables:** `convert_estimate_to_project` (M4, `SECURITY DEFINER`) and
+`upsertProjectAssignmentAsCaller()` (M6's assignment route, through the caller's client). **The
+second is unguarded on its revive branch and notifies on a write that did not happen** (M5-03).
+
+**M5's own writer guard ratio: 4 of 24, and 0 through the shared helper.**
+
+### §1.6 — Module 6 (Team & Field Operations) — filled S162
+
+**M6 owns:** `company_members`, time tracking (5 tables), `daily_logs` + 2 children,
+`safety_incidents` + 2 children, deliveries/purchase orders (4 tables), chat (5 tables),
+`notifications`, `push_subscriptions`, `sync_conflicts` — **24 tables**, the largest built module.
+
+> **⚠️ OWNERSHIP AMBIGUITY, recorded rather than resolved.** §1.1 lists `company_members` as M1's.
+> It is M6's working table — every M6 policy resolves through it, and `get_my_member_id()` is the
+> platform's second-most-called helper. Both are defensible; the passes disagree, so the fact is
+> recorded here rather than one row being silently rewritten.
+
+| Consumer | Reads from M6 | Assumes | Verified S162 |
+| --- | --- | --- | --- |
+| **Every module's RLS** | `company_members` via `get_my_member_id()` | one member row per profile | ✅ backed by `idx_company_members_profile_id` (UNIQUE, partial) |
+| **M7A job cost** | `time_session_rate_snapshots.hourly_rate`, `burden_multiplier`, `fixed_burden_per_hour` — read at `expenses.ts:315` | the frozen rate is trustworthy | ⚠️ **its write policy is company-scoping only** (M6-02). `UNIQUE (session_id)` is the only limit |
+| **M2 contacts** | `subcontractors.email` via `resolveMemberReachability()` | a profile-less member may still have an email | ✅ correct, and indexed. **This is M6's ONLY email path for a member with no login** |
+| **M5 projects** | `project_assignments` | assignment is the unit of field membership | ✅ — and see §1.5's role-blindness row |
+| **M3 files** | `pdf_file_id` on daily logs, deliveries and incidents; chat photos | the category floor does not cover these | ✅ consistent with S155 |
+| **M9 client portal** *(unbuilt)* | `chat_threads`, `chat_messages` | a client cannot read crew conversation | ⚠️ **only because they have no member row.** `chat_threads_select_visible`'s second arm is `kind='sub' OR role <> 'subcontractor'` — a `client` satisfies it |
+
+**M6's own writer guard ratio: 3 of 32, and 0 through the shared helper.**
+**Combined with M5: 7 of 56 across the two modules audited this session.**
+
+### §1.6a — ⚠️ NEW EDGE [S162]: M5's performance remedy would break M6's containment
+
+**The most important line either pass produced, because neither module can see it alone.**
+
+`safety_incident_injuries_select_visible` and `safety_incident_witnesses_select_visible` are guarded
+by a **bare foreign-key existence check** — `EXISTS (SELECT 1 FROM safety_incidents si WHERE si.id =
+incident_id)` — with no visibility predicate of their own. They are nonetheless safe today because
+**PostgreSQL applies `safety_incidents`' own RLS to that nested reference**, so the child inherits
+the parent's scope implicitly.
+
+**`SECURITY DEFINER` functions bypass exactly that.** It is the entire reason `can_view_project()`
+is one. So **S161's M5-07 remedy — wrapping or flattening a lookup into a `SECURITY DEFINER` helper
+to recover the 148× — applied to this lookup would open both tables**, silently, with no policy edit
+anywhere near them.
+
+**Neither change is safe without the other.** M6-04 proposes making the containment explicit first,
+as `change_order_line_items_select_visible` already does; that is a no-op today and a precondition
+for any M5-07 work.
+
+
 ---
 
 ## §2 — Coverage ledger
@@ -241,17 +311,48 @@ otherwise read as a platform-wide indictment. It is three modules and one counte
 
 | subject ↓ / vs → | M1 | M2 | M3 | M4 | M5 | M6 | M7 | M8 | M9 | M10 | M11 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| **M1 Settings/Admin/Billing** | — | **✓** | **✓** | **✓** | S | S | S | n/a | S | — | — |
-| **M2 Contacts & CRM** | **✓** | — | **C** | **✓** | **S** | — | **S** | n/a | **S** | — | — |
-| **M3 Documents & Files** | **✓** | **C** | — | **✓** | **S** | **S** | **S** | n/a | **S** | — | — |
-| **M4 Sales & Estimating** | **✓** | **✓** | **✓** | — | **S** | — | **S** | n/a | — | — | — |
-| **M5 Project Management** | — | — | — | — | — | — | — | — | — | — | — |
-| **M6 Team & Field Ops** | — | — | — | — | — | — | — | — | — | — | — |
+| **M1 Settings/Admin/Billing** | — | **✓** | **✓** | **✓** | **✓** | **✓** | S | n/a | S | — | — |
+| **M2 Contacts & CRM** | **✓** | — | **C** | **✓** | **✓** | **✓** | **S** | n/a | **S** | — | — |
+| **M3 Documents & Files** | **✓** | **C** | — | **✓** | **✓** | **✓** | **S** | n/a | **S** | — | — |
+| **M4 Sales & Estimating** | **✓** | **✓** | **✓** | — | **✓** | **C** | **S** | n/a | — | — | — |
+| **M5 Project Management** | **C** | **✓** | **S** | **✓** | — | **✓** | **S** | n/a | **S** | — | — |
+| **M6 Team & Field Ops** | **C** | **✓** | **✓** | **C** | **✓** | — | **S** | n/a | **S** | — | — |
 | **M7 Job Finances** | — | — | — | — | — | — | — | — | — | — | — |
 | **M8 Inventory & Tools** | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a | n/a |
 | **M9 Client Portal** | — | — | — | — | — | — | — | — | — | — | — |
 | **M10 Reporting** | — | — | — | — | — | — | — | — | — | — | — |
 | **M11 AI Marketing** | — | — | — | — | — | — | — | — | — | — | — |
+
+**Passes 5 and 6 (M5, M6 — S161/S162) notes on their own rows and columns:**
+
+- **M5↔M6 is `✓` — the strongest pair in the ledger, and the only one where each pass found
+  something the other could not.** M5 established that `project_assignments` is role-blind and that
+  `can_view_project()` costs 148× its predicate; M6 established that its own child policies are
+  contained by an implicit mechanism **that M5's proposed remedy would break** (§1.6a). Neither
+  finding is visible from inside one module.
+- **M1↔M5 and M1↔M6 are `✓`.** Both passes read M1's helpers from the consumer side and **M5's pass
+  re-measured them**, correcting §1.1's helper-cost row and its policy census (§3).
+  The **M1 column** for M5/M6 is marked `C` rather than `✓` because neither pass examined M1's own
+  tables as a subject.
+- **M2↔M5 is `✓`** — §1.2a's open edge is now closed from M5's side: `my_assigned_site_address_ids()`
+  tracks assignment and project soft-delete but **not project status**.
+- **M2↔M6 is `✓`, and it is a NEW edge neither M2's nor M6's earlier work had named**:
+  `resolveMemberReachability()` reads `subcontractors.email` as M6's only email path for a
+  profile-less member. M2's pass recorded `M6 = —` and said *"M6 in particular is not obviously
+  empty"*. It was not.
+- **M3↔M5 is `S` from M5's side only** — M5 established that `files` policies call `can_view_project`
+  four times in one policy; it did not examine `files` as a subject. **M3↔M6 is `✓`**: `#129`'s two
+  markup editors are provably one mechanism (S162 V2), closing the item S155 handed forward.
+- **M4↔M5 is `✓`** — `convert_estimate_to_project` verified unchanged from **both** sides now.
+  **M4↔M6 is `C`**: M6 found no M4 dependency, which is weaker evidence than having looked.
+- **M7 is `S` from both**, from the consumer side only: M5 established that four M7 tables are gated
+  by `can_view_project`, and M6 that `expenses.ts` reads `time_session_rate_snapshots`. **M7's own
+  pass must close both.**
+- **M9 is `S` from both.** M5 contributes the blast radius (**51 of 68 policies never mention
+  `client`**); M6 contributes that chat's second arm admits a client outright. Together these are
+  M9's security checklist and they did not exist before this session.
+- **M10 and M11 remain `—` for both.** No dependency was established; that is weaker evidence than
+  having looked.
 
 **Passes 3 and 4 (M3, M4 — S155/S156) notes:**
 
@@ -303,6 +404,64 @@ otherwise read as a platform-wide indictment. It is three modules and one counte
 > pass's finding.** State both readings, which evidence each rests on, and which is believed
 > correct. The repo's convention is that superseded text is quoted rather than deleted, and that
 > applies across passes as much as within a document.
+
+**[S161] — ⚠️ PASS 5 REVISING PASS 1's CONCLUSION ABOUT `can_view_project()`. The numbers stand;
+the inference does not.**
+
+`S152-rls-helper-measurement.md` measured `can_view_project()` at **636.6 µs/call** and concluded
+that because the argument varies per row the cost **cannot be hoisted and is therefore unavoidable**
+— *"❌ No — row-varying argument"*, 96% of all measured policy cost, filed with nothing to do about
+it. §1.1's helper row still carries that reading.
+
+**S161 reproduces the number (583–660 µs) and rejects the inference.** Measured with a per-row
+varying argument so nothing can be constant-folded:
+
+| | per row | above control |
+| --- | --- | --- |
+| the **inlined** `can_view_project` predicate | 6.88 µs | **4.44 µs** |
+| **`can_view_project()` as a function** | 659.7 µs | **657.3 µs** |
+
+**The index work costs 4.4 µs. The wrapper costs 657. Hoisting is indeed impossible; INLINING is
+not, and it recovers ~99.3%.** S153 already noticed the effect by accident — `contacts`' policies
+inline `get_my_company_id()`/`get_my_role()` and run *"~65× faster"* — but read it as a curiosity
+rather than as the same mechanism on the helper that actually costs something.
+
+**Three hypotheses for the overhead were tested and killed** (index work, `SET search_path`, the
+NULL auth context under the Management API). What survives is an exact correlation with **nested
+user-function calls**: 0 nested → 10–16 µs, 1 nested → 197 µs, 3 nested → 660 µs. **The mechanism is
+not established** and is the highest-value follow-up measurement in either document.
+
+**Two corrections of fact in the same row:**
+
+- §1.1 says **58 policies (31 tables)** call `can_view_project`. Live it is **68 policies, 32
+  tables** [S161]. Grown since S152, unremarked.
+- §1.1's banner says *"`companies` … **73 columns** [LIVE]"* and *"[S152] 72 → 73"*. Live it is
+  **72**, and `S152-rls-helper-measurement.md`:226 — the document §1.1 cites — itself says **72**.
+  No column was dropped; `updated_by` and `companies_set_updated_by` are both present. The banner is
+  off by one in both numbers.
+
+**⚠️ Recorded and NOT edited into §1.1, per this section's own rule.** A reader of §1.1 who acts on
+"unavoidable" will do nothing; a reader of this will re-measure first.
+
+---
+
+**[S162] — PASS 6 CONTRADICTING A COMMENT THAT WAS RIGHT WHEN WRITTEN, AND IS THE REPO'S MOST
+EMPHATIC.**
+
+`app/m/detail-access.ts` states *"⚠️ THIS GUARD IS THE ENTIRE ENFORCEMENT. RLS WILL NOT CATCH A
+BYPASS"* and backs it with four policy citations and one measurement. **Three citations are now
+false and the measurement no longer reproduces** — `change_orders` gained the S121 read floor,
+`contacts` the S131 roster floor, and `company_members` was replaced outright by a policy with an
+explicit subcontractor arm. Only `files` still matches (S162 A2–A5).
+
+**Why this belongs in §3 rather than in M6's document alone:** it is the first case in this audit of
+**the system moving underneath a correct comment**. Passes 1–4 found documents that were wrong when
+written; this one was right, and three separate fix sessions — none of which touched this file —
+made it wrong. **A "the database does not enforce this" comment is a claim with an expiry date, and
+nothing in the repo re-checks one.** The S162 harness pins the sentence itself so the claim and the
+policies must be re-read together.
+
+---
 
 **[S156] — PASS 4 CONTRADICTING A PATTERN THREE PASSES HAD ESTABLISHED.**
 
@@ -399,6 +558,8 @@ as well as migrations**.
 | 2-fix | Module 2 — fix pass for pass 2's §4 | S154 | `S153-m2-audit.md` §0a (outcomes) | `s154-m2-fixes.live.ts` (18/18) |
 | 3 | Module 3 — Document & File Management | S155, 2026-08-18 | `docs/specs/S155-m3-audit.md` | `apps/web/test/s155-m3-audit.live.ts` (12/12) |
 | 4 | Module 4 — Sales & Estimating | S156, 2026-08-18 | `docs/specs/S156-m4-audit.md` | `apps/web/test/s156-m4-audit.live.ts` (15/15) |
+| 5 | Module 5 — Project Management | S161, 2026-08-19 | `docs/specs/S161-m5-audit.md` | `apps/web/test/s161-m5-audit.live.ts` (20/20) |
+| 6 | Module 6 — Team & Field Operations | S162, 2026-08-19 | `docs/specs/S162-m6-audit.md` | `apps/web/test/s162-m6-audit.live.ts` (20/20) |
 
 **A fix pass is not a pass.** It closes an existing pass's findings and does not fill a row or a
 column in §2.
@@ -772,3 +933,70 @@ the union, and the migration declares nothing the union has not heard of.
   thrown"; only that one line actually is.
 - **Production's `email_logs` for `email_type = 'invite'`** — S159 §6, left for Josh by his own
   instruction and independent of all of this.
+
+---
+
+### S161/S162 — passes 5 and 6, verified 2026-08-19
+
+> **This session changed no application code, service or schema.** `git diff 34410a1..HEAD` touches
+> **four files: two new `.live.ts` harnesses and two new audit documents**, plus this file. Anything
+> red is therefore pre-existing by construction.
+
+| # | Check | Result |
+| --- | --- | --- |
+| 1 | `npx turbo run type-check` | **exit 0** |
+| 2 | `next lint` | **exit 0** — 16 warnings, **0 introduced**; identical list to S155–S160 |
+| 3 | `npm run build --force` | **exit 0**, `Compiled successfully` |
+| 4 | Committed vitest suite | **866/866 passed**, 58 files |
+| 5 | Every live harness (`test/*.live.ts`, 81 files) | **run A: 964 passed, 1 failed** · **run B: 965/965, exit 0.** See below |
+| 6 | Playwright, four chunks from `apps/web` | **517 passed, 9 skipped, 0 failed** — 54 · 59 (+4) · 42 · 362 (+5) |
+| 7 | `npx supabase migration list` (repo root) | **116 files = 116 local = 116 applied**, zero mismatches. **None added** |
+| 8 | Fixture leakage | **companies 2 → 2 · project_assignments 26 → 26 · projects 9 → 9**, zero `S161`/`S162` probe rows in any table |
+
+#### The one red, and why it is filed as flaky rather than as a finding
+
+`s123-cron-loops.live.ts` §3h — *"fires at the company OWN boundary and reaches Owner AND Admin"* —
+failed on run A and passed on run B and in isolation:
+
+| | result |
+| --- | --- |
+| full live run A | **failed** — `recipients.has(ownerProfileId)` was `false` |
+| full live run B | **passed** |
+| the file alone (9 tests) | **passed** |
+
+`outcome.fired > 0` and `outcome.errors == []` both held, so the cron ran and wrote rows; the
+owner's row was not among the ones the assertion could see.
+
+**Probable cause, stated as probable.** The positive assertions read
+`rowsOfType('timesheet_ready', since)` where `since` is a **Node** timestamp compared against a
+**database** `created_at`. **That file's own header documents this exact defect** — *"`since` WAS A
+LIE … the database clock runs about 110ms ahead"* — and records that S131 converted **the negatives**
+to id-diffing while leaving the positives on the clock. S131 measured the skew in the direction that
+*adds* rows; the opposite direction would *drop* one, which is what this looks like. **Not proven**,
+and it is the first observation of this test failing in that direction.
+
+**Left alone deliberately.** S159's equivalent fix to §3j in this same file was made only after Josh
+approved it; a pass whose remit is findings-only should not quietly rewrite another session's
+harness. **Proposal: convert §3h's positives to the id-diffing `idsOfType`/`rowsAddedSince` pair the
+negatives in the same file already use.** One file, no application code.
+
+⚠️ **And the background-task notification reported "exit code 0" for run A while the printed line
+said `LIVE_EXIT: 1`.** The trap CLAUDE.md documents, in the wild again, on the run that mattered.
+The printed line was read.
+
+#### Method notes worth carrying to pass 7
+
+- **`INSERT … RETURNING` cost three false negatives in one afternoon.** Three S161 probes came back
+  `42501` and were read as "the write is refused"; all three had been refused **on the way back**,
+  and all three writes were in fact permitted. Every insert probe in both harnesses now runs without
+  `.select()` and confirms with a service-role read.
+- **Two "leaks" were killed by a mechanism nothing documents:** the SELECT policy participates in
+  UPDATE, and RLS applies inside a policy's own sub-query. Both make a policy that reads wrong
+  behave right — and both are load-bearing couplings rather than reasons to relax (S161 V3,
+  S162 M6-04).
+- **A vacuous probe nearly inverted a finding.** S162's first safety probe showed every scoped role
+  reading 0 injury rows — not because a policy refused them but because **nobody is assigned to the
+  incident project**. A temporary assignment, reverted, is what made the answer mean anything.
+- **A measurement can be constant-folded away.** S161's first helper measurement used a literal
+  argument and reported the visibility predicate as free. Varying the argument per row is what
+  produced the 148× figure.
