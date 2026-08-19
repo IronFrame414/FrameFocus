@@ -4,42 +4,62 @@ import { getMyProfile } from '@/lib/services/profiles';
 // M6M D-54 / §4.11.10b — the route guard on the four gated DETAIL routes.
 //
 // ===========================================================================
-// ⚠️ THIS GUARD IS THE ENTIRE ENFORCEMENT. RLS WILL NOT CATCH A BYPASS.
+// ⚠️ ONE OF THESE FOUR SURFACES IS STILL UI-ONLY. THREE ARE NOW DB-ENFORCED.
 // ===========================================================================
-// §4.11.10b's third conflict, quoted because it is the whole reason this file
-// is written the way it is:
+// [M6-01, S163 — CORRECTED. The superseded text is quoted below, not deleted.]
+//
+// §4.11.10b's third conflict is why this file exists:
 //
 //   "the sub exclusion is UI-only on every read surface it still covers.
 //    `change_orders`, `company_members`, `contacts` and `files` carry no
 //    `subcontractor` arm on SELECT, so D-54's route guard is the entire
 //    enforcement of what remains of D-53."
 //
-// Checked against the policies rather than taken on trust:
+// _Superseded, quoted rather than rewritten — this header used to open:_
 //
-//   change_orders_select_visible          company_id + can_view_project(). No
-//                                         role floor, no author scoping.
-//                                         20260704215000:332-337. TECH_DEBT #117.
-//   company_members_select_authenticated  company_id = get_my_company_id() and
-//                                         NOTHING else. 20260704210000:81-83.
-//   contacts_select_authenticated         company + is_deleted = false, no role
-//                                         arm. 20260101000000:3267.
-//   files_select_non_client               refuses `client` and floors
-//                                         contracts/change_orders/invoices to
-//                                         owner/admin (+PM for invoices). A
-//                                         SUBCONTRACTOR PASSES IT — they are not
-//                                         `client` — so the sub exclusion is
-//                                         UI-only even though the CATEGORY floor
-//                                         is real. 20260728000000:53-73.
+//   "⚠️ THIS GUARD IS THE ENTIRE ENFORCEMENT. RLS WILL NOT CATCH A BYPASS."
+//   …
+//   "MEASURED, NOT INFERRED [S115]: signed in as the QA subcontractor, the
+//    database returned both change orders on a project they are assigned to, at
+//    full value — net_delta 1410 and 21385.91. Nothing at the database stopped
+//    it. That figure is the argument for this file: remove the guard and the
+//    data is right there."
+//   …
+//   "So: a `curl` with a subcontractor's token still reads every one of these
+//    rows."
 //
-// MEASURED, NOT INFERRED [S115]: signed in as the QA subcontractor, the database
-// returned both change orders on a project they are assigned to, at full value —
-// net_delta 1410 and 21385.91. Nothing at the database stopped it. That figure
-// is the argument for this file: remove the guard and the data is right there.
+// **All of that was true when it was written. Three separate fix sessions —
+// none of which touched this file — made three quarters of it false.**
+// Re-measured live at S162 as the QA subcontractor:
 //
-// So: a `curl` with a subcontractor's token still reads every one of these rows.
-// This guard is a real gate on the SCREEN and it is not a permission at the
-// DATA layer. Do not let its existence read as enforcement it does not provide,
-// and do not delete it on the assumption that RLS is behind it.
+//   change_orders          ⛔ NOW DB-ENFORCED. reads 0. The S121 read floor
+//                          (20260830000000) added owner/admin OR PM-author, and
+//                          a subcontractor matches no arm. The S115 measurement
+//                          above NO LONGER REPRODUCES.
+//   contacts               ⛔ NOW DB-ENFORCED. reads 0. The S131 roster floor,
+//                          restated by S154's M2-02 fix:
+//                          `role <> ALL (subcontractor, client)`.
+//   company_members        ⛔ NOW DB-ENFORCED. Policy REPLACED — it is
+//                          `company_members_select_visible` now, with an
+//                          explicit subcontractor arm: own row, plus owner/admin
+//                          members, plus PMs sharing an assigned project. Reads
+//                          strictly fewer rows than an owner.
+//   files                  ✅ STILL UI-ONLY, AND THIS IS THE ONE THAT MATTERS.
+//                          `files_select_non_client` refuses `client` and floors
+//                          contracts/change_orders/invoices to owner/admin (+PM
+//                          for invoices). A SUBCONTRACTOR PASSES IT — they are
+//                          not `client`. 20260728000000:53-73.
+//
+// ⚠️ SO DO NOT DELETE THIS FILE. `file` is load-bearing and the guard is the
+// only thing standing in front of it. `co`, `member` and `contact` are now belt
+// and braces, and they stay: D-54 asks for hidden AND route-guarded, and a
+// redundant guard costs nothing while a removed one cannot be un-removed
+// cheaply.
+//
+// ⚠️ AND THE LESSON THAT GENERALISES, because it will happen again. **A "the
+// database does not enforce this" comment is a claim with an expiry date, and
+// nothing in the repo re-checks one.** `s162-m6-audit.live.ts` A1 pins the
+// sentences above so the claim and the policies have to be re-read together.
 //
 // ---------------------------------------------------------------------------
 // WHAT IS NOT GUARDED HERE, AND WHY THAT IS CORRECT
