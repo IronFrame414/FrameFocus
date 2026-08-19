@@ -104,28 +104,33 @@ describe('S155-F1 — a crew member cannot SEE an invoice file row but CAN downl
     expect(data, 'crew can read the invoice FILE ROW — the table floor has regressed').toEqual([]);
   });
 
-  it('F1b — ⚠️ but STORAGE hands the same crew member a signed URL for the PDF', async () => {
-    // `project_files_select_non_client` checks bucket, company folder, non-client
-    // and PROJECT ASSIGNMENT. It has NO category floor at all. The invoice path
-    // is `{company}/{project}/…`, so segment 2 IS a project uuid and the
-    // assignment arm passes.
-    //
-    // ⚠️ ASSERTS THE DEFECT. When storage gains the category floor, invert to
-    // expect an error / null.
+  // ✅ INVERTED AT S157 — M3-01 IS FIXED. The originals asked for exactly this
+  // ("when storage gains the category floor, invert to expect an error / null").
+  // `20261007000000_m3_storage_alignment.sql` made the storage policy delegate
+  // to `files` RLS via an EXISTS, so the category floor is stated once, on the
+  // table, and the bytes follow the row.
+  it('F1b — ✅ STORAGE now REFUSES the same crew member a signed URL [inverted]', async () => {
     const { data, error } = await crew.storage.from(BUCKET).createSignedUrl(invoiceFilePath, 60);
 
-    expect(error, 'storage refused — M3-01 may be fixed; if so, invert this').toBeNull();
-    expect(data?.signedUrl, 'no signed URL was minted').toBeTruthy();
+    expect(data?.signedUrl, 'crew minted an invoice URL — M3-01 has regressed').toBeFalsy();
+    expect(error, 'storage allowed the mint').not.toBeNull();
   });
 
-  it('F1c — and the URL really serves the bytes, so this is not a theoretical grant', async () => {
-    // A signed URL that 403s on use would make M3-01 a paperwork problem. It
-    // does not.
-    const { data } = await crew.storage.from(BUCKET).createSignedUrl(invoiceFilePath, 60);
-    const res = await fetch(data!.signedUrl);
-    expect(res.status, 'the signed URL did not serve the file').toBe(200);
-    const bytes = Number(res.headers.get('content-length') ?? '0');
-    expect(bytes, 'the response was empty').toBeGreaterThan(0);
+  it('F1c — ✅ there is no URL to serve, and the OWNER still gets one [inverted]', async () => {
+    // ⚠️ NON-VACUITY. Storage answers "you may not" and "it is not there" with
+    // the same error on purpose (anti-enumeration). So the refusal above is only
+    // meaningful next to a caller who DOES get the bytes: the owner, on the very
+    // same path.
+    const { data: crewUrl } = await crew.storage.from(BUCKET).createSignedUrl(invoiceFilePath, 60);
+    expect(crewUrl?.signedUrl).toBeFalsy();
+
+    const { data: ownerUrl, error: ownerErr } = await owner.storage
+      .from(BUCKET)
+      .createSignedUrl(invoiceFilePath, 60);
+    expect(ownerErr, 'the owner lost the invoice too — this over-tightened').toBeNull();
+    const res = await fetch(ownerUrl!.signedUrl);
+    expect(res.status, "the owner's signed URL did not serve the file").toBe(200);
+    expect(Number(res.headers.get('content-length') ?? '0')).toBeGreaterThan(0);
   });
 
   it('F1d — the divergence is CATEGORY-shaped: the same crew member may see a photo row', async () => {
@@ -163,21 +168,58 @@ describe('S155-F1 — a crew member cannot SEE an invoice file row but CAN downl
 
 describe('S155-F2 — a signed URL keeps working after the access that minted it is revoked', () => {
   it('F2a — mint as crew, revoke the assignment, and the URL still serves', async () => {
-    // Inherent to signed URLs rather than a coding error — but the route mints
-    // them for 3600s (`api/files/signed-url/route.ts:52`), so removing someone
-    // from a project leaves up to an hour of access to anything they already
-    // opened. Recorded because the exposure is a policy question, not a bug.
-    const { data: signed } = await crew.storage
-      .from(BUCKET).createSignedUrl(invoiceFilePath, 60);
-    expect(signed?.signedUrl).toBeTruthy();
+    // Inherent to signed URLs rather than a coding error. RULED AT S157: two
+    // hours, and accept the window (`SIGNED_URL_TTL_SECONDS`). Explicitly NOT
+    // re-checking authorisation on use — that is a round trip on every photo
+    // thumbnail to close a narrow risk. This test therefore still asserts
+    // CURRENT, ACCEPTED behaviour and must keep passing.
+    //
+    // ⚠️ REPOINTED AT S157, AND THE REASON MATTERS. It used to mint the INVOICE
+    // path. Since M3-01 the crew member cannot mint that at all, so the test
+    // would have failed on its setup and looked like the TTL finding had
+    // changed. It has not. The finding is about any file the caller COULD
+    // legitimately open, so it now uses a `photos` row — the category crew is
+    // still entitled to.
+    //
+    // ⚠️ A FIXTURE, BECAUSE THE SEEDED PHOTOS CANNOT CARRY THIS PROBE.
+    // The crew member's assigned project holds 4 `photos` rows and ZERO storage
+    // objects — dangling rows (105 objects against 108 rows overall, LIVE S157).
+    // `createSignedUrl` fails on those with the SAME error as a policy refusal,
+    // so a seeded photo would make this probe fail on its setup and look like
+    // the TTL finding had changed. It has not.
+    const { data: invFile } = await admin
+      .from('files').select('project_id').eq('id', invoiceFileId).single();
+    const projectId = (invFile as { project_id: string }).project_id;
+    const fixturePath = `${companyId}/${projectId}/${MARKER}-f2a-ttl.pdf`;
+    await admin.storage
+      .from(BUCKET)
+      .upload(fixturePath, new Blob(['ttl'], { type: 'application/pdf' }), { upsert: true });
+    const { data: fixtureRow } = await admin
+      .from('files')
+      .insert({
+        company_id: companyId,
+        project_id: projectId,
+        category: 'photos',
+        file_name: `${MARKER}-f2a-ttl.pdf`,
+        file_path: fixturePath,
+        file_size: 3,
+        mime_type: 'application/pdf',
+      })
+      .select('id')
+      .single();
+
+    const { data: signed } = await crew.storage.from(BUCKET).createSignedUrl(fixturePath, 60);
+    expect(
+      signed?.signedUrl,
+      'crew cannot open a photo on its own project — this probe would be vacuous'
+    ).toBeTruthy();
 
     const { data: crewProfile } = await admin
       .from('profiles').select('id').eq('email', CREW).single();
     const { data: crewMember } = await admin
       .from('company_members').select('id').eq('profile_id', crewProfile!.id)
       .order('id', { ascending: true }).limit(1).single();
-    const { data: file } = await admin
-      .from('files').select('project_id').eq('id', invoiceFileId).single();
+    const file = { project_id: projectId };
 
     const { data: assignments } = await admin
       .from('project_assignments').select('id')
@@ -189,7 +231,7 @@ describe('S155-F2 — a signed URL keeps working after the access that minted it
     try {
       // The grant is gone...
       const { error: nowRefused } = await crew.storage
-        .from(BUCKET).createSignedUrl(invoiceFilePath, 60);
+        .from(BUCKET).createSignedUrl(fixturePath, 60);
       expect(nowRefused, 'the revoked crew member can still MINT a URL').not.toBeNull();
 
       // ...but the URL minted a moment ago still works.
@@ -201,6 +243,8 @@ describe('S155-F2 — a signed URL keeps working after the access that minted it
     } finally {
       must('restore assignment', (await admin
         .from('project_assignments').update({ is_deleted: false }).in('id', ids)).error);
+      if (fixtureRow?.id) await admin.from('files').delete().eq('id', fixtureRow.id);
+      await admin.storage.from(BUCKET).remove([fixturePath]);
     }
   });
 });
@@ -216,14 +260,16 @@ describe('S155-F3 — a discarded file write is reported as success', () => {
     // restoreFile, toggleFavorite) check `error` and nothing else — M1-01's and
     // M2-03's shape, third module.
     //
-    // ⚠️ ASSERTS THE DEFECT. When guarded, invert to expect success === false.
+    // ✅ INVERTED AT S157 — M3-03 IS FIXED. The original asked for exactly this
+    // ("when guarded, invert to expect success === false"). All four writers now
+    // end `.select('id')` and go through `applied()`/`DISCARDED`.
     state.client = crew;
     const result = await updateFile(invoiceFileId, { file_name: `${MARKER}-overwritten.pdf` });
 
     expect(
       result.success,
-      'updateFile now reports the refusal — M3-03 may be fixed; if so, invert this'
-    ).toBe(true);
+      'updateFile reported success over a write RLS discarded — M3-03 has regressed'
+    ).toBe(false);
 
     const { data } = await admin
       .from('files').select('file_name').eq('id', invoiceFileId).single();
@@ -235,11 +281,12 @@ describe('S155-F3 — a discarded file write is reported as success', () => {
     const before = await admin
       .from('files').select('is_favorite').eq('id', invoiceFileId).single();
 
+    // ✅ INVERTED AT S157 alongside F3a.
     const result = await toggleFavorite(invoiceFileId, !before.data!.is_favorite);
     expect(
       result.success,
-      'toggleFavorite now reports the refusal — M3-03 may be fixed; if so, invert this'
-    ).toBe(true);
+      'toggleFavorite reported success over a discarded write — M3-03 has regressed'
+    ).toBe(false);
 
     const after = await admin
       .from('files').select('is_favorite').eq('id', invoiceFileId).single();
@@ -269,7 +316,22 @@ describe('S155-F3 — a discarded file write is reported as success', () => {
 // M3-04 — permanentDeleteFile() can report success having deleted NOTHING.
 // ============================================================================
 
-describe('S155-F4 — a refused permanent delete reports success', () => {
+// ✅ RETITLED AT S157 — M3-02 IS FIXED IN THE SERVICE, AND THESE PRIMITIVES ARE
+// UNCHANGED ON PURPOSE.
+//
+// The old title, "a refused permanent delete reports success", is no longer true
+// of `permanentDeleteFile()`: it now row-counts BOTH halves and returns a
+// failure. What this block probes is one layer below that — the raw storage and
+// PostgREST calls — and their behaviour has NOT changed and never will: an
+// RLS-refused `storage.remove()` returns an EMPTY LIST rather than an error, and
+// a zero-row DELETE is not an error in Postgres.
+//
+// That is precisely WHY the service has to count. Keeping this block green
+// documents the primitive the guard is defending against; if either line ever
+// starts erroring on its own, the guard's rationale changed and someone should
+// know. The service-level proof that the guard works lives in
+// `s157-m3-m4-fixes.live.ts` B4/B5.
+describe('S155-F4 — the primitives a refused permanent delete returns [retitled S157]', () => {
   it('F4a — as crew, BOTH the storage remove and the row delete are silent no-ops', async () => {
     // `permanentDeleteFile()` (files-client.ts:340) checks `storageError` then
     // `deleteError` and returns `{ success: true }`. Neither call errors when RLS
@@ -278,7 +340,9 @@ describe('S155-F4 — a refused permanent delete reports success', () => {
     // nothing is told the file is permanently gone — on the one operation in M3
     // that is genuinely irreversible.
     //
-    // ⚠️ ASSERTS THE DEFECT. When guarded, invert to expect a refusal.
+    // ⚠️ STILL CURRENT after S157: this is the DATABASE's behaviour, not the
+    // service's. `permanentDeleteFile()` now checks both results; see B4/B5 in
+    // s157-m3-m4-fixes.live.ts.
     const { data: f } = await admin
       .from('files').select('id, file_path')
       .eq('category', 'photos').eq('is_deleted', false)

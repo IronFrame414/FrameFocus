@@ -109,11 +109,15 @@ describe('S156-F1 — a bare sendEmail after a session is minted', () => {
       'proposals/send lost its try/catch — the S150 fix has regressed'
     ).toBe(true);
 
-    // `resend` still calls it bare.
+    // ✅ INVERTED AT S157 — M4-01 IS FIXED. The original asked for exactly this
+    // ("when resend is wrapped, invert this"). `resend` now folds a thrown error
+    // into the same `sendError` shape `send` uses, so the existing logEmail +
+    // invalidate path handles both — which matters more here than in `send`,
+    // because resend invalidates the client's existing links FIRST.
     expect(
       /try \{[\s\S]{0,400}await sendEmail\(/.test(resend),
-      'proposals/resend now wraps sendEmail — M4-01 may be fixed; if so, invert this'
-    ).toBe(false);
+      'proposals/resend calls sendEmail bare again — M4-01 has regressed'
+    ).toBe(true);
 
     // And it mints a session BEFORE sending, which is what makes it matter.
     const mintIdx = resend.indexOf('createSigningSession');
@@ -330,9 +334,18 @@ describe('S156-F4 — the estimate writers refuse a discarded write', () => {
       const seg = src.slice(fns[i].index!, fns[i + 1]?.index ?? src.length);
       if (!seg.includes('.update(')) continue;
       const after = seg.split('.update(')[1];
+      // ✅ WIDENED AT S157 — M4-04. The six writers were routed through the
+      // SHARED guard, so `applied(data)` is now the counted form and the
+      // hand-rolled `data.length === 0` is gone. Both are accepted: the point of
+      // this test is that a writer reads its affected row count, not which
+      // spelling it uses. `applied(` is listed FIRST because it is the form new
+      // code should use.
       const counted =
         after.includes(".select('id')") &&
-        (after.includes('length === 0') || after.includes('!data') || after.includes('data.length'));
+        (after.includes('applied(') ||
+          after.includes('length === 0') ||
+          after.includes('!data') ||
+          after.includes('data.length'));
       if (!counted) unguarded.push(fns[i][1]);
     }
     expect(unguarded, 'an estimates writer no longer reads its affected row count').toEqual([]);
