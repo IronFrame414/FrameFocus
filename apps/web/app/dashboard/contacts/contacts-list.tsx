@@ -3,8 +3,26 @@
 import { useState } from 'react';
 import type { Contact } from '@/lib/services/contacts';
 import { CONTACT_TYPE_LABELS } from '@framefocus/shared/constants';
-import { deleteContact } from '@/lib/services/contacts-client';
-import { useRouter } from 'next/navigation';
+import { ContactDetailSheet } from './contact-detail-sheet';
+
+// ===========================================================================
+// THE ROW IS THE WAY IN. [S158 · Finding 1, RULED Josh]
+// ===========================================================================
+//
+// _Superseded, quoted rather than rewritten:_ every row ended in an `Actions`
+// cell holding an `Edit` link and a `Delete` button, and those two were the
+// ONLY things a row could do. Looking at a contact meant opening the form that
+// changes them, and deleting one — a record carrying FKs from estimates,
+// projects, invoices, payments, refunds and contracts — was a single click on a
+// table row, behind nothing but a `confirm()`.
+//
+// Now: clicking ANYWHERE on a row opens the detail SHEET, and both actions live
+// inside it. The Actions column is gone, `canEdit` no longer decides whether a
+// column renders — it decides what the sheet offers.
+//
+// ⚠️ `deleteContact` IS NO LONGER IMPORTED HERE, deliberately. The delete lives
+// in one place now. A list that keeps its own copy "for convenience" is how the
+// two paths come to disagree about what a delete does.
 
 interface ContactsListProps {
   contacts: Contact[];
@@ -12,11 +30,10 @@ interface ContactsListProps {
 }
 
 export function ContactsList({ contacts, canEdit }: ContactsListProps) {
-  const router = useRouter();
   const [filterType, setFilterType] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('active');
   const [search, setSearch] = useState('');
-  const [deleting, setDeleting] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
 
   const filtered = contacts.filter((c) => {
     if (filterType !== 'all' && c.contact_type !== filterType) return false;
@@ -33,17 +50,10 @@ export function ContactsList({ contacts, canEdit }: ContactsListProps) {
     return true;
   });
 
-  async function handleDelete(id: string, name: string) {
-    if (!confirm(`Are you sure you want to delete ${name}?`)) return;
-    setDeleting(id);
-    const result = await deleteContact(id);
-    if (result.success) {
-      router.refresh();
-    } else {
-      alert(result.error || 'Failed to delete contact');
-    }
-    setDeleting(null);
-  }
+  // Resolved from `contacts`, not from `filtered`: if a filter changes while
+  // the sheet is open the sheet should keep showing the contact it was opened
+  // for, rather than blinking out because the row behind it no longer matches.
+  const openContact = openId ? (contacts.find((c) => c.id === openId) ?? null) : null;
 
   const selectStyle: React.CSSProperties = {
     padding: '0.375rem 0.5rem',
@@ -95,6 +105,13 @@ export function ContactsList({ contacts, canEdit }: ContactsListProps) {
           <option value="lead">Leads</option>
           <option value="client">Clients</option>
         </select>
+        {/* ⚠️ THIS DROPDOWN WALKS `contacts.status` AND NOTHING ELSE, and "All
+            Statuses" means all THREE of these — not "including deleted".
+            `is_deleted` is a different column answering a different question,
+            and a deleted contact is reachable only from Trash. Josh checked this
+            dropdown for a deleted row at the S157 click-test and reasonably
+            expected one; the answer is a separate view, not a fourth option
+            here. [S158 · Finding 2] */}
         <select
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
@@ -136,12 +153,31 @@ export function ContactsList({ contacts, canEdit }: ContactsListProps) {
                 <th style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>Status</th>
                 <th style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>Email</th>
                 <th style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>Phone</th>
-                {canEdit && <th style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>Actions</th>}
               </tr>
             </thead>
             <tbody>
               {filtered.map((c) => (
-                <tr key={c.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                <tr
+                  key={c.id}
+                  // The whole row, per the ruling — not a link on the name cell,
+                  // which is the shape the subs list uses and which leaves most
+                  // of the row inert.
+                  onClick={() => setOpenId(c.id)}
+                  // A clickable `<tr>` is invisible to the keyboard on its own.
+                  // These three are what make the row an actual control rather
+                  // than a mouse-only affordance.
+                  tabIndex={0}
+                  role="button"
+                  aria-label={`Open ${c.first_name} ${c.last_name}`}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setOpenId(c.id);
+                    }
+                  }}
+                  data-testid={`contact-row-${c.id}`}
+                  style={{ borderBottom: '1px solid #f3f4f6', cursor: 'pointer' }}
+                >
                   <td style={{ padding: '0.75rem 0.5rem', fontWeight: 500 }}>
                     {c.first_name} {c.last_name}
                   </td>
@@ -160,37 +196,19 @@ export function ContactsList({ contacts, canEdit }: ContactsListProps) {
                   </td>
                   <td style={{ padding: '0.75rem 0.5rem', color: '#6b7280' }}>{c.email || '—'}</td>
                   <td style={{ padding: '0.75rem 0.5rem', color: '#6b7280' }}>{c.phone || '—'}</td>
-                  {canEdit && (
-                    <td style={{ padding: '0.75rem 0.5rem' }}>
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <a
-                          href={`/dashboard/contacts/${c.id}/edit`}
-                          style={{ color: '#2563eb', textDecoration: 'none', fontSize: '0.875rem' }}
-                        >
-                          Edit
-                        </a>
-                        <button
-                          onClick={() => handleDelete(c.id, `${c.first_name} ${c.last_name}`)}
-                          disabled={deleting === c.id}
-                          style={{
-                            color: '#dc2626',
-                            background: 'none',
-                            border: 'none',
-                            cursor: 'pointer',
-                            fontSize: '0.875rem',
-                            padding: 0,
-                          }}
-                        >
-                          {deleting === c.id ? '...' : 'Delete'}
-                        </button>
-                      </div>
-                    </td>
-                  )}
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      )}
+
+      {openContact && (
+        <ContactDetailSheet
+          contact={openContact}
+          canEdit={canEdit}
+          onClose={() => setOpenId(null)}
+        />
       )}
     </div>
   );
