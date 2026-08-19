@@ -141,7 +141,25 @@ export type EmailType =
   | 'invite'
   // S137 — the day −7 / day −3 trial warning. `email_types.trial_warning` row
   // lands in 20260918000000, same rule as above: both halves or neither.
-  | 'trial_warning';
+  | 'trial_warning'
+  // ── P1/P2 [S160] — the emails SUPABASE AUTH composes ─────────────────────
+  // Rows land in 20261009000000, in the SAME commit as these lines. The rule
+  // this union has been bitten by twice (`mention`, then nearly `invite`) is
+  // that the table half fails at RUNTIME and the union half at COMPILE time, so
+  // shipping one without the other ships silently. Both halves or neither.
+  //
+  // ⚠️ `auth_invite` IS NOT `invite`. `invite` is OUR invitation, from
+  // `sendInviteEmail()`, branded with the tenant and carrying
+  // `/invite/accept?token=…`. `auth_invite` is GoTrue's own, which only fires
+  // from the Supabase dashboard's Authentication → Users → Invite button and
+  // which nothing in this repository triggers. Telling them apart in
+  // `email_logs` is the entire subject of the S159 investigation.
+  | 'auth_signup_confirmation'
+  | 'auth_recovery'
+  | 'auth_magic_link'
+  | 'auth_email_change'
+  | 'auth_reauthentication'
+  | 'auth_invite';
 
 export interface LogEmailInput {
   company_id: string;
