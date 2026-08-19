@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase-server';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { getOpenAI } from '@/lib/openai';
 import { getActiveTags } from '@/lib/services/tag-options';
 import { getSignedUrl } from '@/lib/services/files';
@@ -188,7 +189,24 @@ ${groupedTagList}`;
   const estimatedCost =
     (inputTokens / 1_000_000) * INPUT_COST_PER_M + (outputTokens / 1_000_000) * OUTPUT_COST_PER_M;
 
-  await supabase.from('ai_tag_logs').insert({
+  // ⚠️ SERVICE-ROLE, NOT THE CALLER'S CLIENT [M6-02, S163].
+  //
+  // `ai_tag_logs` is an append-only cost log and `20261012000000` removed its
+  // authenticated INSERT policy, because that policy was `company_id =
+  // get_my_company_id()` and nothing else — any signed-in user could forge a
+  // cost row, and S162 proved it by doing so as a crew member.
+  //
+  // The ruling is that these logs are written by the SYSTEM. `time_edit_logs`
+  // and `time_session_rate_snapshots` already were, by SECURITY DEFINER
+  // triggers; this was the one writer still going through the caller's session,
+  // so it moves here. **Without this change the migration would have silently
+  // stopped the cost log** — the write is not error-checked below in the
+  // original, so nothing would have surfaced it.
+  //
+  // `company_id` is set explicitly from the file's own row, so dropping RLS
+  // does not drop the tenancy: it was never the thing supplying it.
+  const admin = getSupabaseAdmin();
+  const { error: logError } = await admin.from('ai_tag_logs').insert({
     company_id: file.company_id,
     file_id: file.id,
     model: resolvedModel,
@@ -198,6 +216,16 @@ ${groupedTagList}`;
     success: callSucceeded,
     error_message: errorMessage,
   });
+  // Reported, not thrown: a failed COST LOG must not fail the tagging call the
+  // user asked for. But it must not be silent either — the previous version
+  // discarded the result entirely, which is how a broken log stays broken.
+  if (logError) {
+    console.error('ai-tagging: ai_tag_logs insert failed', {
+      file_id: file.id,
+      company_id: file.company_id,
+      message: logError.message,
+    });
+  }
 
   // ------------------------------------------------------------------------
   // Write validated tags to the file (if any made it through)
