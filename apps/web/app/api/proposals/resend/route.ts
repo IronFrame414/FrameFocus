@@ -57,9 +57,7 @@ export async function POST(request: NextRequest) {
 
   const { data: estimate } = await supabase
     .from('estimates')
-    .select(
-      'id, status, name, estimate_number, company_id, contact_id, expires_at, sent_at'
-    )
+    .select('id, status, name, estimate_number, company_id, contact_id, expires_at, sent_at')
     .eq('id', input.estimate_id)
     .eq('is_deleted', false)
     .maybeSingle();
@@ -152,27 +150,54 @@ export async function POST(request: NextRequest) {
   const bodyText = replaceTemplateVariables(input.body, variables);
   const sender = buildSenderAddress(company);
 
-  const { messageId, error: sendError } = await sendEmail({
-    from: sender,
-    // +REPLY-TO [S97]: a client's reply reaches the COMPANY, not the
-    // platform domain. Resolved in sendEmail so senders inherit it.
-    replyToCompanyId: estimate.company_id,
-    to: contact.email,
-    subject,
-    react: ProposalEmail({
-      companyName: company.name,
-      logoUrl: company.logo_url,
-      brandColor: company.brand_color || '#1a56db',
-      bodyText,
-      signingUrl,
-    }),
-    attachments: [
-      {
-        filename: `${estimate.estimate_number}-proposal.pdf`,
-        content: generated.buffer,
-      },
-    ],
-  });
+  // ⚠️ §3.2 / M4-01 [FIXED S157] — sendEmail CAN THROW, AND THE THROW IS
+  // LOAD-BEARING HERE TOO.
+  //
+  // `sendEmail` calls `getResend()`, which throws when RESEND_API_KEY is unset.
+  // This call was BARE — the same defect S150 fixed in the sibling `send`
+  // route, still live one file over. The throw escaped POST before `logEmail`
+  // below and before the `if (sendError)` branch that invalidates the session,
+  // and the session was already created at :106.
+  //
+  // ⚠️ AND IT WAS WORSE HERE THAN IN `send`, because THIS route invalidates
+  // FIRST (:103, "old links stop working before the new one goes out"). So the
+  // failure left the estimate with NO working link for the client AND an
+  // undelivered live token in the database. The user saw a 500; the link state
+  // had silently changed underneath them.
+  //
+  // Folding a thrown error into the same shape as a returned `sendError` lets
+  // the existing logEmail + invalidate path handle both. This is the third copy
+  // of the pattern; the original is the CO route
+  // (change-orders/[id]/send/route.ts), which has always had it right.
+  let messageId: string | null = null;
+  let sendError: string | null = null;
+  try {
+    const sent = await sendEmail({
+      from: sender,
+      // +REPLY-TO [S97]: a client's reply reaches the COMPANY, not the
+      // platform domain. Resolved in sendEmail so senders inherit it.
+      replyToCompanyId: estimate.company_id,
+      to: contact.email,
+      subject,
+      react: ProposalEmail({
+        companyName: company.name,
+        logoUrl: company.logo_url,
+        brandColor: company.brand_color || '#1a56db',
+        bodyText,
+        signingUrl,
+      }),
+      attachments: [
+        {
+          filename: `${estimate.estimate_number}-proposal.pdf`,
+          content: generated.buffer,
+        },
+      ],
+    });
+    messageId = sent.messageId;
+    sendError = sent.error;
+  } catch (err) {
+    sendError = err instanceof Error ? err.message : 'Email send failed';
+  }
 
   await logEmail(admin, {
     company_id: estimate.company_id,
@@ -184,7 +209,9 @@ export async function POST(request: NextRequest) {
     sender_email: sender,
     subject,
     status: sendError ? 'failed' : 'sent',
-    metadata: sendError ? { error: sendError, body: bodyText, resend: true } : { body: bodyText, resend: true },
+    metadata: sendError
+      ? { error: sendError, body: bodyText, resend: true }
+      : { body: bodyText, resend: true },
   });
 
   if (sendError) {
