@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase-browser';
 import type { Database } from '@framefocus/shared/types/database';
 import { recalculateEstimateTotals } from '@/lib/services/estimate-items-client';
 import type { SupabaseClient } from '@supabase/supabase-js';
+import { applied, DISCARDED } from './mutation-result';
 
 // CHECK-constrained columns come back as loose `string` from the type
 // generator; re-narrow them to the literal unions per CLAUDE.md.
@@ -364,9 +365,7 @@ export async function updateEstimate(
     .select('id');
 
   if (error) return { success: false, error: error.message };
-  if (!data || data.length === 0) {
-    return { success: false, error: 'Estimate not found or not editable' };
-  }
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 
@@ -418,9 +417,7 @@ export async function softDeleteEstimate(
     .select('id');
 
   if (error) return { success: false, error: error.message };
-  if (!data || data.length === 0) {
-    return { success: false, error: 'Estimate not found or you cannot delete it' };
-  }
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 
@@ -479,7 +476,7 @@ export async function markAsSent(
     .select('id');
 
   if (error) return { success: false, error: error.message };
-  if (!data || data.length === 0) return { success: false, error: 'Estimate not found' };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 
@@ -516,7 +513,7 @@ export async function submitForReview(
     .select('id');
 
   if (error) return { success: false, error: error.message };
-  if (!data || data.length === 0) return { success: false, error: 'Estimate not found' };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 
@@ -562,7 +559,7 @@ export async function approveAndSend(
     .select('id');
 
   if (error) return { success: false, error: error.message };
-  if (!data || data.length === 0) return { success: false, error: 'Estimate not found' };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 
@@ -657,6 +654,6 @@ export async function updateReminderSchedule(
     .select('id');
 
   if (error) return { success: false, error: error.message };
-  if (!data || data.length === 0) return { success: false, error: 'Estimate not found' };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
