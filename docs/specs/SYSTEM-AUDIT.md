@@ -380,3 +380,54 @@ as well as migrations**.
 
 **A fix pass is not a pass.** It closes an existing pass's findings and does not fill a row or a
 column in §2.
+
+---
+
+## §5 — Full-verification runs
+
+> **One row per pass that ran the full battery.** A pass reports green only against a *complete*
+> run, and records pre-existing reds here so the next pass does not re-diagnose them.
+>
+> ⚠️ **Read the exit status the way `CLAUDE.md` requires** — redirected to a file and printed, never
+> through a pipe and never off a task summary. The S155/S156 run below is a worked example of why:
+> the live-harness command's **background task notification reported "exit code 0" while the code
+> printed into the log was `1`.** The notification was describing the wrapper, not vitest.
+
+### S155/S156 — passes 3 and 4, verified 2026-08-19
+
+| # | Check | Result |
+| --- | --- | --- |
+| 1 | `npx turbo run type-check` (all packages) | **exit 0** |
+| 2 | `next lint` | **exit 0** — 16 warnings, 0 errors, **all pre-existing** (see below) |
+| 3 | `npm run build` | **exit 0** — first run was a `FULL TURBO` cache hit and was **re-run with `--force`**: 0 cached, 2m39s, `Compiled successfully` |
+| 4 | Committed vitest suite | **795/795 passed**, 55 files — matches the expected count exactly |
+| 5 | Every live harness (`test/*.live.ts`, 75 files) | **866 passed, 11 failed** — **all 11 pre-existing**, itemised below |
+| 6 | Playwright, four chunks | **517 passed, 5 skipped, 0 failed** — `m-shell` 54 · `m-sections` 59 · `m-photos` 42 · rest 362. The four chunks partition the suite exactly (54+59+42+367 = 522) |
+| 7 | `npx supabase migration list` | **113 files = 113 local = 113 applied**, zero rows where `local <> remote` |
+| 8 | Fixture leakage | **companies 2 → 2**, unchanged across the live and Playwright runs |
+
+**Why none of the 11 reds belongs to this branch, by construction.** `git diff 2c36759..HEAD`
+touches **five files: two new `.live.ts` harnesses and three documents. No application code, no
+service, no schema.** All four failing harness files are byte-identical to `main`, so the same run
+on `main` produces the same result. The two new harnesses write only to `signing_sessions`, `files`,
+`project_assignments` and `estimates`, and reference none of the failing tables except one comment.
+
+| Harness | Failed | Cause — all **pre-existing**, none fixed (this pass changes no application code) |
+| --- | --- | --- |
+| `s138-trial-deletion-run` | 7 | The first assertion is a **safety gate** — *"the fixture is the ONLY company due for deletion"* — and it read `[]`. The fixture it needs is absent, so the remaining six cascade. **A precondition failure, not six independent defects.** |
+| `s145-contracts` | 2 | (a) *"companies carries the master and defaults it OFF"* asserts **live row state on a shared company**, not a default: `Bishop Contracting.client_contracts_enabled` is `true`. **The schema is correct** — `information_schema` gives `column_default = false`, `NOT NULL` [LIVE] — so this is a stale toggle plus an assertion whose name over-claims. Its only harness writer, `s146`, sets and restores in a `try/finally` capturing the prior value, so **once the flag is left on, every later run faithfully restores it on**. Same family as **M4-05**. (b) *"an 'initial' box takes neither key nor label"* expects no error and gets CHECK `23514` — a **schema-vs-test disagreement**, unexamined. |
+| `s140-lien-releases` | 1 | *"NONE of them carries a PDF — FrameFocus supplies no form"* expected null and read a `file_id`. **Fixture residue**, same class as M4-05. |
+| `s121-contact-addresses-floor` | 1 | ⚠️ **The one worth acting on.** Its `describe` is titled **"contact_addresses SELECT is NOT floored"** and asserts all three of crew/foreman/subcontractor *"can still READ an address — the ruling was about writes"*. **S154's M2 Group B fix floored exactly that SELECT**, so the harness now asserts the opposite of the shipped ruling. Only the `subcontractor` case reddens: the live `contact_addresses_select_scoped` excludes **`subcontractor` and `client` only** (crew and foreman still read company-wide, by design), so the other two cases still pass **while asserting a claim the policy no longer supports company-wide**. |
+
+**The lesson, because it generalises past this harness.** S155's probe commit states the discipline —
+*"tests asserting current wrong behaviour name what a fix looks like, so they are inverted rather
+than deleted when Josh rules"* — and S154 applied it to **its own** pass-2 probes. It did not sweep
+for **older** harnesses asserting the behaviour it had just overturned. `s121-contact-addresses-floor`
+is that miss, and it is a quiet one: **a partially-stale harness that still passes two of three cases
+reads as healthy.** A fix pass should grep for harnesses naming the table it just floored, not only
+invert the probes it wrote.
+
+**Lint warnings (16, all pre-existing).** 12 × `jsx-a11y/alt-text` and `@next/next/no-img-element`
+in PDF templates (`co-template.tsx`, `invoice-template.tsx`, `proposal-template.tsx`) and auth
+screens, plus one `react-hooks/exhaustive-deps` in `chat-thread.tsx`. **None is in a file this
+branch touches** — the branch adds only `test/` and `docs/`.
