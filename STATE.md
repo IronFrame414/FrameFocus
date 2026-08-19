@@ -18,7 +18,7 @@ Last updated: 2026-08-04 — Session 98 (M6M Mobile PWA spec written, ruled and 
 | 6. Team & Field Operations    | 🚧 IN PROGRESS | **6A ✅, 6B ✅, 6C ✅, 6D ✅ — desktop UI built S87 on feat/module-6b-ui (NOT merged).** 6E deferred post-launch. Full M6 UI: Field Ops hub, 12-item FFNav, daily logs (log-bound photos, presence auto-fill via get_project_day_presence()), safety incidents (atomic RPC, hierarchy notification), deliveries (per-line/whole-delivery photos, damage-photo enforcement, PDF per check-in, project tab). Nine migrations applied to prod in the S98 batch — **prod batch and merge are no longer owed**. **6M (Mobile PWA) specced S98, NOT built** — `docs/specs/M6M-mobile-pwa-spec.md`; mobile is a PWA under `/m`, not React Native (S97 ruling). Blocked on GAP-8 (Mobile Field Capture handoff). Piecemeal-tested; one clean walkthrough advised.                                                                                                                                                                                                                                                                                          |
 | 7. Job Finances               | 🚧 IN PROGRESS | **7A ✅, 7B ✅, 7C ✅, 7D ✅, 7E ✅, 7H ✅ — 7A–7E merged in `91806cf` [S98]; 7C completed and 7H built [S140].** 7A expenses & job cost (`/dashboard/expenses`), 7B revised-contract derivation (`lib/services/contract-value.ts` — the single legal derivation), 7C accounts payable **+ compliance** , 7D client invoicing (`/dashboard/projects/[id]/invoices`), 7E payments (`/dashboard/projects/[id]/payments`), 7H job profitability (`/dashboard/projects/[id]/profitability`, Owner/Admin). **7F ✅ client-outbound [S140]** — lien releases and waivers (`/dashboard/projects/[id]/lien-releases`, Company Settings → Lien releases), migration `20260922000000`. PDF-overlay only: the company uploads its own counsel- or lender-approved form and places boxes; the product authors no legal text. **Sub-inbound (§12) is DEFERRED** — its four design questions are unanswered. **7G QuickBooks is SPECCED, UNBUILT (§S schema layer still TODO); 7I contracts is SPEC ONLY and self-declared stale** — and 7I now owns the sub-contract agreement, not 7F (`113c-spec.md` §7, amended S140). <br><br>⚠️ **The 7C ✅ was overstated until S140.** From S91 to S140 this row read `7C ✅` while the entire compliance half was unbuilt — no upload, no sub record, no calendar row, no release-time chips — and `7C-spec.md:433-449` simultaneously recorded the blocker "RESOLVED S92". A ruling was recorded; nothing shipped, and two documents called it done. Completed at S140: `20260921000000` floors the table to Owner/Admin on all three verbs, and the surface is `/dashboard/subcontractors/[id]` (which also closes TECH_DEBT #13 / #108(c)). <br><br>Financial Visibility Floor is DB-enforced for contract value, budgeted amount and instrument rates; `change_orders.net_delta` remains UI-only by ruling — see TECH_DEBT #117. Specs: `docs/specs/7A-spec.md`, `7B`, `7C`, `7d1`, `7e1`, `7h1`. |
 | 8. Inventory & Tools          | ⚪ NOT STARTED | Added Session 6. Inventory catalog + tool tracking with location, check-in/out log, bulk assignment                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| 9. Customer Experience Portal | ⚪ NOT STARTED | **BLOCKED by Pre-Module 9 Decision Gate.** Scope expanded Session 6: material selections, decision log, photo favorites, pre-construction checklist                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| 9. Customer Experience Portal | 🟡 IN DESIGN | **Gate CLEARED [Josh, S164]** — see "Pre-Module 9 Decision Gate" below. Spec: `docs/specs/9-spec.md`. Scope expanded Session 6: material selections, decision log, photo favorites, pre-construction checklist. **R21 allowances deferred OUT of M9 [S164].**                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | 10. Reporting & Analytics     | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | 11. AI Marketing & Social     | ⚪ NOT STARTED |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 
@@ -533,10 +533,50 @@ These are design questions surfaced during planning that need answers before the
 
 ### Module 9
 
-- **Client portal messaging.** Real-time chat or async email-style? Real-time is more work. Tied to the Pre-Module 9 Decision Gate above — answer this when that gate is resolved.
+- **Client portal messaging.** ~~Real-time chat or async email-style? Real-time is more work. Tied to the
+  Pre-Module 9 Decision Gate above — answer this when that gate is resolved.~~ **ANSWERED [S150 interview,
+  R11/R13].** The client adds *photos, notes and questions*; Owner/Admin/PM respond directly; it is **a
+  thread, not a drop box**, and the photo and its note are **one unit, not two records**. Async, not
+  real-time chat. See `docs/specs/9-spec.md` §7.2.
 
 ---
 
+## Pre-Module 9 Decision Gate — ✅ **RESOLVED [Josh, S164]**
+
+> **Module 9 is UNBLOCKED.** The gate stood as a HARD BLOCK from Session 15 to Session 164. Both
+> ideas are ruled below. **The original text is quoted in full underneath rather than deleted**, so
+> the question this gate actually asked stays legible to whoever reads the answer.
+
+### The ruling
+
+**Idea 1 — outbound webhooks: RULED MODULE 12.** Per-company API keys, webhook configs and
+HMAC-signed events become **Module 12**, built after Module 9, not before it and not as part of it.
+It is not cancelled and it is not a Module 9 dependency.
+
+**Idea 2 — the client-experience pivot: RULED AGAINST, and it was already ruled against.** The S150
+interview settled it as **R1 — accounts, not magic links.** *Josh's reasoning, as given:* long-lived
+magic links do not revoke, and every hard edge in this module — a client who must lose access, two
+clients disagreeing, access after project completion — is a revocation question. **FrameFocus hosts
+the portal.**
+
+**What that means for the gate's four questions**, each answered rather than left standing:
+
+| The gate asked | Answer | Authority |
+|---|---|---|
+| Is FrameFocus the portal, the company website, or both? | **FrameFocus**, with accounts. A company site may carry a *link* to the invite (R1's second entry point), never the portal itself. | R1 |
+| What replaces client messaging if clients don't log in? | Moot — clients log in. Messaging is **a thread, not a drop box** (R11/R13). | R11 |
+| Does magic-link signing fit all tiers or only Business? | Moot as a tiering question. `/sign-co/[token]` **continues to ship for every tier** and is not deprecated; the portal is a **second entry to the same write**. | 9-spec §7.1 |
+| Where does invoice payment live? | **A pay button routing to QuickBooks.** Companies with no QB connection get **no pay option at all** — not a disabled one. | R19 |
+
+**Also deferred out of Module 9 [Josh, S164]: R21, allowance selections.** Allowance identity,
+option storage, the selection write and the third CO entry point are **not built in M9**. See
+`docs/specs/9-spec.md` §8.1 — the spec's own conclusion was that R21 is a sub-module needing its own
+storage ruling, not a section.
+
+<details>
+<summary><strong>The original gate text, quoted verbatim (Session 15 – Session 164)</strong></summary>
+
+```
 ## Pre-Module 9 Decision Gate (HARD BLOCK)
 
 **Module 9 design and build are blocked until this is resolved.** Two product ideas surfaced in Session 15 that fundamentally affect client experience shape.
@@ -546,6 +586,9 @@ These are design questions surfaced during planning that need answers before the
 **Idea 2 — Client-experience pivot (no logins):** Replace FrameFocus-hosted client portal with email + magic-link tokenized pages (for signing COs, picking materials) + webhook sync to the company's own website. Eliminates client accounts.
 
 **Questions to resolve:** Is FrameFocus the client portal, is the company website the client portal, or both? What replaces client messaging thread if clients don't log in? Does magic-link signing fit on all tiers or only Business? Where does invoice payment live?
+```
+
+</details>
 
 ---
 

@@ -536,8 +536,11 @@ Two separate changes, because one is routing and one is data:
 - **Ruling A — the route.** `middleware.ts` and `app/dashboard/layout.tsx` both guard `/dashboard`
   via `apps/web/lib/dashboard-access.ts` (M6M D-54: hidden **and** route-guarded). A
   `subcontractor` goes to `/m/projects`; a `client` goes to a **placeholder** that Module 9
-  replaces. ⚠️ **The Pre-Module 9 gate — hosted portal vs. email plus magic-link tokenised pages —
-  is OPEN and untouched.** A placeholder is not a portal.
+  replaces. ⚠️ ~~**The Pre-Module 9 gate — hosted portal vs. email plus magic-link tokenised pages —
+  is OPEN and untouched.**~~ **RESOLVED [Josh, S164]: FrameFocus hosts the portal, with accounts**
+  (R1); outbound webhooks become **Module 12**. See "Pre-Module 9 Decision Gate" in `STATE.md`.
+  **The placeholder itself is still a placeholder** — that half of the sentence stands until M9
+  stage 1 replaces it. A placeholder is not a portal.
 - **Ruling B — the data.** `20260911000000_roster_visibility_floor.sql`. **A redirect protects no
   data**, since `/m`, every API route and any direct PostgREST call bypass routing entirely.
 
