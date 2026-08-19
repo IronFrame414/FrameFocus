@@ -133,6 +133,47 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
   **Belongs to the M7 pass** (cost/financial surface).
 
+- **#3-m9 — the Financial Visibility Floor gates `project_financials.contract_value` and leaves
+  the SAME FIGURE readable on `client_contracts`. A CREW MEMBER reads it today.** Raised S164
+  (2026-08-19), while building M9 stage 4.
+
+  ```
+  client_contracts_select_visible  SELECT
+    company_id = get_my_company_id()
+    AND get_my_role() <> ALL (ARRAY['subcontractor','client'])   <- everyone else is in
+    AND can_view_project(project_id)
+  ```
+
+  `client_contracts.contract_value` is a real column with real values, and the policy admits
+  **project_manager, foreman and crew_member** on any project they are assigned to.
+
+  **Confirmed live, with rows.** Signed in as the seeded QA identities against rebuild-test:
+
+  | Identity | `client_contracts.contract_value` | `project_financials.contract_value` |
+  | --- | --- | --- |
+  | `josh+crew@worthprop.com` | **213854.10, 12345** | `[]` |
+  | `josh+qa-foreman@worthprop.com` | **12345** | `[]` |
+  | `josh+pm@worthprop.com` | **7860, 12365, 213854.10, 12345** | `[]` |
+
+  `project_financials` is correctly floored for all three — which is the point. **The floor works
+  on the table `CLAUDE.md` names and does not exist on the second copy.**
+
+  ⚠️ **`CLAUDE.md`'s enforcement table says "Contract value … DB-enforced, Owner/Admin" and cites
+  `20260811000000`.** That is true of `project_financials` and false of the platform: S123 was
+  burned by exactly this shape on `change_orders`, where the documented policy and the live one had
+  diverged. Here the two policies never diverged — there are simply **two homes for one figure**,
+  and only one of them was ever floored.
+
+  **NOT fixed here, deliberately.** The obvious fix — floor `client_contracts` to owner/admin —
+  changes who can work with a contract, and 7I's authoring flow admits a PM. It needs a ruling, not
+  a policy edit, and it is not M9's: M9 only touched the CLIENT arm on this table, which is
+  correctly scoped and is proved by `s164-m9-read-arms.live.ts` ARM 2.
+
+  **The client reading it is NOT part of this finding and is correct** — it is her contract, and
+  `CLAUDE.md`'s S164 ruling puts the counterparty outside the Floor. The exposure is to **staff**.
+
+  **Belongs to the M7 pass** (Financial Visibility Floor), with 7I as the affected surface.
+
 ### Branch-scoped, awaiting real numbers — `feature/s150-audit-fixes` [S150]
 
 > Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.

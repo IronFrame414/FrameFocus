@@ -626,6 +626,30 @@ A mostly empty page with a line telling her the **project hasn't started yet.**
 > floor — the portal signs through the service role, as `/sign-co/[token]` already does) and
 > `signing_sessions`. Proved shut, with rows present, in `s164-m9-financial-arms.live.ts` ARM 16.
 
+> ### STAGE 4 — the portal itself, built [S164]
+>
+> `app/portal/` replaces `/client-placeholder`, which is **deleted**. Its own header said Module 9
+> would delete it, and it refused to claim `/portal` while the Pre-Module 9 gate was open. R1 closed
+> the gate, so the name is claimed by ruling rather than by drift.
+>
+> **ONE PAGE PER PROJECT, NOT A TAB SET** — Josh, S164 Q3: *"In the portal, they see all of it on
+> one page and totals added."* Taken as an instruction. A tabbed portal would put each answer a
+> click away and would invite every tab to grow its own idea of what she may see.
+>
+> **The guard is symmetrical.** `dashboard-access.ts` keeps a client out of `/dashboard`;
+> `app/portal/layout.tsx` keeps everyone else out of `/portal`, reusing the same helper rather than
+> retyping a role list. Neither protects data — the arms do.
+>
+> **A deactivated client is LET IN and shown a true sentence.** Bouncing her to `/sign-in` would
+> loop (she has a valid session) and would tell her she is signed out, which is false. R17 empties
+> every arm either way; only the sentence differs.
+>
+> **§7.2's two services finally have a caller.** `inviteClientToPortal()` and
+> `setClientAccessState()` shipped at stage 2 with a live harness and **no user interface at all** —
+> R1 and R17 were true in the database and unreachable in the product. `POST /api/portal/invite`
+> now creates AND sends, through the same `sendInviteEmail()` the staff invite uses (its third
+> caller, not a second mechanism), and the project's Contacts tab carries the R17 control.
+
 ---
 
 ## §14 — Corrections table (carry forward)

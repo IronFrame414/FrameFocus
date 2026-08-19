@@ -58,24 +58,51 @@ test.describe('a subcontractor cannot reach the dashboard', () => {
 });
 
 test.describe('a client cannot reach the dashboard', () => {
-  test('⚠️ lands on the placeholder, which names no company and shows no nav', async ({ page }) => {
-    await signIn(page, CLIENT, /\/client-placeholder/);
-    await expect(page).toHaveURL(/\/client-placeholder/);
-    await expect(page.getByRole('heading', { name: /portal is coming soon/i })).toBeVisible();
+  // ⚠️ REWRITTEN AT S164, NOT DELETED. This block asserted the HOLDING PAGE:
+  //
+  //   test('⚠️ lands on the placeholder, which names no company and shows no nav')
+  //     await expect(page.getByRole('heading', { name: /portal is coming soon/i })).toBeVisible();
+  //     // "It is a holding page, not the first piece of a portal: no dashboard
+  //     //  chrome, and nothing that could leak the tenant."
+  //
+  // M9 stage 4 deleted `/client-placeholder` and built `/portal`. The
+  // "names no company" half is deliberately overturned — R20 requires the
+  // portal to carry the COMPANY's identity once authenticated. What survives
+  // untouched is the guard itself: a client does not reach the dashboard, and
+  // does not loop.
+  test('⚠️ lands on the portal, with the company’s branding and no dashboard nav', async ({
+    page,
+  }) => {
+    await signIn(page, CLIENT, /\/portal/);
+    await expect(page).toHaveURL(/\/portal/);
 
-    // It is a holding page, not the first piece of a portal: no dashboard
-    // chrome, and nothing that could leak the tenant.
+    // R20 — the company names itself here, and the PRODUCT does not.
+    await expect(page.getByRole('heading').first()).toBeVisible();
+    await expect(page.getByText(/EZ Contractor Binder|EZ Binder/)).toHaveCount(0);
+
+    // Still no dashboard chrome: this is a client surface, not a stripped
+    // version of the staff one.
     await expect(page.getByTestId('chat-launcher')).toHaveCount(0);
-    await expect(page.getByRole('link', { name: /projects|contacts|team/i })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: /contacts|team|timesheets/i })).toHaveCount(0);
   });
 
   test('and /dashboard bounces there rather than looping', async ({ page }) => {
     // The loop this guards against is real: a layout that redirects a denied
-    // role to a page whose own layout redirects back is an infinite bounce, and
-    // it is why the placeholder makes no auth check of its own.
-    await signIn(page, CLIENT, /\/client-placeholder/);
+    // role to a page whose own layout redirects back is an infinite bounce.
+    // The portal layout admits a client — including a DEACTIVATED one, which is
+    // what keeps this from looping now that the destination has a guard of its
+    // own.
+    await signIn(page, CLIENT, /\/portal/);
     await page.goto('/dashboard/contacts');
-    await expect(page).toHaveURL(/\/client-placeholder/);
+    await expect(page).toHaveURL(/\/portal/);
+  });
+
+  test('⚠️ and a staff role cannot reach the portal — the guard is symmetrical', async ({
+    page,
+  }) => {
+    await signIn(page, OWNER);
+    await page.goto('/portal');
+    await expect(page).toHaveURL(/\/dashboard/);
   });
 });
 
