@@ -242,7 +242,39 @@ export function DashboardShell({
 
   return (
     <div className="flex min-h-screen">
-      <aside className="flex w-[236px] shrink-0 flex-col bg-brand-900 py-[22px]">
+      {/* ------------------------------------------------------------------
+          THE SIDEBAR IS PINNED TO THE VIEWPORT [S158 · Finding 3, RULED Josh]
+
+          It used to be a plain flex item: `flex w-[236px] shrink-0 flex-col`.
+          With no height of its own it STRETCHED to the height of the flex
+          container, which is the height of the DOCUMENT — so on a long page
+          (Settings was the one Josh caught) the footer's `mt-auto` pushed the
+          user block and Sign out to the bottom of the *document*, hundreds of
+          pixels below the fold. The nav did not "scroll away" because it was
+          scrolling; it scrolled away because it was as tall as the page.
+
+          Three classes, and each is load-bearing:
+            · `h-screen`  — an explicit cross-size, which is also what STOPS the
+                            stretch. `align-self: stretch` only applies while
+                            the cross-size is `auto`, and a stretched box has no
+                            room to move, so `sticky` on its own would do
+                            nothing at all here.
+            · `self-start` — says the same thing declaratively. Redundant with
+                            `h-screen` by the spec; kept so a later edit that
+                            touches the height does not silently reinstate the
+                            stretch.
+            · `sticky top-0` — pins it. Not `fixed`: fixed leaves the 236px
+                            column behind and every dashboard page would have to
+                            re-add the offset.
+
+          ⚠️ AND THE NAV ITSELF NOW SCROLLS — see the `overflow-y-auto min-h-0`
+          below. Capping the aside at one viewport creates the opposite failure
+          on a SHORT viewport: an Owner sees all 14 items plus the lockup and the
+          footer, which overflows a laptop window, and without an inner scroller
+          the overflow would be unreachable in a different way. A fix that works
+          on Settings and breaks a 700px window is not a fix.
+          ------------------------------------------------------------------ */}
+      <aside className="sticky top-0 flex h-screen w-[236px] shrink-0 flex-col self-start bg-brand-900 py-[22px]">
         {/* Header block — the PRODUCT lockup, above the TENANT's company name.
             /logo-full-ice.svg is the FULL-COLOUR variant for navy, and it is
             the deliberate choice here [Josh, S98]: the brand sheet's own
@@ -310,7 +342,12 @@ export function DashboardShell({
             that same order. A build that sorted per role would pass every
             "the right items are present" assertion and fail A-N3.
             ------------------------------------------------------------------ */}
-        <nav className="flex flex-1 flex-col gap-[2px] px-[14px]">
+        {/* `min-h-0` before `overflow-y-auto`, in that order of reasoning: a
+            flex item's default `min-height: auto` refuses to shrink below its
+            content, so the overflow rule would never engage and the footer
+            would be pushed off the bottom of the pinned aside instead. The
+            lockup above and the footer below stay put; only this list moves. */}
+        <nav className="flex min-h-0 flex-1 flex-col gap-[2px] overflow-y-auto px-[14px]">
           {visible.filter((item) => item.section === null).map(renderItem)}
 
           {NAV_SECTIONS.map(({ key, label }) => {
