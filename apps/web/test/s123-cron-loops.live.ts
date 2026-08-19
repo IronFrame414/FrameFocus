@@ -109,7 +109,12 @@ const hourOf = (clock: string | null, fallback: number) =>
 async function rowsOfType(type: string, since: string) {
   const { data } = await admin
     .from('notifications')
-    .select('id, recipient_profile_id, type, title, body, link_key, link_params, project_id')
+    // `source_id` [S159] — the row's originating record. §3j's assertions need
+    // it to tell THIS harness's seeded session apart from a real one; see the
+    // block comment there.
+    .select(
+      'id, recipient_profile_id, type, title, body, link_key, link_params, project_id, source_id'
+    )
     .eq('company_id', company.id)
     .eq('type', type)
     .gte('created_at', since);
@@ -152,7 +157,9 @@ async function idsOfType(type: string): Promise<Set<string>> {
 async function rowsAddedSince(type: string, before: Set<string>) {
   const { data } = await admin
     .from('notifications')
-    .select('id, recipient_profile_id, type, title, body, link_key, link_params, project_id')
+    .select(
+      'id, recipient_profile_id, type, title, body, link_key, link_params, project_id, source_id'
+    )
     .eq('company_id', company.id)
     .eq('type', type);
   const fresh = (data ?? []).filter((r) => !before.has(r.id));
@@ -442,18 +449,62 @@ describe('§3j — runStillClockedIn', () => {
     await seedSegment(openSessionId, start, null);
   });
 
+  /**
+   * ⚠️ SCOPED TO THE SEEDED SESSION, NOT TO THE RECIPIENT. [S159 — RULED Josh]
+   *
+   * **This is the S121 shape, and it went red on live data rather than on a
+   * defect.** Both assertions below used to build their recipient set from
+   * EVERY `still_clocked_in` row this run produced, and then claim that the
+   * Owner's presence in it meant *"management was told about the crew
+   * member's session"*. It does not. `runStillClockedIn` nudges the worker of
+   * **every open session in the company**, so an Owner who is himself clocked
+   * in appears as a recipient **on his own account**, at 16:00, with no
+   * manager notification involved at all.
+   *
+   * Measured [LIVE, S158]: `time_clock_sessions` held one open row —
+   * `clock_in 2026-08-19 12:07:51 UTC, clock_out NULL`, the OWNER's. That made
+   * `recipients.has(ownerProfileId)` true at 16:00, and then made the 17:00
+   * test pick the Owner's own *"You're still clocked in"* row instead of the
+   * manager's overtime row, so **one real person being clocked in reddened two
+   * tests.** A person being clocked in is the product working.
+   *
+   * Same family as `s145-contracts` and `s140-lien-releases`, which `CLAUDE.md`
+   * already names: *an assertion that describes the freshly-seeded world and is
+   * then tested forever against live, shared, mutable data.*
+   *
+   * The fix is the key the notification already carries. `notify()` writes
+   * `source_id` from the cron's `source: { table: 'time_clock_sessions', id:
+   * session.id }`, so a row states which session produced it. **The last test
+   * in this block has scoped by `source_id` since S131**; these two simply were
+   * never brought into line with it.
+   *
+   * ⚠️ AND `source_id` DOES NOT REPLACE `since` — it narrows a different axis.
+   * `since` separates THIS run from earlier ones on the same session (the
+   * 16:00 and 17:00 tests reuse one session by design, because
+   * `idx_time_clock_sessions_one_open_per_member` allows exactly one). Keep
+   * both. The closed-session test at the end of the block is the case where
+   * `source_id` alone genuinely cannot carry the assertion, and it says so.
+   */
+  const forSeededSession = <T extends { source_id: string | null }>(rows: T[]) =>
+    rows.filter((r) => r.source_id === openSessionId);
+
   it('16:00 nudges the WORKER and nobody else', async () => {
     const now = instantAt(tz, 16, null);
     const since = new Date().toISOString();
     const outcome = await runStillClockedIn(admin as SupabaseClient<Database>, now);
 
     expect(outcome.fired).toBeGreaterThan(0);
-    const rows = await rowsOfType('still_clocked_in', since);
+    const rows = forSeededSession(await rowsOfType('still_clocked_in', since));
+    // Not vacuous: if the scoping filtered everything away, the three
+    // membership assertions below would all pass on an empty set.
+    expect(rows.length, 'the seeded session produced no notification at all').toBeGreaterThan(0);
     const recipients = new Set(rows.map((r) => r.recipient_profile_id));
 
     // The one trace where the worker IS the recipient.
     expect(recipients.has(crewProfileId)).toBe(true);
-    // At 16:00 this is the worker's own business — management is NOT told.
+    // At 16:00 this is the worker's own business — management is NOT told
+    // ABOUT THIS SESSION. Whether they have open sessions of their own is a
+    // different fact and no longer confused with this one.
     expect(recipients.has(ownerProfileId)).toBe(false);
     expect(recipients.has(adminProfileId)).toBe(false);
 
@@ -467,12 +518,17 @@ describe('§3j — runStillClockedIn', () => {
     const since = new Date().toISOString();
     await runStillClockedIn(admin as SupabaseClient<Database>, now);
 
-    const rows = await rowsOfType('still_clocked_in', since);
+    const rows = forSeededSession(await rowsOfType('still_clocked_in', since));
+    expect(rows.length, 'the seeded session produced no notification at all').toBeGreaterThan(0);
     const recipients = new Set(rows.map((r) => r.recipient_profile_id));
     expect(recipients.has(crewProfileId)).toBe(true);
     expect(recipients.has(ownerProfileId)).toBe(true);
     expect(recipients.has(adminProfileId)).toBe(true);
 
+    // ⚠️ THE ROW THIS PICKS IS THE POINT. Unscoped, `find(recipient ===
+    // ownerProfileId)` could return the Owner's OWN "You're still clocked in"
+    // row — which is a real row, addressed to the right person, and carries the
+    // wrong title. That is how the 12:07 session reddened this line.
     const managerRow = rows.find((r) => r.recipient_profile_id === ownerProfileId)!;
     expect(managerRow.title).toContain('into overtime');
   });
