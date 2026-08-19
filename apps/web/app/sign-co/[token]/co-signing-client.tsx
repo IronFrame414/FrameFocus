@@ -3,6 +3,7 @@
 import { useRef, useState } from 'react';
 import SignatureCanvas from 'react-signature-canvas';
 import { CONSENT_TEXT } from '@/lib/proposal/proposal-defaults';
+import { typedSignatureToDataUrl } from '@/lib/signature-image';
 
 // 5D §6 — review + sign (draw or type) or decline (notes only) a change
 // order. Adapted from the M4 signing client (locked D-4: same in-house
@@ -58,20 +59,6 @@ export function CoSigningClient({ token, data, recipientName }: CoSigningClientP
     consent &&
     (method === 'draw' ? drawDirty : typedSignature.trim().length > 0);
 
-  function typedToDataUrl(name: string): string {
-    const canvas = document.createElement('canvas');
-    canvas.width = 600;
-    canvas.height = 160;
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      ctx.fillStyle = '#111827';
-      ctx.font = '56px "Brush Script MT", "Segoe Script", "Snell Roundhand", cursive';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(name, 24, 80);
-    }
-    return canvas.toDataURL('image/png');
-  }
-
   async function handleSign() {
     setError(null);
     let signatureData: string;
@@ -83,7 +70,7 @@ export function CoSigningClient({ token, data, recipientName }: CoSigningClientP
       }
       signatureData = pad.getTrimmedCanvas().toDataURL('image/png');
     } else {
-      signatureData = typedToDataUrl(typedSignature.trim());
+      signatureData = typedSignatureToDataUrl(typedSignature.trim());
     }
 
     setBusy(true);

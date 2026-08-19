@@ -649,6 +649,34 @@ A mostly empty page with a line telling her the **project hasn't started yet.**
 > R1 and R17 were true in the database and unreachable in the product. `POST /api/portal/invite`
 > now creates AND sends, through the same `sendInviteEmail()` the staff invite uses (its third
 > caller, not a second mechanism), and the project's Contacts tab carries the R17 control.
+>
+> ### STAGE 5 — the client writes, built [S164]
+>
+> **R11 REUSES `chat_threads`, as a third `kind`.** It already has the shape §7.2 asks for, down to
+> the detail that decides it: **one message with N photos attached** is "one unit, not two records".
+> A `client_messages` table would have been a second implementation of a thread.
+>
+> ⚠️ **AND ADDING A KIND SILENTLY WIDENS THE TWO THAT EXIST.** Every pre-existing chat SELECT policy
+> reads `kind = 'sub' OR get_my_role() IS DISTINCT FROM 'subcontractor'` — written when `kind` had
+> two values. It says *"if it is not the sub thread, any non-subcontractor may read it"*, which on
+> the day a third kind appears **admits foreman and crew to the client's private conversation with
+> the office**, with nothing failing and no policy edited. Closed by a RESTRICTIVE gate
+> (`may_enter_client_thread()`), which leaves `crew` and `sub` untouched by construction rather than
+> by three rewritten policies. `s164-m9-client-writes.live.ts` **W3** proves both directions.
+>
+> **Her photos are client-visible by the WITH CHECK, not by the caller** (R11). `files.client_visible`
+> defaults to false, so an upload that forgot it would post a photo she could not then see. The
+> policy refuses that row instead of storing it — **W2c** asserts the refusal and the acceptance.
+>
+> **R10/Q6 — one write path, distinguishable callers.** `completeCoSignature` takes a required
+> `caller` parameter; `co_signing_sessions` gains `signer_channel` and `signer_profile_id`, tied by a
+> CHECK so the pair cannot record a portal signature with nobody signed in. The consent text names
+> the channel in its own words. **W7** signs a real change order end-to-end and reads the evidence
+> back; **W4c** asserts in the source that `portal-writes.ts` never reimplements the PDF, the budget
+> call or the status flip.
+>
+> 🔴 **AND R10 WAS UNBUILDABLE UNTIL A LIVE DEFECT WAS FIXED.** The CO signature had been impossible
+> since 2026-08-09 — see `TECH_DEBT.md` **#4-m9**. Not M9's bug; M9 is why it was found.
 
 ---
 

@@ -533,3 +533,98 @@ export async function getPortalBilling(
     totalRetainage: invoices.reduce((t, i) => t + i.retainage_withheld, 0),
   };
 }
+
+export interface PortalMessage {
+  id: string;
+  body: string;
+  createdAt: string;
+  /** True when the caller wrote it — the portal renders no names. See R8. */
+  mine: boolean;
+  photos: { fileId: string; url: string | null }[];
+}
+
+/**
+ * R11 — the thread, read.
+ *
+ * ⚠️ NO AUTHOR NAMES, AND THAT IS §4.7 (R8) — *"no names anywhere."* The staff
+ * chat resolves authors through `lib/chat/authors.ts`; this deliberately does
+ * not, because the people on the other side of this thread are the company's
+ * employees and the client is a counterparty. She sees her own messages and
+ * "the office" — which is also what the S131 roster floor would leave her
+ * anyway: a client cannot read another `profiles` row, so an author lookup
+ * would return blanks and the blanks would look like a bug.
+ *
+ * `mine` is computed from the caller's OWN profile id, which she can always
+ * read. That is the whole of the attribution the portal needs.
+ */
+export async function getPortalThread(
+  supabase: SupabaseClient<Database>,
+  projectId: string,
+  myProfileId: string,
+  ttlSeconds: number
+): Promise<PortalMessage[]> {
+  const { data: thread } = await supabase
+    .from('chat_threads')
+    .select('id')
+    .eq('project_id', projectId)
+    .eq('kind', 'client')
+    .maybeSingle();
+  if (!thread) return [];
+
+  const { data: rows } = await supabase
+    .from('chat_messages')
+    .select('id, body, created_at, author_profile_id')
+    .eq('thread_id', (thread as { id: string }).id)
+    .order('created_at', { ascending: true });
+
+  const messages = (rows ?? []) as {
+    id: string;
+    body: string;
+    created_at: string;
+    author_profile_id: string;
+  }[];
+  if (messages.length === 0) return [];
+
+  // ONE query for the photo references, not one per message — the N+1 the
+  // staff thread avoids for the same reason, and it matters more here because
+  // this page renders every message rather than a page of 50.
+  const { data: photoRows } = await supabase
+    .from('chat_message_photos')
+    .select('message_id, file_id, sort_order')
+    .in('message_id', messages.map((m) => m.id))
+    .order('sort_order');
+
+  const fileIds = [...new Set(((photoRows ?? []) as { file_id: string }[]).map((p) => p.file_id))];
+
+  // ⚠️ THROUGH `getPortalPhotos`'s SAME RULE, not a second path resolution.
+  // M6M D-31: chat never resolves a file path itself, because a build that
+  // signed its own URL would serve the UNMARKED original for an annotated
+  // photo — #129's failure. `display_path` is that rule; this reuses it.
+  const urlByFileId = new Map<string, string | null>();
+  if (fileIds.length > 0) {
+    const { data: files } = await supabase
+      .from('files')
+      .select('id, file_path, markup_data')
+      .in('id', fileIds);
+    const paths = ((files ?? []) as { id: string; file_path: string; markup_data: unknown }[]).map(
+      (f) => ({ id: f.id, path: f.markup_data ? `${f.file_path}.markup.jpg` : f.file_path })
+    );
+    const signed = await signPortalPaths(supabase, paths.map((p) => p.path), ttlSeconds);
+    for (const p of paths) urlByFileId.set(p.id, signed.get(p.path) ?? null);
+  }
+
+  const photosByMessage = new Map<string, { fileId: string; url: string | null }[]>();
+  for (const p of (photoRows ?? []) as { message_id: string; file_id: string }[]) {
+    const list = photosByMessage.get(p.message_id) ?? [];
+    list.push({ fileId: p.file_id, url: urlByFileId.get(p.file_id) ?? null });
+    photosByMessage.set(p.message_id, list);
+  }
+
+  return messages.map((m) => ({
+    id: m.id,
+    body: m.body,
+    createdAt: m.created_at,
+    mine: m.author_profile_id === myProfileId,
+    photos: photosByMessage.get(m.id) ?? [],
+  }));
+}

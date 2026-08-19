@@ -11,10 +11,12 @@ import {
   getPortalProjects,
   getPortalProposals,
   getPortalSchedule,
+  getPortalThread,
   signPortalPaths,
 } from '@/lib/services/portal';
 import { PortalShell } from '../portal-shell';
 import { PortalCard, PortalEmpty, PortalStatus, day, money, rowStyle } from '../portal-ui';
+import { ClientComposer, CoSignPanel } from './portal-writes-ui';
 
 /**
  * One project, on ONE PAGE. That is the ruling, not a layout preference.
@@ -54,12 +56,13 @@ export default async function PortalProjectPage({ params }: { params: { projectI
   const project = projects.find((p) => p.id === params.projectId);
   if (!project) notFound();
 
-  const [schedule, documents, proposals, photos, billing] = await Promise.all([
+  const [schedule, documents, proposals, photos, billing, thread] = await Promise.all([
     getPortalSchedule(supabase, project.id),
     getPortalDocuments(supabase, project.id),
     getPortalProposals(supabase, project.id),
     getPortalPhotos(supabase, project.id),
     getPortalBilling(supabase, project.id),
+    getPortalThread(supabase, project.id, identity.profileId, SIGNED_URL_TTL_SECONDS),
   ]);
 
   // §6.1 — the marked-up image where one exists. `display_path` already made
@@ -72,6 +75,7 @@ export default async function PortalProjectPage({ params }: { params: { projectI
 
   const limited = identity.accessLevel !== 'full';
   const notForYou = 'Not included in your current portal access.';
+  const signerName = `${identity.firstName ?? ''} ${identity.lastName ?? ''}`.trim();
 
   return (
     <PortalShell
@@ -133,7 +137,18 @@ export default async function PortalProjectPage({ params }: { params: { projectI
                 {/* R10 — stage 5 turns this into the signing action. Naming the
                     pending state now is not a placeholder: a client who is told
                     nothing is waiting on her is being told the wrong thing. */}
-                {d.signable && (
+                {/* R10 — the signing action, on the row it belongs to.
+                    R13: any client contact may sign, so there is no signer
+                    check here and none in the route — "either client contact
+                    can sign; there is no designated signer." */}
+                {d.signable && d.kind === 'change_order' && (
+                  <CoSignPanel
+                    changeOrderId={d.id}
+                    title={d.title}
+                    defaultName={signerName}
+                  />
+                )}
+                {d.signable && d.kind !== 'change_order' && (
                   <span style={{ fontSize: '12px', fontWeight: 700, color: color.warningDeep }}>
                     Awaiting your signature
                   </span>
@@ -349,6 +364,78 @@ export default async function PortalProjectPage({ params }: { params: { projectI
             </div>
           </>
         )}
+      </PortalCard>
+      <PortalCard
+        title="Questions and photos"
+        subtitle="Anything you send here goes to the office. Your photos are shared with them automatically."
+      >
+        {thread.length === 0 ? (
+          <PortalEmpty>
+            {limited
+              ? notForYou
+              : 'Nothing here yet. Send a question, a note, or a picture of something you want to ask about.'}
+          </PortalEmpty>
+        ) : (
+          thread.map((m) => (
+            <div
+              key={m.id}
+              style={{
+                borderTop: `1px solid ${color.rowDivider}`,
+                padding: '11px 0',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: m.mine ? 'flex-end' : 'flex-start',
+              }}
+            >
+              {/* ⚠️ NO NAMES — §4.7 (R8). "You" and "the office", never a
+                  person. The S131 roster floor would return blanks anyway, and
+                  a blank where a name should be reads as a defect. */}
+              <span
+                style={{
+                  fontFamily: font.mono,
+                  fontSize: '10.5px',
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                  color: color.mutedAlt,
+                }}
+              >
+                {m.mine ? 'You' : 'The office'} · {day(m.createdAt)}
+              </span>
+              {m.body && (
+                <p style={{ fontSize: '13.5px', color: color.body, margin: '4px 0 0', maxWidth: '46ch' }}>
+                  {m.body}
+                </p>
+              )}
+              {m.photos.length > 0 && (
+                <div style={{ display: 'flex', gap: '6px', marginTop: '7px', flexWrap: 'wrap' }}>
+                  {m.photos.map((ph) =>
+                    ph.url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        key={ph.fileId}
+                        src={ph.url}
+                        alt=""
+                        style={{
+                          width: '108px',
+                          height: '81px',
+                          objectFit: 'cover',
+                          borderRadius: '8px',
+                          border: `1px solid ${color.cardBorder}`,
+                        }}
+                      />
+                    ) : null
+                  )}
+                </div>
+              )}
+            </div>
+          ))
+        )}
+
+        {/* R11 is a write, so it is gated on full access — and by RLS besides.
+            A documents-only client is shown the section's empty sentence above
+            and no composer, rather than a composer that fails on send. */}
+        {!limited && <ClientComposer projectId={project.id} />}
       </PortalCard>
     </PortalShell>
   );

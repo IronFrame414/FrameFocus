@@ -1059,8 +1059,10 @@ export type Database = {
           signature_data: string | null
           signature_type: string | null
           signed_at: string | null
+          signer_channel: string | null
           signer_ip: string | null
           signer_name: string | null
+          signer_profile_id: string | null
           signer_user_agent: string | null
           status: string
           token: string
@@ -1081,8 +1083,10 @@ export type Database = {
           signature_data?: string | null
           signature_type?: string | null
           signed_at?: string | null
+          signer_channel?: string | null
           signer_ip?: string | null
           signer_name?: string | null
+          signer_profile_id?: string | null
           signer_user_agent?: string | null
           status?: string
           token: string
@@ -1103,8 +1107,10 @@ export type Database = {
           signature_data?: string | null
           signature_type?: string | null
           signed_at?: string | null
+          signer_channel?: string | null
           signer_ip?: string | null
           signer_name?: string | null
+          signer_profile_id?: string | null
           signer_user_agent?: string | null
           status?: string
           token?: string
@@ -1123,6 +1129,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "co_signing_sessions_signer_profile_id_fkey"
+            columns: ["signer_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -8067,6 +8080,7 @@ export type Database = {
       is_my_recent_segment: { Args: { p_segment_id: string }; Returns: boolean }
       is_platform_admin: { Args: never; Returns: boolean }
       is_project_creator: { Args: { p_project_id: string }; Returns: boolean }
+      may_enter_client_thread: { Args: never; Returns: boolean }
       member_profile_role: { Args: { p_member_id: string }; Returns: string }
       my_assigned_site_address_ids: { Args: never; Returns: string[] }
       my_client_access_level: { Args: never; Returns: string }
