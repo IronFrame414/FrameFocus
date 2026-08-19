@@ -101,6 +101,51 @@ worse than no tests, because it reports as covered.
   *Reasoning, Josh's:* it survives a lawyer asking what she had access to.
 - **Departed staff change nothing** (R18). Photos a PM ticked stay ticked; replies stay.
 
+> ### ✅ R2, R5 and R17 are BUILT — `20261017000000_m9_client_lifecycle.sql` [S164 stage 2]
+>
+> **R5 is an ACCOUNT-level gate, and the obvious per-project reading of it is wrong.** Recorded
+> here because it is the one thing in this section a careful implementer gets backwards:
+>
+> | | linked to a long-completed project | result |
+> |---|---|---|
+> | a client who ALSO has an active project | yes | **sees it, in full** — "nothing narrows with age" |
+> | a client with nothing else | yes | **sees nothing** — "no standing archive access" |
+>
+> Same project, same query, opposite answers; the only difference is what else the account holds.
+> A per-project window returns "no" to both and contradicts R5's own middle sentence. Proved by
+> `s164-m9-client-lifecycle.live.ts` **B3/B4**, and as a live transition by **B7** — linking a new
+> job restores the old projects, and removing it darkens them again.
+>
+> **One timer means one definition.** `client_window_open(status, actual_end_date)` is the only
+> place `45` is written, and it is read by both clocks: access (`is_client_of_project()`) and the
+> invite (all three `get_invitation_*` helpers). ⚠️ **`invitations.expires_at` defaults to
+> `now() + 7 days`**, so leaving it in play would have given a client invite the second clock R2
+> forbids — and the *shorter* of the two. For a client invitation `expires_at` is now ignored
+> entirely. Asserted from both sides: **E1** (expires_at 90 days past, project active → still
+> valid) and **E2** (expires_at 90 days future, project long complete → expired). **E4** proves
+> staff invitations still read `expires_at` exactly as before.
+>
+> **R17's two document-limited states are stored and NOT yet enforced**, because the document
+> surfaces do not exist for a client until stage 2's seven policy arms land. Both currently behave
+> as "still has access"; `my_client_access_level()` exists for those arms to consult. **Any stage
+> adding a client-readable document surface must consult it** — a state that is stored and never
+> read is worse than one that is absent, because the UI reports it as being in force.
+>
+> #### ⚠️ OPEN — what counts as "completion", for `archived` and `cancelled`
+>
+> `projects.status` is one of `active` / `on_hold` / `complete` / `archived` / `cancelled`. R2 and
+> R5 both say *"45 days after project **completion**"*, and only `complete` is completion. **The
+> shipped window therefore closes ONLY on `status = 'complete'` with an `actual_end_date`**, and
+> stays **open** for archived, for cancelled, and for a `complete` project with no end date
+> recorded.
+>
+> That is deliberately fail-**open** on access and it is a decision, not a reading of the ruling:
+> R5 says deactivation is *"a switch, not a shredder"*, and R17 gives Owner/Admin an explicit
+> switch for the case where somebody must lose access now. Automatic closure runs only on an
+> unambiguous date rather than on an inference this build invented. **Josh should rule whether a
+> cancelled project ends portal access, and whether it does so immediately or after the same 45
+> days.** `client_window_open()` is the single place that changes if it does.
+
 **§S — identity storage. ✅ RESOLVED [Josh, S164 Q1]: `profiles.contact_id`, nullable + UNIQUE.**
 Client policy arms use the SECURITY DEFINER helpers `get_my_contact_id()`, `is_client_of_project()`
 and `my_client_site_address_ids()`, and **never `can_view_project()`**. Shipped in
