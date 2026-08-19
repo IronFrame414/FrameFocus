@@ -11,6 +11,7 @@ import { getDeliveriesForProjectDay } from '@/lib/services/deliveries';
 import { getMyMember } from '@/lib/services/members';
 import { FieldTabs } from '@/components/field/field-tabs';
 import { DeleteLogButton, DownloadPdfButton, PhotoGrid } from './detail-client';
+import { SIGNED_URL_TTL_SECONDS } from '@/lib/services/signed-url-ttl';
 
 // 6B-1 §3 — the 4c read/detail view: the office reads the day's field
 // record. Employee hours derive at read time (presence RPC); sub hours are
@@ -88,7 +89,7 @@ export default async function DailyLogDetailPage({
         .from('project-files')
         .createSignedUrls(
           photos.map((p) => p.file_path),
-          3600
+          SIGNED_URL_TTL_SECONDS
         )
     : { data: [] };
   const urlByPath = new Map((signed ?? []).map((s) => [s.path, s.signedUrl]));

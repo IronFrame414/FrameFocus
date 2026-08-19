@@ -29,6 +29,136 @@ incidents, punch items, compliance documents, chat photos and AI tag logs.
 
 ---
 
+## §0a — STATUS AFTER S157 — every finding closed out
+
+> **This audit was written findings-only. S157 is the fix pass.** **Original text is left intact
+> below** — this repo lost a live TECH_DEBT record at `53c7353` by deleting an entry instead of
+> closing it. Read the finding first, then this table.
+
+| # | S155 severity | S157 outcome | Commit |
+| --- | --- | --- | --- |
+| **M3-01** | REACHABLE | ✅ **FIXED, and WIDER than the finding** — storage RLS now delegates to `files` RLS on **SELECT and UPDATE** | `c05ded0` |
+| **M3-02** | REACHABLE | ✅ **FIXED** — both halves row-counted, and a real delete proven to still succeed | `39f8f14` |
+| **M3-03** | REACHABLE | ✅ **FIXED** — all four writers import `applied()`/`DISCARDED`; **fourth module, first to import rather than copy** | `39f8f14` |
+| **M3-04** | LATENT | ✅ **RULED AND APPLIED** — `SIGNED_URL_TTL_SECONDS = 7200`, one home, sweep clean | `39f8f14` |
+| **M3-05** | LATENT | ✅ **FIXED** — `getFiles()` bounded and totally ordered, page reads parallelised, **and a second bug found while doing it** | `39f8f14` |
+| **M3-06** | LATENT | 📌 **VERIFIED AND REPORTED, not built** — see §0c. The shape holds, and M3-01 changed what M9 must do | — |
+
+### §0b — M3-01 was fixed by DELEGATION, and it reaches further than the audit proposed
+
+The audit offered two shapes and recommended (b). **(b) shipped, in a cheaper form than the audit
+imagined.** It does not route downloads through a server route; it makes the storage policy *ask the
+table*:
+
+```sql
+get_my_role() = ANY (ARRAY['owner','admin'])
+OR EXISTS (SELECT 1 FROM files f WHERE f.file_path = objects.name)
+```
+
+The `EXISTS` is a plain subquery evaluated as the calling user, so **`files` RLS filters it**. The
+category floor is therefore stated **once**, on the table, and storage inherits every future change
+to it. No second copy, no folder-regex inference, and `open-file.tsx` and the desktop file rows keep
+going direct — the disruption the audit warned (b) would cause did not materialise.
+
+**Three things the fix pass established that the audit had not:**
+
+1. **⚠️ `UPDATE` carried the same hole, and it was arguably worse.**
+   `project_files_update_non_client` had the identical missing category floor, so an assigned crew
+   member could **overwrite the bytes of an invoice PDF** while the table refused them the row.
+   Proven live before the change against a fixture. Aligning the read and leaving the write open
+   would have re-created the divergence, so both were done. **`INSERT` was deliberately left
+   alone** — on upload the `files` row does not exist yet, and `files_insert_non_client` already
+   carries the floor one layer up.
+2. **`files` had ELEVEN indexes and none on `file_path`.** The new policies join on exactly that
+   column, once per object. `idx_files_file_path` ships in the same migration; without it every
+   signed-URL mint becomes a sequential scan.
+3. **Exactly one object in the bucket has no `files` row** — `{company}/signatures/signature.png`,
+   the saved contractor signature. It is read for PDF generation through the **admin client**, which
+   bypasses RLS entirely, and previewed in Settings by owner/admin, who keep the company-folder
+   short-circuit. **Nothing lost it.** 105 objects checked.
+
+**Proof:** `s157-m3-m4-fixes.live.ts` A1–A6, and `s155-m3-audit.live.ts` F1b/F1c inverted.
+
+### §0c — M3-06 `client_visible`: verified, and M3-01 changed the M9 job
+
+**The shape holds.** `files.client_visible` is `boolean NOT NULL DEFAULT false` [LIVE, S157], and
+**every one of the 108 rows is `false`** — the flag has never been set by any surface, in any
+category. So 9-spec.md §6's *"Default is false, so nothing leaks by omission"* is true today, and
+M9 inherits no dirty values. The audit's warning — *"whoever builds M9 must audit the existing
+values rather than trust them"* — is **discharged: there are none to audit.** If that changes
+before M9 is built, re-check rather than trusting this paragraph.
+
+Still true, and still M9's to close: **no policy reads the flag.** Neither `files_select_non_client`
+nor the storage policy mentions it [LIVE], and `9-spec.md` §S records that the client SELECT arm on
+`files` is what is missing.
+
+> ### ⚠️ AND M3-01 CHANGED WHAT M9 HAS TO DO — this is the important part of this section.
+>
+> **Storage now follows the table.** Before S157 those were two separate grants, and M9 would have
+> had to write a client arm on `files` **and** a matching one on `storage.objects`, keeping them
+> in agreement — exactly the divergence M3-01 existed to fix.
+>
+> **After S157, adding a client arm to `files_select_non_client` grants the BYTES automatically.**
+> That is the right default and it is also a loaded gun: a client arm that is one clause too wide
+> exposes the objects the same instant, with no second policy to review. `9-spec.md` §S already
+> warns that permissive policies are **OR'd** so a new narrow policy narrows nothing (the S131
+> roster-floor trap); with delegation in place that warning now covers storage too.
+>
+> **Note also the interaction with §6.1's derivative-path finding.** One `files` row can resolve to
+> two images (the original and the flattened markup derivative), and **the derivative has no `files`
+> row of its own**. Under delegation, an `EXISTS` on `file_path` will therefore match the original
+> and **not** the derivative — so a client granted the row would get the original's bytes and be
+> refused the marked-up image M9 says they should see. **Whoever builds M9's file grant must decide
+> how the derivative path is authorised.** Recorded here, not solved.
+
+### §0d — the signed-URL sweep Josh asked for, in full
+
+**Every `createSignedUrl`/`createSignedUrls` site in the repo, and whether anything outlives its TTL:**
+
+| Site | Bucket | TTL before | TTL after | Held anywhere? |
+| --- | --- | --- | --- | --- |
+| `api/files/signed-url/route.ts` | project-files | 3600 | **7200** | no — returned to the caller |
+| `lib/services/files.ts` `signedUrlFor` / `getSignedUrl` | project-files | 3600 | **7200** | no |
+| `lib/services/files-client.ts` `getFileSignedUrlClient` | project-files | 300 | **7200** | no |
+| `lib/services/daily-logs-client.ts` | project-files | 3600 | **7200** | no |
+| `lib/services/signing-activity-client.ts` | project-files | 3600 | **7200** | no |
+| `dashboard/expenses/page.tsx` | project-files | 3600 | **7200** | no — render only |
+| `field-ops/[projectId]/deliveries/d/[deliveryId]/page.tsx` | project-files | 3600 | **7200** | no |
+| `field-ops/[projectId]/daily-logs/[logId]/page.tsx` | project-files | 3600 | **7200** | no |
+| `field-ops/safety/[incidentId]/page.tsx` | project-files | 3600 | **7200** | no |
+| `lib/services/company-client.ts` `getContractorSignatureUrl` | project-files | 600 | **600 — unchanged** | no |
+| `api/trial/export/[id]/route.ts` | **exports** | 3600 | **3600 — unchanged** | no |
+
+**✅ NOTHING EMBEDS A SIGNED URL ANYWHERE LONGER-LIVED THAN ITS TTL.** Checked specifically, because
+a two-hour expiry would break such a surface silently:
+
+- **Emails** — no template receives a storage URL. Proposal, CO and invoice mails carry the document
+  as an **attachment**, and the only link they contain is the `/sign/<token>` signing URL, which is
+  a `signing_sessions` row with its own expiry and nothing to do with storage.
+- **Generated PDFs** — the templates embed image **bytes**, not URLs: `co-data.ts` downloads the
+  saved signature through the admin client and hands the template an `imageDataUri`, and the company
+  logo comes from the **public** `company-logos` bucket. Both are TTL-independent.
+- **Stored records** — no column holds a signed URL.
+
+**The two exclusions are deliberate and now say so in place.** `getContractorSignatureUrl` stays at
+600s (an owner/admin Settings preview, rendered immediately — shorter is strictly better, and
+raising it would weaken for nothing). The trial export is a different bucket, minted with the admin
+client for an immediate download, so `SIGNED_URL_TTL_SECONDS` does not govern it.
+
+### §0e — M3-05's fix uncovered a second defect
+
+Bounding `getFiles()` was routine. **The trash page was not.** It asked for `include_deleted: true`
+and then filtered `is_deleted` **in memory** — so it pulled every LIVE file in the project to render
+the deleted ones (the M2-06 shape), and **once a `limit` existed the deleted rows could have been
+pushed out of the response entirely by live ones.** A fix that would have quietly broken the trash
+view if the over-fetch had not been noticed. `getFiles()` grew an `only_deleted` filter and the page
+now asks the database for what it wants.
+
+The ordering was also made total: `created_at` alone is not a total order — seeded rows share
+timestamps — and an unstable order makes a paged read drop or repeat rows.
+
+---
+
 ## §1 — Findings, most severe first
 
 Severity: **REACHABLE TODAY** · **LATENT** · **THEORETICAL**.

@@ -65,10 +65,33 @@ async function nuke(): Promise<void> {
       // [#2-s147] `contacts` first — NO ACTION and not in COMPANY_CHILDREN.
       await deleteCompanies(admin, [cid]);
     }
-    await admin.from('trial_emails').delete().eq('email', EMAIL.toLowerCase());
     await admin.auth.admin.deleteUser(u.id);
   }
   await purgeCompaniesNamed(admin, MARKERS);
+
+  // ⚠️ [S157] UNCONDITIONAL, AND OUTSIDE THE USER LOOP. THIS IS THE SAME TRAP
+  // THE COMMENT ON `MARKERS` ABOVE DESCRIBES, IN A SECOND PLACE.
+  //
+  // This delete used to live INSIDE the `for` loop, so it only ran if an auth
+  // user with EMAIL still existed. But the whole point of this file is that
+  // `runTrialDeletion` DELETES THE AUTH USER — and it succeeds. So after a
+  // PASSING run the loop finds nothing, and the `trial_emails` row survives
+  // cleanup with its company_id nulled.
+  //
+  // The failure that causes is delayed and looks like something else. The
+  // signup trigger (20260918000000, `handle_new_user`) only creates a
+  // `trial_lifecycle` row when the email has FEWER THAN THREE prior trials.
+  // So three passing runs leave three rows, and the FOURTH run's fixture is
+  // created with no trial_lifecycle at all — the `.update()` in beforeAll
+  // matches zero rows and the safety gate reads `[]`, failing this file's
+  // first test and cascading through the other six.
+  //
+  // A FAILING run then cleans up (the user still exists, so the old loop
+  // reached this line), which reset the backlog and made it a self-resetting
+  // four-run cycle — passing three times for every failure, which is exactly
+  // how it stayed unexplained. Verified at S157: one row left behind
+  // immediately after a clean 9/9 run.
+  await admin.from('trial_emails').delete().eq('email', EMAIL.toLowerCase());
 }
 
 beforeAll(async () => {

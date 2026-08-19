@@ -26,9 +26,12 @@ export default async function ProjectFilesTrashPage({
 
   const canPermanentDelete = profile.role === 'owner' || profile.role === 'admin';
 
-  // Fetch only soft-deleted files for this project.
-  const allFiles = await getFiles({ project_id: projectId, include_deleted: true });
-  const deletedFiles = allFiles.filter((f) => f.is_deleted);
+  // Fetch only soft-deleted files for this project. [M3-05, S157]
+  // This asked for `include_deleted: true` and filtered in memory, which pulled
+  // every LIVE file in the project to render the deleted ones — and, once
+  // `getFiles` became bounded, could have pushed the deleted rows out of the
+  // response entirely. The filter belongs in the query.
+  const deletedFiles = await getFiles({ project_id: projectId, only_deleted: true });
 
   return (
     <div style={{ padding: '2rem' }}>

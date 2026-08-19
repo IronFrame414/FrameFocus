@@ -116,21 +116,34 @@ export async function GET(request: NextRequest) {
     const bodyText = replaceTemplateVariables(DEFAULT_CO_REMINDER_BODY, variables);
     const sender = buildSenderAddress(company);
 
-    const { messageId, error: sendError } = await sendEmail({
-      from: sender,
-      // +REPLY-TO [S97]: a client's reply reaches the COMPANY, not the
-      // platform domain. Resolved in sendEmail so senders inherit it.
-      replyToCompanyId: company.id,
-      to: session.recipient_email,
-      subject,
-      react: ChangeOrderEmail({
-        companyName: company.name,
-        logoUrl: company.logo_url,
-        brandColor: company.brand_color || '#1a56db',
-        bodyText,
-        signingUrl,
-      }),
-    });
+    // ⚠️ M4-01 sweep [S157] — this call was BARE, inside the per-CO loop.
+    // `sendEmail` -> `getResend()` THROWS when RESEND_API_KEY is unset, so one
+    // throw aborted every REMAINING reminder in the run, with no record of
+    // which were skipped. The logEmail below already has a `status: 'failed'`
+    // path for a RETURNED error; only a THROW bypassed it.
+    let messageId: string | null = null;
+    let sendError: string | null = null;
+    try {
+      const sent = await sendEmail({
+        from: sender,
+        // +REPLY-TO [S97]: a client's reply reaches the COMPANY, not the
+        // platform domain. Resolved in sendEmail so senders inherit it.
+        replyToCompanyId: company.id,
+        to: session.recipient_email,
+        subject,
+        react: ChangeOrderEmail({
+          companyName: company.name,
+          logoUrl: company.logo_url,
+          brandColor: company.brand_color || '#1a56db',
+          bodyText,
+          signingUrl,
+        }),
+      });
+      messageId = sent.messageId;
+      sendError = sent.error;
+    } catch (err) {
+      sendError = err instanceof Error ? err.message : 'Email send failed';
+    }
 
     await logEmail(admin, {
       company_id: co.company_id,

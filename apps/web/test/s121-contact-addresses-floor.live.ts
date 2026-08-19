@@ -249,11 +249,35 @@ describe('contact_addresses DELETE', () => {
 });
 
 // ---------------------------------------------------------------------------
-// SELECT — DELIBERATELY UNCHANGED. Asserted so a later "tidy-up" that floors
-// SELECT by symmetry fails here rather than on M-36 in the field.
+// SELECT — ⚠️ INVERTED AT S157. READ THIS BEFORE CHANGING IT AGAIN.
+//
+// This block was written at S121 to say "SELECT is DELIBERATELY UNCHANGED", so
+// that a later tidy-up flooring SELECT by symmetry would fail here rather than
+// on M-36 in the field. That was right in S121 and WRONG from S154 onward:
+// M2's Group B fix (20261006000000_m2_address_floor_and_site_grant.sql)
+// deliberately floored SELECT for `subcontractor` and `client`, because the
+// unfloored policy was leaking every client's home address to subcontractors.
+//
+// ⚠️ THE FAILURE MODE THIS FILE DEMONSTRATES, AND WHY IT IS ITS OWN CLASS OF
+// DEFECT. Only the `subcontractor` case ever reddened. Crew and foreman still
+// read company-wide, so two of the three cases kept passing and THE FILE READ
+// AS HEALTHY while its describe block asserted the opposite of a shipped
+// ruling. A test that passes while contradicting the rule is worse than a
+// failing one, because nothing surfaces it. S154 inverted the probes IT had
+// written and did not sweep for older tests encoding the behaviour it was
+// overturning. CLAUDE.md now carries that sweep as a standing rule.
+//
+// The live policy is `contact_addresses_select_scoped`:
+//   company_id = get_my_company_id()
+//   AND ( get_my_role() <> ALL (ARRAY['subcontractor','client'])
+//         OR id IN (SELECT my_assigned_site_address_ids()) )
+//
+// So the two halves below are BOTH load-bearing: crew and foreman must keep
+// company-wide read (M-36 renders it), and a subcontractor must not have it
+// except for the site addresses of projects they are assigned to.
 // ---------------------------------------------------------------------------
-describe('contact_addresses SELECT is NOT floored', () => {
-  for (const role of ['crew_member', 'subcontractor', 'foreman'] as const) {
+describe('contact_addresses SELECT is floored for subs, not for the field roles', () => {
+  for (const role of ['crew_member', 'foreman'] as const) {
     it(`${role} can still READ an address — M-36 renders it`, async () => {
       const id = await seedAddress(`${STAMP} ${role} read`);
       const { data, error } = await sessions[role]
@@ -262,7 +286,22 @@ describe('contact_addresses SELECT is NOT floored', () => {
         .eq('id', id)
         .maybeSingle();
       expect(error).toBeNull();
-      expect(data?.id, `${role} lost READ access — the ruling was about writes`).toBe(id);
+      expect(data?.id, `${role} lost READ access — the S154 floor is subs-only`).toBe(id);
     });
   }
+
+  it('subcontractor is REFUSED an address that is not an assigned site [S154 floor]', async () => {
+    const id = await seedAddress(`${STAMP} subcontractor read`);
+    const { data, error } = await sessions.subcontractor
+      .from('contact_addresses')
+      .select('id, address_line1')
+      .eq('id', id)
+      .maybeSingle();
+    // RLS filters rather than errors: the row is simply not visible.
+    expect(error).toBeNull();
+    expect(
+      data,
+      'a subcontractor read a contact address again — the M2 Group B floor has regressed'
+    ).toBeNull();
+  });
 });

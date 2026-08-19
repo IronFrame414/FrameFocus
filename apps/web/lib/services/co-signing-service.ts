@@ -17,6 +17,7 @@ import {
   getProjectPmNotifyRecipients,
   profileForUserId,
 } from '@/lib/notify/recipients';
+import { applied } from './mutation-result';
 
 // 5D §6 — CO signing-session lifecycle, mirroring the M4 pattern
 // (signing-service.ts): all functions take the service-role client
@@ -163,7 +164,7 @@ export async function completeCoSignature(
     return { success: false, error: stored.error ?? 'Could not store the signed change order.' };
   }
 
-  const { error: sessionError } = await admin
+  const { data: sessionRows, error: sessionError } = await admin
     .from('co_signing_sessions')
     .update({
       status: 'completed',
@@ -177,8 +178,21 @@ export async function completeCoSignature(
       consent_text: CONSENT_TEXT,
     })
     .eq('id', session.id)
-    .eq('status', 'pending');
+    .eq('status', 'pending')
+    .select('id');
   if (sessionError) return { success: false, error: sessionError.message };
+
+  // ⚠️ M4-03 [FIXED S157] — the same discarded compare-and-swap as
+  // `completeSignature` (M4-02), on the CO path. Fixed WITH it: the audit
+  // recorded this sibling precisely so the fix would not be applied to one
+  // function and called done.
+  //
+  // The loser returns SUCCESS — the client did sign, and the winner has already
+  // flipped the CO, written its budget lines and sent the notifications. What
+  // the loser must not do is run all of that a second time.
+  if (!applied(sessionRows)) {
+    return { success: true };
+  }
 
   const { error: coError } = await admin
     .from('change_orders')
@@ -368,19 +382,33 @@ async function notifyCoSigned(
 
     const bodyText = `Hi ${r.name},\n\nChange order ${params.coNumber} has been signed by all parties. The fully signed copy is attached for your records.\n\n— ${company.name}`;
 
-    const { messageId, error } = await sendEmail({
-      from: sender,
-      to: r.email,
-      subject,
-      react: ChangeOrderEmail({
-        companyName: company.name,
-        logoUrl: company.logo_url,
-        brandColor: company.brand_color || '#1a56db',
-        bodyText,
-        signingUrl: null,
-      }),
-      attachments: [{ filename: `${params.coNumber}-signed.pdf`, content: params.signedPdf }],
-    });
+    // ⚠️ M4-01 sweep [S157] — this call was BARE, inside a loop. `sendEmail` ->
+    // `getResend()` THROWS when RESEND_API_KEY is unset, so the throw escaped
+    // the loop: some recipients notified, some not, and NO record of which,
+    // because the logEmail below never ran for the rest. The logEmail already
+    // has a `status: 'failed'` path for a RETURNED error; only a THROW bypassed
+    // it. This makes the code do what it was written to do.
+    let messageId: string | null = null;
+    let error: string | null = null;
+    try {
+      const sent = await sendEmail({
+        from: sender,
+        to: r.email,
+        subject,
+        react: ChangeOrderEmail({
+          companyName: company.name,
+          logoUrl: company.logo_url,
+          brandColor: company.brand_color || '#1a56db',
+          bodyText,
+          signingUrl: null,
+        }),
+        attachments: [{ filename: `${params.coNumber}-signed.pdf`, content: params.signedPdf }],
+      });
+      messageId = sent.messageId;
+      error = sent.error;
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Email send failed';
+    }
 
     await logEmail(admin, {
       company_id: params.companyId,
@@ -430,18 +458,32 @@ async function notifyCoDeclined(
       params.declineNotes ? `\n\nNotes: ${params.declineNotes}` : ''
     }\n\nYou can void it or send a revised change order from the project.\n\n— ${company.name}`;
 
-    const { messageId, error } = await sendEmail({
-      from: sender,
-      to: m.email,
-      subject,
-      react: ChangeOrderEmail({
-        companyName: company.name,
-        logoUrl: company.logo_url,
-        brandColor: company.brand_color || '#1a56db',
-        bodyText,
-        signingUrl: null,
-      }),
-    });
+    // ⚠️ M4-01 sweep [S157] — this call was BARE, inside a loop. `sendEmail` ->
+    // `getResend()` THROWS when RESEND_API_KEY is unset, so the throw escaped
+    // the loop: some recipients notified, some not, and NO record of which,
+    // because the logEmail below never ran for the rest. The logEmail already
+    // has a `status: 'failed'` path for a RETURNED error; only a THROW bypassed
+    // it. This makes the code do what it was written to do.
+    let messageId: string | null = null;
+    let error: string | null = null;
+    try {
+      const sent = await sendEmail({
+        from: sender,
+        to: m.email,
+        subject,
+        react: ChangeOrderEmail({
+          companyName: company.name,
+          logoUrl: company.logo_url,
+          brandColor: company.brand_color || '#1a56db',
+          bodyText,
+          signingUrl: null,
+        }),
+      });
+      messageId = sent.messageId;
+      error = sent.error;
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Email send failed';
+    }
 
     await logEmail(admin, {
       company_id: params.companyId,
@@ -488,7 +530,7 @@ export async function declineCoSignature(
     return { success: false, error: 'This change order is no longer awaiting a response.' };
   }
 
-  const { error: sessionError } = await admin
+  const { data: sessionRows, error: sessionError } = await admin
     .from('co_signing_sessions')
     .update({
       status: 'declined',
@@ -498,8 +540,16 @@ export async function declineCoSignature(
       signer_user_agent: params.signerUserAgent,
     })
     .eq('id', session.id)
-    .eq('status', 'pending');
+    .eq('status', 'pending')
+    .select('id');
   if (sessionError) return { success: false, error: sessionError.message };
+
+  // M4-03 [FIXED S157] — the CO decline's compare-and-swap, the fourth and last
+  // of the set. The decline is recorded by whichever request won; the loser
+  // stops here rather than sending the contractor a duplicate notification.
+  if (!applied(sessionRows)) {
+    return { success: true };
+  }
 
   // Notify the contractor side (spec §7.2 — contractor only). Best-effort.
   await notifyCoDeclined(admin, {

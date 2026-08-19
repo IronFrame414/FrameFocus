@@ -20,6 +20,7 @@ import { NotificationEmail } from '@/lib/email/templates/notification-email';
 // and RLS on signing_sessions intentionally has no write policies.
 
 import { CONSENT_TEXT } from '@/lib/proposal/proposal-defaults';
+import { applied } from './mutation-result';
 export { CONSENT_TEXT };
 
 type SigningSessionRow = Database['public']['Tables']['signing_sessions']['Row'];
@@ -114,17 +115,36 @@ async function notifyManagers(
   const sender = buildSenderAddress(company);
 
   for (const recipient of recipients) {
-    const { messageId, error } = await sendEmail({
-      from: sender,
-      to: recipient.email,
-      subject: params.heading,
-      react: NotificationEmail({
-        brandColor: company.brand_color || '#1a56db',
-        heading: params.heading,
-        message: params.message,
-        estimateUrl: `${appUrl}/dashboard/estimates/${params.estimateId}`,
-      }),
-    });
+    // ⚠️ M4-01 sweep [S157] — this call was BARE, inside a loop.
+    // `sendEmail` -> `getResend()` THROWS when RESEND_API_KEY is unset, so the
+    // throw escaped the loop: some recipients notified, some not, and NO record
+    // of which, because the logEmail below never ran for the rest.
+    //
+    // This does NOT decide the open question of whether a failed notification
+    // should fail the operation that triggered it. That question is already
+    // answered in this function's own design: it returns void, and logEmail
+    // below ALREADY has a `status: 'failed'` + `metadata.error` path for a
+    // RETURNED error. Only a THROW bypassed it. Folding the throw into the same
+    // `error` variable makes the code do what it was written to do.
+    let messageId: string | null = null;
+    let error: string | null = null;
+    try {
+      const sent = await sendEmail({
+        from: sender,
+        to: recipient.email,
+        subject: params.heading,
+        react: NotificationEmail({
+          brandColor: company.brand_color || '#1a56db',
+          heading: params.heading,
+          message: params.message,
+          estimateUrl: `${appUrl}/dashboard/estimates/${params.estimateId}`,
+        }),
+      });
+      messageId = sent.messageId;
+      error = sent.error;
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Email send failed';
+    }
 
     await logEmail(admin, {
       company_id: params.companyId,
@@ -193,7 +213,7 @@ export async function completeSignature(
     return { success: false, error: storeError ?? 'Could not store the signed proposal.' };
   }
 
-  const { error: sessionError } = await admin
+  const { data: sessionRows, error: sessionError } = await admin
     .from('signing_sessions')
     .update({
       status: 'completed',
@@ -207,8 +227,29 @@ export async function completeSignature(
       consent_text: CONSENT_TEXT,
     })
     .eq('id', session.id)
-    .eq('status', 'pending');
+    .eq('status', 'pending')
+    .select('id');
   if (sessionError) return { success: false, error: sessionError.message };
+
+  // ⚠️ M4-02 [FIXED S157] — A COMPARE-AND-SWAP IS THE ONE CONSTRUCT WHERE ZERO
+  // ROWS IS THE EXPECTED LOSING OUTCOME, and Postgres does not call it an
+  // error. `.eq('status','pending')` was already correct; its RESULT was
+  // discarded, so both of two concurrent completions proceeded to overwrite
+  // `signed_proposal_file_id` with the loser's file and send a SECOND
+  // "Proposal signed" notification.
+  //
+  // A DOUBLE-CLICK IS ENOUGH. Both requests pass `getActiveSessionByToken()`
+  // while the session is still pending, both read `status === 'sent'`, and both
+  // then GENERATE AND STORE A PDF before either reaches this line — so the race
+  // window is as wide as PDF generation, not milliseconds.
+  //
+  // The loser is told SUCCESS, deliberately. The client did sign; a generic
+  // failure would be a different lie, and `DISCARDED` is the wrong shape here.
+  // What the loser must NOT do is re-point the estimate at its own PDF or send
+  // a duplicate notification, so it returns before both.
+  if (!applied(sessionRows)) {
+    return { success: true };
+  }
 
   const { error: estimateError } = await admin
     .from('estimates')
@@ -268,7 +309,7 @@ export async function declineEstimate(
 
   const declinedAt = new Date().toISOString();
 
-  const { error: sessionError } = await admin
+  const { data: sessionRows, error: sessionError } = await admin
     .from('signing_sessions')
     .update({
       status: 'declined',
@@ -279,8 +320,17 @@ export async function declineEstimate(
       signer_user_agent: params.signerUserAgent,
     })
     .eq('id', session.id)
-    .eq('status', 'pending');
+    .eq('status', 'pending')
+    .select('id');
   if (sessionError) return { success: false, error: sessionError.message };
+
+  // M4-03 [FIXED S157] — the same CAS shape as `completeSignature` above, and
+  // fixed with it rather than left for a later sweep. The decline IS recorded
+  // by whichever request won, so the loser reports success and stops short of
+  // re-writing the estimate and sending a duplicate notification.
+  if (!applied(sessionRows)) {
+    return { success: true };
+  }
 
   const { error: estimateError } = await admin
     .from('estimates')

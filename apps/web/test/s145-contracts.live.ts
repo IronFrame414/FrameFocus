@@ -262,7 +262,22 @@ describe('S145-C3 — the box payload CHECK (§10.2)', () => {
     expect(error?.message).toMatch(/payload_check/i);
   });
 
-  it("an 'initial' box takes neither key nor label — §7.3d", async () => {
+  // ⚠️ FIXED AT S157 — THE TEST WAS WRONG, THE SCHEMA IS RIGHT.
+  //
+  // This inserted an `initial` box with no `party` and expected success. The
+  // live `contract_template_boxes_payload_check` reads, for the signature and
+  // initial kinds: `value_key IS NULL AND custom_label IS NULL AND party IS NOT
+  // NULL`. So the insert was refused with CHECK 23514 and had been red ever
+  // since `party` shipped.
+  //
+  // The test was written from 7I-spec.md §10.2's schema sketch, which lists
+  // kind/value_key/custom_label and does NOT mention `party` — the column was
+  // added afterwards. The constraint is deliberate and correct: a signature or
+  // initial box has to say WHOSE mark it is (contractor or recipient), which is
+  // the whole point of a two-party contract. The title's claim — "takes neither
+  // key nor label" — is still exactly right; the test just never supplied the
+  // one thing the kind DOES require.
+  it("an 'initial' box takes neither key nor label, but does take a party — §7.3d", async () => {
     const { data, error } = await admin
       .from('contract_template_boxes')
       .insert({
@@ -270,11 +285,29 @@ describe('S145-C3 — the box payload CHECK (§10.2)', () => {
         template_id: templateId,
         x: 0.1, y: 0.2, width: 0.1, height: 0.04,
         kind: 'initial',
+        party: 'recipient',
       })
       .select('id')
       .single();
     expect(error).toBeNull();
     expect(data).toBeTruthy();
+  });
+
+  // The other half of the same constraint, which nothing covered: without a
+  // party there is no such thing as an initial box. Added S157 so the fix above
+  // cannot be mistaken for the constraint having been loosened.
+  it("an 'initial' box with NO party is refused — §10.2", async () => {
+    const { error } = await admin
+      .from('contract_template_boxes')
+      .insert({
+        company_id: companyId,
+        template_id: templateId,
+        x: 0.1, y: 0.3, width: 0.1, height: 0.04,
+        kind: 'initial',
+      })
+      .select('id');
+    expect(error).toBeTruthy();
+    expect(error?.message).toMatch(/payload_check/i);
   });
 
   it('an out-of-bounds box is refused — fractions, never points', async () => {
@@ -384,14 +417,55 @@ describe('S145-C4 — CONTRACT VOID AUTHORITY: the hole that is live today', () 
 });
 
 describe('S145-C5 — the two-level toggle exists on both levels (§5.2)', () => {
-  it('companies carries the master and defaults it OFF', async () => {
-    const { data } = await admin
+  // ⚠️ REWRITTEN AT S157 — IT ASSERTED A COLUMN DEFAULT BY READING A ROW.
+  //
+  // The old form read `client_contracts_enabled` off the SHARED fixture company
+  // and expected `false`, commenting "Off by default". But a default is a
+  // property of the SCHEMA, and this read a value any Owner can toggle in
+  // Settings and `s146-contract-services` toggles on purpose. It went red
+  // because the flag was left on.
+  //
+  // And it could never have recovered on its own: s146 captures the PRIOR value
+  // and restores THAT in its `finally`, which is correct isolation — but it
+  // means that once the flag is left on, every later run faithfully restores it
+  // ON. A test that inherits shared state cannot police that state.
+  //
+  // The schema default IS `false NOT NULL` (verified against
+  // information_schema at S157), so the product was never wrong. What this
+  // describe block actually claims is that "the two-level toggle EXISTS on both
+  // levels", so it now proves the toggle is real and company-controlled by
+  // driving it, and restores whatever it found.
+  it('companies carries the master toggle, and it is writable both ways', async () => {
+    const { data: before } = await admin
       .from('companies')
       .select('client_contracts_enabled')
       .eq('id', companyId)
       .single();
-    // Off by default: enabling the feature company-wide must be a deliberate act.
-    expect((data as { client_contracts_enabled: boolean }).client_contracts_enabled).toBe(false);
+    const prior = (before as { client_contracts_enabled: boolean }).client_contracts_enabled;
+
+    try {
+      for (const value of [false, true, false]) {
+        const { error } = await admin
+          .from('companies')
+          .update({ client_contracts_enabled: value })
+          .eq('id', companyId);
+        expect(error).toBeNull();
+
+        const { data: read } = await admin
+          .from('companies')
+          .select('client_contracts_enabled')
+          .eq('id', companyId)
+          .single();
+        expect((read as { client_contracts_enabled: boolean }).client_contracts_enabled).toBe(
+          value
+        );
+      }
+    } finally {
+      await admin
+        .from('companies')
+        .update({ client_contracts_enabled: prior })
+        .eq('id', companyId);
+    }
   });
 
   it('estimates carries the per-proposal flag and defaults it OFF', async () => {

@@ -155,13 +155,54 @@ describe('S140-F1 — the fixture is real', () => {
     );
   });
 
-  it('NONE of them carries a PDF — FrameFocus supplies no form (§2)', async () => {
-    const { data } = await admin
+  // ⚠️ REWRITTEN AT S157. THE OLD FORM ASSERTED A SUPPORTED ACTION COULD NEVER
+  // HAPPEN.
+  //
+  // It read: "NONE of them carries a PDF — FrameFocus supplies no form (§2)",
+  // and looped over every DEFAULT template on the SHARED fixture company
+  // expecting `pdf_file_id` to be null. It went red when a "Terms and
+  // Conditions.pdf" was uploaded to the default "Conditional Release" template
+  // on 2026-08-18 — which is not a defect, it is THE FEATURE. 7f2-spec.md §2
+  // says the company "uploads its own counsel- or lender-approved PDF" and that
+  // FrameFocus supplies no page CONTENT. It does not say a default template may
+  // never acquire one.
+  //
+  // So the old assertion described the freshly-SEEDED state and then tested it
+  // forever against live, shared, mutable data — the same class of mistake as
+  // s145's "companies carries the master and defaults it OFF", which asserted a
+  // column DEFAULT by reading a row anyone can toggle.
+  //
+  // What IS invariant: `seed_lien_release_templates()` (20260922000000) inserts
+  // (company_id, name, type, is_final, direction, is_default, created_by,
+  // updated_by) and NEVER pdf_file_id, so FrameFocus ships no form. The
+  // observable consequence, and what this now checks, is that any PDF a
+  // template does carry is a REAL UPLOAD owned by the same company — because
+  // FrameFocus creates no `files` rows of its own. That catches a dangling FK
+  // and a cross-tenant file, neither of which the old loop could see.
+  it('any template PDF is an uploaded file owned by this company — FrameFocus ships none (§2)', async () => {
+    const { data: templates } = await admin
       .from('lien_release_templates')
-      .select('pdf_file_id')
+      .select('id, pdf_file_id')
       .eq('company_id', companyId)
       .eq('is_default', true);
-    for (const t of data ?? []) expect(t.pdf_file_id).toBeNull();
+
+    const withPdf = (templates ?? []).filter((t) => t.pdf_file_id !== null);
+    for (const t of withPdf) {
+      const { data: file } = await admin
+        .from('files')
+        .select('id, company_id')
+        .eq('id', t.pdf_file_id as string)
+        .maybeSingle();
+      expect(file, `template ${t.id} points at a file row that does not exist`).not.toBeNull();
+      expect(
+        (file as { company_id: string }).company_id,
+        `template ${t.id} points at ANOTHER company's file`
+      ).toBe(companyId);
+    }
+
+    // Non-vacuity: the seeded set is four client_outbound defaults plus the
+    // S145 sub_inbound ones, so this must never silently examine nothing.
+    expect((templates ?? []).length).toBeGreaterThan(0);
   });
 
   it('the seeded release exists, read outside every policy', async () => {

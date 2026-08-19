@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase-server';
 import type { Database } from '@framefocus/shared/types/database';
+import { SIGNED_URL_TTL_SECONDS } from './signed-url-ttl';
 
 type FileRow = Database['public']['Tables']['files']['Row'];
 
@@ -36,19 +37,57 @@ export type FileRecord = Omit<FileRow, 'category'> & {
 
 // Trash-bin pattern (list): filters is_deleted = false by default so deleted rows never appear in
 // normal listings. Pass include_deleted: true to surface soft-deleted rows for the trash UI. See CLAUDE.md "Trash-bin pattern".
+/**
+ * ⚠️ BOUNDED [M3-05, S157]. This was an unbounded `select('*')` — every file
+ * row a caller could see, in one response, ordered but not limited. It is
+ * filtered by `project_id` at the call site, so it was bounded in PRACTICE by
+ * project size and not by the query: nothing in the code stopped a large
+ * project from returning everything. Same shape as M1-03 and M2-06.
+ *
+ * `limit` is a parameter rather than a hardcoded cap so the trash view and any
+ * future paginated view can ask for what they need. `DEFAULT_FILE_PAGE_SIZE`
+ * is deliberately larger than any project in the current data — the point is a
+ * ceiling that exists, not a page size tuned to today's rows.
+ */
+export const DEFAULT_FILE_PAGE_SIZE = 500;
+
 export async function getFiles(filters?: {
   project_id?: string;
   category?: FileCategory;
   include_deleted?: boolean;
+  /**
+   * Trash view: return ONLY soft-deleted rows.
+   *
+   * ⚠️ NOT the same as `include_deleted`, and the difference is load-bearing
+   * now that this query is bounded. The trash page used to ask for
+   * `include_deleted: true` and then filter `is_deleted` in memory — so it
+   * pulled every live file in the project to display the deleted ones, and
+   * under the new `limit` the deleted rows could be paged out of the response
+   * entirely by live ones. Asking the database for what the page actually
+   * wants fixes both.
+   */
+  only_deleted?: boolean;
+  limit?: number;
+  offset?: number;
 }): Promise<FileRecord[]> {
   const supabase = await createClient();
+
+  const limit = filters?.limit ?? DEFAULT_FILE_PAGE_SIZE;
+  const offset = filters?.offset ?? 0;
 
   let query = supabase
     .from('files')
     .select('*')
-    .order('created_at', { ascending: false });
+    // `created_at` alone is not a total order — seeded rows share timestamps,
+    // and an unstable order makes a paged read drop or repeat rows. `id` is the
+    // tiebreak. This repo has been bitten by unordered reads five times.
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .range(offset, offset + limit - 1);
 
-  if (!filters?.include_deleted) {
+  if (filters?.only_deleted) {
+    query = query.eq('is_deleted', true);
+  } else if (!filters?.include_deleted) {
     query = query.eq('is_deleted', false);
   }
   if (filters?.project_id) {
@@ -123,7 +162,7 @@ export type SignedUrlResult =
  */
 export async function signedUrlFor(
   filePath: string,
-  expiresIn: number = 3600
+  expiresIn: number = SIGNED_URL_TTL_SECONDS
 ): Promise<SignedUrlResult> {
   const supabase = await createClient();
 
@@ -150,7 +189,7 @@ export async function signedUrlFor(
  */
 export async function getSignedUrl(
   filePath: string,
-  expiresIn: number = 3600
+  expiresIn: number = SIGNED_URL_TTL_SECONDS
 ): Promise<string | null> {
   return (await signedUrlFor(filePath, expiresIn)).url;
 }

@@ -246,6 +246,46 @@ Playwright runs reported `0` while 89 and 91 tests had actually failed.
 `defaults.run.shell: bash -euo pipefail {0}`, which closes the pipe case for every `run:` step —
 but **nothing closes the trailing-command case except not writing it**.
 
+### A fix session must sweep for EXISTING tests that encode the behaviour it is overturning — **MANDATORY [Josh, S157]**
+
+**When a session changes a rule — an RLS policy, a role floor, a constraint, a ruling — it is not
+done when its own probes are updated. It must go looking for OLDER tests that assert the behaviour
+it just overturned.**
+
+**Why this is a rule and not a nicety.** S154 floored `contact_addresses` SELECT for
+`subcontractor` and `client`, because the open policy was leaking every client's home address to
+subs. It inverted the probes **it had written** and stopped there.
+`s121-contact-addresses-floor.live.ts` had a describe block titled **"contact_addresses SELECT is
+NOT floored"**, written at S121 to protect the *old* rule, asserting that crew, foreman **and
+subcontractor** could all read an address.
+
+**Only the subcontractor case went red.** Crew and foreman still read company-wide by design, so
+two of the three cases kept passing and **the file read as healthy while its title asserted the
+opposite of a shipped ruling.** It sat that way through two audit passes.
+
+> **A test that passes while contradicting a shipped rule is worse than a failing one, because
+> nothing surfaces it.** A red test is a task. A green test that encodes the wrong rule is a
+> statement — and the next person to read it will believe it.
+
+**In practice, before a fix session ends:**
+
+- **Grep for the table, column, policy or function you changed** across `apps/web/test/`,
+  `apps/web/e2e/` and the specs — not just the files you touched.
+- **Read the describe/it TITLES, not only the assertions.** The defect above was fully visible in
+  the title and invisible in the diff.
+- **Assume the suite is still green.** A partially-stale file is the normal case, not the edge
+  case: any test whose cases span several roles will go red only on the roles you changed.
+- **Invert, do not delete.** A test asserting the old behaviour names what changed; rewritten to
+  the new rule it becomes the regression guard for the fix. Deleting it discards the record. (Same
+  reason `TECH_DEBT.md` entries are closed rather than removed — the repo lost one to deletion at
+  `53c7353`.)
+
+**A closely related trap, from the same session.** `s145-contracts` asserted a *column default* by
+reading a row anyone can toggle, and `s140-lien-releases` asserted that a *supported action* could
+never happen. Both describe the freshly-seeded world and then test it forever against live, shared,
+mutable data. **If an assertion's name says "default", "none" or "never", check that it is reading
+the schema and not a row.**
+
 ## Generated Types Workflow
 
 `packages/shared/types/database.ts` is auto-generated from the live Supabase schema. All service files import from this — never hand-write database type shapes. After every migration that adds, removes, or renames a column or table, run:
