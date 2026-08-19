@@ -47,6 +47,48 @@ export async function getContacts(filters?: {
 }
 
 /**
+ * The trash view's list: ONLY soft-deleted contacts. [S158 · Finding 2]
+ *
+ * The third function of CLAUDE.md's trash-bin pattern, which `files.ts` has had
+ * since Module 3 and this file has not: *"a separate `getTrash()` (or
+ * `listDeleted()`) function filters `is_deleted = true` to power the trash
+ * UI."* Without it a soft delete was indistinguishable from a hard one from the
+ * user's side — the row vanished and nothing in the product listed it.
+ *
+ * ⚠️ NOT A `status` FILTER, AND THE TWO MUST NOT BE CONFLATED. `contacts.status`
+ * is Active / Inactive / Archived — where a contact stands with the company —
+ * and the list's status dropdown, "All Statuses" included, walks only that
+ * column. `is_deleted` is whether the record exists at all. A contact that is
+ * archived is still in the list; a contact that is deleted is only here.
+ *
+ * BOUNDED, and ordered by the column it is bounded on. An unbounded `select('*')`
+ * is the M1-03 / M2-06 / M3-05 shape, and `.limit()` with no `ORDER BY` is the
+ * other half of the same trap — the rows that survive the cap would otherwise be
+ * whatever the planner happened to return.
+ */
+export const DEFAULT_TRASH_PAGE_SIZE = 200;
+
+export async function getDeletedContacts(limit = DEFAULT_TRASH_PAGE_SIZE): Promise<Contact[]> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from('contacts')
+    .select('*')
+    .eq('is_deleted', true)
+    .order('deleted_at', { ascending: false, nullsFirst: false })
+    .limit(limit);
+
+  // Same reasoning as getContacts(): the array return stays until TECH_DEBT #2
+  // gives this route an error boundary, but the SILENCE does not — an empty
+  // trash and a failed query must not read alike in the log.
+  if (error) {
+    console.error('getDeletedContacts: contacts trash query failed', error);
+    return [];
+  }
+  return data ?? [];
+}
+
+/**
  * A single contact BY ID, soft-deleted or not.
  *
  * ⚠️ DELIBERATELY DOES NOT FILTER `is_deleted` [M2-02, S154]. CLAUDE.md's

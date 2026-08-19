@@ -142,6 +142,28 @@ row-count guard** (M2-03), and **soft delete does not work at all** on `contacts
 `subcontractors` (M2-02).~~ **✅ BOTH FIXED [S154].** All three writers row-count through the shared
 `applied()`/`DISCARDED`, and soft delete works on both tables with the row restorable.
 
+**[S158] Two amendments to the paragraph above, from the click-test on the merged result.**
+
+1. **"All three writers" was true of `contacts-client.ts` and NOT of `subcontractors-client.ts`.**
+   That file's `updateSubcontractor()` and `deleteSubcontractor()` checked `error` and nothing else,
+   so a foreman, crew member, subcontractor or client — every role outside
+   `subcontractors_update_authorized` — was told a write had happened over zero rows. The S154 pass
+   fixed the table its findings named and not its twin. **All three writers in that file are guarded
+   now**, not only the one the finding would have named; a file that teaches both patterns is the
+   M1-01 shape. Proof: `s158-trash-restore.live.ts` C1/C2.
+2. **"the row restorable" was true of the DATABASE and of no surface in the product.** From S154 to
+   S158 a soft delete was indistinguishable from a hard one *for the user*: the row left the list
+   and nothing listed it. `S153-m2-audit.md` §1 had said so — *"there is no
+   `getTrash()`/`listDeleted()` for contacts at all, so no trash UI exists to restore into"* — and
+   the fix pass closed the policy half only. **`getDeletedContacts()`, `getDeletedSubcontractors()`,
+   `restoreContact()`, `restoreSubcontractor()` and two `/trash` routes close it.** No migration:
+   every policy this needed shipped in `20261005000000`.
+
+   ⚠️ **The generalisable half.** A restorable row and a restore flow are different deliverables,
+   and a pass that fixes RLS can report the first while shipping neither. CLAUDE.md's trash-bin
+   pattern names **three** functions — list, by-id, and `getTrash()` — and M2 had shipped two of
+   them for a year. **When a module claims the trash-bin pattern, count the functions.**
+
 ### §1.2a — NEW EDGE [S154]: M2 → M5/M6, the assignment-scoped site address
 
 **`contact_addresses` is no longer read by role alone.** `contact_addresses_select_scoped` now has a
@@ -457,9 +479,96 @@ same shape: **an assertion that describes the freshly-seeded world and is then t
 live, shared, mutable data.** If an assertion's name says *default*, *none* or *never*, check that it
 reads the schema and not a row.
 
+**⚠️ THE FIX PASS BROKE ONE THING AND PLAYWRIGHT CAUGHT IT — recorded because the catch is the
+point.** Aligning storage to `files` RLS (`20261007000000`) refused the annotated-photo derivative,
+which has no `files` row by design. `m-photos.spec.ts` went 42 passed → **5 failed**, and the
+symptom was a **silent fallback to the unannotated original** — the `#129` PARITY shape. Fixed by
+`20261008000000`. Two things worth carrying:
+
+1. **The audit had reasoned to this risk and filed it for MODULE 9**, while the same defect was live
+   in **Module 6**. *A risk you expect a future module to hit is worth checking against the modules
+   that already exist.*
+2. **Only the browser suite could see it.** Every live harness was green, because the failure was a
+   render-time fallback, not a refused query. The four-chunk Playwright run is not ceremony.
+
 **⚠️ And a trap for whoever writes the next storage probe.** The bucket holds **105 objects against
 108 `files` rows** [LIVE, S157], so some rows are dangling — and `createSignedUrl` fails on a
 dangling row with **the same error as a policy refusal** (Storage conflates "you may not" with "it is
 not there", deliberately, as anti-enumeration). Two probes in this session failed that way and read
 as policy denials. **Pair every refusal assertion with a caller who DOES get the bytes**, or use a
 fixture you uploaded yourself.
+
+---
+
+### S158 — the click-test findings. Verified 2026-08-19.
+
+> **Not a pass and not a fix pass.** S157's merged result was click-tested by Josh and passed; these
+> are three product gaps it surfaced on the way, all ruled before the work started. **No schema
+> change** — the two service-layer findings needed no migration, which is itself the finding in
+> Finding 2's case.
+
+| # | Check | Result |
+| --- | --- | --- |
+| 1 | `npx turbo run type-check` (all packages) | **exit 0** — `@framefocus/web` a cache MISS, so it really ran |
+| 2 | `next lint` | **exit 0** — 16 warnings, **0 introduced.** Identical list to the S155/S156 run |
+| 3 | `npm run build --force` | **exit 0** — `Compiled successfully`, and both new routes in the manifest: `/dashboard/contacts/trash` 2.48 kB, `/dashboard/subcontractors/trash` 1.78 kB. ⚠️ See the SIGTERM note below |
+| 4 | Committed vitest suite | **806/806 passed**, 56 files — 795/55 plus this session's 11 in one new file |
+| 5 | Every live harness (`test/*.live.ts`, 77 files) | **877 passed, 25 skipped, 2 failed, 1 suite failed** — all three **pre-existing and diagnosed below**, none in a table this branch touches |
+| 6 | Playwright, four chunks | **517 passed, 9 skipped, 0 failed** — `m-shell` 54 · `m-sections` 59 (+4 skipped) · `m-photos` 42 · rest 362 (+5 skipped) |
+| 7 | `npx supabase migration list` | **115 files = 115 local = 115 applied**, zero rows where `local <> remote` |
+| 8 | Fixture leakage | **companies 2 → 2**; zero `S158TRASH` rows left in `contacts` or `subcontractors` |
+
+**⚠️ THE BUILD FAILED TWICE BEFORE IT PASSED, AND THE CAUSE WAS NOT THE CODE.** `next build` exited
+`1` after `✓ Compiled successfully` with `Next.js build worker exited with code: null and signal:
+SIGTERM` — a worker killed under memory pressure, not a compile or type error. **Established as
+environmental rather than argued to be:** the branch was `git stash push -u`'d and the SAME build run
+against clean `HEAD` failed identically. A stale `next dev` server was holding **1.2 GB** on a
+7.9 GB / 2-core box; `scripts/e2e-preflight.sh` with `E2E_PREFLIGHT_START=0` cleared it by PID (never
+`pkill -f` — #137), and the build then passed. *A SIGTERM after "Compiled successfully" is a
+resource report, not a verdict on the diff — and the way to prove that is to build the baseline, not
+to re-read the log.*
+
+**The e2e run was served by `npm run start`, not `npm run dev`** — the production build had just been
+made, `reuseExistingServer` attaches to whatever holds 3000, and #135's own measurements put the dev
+server at ~1400 MB against ~320 MB for `next start`. Same code CI serves.
+
+#### The three reds, none of them this branch's and none of them the product
+
+| Harness | Failed | Cause |
+| --- | --- | --- |
+| `s133-subcontractor-read-floor` | suite (25 skipped) | `beforeAll` refused to run: *"josh+s133-pm2@worthprop.com already exists — a previous run did not clean up."* **Leaked fixture identity**, `auth.users.created_at = 2026-08-19 10:18:47 UTC` — roughly two hours before this session's first edit. The harness is doing exactly what it should; something aborted earlier today. **Not cleaned up here** — deleting an auth identity on rebuild-test is a destructive act nobody ruled, and it is one `admin.auth.admin.deleteUser` away whenever Josh says so. |
+| `s123-cron-loops` | 2 | ⚠️ **The one worth acting on, and it is the S121 shape again.** *"16:00 nudges the WORKER and nobody else"* asserts `recipients.has(ownerProfileId) === false`. It is `true` — **because the Owner has his own open time-clock session**, `time_clock_sessions.clock_in = 2026-08-19 12:07:51 UTC`, `clock_out IS NULL` [LIVE]. `runStillClockedIn` nudges *every* open session's worker, so the Owner appears as a recipient **on his own account**, not because management was told about the crew member's. The 17:00 test then fails downstream for the same reason: `rows.find(r => r.recipient_profile_id === ownerProfileId)` picks the Owner's own *"You're still clocked in"* row instead of the manager's overtime row. |
+
+**What `s123-cron-loops` is actually missing.** Both assertions are scoped by **recipient** and not by
+the **session under test**, so any real open session in the shared company reddens them — and a
+person being clocked in is not an error state, it is the product working. This is precisely
+`CLAUDE.md`'s sweep-rule cousin: *an assertion that describes the freshly-seeded world and is then
+tested forever against live, shared, mutable data.* The fix is to filter `rows` to notifications
+arising from the seeded `openSessionId` / seeded member rather than asserting over every row of the
+type. **Left red deliberately: it is outside all three ruled findings, and Josh rules before a test
+is rewritten.** It is also **not** fixable by clocking the Owner out — that is his live data.
+
+#### Sweep for existing tests encoding the overturned behaviour [CLAUDE.md, S157 rule]
+
+Findings 1 and 2 both change list behaviour, so the sweep was run before finishing rather than after:
+
+- **`contacts-list` / `subcontractors-list`** — no committed test referenced either component. The
+  only e2e specs touching `/dashboard/contacts` assert the **chat launcher** (`desktop-chat-panel`,
+  `desktop-chat-switcher`) and the **route guard** (`desktop-dashboard-guard`); none reads a row
+  action. All green.
+- **`s153-m2-audit.live.ts` F2/F2b/F3** — already inverted at S154, and F2b drives PostgREST
+  directly rather than `deleteSubcontractor()`, so the new row-count guard does not touch it.
+- **`s154-m2-fixes.live.ts` A4** — *"list surfaces still exclude deleted rows"*. Deliberately still
+  true: `getContacts()`/`getSubcontractors()` are unchanged and the new functions are the only ones
+  that may return `is_deleted = true`. `s158-trash-restore` **D1** asserts the service half of the
+  same invariant.
+- **`s130-ffnav.test.ts` / `desktop-ffnav.spec.ts`** — Finding 3 changes the aside's layout classes.
+  Both read `NAV_ITEMS` by regex and `aside nav` by selector respectively; neither asserts geometry.
+  Both green.
+- **Titles read, not only assertions.** Nothing in `test/` or `e2e/` is titled around contacts row
+  actions or around a deleted contact being unreachable.
+
+**Four extra Playwright skips versus the S155/S156 run (5 → 9)**, all in `m-sections` and all
+guarded by `if (n === 0) test.skip(…, 'no change orders on this project' / 'no documents on this
+project')`. Data-conditional on the shared rebuild-test project, in Change Orders, Deliveries, Files
+and Safety — none of which this branch touches.

@@ -1,5 +1,9 @@
 import { createClient } from '@/lib/supabase-server';
 import type { Database } from '@framefocus/shared/types/database';
+// One cap for both trash views [S158]. Declared in contacts.ts and imported
+// rather than re-declared: two constants named the same thing in two files is
+// how they end up different.
+import { DEFAULT_TRASH_PAGE_SIZE } from './contacts';
 
 type SubcontractorRow = Database['public']['Tables']['subcontractors']['Row'];
 export type Subcontractor = Omit<SubcontractorRow, 'sub_type' | 'status'> & {
@@ -32,6 +36,35 @@ export async function getSubcontractors(filters?: {
 
   const { data, error } = await query;
   if (error) return [];
+  return data ?? [];
+}
+
+/**
+ * The trash view's list: ONLY soft-deleted subs and vendors. [S158 · Finding 2]
+ *
+ * The mirror of `getDeletedContacts()`, for the same reason and with the same
+ * bound. **Vendors resolve here and nowhere else** — a vendor is
+ * `subcontractors.sub_type = 'vendor'`, not a separate table, so this one
+ * function is the trash for both and a third surface would be wrong. (There is
+ * a second, unreconciled `vendor` on `contacts.contact_type`; that is M2-05,
+ * deferred to TECH_DEBT #105, and is not resolved by this.)
+ */
+export async function getDeletedSubcontractors(
+  limit = DEFAULT_TRASH_PAGE_SIZE
+): Promise<Subcontractor[]> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from('subcontractors')
+    .select('*')
+    .eq('is_deleted', true)
+    .order('deleted_at', { ascending: false, nullsFirst: false })
+    .limit(limit);
+
+  if (error) {
+    console.error('getDeletedSubcontractors: subcontractors trash query failed', error);
+    return [];
+  }
   return data ?? [];
 }
 
