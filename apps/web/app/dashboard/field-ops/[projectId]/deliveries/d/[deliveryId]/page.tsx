@@ -10,6 +10,7 @@ import {
 import { getMyMember } from '@/lib/services/members';
 import { FieldTabs } from '@/components/field/field-tabs';
 import { DeleteDeliveryButton, DownloadDeliveryPdfButton } from './delivery-actions';
+import { SIGNED_URL_TTL_SECONDS } from '@/lib/services/signed-url-ttl';
 
 // 6D — single delivery read view (primarily the orderless check-ins' home;
 // PO-linked trucks render inside the 4e PO detail and link here via Edit).
@@ -63,7 +64,7 @@ export default async function DeliveryDetailPage({
   ]);
   const allPhotoPaths = [...photos, ...generalPhotos].map((p) => p.file_path);
   const { data: signed } = allPhotoPaths.length
-    ? await supabase.storage.from('project-files').createSignedUrls(allPhotoPaths, 3600)
+    ? await supabase.storage.from('project-files').createSignedUrls(allPhotoPaths, SIGNED_URL_TTL_SECONDS)
     : { data: [] };
   const urlByPath = new Map((signed ?? []).map((s) => [s.path, s.signedUrl]));
 

@@ -5,8 +5,13 @@ import FileRow from './file-row';
 
 export default async function ProjectFilesPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: projectId } = await params;
-  const files = await getFiles({ project_id: projectId });
-  const activeTags = await getActiveTags();
+  // M3-05 [S157] — these two reads are INDEPENDENT and were awaited in series,
+  // so the page paid two round trips end to end for work that takes one. Same
+  // shape as M1-03 (five sequential reads for one row), smaller.
+  const [files, activeTags] = await Promise.all([
+    getFiles({ project_id: projectId }),
+    getActiveTags(),
+  ]);
 
   return (
     <div style={{ padding: '2rem' }}>

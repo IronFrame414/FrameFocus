@@ -263,7 +263,15 @@ export async function clearContractorSignature(
   return { success: true };
 }
 
-/** Short-lived signed URL to preview the saved signature (private bucket). */
+/**
+ * Short-lived signed URL to preview the saved signature (private bucket).
+ *
+ * ⚠️ DELIBERATELY 600s, NOT `SIGNED_URL_TTL_SECONDS` (7200) [S157]. This is an
+ * owner/admin Settings preview of a company asset that is rendered immediately
+ * and never held, so the standard two-hour file-delivery window buys nothing
+ * here and a shorter grant is strictly better. Left out of the M3-04
+ * standardisation on purpose — do not "finish" the sweep by raising it.
+ */
 export async function getContractorSignatureUrl(path: string): Promise<string | null> {
   const supabase = createClient();
   const { data } = await supabase.storage.from('project-files').createSignedUrl(path, 600);

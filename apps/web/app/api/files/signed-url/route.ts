@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { signedUrlFor } from '@/lib/services/files';
+import { SIGNED_URL_TTL_SECONDS } from '@/lib/services/signed-url-ttl';
 
 // TECH_DEBT #142 [S122] — THE ERROR CONTRACT, not the auth model.
 //
@@ -41,7 +42,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Missing path' }, { status: 400 });
   }
 
-  const { url, error } = await signedUrlFor(path, 3600);
+  const { url, error } = await signedUrlFor(path, SIGNED_URL_TTL_SECONDS);
 
   if (error) {
     // The log is never generic, even though the response is.

@@ -1,5 +1,7 @@
 import { createClient } from '@/lib/supabase-browser';
 import type { FileCategory } from './files';
+import { applied, DISCARDED } from './mutation-result';
+import { SIGNED_URL_TTL_SECONDS } from './signed-url-ttl';
 
 const BUCKET = 'project-files';
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
@@ -277,7 +279,7 @@ export async function uploadEstimateBidDocument(
  *  Storage RLS scopes reads by the company_id path segment. */
 export async function getFileSignedUrlClient(
   fileId: string,
-  expiresIn = 300
+  expiresIn = SIGNED_URL_TTL_SECONDS
 ): Promise<string | null> {
   const supabase = createClient();
   const { data: row } = await supabase.from('files').select('file_path').eq('id', fileId).single();
@@ -299,9 +301,12 @@ export async function updateFile(
   const supabase = createClient();
 
   // BEFORE UPDATE trigger `files_set_updated_by` handles updated_by automatically.
-  const { error } = await supabase.from('files').update(updates).eq('id', id);
+  // `.select('id')` is what makes the affected rows observable — see
+  // mutation-result.ts. Without it an RLS-discarded update reports success.
+  const { data, error } = await supabase.from('files').update(updates).eq('id', id).select('id');
 
   if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 
@@ -309,15 +314,17 @@ export async function softDeleteFile(id: string): Promise<MutationResult> {
   const supabase = createClient();
 
   // BEFORE UPDATE trigger handles updated_by.
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('files')
     .update({
       is_deleted: true,
       deleted_at: new Date().toISOString(),
     })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
 
   if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 
@@ -325,15 +332,17 @@ export async function restoreFile(id: string): Promise<MutationResult> {
   const supabase = createClient();
 
   // BEFORE UPDATE trigger handles updated_by.
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('files')
     .update({
       is_deleted: false,
       deleted_at: null,
     })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
 
   if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 
@@ -353,17 +362,55 @@ export async function permanentDeleteFile(id: string): Promise<MutationResult> {
 
   // Delete storage blob first — if row delete fails after, we have an orphan
   // row but no orphan bytes. Opposite ordering would waste storage.
-  const { error: storageError } = await supabase.storage.from(BUCKET).remove([file.file_path]);
+  //
+  // ⚠️ M3-02 [S157] — NEITHER HALF ERRORS WHEN RLS REFUSES, so this function
+  // reported `{ success: true }` having deleted NOTHING, on the one operation
+  // in M3 that is genuinely irreversible. Proven LIVE at S155 (F4) as a crew
+  // member: `remove()` returned `error: null` with an EMPTY removed-list, the
+  // row DELETE affected zero rows with `error: null`, and the row was still
+  // there afterwards.
+  //
+  // The storage API's refusal is the empty `data` array, NOT an error — which
+  // is why `storageError` alone was never going to catch it.
+  const { data: removed, error: storageError } = await supabase.storage
+    .from(BUCKET)
+    .remove([file.file_path]);
 
   if (storageError) {
     return { success: false, error: `Storage delete failed: ${storageError.message}` };
   }
+  if (!removed || removed.length === 0) {
+    // Nothing was removed and storage did not say so. Stop BEFORE deleting the
+    // row: reporting success here would claim the bytes are gone while they
+    // are still served, and deleting the row anyway would strand them
+    // permanently with no record pointing at them.
+    return { success: false, error: DISCARDED };
+  }
 
-  // Delete row (RLS enforces owner/admin only)
-  const { error: deleteError } = await supabase.from('files').delete().eq('id', id);
+  // Delete row (RLS enforces owner/admin only).
+  //
+  // `.select('id')` for the same reason as every UPDATE-shaped write in this
+  // repo — see mutation-result.ts. A DELETE that matches no row is not an
+  // error, and this one is NOT the legitimate-empty case the helper warns
+  // about: we have already proven the row exists by reading `file_path` above.
+  const { data: deleted, error: deleteError } = await supabase
+    .from('files')
+    .delete()
+    .eq('id', id)
+    .select('id');
 
   if (deleteError) {
     return { success: false, error: `Database delete failed: ${deleteError.message}` };
+  }
+  if (!applied(deleted)) {
+    // The bytes are gone and the row is not. Say so precisely rather than
+    // reporting a clean success or a bare failure — CLAUDE.md forbids naming a
+    // cause that has not been verified, and this one HAS been.
+    return {
+      success: false,
+      error:
+        'The file contents were deleted but the record could not be removed. Contact an owner or admin.',
+    };
   }
 
   return { success: true };
@@ -372,8 +419,13 @@ export async function toggleFavorite(id: string, isFavorite: boolean): Promise<M
   const supabase = createClient();
 
   // BEFORE UPDATE trigger handles updated_by.
-  const { error } = await supabase.from('files').update({ is_favorite: isFavorite }).eq('id', id);
+  const { data, error } = await supabase
+    .from('files')
+    .update({ is_favorite: isFavorite })
+    .eq('id', id)
+    .select('id');
 
   if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }

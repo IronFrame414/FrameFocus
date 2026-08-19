@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase-browser';
 import type { Database } from '@framefocus/shared/types/database';
+import { SIGNED_URL_TTL_SECONDS } from './signed-url-ttl';
 
 // Spec 2 — read-side helpers for the estimate detail page's signing
 // activity section. RLS limits both tables to Owner/Admin SELECT on
@@ -70,7 +71,7 @@ export async function getSignedProposalUrl(
 
   const { data, error: urlError } = await supabase.storage
     .from('project-files')
-    .createSignedUrl(file.file_path, 3600);
+    .createSignedUrl(file.file_path, SIGNED_URL_TTL_SECONDS);
   if (urlError || !data?.signedUrl) {
     return { url: null, error: urlError?.message ?? 'Could not create download link' };
   }

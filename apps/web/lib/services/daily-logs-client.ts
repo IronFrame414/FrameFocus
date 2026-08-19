@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase-browser';
 import type { Database } from '@framefocus/shared/types/database';
 import { uploadFile } from '@/lib/services/files-client';
 import type { DailyLog, DayPresence } from '@/lib/services/daily-logs';
+import { SIGNED_URL_TTL_SECONDS } from './signed-url-ttl';
 export type { DailyLog, DailyLogDetail, DayPresence, LogPhoto } from '@/lib/services/daily-logs';
 
 // 6B Daily Logs — client mutations (6B-1 spec §4). RLS enforces authority:
@@ -259,6 +260,6 @@ export async function getFileSignedUrl(
   const supabase = createClient();
   const { data } = await supabase.storage
     .from('project-files')
-    .createSignedUrl(filePath, 3600, downloadName ? { download: downloadName } : undefined);
+    .createSignedUrl(filePath, SIGNED_URL_TTL_SECONDS, downloadName ? { download: downloadName } : undefined);
   return data?.signedUrl ?? null;
 }

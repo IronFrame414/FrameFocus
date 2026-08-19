@@ -49,6 +49,10 @@ export async function GET(_request: NextRequest, { params }: { params: { id: str
     for (const o of objects ?? []) {
       const { data: signed } = await admin.storage
         .from('exports')
+        // ⚠️ The `exports` bucket, NOT `project-files`, so M3-04's
+        // `SIGNED_URL_TTL_SECONDS` does not govern it [S157]. Minted with the
+        // admin client for a completed trial export and returned in this
+        // response for immediate download. Its own surface, its own duration.
         .createSignedUrl(`${prefix}/${o.name}`, 3600, { download: o.name });
       if (signed?.signedUrl) parts.push({ name: o.name, url: signed.signedUrl });
     }

@@ -7,6 +7,7 @@ import { getProjects } from '@/lib/services/projects';
 import { getMyMember } from '@/lib/services/members';
 import { getCompanyTimeSettings } from '@/lib/services/company';
 import { ExpensesPageClient } from './expenses-page-client';
+import { SIGNED_URL_TTL_SECONDS } from '@/lib/services/signed-url-ttl';
 
 /**
  * 7A §5.4 + 7C §3.3 — Receipts | Bills & Commitments | Review queue tabs,
@@ -78,7 +79,7 @@ export default async function ExpensesPage() {
     const receiptRows = await Promise.all(pending.map((e) => getExpenseReceipts(e.id)));
     const allPaths = receiptRows.flat().map((f) => f.file_path);
     const { data: signed } = allPaths.length
-      ? await supabase.storage.from('project-files').createSignedUrls(allPaths, 3600)
+      ? await supabase.storage.from('project-files').createSignedUrls(allPaths, SIGNED_URL_TTL_SECONDS)
       : { data: [] };
     const urlByPath = new Map((signed ?? []).map((s) => [s.path, s.signedUrl]));
     pending.forEach((e, i) => {

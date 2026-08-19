@@ -10,6 +10,7 @@ import {
   ResolutionCard,
   RetryBanner,
 } from './incident-detail-client';
+import { SIGNED_URL_TTL_SECONDS } from '@/lib/services/signed-url-ttl';
 
 // 6C — incident detail (4d right panel, expanded to a full page; also the
 // home of project-less incidents). Edit = reporter or Owner/Admin (live
@@ -74,7 +75,7 @@ export default async function IncidentDetailPage({
         .from('project-files')
         .createSignedUrls(
           photos.map((p) => p.file_path),
-          3600
+          SIGNED_URL_TTL_SECONDS
         )
     : { data: [] };
   const urlByPath = new Map((signed ?? []).map((s) => [s.path, s.signedUrl]));
