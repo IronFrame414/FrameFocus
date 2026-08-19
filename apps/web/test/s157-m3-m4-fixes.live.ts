@@ -191,6 +191,44 @@ describe('M3-01 — storage RLS is aligned to table RLS', () => {
     expect(await after!.text(), 'the bytes changed despite the refusal').toBe('original');
   });
 
+  // ⚠️ THE DERIVATIVE CLAUSE — 20261008000000, and the reason it exists.
+  // `saveMarkup()` writes the flattened image to `{original}.markup.jpg` and
+  // deliberately creates NO `files` row for it (9-spec §6.1: a second
+  // `category='photos'` row would make every annotated photo appear twice).
+  // So one row legitimately owns TWO objects, and the first version of the
+  // delegation could not see the second — which made an annotated photo render
+  // as the UNANNOTATED original with no indication the markup existed. That is
+  // exactly the silent loss CLAUDE.md's PARITY ruling was written about (#129).
+  it('A7 · crew CAN read the DERIVATIVE of a photo it may read', async () => {
+    const { path } = await makeFile('photos', 'deriv-src.pdf');
+    const derivative = `${path}.markup.jpg`;
+    await admin.storage
+      .from(BUCKET)
+      .upload(derivative, new Blob(['marked'], { type: 'image/jpeg' }), { upsert: true });
+    madePaths.push(derivative);
+
+    const { data, error } = await crew.storage.from(BUCKET).createSignedUrl(derivative, 60);
+    expect(error, 'crew lost the marked-up image — the derivative clause has regressed').toBeNull();
+    expect(data?.signedUrl).toBeTruthy();
+  });
+
+  it('A8 · crew CANNOT read the derivative of a file it may NOT read', async () => {
+    // The clause grants the derivative exactly when the ORIGINAL is readable —
+    // it is not a blanket exemption for anything ending `.markup.jpg`.
+    const { path } = await makeFile('invoices', 'deriv-invoice.pdf');
+    const derivative = `${path}.markup.jpg`;
+    await admin.storage
+      .from(BUCKET)
+      .upload(derivative, new Blob(['marked'], { type: 'image/jpeg' }), { upsert: true });
+    madePaths.push(derivative);
+
+    const { data } = await crew.storage.from(BUCKET).createSignedUrl(derivative, 60);
+    expect(
+      data?.signedUrl,
+      'the suffix alone granted access — the derivative clause is too wide'
+    ).toBeFalsy();
+  });
+
   it('A6 · crew CAN still overwrite a photo it owns — A5 is the category, not the verb', async () => {
     const { path } = await makeFile('photos', 'photo-overwrite.pdf');
     const { error } = await crew.storage
