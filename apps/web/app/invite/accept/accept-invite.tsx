@@ -134,6 +134,18 @@ export default function AcceptInviteContent() {
             last_name: lastName.trim(),
             invitation_token: token,
           },
+          // P4 [S160] — matching `sign-up/page.tsx`, which has always passed
+          // this. Without it GoTrue falls back to the project's `site_url`
+          // (`https://EZContractorBinder.com`), so an invitee who accepted on
+          // any other origin — the Vercel preview domain, localhost — is sent
+          // somewhere they were never on. It also made the destination a
+          // dashboard setting nothing in this repository pins.
+          //
+          // ⚠️ THE VALUE IS CHECKED AGAINST `uri_allow_list` BY GoTrue, not
+          // trusted. That is why `auth-email.ts` passes `redirect_to` through
+          // to the verify URL unchanged rather than composing its own — building
+          // a destination there would route around this check.
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       });
 
