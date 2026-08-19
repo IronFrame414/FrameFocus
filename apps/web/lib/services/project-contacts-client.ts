@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase-browser';
 import type { ContactType } from '@framefocus/shared/constants';
 import type { ProjectContact } from '@/lib/services/project-contacts';
+import { applied, DISCARDED } from '@/lib/services/mutation-result';
 export type { ProjectContact };
 
 /** Attach an existing Module 2 contact to a project. */
@@ -12,7 +13,7 @@ export async function attachContact(
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = createClient();
 
-  const { error } = await supabase.from('project_contacts').insert({
+  const { data, error } = await supabase.from('project_contacts').insert({
     project_id: projectId,
     contact_id: contactId,
     role: role ?? null,
@@ -58,11 +59,13 @@ export async function detachContact(
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = createClient();
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('project_contacts')
     .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-    .eq('id', projectContactId);
+    .eq('id', projectContactId)
+    .select('id');
 
   if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }

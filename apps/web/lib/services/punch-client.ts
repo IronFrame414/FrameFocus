@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase-browser';
 import type { PunchItem, PunchItemPriority, PunchItemStatus, PunchList } from '@/lib/services/punch';
+import { applied, DISCARDED } from '@/lib/services/mutation-result';
 export type { PunchItem, PunchItemPriority, PunchItemStatus, PunchList };
 
 const FOREMAN_PLUS = ['owner', 'admin', 'project_manager', 'foreman'];
@@ -68,7 +69,7 @@ export async function createPunchList(
   const supabase = createClient();
 
   const id = crypto.randomUUID();
-  const { error } = await supabase.from('punch_lists').insert({ id, project_id: projectId, name });
+  const { data, error } = await supabase.from('punch_lists').insert({ id, project_id: projectId, name });
 
   if (error) return { success: false, error: error.message };
   return { success: true, id };
@@ -83,12 +84,14 @@ export async function deletePunchList(
   }
   const supabase = createClient();
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('punch_lists')
     .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
 
   if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 
@@ -185,8 +188,11 @@ export async function updatePunchItemFields(
 
   // BEFORE UPDATE trigger `punch_list_items_set_updated_by` handles updated_by.
   // updated_at is handled by the existing updated_at trigger.
-  const { error } = await supabase.from('punch_list_items').update(updates).eq('id', id);
+  const { data, error } = await supabase.from('punch_list_items').update(updates).eq('id', id)
+    .select('id');
+
   if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 
@@ -201,8 +207,11 @@ export async function setRequirementToggles(
   }
   const supabase = createClient();
 
-  const { error } = await supabase.from('punch_list_items').update(toggles).eq('id', id);
+  const { data, error } = await supabase.from('punch_list_items').update(toggles).eq('id', id)
+    .select('id');
+
   if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 
@@ -229,7 +238,7 @@ export async function completePunchItem(
   if (!memberId) return { success: false, error: 'No member identity for the current user.' };
 
   const supabase = createClient();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('punch_list_items')
     .update({
       status: 'complete',
@@ -237,9 +246,11 @@ export async function completePunchItem(
       completed_by: memberId,
       completed_at: new Date().toISOString(),
     })
-    .eq('id', item.id);
+    .eq('id', item.id)
+    .select('id');
 
   if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 
@@ -269,16 +280,18 @@ export async function verifyPunchItem(
   }
 
   const supabase = createClient();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('punch_list_items')
     .update({
       status: 'verified',
       verified_by: memberId,
       verified_at: new Date().toISOString(),
     })
-    .eq('id', item.id);
+    .eq('id', item.id)
+    .select('id');
 
   if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 
@@ -291,11 +304,13 @@ export async function deletePunchItem(
   }
   const supabase = createClient();
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('punch_list_items')
     .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
 
   if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }

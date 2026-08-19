@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase-browser';
+import { applied, DISCARDED } from '@/lib/services/mutation-result';
 import type {
   CalendarEvent,
   GeneralKind,
@@ -79,12 +80,14 @@ export async function deleteScheduleEntry(
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = createClient();
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('schedule_entries')
     .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
 
   if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 
@@ -117,8 +120,11 @@ export async function updateInspection(
   const supabase = createClient();
 
   // BEFORE UPDATE trigger handles updated_by; updated_at trigger handles updated_at.
-  const { error } = await supabase.from('inspections').update(updates).eq('id', id);
+  const { data, error } = await supabase.from('inspections').update(updates).eq('id', id)
+    .select('id');
+
   if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 
@@ -127,11 +133,13 @@ export async function deleteInspection(
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = createClient();
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('inspections')
     .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
 
   if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }

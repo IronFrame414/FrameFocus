@@ -5,6 +5,7 @@ import type {
   ProjectAssignmentCreateInput,
   PunchItemCreateInput,
 } from '@framefocus/shared/validation/assignments';
+import { applied, DISCARDED } from '@/lib/services/mutation-result';
 
 /**
  * ND-18 — the WRITE half of the two assignment routes.
@@ -91,13 +92,29 @@ export async function upsertProjectAssignmentAsCaller(
     if (!existing.is_deleted) {
       return { success: false, error: 'This member is already assigned to the project.' };
     }
-    const { error } = await supabase
+    // ⚠️ THE WORST INSTANCE OF M5-03, AND THE ONLY ONE WITH AN OUTBOUND SIDE
+    // EFFECT. This returned `{ success: true }` on ZERO rows, and
+    // `POST /api/project-assignments` calls `notifyProjectAssigned()` on that
+    // success — so a PM who is NOT assigned to the project got "assigned", and
+    // the member received a notification and an email about an assignment that
+    // did not exist.
+    //
+    // And the same unauthorised action behaved DIFFERENTLY on the two branches
+    // of this one function: the INSERT branch below surfaces a real 42501,
+    // this one lied — the difference being only whether that member had ever
+    // been unassigned before. Correctness that held by history.
+    const { data, error } = await supabase
       .from('project_assignments')
       .update({ is_deleted: false, deleted_at: null })
-      .eq('id', existing.id);
+      .eq('id', existing.id)
+      .select('id');
     if (error) {
       return { success: false, error: error.message, denied: isDenial(error.code) };
     }
+    // `denied: true` and not just an error string: the route logs the RLS
+    // refusal and returns 403 on that flag, which is the same answer the INSERT
+    // branch already gives. A discarded write IS a refusal.
+    if (!applied(data)) return { success: false, error: DISCARDED, denied: true };
     return { success: true, id: existing.id };
   }
 
