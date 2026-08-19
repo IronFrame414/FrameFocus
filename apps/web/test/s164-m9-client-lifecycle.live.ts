@@ -104,10 +104,15 @@ afterAll(async () => {
   }
 });
 
-const windowOpen = async (status: string, end: string | null) => {
+const windowOpen = async (
+  status: string,
+  end: string | null,
+  cancelledAt: string | null = null
+) => {
   const { data, error } = await admin.rpc('client_window_open', {
     p_status: status,
     p_actual_end: end,
+    p_cancelled_at: cancelledAt,
   });
   if (error) throw new Error(`client_window_open: ${error.message}`);
   return data as boolean;
@@ -152,9 +157,44 @@ describe('A — the one timer, as arithmetic (R2/R5)', () => {
     expect(await windowOpen('complete', null)).toBe(true);
   });
 
-  it('A5 — archived and cancelled are NOT completion', async () => {
-    expect(await windowOpen('archived', day(-500))).toBe(true);
-    expect(await windowOpen('cancelled', day(-500))).toBe(true);
+  it('A5 — ARCHIVED is open-ended, and that is ruled rather than overlooked', async () => {
+    // _Superseded at S164, quoted rather than deleted:_
+    //   it('A5 — archived and cancelled are NOT completion', ...)
+    //     expect(await windowOpen('archived', day(-500))).toBe(true);
+    //     expect(await windowOpen('cancelled', day(-500))).toBe(true);
+    //
+    // ⚠️ THE CANCELLED HALF OF THAT IS NOW FALSE. Josh ruled at S164 that a
+    // cancelled project ends portal access 30 days after cancellation, on its
+    // own clock. The archived half stands, and its consequence is stated in A7.
+    expect(await windowOpen('archived', day(-500), null)).toBe(true);
+    expect(await windowOpen('archived', null, null)).toBe(true);
+  });
+
+  it('A6 — ⚠️ CANCELLED runs its own 30-day clock, from cancelled_at', async () => {
+    // 30, not 45 — two windows exist deliberately.
+    expect(await windowOpen('cancelled', null, new Date(Date.now() - 29 * 86400000).toISOString())).toBe(true);
+    expect(await windowOpen('cancelled', null, new Date(Date.now() - 31 * 86400000).toISOString())).toBe(false);
+  });
+
+  it('A7 — and the 30 days is NOT read off actual_end_date', async () => {
+    // The reason the ruling names cancelled_at: "a cancelled project may never
+    // have an actual_end_date". An implementation that reused actual_end_date
+    // would leave every cancelled project open forever, because the column is
+    // NULL on all of them.
+    expect(await windowOpen('cancelled', day(-500), null)).toBe(true);
+    expect(await windowOpen('cancelled', day(-500), new Date(Date.now() - 31 * 86400000).toISOString())).toBe(false);
+  });
+
+  it('A8 — the two clocks are genuinely different numbers', async () => {
+    // 40 days out: past cancellation's 30, inside completion's 45. If either
+    // number were copied from the other, one of these two flips.
+    const fortyDaysAgo = new Date(Date.now() - 40 * 86400000);
+    expect(await windowOpen('complete', fortyDaysAgo.toISOString().slice(0, 10), null)).toBe(true);
+    expect(await windowOpen('cancelled', null, fortyDaysAgo.toISOString())).toBe(false);
+  });
+
+  it('A9 — cancelled with NO date stays open (fail-open, as ruled)', async () => {
+    expect(await windowOpen('cancelled', null, null)).toBe(true);
   });
 });
 
@@ -353,8 +393,7 @@ describe('C — R17: three termination states, Owner/Admin only, all recorded', 
   });
 
   it('C9 — the states in code and the states in the CHECK are the same set', async () => {
-    const { data } = await admin.rpc('client_window_open', { p_status: 'active', p_actual_end: null });
-    expect(data).toBe(true); // rpc reachable, so the migration is applied
+    expect(await windowOpen('active', null, null)).toBe(true); // migration applied
     expect([...CLIENT_ACCESS_STATES].sort()).toEqual(
       ['active', 'deactivated', 'documents_for_signature', 'signed_documents_only'].sort()
     );
@@ -528,5 +567,155 @@ describe('E — R2: ONE timer. expires_at is not a second clock.', () => {
     expect((sig ?? []) as unknown[]).toHaveLength(0);
     const { data: status } = await admin.rpc('get_invitation_status', { invite_token: row.token });
     expect(status).toBe('expired');
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+describe('F — cancellation: the date is captured, and it ends access', () => {
+  /**
+   * A throwaway project owned by the CLOSED client's contact. She has nothing
+   * else, so her account tracks this one project exactly — which makes the
+   * account-level gate readable as a single on/off in these assertions.
+   */
+  let tempId: string | null = null;
+
+  const makeProject = async () => {
+    const { data: counters } = await admin
+      .from('companies')
+      .select('estimate_number_sequence, project_internal_sequence')
+      .eq('id', companyId)
+      .single();
+    const c = counters as { estimate_number_sequence: number; project_internal_sequence: number };
+    const { data, error } = await admin
+      .from('projects')
+      .insert({
+        company_id: companyId,
+        name: `QA A — S164 cancellation probe ${c.project_internal_sequence + 1}`,
+        contact_id: closedContactId,
+        project_type: 'fixed_price',
+        retainage_percent: 5,
+        project_number: `PRJ-${String(c.estimate_number_sequence + 1).padStart(3, '0')}`,
+        project_internal_seq: c.project_internal_sequence + 1,
+        status: 'active',
+      })
+      .select('id')
+      .single();
+    if (error) throw new Error(`temp project: ${error.message}`);
+    await admin
+      .from('companies')
+      .update({
+        estimate_number_sequence: c.estimate_number_sequence + 1,
+        project_internal_sequence: c.project_internal_sequence + 1,
+      })
+      .eq('id', companyId);
+    tempId = (data as { id: string }).id;
+    return tempId;
+  };
+
+  const stateOf = async (id: string) => {
+    const { data } = await admin
+      .from('projects').select('status, cancelled_at').eq('id', id).single();
+    return data as { status: string; cancelled_at: string | null };
+  };
+
+  afterAll(async () => {
+    if (tempId) await admin.from('projects').delete().eq('id', tempId);
+  });
+
+  it('F1 — cancelled_at is NULL until the project is cancelled', async () => {
+    const id = await makeProject();
+    expect((await stateOf(id)).cancelled_at).toBeNull();
+    // ...and while it is active, the closed client's account is LIVE again.
+    expect(await levelOf(closed)).toBe('full');
+  });
+
+  it('F2 — the trigger stamps it on the transition, not the writer', async () => {
+    // Set ONLY the status. Nothing supplies a date, which is the point: a
+    // writer that forgets it would otherwise grant indefinite access.
+    await admin.from('projects').update({ status: 'cancelled' }).eq('id', tempId!);
+    const after = await stateOf(tempId!);
+    expect(after.status).toBe('cancelled');
+    expect(after.cancelled_at).not.toBeNull();
+    expect(Math.abs(Date.now() - Date.parse(after.cancelled_at!))).toBeLessThan(120_000);
+  });
+
+  it('F3 — freshly cancelled is still INSIDE the 30 days', async () => {
+    expect(await levelOf(closed)).toBe('full');
+    expect(await canSee(closed, tempId!)).toBe(true);
+  });
+
+  it('F4 — ⚠️ backdated past 30 days, the account goes dark', async () => {
+    // Status is unchanged here, so the trigger does not re-stamp — which is
+    // itself the assertion that it fires on TRANSITIONS and not on every write.
+    await admin
+      .from('projects')
+      .update({ cancelled_at: new Date(Date.now() - 31 * 86400000).toISOString() })
+      .eq('id', tempId!);
+    expect((await stateOf(tempId!)).status).toBe('cancelled');
+
+    expect(await canSee(closed, tempId!)).toBe(false);
+    expect(await levelOf(closed)).toBe('none');
+  });
+
+  it('F5 — un-cancelling CLEARS the date, and access returns', async () => {
+    await admin.from('projects').update({ status: 'active' }).eq('id', tempId!);
+    const after = await stateOf(tempId!);
+    expect(after.cancelled_at, 'a stale date would expire access on re-cancellation').toBeNull();
+    expect(await levelOf(closed)).toBe('full');
+  });
+
+  it('F6 — re-cancelling RESTARTS the clock rather than inheriting', async () => {
+    await admin.from('projects').update({ status: 'cancelled' }).eq('id', tempId!);
+    const after = await stateOf(tempId!);
+    expect(after.cancelled_at).not.toBeNull();
+    expect(Math.abs(Date.now() - Date.parse(after.cancelled_at!))).toBeLessThan(120_000);
+    // Fresh 30 days, so she is back inside the window.
+    expect(await levelOf(closed)).toBe('full');
+  });
+
+  it('F7 — ARCHIVED does not end access, and that is the ruling', async () => {
+    // Stated as an assertion so nobody later "fixes" it as a leak. The only
+    // thing that ends an archived project's portal access is R17.
+    await admin.from('projects').update({ status: 'archived' }).eq('id', tempId!);
+    expect((await stateOf(tempId!)).cancelled_at).toBeNull();
+    expect(await canSee(closed, tempId!)).toBe(true);
+    expect(await levelOf(closed)).toBe('full');
+  });
+
+  it('F8 — a project INSERTED as cancelled is stamped too', async () => {
+    const { data: counters } = await admin
+      .from('companies')
+      .select('estimate_number_sequence, project_internal_sequence')
+      .eq('id', companyId)
+      .single();
+    const c = counters as { estimate_number_sequence: number; project_internal_sequence: number };
+    const { data, error } = await admin
+      .from('projects')
+      .insert({
+        company_id: companyId,
+        name: `QA A — S164 cancelled-at-insert ${c.project_internal_sequence + 1}`,
+        contact_id: closedContactId,
+        project_type: 'fixed_price',
+        retainage_percent: 5,
+        project_number: `PRJ-${String(c.estimate_number_sequence + 1).padStart(3, '0')}`,
+        project_internal_seq: c.project_internal_sequence + 1,
+        status: 'cancelled',
+      })
+      .select('id, cancelled_at')
+      .single();
+    if (error) throw new Error(error.message);
+    const row = data as { id: string; cancelled_at: string | null };
+    try {
+      expect(row.cancelled_at, 'BEFORE UPDATE alone would miss this row').not.toBeNull();
+    } finally {
+      await admin.from('projects').delete().eq('id', row.id);
+      await admin
+        .from('companies')
+        .update({
+          estimate_number_sequence: c.estimate_number_sequence + 1,
+          project_internal_sequence: c.project_internal_sequence + 1,
+        })
+        .eq('id', companyId);
+    }
   });
 });

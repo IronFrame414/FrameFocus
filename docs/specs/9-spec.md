@@ -131,6 +131,28 @@ worse than no tests, because it reports as covered.
 > adding a client-readable document surface must consult it** — a state that is stored and never
 > read is worse than one that is absent, because the UI reports it as being in force.
 >
+> #### ✅ RESOLVED [Josh, S164] — cancellation runs its own 30-day clock
+>
+> **A cancelled project ends portal access 30 days after cancellation.** The clock starts the day
+> the user cancels, **not `actual_end_date`** — a cancelled project may never have one. **Two
+> windows now exist deliberately: completion 45, cancellation 30**, and `client_window_open()`
+> stays the only place either number is written.
+>
+> **Nothing recorded a cancellation date.** Surveyed before adding one: `projects` had no
+> cancellation column, no status-change log exists anywhere in the schema, and none of the three
+> triggers on `projects` captured it. ⚠️ **`updated_at` cannot stand in** — it looks right on a
+> project nobody has touched since, and silently extends a client's access every time a PM edits a
+> note. `projects.cancelled_at` is now captured by a trigger on the status transition rather than
+> by any writer, because a writer that forgets it grants indefinite access rather than failing.
+> **Zero cancelled projects existed platform-wide**, so there was no backfill.
+>
+> **⚠️ ARCHIVED IS UNCHANGED, and that is ruled rather than overlooked.** Stated plainly because it
+> reads as a bug otherwise: **a client whose project is archived keeps reading it indefinitely.
+> Archiving does not end portal access; only R17 does.** `complete` with no `actual_end_date` also
+> stays open, as shipped.
+>
+> <details><summary>The superseded OPEN item, quoted rather than deleted</summary>
+
 > #### ⚠️ OPEN — what counts as "completion", for `archived` and `cancelled`
 >
 > `projects.status` is one of `active` / `on_hold` / `complete` / `archived` / `cancelled`. R2 and
@@ -145,6 +167,8 @@ worse than no tests, because it reports as covered.
 > unambiguous date rather than on an inference this build invented. **Josh should rule whether a
 > cancelled project ends portal access, and whether it does so immediately or after the same 45
 > days.** `client_window_open()` is the single place that changes if it does.
+>
+> </details>
 
 **§S — identity storage. ✅ RESOLVED [Josh, S164 Q1]: `profiles.contact_id`, nullable + UNIQUE.**
 Client policy arms use the SECURITY DEFINER helpers `get_my_contact_id()`, `is_client_of_project()`

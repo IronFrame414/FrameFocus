@@ -5524,6 +5524,7 @@ export type Database = {
       projects: {
         Row: {
           actual_end_date: string | null
+          cancelled_at: string | null
           change_order_sequence: number
           company_id: string
           contact_address_id: string | null
@@ -5555,6 +5556,7 @@ export type Database = {
         }
         Insert: {
           actual_end_date?: string | null
+          cancelled_at?: string | null
           change_order_sequence?: number
           company_id?: string
           contact_address_id?: string | null
@@ -5586,6 +5588,7 @@ export type Database = {
         }
         Update: {
           actual_end_date?: string | null
+          cancelled_at?: string | null
           change_order_sequence?: number
           company_id?: string
           contact_address_id?: string | null
@@ -7902,7 +7905,7 @@ export type Database = {
         }[]
       }
       client_window_open: {
-        Args: { p_actual_end: string; p_status: string }
+        Args: { p_actual_end: string; p_cancelled_at: string; p_status: string }
         Returns: boolean
       }
       clone_estimate: {
