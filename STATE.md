@@ -273,7 +273,15 @@ STRIPE_PRICE_PROFESSIONAL=price_1THpg4CgYe8l4i02allsU1Js
 STRIPE_PRICE_BUSINESS=price_1THpgOCgYe8l4i023gQwTtYi
 NEXT_PUBLIC_APP_URL=https://frame-focus-eight.vercel.app
 OPENAI_API_KEY=(sk-... key)
+SEND_EMAIL_HOOK_SECRET=(v1,whsec_... — S160, see below)
 ```
+
+**`SEND_EMAIL_HOOK_SECRET` [S160]** — the Standard Webhooks secret for GoTrue's Send Email Hook,
+which routes Supabase Auth's own email (sign-up confirmation, password reset, email change) through
+Resend instead of Supabase's shared mailer. It must hold the **same** value in Vercel, in the
+Codespace secrets, and in the Supabase dashboard's hook config. **Until it is set AND the hook is
+enabled, `/api/auth/send-email` is inert and auth email still goes over the built-in mailer.**
+Exact steps: [`docs/specs/S160-auth-email-hook.md`](docs/specs/S160-auth-email-hook.md) §3.
 
 Vercel env vars must match `.env.local` exactly.
 
@@ -284,13 +292,27 @@ Vercel env vars must match `.env.local` exactly.
 | Setting                     | Value                                                                                       |
 | --------------------------- | ------------------------------------------------------------------------------------------- |
 | Email provider              | ✅ Enabled                                                                                  |
-| Email confirmation          | ✅ Enabled                                                                                  |
-| Site URL                    | `https://frame-focus-eight.vercel.app`                                                      |
+| Email confirmation          | ✅ Enabled (`mailer_autoconfirm: false`) — **and it must stay on** [S160, see below]         |
+| Custom SMTP                 | ❌ **None** (`smtp_host: null`) [LIVE, S159] — which is why S160 built the Send Email Hook   |
+| Send Email Hook             | ❌ **Off** (`hook_send_email_enabled: false`) [LIVE, S160] — attended step, S160 spec §3     |
+| Auth email rate limit       | **2 per hour, project-wide** (`rate_limit_email_sent`) while GoTrue is the sender            |
+| Site URL                    | `https://EZContractorBinder.com` — **corrected S160**; the old value below was stale         |
 | Redirect URLs               | `https://frame-focus-eight.vercel.app/auth/callback`, `http://localhost:3000/auth/callback` |
 | Automatic RLS on new tables | ✅ Enabled                                                                                  |
 | Data API                    | ✅ Enabled                                                                                  |
 | OTP/email link expiry       | 24 hours (raised Session 23 from default)                                                   |
 | Redirect URLs               | + wildcards `/auth/callback?next=*` for prod and localhost                                  |
+
+> **⚠️ `Site URL` was `https://frame-focus-eight.vercel.app` in this table and is not** — the live
+> value is `https://EZContractorBinder.com` [Management API, S159/S160]. Quoted rather than
+> overwritten because the stale value is what a reader would otherwise trust when debugging where a
+> confirmation link points. It matters: GoTrue falls back to `site_url` whenever a client omits
+> `emailRedirectTo`, which `accept-invite.tsx` did until S160 P4.
+>
+> **⚠️ EMAIL CONFIRMATION MUST STAY ENABLED.** S160 ruled that *invited* users skip confirmation,
+> and implemented that **per message inside the Send Email Hook** — deliberately NOT by turning
+> `mailer_autoconfirm` on, which is project-wide and would also skip confirmation for public
+> sign-ups, where the address is self-asserted. See `docs/specs/S160-auth-email-hook.md` §2.2.
 
 ---
 
