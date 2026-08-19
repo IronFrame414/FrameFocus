@@ -692,3 +692,83 @@ absent from `email_logs`.
 `scripts/live-sql.mjs` refuses any project but rebuild-test and that guard was not bypassed. The
 query, and what each of its three outcomes means — including the one that would prove the finding
 wrong — is §6 of the investigation.
+
+---
+
+### S160 — the five S159 proposals, built. Verified 2026-08-19.
+
+> **⚠️ P1 and P3 are BUILT AND NOT ENABLED.** Changing production auth configuration is attended, so
+> the code, the migration and the tests landed and the two dashboard settings did not. Until
+> [`S160-auth-email-hook.md`](S160-auth-email-hook.md) §3 is run by hand, auth email still goes over
+> Supabase's shared mailer exactly as S159 found it — **merging this breaks nothing and fixes
+> nothing.** P4 and P5 need no configuration and take effect on merge.
+
+| # | Check | Result |
+| --- | --- | --- |
+| 1 | `npx turbo run type-check` | **exit 0** |
+| 2 | `next lint` | **exit 0** — 16 warnings, **0 introduced** |
+| 3 | `npm run build --force` | **exit 0** — `/api/auth/send-email` in the route manifest |
+| 4 | Committed vitest suite | **866/866 passed**, 58 files (818/57 + 19 new + 4 added to the brand guard, less two absorbed) |
+| 5 | Every live harness (`test/*.live.ts`, 79 files) | **925 passed, 0 skipped, 0 failed** |
+| 6 | Playwright, four chunks | **517 passed, 9 skipped, 0 failed** — 54 · 59 (+4) · 42 · 362 (+5) |
+| 7 | `npx supabase migration list` | **116 files = 116 local = 116 applied**, zero mismatches. One added: `20261009000000_auth_email_types.sql`, applied to rebuild-test |
+| 8 | Fixture leakage | **companies 2 → 2**; zero `s160` rows in `auth.users`, `profiles`, `invitations` or `email_logs` |
+
+#### ⚠️ PLAYWRIGHT MUST RUN FROM `apps/web` — and from the root it lies
+
+The mirror of S159's `supabase migration list` note, and it cost a full chunk here. Run from the
+repo root, Playwright still **collects** all 522 specs — but `storageState: 'e2e/.auth/user.json'`
+resolves against the wrong root, so every authenticated test fails. Seventeen reds in `m-shell`
+alone, reported as **product** failures (*"the open sheet swallows the tab bar"*), not as a config
+error. The tell is in the test paths: `apps/web/e2e/m-shell.spec.ts` instead of `e2e/m-shell.spec.ts`.
+
+> **Two commands in this repo now fail in a way that reads as a real defect when run from the wrong
+> directory** — `supabase migration list` from `apps/web` (reads as migration drift), and
+> `playwright test` from the root (reads as broken UI). Both are cwd errors. The re-run logs its own
+> `cwd:` line as the first thing in the file, so the next reader can tell in one glance.
+
+#### §1.1 amendment — M1 no longer owns auth email delivery alone
+
+`email_logs` gains six `auth_*` types, and once the hook is enabled the **application** becomes the
+sender for GoTrue's own mail. That is a new edge worth recording before M1's next pass:
+
+| Consumer | Points at | Assumes |
+| --- | --- | --- |
+| **GoTrue → `/api/auth/send-email`** | `profiles.user_id` → `companies` (sender identity), `invitations` (the P3 check), `email_logs` (P2) | a profile exists for the user **by the time the email is sent**. True by construction — `handle_new_user()` runs INSIDE the `auth.users` insert — and handled when it is not: the email still goes out, only the log is skipped, because `email_logs.company_id` is `NOT NULL` |
+
+**And a standing constraint for whoever next edits auth settings:** `mailer_autoconfirm` must stay
+`false`. S160 ruled that *invited* users skip confirmation and implemented it **per message** for
+exactly this reason — the flag is project-wide and would also skip confirmation for public sign-ups,
+where the address is self-asserted. `S160-auth-email-hook.md` §3 step 4.3 is the guard.
+
+#### What the existing suite caught, unprompted
+
+`brand-email-footer.test.tsx` went red the moment `auth-email.tsx` appeared on disk. It walks the
+templates directory rather than trusting a list — built that way at S136, **after** a stale product
+name reached real recipients because `InviteEmail` had shipped and nobody added it to a hardcoded
+five. It did its job here without anyone remembering it existed, and it was satisfied properly (all
+six kinds rendered, HTML and plain text, plus the SUBJECT — S136's actual hole, since subjects are
+not templates) rather than by adding a filename to a set.
+
+> **This is the second session running in which the strongest check was one a previous session left
+> behind.** S159's was `s121-contact-addresses-floor`'s title; S160's is this walk.
+
+#### The registry seam, closed from all three sides
+
+`email_logs.email_type` is `NOT NULL` with an FK to `email_types ON DELETE RESTRICT`, and the
+`EmailType` union is hand-maintained. The table half fails at **runtime**, the union half at
+**compile** time — so shipping one without the other ships silently, which is exactly what `mention`
+did at S126 (found by a ruling sweep, not by anything failing). `s160-auth-email.test.tsx` now
+asserts all three declare the same set: every type `ACTIONS` logs under is in the migration, and in
+the union, and the migration declares nothing the union has not heard of.
+
+#### What is still owed
+
+- **The attended config** — `S160-auth-email-hook.md` §3. Until then P1/P2/P3 are inert.
+- **That GoTrue really calls the hook with the payload shape assumed.** Everything else about the
+  route, signature verification included, is covered in the committed suite: `svix` can *sign* a
+  payload exactly as Supabase does, so unsigned → 400, bad signature → 401 and correctly signed →
+  200 are all decidable with no server. It was nearly filed as "unverifiable until the switch is
+  thrown"; only that one line actually is.
+- **Production's `email_logs` for `email_type = 'invite'`** — S159 §6, left for Josh by his own
+  instruction and independent of all of this.
