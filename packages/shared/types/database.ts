@@ -5053,6 +5053,7 @@ export type Database = {
         Row: {
           avatar_url: string | null
           company_id: string
+          contact_id: string | null
           created_at: string | null
           created_by: string | null
           deleted_at: string | null
@@ -5071,6 +5072,7 @@ export type Database = {
         Insert: {
           avatar_url?: string | null
           company_id: string
+          contact_id?: string | null
           created_at?: string | null
           created_by?: string | null
           deleted_at?: string | null
@@ -5089,6 +5091,7 @@ export type Database = {
         Update: {
           avatar_url?: string | null
           company_id?: string
+          contact_id?: string | null
           created_at?: string | null
           created_by?: string | null
           deleted_at?: string | null
@@ -5110,6 +5113,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profiles_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
             referencedColumns: ["id"]
           },
         ]
@@ -7904,6 +7914,7 @@ export type Database = {
       }
       get_invitation_status: { Args: { invite_token: string }; Returns: string }
       get_my_company_id: { Args: never; Returns: string }
+      get_my_contact_id: { Args: never; Returns: string }
       get_my_member_id: { Args: never; Returns: string }
       get_my_profile_id: { Args: never; Returns: string }
       get_my_role: { Args: never; Returns: string }
@@ -7934,11 +7945,14 @@ export type Database = {
         Args: { p_project_id: string }
         Returns: boolean
       }
+      is_client_of_project: { Args: { p_project_id: string }; Returns: boolean }
       is_my_company_locked: { Args: never; Returns: boolean }
       is_my_recent_segment: { Args: { p_segment_id: string }; Returns: boolean }
       is_platform_admin: { Args: never; Returns: boolean }
       is_project_creator: { Args: { p_project_id: string }; Returns: boolean }
       member_profile_role: { Args: { p_member_id: string }; Returns: string }
+      my_assigned_site_address_ids: { Args: never; Returns: string[] }
+      my_client_site_address_ids: { Args: never; Returns: string[] }
       next_co_number: { Args: { p_project_id: string }; Returns: string }
       next_estimate_number: { Args: never; Returns: string }
       next_invoice_number: { Args: never; Returns: string }

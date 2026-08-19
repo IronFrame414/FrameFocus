@@ -134,7 +134,36 @@ async function ensureIdentity({ email, role, first, last }, companyId) {
   must(`profile(${email})`, pErr);
 
   // `profiles_create_member` made the member row in the spurious company.
-  await db.from('company_members').update({ company_id: companyId }).eq('profile_id', auto.id);
+  //
+  // ⚠️ BUT NOT FOR A CLIENT OR A SUBCONTRACTOR — DELETE IT INSTEAD [S164].
+  //
+  // `create_member_for_new_profile()` opens with
+  // `IF NEW.role IN ('client','subcontractor') THEN RETURN NEW; END IF;`, so
+  // neither role is supposed to have a member row at all. It fires anyway here,
+  // because a tokenless `createUser()` takes `handle_new_user()`'s OWNER path:
+  // the profile is INSERTed as `owner` and only becomes a client in the UPDATE
+  // above. The trigger sees `owner`, makes a `crew` member row, and the line
+  // below then carried it into the REAL company.
+  //
+  // ⚠️ WHY THIS IS NOT COSMETIC. `get_my_member_id()` selects through
+  // `company_members`, so a client holding one stops being refused by absence —
+  // and M9's entire identity ruling [Josh, S164 Q1] rests on clients having NO
+  // member row. Measured at S164: a client with a member row plus a project
+  // assignment satisfies 21 policies across 18 tables that no client rule
+  // mentions, six of them WRITES including `punch_lists`, which R14 rules NO.
+  // It also silently invalidates the counterfactual in
+  // `s164-m9-client-identity.live.ts` — the identity would be reachable for a
+  // reason that has nothing to do with the policy under test.
+  //
+  // Caught by that file's A2 the first time this path created a client.
+  if (role === 'client' || role === 'subcontractor') {
+    const { data: spurious, error: dErr } = await db
+      .from('company_members').delete().eq('profile_id', auto.id).select('id');
+    must(`drop spurious member row(${email})`, dErr);
+    if (spurious.length) note(`spurious member row ${email}`, 'DELETED', spurious[0].id);
+  } else {
+    await db.from('company_members').update({ company_id: companyId }).eq('profile_id', auto.id);
+  }
 
   if (spuriousCompanyId && spuriousCompanyId !== companyId) {
     await db.from('tag_options').delete().eq('company_id', spuriousCompanyId);
@@ -165,7 +194,24 @@ for (const identity of COMPANY_A_IDENTITIES) await ensureIdentity(identity, comp
 
 // ── Company B (#104) ────────────────────────────────────────────────────────
 console.log('\nCompany B (cross-company isolation):');
-let { data: companyB } = await db.from('companies').select('id, name').eq('slug', COMPANY_B_SLUG).maybeSingle();
+// ⚠️ MATCH ON SLUG **OR** NAME [S164]. Matching on slug alone silently created a
+// SECOND company B: the live row's slug is `ridgeline-builders-test-co-2` and
+// this file's constant is `ridgeline-test-co-2`, so the lookup missed and the
+// insert below ran against a tenant that already existed. A duplicate tenant is
+// the worst possible outcome for a script whose entire purpose is proving
+// cross-tenant isolation — the two halves of every isolation assertion end up
+// in different companies and both pass. Found and reverted at S164.
+let { data: companyB } = await db.from('companies').select('id, name, slug').eq('slug', COMPANY_B_SLUG).maybeSingle();
+if (!companyB) {
+  const { data: byName } = await db
+    .from('companies').select('id, name, slug').eq('name', COMPANY_B_NAME).maybeSingle();
+  if (byName) {
+    companyB = byName;
+    note('company B slug drift', 'WARN',
+      `matched by NAME — live slug is '${byName.slug}', this script expects '${COMPANY_B_SLUG}'. ` +
+        'Using the existing company rather than creating a second one.');
+  }
+}
 if (companyB) {
   note(`company ${companyB.name}`, 'exists', companyB.id);
 } else {
@@ -252,7 +298,7 @@ async function seedIsolationFixtures(company, tag, ownerMemberId) {
         .from('projects')
         .insert({
           company_id: company.id, name, contact_id: contactId,
-          project_type: 'fixed_price', contract_value: 50000, retainage_percent: 5,
+          project_type: 'fixed_price', retainage_percent: 5,
           project_number: projectNumber, project_internal_seq: internal,
         })
         .select('id').single();
@@ -265,6 +311,27 @@ async function seedIsolationFixtures(company, tag, ownerMemberId) {
       note(`project ${tag}`, 'CREATED', `${data.id} (${projectNumber})`);
     }
   }
+
+  // ⚠️ CONTRACT VALUE IS NOT ON `projects` AND HAS NOT BEEN SINCE
+  // `20260812000000_drop_projects_contract_value.sql` [S164].
+  //
+  // This insert carried `contract_value: 50000` until S164, so the moment a
+  // company's project had to be CREATED rather than found, the whole script
+  // died with "Could not find the 'contract_value' column of 'projects'".
+  // Company A's project already existed, so the failure only ever surfaced on
+  // company B — i.e. only on a rebuild, which is exactly when this script is
+  // the thing you are relying on.
+  //
+  // The Financial Visibility Floor moved the column to `project_financials`
+  // (1:1 off `projects`, Owner/Admin-only by RLS — the service role used here
+  // bypasses that). Company A's fixture already carries 50000 via the
+  // conversion migration's backfill, so company B must match or the two
+  // isolation sets are no longer comparable.
+  await ensureRow(
+    `project financials ${tag}`, 'project_financials',
+    { project_id: projectId },
+    { company_id: company.id, project_id: projectId, contract_value: 50000 }
+  );
 
   // Invoice: created as a draft then sent, so the numbering trigger runs for real.
   let invoiceId;
@@ -566,6 +633,180 @@ await ensureIdentity(
     strayMember ? `unexpected member ${strayMember.id}` : 'as create_member_for_new_profile intends'
   );
 }
+
+// ── M9 stage 1 [S164] — THE LINKED CLIENT, AND WHY THERE MUST BE TWO ────────
+//
+// `9-spec.md` §2 is the reason this block exists, and it is the single highest
+// risk in Module 9:
+//
+//   > every existing "client reads 0" probe passes VACUOUSLY. A client is
+//   > refused today by the ABSENCE OF A MEMBER ROW, not by any client rule.
+//
+// So "the client read 0 rows" proves nothing on its own. It is true of that
+// identity for EVERY table, under every policy, correct or not. A probe that
+// would pass against a client who does not exist is not a test.
+//
+// ⚠️ THE FIX IS TWO IDENTITIES, NOT ONE. `josh+qa-client@` above stays exactly
+// as it is — UNLINKED, `contact_id IS NULL` — and becomes the CONTROL. The
+// identity below is LINKED to the fixture project's contact. Every M9 policy
+// arm is then proved in both directions on the same query:
+//
+//     linked client   -> reads the row      (the grant works)
+//     unlinked client -> reads nothing      (refused BY RULE, not by absence)
+//
+// Neither half is worth anything alone. One says a grant exists; the other says
+// it is a grant and not a hole. This is the condition Josh set for building M9
+// straight through instead of stopping to build a fixture first [S164 Q7].
+//
+// Noted against TECH_DEBT #149, which already records this script as
+// hand-curated and unreproducible.
+console.log('\nM9 stage 1 — the linked client principal:');
+
+const CLIENT_LINKED_EMAIL = 'josh+qa-client-linked@worthprop.com';
+
+// The fixture project's own contact — `seedIsolationFixtures` created it and
+// `projects.contact_id` already points at it, which is arm (a) of
+// `is_client_of_project()`.
+const { data: fixtureContact } = await db
+  .from('contacts').select('id')
+  .eq('company_id', companyA.id).eq('last_name', 'ClientA').maybeSingle();
+if (!fixtureContact) {
+  throw new Error('contact ClientA not found in company A — seedIsolationFixtures did not run.');
+}
+
+// TWO addresses on ONE contact, and the second one is the entire point.
+//
+// ⚠️ A SITE ADDRESS AND A HOME ADDRESS, so the grant can be proved to be a
+// GRANT AND NOT A DOOR. `my_client_site_address_ids()` resolves through
+// `projects.contact_address_id`, so it must return the site and must NOT return
+// the home — and with only one address seeded, a policy that wrongly unlocked
+// the whole contact's address list would pass identically. This is the same
+// trap `20261006000000` (the S154 sub grant) called out and fixtured against.
+const siteAddressId = await ensureRow(
+  'client site address', 'contact_addresses',
+  { contact_id: fixtureContact.id, label: 'Job site' },
+  {
+    company_id: companyA.id, contact_id: fixtureContact.id,
+    label: 'Job site', address_line1: '400 QA Site Way',
+    city: 'Springfield', state: 'IL', zip: '62701', is_primary: false,
+  }
+);
+const homeAddressId = await ensureRow(
+  'client HOME address (must stay hidden)', 'contact_addresses',
+  { contact_id: fixtureContact.id, label: 'Home' },
+  {
+    company_id: companyA.id, contact_id: fixtureContact.id,
+    label: 'Home', address_line1: '9 QA Private Residence Rd',
+    city: 'Springfield', state: 'IL', zip: '62704', is_primary: true,
+  }
+);
+
+// Point the fixture project at the SITE address only.
+{
+  const { data: proj } = await db
+    .from('projects').select('contact_address_id').eq('id', aProjectId).single();
+  if (proj.contact_address_id === siteAddressId) {
+    note('fixture project site address', 'exists', siteAddressId);
+  } else {
+    must('set fixture project site address', (await db.from('projects')
+      .update({ contact_address_id: siteAddressId })
+      .eq('id', aProjectId)).error);
+    note('fixture project site address', 'CREATED', `${aProjectId} -> ${siteAddressId}`);
+  }
+}
+
+// The identity itself. No member row — `create_member_for_new_profile()` skips
+// 'client', which is exactly the property Q1's ruling rests on.
+const linkedClientProfile = await ensureIdentity(
+  { email: CLIENT_LINKED_EMAIL, role: 'client', first: 'QA', last: 'Client Linked' },
+  companyA.id
+);
+
+// ⚠️ ENFORCE "NO MEMBER ROW" ON EVERY RUN, not just on the run that creates the
+// identity. `ensureIdentity()` returns EARLY when the profile already exists,
+// so its own guard above never re-checks an identity seeded by an older version
+// of this script — and one was: the first S164 run produced a `crew` member row
+// for the linked client and `s164-m9-client-identity.live.ts` A2 caught it.
+//
+// This block is the repair AND the standing invariant. It is cheap and it runs
+// every time, because the property it protects is the one M9's identity ruling
+// is built on.
+for (const email of [CLIENT_LINKED_EMAIL, CLIENT_EMAIL]) {
+  const { data: prof } = await db.from('profiles').select('id').eq('email', email).single();
+  const { data: strays, error: sErr } = await db
+    .from('company_members').delete().eq('profile_id', prof.id).select('id');
+  must(`clear member rows(${email})`, sErr);
+  note(
+    `client has no member row — ${email}`,
+    strays.length ? 'REPAIRED' : 'exists',
+    strays.length ? `deleted ${strays.length} (get_my_member_id() must return NULL)` : 'none, as required'
+  );
+}
+
+// The link. Requires `20261016000000_m9_client_identity.sql` to be pushed
+// first — if it has not been, say so plainly rather than failing on an unknown
+// column three steps later.
+{
+  const { error: linkErr } = await db
+    .from('profiles')
+    .update({ contact_id: fixtureContact.id })
+    .eq('id', linkedClientProfile.id)
+    .is('contact_id', null);
+  if (linkErr && /contact_id/.test(linkErr.message)) {
+    throw new Error(
+      'profiles.contact_id does not exist yet — push ' +
+        '20261016000000_m9_client_identity.sql before seeding. Original: ' + linkErr.message
+    );
+  }
+  must('link client profile -> contact', linkErr);
+  note('client profile ↔ contact link', 'ok', `${linkedClientProfile.id} -> ${fixtureContact.id}`);
+}
+
+// Arm (b) of `is_client_of_project()` — R3's "several contacts per project".
+//
+// ⚠️ SEEDED ON A DIFFERENT PROJECT ON PURPOSE. On the fixture project the
+// client already qualifies through `projects.contact_id`, so a `project_contacts`
+// row there would prove nothing — arm (a) would carry the assertion and arm (b)
+// could be deleted without a single test going red. The m-sections project's
+// `contact_id` is a DIFFERENT contact (Bishop), so it is reachable through arm
+// (b) and through nothing else.
+{
+  const { data: sectionsProject } = await db
+    .from('projects').select('id, company_id, contact_id')
+    .eq('id', SECTIONS_PROJECT_ID).maybeSingle();
+  if (!sectionsProject) {
+    note('client → m-sections project_contacts', 'WARN',
+      `${SECTIONS_PROJECT_ID} not found — arm (b) of is_client_of_project() will be untested`);
+  } else if (sectionsProject.contact_id === fixtureContact.id) {
+    note('client → m-sections project_contacts', 'WARN',
+      'm-sections project.contact_id IS the fixture contact — arm (b) is no longer isolated by this fixture');
+  } else {
+    await ensureRow(
+      'client → m-sections project_contacts', 'project_contacts',
+      { project_id: SECTIONS_PROJECT_ID, contact_id: fixtureContact.id },
+      {
+        company_id: companyA.id, project_id: SECTIONS_PROJECT_ID,
+        contact_id: fixtureContact.id, role: 'client',
+      }
+    );
+  }
+}
+
+// The control must STAY unlinked. If some later edit links it, every
+// "refused by rule" assertion in the M9 suite silently becomes vacuous again —
+// in the other direction this time, which is harder to notice.
+{
+  const { data: control } = await db
+    .from('profiles').select('id, contact_id').eq('email', CLIENT_EMAIL).single();
+  note(
+    'control client is UNLINKED (required)',
+    control.contact_id ? 'WARN' : 'exists',
+    control.contact_id
+      ? `contact_id=${control.contact_id} — the M9 counterfactual is COMPROMISED`
+      : 'contact_id IS NULL, as the counterfactual requires'
+  );
+}
+note('M9 addresses', 'exists', `site=${siteAddressId} home=${homeAddressId} (home must never be readable)`);
 
 // ── D-57 / D-58 punch fixtures — the three items the proof needs ────────────
 //

@@ -381,6 +381,7 @@ platform gates on:
 | `crew_member`     | josh+crew@worthprop.com          | Casey Crew    |
 | `subcontractor`   | **josh+qa-sub@worthprop.com**    | QA Sub A      |
 | `client`          | **josh+qa-client@worthprop.com** | QA Client A   |
+| `client` (linked) | **josh+qa-client-linked@worthprop.com** | QA Client Linked |
 
 > **The two added S113 (#127) are not shaped like the other five, and the difference matters.**
 > `create_member_for_new_profile()` (`20260704210000`) returns early for both `client` and
@@ -400,6 +401,28 @@ platform gates on:
 > - The **client** deliberately has **no member row**. A client is not assignable to work; the
 >   identity exists to exercise the `get_my_role() <> 'client'` arms that `files_select_non_client`
 >   and its three siblings are built on. The seed asserts the absence rather than assuming it.
+> - **[S164] THERE ARE NOW TWO CLIENTS, AND BOTH ARE REQUIRED.** `9-spec.md` §2 is the reason: a
+>   client is refused today **by the absence of a member row, not by any client rule**, so
+>   `expect(rows).toHaveLength(0)` for a client is true of every table under a correct policy and
+>   under no policy at all. **Every Module 9 grant is therefore proved on the same query by a pair:**
+>
+>   | identity | `profiles.contact_id` | role in the proof |
+>   | --- | --- | --- |
+>   | `josh+qa-client@` | **NULL** | **the CONTROL** — must read nothing. Proves the grant is scoped. |
+>   | `josh+qa-client-linked@` | contact *QA ClientA* | **the LINKED client** — must read the row. Proves the grant exists. |
+>
+>   ⚠️ **Neither half is worth anything alone**, and the control is the fragile one: link it by
+>   accident and the whole M9 suite goes on reporting green while proving nothing. The seed asserts
+>   it is unlinked on every run, and `s164-m9-client-identity.live.ts` F2 asserts it again after a
+>   deliberate failed write.
+>
+>   The linked client reaches the `QA A — isolation fixture` project through **`projects.contact_id`**
+>   (arm a) and `eaf0e25b-…` through **`project_contacts`** (arm b) — two different projects on
+>   purpose, because a junction row on the fixture project would be carried by arm (a) and arm (b)
+>   could then be deleted without a test going red. Her contact carries **two addresses**, `Job site`
+>   and `Home`; the site address is reachable and **the home address must never be**, which is the
+>   only assertion that distinguishes a correct grant from one that unlocked the contact's whole
+>   address list.
 >
 > **⚠️ Do not substitute the 32 roster rows.** `company_members` holds 33 rows with
 > `member_type = 'subcontractor'`; **32 have `profile_id IS NULL`** — domain roster entries with no
@@ -413,7 +436,7 @@ solely so cross-company isolation can be *proved* rather than asserted from code
 | ------- | -------------------------------- | ------------ |
 | `owner` | **josh+qa-b-owner@worthprop.com**| QA Owner B   |
 
-**Password (all eight): `FrameFocusTest!2026`**
+**Password (all nine): `FrameFocusTest!2026`**
 
 > Committed deliberately, and only defensible because of what it protects: a disposable test
 > database with no real customer data, in a private repo. **Never reuse it anywhere else, never
