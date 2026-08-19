@@ -71,6 +71,11 @@ export default async function SubcontractorsPage() {
       <SubcontractorsList
         subcontractors={subcontractors}
         canEdit={!!profile && ['owner', 'admin', 'project_manager'].includes(profile.role)}
+        // [S159] Owner/Admin only — the same list the detail page uses to decide
+        // whether to run the compliance query at all. It gates the sheet's LINK
+        // to that page, not any compliance data: nothing about a document
+        // reaches this component or its payload.
+        canSeeCompliance={!!profile && ['owner', 'admin'].includes(profile.role)}
       />
     </div>
   );
