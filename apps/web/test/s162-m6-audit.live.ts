@@ -41,12 +41,24 @@ describe('S162-A — M6-01: the mobile guard’s stated justification has gone s
     'utf8'
   );
 
-  it('A1 — the file still claims to be the entire enforcement', () => {
-    // Source-level, anchored on the sentence itself. If a fix session rewrites
-    // the header this reddens, which is the point: the claim and the database
-    // must be re-checked together.
-    expect(guard).toContain('THIS GUARD IS THE ENTIRE ENFORCEMENT');
-    expect(guard).toContain('RLS WILL NOT CATCH A BYPASS');
+  it('✅ A1 — INVERTED [S163]: the file no longer claims to be the entire enforcement', () => {
+    // Was: asserted the header still said "THIS GUARD IS THE ENTIRE
+    // ENFORCEMENT" / "RLS WILL NOT CATCH A BYPASS", so that a rewrite would
+    // redden and force the claim and the policies to be re-read together. M6-01
+    // is that rewrite.
+    //
+    // The claim is now narrowed to `files`, and the superseded text is QUOTED in
+    // the header rather than deleted — which is why the old sentences still
+    // appear in the file. So this asserts the CORRECTION, not the absence.
+    expect(guard, 'the corrected header is gone').toContain(
+      'ONE OF THESE FOUR SURFACES IS STILL UI-ONLY'
+    );
+    expect(guard, 'the superseded claim was deleted instead of quoted').toContain(
+      '_Superseded, quoted rather than rewritten'
+    );
+    expect(guard, 'files is no longer named as the one that matters').toContain(
+      'STILL UI-ONLY, AND THIS IS THE ONE THAT MATTERS'
+    );
   });
 
   it('⚠️ A2 — but a subcontractor now reads ZERO change orders — the DB does catch it', async () => {
@@ -149,31 +161,19 @@ describe('S162-B — M6-02: time_edit_logs can be written by anyone, read by no 
       changes: { S162PROBE: 'forged by a crew member' },
     });
 
-    // WHEN FIXED, INVERT: expect an RLS refusal.
-    expect(error, `the forged insert was refused: ${error?.code}`).toBeNull();
+    // ✅ INVERTED [S163]. Was: accepted, and the row landed carrying the
+    // impersonated editor. `20261012000000` removed the authenticated INSERT
+    // policy entirely — the log is written only by its SECURITY DEFINER
+    // triggers now.
+    expect(error, 'a crew member can forge an audit row again').not.toBeNull();
+    expect(error!.code).toBe('42501');
+    void editorId;
 
     const { data: landed } = await admin
       .from('time_edit_logs')
-      .select('id, editor_member_id')
-      .contains('changes', { S162PROBE: 'forged by a crew member' });
-    expect((landed ?? []).length, 'the forged row did not land').toBe(1);
-    expect(
-      (landed as { editor_member_id: string }[])[0].editor_member_id,
-      'the row does not carry the impersonated editor'
-    ).toBe(editorId);
-
-    // The crew member cannot read back what they just wrote — write-only, and
-    // an owner reading this table sees the forgery as truth.
-    const { data: readBack } = await crew
-      .from('time_edit_logs')
       .select('id')
       .contains('changes', { S162PROBE: 'forged by a crew member' });
-    expect((readBack ?? []).length, 'the author can read the audit log').toBe(0);
-
-    await admin
-      .from('time_edit_logs')
-      .delete()
-      .contains('changes', { S162PROBE: 'forged by a crew member' });
+    expect((landed ?? []).length, 'a forged row landed despite the refusal').toBe(0);
   });
 
   it('⚠️ B2 — the counterfactual FAILED: it is a CONVENTION, and it covers three logs', async () => {
@@ -206,16 +206,19 @@ describe('S162-B — M6-02: time_edit_logs can be written by anyone, read by no 
       success: true,
     });
 
-    // WHEN FIXED, INVERT: the log should refuse a row the caller did not author.
-    expect(error, `ai_tag_logs refused the forgery: ${error?.code}`).toBeNull();
+    // ✅ INVERTED [S163]. All three logs moved together, because the
+    // counterfactual established this was the CONVENTION rather than one slip.
+    // ⚠️ `ai_tag_logs` needed a code change too: `ai-tagging.ts` wrote through
+    // the caller's session, so dropping the policy alone would have silently
+    // stopped the cost log. It uses the service role now.
+    expect(error, 'a crew member can forge a cost row again').not.toBeNull();
+    expect(error!.code).toBe('42501');
 
     const { data: landed } = await admin
       .from('ai_tag_logs')
       .select('id')
       .eq('model', 'S162PROBE-forged');
-    expect((landed ?? []).length, 'the forged cost row did not land').toBe(1);
-
-    await admin.from('ai_tag_logs').delete().eq('model', 'S162PROBE-forged');
+    expect((landed ?? []).length, 'a forged cost row landed despite the refusal').toBe(0);
   });
 });
 
@@ -520,19 +523,22 @@ describe('S162-G — M6-07/08: injury records and the RLS-inside-a-policy mechan
       .from('safety_incident_injuries')
       .select('id, injured_name, treatment_notes');
 
-    // WHEN FIXED, INVERT: a subcontractor should read neither.
+    // ✅ PARTLY INVERTED [S163], and the split is the ruling.
+    //
+    // The INCIDENT stays readable — D-11 grants every role the incident list,
+    // and `app/m/p/[projectId]/safety/page.tsx` says a name on a list is a
+    // different disclosure from a name on a record someone opened. M6-03
+    // deliberately floored the CHILDREN and not the parent.
     expect(
       (incidents ?? []).length,
-      'an assigned subcontractor no longer reads safety incidents — invert this test'
+      'the subcontractor lost the incident list too — M6-03 floored the parent by mistake'
     ).toBeGreaterThan(0);
+
+    // The INJURY rows are gone. Was: 2 rows and both injured names.
     expect(
       (injuries ?? []).length,
-      'an assigned subcontractor no longer reads injury records — invert this test'
-    ).toBeGreaterThan(0);
-    const named = ((injuries ?? []) as { injured_name: string | null }[]).filter(
-      (r) => r.injured_name
-    );
-    expect(named.length, 'no injured name was exposed').toBeGreaterThan(0);
+      'an assigned subcontractor reads injury records again'
+    ).toBe(0);
   });
 
   it('G2 — SOUND, for a non-obvious reason: the child policy is contained by the PARENT’s RLS', async () => {
