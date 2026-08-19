@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase-browser';
+import { applied, DISCARDED } from '@/lib/services/mutation-result';
 
 export async function createSubcontractor(
   sub: Record<string, unknown>
@@ -20,9 +21,25 @@ export async function updateSubcontractor(
 
   // BEFORE UPDATE trigger `subcontractors_set_updated_by` handles updated_by.
   // updated_at is handled by the existing updated_at trigger.
-  const { error } = await supabase.from('subcontractors').update(updates).eq('id', id);
+  const { data, error } = await supabase
+    .from('subcontractors')
+    .update(updates)
+    .eq('id', id)
+    .select('id');
 
   if (error) return { success: false, error: error.message };
+  // M2-03's rule, applied to the table it had not reached yet [S158].
+  // `mutation-result.ts` says it without an escape hatch — *"an UPDATE-shaped
+  // write ends `.select('id')` and goes through `applied()`. No exceptions."* —
+  // and `subcontractors_update_authorized` admits owner/admin/project_manager
+  // only, so foreman, crew, subcontractor and client all match ZERO rows, which
+  // is not an error and was reported as success.
+  //
+  // ⚠️ ALL THREE WRITERS IN THIS FILE ARE GUARDED, DELIBERATELY. Guarding only
+  // the one a finding named is the M1-01 shape exactly: a file that teaches both
+  // patterns, where the next person copies whichever neighbour they happened to
+  // read.
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 
@@ -32,15 +49,42 @@ export async function deleteSubcontractor(
   const supabase = createClient();
 
   // BEFORE UPDATE trigger handles updated_by.
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('subcontractors')
     .update({
       is_deleted: true,
       deleted_at: new Date().toISOString(),
     })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
 
   if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
+  return { success: true };
+}
+
+/**
+ * Put a soft-deleted sub or vendor back. [S158 · Finding 2]
+ *
+ * `restoreContact()`'s twin, for the second of the two tables S154 restored
+ * soft delete to. One function covers subs AND vendors because a vendor is
+ * `sub_type = 'vendor'` on this table — there is no separate vendor table to
+ * build a third restore for.
+ */
+export async function restoreSubcontractor(
+  id: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = createClient();
+
+  // BEFORE UPDATE trigger handles updated_by.
+  const { data, error } = await supabase
+    .from('subcontractors')
+    .update({ is_deleted: false, deleted_at: null })
+    .eq('id', id)
+    .select('id');
+
+  if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 

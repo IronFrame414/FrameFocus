@@ -59,6 +59,42 @@ export async function deleteContact(id: string): Promise<{ success: boolean; err
 }
 
 
+/**
+ * Put a soft-deleted contact back. [S158 · Finding 2]
+ *
+ * The exact inverse of `deleteContact()` — `is_deleted = false` and
+ * `deleted_at = null` together, because a row with `is_deleted = false` and a
+ * stale `deleted_at` would tell the trash view's "Deleted" column a date for a
+ * record that is not deleted.
+ *
+ * ⚠️ This is possible ONLY because `contacts_select_authenticated` no longer
+ * filters `is_deleted` (`20261005000000`). PostgREST's UPDATE returns rows, so
+ * the row must satisfy the SELECT policy on the way in as well as on the way
+ * out; the filter that used to be in that policy made both directions
+ * impossible. `s154-m2-fixes.live.ts` A2 is the regression guard on the policy,
+ * and the S158 harness is the guard on this function.
+ *
+ * `.select('id')` + `applied()` per `mutation-result.ts`: an UPDATE the policy
+ * refuses affects zero rows and raises NO error, so a restore attempted by
+ * foreman, crew or anyone else outside `contacts_update_authorized` would
+ * otherwise report success over a row still sitting in the trash.
+ */
+export async function restoreContact(id: string): Promise<{ success: boolean; error?: string }> {
+  const supabase = createClient();
+
+  // BEFORE UPDATE trigger handles updated_by.
+  const { data, error } = await supabase
+    .from('contacts')
+    .update({ is_deleted: false, deleted_at: null })
+    .eq('id', id)
+    .select('id');
+
+  if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
+  return { success: true };
+}
+
+
 // ── Picker options (4D estimate builder) ──
 
 export interface ContactOption {
