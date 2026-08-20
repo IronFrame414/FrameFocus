@@ -16,7 +16,7 @@ lose the outcome.
 | 4 | Full committed vitest suite | 🟢 PASS | 59 files, 894/894, exit 0 |
 | 5 | Every live harness, all 88 files (cold + warm re-run of reds) | ⏳ PENDING | — |
 | 6 | Playwright, four chunks from `apps/web` | ⏳ PENDING | — |
-| 7 | `npx supabase migration list` (repo root) | ⏳ PENDING | — |
+| 7 | `npx supabase migration list` (repo root) | 🟢 PASS | 129 files = 129 applied, all local==remote |
 | 8 | `fixture-snapshot.mjs` before & after | ⏳ PENDING | — |
 
 Legend: ⏳ PENDING · 🟢 PASS · 🔴 RED · ⚠️ PASS-WITH-NOTES
@@ -53,6 +53,10 @@ Legend: ⏳ PENDING · 🟢 PASS · 🔴 RED · ⚠️ PASS-WITH-NOTES
 
 ### 6. Playwright (4 chunks) — ⏳ PENDING
 
-### 7. migration list — ⏳ PENDING
+### 7. migration list — 🟢 PASS
+
+- Command: `npx supabase migration list` (from repo root)
+- Finished: 2026-08-20T12:01:50Z
+- **PRINTED exit: 0.** 129 local `.sql` files = 129 list entries; every row has `local == remote` (no local-only, no remote-only). Latest `20261022000000` (the M9 CO-signature-stamp fix). files = local = applied.
 
 ### 8. fixture snapshot before/after — ⏳ PENDING
