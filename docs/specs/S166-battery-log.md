@@ -12,7 +12,7 @@ lose the outcome.
 |---|------|--------|--------|
 | 1 | `npx turbo run type-check` | 🟢 PASS | 5/5 tasks successful, exit 0 |
 | 2 | `next lint` (expect 0) | 🟢 PASS | "No ESLint warnings or errors", exit 0 |
-| 3 | `npm run build --force` (FULL TURBO ≠ evidence) | ⏳ PENDING | — |
+| 3 | `npm run build --force` (FULL TURBO ≠ evidence) | 🟢 PASS | fresh: 0 cached, compiled, 1m58s, exit 0 |
 | 4 | Full committed vitest suite | ⏳ PENDING | — |
 | 5 | Every live harness, all 88 files (cold + warm re-run of reds) | ⏳ PENDING | — |
 | 6 | Playwright, four chunks from `apps/web` | ⏳ PENDING | — |
@@ -37,7 +37,11 @@ Legend: ⏳ PENDING · 🟢 PASS · 🔴 RED · ⚠️ PASS-WITH-NOTES
 - Finished: 2026-08-20T11:47:41Z
 - **PRINTED exit: 0.** "✔ No ESLint warnings or errors". Still at 0.
 
-### 3. build --force — ⏳ PENDING
+### 3. build --force — 🟢 PASS
+
+- Command: `npx turbo run build --force`
+- Finished: 2026-08-20T11:49:57Z
+- **PRINTED exit: 0.** `Cached: 0 cached, 1 total` (genuinely fresh, not FULL TURBO), `✓ Compiled successfully`. Time 1m58.4s.
 
 ### 4. committed vitest — ⏳ PENDING
 
