@@ -13,7 +13,7 @@ lose the outcome.
 | 1 | `npx turbo run type-check` | 🟢 PASS | 5/5 tasks successful, exit 0 |
 | 2 | `next lint` (expect 0) | 🟢 PASS | "No ESLint warnings or errors", exit 0 |
 | 3 | `npm run build --force` (FULL TURBO ≠ evidence) | 🟢 PASS | fresh: 0 cached, compiled, 1m58s, exit 0 |
-| 4 | Full committed vitest suite | ⏳ PENDING | — |
+| 4 | Full committed vitest suite | 🟢 PASS | 59 files, 894/894, exit 0 |
 | 5 | Every live harness, all 88 files (cold + warm re-run of reds) | ⏳ PENDING | — |
 | 6 | Playwright, four chunks from `apps/web` | ⏳ PENDING | — |
 | 7 | `npx supabase migration list` (repo root) | ⏳ PENDING | — |
@@ -43,7 +43,11 @@ Legend: ⏳ PENDING · 🟢 PASS · 🔴 RED · ⚠️ PASS-WITH-NOTES
 - Finished: 2026-08-20T11:49:57Z
 - **PRINTED exit: 0.** `Cached: 0 cached, 1 total` (genuinely fresh, not FULL TURBO), `✓ Compiled successfully`. Time 1m58.4s.
 
-### 4. committed vitest — ⏳ PENDING
+### 4. committed vitest — 🟢 PASS
+
+- Command: `npx vitest run` (from `apps/web`; committed config, excludes `*.live.ts`)
+- Finished: 2026-08-20T11:50:40Z
+- **PRINTED exit: 0.** `Test Files 59 passed (59)`, `Tests 894 passed (894)`. Duration 21.3s. Matches last session.
 
 ### 5. live harnesses (88) — ⏳ PENDING
 
