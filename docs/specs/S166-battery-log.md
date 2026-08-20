@@ -17,7 +17,7 @@ lose the outcome.
 | 5 | Every live harness, all 88 files (cold + warm re-run of reds) | 🟢 PASS (effectively) | 1177/1177 pass; 4 cold reds all cold-cache/residue, NOT the same four as last session, zero tree defects |
 | 6 | Playwright, four chunks from `apps/web` | 🟢 PASS | 518 passed, 9 skipped, 0 failed (all 4 shards exit 0) |
 | 7 | `npx supabase migration list` (repo root) | 🟢 PASS | 129 files = 129 applied, all local==remote |
-| 8 | `fixture-snapshot.mjs` before & after | ⏳ PENDING | — |
+| 8 | `fixture-snapshot.mjs` before & after | ⚠️ PASS-WITH-NOTES | before≠after; every delta explained (my documented restores + test churn), no product leak |
 
 Legend: ⏳ PENDING · 🟢 PASS · 🔴 RED · ⚠️ PASS-WITH-NOTES
 
@@ -119,4 +119,21 @@ run's own client-writes failure) a dangling photo row.
 - Finished: 2026-08-20T12:01:50Z
 - **PRINTED exit: 0.** 129 local `.sql` files = 129 list entries; every row has `local == remote` (no local-only, no remote-only). Latest `20261022000000` (the M9 CO-signature-stamp fix). files = local = applied.
 
-### 8. fixture snapshot before/after — ⏳ PENDING
+### 8. fixture snapshot before/after — ⚠️ PASS-WITH-NOTES
+
+- Before: 2026-08-20T11:51:08Z (pre-live-suite). After: 2026-08-20T12:40:40Z (post-Playwright).
+- **Not identical.** The window spans the full live suite + my fixture restores + Playwright, so
+  the diff is the net of all three. Every delta is accounted for — none indicates a product leak:
+
+| Field | Before → After | Explanation |
+|---|---|---|
+| `profiles` | 11 → 10 | Net −1 from my deletion of the orphaned `josh+s133-pm2@` transient identity. |
+| `client_contracts` | 7 → 8 | +1 from my reseed (restored the draft client contract a failed run had deleted). |
+| `company_members` | 259 → 265 | +6 test churn — Playwright `m-writes`/team specs and hub-fixture create members; not all torn down. Same category as prior sessions. |
+| `files` | 163 → 169 | +6 test churn — `m-photos`/`m-capture` uploads, net of my orphan `qa-m9-write.jpg` deletion. |
+| `chat_threads` / `chat_messages` | 1→0 / 2→0 | Chat harnesses (`desktop-chat-*`, `m-chat-*`) tear down aggressively and removed the seeded thread — a known pattern (same 1→0 seen last session). |
+
+- **No silent product leakage.** The deltas are shared-fixture churn on rebuild-test plus the
+  restores I performed in Step 5, all itemised above. A reseed (`node scripts/seed-test-identities.mjs`)
+  would restore the seeded chat thread and normalise counts; not run again here to keep this snapshot
+  honest about what the battery actually left.
