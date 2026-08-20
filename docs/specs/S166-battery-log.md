@@ -10,7 +10,7 @@ lose the outcome.
 
 | # | Step | Status | Result |
 |---|------|--------|--------|
-| 1 | `npx turbo run type-check` | ⏳ PENDING | — |
+| 1 | `npx turbo run type-check` | 🟢 PASS | 5/5 tasks successful, exit 0 |
 | 2 | `next lint` (expect 0) | ⏳ PENDING | — |
 | 3 | `npm run build --force` (FULL TURBO ≠ evidence) | ⏳ PENDING | — |
 | 4 | Full committed vitest suite | ⏳ PENDING | — |
@@ -25,7 +25,11 @@ Legend: ⏳ PENDING · 🟢 PASS · 🔴 RED · ⚠️ PASS-WITH-NOTES
 
 ## Step details
 
-### 1. type-check — ⏳ PENDING
+### 1. type-check — 🟢 PASS
+
+- Command: `npx turbo run type-check`
+- Finished: 2026-08-20T11:47:01Z
+- **PRINTED exit: 0.** `Tasks: 5 successful, 5 total` (4 cached, 1 fresh after restart). Time 15.95s.
 
 ### 2. lint — ⏳ PENDING
 
