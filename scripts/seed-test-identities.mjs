@@ -1039,12 +1039,63 @@ for (const [id, want, label] of [[visibleFileId, true, 'visible'], [hiddenFileId
 // A DRAFT of each document type. The existing fixtures are all non-draft, so
 // without these "the client cannot see drafts" would be untested.
 const ownerMemberIdA = await memberIdFor(aOwnerProfile.id);
+
+// ── Idempotency repair [S167] — THE DRAFT CO IS SIGNABLE FROM THE PRODUCT UI ───
+//
+// It was signed by accident during the S165 click-test (2026-08-20), and unlike
+// every other fixture in this file IT CANNOT BE PUT BACK. Both directions are
+// closed, and both were confirmed against the live row before this was written:
+//
+//   UPDATE  — `enforce_change_order_immutability()` refuses to clear `signed_at`
+//             AND `contractor_signed_at` ("A signature stamp cannot be
+//             rewritten."), and refuses to restore `net_delta` ("A sent change
+//             order is immutable — void and reissue instead."). Service role is
+//             no help: it bypasses RLS, not triggers.
+//   DELETE  — `change_order_line_items_change_order_id_fkey` has NO
+//             `ON DELETE CASCADE`, so the parent cannot go first; and
+//             `enforce_co_line_parent_open()` refuses to delete the line while
+//             the parent is not a draft, so the line cannot go first either.
+//             ⚠️ A change order that has left draft WITH a line is undeletable
+//             by any path — filed as #1-s167fx. `enforce_co_line_parent_open()`
+//             returns early "so a CASCADE delete stays possible"; that CASCADE
+//             does not exist.
+//
+// So the moved row is renamed OUT OF THE WAY — `title` is not frozen — and a
+// fresh draft is created below under the canonical title, which keeps
+// `s164-m9-read-arms` ARM 4c reading one row by that title. `co_number` IS
+// frozen and is UNIQUE per company, so the replacement takes the next free
+// `CO-QA-M9-DRAFT-n`; nothing reads `co_number`.
+//
+// ⚠️ THE STALE LINE NAME SURVIVES. `enforce_co_line_parent_open()` blocks UPDATE
+// as well as DELETE, so the superseded CO keeps a line called "QA M9 line on the
+// DRAFT co" whose parent is now SIGNED — i.e. legitimately visible to the client.
+// That is why ARM 5b is anchored to the parent id and not to that string.
+let draftCoNumber = 'CO-QA-M9-DRAFT';
+{
+  const { data: stuck } = await db
+    .from('change_orders').select('id, status, co_number')
+    .eq('company_id', companyA.id).eq('title', 'QA M9 — draft CO').maybeSingle();
+  if (stuck && stuck.status !== 'draft') {
+    const dead = `ZZ SUPERSEDED — QA M9 draft CO (${stuck.co_number}, ${stuck.status} — do not use)`;
+    must('rename superseded draft CO', (await db.from('change_orders')
+      .update({ title: dead }).eq('id', stuck.id)).error);
+    note('QA M9 — draft CO', 'REPAIRED', `left draft (${stuck.status}); renamed to "${dead}" and rebuilt below`);
+  }
+
+  // Next free co_number. Only consulted when the row below is actually created.
+  const { data: taken } = await db
+    .from('change_orders').select('co_number')
+    .eq('company_id', companyA.id).like('co_number', 'CO-QA-M9-DRAFT%');
+  const used = new Set((taken ?? []).map((r) => r.co_number));
+  for (let n = 2; used.has(draftCoNumber); n += 1) draftCoNumber = `CO-QA-M9-DRAFT-${n}`;
+}
+
 await ensureRow(
   'DRAFT change order (client must not see)', 'change_orders',
   { company_id: companyA.id, project_id: aProjectId, title: 'QA M9 — draft CO' },
   {
     company_id: companyA.id, project_id: aProjectId,
-    co_number: 'CO-QA-M9-DRAFT', title: 'QA M9 — draft CO',
+    co_number: draftCoNumber, title: 'QA M9 — draft CO',
     co_type: 'fixed_price', author_member_id: ownerMemberIdA,
     status: 'draft', pricing_mode: 'markup', net_delta: 1234.56,
   }

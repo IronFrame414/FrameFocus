@@ -56,11 +56,43 @@ staff-side sender using the link the builder prints on screen.
 **Both halves matter.** A fix that wrongly *allowed* a rewrite would still pass the happy path — so
 you must confirm the first stamp lands **and** that the link cannot be used a second time.
 
-### A.0 — do NOT use the seeded "QA M9 — sent CO"
+### A.0 — ⚠️ TWO seeded COs are off limits, and the DANGEROUS one is the DRAFT
 
-There is a fixture CO titled **"QA M9 — sent CO"** that the portal read-arm tests depend on being in
-the `sent` state. **Do not sign it.** Create your own throwaway CO as below, so nothing other tests
-rely on changes state.
+_Rewritten [S167]. The previous version of this section named only **"QA M9 — sent CO"**, and the
+one that actually got signed by accident on 2026-08-20 was the **draft**. Naming one fixture and
+not its sibling is what made the mistake easy._
+
+The CO list on **"QA A — isolation fixture"** is ordered by **CO number, ascending**
+(`change-orders.ts:69`), so after step A.1 it reads top to bottom:
+
+| # | CO number | Title | Status | Touch it? |
+| --- | --- | --- | --- | --- |
+| 1 | `CO-159-64` | **ZZ click-test CO** | sent → you sign it | ✅ **THIS is the one you sign.** Yours, disposable. |
+| 2 | `CO-QA-M9-DRAFT` | ZZ SUPERSEDED — QA M9 draft CO | signed | ⛔ dead row, left by the S167 accident. Ignore. |
+| 3 | `CO-QA-M9-DRAFT-2` ⁽*⁾ | **QA M9 — draft CO** | **draft** | 🚨 **DO NOT SEND OR SIGN.** `s164-m9-read-arms` ARM 4c/5b need it to stay a **draft**. |
+| 4 | `CO-QA-M9-SENT` | **QA M9 — sent CO** | **sent** | 🚨 **DO NOT SIGN, VOID OR EDIT.** ARM 4a/5a need it to stay **sent** with its line. |
+
+⁽*⁾ The **title** is stable; the **number** is not. Each rebuild takes the next free
+`CO-QA-M9-DRAFT-n`, so check the list rather than the suffix.
+
+> **Row 3 is the trap.** It sits **directly under your throwaway** in the list, it is a *draft* so
+> the page offers you **Send** in one click and the signing link the moment you do, and its title
+> begins "QA M9" exactly like the row you were told to avoid. Row 2 exists because that is what
+> happened.
+
+**Which signing link belongs to which CO.** A CO's signing link is printed **on that CO's own
+page**, under **"Signing link:"** with a **Copy** button — the token is minted per change order, so
+**the only link you should ever paste into the signing tab is the one copied from the
+`ZZ click-test CO` page (row 1)**. Confirm the CO number in the page header before you copy, and
+again on the `/sign-co/<token>` page before you sign: the signing page shows the CO it is about.
+If it does not say **ZZ click-test CO**, close the tab.
+
+**⚠️ AND THIS ONE IS NOT REPAIRABLE BY RESEEDING.** B.5 says most mistakes are fixed by re-running
+`seed-test-identities.mjs`. **A signed change order is not.** The immutability trigger refuses to
+clear `signed_at` or restore `net_delta`, and the row cannot be deleted either — its line item's
+FK has no `ON DELETE CASCADE` and the line is frozen with its parent (**#1-s167fx**). The seed's
+S167 repair block can only **rename the corpse out of the way and build a new draft beside it**,
+which is what rows 2 and 3 above are. Every accidental signature leaves one more permanent row.
 
 ### A.1 — create and send a throwaway CO
 
@@ -105,6 +137,10 @@ rely on changes state.
 
 Optionally **void** `ZZ click-test CO` from the CO page so it does not linger. Leaving it is
 harmless — no test keys on that title.
+
+> **You cannot delete it** — a signed CO carrying a line item is undeletable (#1-s167fx), so each
+> run of Part A leaves one more `ZZ click-test CO` behind for good. Number them (`ZZ click-test CO
+> 2`, …) rather than reusing the title.
 
 ---
 
@@ -236,8 +272,12 @@ contacts page**, not in a settings screen.
 The seed is **idempotent and self-repairing**, so most mistakes are fixable by re-running
 `node scripts/seed-test-identities.mjs`. But avoid these to save yourself the reseed:
 
-1. **Do not sign, void, or edit "QA M9 — sent CO."** The portal read-arm tests require it to stay
-   `sent` with its line intact. (Sign **`ZZ click-test CO`** in Part A instead.)
+1. **Do not sign, send, void or edit EITHER seeded CO — "QA M9 — sent CO" _or_ "QA M9 — draft CO."**
+   The read arms need the first to stay `sent` with its line intact and the second to stay a
+   `draft`. (Sign **`ZZ click-test CO`** in Part A instead — see **A.0** for the list order that
+   makes the draft easy to hit by mistake.)
+   **⚠️ Unlike everything else on this list, a signature is NOT undone by a reseed** — the row can
+   be neither reverted nor deleted (#1-s167fx). The seed can only rename it aside and rebuild.
 2. **Do not leave any client on a non-`active` R17 state.** The seed resets all three clients to
    `active` on each run, but if you stop mid-test, several M9 harnesses that assume an active linked
    client will go red. Set her back to **Full portal access**, or reseed.
