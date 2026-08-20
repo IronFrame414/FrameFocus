@@ -196,8 +196,31 @@ describe('ARM 5 — change_order_line_items follow their parent', () => {
   });
 
   it('5b — ⚠️ and NOT the line on the draft co', async () => {
-    const rows = await ids(linked, 'change_order_line_items', 'id, name');
-    expect(rows.map((r) => r.name)).not.toContain('QA M9 line on the DRAFT co');
+    // [S167] RE-POINTED FROM THE NAME TO THE PARENT ID. The assertion is the
+    // same one — a line of a DRAFT change order must not reach the client —
+    // but the string is no longer a safe handle for it.
+    //
+    // The S165 click-test signed the seeded draft CO by accident, and that row
+    // can be neither reverted nor deleted (the trigger refuses to clear a
+    // signature stamp; the FK has no CASCADE and the line is frozen with its
+    // parent — see the S167 repair block in scripts/seed-test-identities.mjs,
+    // and #1-s167fx). The seed renames the stuck row out of the way and rebuilds
+    // the draft, but the stuck row KEEPS its line — a row still called
+    // 'QA M9 line on the DRAFT co' whose parent is now SIGNED, and therefore
+    // one the client is *supposed* to see. Asserting on the name would fail on
+    // correct behaviour.
+    const { data: d } = await admin
+      .from('change_orders').select('id')
+      .eq('company_id', companyId).eq('title', 'QA M9 — draft CO').single();
+    const draftId = (d as { id: string }).id;
+
+    const { count: onDraft } = await admin
+      .from('change_order_line_items').select('id', { count: 'exact', head: true })
+      .eq('change_order_id', draftId);
+    expect(onDraft, 'the draft CO carries no line — 5b would be vacuous').toBeGreaterThan(0);
+
+    const rows = await ids(linked, 'change_order_line_items', 'id, name, change_order_id');
+    expect(rows.map((r) => r.change_order_id)).not.toContain(draftId);
   });
 
   it('5c — CONTROL reads none', async () => {

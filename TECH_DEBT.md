@@ -78,6 +78,57 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
 ## Open Tech Debt
 
+### Branch-scoped, awaiting real numbers — `fix/s167-restore-m9-draft-co-fixture` [S167]
+
+> Provisional id per the S136 rule: never allocate a bare `#N` on a branch. Tag `s167fx`.
+
+- **#1-s167fx — A CHANGE ORDER THAT HAS LEFT DRAFT AND CARRIES A LINE ITEM IS UNDELETABLE BY ANY
+  PATH, INCLUDING SERVICE ROLE. The two guards close on each other, and one of them documents an
+  escape hatch that does not exist.** Raised S167 (2026-08-20).
+
+  Both halves confirmed against the live row `cb5d7729-48e5-4fb7-8aac-14c762ab8b6c` on
+  rebuild-test, with the service-role key, before this was filed:
+
+  | Attempt | Result |
+  | --- | --- |
+  | `DELETE` the parent CO | `violates foreign key constraint "change_order_line_items_change_order_id_fkey"` — the FK is **`NO ACTION`**, declared without `ON DELETE CASCADE` at `20260704215000_module5_5d_change_orders.sql:130`. |
+  | `DELETE` the line first | `Lines of a sent change order are immutable — void and reissue instead.` — `enforce_co_line_parent_open()`, `20260809000000_financial_rls_floor_part3.sql`. |
+
+  **The escape hatch is imaginary.** `enforce_co_line_parent_open()` returns early when the parent
+  row is already gone, and says why in its own comment: *"The parent is already gone (CASCADE
+  delete) — nothing to protect, and blocking here would make a change order undeletable."* That
+  branch can never be reached from a `DELETE` on `change_orders`, because the FK it presumes has
+  no `CASCADE`. **The comment describes the exact defect it was written to prevent.**
+
+  Service role is no help — it bypasses **RLS**, not triggers, and not FKs.
+
+  **The same row is also unrevertable**, which is correct and is not the debt: the S164 fix
+  (`20261022000000_co_signature_stamp_fix.sql`) refuses to clear `signed_at` or
+  `contractor_signed_at` ("A signature stamp cannot be rewritten"), and the S123-era freeze refuses
+  to restore `net_delta` ("A sent change order is immutable — void and reissue instead"). Those are
+  the rules working. The debt is that **`void` is the documented remedy and `void` does not remove
+  a row**, so a wrongly-created CO is permanent.
+
+  **How it surfaced.** The S165 click-test signed the seeded fixture CO `CO-QA-M9-DRAFT` by
+  accident (see the S167 inventory, `docs/specs/S167-fixture-inventory.md`). The fixture could not
+  be restored, only renamed aside and rebuilt — `scripts/seed-test-identities.mjs`, S167 repair
+  block — and `s164-m9-read-arms` ARM 5b had to be re-anchored from the line's **name** to its
+  **parent id**, because the stuck row keeps a line called "QA M9 line on the DRAFT co" that is now
+  legitimately client-visible.
+
+  **Impact beyond QA.** This is a product behaviour, not a fixture problem. Any real CO created in
+  error and sent — wrong project, wrong client, duplicate — is in the company's data for good.
+  `voided` hides it from most surfaces but the row, its number and its line items remain, and
+  `20260809000000` freezes `voided` too ("A voided change order is frozen forever").
+
+  **Fix direction — do NOT just add `ON DELETE CASCADE`.** Decide first whether a sent CO *should*
+  be deletable at all. If yes, the narrow change is `ON DELETE CASCADE` on
+  `change_order_line_items.change_order_id` (and `change_order_line_rows.line_item_id`), which
+  `enforce_co_line_parent_open()` is **already written to accommodate**, plus an Owner-only guard so
+  this is not a PM-reachable erase of a financial record. If no, then the comment quoted above is
+  the thing to fix, and `void` needs to be honest that it is permanent. Cross-ref `#117` (the CO
+  read floor) for who may reach these rows at all.
+
 ### Branch-scoped, awaiting real numbers — `feature/s164-m9-client-portal` [S164]
 
 > Provisional ids per the S136 rule: never allocate a bare `#N` on a branch. Tag `m9`.
@@ -1640,6 +1691,15 @@ non-role portal identity; then build the sub-facing surface that issues these in
   | **D · Un-shard, raise the cap** ← **CHOSEN [Josh, S134]** | Wall-clock — serial `workers:1` is ~14.3 min local, slower on GitHub; timeout raised 20→35 | Wall-clock ceiling — every added test pushes back toward the cap; a reprieve, not a cure | **Cannot reintroduce the bug** — serial can't collide, whatever a new test does. |
 
   A is the eventual answer and is blocked here. **Building the reproducible seed is the real unlock.** Cross-ref #150. Raised S134.
+
+  **[S167] The same problem has a second, smaller face, and it is now inventoried.** #149 is about
+  fixtures that cannot be **rebuilt**; S167 found the adjacent class — fixtures that a human can
+  **change from the product UI in two clicks**, some of which the seed cannot put back. The S165
+  click-test signed `CO-QA-M9-DRAFT` by accident and the row turned out to be neither revertable
+  nor deletable (`#1-s167fx`), so the seed can only rename it aside and build a new draft beside it.
+  **The inventory — which fixtures are reachable, which are repairable, and the one whose corruption
+  is silent — is `docs/specs/S167-fixture-inventory.md`.** It is a smaller unlock than the
+  reproducible seed and does not depend on it.
 
 - **#150** **Four CI shards shared ONE rebuild-test database, so any test asserting the ABSENCE / emptiness / exact COUNT of something another shard writes to a shared fixture was exposed. Recorded precisely so a future sharding attempt starts from this list, not a fresh audit.** Raised S134 (2026-08-11). The sharding that caused it (S133, `ce6efa8`) is reverted for now (Option D, #149); the sharding work is kept on branch `ci/shard-playwright`, not deleted, for when the seed (#149) lands.
 
