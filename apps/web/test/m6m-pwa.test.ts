@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import manifest from '@/app/manifest';
+import { crewManifest as manifest } from '@/lib/crew-manifest';
 import { brand } from '@/lib/brand';
 
 // M6M §7 — the PWA criteria: A-26b, A-26b2, A-26b3, A-26b4, A-26c [unit],
@@ -31,7 +31,7 @@ describe('§7.1 — the manifest', () => {
     // …and the manifest SOURCE contains none of them as a literal, so editing
     // lib/brand.ts changes the manifest with no edit here. This is the
     // assertion that fails on a stale product name WITHOUT naming the new one.
-    const src = read('app/manifest.ts');
+    const src = read('lib/crew-manifest.ts'); // moved from app/manifest.ts [S164]
     for (const value of [brand.name, brand.shortName, brand.themeColor, brand.backgroundColor]) {
       expect(src).not.toContain(value);
     }
@@ -41,7 +41,7 @@ describe('§7.1 — the manifest', () => {
   });
 
   it('A-26b3 · no product name appears as a string anywhere in the /m tree or the manifest', () => {
-    const files: string[] = ['app/manifest.ts'];
+    const files: string[] = ['lib/crew-manifest.ts']; // moved [S164]
     const walk = (dir: string) => {
       for (const name of readdirSync(join(WEB_ROOT, dir))) {
         const rel = join(dir, name);

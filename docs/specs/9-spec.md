@@ -677,6 +677,44 @@ A mostly empty page with a line telling her the **project hasn't started yet.**
 >
 > 🔴 **AND R10 WAS UNBUILDABLE UNTIL A LIVE DEFECT WAS FIXED.** The CO signature had been impossible
 > since 2026-08-09 — see `TECH_DEBT.md` **#4-m9**. Not M9's bug; M9 is why it was found.
+>
+> ### Q5 — the portal's install path, built [S164]
+>
+> **The answer to the brief's question is YES: a portal scope was added without changing crew
+> behaviour.** `app/manifest.ts` kept `start_url: '/m'` and its content is byte-identical.
+>
+> ⚠️ **But the obvious mechanism does not work, and it fails SILENTLY.** A nested layout exporting
+> `metadata.manifest` is ignored for that field: measured with a probe layout exporting BOTH `title`
+> and `manifest`, the title overrode and **the page still linked `/manifest.webmanifest`.** Next
+> collects the manifest FILE CONVENTION only at the app root and applies it *after* the metadata
+> chain, so nothing nested can override it. A build that trusted the documentation here would have
+> shipped a portal whose installed icon opens the field-crew shell — §2.5's failure exactly.
+>
+> **The fix:** `app/manifest.ts` (the convention) became `lib/crew-manifest.ts` served by
+> `app/manifest.webmanifest/route.ts` at the same URL, linked from the root layout's
+> `metadata.manifest`. Verified against a running server: **same bytes, same content-type, same
+> `cache-control`, same `crossorigin`.** The portal then overrides it for its own subtree.
+>
+> **Third worker, `public/sw-portal.js`, scope `/portal`, no `fetch` handler** — `sw-dashboard.js`'s
+> design and its reasoning: the portal needs an install and later push, not a cache, and a worker
+> with no fetch handler cannot serve a stale response.
+>
+> ⚠️ **The portal does NOT enrol push, and stage 6 is still gated.** The worker exists because iOS
+> delivers Web Push only to an *installed* PWA (GATED.md Gate 4) — the install is the precondition,
+> not the feature. Its re-subscribe posts `surface: 'client'`, a value **the CHECK constraint and
+> `links.ts` both still refuse**, deliberately: borrowing `'mobile'` would be accepted and would
+> resolve a client's notification to `/m/...`, a route she is bounced out of. A refused value fails
+> loudly; a borrowed one fails silently. **Stage 6 must add the surface to the constraint and a
+> resolver to `links.ts` together.**
+>
+> **R20 has one place it cannot reach: the home-screen label.** The manifest is one document for
+> every tenant, so the icon under a client's finger reads "Project Portal", not the contractor's
+> name. `brand.name` is absent — the product does not name itself to a client — but the company's
+> name is not there either. ⚠️ **A per-tenant manifest IS achievable** and an earlier claim here that
+> it was not has been withdrawn: Next emits `crossorigin="use-credentials"`, so the fetch carries
+> cookies and a dynamic route could read the session. **Not built — Josh's call.** A manifest is read
+> at INSTALL time, so a client installing from a cold start with no session would keep the generic
+> label permanently.
 
 ---
 

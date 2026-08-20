@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync } from 'fs';
 import { join } from 'path';
-import manifest from '../app/manifest';
+import { crewManifest as manifest } from '@/lib/crew-manifest';
 import { metadata } from '../app/layout';
 import { brand } from '@/lib/brand';
 

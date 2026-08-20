@@ -48,6 +48,20 @@ export const metadata: Metadata = {
   // ⚠️ NOT `brand.name`. R20: the product does not name itself to a client.
   // A tab title is the one piece of chrome that survives a screenshot.
   title: 'Project portal',
+
+  // ⚠️ Q5 [S164] — THE PORTAL'S OWN MANIFEST, AND THE CREW'S IS UNTOUCHED.
+  //
+  // `app/manifest.ts` keeps `start_url: '/m'`; changing it would redirect every
+  // field user's home-screen icon, which the brief for this work rules out.
+  // Metadata merges shallowly and a nested segment REPLACES the parent's value
+  // for a field, so this emits exactly one `<link rel="manifest">` under
+  // `/portal` and nothing under `/m` or `/dashboard` is affected.
+  //
+  // It must be a URL rather than a `manifest.ts` beside this file: Next collects
+  // the manifest FILE convention only at the app root, and a nested one is
+  // silently never detected — the portal would go on serving the crew manifest
+  // and an installed portal would open the field shell.
+  manifest: '/portal.webmanifest',
 };
 
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
