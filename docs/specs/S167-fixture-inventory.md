@@ -5,7 +5,27 @@
 > **Parent debt:** [`TECH_DEBT.md` #149](../../TECH_DEBT.md) — *"the pinned fixtures are hand-curated
 > on rebuild-test and reproducible from no script."* This document is that problem in miniature and
 > at a scale we can actually work through.
-> **Related:** `#1-s167fx` (a sent CO with a line item is undeletable), `docs/specs/S165-m9-clicktest.md` §A.0 / §B.5.
+> **Related:** `#1-s167fx` — **CLOSED at S168** (`20261023000000`); see the update below.
+> `docs/specs/S165-m9-clicktest.md` §A.0 / §B.5.
+
+---
+
+## ⚠️ UPDATE [S168] — half of the worked example below is no longer true
+
+**`#1-s167fx` is fixed.** An UNSIGNED change order now deletes cleanly, line items and all: the
+`ON DELETE CASCADE` that `enforce_co_line_parent_open()`'s comment always assumed now exists, and
+void gained a required reason and a reissue path. Josh's ruling and the migration are
+`20261023000000`.
+
+**What did NOT change, and is the reason the repair block still stands:** a **signed** change order
+is refused by `enforce_change_order_delete_boundary()` for *every* caller, service role included —
+*"a change order is a legal document, and being able to prove you never sent one is a claim the
+system must not be able to make falsely"* [Josh, S168]. `CO-QA-M9-DRAFT` was signed, so it is still
+unrepairable and still renamed aside rather than rebuilt.
+
+**And the inventory's own point survives intact** — arguably it is sharpened. The fixture was still
+reachable in two clicks from the product UI; the class of problem was never the FK. Everything below
+this line reads as written, with that one correction applied to the "Not deletable" bullet.
 
 ---
 
@@ -44,8 +64,10 @@ link the moment it was sent. It was signed on 2026-08-20.
   to clear `contractor_signed_at`, and refuses to restore `net_delta`. Those refusals are *correct*
   — they are the S164 signature fix and the S123-era money freeze doing their jobs. Service role
   does not help; it bypasses RLS, not triggers.
-- **Not deletable** — the line-item FK has no `ON DELETE CASCADE`, so the parent cannot go first,
-  and the line is frozen with its parent, so the line cannot go first either (`#1-s167fx`).
+- **Not deletable** — at S167, because the line-item FK had no `ON DELETE CASCADE` so the parent
+  could not go first, and the line was frozen with its parent so the line could not go first either
+  (`#1-s167fx`). **At S168 that deadlock is fixed and this row is still not deletable, for a
+  different and deliberate reason: it is SIGNED.**
 
 So the seed's S167 repair does the only thing left: **renames the corpse aside and builds a new
 draft next to it.** Each accident of this kind leaves one more permanent row in the fixture project,

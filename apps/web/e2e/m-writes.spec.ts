@@ -398,7 +398,7 @@ test.describe('A-55 · the three-level editor produces a real net_delta', () => 
 // M-31 — the write controls, and who does not get them
 // ===========================================================================
 test.describe('M-31 · write controls are Owner/Admin/PM, on a screen foreman and crew still read', () => {
-  test('an owner gets Edit, Send and Void on a draft', async ({ page }) => {
+  test('an owner gets Edit, Send, Void and Delete on a draft', async ({ page }) => {
     test.setTimeout(120_000);
     await signInAs(page, OWNER);
 
@@ -411,6 +411,10 @@ test.describe('M-31 · write controls are Owner/Admin/PM, on a screen foreman an
     await expect(page.getByTestId('m-co-edit')).toBeVisible();
     await expect(page.getByTestId('m-co-send')).toBeVisible();
     await expect(page.getByTestId('m-co-void')).toBeVisible();
+    // [S168] The fourth control. UNSIGNED only, Owner/Admin only — the boundary
+    // is `enforce_change_order_delete_boundary`, and this asserts the surface
+    // agrees with it on the one state where deleting is unambiguously allowed.
+    await expect(page.getByTestId('m-co-delete')).toBeVisible();
   });
 
   test('a terminal change order says so instead of rendering an empty box', async ({ page }) => {
@@ -421,7 +425,20 @@ test.describe('M-31 · write controls are Owner/Admin/PM, on a screen foreman an
 
     // Whatever status the first CO is in, the actions section must never be
     // empty markup: either it offers controls, or it explains why it does not.
-    const hasControls = (await page.getByTestId('m-co-send').count()) > 0;
+    //
+    // ⚠️ [S168] THE CONTROL SET GREW AND THIS TEST HAD TO GROW WITH IT. It used
+    // to probe `m-co-send` alone as the proxy for "has controls", which was true
+    // when Send was offered in every non-terminal state. It no longer is: a
+    // SIGNED CO now offers Void, and a VOIDED one offers Reissue and Delete, so
+    // the old shape would have found no Send, demanded the terminal sentence,
+    // and gone red against a screen that was working. The property being
+    // protected is unchanged — never render an empty box — so the probe is
+    // widened to the whole control set rather than weakened.
+    const controls = ['m-co-edit', 'm-co-send', 'm-co-void', 'm-co-reissue', 'm-co-delete'];
+    let hasControls = false;
+    for (const id of controls) {
+      if ((await page.getByTestId(id).count()) > 0) hasControls = true;
+    }
     if (!hasControls) await expect(page.getByTestId('m-co-terminal')).toBeVisible();
   });
 

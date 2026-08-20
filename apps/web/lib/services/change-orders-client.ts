@@ -230,12 +230,73 @@ export async function sendChangeOrder(
   }
 }
 
-/** Void a draft or sent-but-unsigned CO; revising means void + write a new CO. */
-export async function voidChangeOrder(id: string): Promise<Result> {
+/**
+ * Void a change order — draft, sent, or SIGNED.
+ *
+ * ⚠️ [S168] A REASON IS REQUIRED IN EVERY CASE, and the requirement does not
+ * soften for an unsigned CO. Josh ruled explicitly against distinguishing the
+ * two: *"user should give reason for void."* One path, one requirement — so
+ * there is one function, and neither surface gets to decide the reason is
+ * optional on its own screen (CLAUDE.md PARITY).
+ *
+ * The reason is checked in the route AND in the database
+ * (`enforce_change_order_void_authority`, plus `change_orders_void_shape_check`
+ * behind it). This client-side check exists only to save a round trip; it is
+ * not the gate and must not be treated as one.
+ *
+ * The signed copy is RETAINED — `signed-artifact-spec.md`. Voiding retires a
+ * document the client saw; it never destroys it.
+ */
+export async function voidChangeOrder(id: string, reason: string): Promise<Result> {
+  if (!reason.trim()) {
+    return { success: false, error: 'A reason is required to void a change order.' };
+  }
   try {
-    const res = await fetch(`/api/change-orders/${id}/void`, { method: 'POST' });
+    const res = await fetch(`/api/change-orders/${id}/void`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: reason.trim() }),
+    });
     const json = await res.json();
     if (!res.ok) return { success: false, error: json.error ?? 'Void failed' };
+    return { success: true };
+  } catch {
+    return { success: false, error: 'Network error — please try again.' };
+  }
+}
+
+/**
+ * Reissue a VOIDED change order as a fresh draft — the path
+ * `enforce_change_order_immutability()` has advertised since 20260809000000
+ * ("void and reissue instead") and that did not exist until S168.
+ *
+ * Returns the new draft's id so the caller can navigate straight into it.
+ */
+export async function reissueChangeOrder(id: string): Promise<CreateResult> {
+  try {
+    const res = await fetch(`/api/change-orders/${id}/reissue`, { method: 'POST' });
+    const json = await res.json();
+    if (!res.ok) return { success: false, error: json.error ?? 'Reissue failed' };
+    return { success: true, id: json.id };
+  } catch {
+    return { success: false, error: 'Network error — please try again.' };
+  }
+}
+
+/**
+ * Permanently delete an UNSIGNED change order. There is no trash bin here and
+ * that is deliberate — see the route.
+ *
+ * ⚠️ A SIGNED CO IS NEVER DELETABLE [Josh, S168]: *"a change order is a legal
+ * document, and being able to prove you never sent one is a claim the system
+ * must not be able to make falsely."* The boundary is enforced by a BEFORE
+ * DELETE trigger that has no service-role escape, not by this function.
+ */
+export async function deleteChangeOrder(id: string): Promise<Result> {
+  try {
+    const res = await fetch(`/api/change-orders/${id}`, { method: 'DELETE' });
+    const json = await res.json();
+    if (!res.ok) return { success: false, error: json.error ?? 'Delete failed' };
     return { success: true };
   } catch {
     return { success: false, error: 'Network error — please try again.' };

@@ -1,6 +1,10 @@
 import { createClient } from '@/lib/supabase-server';
 import { notFound, redirect } from 'next/navigation';
-import { getChangeOrder, getCoSigningSessions } from '@/lib/services/change-orders';
+import {
+  getChangeOrder,
+  getCoSigningSessions,
+  getCoSupersession,
+} from '@/lib/services/change-orders';
 import { getSubcontractors } from '@/lib/services/subcontractors';
 import { redactCoDetail } from '@/lib/co-redaction';
 import { CoBuilder } from './co-builder';
@@ -36,6 +40,12 @@ export default async function ChangeOrderPage({
   }
 
   const canManage = ['owner', 'admin', 'project_manager'].includes(profile.role);
+  // [S168] DELETE is Owner/Admin, narrower than `canManage`. Josh's ruling
+  // names the signed/unsigned boundary and is silent on authority; a permanent,
+  // unrecoverable removal of a legal document takes the conservative default.
+  // The real gate is `change_orders_delete_unsigned` + the BEFORE DELETE
+  // trigger (`20261023000000` §5) — this only decides whether to draw a button.
+  const canDelete = ['owner', 'admin'].includes(profile.role);
   // §7.3 S-5 as amended by RULING A [S97, 2026-08-02]: CO instrument rates are
   // Owner/Admin only and a PM sees NO rate values — the section is not mounted
   // below Owner/Admin rather than rendered read-only.
@@ -70,11 +80,12 @@ export default async function ChangeOrderPage({
     .eq('id', params.id)
     .maybeSingle();
 
-  const [subcontractors, sessions] = await Promise.all([
+  const [subcontractors, sessions, supersession] = await Promise.all([
     getSubcontractors({ status: 'active' }),
     canManage && changeOrder.status === 'sent'
       ? getCoSigningSessions(params.coId)
       : Promise.resolve([]),
+    getCoSupersession(params.coId),
   ]);
 
   const pendingSession =
@@ -96,6 +107,9 @@ export default async function ChangeOrderPage({
       pendingSigningToken={pendingSession?.token ?? null}
       companyName={companyName}
       hasSavedSignature={hasSavedSignature}
+      canDelete={canDelete}
+      supersedes={supersession.supersedes}
+      supersededBy={supersession.supersededBy}
     />
   );
 }

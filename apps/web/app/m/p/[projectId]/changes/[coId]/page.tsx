@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import {
   getChangeOrder,
   getCoSigningSessions,
+  getCoSupersession,
   CO_STATUS_LABELS,
 } from '@/lib/services/change-orders';
 import { getMyProfile } from '@/lib/services/profiles';
@@ -80,7 +81,11 @@ export default async function ChangeOrderDetailPage({
   const backTo = `/m/p/${params.projectId}/changes`;
   await requireDetailAccess('co', backTo);
 
-  const [co, profile] = await Promise.all([getChangeOrder(params.coId), getMyProfile()]);
+  const [co, profile, supersession] = await Promise.all([
+    getChangeOrder(params.coId),
+    getMyProfile(),
+    getCoSupersession(params.coId),
+  ]);
   if (!co) notFound();
 
   const showMoney = MONEY_ROLES.includes(profile?.role ?? '');
@@ -222,6 +227,13 @@ export default async function ChangeOrderDetailPage({
           // First send versus re-send. The route reuses an existing contractor
           // signature verbatim and only demands one when this is null.
           needsSignature={!co.contractor_signed_at}
+          // [S168] The SAME predicate the desktop builder uses, passed rather
+          // than re-derived — CLAUDE.md PARITY: one feature, two presentations,
+          // and the divergence is always the second implementation.
+          signedAt={co.signed_at}
+          voidReason={co.void_reason}
+          supersededById={supersession.supersededBy?.id ?? null}
+          canDelete={['owner', 'admin'].includes(profile?.role ?? '')}
         />
       ) : null}
     </div>

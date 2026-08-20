@@ -82,7 +82,7 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
 > Provisional id per the S136 rule: never allocate a bare `#N` on a branch. Tag `s167fx`.
 
-- **#1-s167fx — A CHANGE ORDER THAT HAS LEFT DRAFT AND CARRIES A LINE ITEM IS UNDELETABLE BY ANY
+- **#1-s167fx — ✅ CLOSED [S168] — A CHANGE ORDER THAT HAS LEFT DRAFT AND CARRIES A LINE ITEM IS UNDELETABLE BY ANY
   PATH, INCLUDING SERVICE ROLE. The two guards close on each other, and one of them documents an
   escape hatch that does not exist.** Raised S167 (2026-08-20).
 
@@ -121,7 +121,43 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   `voided` hides it from most surfaces but the row, its number and its line items remain, and
   `20260809000000` freezes `voided` too ("A voided change order is frozen forever").
 
-  **Fix direction — do NOT just add `ON DELETE CASCADE`.** Decide first whether a sent CO *should*
+  > ### ✅ CLOSED [S168] — `20261023000000_co_void_reissue_delete.sql`
+  >
+  > **Josh ruled all three paths** and the fix direction below was followed rather than short-cut:
+  > the question *"should a sent CO be deletable at all"* was answered first, and the answer draws
+  > the line at the **signature**, not at the FK.
+  >
+  > | Path | What shipped |
+  > | --- | --- |
+  > | **VOID** | Any sent CO, **signed or unsigned**, with a **REQUIRED reason** — Josh ruled against distinguishing the two. `void_reason`/`voided_by`/`voided_at` + `change_orders_void_shape_check`, authority in `enforce_change_order_void_authority` (owner/admin/authoring-PM, mirroring the #117 read floor). `voided_by` is stamped from `auth.uid()`, not the payload, and the whole record is frozen afterwards by the amended immutability trigger. **The signed artifact is retained** — only `pending` signing sessions are invalidated. |
+  > | **REISSUE** | `supersedes_change_order_id`, the `contract_documents.supersedes_document_id` shape (7I §10.4). `enforce_change_order_supersedes_valid` requires the target to be VOIDED, same company, same project, never itself; `change_orders_supersedes_once` allows exactly one reissue per withdrawal. `/api/change-orders/[id]/reissue` copies lines and rows and rolls the new draft back on any partial failure — a rollback only possible *because* this item was fixed. |
+  > | **DELETE** | **UNSIGNED ONLY.** `change_orders_delete_unsigned` (RLS: Owner/Admin, in-tenant) answers WHO; `enforce_change_order_delete_boundary` answers WHAT and **has no service-role escape**, because the claim it protects is *"we never sent that"*. |
+  >
+  > **The deadlock: CASCADE, and the comment is now true.** `ON DELETE CASCADE` added to
+  > `change_order_line_items.change_order_id`, `change_order_line_rows.line_item_id`,
+  > `co_signing_sessions.change_order_id` and `instrument_rates.change_order_id` (forced there —
+  > `instrument_rates_one_instrument` makes SET NULL invalid); `tasks.change_order_id` takes SET NULL
+  > because field work outlives its paperwork. An ordered delete was rejected: PostgREST has no
+  > transaction, so it is three round trips that can strand a half-deleted document, **and it would
+  > have required relaxing `enforce_co_line_parent_open()` as well** — CASCADE requires relaxing
+  > nothing, because that function's unreachable early-return was written for exactly this.
+  >
+  > **⚠️ TWO FKs KEPT `NO ACTION` ON PURPOSE, and they are a feature:**
+  > `invoice_lines.source_change_order_id` and `project_budget_items.source_change_order_id`. A CO
+  > that has been billed or budgeted against is load-bearing elsewhere; the FK refusing is the guard,
+  > and the route translates `23503` into a sentence.
+  >
+  > **Two judgement calls the ruling did not reach**, flagged in the migration header and repeated
+  > here so they are easy to overturn: **(i)** delete is Owner/Admin, narrower than void's
+  > owner/admin/PM, because it is destructive and unrecoverable; **(ii)** "unsigned" means
+  > `signed_at IS NULL AND status <> 'signed'`, so a draft and a voided-but-never-signed CO are both
+  > deletable — the ruling's boundary is the signature and the predicate is the signature.
+  >
+  > Evidence: `apps/web/test/s168-co-lifecycle.live.ts`, 21 probes, every refusal mutation-proved by
+  > re-reading through the service role. Both surfaces updated (`co-builder.tsx`, `co-actions.tsx`)
+  > through the same `voidChangeOrder`/`reissueChangeOrder`/`deleteChangeOrder`, per PARITY.
+
+  **Fix direction as filed at S167 — do NOT just add `ON DELETE CASCADE`.** Decide first whether a sent CO *should*
   be deletable at all. If yes, the narrow change is `ON DELETE CASCADE` on
   `change_order_line_items.change_order_id` (and `change_order_line_rows.line_item_id`), which
   `enforce_co_line_parent_open()` is **already written to accommodate**, plus an Owner-only guard so

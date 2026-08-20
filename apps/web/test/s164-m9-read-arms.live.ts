@@ -201,10 +201,12 @@ describe('ARM 5 — change_order_line_items follow their parent', () => {
     // but the string is no longer a safe handle for it.
     //
     // The S165 click-test signed the seeded draft CO by accident, and that row
-    // can be neither reverted nor deleted (the trigger refuses to clear a
-    // signature stamp; the FK has no CASCADE and the line is frozen with its
-    // parent — see the S167 repair block in scripts/seed-test-identities.mjs,
-    // and #1-s167fx). The seed renames the stuck row out of the way and rebuilds
+    // can be neither reverted nor deleted — the trigger refuses to clear a
+    // signature stamp, and `enforce_change_order_delete_boundary()` refuses to
+    // delete a SIGNED change order for any caller [S168]. (The FK/trigger
+    // deadlock that made even an UNSIGNED one undeletable was #1-s167fx and is
+    // CLOSED; a signed row is refused on purpose, not by accident. See the S167
+    // repair block in scripts/seed-test-identities.mjs.) The seed renames the stuck row out of the way and rebuilds
     // the draft, but the stuck row KEEPS its line — a row still called
     // 'QA M9 line on the DRAFT co' whose parent is now SIGNED, and therefore
     // one the client is *supposed* to see. Asserting on the name would fail on

@@ -3,7 +3,12 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { sendChangeOrder, voidChangeOrder } from '@/lib/services/change-orders-client';
+import {
+  deleteChangeOrder,
+  reissueChangeOrder,
+  sendChangeOrder,
+  voidChangeOrder,
+} from '@/lib/services/change-orders-client';
 import type { ChangeOrderStatus } from '@/lib/services/change-orders-client';
 import {
   ErrorNotice,
@@ -11,6 +16,7 @@ import {
   OptionStack,
   PrimaryButton,
   SecondaryButton,
+  TextAreaField,
   TextField,
   useOnline,
 } from '../../../../write-ui';
@@ -73,17 +79,34 @@ export function CoActions({
   coId,
   status,
   needsSignature,
+  signedAt,
+  voidReason,
+  supersededById,
+  canDelete,
 }: {
   projectId: string;
   coId: string;
   status: ChangeOrderStatus;
   /** True when the CO carries no `contractor_signed_at` — i.e. a first send. */
   needsSignature: boolean;
+  /** [S168] `change_orders.signed_at`. The DELETE predicate is the SAME
+   *  expression the desktop builder uses, passed rather than re-derived —
+   *  CLAUDE.md PARITY: the second implementation is always the divergence. */
+  signedAt: string | null;
+  /** [S168] Read back on a voided CO. A reason nobody can see is not a record. */
+  voidReason: string | null;
+  /** [S168] The CO that REPLACED this one, if any. ⚠️ Not this row's own
+   *  `supersedes_change_order_id`, which points the other way — see
+   *  `getCoSupersession()`. */
+  supersededById: string | null;
+  /** [S168] Owner/Admin. Narrower than the write gate on purpose. */
+  canDelete: boolean;
 }) {
   const router = useRouter();
   const online = useOnline();
 
   const [mode, setMode] = useState<'send' | 'void' | null>(null);
+  const [voidReasonInput, setVoidReasonInput] = useState('');
   const [sigMode, setSigMode] = useState<'typed_name' | 'saved_image'>('typed_name');
   const [sigName, setSigName] = useState('');
   const [recipientEmail, setRecipientEmail] = useState('');
@@ -91,12 +114,19 @@ export function CoActions({
   const [error, setError] = useState<string | null>(null);
   const [signingUrl, setSigningUrl] = useState<string | null>(null);
 
-  // The route accepts draft OR sent (re-send mints a fresh token); signed and
-  // voided are terminal. Mirrors the route's own 409, so the control is absent
-  // rather than present-and-failing.
+  // The route accepts draft OR sent (re-send mints a fresh token). Mirrors the
+  // route's own 409, so the control is absent rather than present-and-failing.
   const sendable = status === 'draft' || status === 'sent';
-  const voidable = status === 'draft' || status === 'sent';
+  // [S168] A SIGNED CO IS NOW VOIDABLE. Josh ruled void applies to any sent CO,
+  // signed or unsigned, with a reason in every case — and the signed copy is
+  // retained (`signed-artifact-spec.md`). Only `voided` is terminal, because
+  // `enforce_change_order_immutability()` freezes it forever.
+  const voidable = status !== 'voided';
   const editable = status === 'draft';
+  // [S168] The reissue path the immutability trigger has always advertised.
+  const reissuable = status === 'voided' && supersededById === null;
+  // [S168] Same predicate as the desktop builder, character for character.
+  const deletable = canDelete && signedAt === null && status !== 'signed';
 
   // A signed or voided CO is terminal: there is no Edit, no Send, no Void.
   //
@@ -107,7 +137,7 @@ export function CoActions({
   // author who reaches a signed CO looking for Edit deserves the reason, which
   // is D-51's: revising means voiding and writing a new one, and neither is
   // available once the client has signed.
-  const hasAnyAction = editable || sendable || voidable;
+  const hasAnyAction = editable || sendable || voidable || reissuable || deletable;
 
   const signatureReady = !needsSignature || sigName.trim().length > 0;
 
@@ -141,17 +171,50 @@ export function CoActions({
 
   async function doVoid() {
     if (!online) return;
+    if (!voidReasonInput.trim()) {
+      setError('A reason is required to void a change order.');
+      return;
+    }
     setBusy(true);
     setError(null);
 
-    const result = await voidChangeOrder(coId);
+    const result = await voidChangeOrder(coId, voidReasonInput);
     setBusy(false);
     if (!result.success) {
       setError(result.error ?? 'The change order could not be voided.');
       return;
     }
     setMode(null);
+    setVoidReasonInput('');
     router.refresh();
+  }
+
+  async function doReissue() {
+    if (!online) return;
+    setBusy(true);
+    setError(null);
+
+    const result = await reissueChangeOrder(coId);
+    setBusy(false);
+    if (!result.success || !result.id) {
+      setError(result.error ?? 'The change order could not be reissued.');
+      return;
+    }
+    router.push(`/m/p/${projectId}/changes/${result.id}`);
+  }
+
+  async function doDelete() {
+    if (!online) return;
+    setBusy(true);
+    setError(null);
+
+    const result = await deleteChangeOrder(coId);
+    if (!result.success) {
+      setBusy(false);
+      setError(result.error ?? 'The change order could not be deleted.');
+      return;
+    }
+    router.push(`/m/p/${projectId}/changes`);
   }
 
   return (
@@ -162,9 +225,10 @@ export function CoActions({
           role="status"
           className="rounded-[12px] border border-m6m-border bg-m6m-card px-[14px] py-[12px] text-[14px] text-m6m-navy"
         >
-          {status === 'signed'
-            ? 'This change order is signed. It can no longer be edited, sent or voided.'
-            : 'This change order is voided. Write a new one to replace it.'}
+          {/* [S168] A signed CO is no longer terminal — it can be voided. The
+              only state that reaches this sentence now is a voided CO that has
+              already been reissued and that this role cannot delete. */}
+          This change order is voided and has already been reissued.
         </p>
       ) : null}
 
@@ -274,13 +338,25 @@ export function CoActions({
           <div className="mt-[12px] rounded-[14px] border border-m6m-danger-border bg-[#fdf1f0] p-[14px]">
             <p className="text-[15px] font-bold text-m6m-danger">Void this change order?</p>
             <p className="mt-[4px] text-[13px] text-m6m-navy">
-              Revising means voiding this one and writing a new change order. This cannot be undone.
+              {status === 'signed'
+                ? 'This change order is signed. Voiding withdraws it — the signed copy stays on file.'
+                : 'Voiding withdraws this change order. You can reissue it as a new draft afterwards.'}
             </p>
+            {/* [S168] REQUIRED, and required identically on both surfaces —
+                Josh ruled against a signed/unsigned split: "user should give
+                reason for void." The reason is permanent once written. */}
+            <TextAreaField
+              label="Reason (required)"
+              value={voidReasonInput}
+              onChange={setVoidReasonInput}
+              testId="m-co-void-reason"
+              rows={2}
+            />
             <PrimaryButton
               label="Void"
               busyLabel="Voiding…"
               onClick={doVoid}
-              disabled={!online}
+              disabled={!online || !voidReasonInput.trim()}
               busy={busy}
               testId="m-co-void-confirm"
               tone="danger"
@@ -306,6 +382,49 @@ export function CoActions({
             }}
           />
         )
+      ) : null}
+
+      {/* ── [S168] REISSUE — the path `enforce_change_order_immutability()`
+             has advertised since 2026-08-09 ("void and reissue instead") and
+             that did not exist until now. ── */}
+      {reissuable && mode === null ? (
+        <div className="mt-[12px]">
+          <PrimaryButton
+            label="Reissue as a new draft"
+            busyLabel="Reissuing…"
+            onClick={doReissue}
+            disabled={!online}
+            busy={busy}
+            testId="m-co-reissue"
+          />
+        </div>
+      ) : null}
+
+      {/* The void record, read back. */}
+      {status === 'voided' && voidReason ? (
+        <p
+          data-testid="m-co-void-reason-shown"
+          className="mt-[12px] rounded-[12px] border border-m6m-border bg-m6m-card px-[14px] py-[12px] text-[13px] text-m6m-navy"
+        >
+          <span className="font-bold">Voided.</span> {voidReason}
+        </p>
+      ) : null}
+
+      {/* ── [S168] DELETE — UNSIGNED ONLY, Owner/Admin only. The database is
+             the boundary (`enforce_change_order_delete_boundary` has no
+             service-role escape); this control merely stays out of the way. ── */}
+      {deletable && mode === null ? (
+        <div className="mt-[12px]">
+          <SecondaryButton
+            label="Delete permanently"
+            testId="m-co-delete"
+            disabled={!online || busy}
+            onClick={doDelete}
+          />
+          <p className="mt-[6px] text-[12px] text-m6m-muted">
+            Deleting leaves no record. To keep one, void it instead.
+          </p>
+        </div>
       ) : null}
 
       {error ? <ErrorNotice message={error} testId="m-co-action-error" /> : null}
