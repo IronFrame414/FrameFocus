@@ -49,7 +49,28 @@ Legend: ⏳ PENDING · 🟢 PASS · 🔴 RED · ⚠️ PASS-WITH-NOTES
 - Finished: 2026-08-20T11:50:40Z
 - **PRINTED exit: 0.** `Test Files 59 passed (59)`, `Tests 894 passed (894)`. Duration 21.3s. Matches last session.
 
-### 5. live harnesses (88) — ⏳ PENDING
+### 5. live harnesses (88) — ⏳ IN PROGRESS (cold recorded; warm re-run next)
+
+**⚠️ Caveat on this cold run:** an earlier foreground attempt of this same suite was killed at the
+tool's 10-minute cap (SIGTERM) and left fixture residue — most visibly a transient identity
+`josh+s133-pm2@` that its interrupted `afterAll` never cleaned. The cold run below therefore starts
+from slightly-dirty fixtures, which is itself one of the failures. Re-launched in the background to
+run to completion.
+
+**Cold run (background `bwbljk1h9`), finished 2026-08-20T12:16:08Z — PRINTED exit: 1.**
+`Test Files 4 failed | 84 passed (88)` · `Tests 3 failed | 1149 passed | 25 skipped (1177)`.
+
+The 4 red files — **NOT the same four as last session** (last session: s97ct-isolation, s118-m6m,
+s137, s138 — all green here):
+
+| File | Failure | First read |
+|------|---------|-----------|
+| `s133-subcontractor-read-floor` | `beforeAll`: `josh+s133-pm2@ already exists — a previous run did not clean up` | **Residue from the killed foreground run**, not the tree. |
+| `s164-m9-client-writes` W6c | insert expected to succeed returned `42501` (`expected {code:'42501'} to be null`) | R17 `client_access_state` likely left non-active by the killed run. |
+| `s164-m9-portal-shell` P4b | storage markup derivative `did not sign: expected undefined to be truthy` | storage-object fixture; check warm. |
+| `s123-reminders-loop` §3f | `expected false to be true` (final reminder / §3f fan-out) | timing/loop; check warm. |
+
+Warm re-run of these four recorded below.
 
 ### 6. Playwright (4 chunks) — ⏳ PENDING
 
