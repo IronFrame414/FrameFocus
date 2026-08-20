@@ -187,16 +187,50 @@ describe('S143-Q3 — credit vs refund is storable (B4)', () => {
 
 describe('S143-Q4 — ONE write rule: a PM cannot hand-write sync state (B1)', () => {
   it('a PM cannot claim an invoice reached QuickBooks', async () => {
+    // ⚠️ SCOPED TO A PROJECT THE PM IS ASSIGNED TO [S165 sweep]. As written this
+    // took the FIRST company invoice, unordered — and the `if (!readable?.length)
+    // return` below then SILENTLY no-ops the whole guard whenever the heap hands
+    // back an invoice on a project this PM is not on. Ordering would NOT fix it:
+    // the test depends on the invoice being one the PM can SEE, which is a
+    // property of the project assignment, not of physical row order. Same class
+    // as s143-void-authority's fixture pick — scope to the PM's own assignments.
+    // (Measured: 11 of 15 company-A invoices sit on a PM-assigned project, so the
+    // old pick skipped ~1 run in 4 with nothing failing.)
+    const { data: pmProfile } = await admin
+      .from('profiles')
+      .select('id')
+      .eq('email', PM)
+      .eq('is_deleted', false)
+      .single();
+    const { data: pmMember } = await admin
+      .from('company_members')
+      .select('id')
+      .eq('profile_id', (pmProfile as { id: string }).id)
+      .eq('company_id', companyId)
+      .eq('is_deleted', false)
+      .single();
+    const { data: assignments } = await admin
+      .from('project_assignments')
+      .select('project_id')
+      .eq('member_id', (pmMember as { id: string }).id)
+      .eq('is_deleted', false);
+    const assignedProjectIds = [
+      ...new Set(((assignments ?? []) as { project_id: string }[]).map((a) => a.project_id)),
+    ];
     const { data: invoice } = await admin
       .from('invoices')
       .select('id, project_id')
       .eq('company_id', companyId)
       .eq('is_deleted', false)
+      .in('project_id', assignedProjectIds.length ? assignedProjectIds : ['00000000-0000-0000-0000-000000000000'])
+      .order('id')
       .limit(1)
-      .single();
+      .maybeSingle();
+    if (!invoice) return; // no invoice on any PM-assigned project — vacuous, not passed
     const invoiceId = (invoice as { id: string }).id;
 
-    // Non-vacuity: the PM can see and update this row.
+    // Non-vacuity: the PM can see and update this row. With the scope above this
+    // should always hold; kept as a belt-and-suspenders against fixture drift.
     const { data: readable } = await pmC.from('invoices').select('id').eq('id', invoiceId);
     if (!readable?.length) return; // not assigned — the guard is untested here, not passed
     const { error: harmless } = await pmC
