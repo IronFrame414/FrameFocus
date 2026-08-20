@@ -14,7 +14,7 @@ lose the outcome.
 | 2 | `next lint` (expect 0) | 🟢 PASS | "No ESLint warnings or errors", exit 0 |
 | 3 | `npm run build --force` (FULL TURBO ≠ evidence) | 🟢 PASS | fresh: 0 cached, compiled, 1m58s, exit 0 |
 | 4 | Full committed vitest suite | 🟢 PASS | 59 files, 894/894, exit 0 |
-| 5 | Every live harness, all 88 files (cold + warm re-run of reds) | ⏳ PENDING | — |
+| 5 | Every live harness, all 88 files (cold + warm re-run of reds) | 🟢 PASS (effectively) | 1177/1177 pass; 4 cold reds all cold-cache/residue, NOT the same four as last session, zero tree defects |
 | 6 | Playwright, four chunks from `apps/web` | ⏳ PENDING | — |
 | 7 | `npx supabase migration list` (repo root) | 🟢 PASS | 129 files = 129 applied, all local==remote |
 | 8 | `fixture-snapshot.mjs` before & after | ⏳ PENDING | — |
@@ -49,7 +49,7 @@ Legend: ⏳ PENDING · 🟢 PASS · 🔴 RED · ⚠️ PASS-WITH-NOTES
 - Finished: 2026-08-20T11:50:40Z
 - **PRINTED exit: 0.** `Test Files 59 passed (59)`, `Tests 894 passed (894)`. Duration 21.3s. Matches last session.
 
-### 5. live harnesses (88) — ⏳ IN PROGRESS (cold recorded; warm re-run next)
+### 5. live harnesses (88) — 🟢 PASS (effectively; see verdict)
 
 **⚠️ Caveat on this cold run:** an earlier foreground attempt of this same suite was killed at the
 tool's 10-minute cap (SIGTERM) and left fixture residue — most visibly a transient identity
@@ -70,7 +70,36 @@ s137, s138 — all green here):
 | `s164-m9-portal-shell` P4b | storage markup derivative `did not sign: expected undefined to be truthy` | storage-object fixture; check warm. |
 | `s123-reminders-loop` §3f | `expected false to be true` (final reminder / §3f fan-out) | timing/loop; check warm. |
 
-Warm re-run of these four recorded below.
+**Warm re-run (12:17:37Z) of the four — PRINTED exit: 1.** `3 failed | 1 passed`:
+- `s164-m9-client-writes` → **GREEN** (a genuine cold-cache flake, the same shape as last session's four).
+- `s133`, `s123-reminders`, `s164-portal-shell` → still red — because they are **fixture residue, not cold-cache**, and a plain warm re-run does not clear residue.
+
+**Fixture restore (undoing the killed run's corruption — data only, no code changed):**
+1. Deleted the orphaned transient identity `josh+s133-pm2@` (profile + auth user + member row) that `s133`'s interrupted `afterAll` never removed.
+2. `node scripts/seed-test-identities.mjs` — exit 0, restored **2 drifted rows** (a draft client contract + the M9 hour claim that a failed run had deleted), 87 already present.
+
+**Post-restore re-run (12:19:46Z):** `s133` → **GREEN**, `s123-reminders` → **GREEN**. `s164-portal-shell` P4b still red.
+
+**Root cause of the last one, diagnosed:** the cold run's `s164-m9-client-writes` failure left a dangling
+`files` row `qa-m9-write.jpg` (`client_visible=true`, created 12:01) **whose storage object had been
+deleted** — its cleanup deleted the object but not the row. `s164-portal-shell` P4b lists client-visible
+photos and correctly fails to sign a photo whose object is gone. Deleted the orphan row; re-ran
+`s164-portal-shell` → **27/27 GREEN, exit 0** (12:21:03Z).
+
+**VERDICT — 🟢 effectively green: 1177/1177 live tests pass on the merged tree, ZERO tree defects.**
+Every red was cold-cache flakiness or fixture residue, and the residue was largely self-inflicted:
+the foreground attempt killed at the 10-minute tool cap left `s133`'s identity and (via the cold
+run's own client-writes failure) a dangling photo row.
+
+- **Same four as last session?** **No.** Last session: s97ct-isolation, s118-m6m, s137, s138 — all
+  four **passed** in this run. This session's cold reds were s133 / s164-client-writes /
+  s164-portal-shell / s123-reminders. The *category* (cold-cache + residue) repeats; the specific
+  files do not.
+- **Anything new/real?** **No product/merge defect.** One test-hygiene observation worth Josh's eye
+  (not fixed, per instruction): when `s164-m9-client-writes` fails mid-run it can leave a
+  `client_visible` `files` row without its storage object, which then reddens `s164-portal-shell` —
+  a non-atomic cleanup coupling two harnesses through shared fixture state. Filing candidate, not a
+  blocker.
 
 ### 6. Playwright (4 chunks) — ⏳ PENDING
 
