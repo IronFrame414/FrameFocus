@@ -346,11 +346,33 @@ describe('S163-D — M6-02: the append-only logs refuse every authenticated writ
       .from('time_edit_logs')
       .select('*', { count: 'exact', head: true });
 
-    const { data: seg } = await admin
+    // ⚠️ THE SEGMENT MUST NOT BE THE OWNER'S OWN [S164]. As written this took
+    // `time_segments limit(1)` — unordered, unfiltered — and
+    // `audit_time_segment_edit()` deliberately writes NO log when the editor IS
+    // the segment's member ("IF v_me IS NOT DISTINCT FROM v_target THEN RETURN
+    // NULL"). Editing your own time is not an edit by someone else.
+    //
+    // So on any run where the heap handed back one of the owner's own segments,
+    // D3 failed with "the audit trigger stopped firing" — announcing a broken
+    // audit trail when the trigger was working exactly as specified. Worse, the
+    // test DESTABILISES ITS OWN FIXTURE: it rewrites the note, which moves the
+    // row, so the next run's unordered pick is a different one. Same defect
+    // class as the `project_assignments` pick in `s143-void-authority`.
+    const { data: ownerProfile } = await admin
+      .from('profiles').select('id').eq('email', OWNER).eq('is_deleted', false).single();
+    const { data: ownerMember } = await admin
+      .from('company_members').select('id')
+      .eq('profile_id', (ownerProfile as { id: string }).id).eq('is_deleted', false).single();
+
+    const { data: candidates } = await admin
       .from('time_segments')
-      .select('id, note')
-      .limit(1)
-      .single();
+      .select('id, note, session_id, time_clock_sessions!inner(member_id)')
+      .neq('time_clock_sessions.member_id', (ownerMember as { id: string }).id)
+      .order('id')
+      .limit(1);
+    const seg = ((candidates ?? []) as unknown as { id: string; note: string | null }[])[0];
+    expect(seg, 'no segment belonging to someone other than the owner — D3 would be vacuous')
+      .toBeTruthy();
     const s = seg as { id: string; note: string | null };
     const { data: upd } = await owner
       .from('time_segments')

@@ -101,12 +101,63 @@ export async function invalidateSessionsForChangeOrder(
     .eq('status', 'pending');
 }
 
+/**
+ * WHICH SURFACE PRODUCED THE SIGNATURE — R10 / Q6 [Josh, S164].
+ *
+ * ===========================================================================
+ * ⚠️ ONE WRITE PATH, DISTINGUISHABLE CALLERS. NOT TWO WRITE PATHS.
+ * ===========================================================================
+ * §7.1: *"The portal must call THE SAME signature write the tokenised route
+ * calls. A second implementation that 'does the same thing' IS the divergence
+ * — that is `#129`'s precedent exactly, where two markup editors that both
+ * 'worked' produced silent data loss."*
+ *
+ * And then Josh's Q6 answer, which is the reason this type exists at all:
+ * *"an authenticated portal session and an anonymous token holder are
+ * materially different evidence, and `signer_ip`, `signer_user_agent` and the
+ * consent record must be able to say which."*
+ *
+ * Both things at once. The function below is unchanged in what it DOES; what
+ * it now records is which of two materially different callers did it.
+ *
+ * The difference is not cosmetic. On `token_link`, `signer_ip` and
+ * `signer_user_agent` describe **whoever opened an emailed link** — anyone
+ * holding the URL. On `portal_session` they describe **a session that
+ * authenticated as a specific profile**. Storing those two in one pair of
+ * columns with nothing to tell them apart would make the weaker evidence
+ * indistinguishable from the stronger, in the row that IS the binding record.
+ */
+export type CoSignatureCaller =
+  | { kind: 'token_link' }
+  | { kind: 'portal_session'; profileId: string };
+
 export interface CompleteCoSignatureParams {
   signatureType: 'draw' | 'type';
   signatureData: string; // base64 PNG (data URL ok)
   signerName: string;
   signerIp: string | null;
   signerUserAgent: string | null;
+  /**
+   * ⚠️ REQUIRED, NOT OPTIONAL, AND NOT DEFAULTED TO `token_link`.
+   * A default would let a future caller record a portal signature as an
+   * anonymous one by forgetting a field — which is the failure this parameter
+   * exists to prevent, arriving through the parameter itself.
+   */
+  caller: CoSignatureCaller;
+}
+
+/**
+ * The consent sentence, with the channel attested inside it.
+ *
+ * `CONSENT_TEXT` is shared with the proposal flow and is deliberately not
+ * edited. What is stored on a CO session is that text PLUS one sentence naming
+ * how the signature was given — so the consent record answers Q6's question on
+ * its own, without a reader having to join it to `signer_channel`.
+ */
+export function coConsentTextFor(caller: CoSignatureCaller): string {
+  return caller.kind === 'portal_session'
+    ? `${CONSENT_TEXT} I gave this signature while signed in to my client portal account.`
+    : `${CONSENT_TEXT} I gave this signature from the link emailed to me.`;
 }
 
 /**
@@ -174,8 +225,12 @@ export async function completeCoSignature(
       signer_name: params.signerName,
       signer_ip: params.signerIp,
       signer_user_agent: params.signerUserAgent,
+      // Q6 — the two halves of "who signed": the surface, and the account.
+      signer_channel: params.caller.kind,
+      signer_profile_id:
+        params.caller.kind === 'portal_session' ? params.caller.profileId : null,
       consent_given: true,
-      consent_text: CONSENT_TEXT,
+      consent_text: coConsentTextFor(params.caller),
     })
     .eq('id', session.id)
     .eq('status', 'pending')

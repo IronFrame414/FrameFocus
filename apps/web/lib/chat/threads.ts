@@ -17,7 +17,17 @@ import { candidateTokens, type MentionCandidate } from '@/lib/chat/mentions';
  * because the writes would simply succeed more often.
  */
 
-export type ThreadKind = 'crew' | 'sub';
+/**
+ * ⚠️ `client` ADDED BY M9 R11 [S164]. Three kinds, not two.
+ *
+ * The CHECK on `chat_threads.kind` is the authority and this follows it. Read
+ * `20261021000000` §2 before adding a fourth: the pre-existing SELECT policies
+ * are shaped `kind = 'sub' OR role IS DISTINCT FROM 'subcontractor'`, so any
+ * new kind is admitted to every non-subcontractor role by default — which is
+ * how a fourth kind would silently reach foreman and crew, with nothing
+ * failing and no policy edited.
+ */
+export type ThreadKind = 'crew' | 'sub' | 'client';
 
 export interface ChatThread {
   id: string;

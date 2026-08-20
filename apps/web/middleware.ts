@@ -253,6 +253,19 @@ export async function middleware(request: NextRequest) {
 // invite / sign-co / reset-password are token-based and hold no session.
 // `/api/:path*` and `/locked` ADDED [S138] for the trial lock guard above.
 //
+// `/portal` ADDED [S164, M9 stage 4] — for the SAME reason `/m` was, and the
+// symptom would be the same one: `app/portal/layout.tsx` calls getUser(), a
+// Server Component cannot persist a refreshed token, so a stale session would
+// send the client to /sign-in, where this middleware refreshes successfully,
+// sees a valid user, and forwards to /dashboard — where the S131 guard bounces
+// her back to /portal. A client left alone for a week would ping-pong.
+//
+// Nothing else about /portal changes here: the dashboard-role guard, the
+// billing redirect and the unauthenticated redirect are all scoped to
+// `/dashboard` and never see it. The trial lock DOES apply, and should: a
+// locked tenant's client portal going dark is the correct behaviour, and
+// `/locked` explains it.
+//
 // ⚠️ ADDING /api HERE IS A REAL COST AND A DELIBERATE TRADE. Every API request
 // now runs getUser() plus one `is_my_company_locked()` RPC. The alternative was
 // an opt-in helper called from each route, which is a list someone forgets to
@@ -268,6 +281,8 @@ export const config = {
     '/dashboard/:path*',
     '/m',
     '/m/:path*',
+    '/portal',
+    '/portal/:path*',
     '/sign-in',
     '/sign-up',
     '/locked',

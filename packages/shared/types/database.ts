@@ -1059,8 +1059,10 @@ export type Database = {
           signature_data: string | null
           signature_type: string | null
           signed_at: string | null
+          signer_channel: string | null
           signer_ip: string | null
           signer_name: string | null
+          signer_profile_id: string | null
           signer_user_agent: string | null
           status: string
           token: string
@@ -1081,8 +1083,10 @@ export type Database = {
           signature_data?: string | null
           signature_type?: string | null
           signed_at?: string | null
+          signer_channel?: string | null
           signer_ip?: string | null
           signer_name?: string | null
+          signer_profile_id?: string | null
           signer_user_agent?: string | null
           status?: string
           token: string
@@ -1103,8 +1107,10 @@ export type Database = {
           signature_data?: string | null
           signature_type?: string | null
           signed_at?: string | null
+          signer_channel?: string | null
           signer_ip?: string | null
           signer_name?: string | null
+          signer_profile_id?: string | null
           signer_user_agent?: string | null
           status?: string
           token?: string
@@ -1123,6 +1129,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "co_signing_sessions_signer_profile_id_fkey"
+            columns: ["signer_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -5524,6 +5537,7 @@ export type Database = {
       projects: {
         Row: {
           actual_end_date: string | null
+          cancelled_at: string | null
           change_order_sequence: number
           company_id: string
           contact_address_id: string | null
@@ -5555,6 +5569,7 @@ export type Database = {
         }
         Insert: {
           actual_end_date?: string | null
+          cancelled_at?: string | null
           change_order_sequence?: number
           company_id?: string
           contact_address_id?: string | null
@@ -5586,6 +5601,7 @@ export type Database = {
         }
         Update: {
           actual_end_date?: string | null
+          cancelled_at?: string | null
           change_order_sequence?: number
           company_id?: string
           contact_address_id?: string | null
@@ -7901,8 +7917,46 @@ export type Database = {
           unread_count: number
         }[]
       }
+      client_document_visible: { Args: { p_status: string }; Returns: boolean }
+      client_has_full_access: { Args: never; Returns: boolean }
+      client_invoice_sections: {
+        Args: { p_invoice_id: string }
+        Returns: {
+          billed_subtotal: number
+          category: string
+          invoice_id: string
+        }[]
+      }
+      client_proposals: {
+        Args: { p_project_id: string }
+        Returns: {
+          accepted_at: string
+          contract_type: string
+          declined_at: string
+          estimate_number: string
+          expires_at: string
+          grand_total: number
+          id: string
+          name: string
+          sent_at: string
+          status: string
+          viewed_at: string
+        }[]
+      }
+      client_schedule: {
+        Args: { p_project_id: string }
+        Returns: {
+          due_date: string
+          id: string
+          phase_name: string
+          project_id: string
+          start_date: string
+          status: string
+          title: string
+        }[]
+      }
       client_window_open: {
-        Args: { p_actual_end: string; p_status: string }
+        Args: { p_actual_end: string; p_cancelled_at: string; p_status: string }
         Returns: boolean
       }
       clone_estimate: {
@@ -8026,10 +8080,12 @@ export type Database = {
       is_my_recent_segment: { Args: { p_segment_id: string }; Returns: boolean }
       is_platform_admin: { Args: never; Returns: boolean }
       is_project_creator: { Args: { p_project_id: string }; Returns: boolean }
+      may_enter_client_thread: { Args: never; Returns: boolean }
       member_profile_role: { Args: { p_member_id: string }; Returns: string }
       my_assigned_site_address_ids: { Args: never; Returns: string[] }
       my_client_access_level: { Args: never; Returns: string }
       my_client_site_address_ids: { Args: never; Returns: string[] }
+      my_company_id_flat: { Args: never; Returns: string }
       next_co_number: { Args: { p_project_id: string }; Returns: string }
       next_estimate_number: { Args: never; Returns: string }
       next_invoice_number: { Args: never; Returns: string }

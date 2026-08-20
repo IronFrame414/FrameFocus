@@ -291,14 +291,38 @@ describe('D — contact_addresses: the SITE address only', () => {
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-describe('E — stage 1 grants identity and NOTHING ELSE', () => {
-  // A regression guard for stages 2 and 3. Each of these becomes a real grant
-  // later, deliberately and one at a time; until then a non-zero count here
-  // means something opened that nobody decided to open.
-  const CLOSED = ['files', 'invoices', 'change_orders', 'projects', 'daily_logs', 'punch_lists'];
+describe('E — what stage 1 did NOT grant, as amended by stages 3 and 3b', () => {
+  // ⚠️ INVERTED AT S164 STAGE 3, NOT DELETED. `CLAUDE.md` — "a fix session must
+  // sweep for EXISTING tests that encode the behaviour it is overturning".
+  //
+  // _Superseded, quoted rather than rewritten:_ this block read
+  // **"E — stage 1 grants identity and NOTHING ELSE"** and asserted
+  // `toHaveLength(0)` over
+  // `['files','invoices','change_orders','projects','daily_logs','punch_lists']`.
+  //
+  // Four of those six were opened ON PURPOSE by `20261019000000` and
+  // `20261020000000`, under R14 and the S164 counterparty ruling. **The other
+  // two kept passing** — which is the S157 shape exactly: a file that reads
+  // healthy on a third of its cases while its TITLE asserts the opposite of a
+  // shipped rule. The four moved to `s164-m9-read-arms.live.ts` and
+  // `s164-m9-financial-arms.live.ts`, where each is proved as a GRANT with its
+  // own counterfactual rather than as an absence.
+  //
+  // What remains here is the part that was never overturned, plus the arms
+  // stage 3 deliberately declined to open. Each entry names its authority, so
+  // the next session to open one has to disagree with a citation.
+  const CLOSED: [string, string][] = [
+    ['daily_logs', 'R14 — NO, and it stayed NO'],
+    ['punch_lists', 'R14 — NO, and it stayed NO'],
+    ['tasks', '20261019000000 §3 — RLS cannot hide a column; the schedule is a projection'],
+    ['schedule_entries', 'R14 — no assignments, no crew'],
+    ['estimates', '20261020000000 §5 — internal_notes, and estimate_sub_bids by containment'],
+    ['co_signing_sessions', "20261020000000 §6 — S163's M5-01 floor, not re-opened"],
+    ['project_budget_amounts', '20261020000000 §6 — the internal budget is not her budget'],
+  ];
 
-  for (const table of CLOSED) {
-    it(`E — linked client still reads 0 from ${table}`, async () => {
+  for (const [table, why] of CLOSED) {
+    it(`E — linked client still reads 0 from ${table} (${why})`, async () => {
       const { data, error } = await linked.from(table).select('id');
       expect(error).toBeNull();
       expect(data ?? [], `${table} opened without a ruling`).toHaveLength(0);

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DASHBOARD_ROLES, ROLE_HIERARCHY, type CompanyRole } from '@framefocus/shared';
 import {
@@ -14,6 +15,7 @@ import {
 // RULING A [Josh, S131] — DASHBOARD_ROLES, enforced.
 // ============================================================================
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf8');
 
 describe('the predicate agrees with the constant', () => {
@@ -80,11 +82,50 @@ describe('D-54 — hidden AND route-guarded, in both seats', () => {
     );
   });
 
-  it('the placeholder reads no data and names no company', () => {
-    const page = read('../app/client-placeholder/page.tsx');
-    expect(page).not.toContain('supabase');
-    expect(page).not.toContain("from('companies')");
-    expect(page).not.toContain('createClient');
+  // ⚠️ INVERTED AT S164, NOT DELETED. `CLAUDE.md` — a fix session must sweep for
+  // existing tests that encode the behaviour it is overturning.
+  //
+  // _Superseded, quoted rather than rewritten:_
+  //
+  //   it('the placeholder reads no data and names no company', () => {
+  //     const page = read('../app/client-placeholder/page.tsx');
+  //     expect(page).not.toContain('supabase');
+  //     expect(page).not.toContain("from('companies')");
+  //     expect(page).not.toContain('createClient');
+  //   });
+  //
+  // Both halves were TRUE OF A HOLDING PAGE and are FALSE OF A PORTAL, on
+  // purpose. The portal reads data (that is what it is for) and R20 requires it
+  // to name the company — *"branding swaps only after authentication."*
+  //
+  // The property that survives is the one §11 actually protects: **no tenant
+  // identity before a session.** That is now guaranteed by SHAPE rather than by
+  // absence, and these three assertions are what pin the shape.
+  describe('the portal replaced the placeholder, and R20 holds by construction', () => {
+    it('the guard points at /portal, and the holding page is gone', () => {
+      expect(CLIENT_PLACEHOLDER_PATH).toBe('/portal');
+      expect(existsSync(resolve(__dirname, '../app/client-placeholder'))).toBe(false);
+      expect(existsSync(resolve(__dirname, '../app/portal/layout.tsx'))).toBe(true);
+    });
+
+    it('⚠️ the layout redirects an unauthenticated caller BEFORE any company read', () => {
+      // If a company query could run first, a signed-out visitor could be
+      // served a tenant's name from a cached render. The order is the property.
+      const layout = read('../app/portal/layout.tsx');
+      const redirectAt = layout.indexOf("redirect('/sign-in?next=%2Fportal')");
+      expect(redirectAt).toBeGreaterThan(-1);
+      expect(layout).not.toContain("from('companies')");
+    });
+
+    it('⚠️ the shell TAKES branding as a prop and names no product', () => {
+      // It cannot invent a company name, so it cannot leak one; and R20 says
+      // the company's identity REPLACES the product's rather than joining it.
+      const shell = read('../app/portal/portal-shell.tsx');
+      expect(shell).not.toContain("from('companies')");
+      expect(shell).not.toContain('createClient');
+      expect(shell).not.toContain('@/lib/brand');
+      expect(shell).toContain('branding');
+    });
   });
 });
 

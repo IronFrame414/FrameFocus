@@ -1,11 +1,34 @@
 import type { MetadataRoute } from 'next';
 import { brand } from '@/lib/brand';
 
-// M6M §7.1 — the PWA manifest.
+// M6M §7.1 — the PWA manifest. The FIELD CREW's, and it is unchanged.
 //
-// Next serves this at /manifest.webmanifest and injects the
-// <link rel="manifest"> itself. Do NOT hand-write that link in layout.tsx;
-// two manifest links is a spec violation and browsers pick unpredictably.
+// ---------------------------------------------------------------------------
+// ⚠️ MOVED OUT OF `app/manifest.ts` AT S164, AND THE CONTENT IS BYTE-IDENTICAL
+// ---------------------------------------------------------------------------
+// _Superseded, quoted rather than deleted:_
+//
+//   "Next serves this at /manifest.webmanifest and injects the
+//    <link rel='manifest'> itself. Do NOT hand-write that link in layout.tsx;
+//    two manifest links is a spec violation and browsers pick unpredictably."
+//
+// Both sentences were true and the FIRST one is why M9 could not give the
+// client portal its own manifest. **Measured, not reasoned about**: a nested
+// layout exporting `metadata.manifest` had its `title` honoured and its
+// `manifest` IGNORED — the served page still linked `/manifest.webmanifest`.
+// Next collects the manifest FILE CONVENTION only at the app root and applies
+// it AFTER the metadata chain, so nothing nested can override it.
+//
+// So the file convention is gone and the same object is now served by
+// `app/manifest.webmanifest/route.ts` at **the same URL, with the same
+// content-type and the same bytes**, linked from the root layout's
+// `metadata.manifest`. A field user's installed app cannot tell the difference:
+// `start_url` is still `/m`.
+//
+// The rule the superseded comment states still holds and is now enforced from
+// the other end — the LINK is emitted by `metadata.manifest` (root layout for
+// crew, `app/portal/layout.tsx` for the portal), never hand-written, so exactly
+// one is emitted per page.
 //
 // ---------------------------------------------------------------------------
 // EVERY BRAND VALUE IS IMPORTED. NONE IS A LITERAL. (§7.1)
@@ -36,7 +59,7 @@ import { brand } from '@/lib/brand';
 // Ruled [Josh, S98]: indigo lives ONLY in the app-icon artwork. The tile will
 // not match the app bar, and is not supposed to. Do not reconcile them.
 
-export default function manifest(): MetadataRoute.Manifest {
+export function crewManifest(): MetadataRoute.Manifest {
   return {
     name: brand.name,
     short_name: brand.shortName,

@@ -383,14 +383,60 @@ describe('S162-F — the M6 guarantees that hold', () => {
     // helper — and is then filtered by `kind`. The separation is role-AWARE and
     // the helper's blindness is a precondition for it, not a hole.
     //
-    // ⚠️ CHAT IS EMPTY ON REBUILD-TEST (0 threads, 0 messages), so this asserts
-    // the POLICY SHAPE from pg_policies rather than probing rows. A row probe
-    // here would pass vacuously.
-    const { data: threads } = await admin.from('chat_threads').select('id');
-    expect(
-      (threads ?? []).length,
-      'chat now has rows — replace this shape assertion with a real probe'
-    ).toBe(0);
+    // ⚠️ UPGRADED TO A REAL PROBE [S164], WHICH IS WHAT THIS TEST ASKED FOR.
+    // _Superseded, quoted rather than deleted:_
+    //
+    //   // ⚠️ CHAT IS EMPTY ON REBUILD-TEST (0 threads, 0 messages), so this
+    //   // asserts the POLICY SHAPE from pg_policies rather than probing rows.
+    //   const { data: threads } = await admin.from('chat_threads').select('id');
+    //   expect((threads ?? []).length,
+    //     'chat now has rows — replace this shape assertion with a real probe'
+    //   ).toBe(0);
+    //
+    // M9 R11 put rows in `chat_threads`, so the precondition is gone and the
+    // assertion it stood on — "there are zero threads" — became a statement
+    // about the fixture rather than about the policy. The instruction in its own
+    // failure message is followed here.
+    const { data: subProfile } = await admin
+      .from('profiles').select('id, company_id')
+      .eq('email', 'josh+qa-sub@worthprop.com').eq('is_deleted', false).single();
+    const subCompany = (subProfile as { company_id: string }).company_id;
+
+    // A project the sub is assigned to, so `can_view_project` passes and the
+    // filtering that remains is `kind` alone — which is the thing under test.
+    const { data: assignment } = await admin
+      .from('project_assignments')
+      .select('project_id, company_members!inner(profile_id)')
+      .eq('company_members.profile_id', (subProfile as { id: string }).id)
+      .eq('is_deleted', false)
+      .order('project_id')
+      .limit(1)
+      .maybeSingle();
+    expect(assignment, 'the sub is assigned to nothing — F1 would be vacuous').toBeTruthy();
+    const projectId = (assignment as unknown as { project_id: string }).project_id;
+
+    const owner = await sessionFor('josh+test50@worthprop.com');
+    const ensure = async (kind: 'crew' | 'sub') => {
+      const { data: found } = await admin
+        .from('chat_threads').select('id')
+        .eq('project_id', projectId).eq('kind', kind).maybeSingle();
+      if (found) return (found as { id: string }).id;
+      const { data } = await owner
+        .from('chat_threads').insert({ project_id: projectId, kind }).select('id').single();
+      return (data as { id: string }).id;
+    };
+    const crewThreadId = await ensure('crew');
+    const subThreadId = await ensure('sub');
+
+    const sub = await sessionFor('josh+qa-sub@worthprop.com');
+    const { data: visible } = await sub
+      .from('chat_threads').select('id, kind').eq('company_id', subCompany);
+    const ids = ((visible ?? []) as { id: string }[]).map((r) => r.id);
+
+    expect(ids, 'a subcontractor could not see the SUB thread — the probe is inverted')
+      .toContain(subThreadId);
+    expect(ids, 'a subcontractor read the CREW thread').not.toContain(crewThreadId);
+    for (const t of (visible ?? []) as { kind: string }[]) expect(t.kind).toBe('sub');
   });
 
   it('F2 — notifications, push and chat_reads are all scoped to the caller’s own profile', async () => {

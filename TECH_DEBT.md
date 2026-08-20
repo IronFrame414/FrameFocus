@@ -133,6 +133,92 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
   **Belongs to the M7 pass** (cost/financial surface).
 
+- **#3-m9 — the Financial Visibility Floor gates `project_financials.contract_value` and leaves
+  the SAME FIGURE readable on `client_contracts`. A CREW MEMBER reads it today.** Raised S164
+  (2026-08-19), while building M9 stage 4.
+
+  ```
+  client_contracts_select_visible  SELECT
+    company_id = get_my_company_id()
+    AND get_my_role() <> ALL (ARRAY['subcontractor','client'])   <- everyone else is in
+    AND can_view_project(project_id)
+  ```
+
+  `client_contracts.contract_value` is a real column with real values, and the policy admits
+  **project_manager, foreman and crew_member** on any project they are assigned to.
+
+  **Confirmed live, with rows.** Signed in as the seeded QA identities against rebuild-test:
+
+  | Identity | `client_contracts.contract_value` | `project_financials.contract_value` |
+  | --- | --- | --- |
+  | `josh+crew@worthprop.com` | **213854.10, 12345** | `[]` |
+  | `josh+qa-foreman@worthprop.com` | **12345** | `[]` |
+  | `josh+pm@worthprop.com` | **7860, 12365, 213854.10, 12345** | `[]` |
+
+  `project_financials` is correctly floored for all three — which is the point. **The floor works
+  on the table `CLAUDE.md` names and does not exist on the second copy.**
+
+  ⚠️ **`CLAUDE.md`'s enforcement table says "Contract value … DB-enforced, Owner/Admin" and cites
+  `20260811000000`.** That is true of `project_financials` and false of the platform: S123 was
+  burned by exactly this shape on `change_orders`, where the documented policy and the live one had
+  diverged. Here the two policies never diverged — there are simply **two homes for one figure**,
+  and only one of them was ever floored.
+
+  **NOT fixed here, deliberately.** The obvious fix — floor `client_contracts` to owner/admin —
+  changes who can work with a contract, and 7I's authoring flow admits a PM. It needs a ruling, not
+  a policy edit, and it is not M9's: M9 only touched the CLIENT arm on this table, which is
+  correctly scoped and is proved by `s164-m9-read-arms.live.ts` ARM 2.
+
+  **The client reading it is NOT part of this finding and is correct** — it is her contract, and
+  `CLAUDE.md`'s S164 ruling puts the counterparty outside the Floor. The exposure is to **staff**.
+
+  **Belongs to the M7 pass** (Financial Visibility Floor), with 7I as the affected surface.
+
+- **#4-m9 — 🔴 FIXED HERE, and filed so the SHAPE is on record: the change-order signature was
+  IMPOSSIBLE for ten days and no test noticed.** Raised and closed S164 (2026-08-19).
+
+  `enforce_change_order_immutability()` (`20260809000000` §1) froze `signed_at` on any CO that had
+  left draft. `completeCoSignature()` — the only writer of a client signature — does
+  `update({ status: 'signed', signed_at })` on a CO whose status is `sent`. `OLD.signed_at` is NULL,
+  `NEW.signed_at` is a timestamp, so **the first stamp was refused with the message written for a
+  rewrite**: *"A signature stamp cannot be rewritten."* `/sign-co/[token]` returned 409 to every
+  client who clicked Sign.
+
+  **Confirmed three ways before the fix was written**, and the second is the one worth keeping:
+
+  1. The exact write was attempted against a live `sent` CO and refused, by name.
+  2. **Every `signed` change order in the database predates 2026-08-09.** The newest is 2026-07-31
+     — the migration's own date is the cut-off. Nothing has been signed since it shipped.
+  3. The trigger permitted `status = 'signed'` on its own and forbade only the timestamp. A CO could
+     be marked signed with no record of when, and could not be marked signed with one.
+
+  **Why the suite did not catch it, which is the transferable part.**
+  `s123-co-signed-notify.live.ts` INSERTs a row with `status: 'signed'` directly and asserts the
+  notifications. `s97ct-floor3.live.ts` **1c** asserts the trigger's refusal of a REWRITE and passes
+  correctly. **The suite covered the rule and it covered the consequence. Nothing covered the act
+  between them** — no test had ever called `completeCoSignature`.
+
+  Fixed by `20261022000000_co_signature_stamp_fix.sql`: the first stamp is allowed on the transition
+  into `signed`, a rewrite is still refused, and a stamp without the status is refused. Regression
+  guard: `s164-m9-client-writes.live.ts` **W8a/W8b/W8c**, plus **W7** which signs an actual change
+  order end-to-end through the portal.
+
+- **#5-m9 — two live tests pick a fixture with an unordered `limit(1)` and depend on which row they
+  get.** Raised S164 (2026-08-19), both repaired in the same session.
+
+  | Test | Picked | Why it mattered |
+  | --- | --- | --- |
+  | `s143-void-authority` | the first `project_assignments` row in the company, any member's | its own comment says the project must be one **the PM** is assigned to. It landed on an owner-only assignment and took V0/V1/V2/V4 red **on visibility** — the exact confusion the comment exists to prevent. |
+  | `s163-m5-m6-fixes` **D3** | the first `time_segments` row | `audit_time_segment_edit()` writes **no log** when the editor is the segment's own member. On a run that picked one of the owner's own segments it failed with *"the audit trigger stopped firing — M6-02 broke the audit trail"* — announcing a broken audit trail while the trigger worked as specified. |
+
+  **D3 destabilises its own fixture**: it rewrites the segment's note, which moves the row, so the
+  next run's unordered pick is a different one. Both now filter to a row that satisfies the test's
+  own premise and order deterministically.
+
+  ⚠️ **Not necessarily the last two.** `.limit(1)` without `.order()` returns rows in physical order,
+  which changes with any UPDATE anywhere in the table. A sweep of the live harnesses for
+  `.limit(1)` with no `.order()` is worth doing as its own pass.
+
 ### Branch-scoped, awaiting real numbers — `feature/s150-audit-fixes` [S150]
 
 > Provisional ids per the S136 rule: never allocate a bare `#N` on a branch.

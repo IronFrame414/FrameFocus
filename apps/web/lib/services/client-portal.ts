@@ -2,6 +2,11 @@ import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
 import { applied, DISCARDED } from '@/lib/services/mutation-result';
+import {
+  CLIENT_ACCESS_STATES,
+  type ClientAccessState,
+  type PortalAccountRow,
+} from './client-portal-shared';
 
 /**
  * Module 9 stage 2 — the client portal's invite path and its three termination
@@ -21,23 +26,20 @@ import { applied, DISCARDED } from '@/lib/services/mutation-result';
  * and every test would still pass.
  */
 
-/** R17's three states, plus the default. Mirrors the CHECK on the column. */
-export const CLIENT_ACCESS_STATES = [
-  'active',
-  'deactivated',
-  'signed_documents_only',
-  'documents_for_signature',
-] as const;
-
-export type ClientAccessState = (typeof CLIENT_ACCESS_STATES)[number];
-
-/** Human labels, so the three states read the way R17 words them. */
-export const CLIENT_ACCESS_STATE_LABELS: Record<ClientAccessState, string> = {
-  active: 'Full portal access',
-  deactivated: 'Fully deactivated',
-  signed_documents_only: 'Signed documents only',
-  documents_for_signature: 'Documents sent for signature, signed or not',
-};
+// ⚠️ THE STATES AND THEIR LABELS MOVED TO `client-portal-shared.ts` [S164
+// stage 4] and are RE-EXPORTED here so every existing import keeps working.
+//
+// They had to move: this file is `server-only`, and stage 4's dashboard control
+// is a `'use client'` component that needs the same four values and the same
+// four words. Retyping them in the component is the CLAUDE.md PARITY failure in
+// miniature — two lists that agree today, one of which is the one a CHECK
+// constraint actually enforces.
+export {
+  CLIENT_ACCESS_STATES,
+  CLIENT_ACCESS_STATE_LABELS,
+  type ClientAccessState,
+  type PortalAccountRow,
+} from './client-portal-shared';
 
 export interface PortalInviteResult {
   success: boolean;
@@ -272,4 +274,86 @@ export async function getClientAccessEvents(
 
   if (error) throw error;
   return (data ?? []) as ClientAccessEvent[];
+}
+
+/**
+ * Stage 4 — what the dashboard needs in order to render the portal controls.
+ *
+ * ⚠️ A CONTACT WITH NO ACCOUNT AND A CONTACT WITH A DEACTIVATED ACCOUNT ARE NOT
+ * THE SAME ROW, AND THE SCREEN MUST NOT OFFER THE SAME BUTTON FOR BOTH.
+ * `inviteClientToPortal()` already refuses the second case with a sentence that
+ * names the remedy — *"change their access state to restore it rather than
+ * sending a new invite"* — but a screen that offers "Invite" and then explains
+ * why it did not work is a screen that wasted the click. This is what lets the
+ * panel offer the right control the first time.
+ */
+export async function getPortalAccountsForProject(
+  supabase: SupabaseClient<Database>,
+  projectId: string
+): Promise<PortalAccountRow[]> {
+  // Client-type contacts on this project: the project's own `contact_id` plus
+  // anything in `project_contacts`. Both arms, because `is_client_of_project()`
+  // honours both and a panel that showed only one would hide half the people
+  // who can be invited.
+  const [projectRes, junctionRes] = await Promise.all([
+    supabase.from('projects').select('contact_id').eq('id', projectId).maybeSingle(),
+    supabase
+      .from('project_contacts')
+      .select('contact_id')
+      .eq('project_id', projectId)
+      .eq('is_deleted', false),
+  ]);
+
+  const ids = new Set<string>();
+  const projectContactId = (projectRes.data as { contact_id: string | null } | null)?.contact_id;
+  if (projectContactId) ids.add(projectContactId);
+  for (const r of (junctionRes.data ?? []) as { contact_id: string }[]) ids.add(r.contact_id);
+  if (ids.size === 0) return [];
+
+  const { data: contacts } = await supabase
+    .from('contacts')
+    .select('id, first_name, last_name, email, contact_type, is_deleted')
+    .in('id', [...ids]);
+
+  const rows = ((contacts ?? []) as {
+    id: string;
+    first_name: string | null;
+    last_name: string | null;
+    email: string | null;
+    contact_type: string;
+    is_deleted: boolean | null;
+  }[]).filter((c) => !c.is_deleted && c.contact_type === 'client');
+
+  if (rows.length === 0) return [];
+
+  const { data: accounts } = await supabase
+    .from('profiles')
+    .select('id, contact_id, client_access_state')
+    .in('contact_id', rows.map((r) => r.id))
+    .eq('is_deleted', false);
+
+  const byContact = new Map<string, { id: string; state: ClientAccessState }>();
+  for (const a of (accounts ?? []) as {
+    id: string;
+    contact_id: string | null;
+    client_access_state: string;
+  }[]) {
+    if (a.contact_id) {
+      byContact.set(a.contact_id, {
+        id: a.id,
+        state: a.client_access_state as ClientAccessState,
+      });
+    }
+  }
+
+  return rows.map((c) => {
+    const account = byContact.get(c.id);
+    return {
+      contactId: c.id,
+      contactName: `${c.first_name ?? ''} ${c.last_name ?? ''}`.trim() || 'Client',
+      email: c.email,
+      profileId: account?.id ?? null,
+      state: account?.state ?? null,
+    };
+  });
 }

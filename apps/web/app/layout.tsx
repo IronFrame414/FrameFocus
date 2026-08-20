@@ -26,9 +26,27 @@ export const metadata: Metadata = {
 
   // M6M §7.2 — home-screen install assets.
   //
-  // The <link rel="manifest"> is NOT here: app/manifest.ts is a file
-  // convention and Next injects that link itself. Adding it here too would
-  // emit two.
+  // ⚠️ THE MANIFEST LINK IS HERE NOW [S164]. _Superseded, quoted rather than
+  // deleted:_ "The <link rel='manifest'> is NOT here: app/manifest.ts is a file
+  // convention and Next injects that link itself. Adding it here too would emit
+  // two."
+  //
+  // The file convention is gone — it is collected only at the app root and
+  // applied AFTER the metadata chain, so nothing nested could override it, and
+  // M9's client portal needs its own (`app/portal/layout.tsx`). Measured before
+  // changing anything: a nested layout's `title` overrode and its `manifest`
+  // did not.
+  //
+  // The rule the old comment protects is unchanged and is still enforced —
+  // exactly ONE link per page, emitted by `metadata.manifest`, never
+  // hand-written in JSX. This is the crew/default one; `/portal` replaces it
+  // for its own subtree.
+  //
+  // Verified after the change, not assumed: the served document is
+  // byte-identical, the content-type and cache-control headers match, and Next
+  // still emits `crossorigin="use-credentials"` on the link. A field user's
+  // installed app cannot tell the difference — `start_url` is still `/m`.
+  manifest: '/manifest.webmanifest',
   //
   // NO favicon.ico EXISTS. Next's automatic favicon handling keys off
   // app/favicon.ico specifically, so with none present nothing is emitted by

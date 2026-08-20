@@ -35,7 +35,8 @@ import { expect, type Page } from '@playwright/test';
 /** Where this identity ends up after a successful sign-in on a desktop UA. */
 export function landingFor(email: string): RegExp {
   if (email.includes('qa-sub')) return /\/m\/projects/;
-  if (email.includes('qa-client')) return /\/client-placeholder/;
+  // [S164] `/client-placeholder` is deleted; M9 stage 4 built `/portal`.
+  if (email.includes('qa-client')) return /\/portal/;
   return /\/dashboard/;
 }
 

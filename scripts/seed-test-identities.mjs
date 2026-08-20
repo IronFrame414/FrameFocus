@@ -956,6 +956,387 @@ for (const email of [CLIENT_LINKED_EMAIL, CLIENT_EMAIL, CLIENT_CLOSED_EMAIL]) {
 note('M9 lifecycle fixtures', 'exists',
   `closedProject=${closedProjectId} closedContact=${closedContactId} noEmailContact=${noEmailContactId}`);
 
+// ── M9 stage 3 [S164] — READ-SURFACE FIXTURES ───────────────────────────────
+//
+// Every client read arm needs BOTH halves present, or its probe passes for the
+// wrong reason:
+//
+//   the row she MAY see      -> proves the arm grants
+//   a row she MAY NOT see    -> proves the arm is an arm and not an open door
+//
+// A probe against an empty table passes vacuously, and 4 of the 5 existing
+// fixture files had no storage object at all — so a storage assertion against
+// them would have proved nothing either.
+console.log('\nM9 stage 3 — read-surface fixtures:');
+
+// ⚠️ REAL STORAGE OBJECTS, NOT JUST `files` ROWS. The markup-derivative branch
+// of the storage policy is the one thing that cannot be tested without bytes in
+// the bucket: an annotated photo is ONE `files` row plus a flattened derivative
+// at `<path>.markup.jpg` with NO row of its own, so a policy missing that branch
+// serves the row and 403s the image. That failure looks like a broken image
+// rather than a policy gap, which is exactly why it is fixtured.
+const ONE_PX_JPEG = Buffer.from(
+  '/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB' +
+    'AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEB/8AACwgAAQABAQERAP/EABQAAQAAAAAAAAAA' +
+    'AAAAAAAAAAr/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oACAEBAAA/AD8A/9k=',
+  'base64'
+);
+
+async function ensureObject(path, bytes) {
+  const { data: existing } = await db.storage
+    .from('project-files')
+    .list(path.split('/').slice(0, -1).join('/'), { search: path.split('/').pop() });
+  if (existing?.length) {
+    note(`storage object ${path.split('/').pop()}`, 'exists', `${bytes.length}b`);
+    return;
+  }
+  const { error } = await db.storage
+    .from('project-files')
+    .upload(path, bytes, { contentType: 'image/jpeg', upsert: true });
+  must(`upload ${path}`, error);
+  note(`storage object ${path.split('/').pop()}`, 'CREATED', `${bytes.length}b`);
+}
+
+const visiblePhotoPath = `${companyA.id}/${aProjectId}/qa-m9-visible.jpg`;
+const hiddenPhotoPath = `${companyA.id}/${aProjectId}/qa-m9-hidden.jpg`;
+
+await ensureObject(visiblePhotoPath, ONE_PX_JPEG);
+// The derivative. Deterministic path, exactly as `saveMarkup()` writes it.
+await ensureObject(`${visiblePhotoPath}.markup.jpg`, ONE_PX_JPEG);
+await ensureObject(hiddenPhotoPath, ONE_PX_JPEG);
+
+const visibleFileId = await ensureRow(
+  'client-VISIBLE photo', 'files',
+  { company_id: companyA.id, file_path: visiblePhotoPath },
+  {
+    company_id: companyA.id, project_id: aProjectId, category: 'photos',
+    file_name: 'qa-m9-visible.jpg', file_path: visiblePhotoPath,
+    file_size: ONE_PX_JPEG.length, mime_type: 'image/jpeg',
+    client_visible: true, markup_data: { shapes: [] },
+  }
+);
+const hiddenFileId = await ensureRow(
+  'client-HIDDEN photo (must stay hidden)', 'files',
+  { company_id: companyA.id, file_path: hiddenPhotoPath },
+  {
+    company_id: companyA.id, project_id: aProjectId, category: 'photos',
+    file_name: 'qa-m9-hidden.jpg', file_path: hiddenPhotoPath,
+    file_size: ONE_PX_JPEG.length, mime_type: 'image/jpeg',
+    client_visible: false,
+  }
+);
+// Re-asserted every run: the flags ARE the test, and a stray edit to either one
+// silently turns the pair into two identical halves.
+for (const [id, want, label] of [[visibleFileId, true, 'visible'], [hiddenFileId, false, 'hidden']]) {
+  const { data: f } = await db.from('files').select('client_visible').eq('id', id).single();
+  if (f.client_visible !== want) {
+    must(`reset client_visible(${label})`, (await db.from('files')
+      .update({ client_visible: want }).eq('id', id)).error);
+    note(`client_visible ${label}`, 'REPAIRED', String(want));
+  }
+}
+
+// A DRAFT of each document type. The existing fixtures are all non-draft, so
+// without these "the client cannot see drafts" would be untested.
+const ownerMemberIdA = await memberIdFor(aOwnerProfile.id);
+await ensureRow(
+  'DRAFT change order (client must not see)', 'change_orders',
+  { company_id: companyA.id, project_id: aProjectId, title: 'QA M9 — draft CO' },
+  {
+    company_id: companyA.id, project_id: aProjectId,
+    co_number: 'CO-QA-M9-DRAFT', title: 'QA M9 — draft CO',
+    co_type: 'fixed_price', author_member_id: ownerMemberIdA,
+    status: 'draft', pricing_mode: 'markup', net_delta: 1234.56,
+  }
+);
+// Idempotency repair. An earlier run created this CO already SENT, and the
+// immutability trigger then refuses to add its line for ever. Drop the row when
+// it is sent-but-lineless so the create-draft/add-line/flip sequence below can
+// run; a CO that already has its line is left alone.
+{
+  const { data: co } = await db
+    .from('change_orders').select('id, status')
+    .eq('company_id', companyA.id).eq('title', 'QA M9 — sent CO').maybeSingle();
+  if (co && co.status !== 'draft') {
+    const { count } = await db
+      .from('change_order_line_items')
+      .select('id', { count: 'exact', head: true })
+      .eq('change_order_id', co.id);
+    if (!count) {
+      must('drop lineless sent CO', (await db.from('change_orders').delete().eq('id', co.id)).error);
+      note('QA M9 — sent CO', 'REPAIRED', 'dropped (sent with no line) so it can be rebuilt as a draft');
+    }
+  }
+}
+
+await ensureRow(
+  'SENT change order (client must see)', 'change_orders',
+  { company_id: companyA.id, project_id: aProjectId, title: 'QA M9 — sent CO' },
+  {
+    company_id: companyA.id, project_id: aProjectId,
+    co_number: 'CO-QA-M9-SENT', title: 'QA M9 — sent CO',
+    co_type: 'fixed_price', author_member_id: ownerMemberIdA,
+    // ⚠️ CREATED AS A DRAFT and flipped below. `change_orders` has a trigger —
+    // "Lines of a sent change order are immutable — void and reissue instead" —
+    // so a line cannot be added after the flip. Seeding it sent would leave the
+    // line-item arm with no visible row to find.
+    status: 'draft', pricing_mode: 'markup', net_delta: 2345.67,
+  }
+);
+
+// A line on each CO. Without both, the line-item arm proves nothing: with only
+// a visible parent it cannot show the arm EXCLUDES anything, and with only a
+// draft parent it cannot show the arm GRANTS anything.
+for (const [coTitle, lineName] of [
+  ['QA M9 — sent CO', 'QA M9 line on the SENT co'],
+  ['QA M9 — draft CO', 'QA M9 line on the DRAFT co'],
+]) {
+  const { data: co } = await db
+    .from('change_orders').select('id')
+    .eq('company_id', companyA.id).eq('title', coTitle).maybeSingle();
+  if (!co) continue;
+  await ensureRow(
+    `line item — ${coTitle}`, 'change_order_line_items',
+    { change_order_id: co.id, name: lineName },
+    {
+      company_id: companyA.id, change_order_id: co.id,
+      name: lineName, sort_order: 1, total_price: 100,
+    }
+  );
+}
+
+// Now flip it, with its line already in place.
+{
+  const { data: co } = await db
+    .from('change_orders').select('id, status')
+    .eq('company_id', companyA.id).eq('title', 'QA M9 — sent CO').maybeSingle();
+  if (co && co.status !== 'sent') {
+    must('flip QA M9 CO to sent', (await db.from('change_orders')
+      .update({ status: 'sent' }).eq('id', co.id)).error);
+    note('QA M9 — sent CO', 'SENT', co.id);
+  }
+}
+
+await ensureRow(
+  'DRAFT client contract (client must not see)', 'client_contracts',
+  { company_id: companyA.id, project_id: aProjectId, status: 'draft' },
+  { company_id: companyA.id, project_id: aProjectId, status: 'draft' }
+);
+
+// A contract_document. `document_kind = 'client_contract'` requires an estimate
+// and forbids a sub_contract_id — enforced by a CHECK, so both are supplied.
+{
+  const { data: tmpl } = await db.from('contract_templates')
+    .select('id').eq('company_id', companyA.id).eq('document_kind', 'client_contract').limit(1).maybeSingle();
+  const { data: est } = await db.from('estimates')
+    .select('id').eq('company_id', companyA.id).limit(1).maybeSingle();
+  if (tmpl && est) {
+    await ensureRow(
+      'SENT contract document (client must see)', 'contract_documents',
+      { company_id: companyA.id, project_id: aProjectId, status: 'sent' },
+      {
+        company_id: companyA.id, project_id: aProjectId,
+        template_id: tmpl.id, estimate_id: est.id,
+        document_kind: 'client_contract', delivery_mode: 'esignature',
+        status: 'sent',
+      }
+    );
+  } else {
+    note('contract document fixture', 'WARN', 'no client_contract template or estimate — that arm will be vacuous');
+  }
+}
+
+note('M9 read fixtures', 'exists',
+  `visibleFile=${visibleFileId} hiddenFile=${hiddenFileId} markup=${visiblePhotoPath}.markup.jpg`);
+
+// ── M9 stage 3b [S164] — FINANCIAL FIXTURES ─────────────────────────────────
+//
+// ⚠️ THE PAIR HERE IS A PRESENTATION LEVEL, NOT AN IDENTITY. `presentation_level`
+// is the gate Josh ruled into the DATABASE, and a probe cannot see it work with
+// only one level present: every one of the 11 invoices that existed before this
+// block is `lump_sum`, so "the client reads no lines" was true of the whole
+// table and would have passed against a policy that granted everything.
+//
+// Three bills on the SAME project, differing only in that column:
+//   full_detail  -> lines readable, with cost_basis and unit_rate
+//   by_section   -> NO lines; section subtotals only
+//   lump_sum     -> NO lines; the total is the whole disclosure
+// plus a draft, which is not a bill at all.
+console.log('\nM9 stage 3b — financial fixtures:');
+
+// ⚠️ EVERY INVOICE IS CREATED AS A DRAFT AND FLIPPED. `invoice_lines_parent_open`
+// refuses a line whose parent invoice has left draft — the same trap as the CO
+// immutability trigger above, and it fails the same way: an invoice seeded
+// straight to `sent` is an invoice whose line arm can never be tested.
+async function ensureInvoice(label, { presentation, status, lines }) {
+  const { data: existing } = await db
+    .from('invoices').select('id, status, presentation_level')
+    .eq('company_id', companyA.id).eq('project_id', aProjectId).eq('title', label).maybeSingle();
+
+  let invoiceId = existing?.id;
+  if (!invoiceId) {
+    const billed = lines.reduce((n, l) => n + Number(l.billed_amount), 0);
+    const derived = lines.reduce((n, l) => n + Number(l.derived_amount ?? l.billed_amount), 0);
+    const { data, error } = await db.from('invoices').insert({
+      company_id: companyA.id, project_id: aProjectId, title: label,
+      author_member_id: ownerMemberIdA, invoice_type: 'standard',
+      status: 'draft', presentation_level: presentation,
+      issue_date: '2026-08-01', due_date: '2026-08-31',
+      derived_total: derived, billed_total: billed, amount_receivable: billed,
+      retainage_withheld: 0,
+    }).select('id').single();
+    must(`invoice ${label}`, error);
+    invoiceId = data.id;
+    note(`invoice ${label}`, 'CREATED', invoiceId);
+  } else {
+    note(`invoice ${label}`, 'exists', invoiceId);
+  }
+
+  for (const line of lines) {
+    await ensureRow(
+      `  line — ${label} / ${line.description}`, 'invoice_lines',
+      { invoice_id: invoiceId, description: line.description },
+      { company_id: companyA.id, invoice_id: invoiceId, ...line }
+    );
+  }
+
+  const { data: now } = await db.from('invoices').select('status').eq('id', invoiceId).single();
+  if (now.status !== status) {
+    must(`flip ${label} -> ${status}`,
+      (await db.from('invoices').update({ status }).eq('id', invoiceId)).error);
+    note(`invoice ${label}`, status.toUpperCase(), invoiceId);
+  }
+  return invoiceId;
+}
+
+// The instrument. T&M, so `unit_rate` on the labor line is an AGREED hourly
+// rate and not an arithmetic result — R7a names the agreed figure specifically.
+// It hangs off an estimate on HER project so the proposals arm has a subject too.
+const tmEstimateId = await ensureRow(
+  'M9 T&M estimate (her project)', 'estimates',
+  { company_id: companyA.id, estimate_number: 'EST-QA-M9' },
+  {
+    company_id: companyA.id, estimate_number: 'EST-QA-M9',
+    name: 'QA M9 — T&M proposal', project_id: aProjectId,
+    contact_id: fixtureContact.id, status: 'sent', contract_type: 'time_and_materials',
+    pricing_mode: 'markup', grand_total: 4200, sent_at: '2026-08-01T12:00:00Z',
+    created_by_role: 'owner',
+  }
+);
+// The counterfactual for the proposals arm: never sent, so never hers.
+await ensureRow(
+  'M9 UNSENT estimate (proposals arm must not return it)', 'estimates',
+  { company_id: companyA.id, estimate_number: 'EST-QA-M9-UNSENT' },
+  {
+    company_id: companyA.id, estimate_number: 'EST-QA-M9-UNSENT',
+    name: 'QA M9 — unsent proposal', project_id: aProjectId,
+    contact_id: fixtureContact.id, status: 'draft', contract_type: 'time_and_materials',
+    pricing_mode: 'markup', grand_total: 999, sent_at: null, created_by_role: 'owner',
+    internal_notes: 'QA M9 — internal, must never reach a client.',
+  }
+);
+
+const tmRateId = await ensureRow(
+  'M9 instrument rate — the AGREED $95/hr', 'instrument_rates',
+  { company_id: companyA.id, estimate_id: tmEstimateId, rate_type: 'tm_labor_hourly' },
+  {
+    company_id: companyA.id, estimate_id: tmEstimateId,
+    rate_type: 'tm_labor_hourly', rate: 95, effective_from: '2026-08-01',
+  }
+);
+
+// full_detail — she reads the lines, cost basis and all. §4.4's T&M shape:
+// what the company paid BESIDE what she is billed.
+const fullDetailInvoiceId = await ensureInvoice('QA M9 — full_detail bill', {
+  presentation: 'full_detail', status: 'sent',
+  lines: [
+    {
+      sort_order: 1, line_type: 'derived_labor', category: 'labor',
+      description: 'QA M9 labor (full_detail)', quantity: 10, unit_rate: 95,
+      cost_basis: 640, derived_amount: 950, billed_amount: 950,
+      instrument_rate_id: tmRateId,
+    },
+    {
+      sort_order: 2, line_type: 'derived_cost', category: 'material',
+      description: 'QA M9 material (full_detail)',
+      cost_basis: 500, derived_amount: 600, billed_amount: 600,
+    },
+  ],
+});
+
+// by_section — same two categories, and she must read NEITHER line. The
+// subtotals reach her through client_invoice_sections() instead.
+const bySectionInvoiceId = await ensureInvoice('QA M9 — by_section bill', {
+  presentation: 'by_section', status: 'sent',
+  lines: [
+    {
+      sort_order: 1, line_type: 'derived_labor', category: 'labor',
+      description: 'QA M9 labor (by_section)', quantity: 4, unit_rate: 95,
+      cost_basis: 260, derived_amount: 380, billed_amount: 380,
+    },
+    {
+      sort_order: 2, line_type: 'derived_cost', category: 'material',
+      description: 'QA M9 material (by_section)',
+      cost_basis: 100, derived_amount: 120, billed_amount: 120,
+    },
+  ],
+});
+
+// lump_sum — the opaque instrument. One line exists; she must never reach it.
+const lumpSumInvoiceId = await ensureInvoice('QA M9 — lump_sum bill', {
+  presentation: 'lump_sum', status: 'sent',
+  lines: [
+    {
+      sort_order: 1, line_type: 'fixed', category: 'other',
+      description: 'QA M9 lump sum (client must not see this line)',
+      cost_basis: 3000, derived_amount: 5000, billed_amount: 5000,
+    },
+  ],
+});
+
+// A draft bill. Not sent, therefore not a bill — and full_detail, so ONLY the
+// status filter can be what hides it.
+const draftInvoiceId = await ensureInvoice('QA M9 — draft bill', {
+  presentation: 'full_detail', status: 'draft',
+  lines: [{
+    sort_order: 1, line_type: 'fixed', category: 'other',
+    description: 'QA M9 draft line (client must not see this line)',
+    cost_basis: 10, derived_amount: 20, billed_amount: 20,
+  }],
+});
+
+// The claim rows. R8's counterfactual: these must exist, or "a client reads no
+// hour claims" is true of an empty table and proves nothing about the floor.
+{
+  // ⚠️ `member_id` and `work_date` are the CLAIM's own columns, not the
+  // segment's — `time_segments` carries neither (they hang off the session).
+  // The first version of this fixture selected them from `time_segments`,
+  // which fails as a silent `null` and left the R8 probe reading an empty
+  // table. Exactly the §2 vacuity trap, inside the fixture written to prevent it.
+  const { data: seg } = await db.from('time_segments')
+    .select('id').eq('company_id', companyA.id).eq('is_deleted', false).limit(1).maybeSingle();
+  const { data: laborLine } = await db.from('invoice_lines')
+    .select('id').eq('invoice_id', fullDetailInvoiceId)
+    .eq('description', 'QA M9 labor (full_detail)').maybeSingle();
+  if (seg && laborLine) {
+    await ensureRow(
+      'M9 hour claim (R8 — client must never read a crew name)', 'invoice_hour_claims',
+      { invoice_id: fullDetailInvoiceId, time_segment_id: seg.id },
+      {
+        company_id: companyA.id, invoice_id: fullDetailInvoiceId,
+        invoice_line_id: laborLine.id, time_segment_id: seg.id,
+        member_id: ownerMemberIdA, work_date: '2026-08-01', raw_hours: 8,
+      }
+    );
+  } else {
+    note('hour claim fixture', 'WARN',
+      `no ${seg ? 'labor line' : 'time_segments'} — the R8 probe would be VACUOUS`);
+  }
+}
+
+note('M9 financial fixtures', 'exists',
+  `full=${fullDetailInvoiceId} section=${bySectionInvoiceId} lump=${lumpSumInvoiceId} draft=${draftInvoiceId} rate=${tmRateId}`);
+
 // ── D-57 / D-58 punch fixtures — the three items the proof needs ────────────
 //
 // Permanent and idempotent so the migration proof is REPRODUCIBLE by anyone,

@@ -131,6 +131,28 @@ worse than no tests, because it reports as covered.
 > adding a client-readable document surface must consult it** — a state that is stored and never
 > read is worse than one that is absent, because the UI reports it as being in force.
 >
+> #### ✅ RESOLVED [Josh, S164] — cancellation runs its own 30-day clock
+>
+> **A cancelled project ends portal access 30 days after cancellation.** The clock starts the day
+> the user cancels, **not `actual_end_date`** — a cancelled project may never have one. **Two
+> windows now exist deliberately: completion 45, cancellation 30**, and `client_window_open()`
+> stays the only place either number is written.
+>
+> **Nothing recorded a cancellation date.** Surveyed before adding one: `projects` had no
+> cancellation column, no status-change log exists anywhere in the schema, and none of the three
+> triggers on `projects` captured it. ⚠️ **`updated_at` cannot stand in** — it looks right on a
+> project nobody has touched since, and silently extends a client's access every time a PM edits a
+> note. `projects.cancelled_at` is now captured by a trigger on the status transition rather than
+> by any writer, because a writer that forgets it grants indefinite access rather than failing.
+> **Zero cancelled projects existed platform-wide**, so there was no backfill.
+>
+> **⚠️ ARCHIVED IS UNCHANGED, and that is ruled rather than overlooked.** Stated plainly because it
+> reads as a bug otherwise: **a client whose project is archived keeps reading it indefinitely.
+> Archiving does not end portal access; only R17 does.** `complete` with no `actual_end_date` also
+> stays open, as shipped.
+>
+> <details><summary>The superseded OPEN item, quoted rather than deleted</summary>
+
 > #### ⚠️ OPEN — what counts as "completion", for `archived` and `cancelled`
 >
 > `projects.status` is one of `active` / `on_hold` / `complete` / `archived` / `cancelled`. R2 and
@@ -145,6 +167,8 @@ worse than no tests, because it reports as covered.
 > unambiguous date rather than on an inference this build invented. **Josh should rule whether a
 > cancelled project ends portal access, and whether it does so immediately or after the same 45
 > days.** `client_window_open()` is the single place that changes if it does.
+>
+> </details>
 
 **§S — identity storage. ✅ RESOLVED [Josh, S164 Q1]: `profiles.contact_id`, nullable + UNIQUE.**
 Client policy arms use the SECURITY DEFINER helpers `get_my_contact_id()`, `is_client_of_project()`
@@ -575,6 +599,122 @@ A mostly empty page with a line telling her the **project hasn't started yet.**
 | 6 | Notifications (R12) | push enrolment verified on a handset (§9.1) |
 | 7 | Payment (R19) | a live QB connection |
 | **—** | **Allowances (R21)** | **its own spec. See §8.1 — this is not a section, it is a sub-module, and its storage needs a ruling.** |
+
+> ### ⚠️ STAGES 2 AND 3 ARE ONE DATABASE CHANGE IN TWO PARTS — built [S164]
+>
+> The table above splits "read surfaces" from "the financial view", and that split does not survive
+> contact with RLS. **Every financial fact a client sees is a policy on a table she either can or
+> cannot read**, so the money half is not a rendering layer over stage 2 — it is more arms on the
+> same wall. Both shipped together:
+>
+> | Migration | Arms |
+> | --- | --- |
+> | `20261019000000_m9_client_read_arms.sql` | `projects`, `client_contracts`, `contract_documents`, `change_orders`, `change_order_line_items`, `files`, `storage.objects` (**incl. the markup-derivative branch**), and `client_schedule()` |
+> | `20261020000000_m9_client_financial_arms.sql` | `invoices`, `invoice_lines` (**RESTRICTIVE `presentation_level` gate**), `instrument_rates` (by containment), `client_invoice_sections()`, `client_proposals()`, and RESTRICTIVE closures on `invoice_cost_claims` / `invoice_hour_claims` |
+>
+> **The instrument is per-bill and there was never anywhere to write it otherwise.** Verified live:
+> **`projects` carries no contract-type column at all.** `contract_type` is on `estimates`, `co_type`
+> on `change_orders`, and `instrument_rates` CHECKs exactly one of `estimate_id` / `change_order_id`.
+> Josh's "a lump-sum contract can carry a T&M change order" is therefore not a case to handle — it is
+> the only shape the schema can express.
+>
+> **§4.3's "budgeted" does NOT resolve to `project_budget_amounts`, and that table stays closed.**
+> It is the company's internal per-project budget line, revised and re-forecast as the job runs; the
+> figure the client agreed is on the instrument she signed. See `20261020000000` §6.
+>
+> **Two surfaces in §5's list were deliberately NOT opened**: `co_signing_sessions` (S163's M5-01
+> floor — the portal signs through the service role, as `/sign-co/[token]` already does) and
+> `signing_sessions`. Proved shut, with rows present, in `s164-m9-financial-arms.live.ts` ARM 16.
+
+> ### STAGE 4 — the portal itself, built [S164]
+>
+> `app/portal/` replaces `/client-placeholder`, which is **deleted**. Its own header said Module 9
+> would delete it, and it refused to claim `/portal` while the Pre-Module 9 gate was open. R1 closed
+> the gate, so the name is claimed by ruling rather than by drift.
+>
+> **ONE PAGE PER PROJECT, NOT A TAB SET** — Josh, S164 Q3: *"In the portal, they see all of it on
+> one page and totals added."* Taken as an instruction. A tabbed portal would put each answer a
+> click away and would invite every tab to grow its own idea of what she may see.
+>
+> **The guard is symmetrical.** `dashboard-access.ts` keeps a client out of `/dashboard`;
+> `app/portal/layout.tsx` keeps everyone else out of `/portal`, reusing the same helper rather than
+> retyping a role list. Neither protects data — the arms do.
+>
+> **A deactivated client is LET IN and shown a true sentence.** Bouncing her to `/sign-in` would
+> loop (she has a valid session) and would tell her she is signed out, which is false. R17 empties
+> every arm either way; only the sentence differs.
+>
+> **§7.2's two services finally have a caller.** `inviteClientToPortal()` and
+> `setClientAccessState()` shipped at stage 2 with a live harness and **no user interface at all** —
+> R1 and R17 were true in the database and unreachable in the product. `POST /api/portal/invite`
+> now creates AND sends, through the same `sendInviteEmail()` the staff invite uses (its third
+> caller, not a second mechanism), and the project's Contacts tab carries the R17 control.
+>
+> ### STAGE 5 — the client writes, built [S164]
+>
+> **R11 REUSES `chat_threads`, as a third `kind`.** It already has the shape §7.2 asks for, down to
+> the detail that decides it: **one message with N photos attached** is "one unit, not two records".
+> A `client_messages` table would have been a second implementation of a thread.
+>
+> ⚠️ **AND ADDING A KIND SILENTLY WIDENS THE TWO THAT EXIST.** Every pre-existing chat SELECT policy
+> reads `kind = 'sub' OR get_my_role() IS DISTINCT FROM 'subcontractor'` — written when `kind` had
+> two values. It says *"if it is not the sub thread, any non-subcontractor may read it"*, which on
+> the day a third kind appears **admits foreman and crew to the client's private conversation with
+> the office**, with nothing failing and no policy edited. Closed by a RESTRICTIVE gate
+> (`may_enter_client_thread()`), which leaves `crew` and `sub` untouched by construction rather than
+> by three rewritten policies. `s164-m9-client-writes.live.ts` **W3** proves both directions.
+>
+> **Her photos are client-visible by the WITH CHECK, not by the caller** (R11). `files.client_visible`
+> defaults to false, so an upload that forgot it would post a photo she could not then see. The
+> policy refuses that row instead of storing it — **W2c** asserts the refusal and the acceptance.
+>
+> **R10/Q6 — one write path, distinguishable callers.** `completeCoSignature` takes a required
+> `caller` parameter; `co_signing_sessions` gains `signer_channel` and `signer_profile_id`, tied by a
+> CHECK so the pair cannot record a portal signature with nobody signed in. The consent text names
+> the channel in its own words. **W7** signs a real change order end-to-end and reads the evidence
+> back; **W4c** asserts in the source that `portal-writes.ts` never reimplements the PDF, the budget
+> call or the status flip.
+>
+> 🔴 **AND R10 WAS UNBUILDABLE UNTIL A LIVE DEFECT WAS FIXED.** The CO signature had been impossible
+> since 2026-08-09 — see `TECH_DEBT.md` **#4-m9**. Not M9's bug; M9 is why it was found.
+>
+> ### Q5 — the portal's install path, built [S164]
+>
+> **The answer to the brief's question is YES: a portal scope was added without changing crew
+> behaviour.** `app/manifest.ts` kept `start_url: '/m'` and its content is byte-identical.
+>
+> ⚠️ **But the obvious mechanism does not work, and it fails SILENTLY.** A nested layout exporting
+> `metadata.manifest` is ignored for that field: measured with a probe layout exporting BOTH `title`
+> and `manifest`, the title overrode and **the page still linked `/manifest.webmanifest`.** Next
+> collects the manifest FILE CONVENTION only at the app root and applies it *after* the metadata
+> chain, so nothing nested can override it. A build that trusted the documentation here would have
+> shipped a portal whose installed icon opens the field-crew shell — §2.5's failure exactly.
+>
+> **The fix:** `app/manifest.ts` (the convention) became `lib/crew-manifest.ts` served by
+> `app/manifest.webmanifest/route.ts` at the same URL, linked from the root layout's
+> `metadata.manifest`. Verified against a running server: **same bytes, same content-type, same
+> `cache-control`, same `crossorigin`.** The portal then overrides it for its own subtree.
+>
+> **Third worker, `public/sw-portal.js`, scope `/portal`, no `fetch` handler** — `sw-dashboard.js`'s
+> design and its reasoning: the portal needs an install and later push, not a cache, and a worker
+> with no fetch handler cannot serve a stale response.
+>
+> ⚠️ **The portal does NOT enrol push, and stage 6 is still gated.** The worker exists because iOS
+> delivers Web Push only to an *installed* PWA (GATED.md Gate 4) — the install is the precondition,
+> not the feature. Its re-subscribe posts `surface: 'client'`, a value **the CHECK constraint and
+> `links.ts` both still refuse**, deliberately: borrowing `'mobile'` would be accepted and would
+> resolve a client's notification to `/m/...`, a route she is bounced out of. A refused value fails
+> loudly; a borrowed one fails silently. **Stage 6 must add the surface to the constraint and a
+> resolver to `links.ts` together.**
+>
+> **R20 has one place it cannot reach: the home-screen label.** The manifest is one document for
+> every tenant, so the icon under a client's finger reads "Project Portal", not the contractor's
+> name. `brand.name` is absent — the product does not name itself to a client — but the company's
+> name is not there either. ⚠️ **A per-tenant manifest IS achievable** and an earlier claim here that
+> it was not has been withdrawn: Next emits `crossorigin="use-credentials"`, so the fetch carries
+> cookies and a dynamic route could read the session. **Not built — Josh's call.** A manifest is read
+> at INSTALL time, so a client installing from a cold start with no session would keep the generic
+> label permanently.
 
 ---
 

@@ -128,11 +128,30 @@ beforeAll(async () => {
   // A project the PM is ASSIGNED to — otherwise can_view_project() refuses and
   // the probe would pass for the wrong reason (no visibility, not no
   // authority). That distinction is the whole point of the PM cases.
+  //
+  // ⚠️ SCOPED TO THE PM'S OWN MEMBER ROW [S164]. As written this took the FIRST
+  // assignment row in the company, unordered and unfiltered — any member's, on
+  // any project. It read as "a project someone is assigned to", and the comment
+  // above says it must be a project THE PM is assigned to. PostgREST returns
+  // rows in physical order when no ORDER BY is given, so the fixture the whole
+  // file depends on was chosen by whatever the heap happened to hand back that
+  // day. It landed on an OWNER-only assignment and took V0, V1, V2 and V4 red
+  // together — all four failing on visibility, which is the exact confusion the
+  // comment was written to prevent.
+  const { data: pmProfile } = await admin
+    .from('profiles').select('id').eq('email', PM).eq('is_deleted', false).single();
+  const { data: pmMember } = await admin
+    .from('company_members').select('id')
+    .eq('profile_id', (pmProfile as { id: string }).id)
+    .eq('company_id', companyId).eq('is_deleted', false).single();
+
   const { data: assignment } = await admin
     .from('project_assignments')
     .select('project_id, projects!inner(company_id, contact_id, is_deleted)')
+    .eq('member_id', (pmMember as { id: string }).id)
     .eq('projects.company_id', companyId)
     .eq('projects.is_deleted', false)
+    .order('project_id')
     .limit(1)
     .single();
   projectId = (assignment as unknown as { project_id: string }).project_id;

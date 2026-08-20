@@ -33,6 +33,10 @@ export async function POST(
     signerName: parsed.data.signer_name,
     signerIp: forwardedFor ? forwardedFor.split(',')[0].trim() : null,
     signerUserAgent: request.headers.get('user-agent'),
+    // Q6 [S164] — this route IS the anonymous one: no session, the token is
+    // the credential. Naming it explicitly is what lets the portal's caller be
+    // told apart from it in the binding record.
+    caller: { kind: 'token_link' },
   });
 
   if (!result.success) {

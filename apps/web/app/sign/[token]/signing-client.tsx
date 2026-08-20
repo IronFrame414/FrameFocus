@@ -6,6 +6,7 @@ import type { ProposalData } from '@/lib/proposal/proposal-data';
 import { ProposalHtml } from '@/lib/proposal/proposal-html';
 import { CONSENT_TEXT } from '@/lib/proposal/proposal-defaults';
 import { declineReasonCodes } from '@framefocus/shared/validation/estimate';
+import { typedSignatureToDataUrl } from '@/lib/signature-image';
 
 // Spec 2 (4F) — review + accept (draw or type signature) or decline
 // (reason code + notes). Mobile-friendly; the canvas pad handles
@@ -48,20 +49,6 @@ export function SigningClient({ token, proposal, recipientName }: SigningClientP
     consent &&
     (method === 'draw' ? drawDirty : typedSignature.trim().length > 0);
 
-  function typedToDataUrl(name: string): string {
-    const canvas = document.createElement('canvas');
-    canvas.width = 600;
-    canvas.height = 160;
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      ctx.fillStyle = '#111827';
-      ctx.font = '56px "Brush Script MT", "Segoe Script", "Snell Roundhand", cursive';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(name, 24, 80);
-    }
-    return canvas.toDataURL('image/png');
-  }
-
   async function handleSign() {
     setError(null);
     let signatureData: string;
@@ -73,7 +60,7 @@ export function SigningClient({ token, proposal, recipientName }: SigningClientP
       }
       signatureData = pad.getTrimmedCanvas().toDataURL('image/png');
     } else {
-      signatureData = typedToDataUrl(typedSignature.trim());
+      signatureData = typedSignatureToDataUrl(typedSignature.trim());
     }
 
     setBusy(true);

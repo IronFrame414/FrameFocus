@@ -44,18 +44,27 @@ import { DASHBOARD_ROLES, type CompanyRole } from '@framefocus/shared';
 export const SUBCONTRACTOR_HOME_PATH = '/m/projects';
 
 /**
- * ⚠️ A HOLDING PAGE, NOT A PORTAL, AND THE NAME SAYS SO ON PURPOSE.
+ * The client portal. **`/portal` is now a real route tree** — `app/portal/`.
  *
- * The client portal does not exist — there is no portal route tree in `app/`.
- * Module 9 builds it. This path exists so that a role blocked from the
- * dashboard lands SOMEWHERE rather than on a redirect loop.
+ * ⚠️ RENAMED AND REPOINTED [S164]. _Superseded, quoted rather than deleted:_
  *
- * It is deliberately NOT `/portal`. The Pre-Module 9 gate — hosted portal vs.
- * email plus magic-link tokenised pages — is **open and untouched** [S131], and
- * claiming `/portal` would quietly presume the hosted answer. Whichever way
- * that gate is ruled, this path is thrown away rather than built on.
+ * > *"⚠️ A HOLDING PAGE, NOT A PORTAL, AND THE NAME SAYS SO ON PURPOSE. The
+ * > client portal does not exist … It is deliberately NOT `/portal`. The
+ * > Pre-Module 9 gate — hosted portal vs. email plus magic-link tokenised
+ * > pages — is **open and untouched** [S131], and claiming `/portal` would
+ * > quietly presume the hosted answer."*
+ *
+ * **The gate is closed: R1 [Josh, S164] — WE host the portal, with accounts**
+ * (the product name is deliberately not written out here; `brand-literals`
+ * forbids the pre-rebrand one and `lib/brand.ts` owns the current one). So the presumption the old comment refused to make has been made
+ * deliberately, by ruling, and `/client-placeholder` is deleted rather than
+ * left as a second destination nothing points at.
+ *
+ * The CONSTANT keeps its old name on purpose for now — renaming it in the same
+ * commit that repoints it would make a one-line change look like a sweep, and
+ * the name is referenced by the S131 unit tests that prove the pairing below.
  */
-export const CLIENT_PLACEHOLDER_PATH = '/client-placeholder';
+export const CLIENT_PLACEHOLDER_PATH = '/portal';
 
 /** Whether this role may reach `/dashboard` at all. */
 export function isDashboardRole(role: string | null | undefined): boolean {
