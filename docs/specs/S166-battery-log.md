@@ -15,7 +15,7 @@ lose the outcome.
 | 3 | `npm run build --force` (FULL TURBO ≠ evidence) | 🟢 PASS | fresh: 0 cached, compiled, 1m58s, exit 0 |
 | 4 | Full committed vitest suite | 🟢 PASS | 59 files, 894/894, exit 0 |
 | 5 | Every live harness, all 88 files (cold + warm re-run of reds) | 🟢 PASS (effectively) | 1177/1177 pass; 4 cold reds all cold-cache/residue, NOT the same four as last session, zero tree defects |
-| 6 | Playwright, four chunks from `apps/web` | ⏳ PENDING | — |
+| 6 | Playwright, four chunks from `apps/web` | 🟢 PASS | 518 passed, 9 skipped, 0 failed (all 4 shards exit 0) |
 | 7 | `npx supabase migration list` (repo root) | 🟢 PASS | 129 files = 129 applied, all local==remote |
 | 8 | `fixture-snapshot.mjs` before & after | ⏳ PENDING | — |
 
@@ -101,7 +101,17 @@ run's own client-writes failure) a dangling photo row.
   a non-atomic cleanup coupling two harnesses through shared fixture state. Filing candidate, not a
   blocker.
 
-### 6. Playwright (4 chunks) — ⏳ PENDING
+### 6. Playwright (4 chunks) — 🟢 PASS
+
+- Command: `npx playwright test --shard=k/4` (k=1..4) from `apps/web`, against the warm production
+  build (`npm run start`), serial (`workers: 1`), from `apps/web` cwd so `storageState` resolves.
+- Finished: 2026-08-20T12:40:03Z. Per shard, all **PRINTED exit: 0**:
+  - Shard 1/4: 133 passed (7.3m)
+  - Shard 2/4: 157 passed, 3 skipped (3.7m)
+  - Shard 3/4: 124 passed, 4 skipped (3.2m)
+  - Shard 4/4: 104 passed, 2 skipped (3.7m)
+- **Total 518 passed, 9 skipped, 0 failed.** Same as last session. (Wall-clock ~18m serial on this
+  warm Codespace vs CI's >32.5m cold un-sharded — CI is slower per the S165 CI-timeout diagnosis.)
 
 ### 7. migration list — 🟢 PASS
 
