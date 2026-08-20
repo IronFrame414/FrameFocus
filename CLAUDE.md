@@ -286,6 +286,40 @@ never happen. Both describe the freshly-seeded world and then test it forever ag
 mutable data. **If an assertion's name says "default", "none" or "never", check that it is reading
 the schema and not a row.**
 
+### A `.limit(1)` must be ORDERED, or SCOPED to the property the caller depends on — **MANDATORY [Josh, S165]**
+
+**A `.limit(1)` with no `ORDER BY` returns a heap-order row — whichever the storage engine hands
+back — and that order shifts the moment any row in the table is updated.** So the query passes for
+several runs and then fails, with nothing in the diff to explain why. `context100` §6 named this
+class; it has recurred roughly eight or nine times across the campaign (`s143-void-authority`,
+`s162` F1, `s163` D3, and the S165 sweep among them) and has outlived every individual fix.
+
+**Every `.limit(1)` is one of three things. Decide which before you leave it:**
+
+1. **Ordering fixes it** — the caller wants *a* deterministic row and any stable one will do (the
+   latest, the oldest, the highest `sort_order`). Add `.order('<col>', …)`. Reference:
+   `invoices-client.ts:202`/`:292` (append after the last line), which document exactly this.
+2. **Ordering does NOT fix it** — the caller depends on the row having a property the query never
+   filtered for. `s143-void-authority` wanted *the PM's* assignment and took the first in the
+   company; `s163` D3 wanted a segment the owner did **not** author; the S165 sweep found
+   `s143-qb-scaffolding` Q4 taking any company invoice when it needed one the PM could *see*.
+   **Ordering would only make the wrong pick stable.** Scope the query with the `.eq`/`.in`/`.not`
+   the dependency actually names. **This is the important category and the one that keeps
+   recurring** — the tell is that code *downstream of the fetch* asserts or relies on something
+   (a role, an author, an assignment, a status) the `select` did not constrain. A silent early-out
+   (`if (!readable?.length) return`) on a wrong pick is not a pass; it is an untested run wearing a
+   green tick.
+3. **Genuinely arbitrary** — any matching row is fine and nothing downstream depends on which
+   (an existence probe reading only `(data ?? []).length > 0`, a schema/column-exists probe, or a
+   query guaranteed to return exactly one row by RLS). Leave it, and **add a one-line comment
+   saying so**, so the next sweep does not re-examine it.
+
+**This is not test-only.** A service that takes an unordered first row (`reminders.ts`,
+`email-service.ts`'s owner fallback, existence probes in `client-portal.ts`) has the same defect
+with worse consequences. When sweeping, read `app/` and `lib/` too, not just `test/` and the
+fixtures. Comment lines that merely *mention* `.limit(1)` are not call sites — judge the query, not
+the grep hit.
+
 ## Generated Types Workflow
 
 `packages/shared/types/database.ts` is auto-generated from the live Supabase schema. All service files import from this — never hand-write database type shapes. After every migration that adds, removes, or renames a column or table, run:
