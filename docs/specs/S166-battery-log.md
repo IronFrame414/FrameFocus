@@ -11,7 +11,7 @@ lose the outcome.
 | # | Step | Status | Result |
 |---|------|--------|--------|
 | 1 | `npx turbo run type-check` | 🟢 PASS | 5/5 tasks successful, exit 0 |
-| 2 | `next lint` (expect 0) | ⏳ PENDING | — |
+| 2 | `next lint` (expect 0) | 🟢 PASS | "No ESLint warnings or errors", exit 0 |
 | 3 | `npm run build --force` (FULL TURBO ≠ evidence) | ⏳ PENDING | — |
 | 4 | Full committed vitest suite | ⏳ PENDING | — |
 | 5 | Every live harness, all 88 files (cold + warm re-run of reds) | ⏳ PENDING | — |
@@ -31,7 +31,11 @@ Legend: ⏳ PENDING · 🟢 PASS · 🔴 RED · ⚠️ PASS-WITH-NOTES
 - Finished: 2026-08-20T11:47:01Z
 - **PRINTED exit: 0.** `Tasks: 5 successful, 5 total` (4 cached, 1 fresh after restart). Time 15.95s.
 
-### 2. lint — ⏳ PENDING
+### 2. lint — 🟢 PASS
+
+- Command: `next lint` (from `apps/web`)
+- Finished: 2026-08-20T11:47:41Z
+- **PRINTED exit: 0.** "✔ No ESLint warnings or errors". Still at 0.
 
 ### 3. build --force — ⏳ PENDING
 
