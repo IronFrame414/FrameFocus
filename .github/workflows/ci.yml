@@ -86,8 +86,29 @@ jobs:
   # worse than a slow green. `workers: 1` (playwright.config.ts) is load-bearing
   # here, not incidental.
   #
-  # timeout RAISED 20 -> 35: #197 hit the old 20-minute cap un-sharded; local is
-  # ~14.3 min and GitHub's runner is slower. 35 is headroom, not a target.
+  # timeout RAISED 20 -> 35 -> 50. TWICE NOW, and the second time is not the same
+  # cause as the first, which is the thing worth recording.
+  #
+  #   20 -> 35 [S134]: #197 hit the old 20-minute cap un-sharded. That was the
+  #                    suite being un-sharded — a one-off step change.
+  #   35 -> 50 [S165]: every run since the M5/M6-fixes merge (dc1e80c onward —
+  #                    S163's fixes, all three M9 merges, the tools commit,
+  #                    fd9ec3e) was CANCELLED at the 35-min cap. Measured from
+  #                    the Actions API, the "Run Playwright tests" step went
+  #                    23m32s (feb62ae, last green) -> >32m35s (cancelled,
+  #                    unfinished) — a >38% jump. But the e2e suite gained only
+  #                    ~2 tests over that span; what grew was 13 MIGRATIONS
+  #                    (+2,920 lines of SQL: S163 x6, M9 x5, +2). The cost is
+  #                    PER-STATEMENT DB overhead — more RLS policies and triggers
+  #                    on the one shared rebuild-test DB that this serial suite
+  #                    round-trips thousands of times — NOT more tests. So this
+  #                    ceiling will keep being outgrown as modules add policy,
+  #                    and raising it is a treadmill, not a fix.
+  #
+  # 50 is deliberately generous: because every run has been capped, the TRUE
+  # full duration is unknown (only "> 32m35s"). 50 lets the next run finish AND
+  # finally measure it, which is the number Josh needs to rule on the durable
+  # fix. Lower it once that number exists. Headroom to measure, not a target.
   #
   # NOT THE EVENTUAL ANSWER. A database PER SHARD (safe by construction) is, and
   # it is BLOCKED on a reproducible seed that does not exist — the pinned
@@ -106,7 +127,7 @@ jobs:
   e2e:
     name: E2E (Playwright)
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
 
