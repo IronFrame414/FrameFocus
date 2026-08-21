@@ -8803,6 +8803,16 @@ export type Database = {
         Returns: Json
       }
       seed_default_tags: { Args: { p_company_id: string }; Returns: undefined }
+      selection_option_images: {
+        Args: { p_selection_id: string }
+        Returns: {
+          file_id: string
+          file_path: string
+          kind: string
+          mime_type: string
+          option_id: string
+        }[]
+      }
       set_line_override_cost: {
         Args: { p_cost: number; p_line_id: string }
         Returns: undefined

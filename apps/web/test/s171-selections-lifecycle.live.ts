@@ -7,10 +7,12 @@ import {
   computeOfferedFigures,
   declineSelection,
   offerSelection,
+  reopenSelection,
   reviseSelection,
   selectionConsentTextFor,
   withdrawSelectionOffer,
 } from '@/lib/services/selection-lifecycle-service';
+import { signSelectionOptionImages } from '@/lib/services/selections';
 
 // ============================================================================
 // S171 — Allowances & Selections STAGE 4: offer, sign, deny, revise.
@@ -269,21 +271,44 @@ describe('S171-4C — revise (Q9): prior signature RETAINED, one current at a ti
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-describe('S171-4D — deny (Q9): a return to DRAFT, not a terminus', () => {
-  it('D1 — revise → offer → LINKED declines with a note: session declined, selection DRAFT, stamps cleared, Owner/Admin notified', async () => {
+describe('S171-4D — deny (Q9 as amended S172): DENIED is a RESTING state; reopen is the company\'s act', () => {
+  // [S172] INVERTED, not deleted. _Superseded title: "deny (Q9): a return to
+  // DRAFT, not a terminus" — asserting status 'draft' and stamps cleared right
+  // after the client declined._ Josh: "it should be flagged as denied. A user
+  // can choose to re-open it, which moves to draft."
+  it('D1 — revise → offer → LINKED declines with a note: session declined, selection DENIED (stamps KEPT), Owner/Admin notified', async () => {
     expect((await reviseSelection(S.pm!, selId)).success).toBe(true);
     expect((await offerSelection(S.pm!, selId)).success).toBe(true);
     const r = await declineSelection(S.linked!, selId, { caller: { kind: 'portal_session', profileId: pid.linked! }, notes: 'Too dark for the bath' });
     expect(r.success, r.error).toBe(true);
     const s = await sel();
-    expect(s.status).toBe('draft');
-    expect(s.offered_sell_amount).toBeNull();
+    expect(s.status).toBe('denied');
+    expect(Number(s.offered_sell_amount), 'the company must still see what was refused').toBe(6300);
     const declined = (await sessions()).filter((x) => x.status === 'declined');
     expect(declined).toHaveLength(1);
     expect(declined[0].decline_notes).toBe('Too dark for the bath');
     const { data } = await admin.from('notifications').select('body').eq('source_id', selId).eq('type', 'selection_denied');
     expect((data ?? []).length).toBeGreaterThan(0);
     expect(data![0].body).toMatch(/Too dark/);
+    expect(data![0].body).toMatch(/reopen/);
+  });
+
+  it('D1b — a denied selection does NOT auto-return: it is still denied, the LINKED client still sees it, offer is refused', async () => {
+    expect((await sel()).status).toBe('denied');
+    const { data } = await S.linked!.from('selections').select('id, status').eq('id', selId);
+    expect(data?.[0]?.status).toBe('denied');
+    expect((await offerSelection(S.pm!, selId)).success, 'a denied selection was re-offered without reopening').toBe(false);
+  });
+
+  it('D1c — a SUB cannot reopen (zero rows); the PM reopens → draft, stamps cleared, declined session kept', async () => {
+    expect((await reopenSelection(S.sub!, selId)).success).toBe(false);
+    expect((await sel()).status).toBe('denied');
+    const r = await reopenSelection(S.pm!, selId);
+    expect(r.success, r.error).toBe(true);
+    const s = await sel();
+    expect(s.status).toBe('draft');
+    expect(s.offered_sell_amount).toBeNull();
+    expect((await sessions()).filter((x) => x.status === 'declined')).toHaveLength(1);
   });
 
   it('D2 — CONTROL cannot decline (no row); a draft cannot be declined', async () => {
@@ -331,5 +356,79 @@ describe('S171-4E — client-supplied (Q6): no money, no-money wording, allowanc
     if ('error' in f) throw new Error(f.error);
     expect(f.allowanceDeduction).toBe(0);
     expect(f.variance).toBe(1100);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+describe('S172-B — option images through the SECURITY DEFINER read: "if you can see the selection, you can see its images"', () => {
+  let fileId: string;
+  let optId: string;
+  it('B0 — fixture: a PM-uploaded image (client_visible FALSE) on a chosen option of the money selection', async () => {
+    // Written as the PM would write it: files_insert_non_client forbids
+    // client_visible=true for a PM, so this row is invisible to the client
+    // through the general files arm. That is the point of the probe.
+    // A real object — createSignedUrl refuses a key that does not exist.
+    const path = `${companyId}/${PROJECT}/${MARKER}-tile.jpg`;
+    const { error: upErr } = await admin.storage.from('project-files').upload(path, Buffer.from([0xff, 0xd8, 0xff, 0xd9]), { contentType: 'image/jpeg', upsert: true });
+    must('storage', upErr);
+    const { data: f, error } = await admin.from('files').insert({
+      company_id: companyId, project_id: PROJECT, category: 'photos', file_name: `${MARKER}-tile.jpg`,
+      file_path: `${companyId}/${PROJECT}/${MARKER}-tile.jpg`, file_size: 1, mime_type: 'image/jpeg', client_visible: false, created_by: null,
+    }).select('id').single();
+    must('file', error);
+    fileId = f!.id;
+    optId = optA;
+    must('attach', (await admin.from('selection_options').update({ image_file_id: fileId }).eq('id', optId)).error);
+    // The selection is in draft right now (D1c); re-offer it so the client arm admits it.
+    expect((await offerSelection(S.pm!, selId)).success).toBe(true);
+  });
+
+  it('B1 — the LINKED client CANNOT read the file row directly (not client_visible) …', async () => {
+    const { data } = await S.linked!.from('files').select('id').eq('id', fileId);
+    expect(data ?? []).toHaveLength(0);
+  });
+
+  it('B2 — … but the definer read returns its path to her, keyed on the selection', async () => {
+    const { data, error } = await S.linked!.rpc('selection_option_images', { p_selection_id: selId });
+    expect(error).toBeNull();
+    const rows = (data ?? []) as { option_id: string; kind: string; file_id: string }[];
+    expect(rows.some((r) => r.option_id === optId && r.file_id === fileId && r.kind === 'image')).toBe(true);
+  });
+
+  it('B3 — and signSelectionOptionImages() hands her a signed URL for it', async () => {
+    const map = await signSelectionOptionImages(selId, S.linked!);
+    expect(map[optId]?.image).toMatch(/^https?:\/\//);
+  });
+
+  for (const role of ['owner', 'pm', 'sub'] as const) {
+    it(`B4-${role} — staff who can see the selection get the path too`, async () => {
+      const { data } = await S[role]!.rpc('selection_option_images', { p_selection_id: selId });
+      expect(((data ?? []) as { file_id: string }[]).some((r) => r.file_id === fileId)).toBe(true);
+    });
+  }
+
+  it('B5 — CONTROL client (no project) gets NOTHING — and it is not a broken session', async () => {
+    const { data: me } = await S.control!.from('profiles').select('id').limit(1); // own row only, by RLS
+    expect(me?.length).toBe(1);
+    const { data, error } = await S.control!.rpc('selection_option_images', { p_selection_id: selId });
+    expect(error).toBeNull();
+    expect(data ?? []).toHaveLength(0);
+    expect(await signSelectionOptionImages(selId, S.control!)).toEqual({});
+  });
+
+  it('B6 — a DRAFT selection\'s images are hidden from the client but not from staff (the arm is restated correctly)', async () => {
+    expect((await withdrawSelectionOffer(S.owner!, selId)).success).toBe(true); // → draft
+    const { data: c } = await S.linked!.rpc('selection_option_images', { p_selection_id: selId });
+    expect(c ?? []).toHaveLength(0);
+    const { data: s } = await S.sub!.rpc('selection_option_images', { p_selection_id: selId });
+    expect(((s ?? []) as unknown[]).length).toBeGreaterThan(0);
+  });
+
+  it('B7 — the general client_visible mechanism is untouched: the file row still says FALSE', async () => {
+    const { data } = await admin.from('files').select('client_visible').eq('id', fileId).single();
+    expect(data!.client_visible).toBe(false);
+    await admin.from('selection_options').update({ image_file_id: null }).eq('id', optId);
+    await admin.from('files').delete().eq('id', fileId);
+    await admin.storage.from('project-files').remove([`${companyId}/${PROJECT}/${MARKER}-tile.jpg`]);
   });
 });

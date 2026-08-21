@@ -12,6 +12,19 @@ import type {
 
 export type { Selection, SelectionArea, SelectionMode, SelectionOption, SelectionOptionSource, SelectionStatus };
 
+/** Signed URLs for a selection's option images, via the definer read (S172). */
+export async function fetchSelectionOptionImages(
+  selectionId: string
+): Promise<Record<string, { image?: string; link_thumbnail?: string }>> {
+  try {
+    const res = await fetch(`/api/selections/${selectionId}/images`, { cache: 'no-store' });
+    if (!res.ok) return {};
+    return (await res.json()) as Record<string, { image?: string; link_thumbnail?: string }>;
+  } catch {
+    return {};
+  }
+}
+
 // ============================================================================
 // Allowances & Selections — CLIENT writes. [S171, stage 2]
 //

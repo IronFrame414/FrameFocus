@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useRef, useState, type ClipboardEvent, type DragEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type DragEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { Selection, SelectionOption, SelectionOptionSource } from '@/lib/services/selections-client';
@@ -7,6 +7,7 @@ import {
   createSelectionOption,
   deleteSelectionOption,
   ensureSelectionThread,
+  fetchSelectionOptionImages,
   postSelectionMessage,
   saveSelectionNotes,
   saveSelectionOptionAmounts,
@@ -15,10 +16,9 @@ import {
   updateSelectionOption,
 } from '@/lib/services/selections-client';
 import { uploadFile } from '@/lib/services/files-client';
-import { setFileClientVisible } from '@/lib/services/daily-logs-client';
 import { CatalogPicker } from '@/app/dashboard/estimates/[id]/catalog-picker';
 import type { CostCatalogItem } from '@/lib/services/cost-catalog-client';
-import { OptionThumb, StatusPill } from '../selections-tab';
+import { OptionThumb, StatusPill, UrlThumb } from '../selections-tab';
 import { SelectionLifecycle } from './selection-lifecycle';
 
 // ============================================================================
@@ -72,6 +72,14 @@ interface Props {
 
 export function SelectionSheet({ projectId, role, myProfileId, selection, areas, allowances, thread, sessions }: Props) {
   const router = useRouter();
+  const [imageUrls, setImageUrls] = useState<Record<string, { image?: string; link_thumbnail?: string }>>({});
+  useEffect(() => {
+    let live = true;
+    fetchSelectionOptionImages(selection.id).then((m) => live && setImageUrls(m));
+    return () => {
+      live = false;
+    };
+  }, [selection.id, selection.options]);
   const canManage = MANAGER.includes(role);
   const canNotes = NOTES_ROLES.includes(role) && selection.notes !== null;
   const editable = canManage && (selection.status === 'draft' || selection.status === 'in_discussion');
@@ -176,7 +184,7 @@ export function SelectionSheet({ projectId, role, myProfileId, selection, areas,
           {selection.options.length === 0 && <p style={{ fontSize: '0.8125rem', color: '#6b7280' }}>No options yet.</p>}
           <div style={{ display: 'grid', gap: '0.75rem' }}>
             {selection.options.map((o) => (
-              <OptionCard key={o.id} option={o} selection={selection} projectId={projectId} role={role} editable={editable} canManage={canManage} busy={busy} run={run} />
+              <OptionCard key={o.id} option={o} selection={selection} projectId={projectId} role={role} editable={editable} canManage={canManage} busy={busy} run={run} imageUrl={imageUrls[o.id]?.image ?? imageUrls[o.id]?.link_thumbnail ?? null} />
             ))}
           </div>
           {editable && <AddOption selection={selection} projectId={projectId} run={run} />}
@@ -224,13 +232,13 @@ function Toggle({ label: l, checked, disabled, onChange, testId }: { label: stri
 }
 
 // ── Image intake: the four paths ─────────────────────────────────────────────
-async function intakeImage(file: File, projectId: string, role: string): Promise<{ fileId: string | null; error?: string }> {
+async function intakeImage(file: File, projectId: string, _role: string): Promise<{ fileId: string | null; error?: string }> {
   const r = await uploadFile(file, { project_id: projectId, category: 'photos', tags: ['selection-option'] });
   if (!r.success || !r.id) return { fileId: null, error: r.error };
-  // files_insert_non_client lets only owner/admin set client_visible; a PM's
-  // upload stays staff-only here and stage 7 has to handle it (flagged in the
-  // stage 3 report). Owner/admin flip it so the portal can show the picture.
-  if (role === 'owner' || role === 'admin') await setFileClientVisible(r.id, true);
+  // [S172] NO client_visible flip. Option images reach the client through
+  // selection_option_images(), the definer read keyed on the selection — so a
+  // PM's upload is as visible to the client as an owner's, and neither enters
+  // the general client-visible pool.
   return { fileId: r.id };
 }
 
@@ -252,9 +260,10 @@ function useImagePaths(onFile: (f: File) => void) {
   return { inputRef, onDrop, onPaste, onDragOver: (e: DragEvent) => e.preventDefault() };
 }
 
-function OptionCard({ option, selection, projectId, role, editable, canManage, busy, run }: {
+function OptionCard({ option, selection, projectId, role, editable, canManage, busy, run, imageUrl }: {
   option: SelectionOption; selection: Selection; projectId: string; role: string; editable: boolean; canManage: boolean; busy: boolean;
   run: (fn: () => Promise<{ success: boolean; error?: string }>) => Promise<{ success: boolean; error?: string }>;
+  imageUrl: string | null;
 }) {
   const [linkBusy, setLinkBusy] = useState(false);
   const [linkMsg, setLinkMsg] = useState<string | null>(null);
@@ -282,7 +291,7 @@ function OptionCard({ option, selection, projectId, role, editable, canManage, b
     <div data-testid={`option-${option.id}`} onDrop={editable ? paths.onDrop : undefined} onDragOver={editable ? paths.onDragOver : undefined} onPaste={editable ? paths.onPaste : undefined}
       style={{ display: 'grid', gridTemplateColumns: '72px 1fr', gap: '0.75rem', padding: '0.75rem', border: option.is_chosen ? '2px solid #16a34a' : '1px solid #e5e7eb', borderRadius: '0.5rem' }}>
       <div>
-        <OptionThumb fileId={option.image_file_id ?? option.link_thumbnail_file_id ?? null} size={72} />
+        <UrlThumb url={imageUrl} size={72} />
         {editable && (
           <div style={{ marginTop: '0.375rem', display: 'grid', gap: '0.25rem' }}>
             <button type="button" style={{ ...btn, padding: '0.2rem 0.4rem', fontSize: '0.6875rem' }} onClick={() => paths.inputRef.current?.click()} data-testid="opt-upload">Upload</button>

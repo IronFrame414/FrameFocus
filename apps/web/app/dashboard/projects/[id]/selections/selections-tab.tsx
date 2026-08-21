@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { createSelection, createSelectionArea } from '@/lib/services/selections-client';
+import { createSelection, createSelectionArea, fetchSelectionOptionImages } from '@/lib/services/selections-client';
 import { getFileSignedUrlClient } from '@/lib/services/files-client';
 
 // §9.2 — the no-cost tab. The props type is the contract: there is no amount,
@@ -40,12 +40,14 @@ export const STATUS_LABELS: Record<string, string> = {
   in_discussion: 'In discussion',
   awaiting_approval: 'Awaiting approval',
   approved: 'Approved',
+  denied: 'Denied', // [S172] a resting state — the company reopens it
 };
 const STATUS_COLORS: Record<string, { bg: string; fg: string }> = {
   draft: { bg: '#f3f4f6', fg: '#374151' },
   in_discussion: { bg: '#fef3c7', fg: '#92400e' },
   awaiting_approval: { bg: '#dbeafe', fg: '#1e40af' },
   approved: { bg: '#dcfce7', fg: '#166534' },
+  denied: { bg: '#fee2e2', fg: '#991b1b' },
 };
 
 const card: React.CSSProperties = { backgroundColor: '#fff', border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem', marginBottom: '1rem' };
@@ -61,6 +63,15 @@ export function StatusPill({ status }: { status: string }) {
   );
 }
 
+/** A thumbnail from an already-signed URL (the definer read, S172). */
+export function UrlThumb({ url, size = 56 }: { url: string | null; size?: number }) {
+  if (!url) return <div aria-hidden style={{ width: size, height: size, borderRadius: '0.375rem', backgroundColor: '#f3f4f6', border: '1px dashed #d1d5db' }} />;
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={url} alt="" style={{ width: size, height: size, objectFit: 'cover', borderRadius: '0.375rem', border: '1px solid #e5e7eb' }} />;
+}
+
+/** A thumbnail for a file the CALLER can read directly (thread photos). Option
+ *  images use UrlThumb via the definer read instead. */
 export function OptionThumb({ fileId, size = 56 }: { fileId: string | null; size?: number }) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
@@ -160,7 +171,7 @@ export function SelectionsTab({ projectId, role, areas }: { projectId: string; r
               const show = chosen.length ? chosen : s.options.slice(0, 1);
               return (
                 <Link key={s.id} href={`${base}/${s.id}`} data-testid={`selection-row-${s.id}`} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start', textDecoration: 'none', color: 'inherit', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #f3f4f6' }}>
-                  <OptionThumb fileId={show[0]?.image_file_id ?? null} />
+                  <RowThumb selectionId={s.id} optionId={show[0]?.id ?? null} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
                       <strong style={{ fontSize: '0.9375rem' }}>{s.name}</strong>
@@ -189,4 +200,16 @@ export function SelectionsTab({ projectId, role, areas }: { projectId: string; r
       ))}
     </div>
   );
+}
+
+function RowThumb({ selectionId, optionId }: { selectionId: string; optionId: string | null }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    if (optionId) fetchSelectionOptionImages(selectionId).then((m) => live && setUrl(m[optionId]?.image ?? m[optionId]?.link_thumbnail ?? null));
+    return () => {
+      live = false;
+    };
+  }, [selectionId, optionId]);
+  return <UrlThumb url={url} />;
 }

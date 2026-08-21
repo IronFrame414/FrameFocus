@@ -202,3 +202,21 @@ test.describe('stage 4 — the sheet\'s lifecycle controls (company side)', () =
     await expect(page.getByTestId('sel-lifecycle')).toContainText('Not yet sent to the client');
   });
 });
+
+test.describe('S172 — DENIED is a resting state the company reopens', () => {
+  test('owner: a denied selection shows the Denied pill, what was refused, and Reopen → draft', async ({ page }) => {
+    // Put the fixture into denied the way a client decline leaves it (stamps kept).
+    const admin = adminClient();
+    await admin.from('selections').update({ status: 'denied', offered_sell_amount: 5040, offered_allowance_deduction: 0, offered_variance: 5040, offered_at: new Date().toISOString() }).eq('id', selectionId);
+    await signIn(page, OWNER);
+    await page.goto(`/dashboard/projects/${PROJECT_QA_A}/selections/${selectionId}`);
+    await expect(page.getByTestId('selection-status')).toContainText('Denied');
+    await expect(page.getByTestId('sel-denied-note')).toBeVisible();
+    await expect(page.getByTestId('sel-price-block')).toContainText('$5,040.00'); // the company still sees what was refused
+    await expect(page.getByTestId('sel-offer')).toHaveCount(0); // cannot re-offer without reopening
+    await page.getByTestId('sel-reopen').click();
+    await expect(page.getByTestId('selection-status')).toContainText('Draft');
+    await expect(page.getByTestId('sel-price-block')).toHaveCount(0);
+    await expect(page.getByTestId('sel-offer')).toBeVisible();
+  });
+});
