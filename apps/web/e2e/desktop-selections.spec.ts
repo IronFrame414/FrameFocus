@@ -20,11 +20,24 @@ const SUB = 'josh+qa-sub@worthprop.com';
 
 let selectionId = '';
 
-async function sweep() {
+async function sweep(): Promise<string[]> {
   const admin = adminClient();
+  const errors: string[] = [];
+  const check = (label: string, error: { message: string } | null) => {
+    if (error) errors.push(`${label}: ${error.message}`);
+  };
   const { data: sels } = await admin.from('selections').select('id').like('name', `${MARKER}%`);
   const ids = (sels ?? []).map((s) => s.id);
   if (ids.length) {
+    // ⚠️ SESSIONS AND NOTIFICATIONS FIRST. The stage-4 Offer test opens a
+    // signing session that references the selection (FK, no cascade). The
+    // first version of this sweep did not delete it, `selections.delete()` was
+    // refused on the FK, the refusal was swallowed, and the area survived into
+    // the next run's beforeAll — where the unique index turned it into a null
+    // and a TypeError. A sweep that cannot tell you it failed is the S168 defect.
+    check('unlink sessions', (await admin.from('selections').update({ signed_session_id: null }).in('id', ids)).error);
+    check('sessions', (await admin.from('selection_signing_sessions').delete().in('selection_id', ids)).error);
+    check('notifications', (await admin.from('notifications').delete().in('source_id', ids).eq('source_table', 'selections')).error);
     const { data: opts } = await admin.from('selection_options').select('id').in('selection_id', ids);
     const oids = (opts ?? []).map((o) => o.id);
     if (oids.length) {
@@ -38,13 +51,15 @@ async function sweep() {
       await admin.from('selection_messages').delete().in('thread_id', tids);
       await admin.from('selection_threads').delete().in('id', tids);
     }
-    await admin.from('selections').delete().in('id', ids);
+    check('selections', (await admin.from('selections').delete().in('id', ids)).error);
   }
-  await admin.from('selection_areas').delete().like('name', `${MARKER}%`);
+  check('areas', (await admin.from('selection_areas').delete().like('name', `${MARKER}%`)).error);
+  return errors;
 }
 
 test.beforeAll(async () => {
-  await sweep();
+  const errors = await sweep();
+  expect(errors, 'the pre-run sweep met refusals — fixture residue would make every test below vacuous or wrong').toEqual([]);
   const admin = adminClient();
   const { data: company } = await admin.from('companies').select('id').eq('name', 'Bishop Contracting').single();
   const { data: area } = await admin.from('selection_areas').insert({ company_id: company!.id, project_id: PROJECT_QA_A, name: `${MARKER} Kitchen` }).select('id').single();
@@ -61,7 +76,11 @@ test.beforeAll(async () => {
   await admin.from('selection_notes').insert({ company_id: company!.id, selection_id: selectionId, internal_notes: 'margin is thin here' });
 });
 test.afterAll(async () => {
-  await sweep();
+  const errors = await sweep();
+  const admin = adminClient();
+  const { count } = await admin.from('selection_areas').select('id', { count: 'exact', head: true }).like('name', `${MARKER}%`);
+  expect(errors, 'teardown met refusals').toEqual([]);
+  expect(count, 'an area was left behind').toBe(0);
 });
 
 const MONEY = /\$\s?\d|4,?200|5,?040|margin is thin/;
