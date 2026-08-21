@@ -17,7 +17,7 @@ restart cannot lose the outcome. (Committed on `main`, path-scoped, **not pushed
 | 0 | `fixture-snapshot.mjs` BEFORE | 🟢 DONE | exit 0; baseline captured, incl. a **pre-existing** CO-residue census (44 suspect rows / 64 total) |
 | 1 | `npx turbo run type-check` | 🟢 PASS | 5/5 successful, **0 cached** (forced, genuinely fresh), exit 0 |
 | 2 | `next lint` (expect 0) | 🟢 PASS | "No ESLint warnings or errors", exit 0 — still at 0 |
-| 3 | `npm run build --force` (FULL TURBO ≠ evidence) | ⏳ PENDING | |
+| 3 | `npm run build --force` (FULL TURBO ≠ evidence) | 🟢 PASS | fresh: **0 cached, 1 total**, `✓ Compiled successfully`, 2m23.2s, exit 0 |
 | 4 | Full committed vitest suite | ⏳ PENDING | |
 | 5 | Every live harness, all 89 files (cold + warm re-run of reds) | ⏳ PENDING | |
 | 6 | Playwright, four chunks from `apps/web` | ⏳ PENDING | |
@@ -91,7 +91,30 @@ for all five packages.
 - **PRINTED exit: 0.** Sole output line: `✔ No ESLint warnings or errors`. **Still at 0** — S168's
   merge (CO void/reissue/delete, the four-page portal split, both harness fixes) introduced none.
 
-### 3. build --force — ⏳ PENDING
+### 3. build --force — 🟢 PASS
+
+- Command: `npx turbo run build --force`
+- Finished: 2026-08-21T09:39:29Z
+- **PRINTED exit: 0.** `Tasks: 1 successful, 1 total`, **`Cached: 0 cached, 1 total`** (genuinely
+  fresh, not FULL TURBO), `✓ Compiled successfully` — 1 occurrence; `Failed to compile|Error:` —
+  **0** occurrences. Time 2m23.171s.
+
+> #### ⚠️ The background-task notification for this step said **"failed with exit code 1"**. It was wrong, and reading it would have reported a green build as red.
+>
+> The step exceeded the 120s foreground cap and was moved to the background. The notification
+> summarised the **compound command's** status, and my command ended with
+> `grep -icE 'Failed to compile|Error:' <log>` — which printed `0` (the correct, good answer) and
+> **therefore exited 1**, because `grep -c` exits non-zero when the count is zero.
+>
+> So the notification's `1` is **grep's status reporting the absence of build errors**, not the
+> build's. The PRINTED line — `PRINTED_EXIT_LINE: 0`, captured into `$?` immediately after the
+> `turbo` invocation and before anything else ran — is the build's own, and it is **0**.
+>
+> This is `CLAUDE.md` → "Reading the exit status of a command" rules 1–3 firing in one step: the
+> status read must belong to the process under test, a trailing command masks it, and the
+> corroborating signal (`0` failure markers, `1` success marker, `0 cached`, 2m23s of real work)
+> is what settles it. **Recorded rather than quietly worked around, because this battery's whole
+> instruction is to read the printed line and this is the one step where the two disagreed.**
 
 ### 4. committed vitest — ⏳ PENDING
 
