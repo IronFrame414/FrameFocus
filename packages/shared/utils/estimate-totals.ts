@@ -30,7 +30,16 @@ export type DiscountType = 'percent' | 'fixed';
 
 export type PricingMode = 'markup' | 'margin';
 
-export type RowType = 'labor' | 'material' | 'subcontractor' | 'other';
+/**
+ * [S170] 'allowance' is a FIFTH row type (allowances-selections-spec §2). It
+ * prices as quantity × unit_cost and rides the instrument's MATERIAL markup at
+ * every level (Josh, S169 Q3 as corrected). The old representation — a
+ * material row with unit_of_measure = 'allowance' — was retired by
+ * 20261025000000. Every switch on RowType below carries an explicit arm for
+ * it; none may absorb it through a default, because every default here is a
+ * silent $0 / null / undefined.
+ */
+export type RowType = 'labor' | 'material' | 'subcontractor' | 'other' | 'allowance';
 
 export function roundMoney(value: number): number {
   return Math.round(value * 100) / 100;
@@ -91,22 +100,29 @@ export interface EstimateMarkupDefaults {
 }
 
 /**
- * Pre-markup, pre-tax cost of a single row. For allowance material
- * rows the unit cost IS the allowance amount and quantity is ignored
- * (§4.14).
+ * Pre-markup, pre-tax cost of a single row.
+ *
+ * [S170] An allowance is its own row type and prices as quantity × unit_cost —
+ * the same shape as material. _Superseded (4D §4.14, quoted not deleted): "For
+ * allowance material rows the unit cost IS the allowance amount and quantity
+ * is ignored."_ That representation no longer exists; the migration rewrote
+ * such rows with quantity = 1, so the figure is unchanged.
+ *
+ * The `default` is the trap this function used to be: an unknown type priced
+ * at $0 with no error. It now throws, so a sixth type cannot ship quietly.
  */
 export function computeRowCost(row: RowPricingInput): number {
   switch (row.row_type) {
     case 'labor':
       return roundMoney((row.rate ?? 0) * (row.quantity ?? 0));
     case 'material':
-      if (row.unit_of_measure === 'allowance') return roundMoney(row.unit_cost ?? 0);
+    case 'allowance':
       return roundMoney((row.quantity ?? 0) * (row.unit_cost ?? 0));
     case 'subcontractor':
     case 'other':
       return roundMoney(row.amount ?? 0);
     default:
-      return 0;
+      throw new Error(`computeRowCost: unknown row_type ${String(row.row_type)}`);
   }
 }
 
@@ -126,6 +142,10 @@ export function resolveRowMarkupPercent(
     case 'labor':
       return defaults.labor_markup_percent ?? null;
     case 'material':
+    // [S170] an allowance rides MATERIAL's default (Q3) — deliberately not its
+    // own column, so fixed-price and cost-plus give the same answer by the
+    // same rule ("sell derives per instrument").
+    case 'allowance':
       return defaults.material_markup_percent ?? null;
     case 'subcontractor':
     case 'other':
@@ -228,6 +248,10 @@ function costPlusMarkupFor(
 ): number | null | undefined {
   switch (rowType) {
     case 'material':
+    // [S170] cost-plus allowance rides cost_plus_material_percent — there is
+    // no cost_plus_allowance_percent rate type, on purpose (no reader: 7D
+    // bills actual costs by EXPENSE category, which never carries 'allowance').
+    case 'allowance':
       return ctx.cost_plus_material_percent;
     case 'subcontractor':
       return ctx.cost_plus_subcontractor_percent;
@@ -256,9 +280,12 @@ export function assertInstrumentRatesInForce(
 ): void {
   if (ctx.contract_type === 'cost_plus') {
     const used = new Set(rows.map((r) => r.row_type));
-    for (const rowType of ['material', 'subcontractor', 'other'] as const) {
+    for (const rowType of ['material', 'subcontractor', 'other', 'allowance'] as const) {
       if (used.has(rowType) && costPlusMarkupFor(ctx, rowType) == null) {
-        throw new NoRateInForceError(`cost_plus_${rowType}_percent`);
+        // [S170] an allowance needs the MATERIAL rate — name that one, not a
+        // non-existent cost_plus_allowance_percent.
+        const needed = rowType === 'allowance' ? 'material' : rowType;
+        throw new NoRateInForceError(`cost_plus_${needed}_percent`);
       }
     }
   }

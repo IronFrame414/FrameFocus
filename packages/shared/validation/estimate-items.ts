@@ -2,12 +2,15 @@ import { z } from 'zod';
 import { discountTypes } from './estimate';
 
 // Enums mirror the CHECK constraints on the estimate child tables
-// (migration 20260618120000). `allowance` IS valid here — unlike the
-// cost catalog — because allowance is an estimate-time concept on a
-// material row (§4.5/§4.14).
+// (migration 20260618120000, amended 20261025000000).
+//
+// [S170] 'allowance' is a ROW TYPE now, not a unit of measure. _Superseded
+// comment, quoted not deleted: "`allowance` IS valid here — unlike the cost
+// catalog — because allowance is an estimate-time concept on a material row
+// (§4.5/§4.14)."_ It left the UoM enum and the DB CHECK in the same migration.
 
 // 4D-rev: a line item is composed of typed rows; no more line_type.
-export const rowTypes = ['labor', 'material', 'subcontractor', 'other'] as const;
+export const rowTypes = ['labor', 'material', 'subcontractor', 'other', 'allowance'] as const;
 
 export const laborUnits = ['hours', 'days'] as const;
 
@@ -21,7 +24,6 @@ export const materialUnitsOfMeasure = [
   'gallon',
   'pair',
   'set',
-  'allowance',
   'other',
 ] as const;
 

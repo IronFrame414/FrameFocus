@@ -10,6 +10,7 @@ import {
   NoRateInForceError,
   type InstrumentPricingContext,
   type RowPricingInput,
+  resolveRowMarkupPercent,
 } from '@framefocus/shared/utils/estimate-totals';
 
 // Money-representation shared math (docs/specs/money-representation.md §6,
@@ -58,8 +59,44 @@ describe('computeRowBudgetCost (A-1 — tax-inclusive budget cost)', () => {
     ).toBe(216.5);
   });
 
-  it('allowance material uses unit_cost alone, then tax', () => {
-    expect(computeRowBudgetCost(material(1500, 99, true, 'allowance'), 10)).toBe(1650);
+  // [S170] INVERTED, not deleted. _Superseded title, quoted: "allowance
+  // material uses unit_cost alone, then tax" — asserting 1500 × 99 → 1650._
+  // That encoded 4D §4.14's retired representation (a material row whose
+  // unit_of_measure = 'allowance' ignored quantity). 'allowance' is now its
+  // own row type and prices as quantity × unit_cost like material
+  // (20261025000000; allowances-selections-spec §2). A 99-quantity allowance
+  // is 99 allowances. The old assertion would now be a silent 98 × $1,500
+  // under-budget, which is exactly the class of defect the S157 sweep rule
+  // exists to catch.
+  it('allowance is its OWN row type: quantity × unit_cost, then tax', () => {
+    const allowance: RowPricingInput = {
+      row_type: 'allowance',
+      unit_cost: 1500,
+      quantity: 1,
+      apply_tax: true,
+      unit_of_measure: 'each',
+    };
+    expect(computeRowBudgetCost(allowance, 10)).toBe(1650);
+    expect(computeRowBudgetCost({ ...allowance, quantity: 2 }, 10)).toBe(3300);
+    expect(computeRowBudgetCost({ ...allowance, apply_tax: false }, 10)).toBe(1500);
+  });
+
+  it('an allowance row with quantity 99 is NOT a $1,500 row — the old rule is gone', () => {
+    expect(
+      computeRowBudgetCost(
+        { row_type: 'allowance', unit_cost: 1500, quantity: 99, apply_tax: false },
+        10
+      )
+    ).toBe(148500);
+  });
+
+  it('an unknown row_type THROWS rather than pricing at $0', () => {
+    expect(() =>
+      computeRowBudgetCost(
+        { row_type: 'gift_card' as unknown as RowPricingInput['row_type'], amount: 1, apply_tax: false },
+        0
+      )
+    ).toThrow(/unknown row_type/);
   });
 
   it('NULL tax rate is a no-op multiplier', () => {
@@ -130,6 +167,41 @@ describe('applyInstrumentRateOverrides (P4/A-9 — negotiated rates override per
     expect(() =>
       applyInstrumentRateOverrides(rows, { contract_type: 'cost_plus' })
     ).toThrow(NoRateInForceError);
+  });
+
+  // [S170] Q3 as corrected by Josh: on cost-plus, an allowance "is billed like
+  // everything else on" the instrument — and there is no single project
+  // percent (A-9: four independent rates), so it rides MATERIAL's. There is
+  // deliberately no cost_plus_allowance_percent rate type; these pin that.
+  it('[S170] cost_plus: an ALLOWANCE row takes cost_plus_material_percent', () => {
+    const out = applyInstrumentRateOverrides(
+      [{ row_type: 'allowance', unit_cost: 5000, quantity: 1, apply_tax: true, markup_percent: 40 }],
+      fourRates
+    );
+    expect(out[0].markup_percent).toBe(12);
+  });
+
+  it('[S170] cost_plus: an allowance row with NO material rate throws, naming the MATERIAL rate', () => {
+    let caught: unknown;
+    try {
+      applyInstrumentRateOverrides(
+        [{ row_type: 'allowance', unit_cost: 5000, quantity: 1, apply_tax: true }],
+        { ...fourRates, cost_plus_material_percent: null }
+      );
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(NoRateInForceError);
+    // The label names MATERIAL — there is no "allowance markup rate" to name.
+    expect((caught as Error).message).toMatch(/material markup rate/);
+  });
+
+  it('[S170] time_and_materials: an allowance row takes tm_nonlabor_percent like every non-labor row', () => {
+    const out = applyInstrumentRateOverrides(
+      [{ row_type: 'allowance', unit_cost: 5000, quantity: 1, apply_tax: true, markup_percent: 40 }],
+      { contract_type: 'time_and_materials', tm_labor_hourly: 85, tm_nonlabor_percent: 20 }
+    );
+    expect(out[0].markup_percent).toBe(20);
   });
 
   it('a cost_plus markup is only required when rows of its category exist (7d1 §6.1)', () => {
@@ -263,5 +335,30 @@ describe('flat-rate labor pricing (flat_rate_labor — S97 corrected ruling)', (
       deriveCostPlusSell(1000, 18),
       deriveCostPlusSell(200, 18),
     ]);
+  });
+});
+
+// ── [S170] fixed-price default-markup chain for the fifth row type ────────────
+// Josh, S169 Q3 as corrected: "it should inherit the markup from the allowance
+// line that it is pulling from" — row markup first; with none, the
+// instrument's MATERIAL default (no allowance_markup_percent column exists, on
+// purpose — riding material keeps fixed-price and cost-plus on one rule).
+describe('[S170] resolveRowMarkupPercent — allowance rides MATERIAL default on fixed-price', () => {
+  const defaults = {
+    labor_markup_percent: 10,
+    material_markup_percent: 25,
+    subcontractor_markup_percent: 8,
+  };
+  it('its own markup_percent wins when set', () => {
+    expect(resolveRowMarkupPercent('allowance', 33, defaults)).toBe(33);
+  });
+  it("with none, it takes the instrument's MATERIAL default — not sub's, not null", () => {
+    expect(resolveRowMarkupPercent('allowance', null, defaults)).toBe(25);
+    expect(resolveRowMarkupPercent('allowance', undefined, defaults)).toBe(25);
+  });
+  it('a null material default yields null (never 0)', () => {
+    expect(
+      resolveRowMarkupPercent('allowance', null, { ...defaults, material_markup_percent: null })
+    ).toBeNull();
   });
 });

@@ -520,7 +520,15 @@ function buildSlices(input: {
           ? (input.instruments.find((i) => i.estimateId)?.key ?? 'est:unknown')
           : 'adhoc';
 
-    for (const category of ['labor', 'material', 'subcontractor', 'other'] as ProfitCategory[]) {
+    // [S170] 'allowance' enumerated explicitly — a category missing from this
+    // list is OMITTED from the report, not bucketed anywhere.
+    for (const category of [
+      'labor',
+      'material',
+      'subcontractor',
+      'other',
+      'allowance',
+    ] as ProfitCategory[]) {
       const items = group.groups.flatMap((g) => g.items).filter((i) => i.row_type === category);
       if (items.length === 0) continue;
 

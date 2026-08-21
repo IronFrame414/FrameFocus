@@ -30,7 +30,8 @@
 // blanket markup to a category total — the shape of the input forbids it,
 // which is a stronger guarantee than a comment asking the next reader not to.
 
-export type ProfitCategory = 'labor' | 'material' | 'subcontractor' | 'other';
+/** [S170] 'allowance' added — a fifth budget row type (allowances-selections-spec §2). */
+export type ProfitCategory = 'labor' | 'material' | 'subcontractor' | 'other' | 'allowance';
 
 export const PROFIT_CATEGORIES: ProfitCategory[] = [
   'labor',

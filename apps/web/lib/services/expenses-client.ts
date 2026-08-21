@@ -333,7 +333,7 @@ export async function createAdHocBudgetLine(
   projectId: string,
   input: {
     description: string;
-    row_type?: 'labor' | 'material' | 'subcontractor' | 'other' | null;
+    row_type?: 'labor' | 'material' | 'subcontractor' | 'other' | 'allowance' | null;
     cost_code?: string | null;
   }
 ): Promise<CreateResult> {

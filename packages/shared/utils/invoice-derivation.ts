@@ -25,7 +25,10 @@
 import { roundMoney } from './estimate-totals';
 
 export type CostCategory = 'material' | 'subcontractor' | 'other';
-export type RowCategory = CostCategory | 'labor';
+/** [S170] 'allowance' is a fifth category (allowances-selections-spec §2) — a
+ *  budget concept, NOT an expense one, which is why it is added HERE and not
+ *  to CostCategory: expenses never carry it. */
+export type RowCategory = CostCategory | 'labor' | 'allowance';
 
 /** §11 — chosen per invoice; all three levels are built. */
 export type PresentationLevel = 'full_detail' | 'by_section' | 'lump_sum';
@@ -551,6 +554,7 @@ const SECTION_LABEL: Record<RowCategory, string> = {
   material: 'Materials',
   subcontractor: 'Subcontractors',
   other: 'Other',
+  allowance: 'Allowances',
 };
 
 /**
@@ -612,7 +616,9 @@ export function presentInvoice(
     const bucket: RowCategory = l.category ?? 'other';
     sectionTotals.set(bucket, roundMoney((sectionTotals.get(bucket) ?? 0) + l.amount));
   }
-  const sections = (['labor', 'material', 'subcontractor', 'other'] as RowCategory[])
+  // [S170] 'allowance' enumerated explicitly — a category missing from this
+  // list has its lines silently DROPPED from the by-section view.
+  const sections = (['labor', 'material', 'subcontractor', 'other', 'allowance'] as RowCategory[])
     .filter((c) => sectionTotals.has(c))
     .map((c) => ({ label: SECTION_LABEL[c], amount: sectionTotals.get(c) as number }));
 

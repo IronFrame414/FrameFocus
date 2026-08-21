@@ -88,6 +88,7 @@ import {
 const ROW_TYPES: readonly { value: CoRowType; label: string }[] = [
   { value: 'labor', label: 'Labor' },
   { value: 'material', label: 'Material' },
+  { value: 'allowance', label: 'Allowance' }, // [S170] fifth row type — parity with the desktop builder
   { value: 'subcontractor', label: 'Sub' },
   { value: 'other', label: 'Other' },
 ];
@@ -507,7 +508,7 @@ function RowBlock({
     const patch =
       row.row_type === 'labor'
         ? { name: name.trim(), rate: num(rate), quantity: num(quantity) }
-        : row.row_type === 'material'
+        : row.row_type === 'material' || row.row_type === 'allowance' // [S170] material shape
           ? { name: name.trim(), unit_cost: num(unitCost), quantity: num(quantity) }
           : { name: name.trim(), amount: num(amount) };
 
@@ -562,7 +563,7 @@ function RowBlock({
                 inputMode="decimal"
               />
             </>
-          ) : row.row_type === 'material' ? (
+          ) : row.row_type === 'material' || row.row_type === 'allowance' ? (
             <>
               <TextField
                 label="Unit cost"
@@ -654,7 +655,7 @@ function NewRowForm({
     name.trim() !== '' &&
     (rowType === 'labor'
       ? num(rate) !== null && num(quantity) !== null
-      : rowType === 'material'
+      : rowType === 'material' || rowType === 'allowance'
         ? num(unitCost) !== null && num(quantity) !== null
         : num(amount) !== null);
 
@@ -681,7 +682,7 @@ function NewRowForm({
             required
           />
         </>
-      ) : rowType === 'material' ? (
+      ) : rowType === 'material' || rowType === 'allowance' ? (
         <>
           <TextField
             label="Unit cost"
@@ -734,8 +735,11 @@ function NewRowForm({
                 // 'each', sub/other opt-in. Passing null here would override a
                 // default with an invalid value on a NOT NULL column.
                 rate: rowType === 'labor' ? num(rate) : null,
-                quantity: rowType === 'labor' || rowType === 'material' ? num(quantity) : null,
-                unit_cost: rowType === 'material' ? num(unitCost) : null,
+                quantity:
+                  rowType === 'labor' || rowType === 'material' || rowType === 'allowance'
+                    ? num(quantity)
+                    : null,
+                unit_cost: rowType === 'material' || rowType === 'allowance' ? num(unitCost) : null,
                 amount: rowType === 'subcontractor' || rowType === 'other' ? num(amount) : null,
                 subcontractor_id: null,
               });

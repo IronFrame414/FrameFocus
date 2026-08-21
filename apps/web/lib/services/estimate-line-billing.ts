@@ -80,7 +80,13 @@ export function categoryForLineItem(rowTypes: string[]): RowCategory {
   const distinct = [...new Set(rowTypes)];
   if (distinct.length === 1) {
     const only = distinct[0];
-    if (only === 'labor' || only === 'material' || only === 'subcontractor' || only === 'other') {
+    if (
+      only === 'labor' ||
+      only === 'material' ||
+      only === 'subcontractor' ||
+      only === 'other' ||
+      only === 'allowance' // [S170] fifth row type; an all-allowance item sections as Allowances
+    ) {
       return only;
     }
   }

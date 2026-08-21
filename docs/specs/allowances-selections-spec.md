@@ -99,11 +99,19 @@ incurred against an allowance is booked as what it is (a tile purchase is `mater
 **Shape** (Q3): `quantity` (default 1) × `unit_cost`; `markup_percent` per row; `apply_tax` as
 material (default true). **Never `amount`, `rate`, `labor_unit`, `subcontractor_id`, `catalog_item_id`.**
 
-**Markup defaults** — three new column pairs so the type has a default to inherit like its siblings:
-`estimates.allowance_markup_percent`, `change_orders.allowance_markup_percent`,
+**Markup defaults — AMENDED [S170, on Josh's Q3 correction].** _Superseded text, quoted not deleted:
+"three new column pairs … `estimates.allowance_markup_percent`, `change_orders.allowance_markup_percent`,
 `companies.default_allowance_markup_percent` / `_margin_percent`; and a new
-`instrument_rates.rate_type = 'cost_plus_allowance_percent'` so a cost-plus instrument has a rate to
-draw (A-9: every category at its own independent rate).
+`instrument_rates.rate_type = 'cost_plus_allowance_percent'`."_ **None of these is added.** An
+allowance rides the instrument's **MATERIAL** markup at every level — row `markup_percent` →
+`estimates`/`change_orders.material_markup_percent` → `companies.default_material_markup_percent`;
+on cost-plus, `cost_plus_material_percent`. `cost_plus_allowance_percent` would have **no reader**:
+7D bills actual costs through `nonLaborRateType(contractType, cost.category)` where `category` is
+the *expense* category, which never carries `allowance`; its only reader would be the estimate/CO
+pricer, and there Josh's ruling is that a cost-plus allowance *"is billed like everything else on
+it"*. One rule, two instruments: **sell derives per instrument, and the instrument's material rate is
+the allowance's rate.** Shipped in `20261025000000`; `resolveRowMarkupPercent`, `costPlusMarkupFor`
+and `switch_pricing_mode` each carry an explicit arm saying so.
 
 ### §2.2 — Migration of the existing representation (Q1)
 
@@ -225,16 +233,23 @@ existing writers (§2.3) with `row_type = 'allowance'` and `budgeted_amount` = c
 its own budget category** — rendered by `budget.ts` as a group keyed `row_type = 'allowance'` ahead
 of the cost-code groups.
 
-### §5.2 — Selection pricing and Q3's default
-Selection cost = Σ chosen options' `quantity × unit_cost`; markup per option, defaulting to:
-1. the linked allowance budget line's source row `markup_percent`, else
-2. that row's instrument `allowance_markup_percent`, else
-3. (unlinked) the contract estimate's `allowance_markup_percent` (via `client_contracts`).
+### §5.2 — Selection pricing and Q3 — **RULED [Josh, S170]: one rule, two instruments**
+Josh: *"it should inherit the markup from the allowance line that it is pulling from. Cost-plus
+projects have a markup set for the project. That is the value that would be used for cost-plus
+allowance selections."* These are not an exception to each other — **sell derives per instrument**
+and the instrument decides the rate:
 
-> ⚠️ **Flagged for Josh.** The ruling says *"project default"*. No project-level markup default
-> exists — defaults live on company, instrument and row (analysis 2b.6). The chain above is the
-> nearest thing without inventing a fourth level. If Josh wants a literal project-level column
-> (`projects.default_selection_markup_percent`), it is one column and replaces step 3 only.
+- **Fixed-price** — the selection inherits the **linked allowance line's effective markup**: the
+  row's `markup_percent`, else its instrument's `material_markup_percent` (which an allowance rides —
+  §2.1), else `companies.default_material_markup_percent`. **Unlinked** selections take the contract
+  estimate's (via `client_contracts` → `estimates`).
+- **Cost-plus** — the **instrument's `cost_plus_material_percent`** in force (A-9: four independent
+  rates, no single project percent; the allowance rides material's). Not the allowance line's own.
+- **T&M** — `tm_nonlabor_percent`, like every non-labor row.
+
+User-editable per selection in every case. _Superseded: the S169 flag proposing
+`projects.default_selection_markup_percent` — withdrawn; there is no project-level default and none is
+needed._
 
 ### §5.3 — Variance (Q7, Q8)
 `sell_total = Σ chosen options' sell` (sum-then-compare). `allowance_deduction = allowance sell` (from
