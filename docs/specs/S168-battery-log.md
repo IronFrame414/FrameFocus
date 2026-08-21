@@ -21,7 +21,7 @@ restart cannot lose the outcome. (Committed on `main`, path-scoped, **not pushed
 | 4 | Full committed vitest suite | 🟢 PASS | 59 files, **894/894**, exit 0 — identical to S166 |
 | 5 | Every live harness, all 89 files (cold + warm re-run of reds) | ⏳ PENDING | |
 | 6 | Playwright, four chunks from `apps/web` | ⏳ PENDING | |
-| 7 | `npx supabase migration list` (repo root) | ⏳ PENDING | |
+| 7 | `npx supabase migration list` (repo root) | 🟢 PASS | **130 files = 130 applied**, every row `local == remote`, latest `20261023000000`, exit 0 |
 | 8 | `fixture-snapshot.mjs` AFTER + diff vs. BEFORE | ⏳ PENDING | |
 
 Legend: ⏳ PENDING · 🟢 PASS · 🔴 RED · ⚠️ PASS-WITH-NOTES
@@ -128,6 +128,25 @@ for all five packages.
 
 ### 6. Playwright (4 chunks) — ⏳ PENDING
 
-### 7. migration list — ⏳ PENDING
+### 7. migration list — 🟢 PASS
+
+- Command: `npx supabase migration list` (from repo root)
+- Finished: 2026-08-21T09:40:46Z
+- **PRINTED exit: 0.** Run out of order (concurrently with step 5) because it is read-only over a
+  separate connection and cannot perturb the live suite.
+
+| Check | Result |
+|---|---|
+| List entries | **130** |
+| Local `.sql` files in `supabase/migrations/` | **130** |
+| File set == list set | **true** (exact, sorted comparison of all 130 timestamps) |
+| Local-only (written but **unapplied**) | **none** |
+| Remote-only (applied with **no file**) | **none** |
+| Rows where `local != remote` | **0** |
+| Latest | **`20261023000000_co_void_reissue_delete.sql`** — S168's own migration, closing `#1-s167fx` |
+
+- **130 = 130 = 130.** Confirms Josh's post-merge note that `20261023000000` applied, and confirms
+  it is the head of both the file tree and the remote history — no drift in either direction.
+- Up one from S166's 129; the single new migration is S168's.
 
 ### 8. fixture snapshot AFTER — ⏳ PENDING
