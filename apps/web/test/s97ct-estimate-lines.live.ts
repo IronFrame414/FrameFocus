@@ -20,7 +20,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { admin, assertRebuildTest } from './live-session';
+import { admin, assertRebuildTest, disposeChangeOrdersError, disposeProjectChangeOrdersError, sweepChangeOrders } from './live-session';
 import { loadEstimateLineBilling } from '@/lib/services/estimate-line-billing';
 import { presentInvoice, type PresentationLine } from '@framefocus/shared/utils/invoice-derivation';
 
@@ -104,6 +104,14 @@ const send = async (id: string) =>
 
 beforeAll(async () => {
   assertRebuildTest();
+  // ⚠️ [S168] START FROM A DIRTY DATABASE. `afterAll` does not run when a run
+  // is interrupted, and this suite's `co_number`s are FIXED — so one killed run
+  // used to brick every later one on `change_orders_company_co_number_key`,
+  // permanently, until somebody cleaned the table by hand. Sweeping first makes
+  // the suite runnable twice in a row from ANY starting state, which is the
+  // property that was actually missing and the one a single green run cannot
+  // demonstrate.
+  await sweepChangeOrders(MARKER);
 
   const { data: company } = await admin
     .from('companies').select('id').eq('name', 'Bishop Contracting').single();
@@ -364,7 +372,7 @@ describe('S97CT-ESTLINES — 6/7. scope of the ceiling', () => {
     expect(coErr).toBeNull();
     must('co cleanup', (await admin.from('invoices').delete().eq('id', inv)).error);
     invoiceIds.splice(invoiceIds.indexOf(inv), 1);
-    must('co delete', (await admin.from('change_orders').delete().eq('id', co!.id)).error);
+    must('co delete', await disposeChangeOrdersError([co!.id]));
   });
 
   it('P11 — the ceiling does NOT apply on a cost-plus project', async () => {
@@ -451,7 +459,7 @@ afterAll(async () => {
     if (!pid) continue;
     const { data: invs } = await admin.from('invoices').select('id').eq('project_id', pid);
     for (const i of invs ?? []) check('extra invoice', (await admin.from('invoices').delete().eq('id', i.id)).error);
-    check('change orders', (await admin.from('change_orders').delete().eq('project_id', pid)).error);
+    check('change orders', await disposeProjectChangeOrdersError(pid));
     check('financials', (await admin.from('project_financials').delete().eq('project_id', pid)).error);
     check('project', (await admin.from('projects').delete().eq('id', pid)).error);
   }
@@ -470,4 +478,12 @@ afterAll(async () => {
   const { count } = await admin
     .from('projects').select('id', { count: 'exact', head: true }).like('name', `${MARKER}%`);
   console.log(`\n[${MARKER} TEARDOWN] projects left: ${count}; errors: ${errors.length ? JSON.stringify(errors) : 'NONE'}`);
+  // ⚠️ [S168] THIS THROW IS THE POINT. The teardown has always collected
+  // `errors` and only PRINTED them, so when the S168 delete boundary began
+  // refusing this suite's signed change order the cleanup failed in silence,
+  // the project FK-blocked behind it, and the NEXT run died on a duplicate
+  // `co_number` in `beforeAll` — a failure reported by a different suite, one
+  // run later, with no trace of the cause. A cleanup that cannot fail its own
+  // run is not a cleanup.
+  if (errors.length) throw new Error(`[${MARKER}] teardown failed: ${JSON.stringify(errors)}`);
 }, 240_000);

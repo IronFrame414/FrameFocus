@@ -1,6 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { admin, assertRebuildTest, sessionFor } from './live-session';
+import {
+  admin,
+  assertRebuildTest,
+  disposeChangeOrders,
+  sessionFor,
+  sweepChangeOrders,
+} from './live-session';
 
 // ============================================================================
 // S168 — VOID / REISSUE / DELETE on a change order. Closes #1-s167fx.
@@ -49,6 +55,20 @@ const made = new Set<string>();
 
 let seq = 0;
 const nextNumber = () => `ZZ-S168-${Date.now().toString(36)}-${(seq += 1)}`;
+
+/**
+ * ⚠️ THE STABLE SIGNED FIXTURE — created ONCE, EVER, and reused forever.
+ *
+ * L4c and L4d need a genuinely signature-bearing change order and neither
+ * MUTATES it: the delete they attempt is refused, so the row comes out the
+ * other side untouched. Creating a fresh one per run would strand two more
+ * permanent rows every time, because a signed CO cannot be deleted by anyone
+ * (`enforce_change_order_delete_boundary`) — which is the ruling, not a bug.
+ *
+ * Its prefix deliberately does NOT match the `ZZ-S168-` sweep below, so the
+ * sweep cannot soft-delete the thing it is supposed to preserve.
+ */
+const PERMANENT_SIGNED = 'ZZ-S168X-PERMANENT-SIGNED';
 
 /**
  * A change order in a chosen state, seeded service-role so its existence never
@@ -114,6 +134,42 @@ async function makeCo(
     if (flipError) throw new Error(`makeCo flip to ${status}: ${flipError.message}`);
   }
 
+  return id;
+}
+
+/** Find-or-create the one permanent signed fixture. */
+async function permanentSignedCo(): Promise<string> {
+  const { data: found } = await admin
+    .from('change_orders')
+    .select('id')
+    .eq('company_id', companyId)
+    .eq('co_number', PERMANENT_SIGNED)
+    .maybeSingle();
+  if (found) return (found as { id: string }).id;
+
+  const { data, error } = await admin
+    .from('change_orders')
+    .insert({
+      company_id: companyId,
+      project_id: projectId,
+      co_number: PERMANENT_SIGNED,
+      title: 'ZZ S168 permanent signed fixture — cannot be deleted, by design',
+      co_type: 'fixed_price',
+      pricing_mode: 'markup',
+      author_member_id: ownerMemberId,
+      status: 'draft',
+      net_delta: 500,
+    })
+    .select('id')
+    .single();
+  if (error) throw new Error(`permanentSignedCo: ${error.message}`);
+  const id = (data as { id: string }).id;
+
+  const { error: signError } = await admin
+    .from('change_orders')
+    .update({ status: 'signed', signed_at: new Date().toISOString() })
+    .eq('id', id);
+  if (signError) throw new Error(`permanentSignedCo sign: ${signError.message}`);
   return id;
 }
 
@@ -199,16 +255,53 @@ beforeAll(async () => {
     .limit(1)
     .single();
   projectId = (assignment as unknown as { project_id: string }).project_id;
+
+  // ⚠️ START FROM A DIRTY DATABASE. `afterAll` does not run when a run is
+  // interrupted, and before S168 this file left 120 rows behind across six
+  // green runs. Sweeping first means the suite is honest about its own residue
+  // instead of stepping around it. Signature-bearing leftovers are soft-deleted
+  // by the sweep rather than removed — they cannot be removed.
+  await sweepChangeOrders('ZZ-S168-');
 });
 
 afterAll(async () => {
-  // Children first for the ones the CASCADE cannot reach, then the parents.
-  // A `signed` fixture is refused by the delete boundary even here, so it is
-  // unsigned first — the harness has to obey the rule it is testing.
-  if (made.size) {
-    const ids = [...made];
-    await admin.from('change_orders').update({ signed_at: null, status: 'draft' }).in('id', ids);
-    await admin.from('change_orders').delete().in('id', ids);
+  // ==========================================================================
+  // ⚠️ THE PREVIOUS VERSION OF THIS BLOCK LEAKED 120 CHANGE ORDERS. [S168]
+  // ==========================================================================
+  // _Superseded code, quoted rather than deleted:_
+  //
+  //     await admin.from('change_orders')
+  //       .update({ signed_at: null, status: 'draft' }).in('id', ids);
+  //     await admin.from('change_orders').delete().in('id', ids);
+  //
+  // THREE faults, each of which alone would have been enough:
+  //
+  //   1. The UPDATE is refused for every signed row ("A signature stamp cannot
+  //      be rewritten") and every voided one ("frozen forever"), and its error
+  //      was never read.
+  //   2. **`.in(ids)` IS ONE STATEMENT.** A single row the delete boundary
+  //      refuses aborts the whole batch and takes every deletable sibling with
+  //      it. Nothing was ever deleted — not some of it, none of it.
+  //   3. Nothing checked, so nothing said so.
+  //
+  // ⚠️ AND THE REASON IT STAYED INVISIBLE IS WORTH MORE THAN THE FIX. The
+  // `co_number`s here are timestamped, so this harness can never collide with
+  // its own residue — and a harness that cannot collide with itself also cannot
+  // TELL you it is leaking. It ran green six times over 120 abandoned rows. The
+  // suites that did notice were six unrelated s97ct files, one run later, dying
+  // on a duplicate key in `beforeAll`.
+  //
+  // `disposeChangeOrders()` throws if a row is still live afterwards.
+  const result = await disposeChangeOrders([...made]);
+  if (result.retained.length) {
+    // NOT a failure. A change order carrying a real signature cannot be deleted
+    // by anyone, service role included — that is exactly what L4c/L4d assert.
+    // Soft-deleted, so it leaves every listing and stops contributing to the
+    // revised-contract derivation, and reported so the cost is never silent.
+    console.log(
+      `\n[S168 TEARDOWN] ${result.deleted} deleted, ${result.unflagged} unflagged-then-deleted, ` +
+        `${result.retained.length} PERMANENT (signed, soft-deleted): ${JSON.stringify(result.retained)}`
+    );
   }
 });
 
@@ -268,6 +361,13 @@ describe('L1 — VOID requires a reason, in every case', () => {
     // This is the ruling change. The old route refused anything but draft/sent,
     // citing 5D F-4 ("reversing a binding CO is unpinned"). That interview
     // happened.
+    //
+    // ⚠️ THIS PROBE COSTS ONE PERMANENT ROW PER RUN, AND IT IS IRREDUCIBLE.
+    // It CONSUMES its fixture — signed goes to voided and a voided CO is frozen
+    // forever — so unlike L4c/L4d it cannot reuse the stable one, and the row it
+    // leaves carries a signature and can never be deleted by anybody. The
+    // teardown soft-deletes it and PRINTS it. That is the price of the ruling,
+    // paid where the ruling is tested, rather than hidden.
     const id = await makeCo({ status: 'signed' });
     const { error } = await tryVoid(ownerC, id, 'Scope withdrawn by agreement.');
     expect(error).toBeNull();
@@ -454,7 +554,10 @@ describe('L4 — DELETE: unsigned only, and the FK deadlock is gone', () => {
   });
 
   it('L4c — 🔴 a SIGNED change order does NOT delete, for an Owner', async () => {
-    const id = await makeCo({ status: 'signed' });
+    // The STABLE fixture, not a fresh one. Neither this probe nor L4d mutates
+    // it — the delete is refused, so the row is untouched — and a fresh signed
+    // CO per run would strand two more permanently undeletable rows every time.
+    const id = await permanentSignedCo();
     const { error } = await ownerC.from('change_orders').delete().eq('id', id).select('id');
     // Two guards could answer here — the RLS policy excludes it silently, the
     // trigger refuses it loudly. Either way the row must still exist.
@@ -467,7 +570,7 @@ describe('L4 — DELETE: unsigned only, and the FK deadlock is gone', () => {
     // prove you never sent one is a claim the system must not be able to make
     // falsely." A service-role exemption would be that claim, available to any
     // background job or migration.
-    const id = await makeCo({ status: 'signed' });
+    const id = await permanentSignedCo();
     const { error } = await admin.from('change_orders').delete().eq('id', id);
     expect(error?.message ?? '').toMatch(/signed change order cannot be deleted/i);
     expect(await row(id)).not.toBeNull();

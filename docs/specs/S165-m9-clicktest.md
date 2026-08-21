@@ -70,10 +70,23 @@ The CO list on **"QA A — isolation fixture"** is ordered by **CO number, ascen
 | 1 | `CO-159-64` | **ZZ click-test CO** | sent → you sign it | ✅ **THIS is the one you sign.** Yours, disposable. |
 | 2 | `CO-QA-M9-DRAFT` | ZZ SUPERSEDED — QA M9 draft CO | signed | ⛔ dead row, left by the S167 accident. Ignore. |
 | 3 | `CO-QA-M9-DRAFT-2` ⁽*⁾ | **QA M9 — draft CO** | **draft** | 🚨 **DO NOT SEND OR SIGN.** `s164-m9-read-arms` ARM 4c/5b need it to stay a **draft**. |
-| 4 | `CO-QA-M9-SENT` | **QA M9 — sent CO** | **sent** | 🚨 **DO NOT SIGN, VOID OR EDIT.** ARM 4a/5a need it to stay **sent** with its line. |
+| 4 | `CO-QA-M9-SENT` | **QA M9 — sent CO** | ~~sent~~ **SIGNED — already lost, 2026-08-20** | ☠️ **This one is gone.** Signed from the PORTAL during Part B (`signer_channel = portal_session`). It cannot be reverted, deleted, or even renamed-and-rebuilt — its `co_number` is frozen. Awaiting a rebuild as `CO-QA-M9-SENT-2`. |
 
 ⁽*⁾ The **title** is stable; the **number** is not. Each rebuild takes the next free
 `CO-QA-M9-DRAFT-n`, so check the list rather than the suffix.
+
+> ### ☠️ AND ROW 4 WAS LOST THE SAME NIGHT, FROM THE OTHER DIRECTION [S168]
+>
+> **The portal's Documents card puts a Sign button on `QA M9 — sent CO`** — R10 by design, and
+> B.2.2's expected-contents table below says to expect it. So Part B tells you the button is
+> correct, and B.5 §1 tells you not to press it, and both are true. It was pressed at 23:15 on
+> 2026-08-20 and the fixture is permanently signed.
+>
+> **Nothing went red.** ARM 4a only requires the CO to be non-draft; ARM 5a only requires its line
+> to be visible. `s164-m9-read-arms` stayed 188/188 across three runs over a broken fixture.
+>
+> **Until it is rebuilt, expect row 4 to read `Signed` in the portal, not `Awaiting your
+> signature`.** That is the damage, not a bug in the page.
 
 > **Row 3 is the trap.** It sits **directly under your throwaway** in the list, it is a *draft* so
 > the page offers you **Send** in one click and the signing link the moment you do, and its title

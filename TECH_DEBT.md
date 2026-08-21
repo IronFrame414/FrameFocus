@@ -119,6 +119,46 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   client arm. **Sweep the tests before finishing** — anything asserting a team-roster row count or
   the invite role list encodes today's behaviour, per CLAUDE.md's S157 rule.
 
+- **#3-s168 — `CO-QA-M9-SENT` WAS SIGNED FROM THE PORTAL AND IS PERMANENTLY LOST. THE READ ARMS
+  STAYED GREEN OVER IT FOR THREE RUNS.** Raised S168 (2026-08-21), found while chasing unrelated
+  fixture residue. Nobody reported it, because nothing failed.
+
+  ```
+  co_signing_sessions:  status=completed  signer_channel=portal_session
+                        signer_name="QA Client Linked"  signed_at=2026-08-20T23:15:43
+  ```
+
+  Signed from the **portal**, during the Part B click-test. `9-spec.md` R10 puts a **Sign** button
+  on exactly that row and `S165-m9-clicktest.md` B.2.2 tells the tester to expect it; B.5 §1 tells
+  them not to press it. Both were true at once.
+
+  **Two defects, and the second is the one that generalises.**
+
+  1. **The fixture is unrepairable, and now more thoroughly than `CO-QA-M9-DRAFT` was.** `signed_at`
+     cannot be cleared (S164) and the row cannot be deleted (S168's own boundary). It cannot even be
+     renamed-aside-and-rebuilt the way the draft was: the seed's `ensureRow` key is the **title**, so
+     a rename frees the title, but `co_number` is frozen by the immutability trigger and
+     `CO-QA-M9-SENT` stays taken. A rebuild must take `CO-QA-M9-SENT-2`.
+
+  2. **⚠️ `s164-m9-read-arms` STAYED 188/188 ACROSS THREE RUNS OVER A BROKEN FIXTURE.** ARM 4a
+     asserts only `status !== 'draft'`, and ARM 5a only that the sent CO's line is visible. `signed`
+     satisfies both. This is CLAUDE.md's S157 rule seen from the other end: not a test that
+     contradicts a shipped rule, but a test **whose every assertion is satisfied by the wrong
+     state**. A fixture pinned to one specific state needs an assertion that names that state.
+
+  **Fix, in one pass, and not before Josh's click-test is finished** — re-seeding under a live
+  click-test is the S167 mistake repeated:
+  - Rename the signed row aside (`ZZ SUPERSEDED — QA M9 sent CO …`) and rebuild as
+    `CO-QA-M9-SENT-2`, draft → line → flip to `sent`, per the existing S167 repair block's shape.
+  - **Then tighten ARM 4a to assert the seeded CO is specifically `sent`** — that assertion is what
+    would have caught this at 23:15 instead of two hours later by accident. It is deliberately NOT
+    added now, because it would be red against the live database until the rebuild lands, and a
+    knowingly-red test in the battery is noise rather than a task.
+  - Decide whether the seeded pair should carry a portal Sign affordance at all. A fixture whose
+    only job is to sit in one state probably should not be the row the click-test is told to click.
+  Cross-ref `docs/specs/S167-fixture-inventory.md`, which now carries this as its second worked
+  example and has had its "reachable from the UI" column widened from `/dashboard` to every surface.
+
 - **#2-s168 — AN EXPIRED CLIENT INVITE POINTS AT THE ONE PAGE A CLIENT SHOULD NOT BE ON.** Raised
   S168 (2026-08-20), from the same click-test.
 

@@ -10,7 +10,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { admin, assertRebuildTest, sessionFor } from './live-session';
+import { admin, assertRebuildTest, disposeChangeOrdersError, sessionFor, sweepChangeOrders } from './live-session';
 
 const MARKER = 'S97FLOOR3';
 
@@ -38,6 +38,14 @@ const must = (label: string, error: { message: string } | null) => {
 
 beforeAll(async () => {
   assertRebuildTest();
+  // ⚠️ [S168] START FROM A DIRTY DATABASE. `afterAll` does not run when a run
+  // is interrupted, and this suite's `co_number`s are FIXED — so one killed run
+  // used to brick every later one on `change_orders_company_co_number_key`,
+  // permanently, until somebody cleaned the table by hand. Sweeping first makes
+  // the suite runnable twice in a row from ANY starting state, which is the
+  // property that was actually missing and the one a single green run cannot
+  // demonstrate.
+  await sweepChangeOrders(MARKER);
 
   const { data: company } = await admin
     .from('companies').select('id').eq('name', 'Bishop Contracting').single();
@@ -588,7 +596,7 @@ afterAll(async () => {
     await admin.from('change_orders').update({ status: 'draft' }).eq('id', coId);
     check('co line rows', (await admin.from('change_order_line_rows').delete().eq('line_item_id', sentLineItemId)).error);
     check('co line items', (await admin.from('change_order_line_items').delete().eq('change_order_id', coId)).error);
-    check('change order', (await admin.from('change_orders').delete().eq('id', coId)).error);
+    check('change order', await disposeChangeOrdersError([coId]));
   }
 
   if (subcontractorId) {
@@ -601,4 +609,12 @@ afterAll(async () => {
   const { count } = await admin
     .from('change_orders').select('id', { count: 'exact', head: true }).like('co_number', `${MARKER}%`);
   console.log(`\n[${MARKER} TEARDOWN] ${MARKER} COs left: ${count}; errors: ${errors.length ? JSON.stringify(errors) : 'NONE'}`);
+  // ⚠️ [S168] THIS THROW IS THE POINT. The teardown has always collected
+  // `errors` and only PRINTED them, so when the S168 delete boundary began
+  // refusing this suite's signed change order the cleanup failed in silence,
+  // the project FK-blocked behind it, and the NEXT run died on a duplicate
+  // `co_number` in `beforeAll` — a failure reported by a different suite, one
+  // run later, with no trace of the cause. A cleanup that cannot fail its own
+  // run is not a cleanup.
+  if (errors.length) throw new Error(`[${MARKER}] teardown failed: ${JSON.stringify(errors)}`);
 }, 240_000);

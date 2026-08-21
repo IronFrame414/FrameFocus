@@ -219,4 +219,12 @@ afterAll(async () => {
   const { count } = await admin
     .from('invoices').select('id', { count: 'exact', head: true }).like('title', `${MARKER}%`);
   console.log(`\n[${MARKER} TEARDOWN] rows left: ${count}; errors: ${errors.length ? JSON.stringify(errors) : 'NONE'}`);
+  // ⚠️ [S168] THIS THROW IS THE POINT. The teardown has always collected
+  // `errors` and only PRINTED them, so when the S168 delete boundary began
+  // refusing this suite's signed change order the cleanup failed in silence,
+  // the project FK-blocked behind it, and the NEXT run died on a duplicate
+  // `co_number` in `beforeAll` — a failure reported by a different suite, one
+  // run later, with no trace of the cause. A cleanup that cannot fail its own
+  // run is not a cleanup.
+  if (errors.length) throw new Error(`[${MARKER}] teardown failed: ${JSON.stringify(errors)}`);
 }, 180_000);

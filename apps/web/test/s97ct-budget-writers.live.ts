@@ -16,7 +16,7 @@
  * Every line created here is deleted in afterAll.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { admin, assertRebuildTest, sessionFor } from './live-session';
+import { admin, assertRebuildTest, disposeChangeOrdersError, sessionFor, sweepChangeOrders } from './live-session';
 
 const MARKER = 'S97WRITERS';
 
@@ -44,6 +44,14 @@ async function budgetedFor(itemId: string): Promise<number | null> {
 
 beforeAll(async () => {
   assertRebuildTest();
+  // ⚠️ [S168] START FROM A DIRTY DATABASE. `afterAll` does not run when a run
+  // is interrupted, and this suite's `co_number`s are FIXED — so one killed run
+  // used to brick every later one on `change_orders_company_co_number_key`,
+  // permanently, until somebody cleaned the table by hand. Sweeping first makes
+  // the suite runnable twice in a row from ANY starting state, which is the
+  // property that was actually missing and the one a single green run cannot
+  // demonstrate.
+  await sweepChangeOrders(MARKER);
 
   const { data: company } = await admin
     .from('companies').select('id').eq('name', 'Bishop Contracting').single();
@@ -379,7 +387,7 @@ afterAll(async () => {
       check('co rows', (await admin.from('change_order_line_rows').delete().eq('line_item_id', li.id)).error);
     }
     check('co items', (await admin.from('change_order_line_items').delete().eq('change_order_id', co.id)).error);
-    check('co', (await admin.from('change_orders').delete().eq('id', co.id)).error);
+    check('co', await disposeChangeOrdersError([co.id]));
   }
 
   for (const pid of projectIds) {
