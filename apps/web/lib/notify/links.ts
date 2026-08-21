@@ -47,6 +47,13 @@ interface LinkDef {
 }
 
 const LINKS: Record<string, LinkDef> = {
+  // S171 — a selection's company sheet. No /m edit surface yet (stage 3 report),
+  // so mobile deep-links to the read-only /m list.
+  selection: {
+    mobile: (p) => (p.projectId ? `/m/p/${p.projectId}/selections` : null),
+    desktop: (p) =>
+      p.projectId && p.id ? `/dashboard/projects/${p.projectId}/selections/${p.id}` : null,
+  },
   chat: {
     // ⚠️ A PARAM, NOT A ROUTE — CORRECTED [S126 slice 3] against ND-40/ND-37.
     // _Superseded, quoted not rewritten: `/m/p/${p.projectId}/chat`._

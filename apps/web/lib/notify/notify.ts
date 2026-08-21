@@ -92,7 +92,12 @@ export type NotificationType =
   // the CHECK constraint, and `email_types` + `EmailType`. S126 shipped
   // `mention` in the table and not in a union, and that half only fails at
   // compile time — so it shipped silently.
-  | 'trial_warning';
+  | 'trial_warning'
+  // S171 — Allowances & Selections Q9: Owner/Admin on BOTH approval and denial.
+  // CHECK value lands in 20261027000000, same commit. In-app + push only; not
+  // emailed, so `email_types` is deliberately untouched.
+  | 'selection_approved'
+  | 'selection_denied';
 
 export interface NotifyParams {
   admin: SupabaseClient<Database>;

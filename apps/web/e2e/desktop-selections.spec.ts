@@ -157,3 +157,29 @@ test.describe('/m parity — the subcontractor reads the list with NO COSTS', ()
     await expectNoMoney(page, '[data-testid="m-selections"]');
   });
 });
+
+test.describe('stage 4 — the sheet\'s lifecycle controls (company side)', () => {
+  test('owner: "Send to client for approval" → price block + Withdraw → back to draft', async ({ page }) => {
+    await signIn(page, OWNER);
+    await page.goto(`/dashboard/projects/${PROJECT_QA_A}/selections/${selectionId}`);
+    await expect(page.getByTestId('sel-offer')).toBeVisible();
+    await page.getByTestId('sel-offer').click();
+    await expect(page.getByTestId('sel-price-block')).toBeVisible();
+    await expect(page.getByTestId('sel-price-block')).toContainText('Selections Price');
+    await expect(page.getByTestId('sel-price-block')).toContainText('$5,040.00');
+    await expect(page.getByTestId('sel-price-block')).toContainText('Allowance Deduction');
+    await expect(page.getByTestId('sel-variance')).toContainText('$5,040.00'); // unlinked → pure add (Q8)
+    await expect(page.getByTestId('sel-name')).toBeDisabled(); // frozen while awaiting
+    page.once('dialog', (d) => d.accept());
+    await page.getByTestId('sel-withdraw').click();
+    await expect(page.getByTestId('sel-offer')).toBeVisible();
+    await expect(page.getByTestId('sel-price-block')).toHaveCount(0);
+  });
+
+  test('foreman: no lifecycle buttons, only the status sentence', async ({ page }) => {
+    await signIn(page, FOREMAN);
+    await page.goto(`/dashboard/projects/${PROJECT_QA_A}/selections/${selectionId}`);
+    await expect(page.getByTestId('sel-offer')).toHaveCount(0);
+    await expect(page.getByTestId('sel-lifecycle')).toContainText('Not yet sent to the client');
+  });
+});

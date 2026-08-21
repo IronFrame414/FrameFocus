@@ -86,6 +86,57 @@ reads the chosen option with no money or notes. type-check 0, lint 0.
 "from budget" option source).
 
 
-## Stage 4 — ⏳
+## Stage 4 — offer, sign, deny, revise — ✅ COMMITTED
+
+**Migration:** `20261027000000_selection_notifications.sql` — `selection_approved` / `selection_denied`
+on the `notifications_type_check` (+ `NotificationType` union, same commit; in-app + push only, so
+`email_types` deliberately untouched). Pushed, exit 0.
+
+**Service:** `lib/services/selection-lifecycle-service.ts` — `offerSelection` (company, gated by the
+**caller's RLS UPDATE**; stamps `offered_*` from Σ chosen sell − allowance sell; opens one `pending`
+session, invalidating any older pending one), `withdrawSelectionOffer`, `reviseSelection` (approved →
+in_discussion; the completed session gets `superseded_at`, **never deleted**), and the client's two
+acts through **one write path with M9's caller-context** — `completeSelectionSignature` (portal only;
+session `completed` with consent text, IP, UA, channel, profile and a **snapshot of what she saw**;
+selection `approved` with `signed_* = offered_*`) and `declineSelection` (→ **draft**, stamps
+cleared, session `declined` with her note). Owner/Admin notified on both via `notify()`.
+**Binding wording** (Josh): *"…accept the stated price of $X, less my allowance of $Y, for an added
+price / a credit of $Z. This signature is binding and accepts the stated costs."* — and the
+**no-money variant** for client-supplied (*"I am supplying this item myself; no charge applies. This
+signature is binding."*). **Allowance sell** = `budgeted_amount` × (1 + markup) with the Q3 chain
+(source row → instrument material markup → company material default).
+
+**Routes:** `/api/selections/[id]/{offer,withdraw,revise}` (staff) and
+`/api/portal/{sign-selection,decline-selection}` (client; mirror `/api/portal/sign-co`, validate
+`completeSignatureSchema`, pass `caller: { kind: 'portal_session', profileId }`). The portal PAGE
+that calls them is stage 7 — the dead route stays dead; the harness exercises the write path.
+
+**Sheet:** `selection-lifecycle.tsx` — Send for approval (needs ≥1 priced chosen option unless
+client-supplied/discussion), the ruled price block (*Selections Price / Allowance Deduction / Added
+Price* or *Credit Owed*), Withdraw, Revise (confirm names the retained prior signature), session
+history; fields freeze once offered.
+
+**Harness:** `s171-selections-lifecycle.live.ts` — **18/18 twice, exit 0, zero residue**, calling the
+real service with real sessions (PM offers/revises; LINKED signs/declines; SUB and CONTROL refused,
+mutation-proved). **B3 is the sentence this stage exists to prove: after approval NO change order
+exists, `project_financials.contract_value` and Σ signed CO `net_delta` are byte-identical to the
+baseline, and `project_budget_items` has the same count.** Also proven: a cost edit after offer does
+not move the offered stamp (A4); revise supersedes and retains (`signature_data` intact, C1); a
+second sign gives two completed sessions with exactly one current (C2); decline returns to draft
+with the note in the notification (D1); client-supplied signs with no stamps and the no-money wording
+(E2); unlinked = pure add, deduction 0 (E3).
+
+**Playwright:** `desktop-selections.spec.ts` now **10/10** — owner sends, sees the price block
+(`$5,040.00` pure add), withdraws back to draft; foreman sees no lifecycle buttons.
+
+**One affordance beyond the rulings, flagged:** **Withdraw** (company-side awaiting_approval → draft,
+pending session invalidated). Not in Q9, which rules the client's denial; added because a company
+that notices a wrong price after sending otherwise has no way back except waiting for the client to
+decline. Same mechanics as deny, company-initiated. Remove if unwanted.
+
+**Stop conditions:** none. **No 7B/7D/7H file touched** — verified by B3 and by `git diff --stat`
+on this stage (no `contract-value.ts`, `invoice*`, `profitability*`). Nothing written to
+`project_budget_items`. No new markup column, no new rate type.
+
 
 ## Verification battery — ⏳
