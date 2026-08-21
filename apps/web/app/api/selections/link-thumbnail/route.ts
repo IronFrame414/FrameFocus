@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { randomUUID } from 'node:crypto';
 import { createClient } from '@/lib/supabase-server';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { brand } from '@/lib/brand';
 
 // ============================================================================
 // Option image path 2 of 4 — "paste a link that renders a thumbnail". [S171 s3]
@@ -47,7 +48,8 @@ async function fetchWithLimit(url: string, accept: string): Promise<Response> {
     return await fetch(url, {
       redirect: 'follow',
       signal: ctrl.signal,
-      headers: { accept, 'user-agent': 'FrameFocus-link-preview/1.0' },
+      // brand.name, never a literal — S136's brand-literals guard.
+      headers: { accept, 'user-agent': `${brand.name}-link-preview/1.0` },
     });
   } finally {
     clearTimeout(t);

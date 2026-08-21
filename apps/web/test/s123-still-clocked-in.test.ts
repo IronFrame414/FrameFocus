@@ -64,9 +64,15 @@ describe('§3j — the spec premise that turned out to be false', () => {
     // 20260918000000 (S137, trial lifecycle) re-creates it to add
     // `trial_warning`. It is the same category as notifications_core.sql, which
     // this list already allowed for exactly the same reason.
+    //
+    // 20261027000000 (S171, selections) re-creates it again to add
+    // `selection_approved` / `selection_denied`. Same category, same reason;
+    // its only emitter is selection-lifecycle-service.ts, which emits THOSE
+    // two types and never still_clocked_in.
     expect(hits.sort(), `unexpected still-clocked-in producers: ${hits.join(', ')}`).toEqual([
       'supabase/migrations/20260905000000_notifications_core.sql',
       'supabase/migrations/20260918000000_trial_lifecycle.sql',
+      'supabase/migrations/20261027000000_selection_notifications.sql',
     ]);
   });
 });
