@@ -14,7 +14,7 @@ restart cannot lose the outcome. (Committed on `main`, path-scoped, **not pushed
 
 | # | Step | Status | Result |
 |---|------|--------|--------|
-| 0 | `fixture-snapshot.mjs` BEFORE | ⏳ PENDING | |
+| 0 | `fixture-snapshot.mjs` BEFORE | 🟢 DONE | exit 0; baseline captured, incl. a **pre-existing** CO-residue census (44 suspect rows / 64 total) |
 | 1 | `npx turbo run type-check` | ⏳ PENDING | |
 | 2 | `next lint` (expect 0) | ⏳ PENDING | |
 | 3 | `npm run build --force` (FULL TURBO ≠ evidence) | ⏳ PENDING | |
@@ -40,7 +40,36 @@ Legend: ⏳ PENDING · 🟢 PASS · 🔴 RED · ⚠️ PASS-WITH-NOTES
 
 ## Step details
 
-### 0. fixture snapshot BEFORE — ⏳ PENDING
+### 0. fixture snapshot BEFORE — 🟢 DONE
+
+- Command: `node fixture-snapshot.mjs` (repo root)
+- Finished: 2026-08-21T09:35:03Z — **PRINTED exit: 0.**
+
+```
+companies 4        projects 10        projects_live 10   project_assignments 26
+project_contacts 8 contacts 31        profiles 10        company_members 296
+change_orders 64   invoices 15        invoice_lines 18   chat_threads 1
+chat_messages 30   files 196          co_signing_sessions 23
+estimates 15       client_contracts 8
+company_names 4    project_names 10   assignment_pairs 26
+```
+
+**Extra baseline taken for question 1 (CO leakage).** `fixture-snapshot.mjs` counts
+`change_orders` but does not name them, and the question is about *which* rows. A separate
+read-only census via `scripts/live-sql.mjs`:
+
+- **`change_orders` total: 64. Suspect (`ZZ…`/`QA…`) rows: 44** — i.e. **residue predates this
+  battery**, accumulated across earlier sessions. Step 8 therefore measures the **delta from this
+  baseline**, not the absolute count; an absolute count would blame this run for other runs' rows.
+- Shape of the existing residue, which is itself informative:
+  - Runs **before** the S168 harness-leak fix (`85397da`) left **three** rows each —
+    `ZZ-S168-<id>-6` (voided) plus `-22` and `-23` (**signed**).
+  - The **three most recent** runs (01:13:48Z, 01:29:20Z, and **09:26:33Z — Josh's own post-merge
+    `s168 21/21`**) each left **exactly one** row: `ZZ-S168-<id>-6`, status `voided`. The signed
+    pair stopped leaking; one voided row did not.
+  - One deliberately-named permanent row exists: `ZZ-S168X-PERMANENT-SIGNED` (00:54:04Z).
+- Whether that single `-6` voided row is a genuine residual leak or an intended persistent fixture
+  is resolved in step 8 against this run's own delta.
 
 ### 1. type-check — ⏳ PENDING
 
