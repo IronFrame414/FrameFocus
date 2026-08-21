@@ -22,7 +22,7 @@ restart cannot lose the outcome. (Committed on `main`, path-scoped, **not pushed
 | 5 | Every live harness, all 89 files (cold + warm re-run of reds) | 🟢 PASS (effectively) | cold exit 1 (2 files red of 89); warm re-run of both **exit 0, 23/23**. Zero tree defects. Red set **disjoint** from both prior batteries |
 | 6 | Playwright, four chunks from `apps/web` | 🟢 PASS | **521 passed, 9 skipped, 0 failed**; all four shards exit 0 |
 | 7 | `npx supabase migration list` (repo root) | 🟢 PASS | **130 files = 130 applied**, every row `local == remote`, latest `20261023000000`, exit 0 |
-| 8 | `fixture-snapshot.mjs` AFTER + diff vs. BEFORE | ⏳ PENDING | |
+| 8 | `fixture-snapshot.mjs` AFTER + diff vs. BEFORE | ⚠️ PASS-WITH-NOTES | before≠after; 5 deltas, all explained. **No CO leak** — live CO count 25→25, Playwright created none |
 
 Legend: ⏳ PENDING · 🟢 PASS · 🔴 RED · ⚠️ PASS-WITH-NOTES
 
@@ -233,7 +233,7 @@ no manual restore at all.
   it is the head of both the file tree and the remote history — no drift in either direction.
 - Up one from S166's 129; the single new migration is S168's.
 
-### 8. fixture snapshot AFTER — ⏳ PENDING (interim CO census recorded below)
+### 8. fixture snapshot AFTER — ⚠️ PASS-WITH-NOTES (every delta explained; no product leak)
 
 **Interim, taken 2026-08-21T09:57Z — immediately after the live suite, before Playwright.** Taken
 at this point deliberately: it splits the battery's CO churn into "what the 89 live harnesses did"
@@ -257,3 +257,67 @@ All three rows the live suite created are **soft-deleted**:
 
 **The full run added ZERO live change orders.** Every row either deleted outright or, where the
 delete boundary forbids removal, was soft-deleted by its harness's teardown.
+
+#### Final AFTER snapshot
+
+- Command: `node fixture-snapshot.mjs` (repo root), 2026-08-21T10:16:35Z, after the production
+  server was stopped **by PID** (never `pkill -f` — `CLAUDE.md` exit-status rule 4).
+- **PRINTED exit: 0.** Before ≠ after; five scalar fields moved, and every one is accounted for.
+
+| Field | Before → After | Explanation |
+|---|---|---|
+| `change_orders` | 64 → **67** (+3) | The three rows itemised above, **all soft-deleted**. Live CO count **25 → 25, unchanged.** |
+| `company_members` | 296 → **302** (+6) | Test churn — Playwright `m-writes`/team specs and `hub-fixture` create members and do not tear all of them down. **Exactly the +6 S166 recorded**, same cause. |
+| `files` | 196 → **199** (+3) | Live-suite churn, all three identified by name: two `lien-release-sub_inbound-conditional-*.pdf` (09:40:52Z, 09:40:54Z, from `s145-sub-inbound`) and one `CO-QA-M9-SIGN-…-v2.pdf` (09:41:35Z, the signed-CO artifact). |
+| `chat_threads` | 1 → **0** | **Not a loss — a return to the documented steady state.** See below. |
+| `chat_messages` | 30 → **0** | Same; messages cascade from the thread. |
+
+**Unchanged (12 of 17 scalars):** `companies`, `projects`, `projects_live`, `project_assignments`,
+`project_contacts`, `contacts`, `profiles`, `invoices`, `invoice_lines`, `co_signing_sessions`,
+`estimates`, `client_contracts`. **All three named-identity arrays are byte-identical** —
+`company_names` (4), `project_names` (10), `assignment_pairs` (26) — so nothing was renamed,
+re-statused, or re-assigned.
+
+**On the chat delta, this battery corrects S166's reading of the same pattern.** S166 logged it as
+the harnesses having "removed the **seeded** thread". `apps/web/e2e/chat-fixture.ts:8-15` says
+otherwise, in its own words: the documented clean state is **"0/0/0/0"**, and *"the threads
+themselves are created BY THE APP, not seeded … `teardownChat()` removes everything for the
+projects a spec touched"*. So the thread is **not** seeded, `0/0` is the **correct** end state, and
+what the BEFORE snapshot caught at 1/30 was **residue from an earlier run that this battery cleaned
+up**. The delta runs in the reverse direction from how it was previously recorded: this is the one
+field where the tree ended *tidier* than it started.
+
+- **`profiles` unchanged at 10** — no orphaned transient identity this time, unlike S166 (which had
+  to delete a stranded `josh+s133-pm2@`). That is the dividend of running the suite detached so its
+  `afterAll` actually ran.
+- **No reseed was run**, deliberately and for S166's reason: reseeding would normalise the counts
+  and make this snapshot dishonest about what the battery actually left.
+
+---
+
+## ⇒ Answer to question 1: **No ZZ-S168 or S97 row was left behind. Nothing leaked.**
+
+- **Playwright created zero change orders** — the query for rows created after 09:57Z returns `[]`.
+  All CO churn belongs to the live suite.
+- **The live (non-soft-deleted) CO count is 25 before and 25 after.** Every one of the 3 rows this
+  battery created is `is_deleted = true`.
+- **The five live suspiciously-named CO rows all predate this battery** (08-19 21:59Z through
+  08-21 00:54Z) and none was created by it:
+  `CO-QA-M9-DRAFT`, `CO-QA-M9-SENT`, `CO-159-64`, `CO-QA-M9-DRAFT-2`, and
+  **`ZZ-S168X-PERMANENT-SIGNED`** — the last being the harness's *deliberate* stable fixture, whose
+  prefix is excluded from the `ZZ-S168-` sweep on purpose so it can be reused by L4c/L4d rather
+  than re-minted each run.
+- **Of the 24 `ZZ-S168*` rows in the database, 23 are soft-deleted and the 1 live one is that
+  intended permanent fixture.**
+
+**On the specific worry — two harnesses creating COs against a delete boundary that makes signed
+COs permanent — the mechanism behaved exactly as designed, and the full run is where that gets
+proven.** The one row per run that cannot be deleted (`ZZ-S168-<id>-6`, from **L1d**, which voids a
+*signed* CO and thereby consumes its fixture) is soft-deleted and **printed** by the teardown, so
+its cost is visible rather than silent. The fix at `85397da` is measurable in the residue itself:
+runs before it left **three** undeleted rows each (`-6`, `-22`, `-23`); every run after it —
+including Josh's own post-merge `s168 21/21` at 09:26Z and this battery's at 09:43Z — left
+**one**, soft-deleted.
+
+**A leak that only appears in a full run is what step 8 exists to catch, and on this tree it caught
+none.**
