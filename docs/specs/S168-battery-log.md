@@ -18,7 +18,7 @@ restart cannot lose the outcome. (Committed on `main`, path-scoped, **not pushed
 | 1 | `npx turbo run type-check` | 🟢 PASS | 5/5 successful, **0 cached** (forced, genuinely fresh), exit 0 |
 | 2 | `next lint` (expect 0) | 🟢 PASS | "No ESLint warnings or errors", exit 0 — still at 0 |
 | 3 | `npm run build --force` (FULL TURBO ≠ evidence) | 🟢 PASS | fresh: **0 cached, 1 total**, `✓ Compiled successfully`, 2m23.2s, exit 0 |
-| 4 | Full committed vitest suite | ⏳ PENDING | |
+| 4 | Full committed vitest suite | 🟢 PASS | 59 files, **894/894**, exit 0 — identical to S166 |
 | 5 | Every live harness, all 89 files (cold + warm re-run of reds) | ⏳ PENDING | |
 | 6 | Playwright, four chunks from `apps/web` | ⏳ PENDING | |
 | 7 | `npx supabase migration list` (repo root) | ⏳ PENDING | |
@@ -116,7 +116,13 @@ for all five packages.
 > is what settles it. **Recorded rather than quietly worked around, because this battery's whole
 > instruction is to read the printed line and this is the one step where the two disagreed.**
 
-### 4. committed vitest — ⏳ PENDING
+### 4. committed vitest — 🟢 PASS
+
+- Command: `npx vitest run` (from `apps/web`; committed config — excludes `*.live.ts` and `e2e/**`)
+- Finished: 2026-08-21T09:40:18Z
+- **PRINTED exit: 0.** `Test Files  59 passed (59)`, `Tests  894 passed (894)`, Duration 21.25s.
+- **Identical to the S166 battery** (59 / 894). S168 added no committed unit tests — its work is
+  covered by the live harness `s168-co-lifecycle.live.ts` (step 5) and the portal Playwright spec.
 
 ### 5. live harnesses (89) — ⏳ PENDING
 
