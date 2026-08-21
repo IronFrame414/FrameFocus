@@ -149,7 +149,53 @@ on this stage (no `contract-value.ts`, `invoice*`, `profitability*`). Nothing wr
 | V3 | `turbo run build --force` | 🟢 | exit 0, 0 cached, compiled |
 | V4 | committed vitest | 🟢 after 2 guard catches | first run **exit 1, 902/904**: `brand-literals` caught a product-name literal in the link-preview route's user-agent (now `brand.name` — the old name would have gone out in an HTTP header); `s123-still-clocked-in` caught my notifications-CHECK restatement in its producer grep — allowlisted with the S137 reasoning (a CHECK declaration is not an emitter). Re-run **exit 0, 59 files, 904/904** |
 | V5 | every live harness | 🟢 | **PRINTED exit 0 on the COLD pass — 92/92 files, 1273/1273, 8m26s. No warm pass needed — second battery in a row.** 92 = 90 + the two S171 harnesses; 1273 = 1214 + 41 + 18 |
-| V6 | Playwright ×4 from `apps/web` | ⏳ | |
+| V6 | Playwright ×4 from `apps/web` | 🟢 after one fix | First pass: shards 2/3/4 **exit 0** (124+3sk / 157+4sk / 104+2sk); shard 1 **exit 1** — one `✘`, **my own new spec**, at **0ms** (setup, not an assertion): its `beforeAll` insert hit the `selection_areas` partial unique index on residue the sweep had not cleared. Root cause: the stage-4 Offer test opens a signing session (FK to the selection); the stage-3 sweep never deleted sessions, `selections.delete()` was refused on the FK, **the refusal was swallowed**, and the area leaked into the next run — the exact "harness that cannot tell you it leaked" defect. Fixed (`35fc082`): the sweep deletes sessions + notifications first and **asserts zero refusals and zero residue** in both hooks. Spec re-run twice from the dirty start: 10/10, 10/10. **Shard 1 re-run in full: 146/146, exit 0, `✘` 0.** Totals across the four: **531 passed, 9 skipped, 0 failed** (521 + the 10 new) |
 | V7 | `supabase migration list` (repo root) | 🟢 | exit 0, **134 = 134**, latest `20261027000000` |
-| V8 | `fixture-snapshot.mjs` AFTER | ⏳ | |
+| V8 | `fixture-snapshot.mjs` AFTER | ⚠️ PASS-WITH-NOTES | 14:46:27Z, exit 0. The known S168/S170 profile: `company_members` +6 (Playwright churn), `change_orders` +3 **all soft-deleted** (live **25 → 25**), `files` +3; all three named-identity arrays identical. **All nine `selection_*` tables at 0 rows, 0 `S171` budget lines, 0 selection notifications.** |
 
+---
+
+## Closing verdict — 🟢 STAGES 2, 3, 4 BUILT AND VERIFIED on `feature/s171-selections-stages-2-4`
+
+| | Printed exit | Numbers |
+|---|---|---|
+| type-check --force | 0 | 5/5, 0 cached |
+| lint | 0 | 0 / 0 |
+| build --force | 0 | 0 cached |
+| committed vitest | 1 → **0** | 904/904 after two guard catches (both real: a brand literal in an outbound UA; a CHECK restatement in a producer grep) |
+| **live harnesses** | **0 cold** | **92/92, 1273/1273 — second consecutive battery with no warm pass** |
+| Playwright ×4 | 1,0,0,0 → **0,0,0,0** | 531 / 9 sk / 0 after the e2e-sweep fix |
+| migration list | 0 | 134 = 134 |
+| snapshot | 0 | known profile; **zero residue in all nine new tables** |
+
+**Three migrations on rebuild-test** (`20261026000000`, `20261027000000` — plus nothing else); none on
+production. **No 7B/7D/7H file touched in any stage** (`git diff --stat e9a26ae..HEAD` carries no
+`contract-value`, `invoice*`, `profitability*`, `budget.ts`). **Nothing written to
+`project_budget_items`** (read-only: dropdown, "from budget" source, the harness's own fixture line).
+**No new markup column, no new rate type.** The portal Selections route is **still the S168 dead
+page**.
+
+### Decisions and flags for Josh, collected from the three stop reports
+
+1. No `'denied'` status — denial returns to draft; the session records `declined` (stage 2).
+2. Sessions are service-role write only, like `co_signing_sessions` (stage 2).
+3. **PM-uploaded option images are not client-visible** under `files_insert_non_client` — stage 7
+   must serve option images through a definer read keyed on the selection (recommended) or flip the
+   flag owner-side (stage 3).
+4. **No `/m` hub tile** (ruled nine-tile set) and **no `/m` edit sheet** (M6M-edit-surfaces-spec)
+   — the `/m` read-only route exists (stage 3).
+5. **Withdraw** — a company-side awaiting_approval → draft affordance beyond Q9; remove if unwanted
+   (stage 4).
+
+### Two defects this session caught in its own work, recorded because they generalise
+
+- A **brand literal** in an outbound HTTP header, caught by `brand-literals.test.ts`. The guard
+  exists because S136 found the old name surviving in strings; it just found another.
+- An **e2e sweep that swallowed an FK refusal** and leaked fixture rows into the next run — caught
+  only because Playwright sharding put the spec's tests in a later process than its own teardown.
+  The live harnesses had the loud sweep from the start (S168's lesson); the e2e one did not until
+  it failed. Both sweeps now assert zero residue.
+
+### Ready for stage 5 when released
+
+`signed_variance` is stamped and waiting; the derivation it feeds is untouched.
