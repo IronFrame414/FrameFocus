@@ -6642,6 +6642,634 @@ export type Database = {
           },
         ]
       }
+      selection_areas: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          is_deleted: boolean
+          name: string
+          project_id: string
+          sort_order: number
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean
+          name: string
+          project_id: string
+          sort_order?: number
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean
+          name?: string
+          project_id?: string
+          sort_order?: number
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "selection_areas_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "selection_areas_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      selection_message_photos: {
+        Row: {
+          company_id: string
+          created_at: string
+          file_id: string
+          id: string
+          message_id: string
+          sort_order: number
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          file_id: string
+          id?: string
+          message_id: string
+          sort_order?: number
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          file_id?: string
+          id?: string
+          message_id?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "selection_message_photos_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "selection_message_photos_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "selection_message_photos_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "selection_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      selection_messages: {
+        Row: {
+          author_profile_id: string
+          body: string
+          company_id: string
+          created_at: string
+          id: string
+          link_url: string | null
+          thread_id: string
+        }
+        Insert: {
+          author_profile_id: string
+          body: string
+          company_id?: string
+          created_at?: string
+          id?: string
+          link_url?: string | null
+          thread_id: string
+        }
+        Update: {
+          author_profile_id?: string
+          body?: string
+          company_id?: string
+          created_at?: string
+          id?: string
+          link_url?: string | null
+          thread_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "selection_messages_author_profile_id_fkey"
+            columns: ["author_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "selection_messages_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "selection_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "selection_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      selection_notes: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          internal_notes: string
+          selection_id: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          internal_notes?: string
+          selection_id: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          internal_notes?: string
+          selection_id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "selection_notes_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "selection_notes_selection_id_fkey"
+            columns: ["selection_id"]
+            isOneToOne: true
+            referencedRelation: "selections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      selection_option_amounts: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          markup_percent: number | null
+          option_id: string
+          quantity: number
+          unit_cost: number
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          markup_percent?: number | null
+          option_id: string
+          quantity?: number
+          unit_cost?: number
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          markup_percent?: number | null
+          option_id?: string
+          quantity?: number
+          unit_cost?: number
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "selection_option_amounts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "selection_option_amounts_option_id_fkey"
+            columns: ["option_id"]
+            isOneToOne: true
+            referencedRelation: "selection_options"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      selection_options: {
+        Row: {
+          catalog_item_id: string | null
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          description: string | null
+          id: string
+          image_file_id: string | null
+          is_chosen: boolean
+          is_deleted: boolean
+          link_thumbnail_file_id: string | null
+          link_url: string | null
+          name: string
+          selection_id: string
+          sort_order: number
+          source: string
+          source_budget_item_id: string | null
+          spec_detail: string | null
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          catalog_item_id?: string | null
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          image_file_id?: string | null
+          is_chosen?: boolean
+          is_deleted?: boolean
+          link_thumbnail_file_id?: string | null
+          link_url?: string | null
+          name: string
+          selection_id: string
+          sort_order?: number
+          source?: string
+          source_budget_item_id?: string | null
+          spec_detail?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          catalog_item_id?: string | null
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          id?: string
+          image_file_id?: string | null
+          is_chosen?: boolean
+          is_deleted?: boolean
+          link_thumbnail_file_id?: string | null
+          link_url?: string | null
+          name?: string
+          selection_id?: string
+          sort_order?: number
+          source?: string
+          source_budget_item_id?: string | null
+          spec_detail?: string | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "selection_options_catalog_item_id_fkey"
+            columns: ["catalog_item_id"]
+            isOneToOne: false
+            referencedRelation: "cost_catalog"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "selection_options_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "selection_options_image_file_id_fkey"
+            columns: ["image_file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "selection_options_link_thumbnail_file_id_fkey"
+            columns: ["link_thumbnail_file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "selection_options_selection_id_fkey"
+            columns: ["selection_id"]
+            isOneToOne: false
+            referencedRelation: "selections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "selection_options_source_budget_item_id_fkey"
+            columns: ["source_budget_item_id"]
+            isOneToOne: false
+            referencedRelation: "project_budget_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      selection_signing_sessions: {
+        Row: {
+          company_id: string
+          consent_given: boolean
+          consent_text: string | null
+          created_at: string
+          decline_notes: string | null
+          declined_at: string | null
+          id: string
+          selection_id: string
+          signature_data: string | null
+          signature_type: string | null
+          signed_at: string | null
+          signer_channel: string
+          signer_ip: string | null
+          signer_name: string | null
+          signer_profile_id: string | null
+          signer_user_agent: string | null
+          snapshot: Json | null
+          status: string
+          superseded_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          consent_given?: boolean
+          consent_text?: string | null
+          created_at?: string
+          decline_notes?: string | null
+          declined_at?: string | null
+          id?: string
+          selection_id: string
+          signature_data?: string | null
+          signature_type?: string | null
+          signed_at?: string | null
+          signer_channel?: string
+          signer_ip?: string | null
+          signer_name?: string | null
+          signer_profile_id?: string | null
+          signer_user_agent?: string | null
+          snapshot?: Json | null
+          status?: string
+          superseded_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          consent_given?: boolean
+          consent_text?: string | null
+          created_at?: string
+          decline_notes?: string | null
+          declined_at?: string | null
+          id?: string
+          selection_id?: string
+          signature_data?: string | null
+          signature_type?: string | null
+          signed_at?: string | null
+          signer_channel?: string
+          signer_ip?: string | null
+          signer_name?: string | null
+          signer_profile_id?: string | null
+          signer_user_agent?: string | null
+          snapshot?: Json | null
+          status?: string
+          superseded_at?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "selection_signing_sessions_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "selection_signing_sessions_selection_id_fkey"
+            columns: ["selection_id"]
+            isOneToOne: false
+            referencedRelation: "selections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "selection_signing_sessions_signer_profile_id_fkey"
+            columns: ["signer_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      selection_threads: {
+        Row: {
+          company_id: string
+          created_at: string
+          id: string
+          selection_id: string
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          selection_id: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          id?: string
+          selection_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "selection_threads_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "selection_threads_selection_id_fkey"
+            columns: ["selection_id"]
+            isOneToOne: true
+            referencedRelation: "selections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      selections: {
+        Row: {
+          allow_multiple: boolean
+          allowance_budget_item_id: string | null
+          area_id: string | null
+          client_supplied: boolean
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          description: string | null
+          due_date: string | null
+          id: string
+          is_deleted: boolean
+          mode: string
+          name: string
+          offered_allowance_deduction: number | null
+          offered_at: string | null
+          offered_sell_amount: number | null
+          offered_variance: number | null
+          project_id: string
+          show_differences: boolean
+          signed_allowance_deduction: number | null
+          signed_at: string | null
+          signed_sell_amount: number | null
+          signed_session_id: string | null
+          signed_variance: number | null
+          status: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          allow_multiple?: boolean
+          allowance_budget_item_id?: string | null
+          area_id?: string | null
+          client_supplied?: boolean
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          is_deleted?: boolean
+          mode?: string
+          name: string
+          offered_allowance_deduction?: number | null
+          offered_at?: string | null
+          offered_sell_amount?: number | null
+          offered_variance?: number | null
+          project_id: string
+          show_differences?: boolean
+          signed_allowance_deduction?: number | null
+          signed_at?: string | null
+          signed_sell_amount?: number | null
+          signed_session_id?: string | null
+          signed_variance?: number | null
+          status?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          allow_multiple?: boolean
+          allowance_budget_item_id?: string | null
+          area_id?: string | null
+          client_supplied?: boolean
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string | null
+          due_date?: string | null
+          id?: string
+          is_deleted?: boolean
+          mode?: string
+          name?: string
+          offered_allowance_deduction?: number | null
+          offered_at?: string | null
+          offered_sell_amount?: number | null
+          offered_variance?: number | null
+          project_id?: string
+          show_differences?: boolean
+          signed_allowance_deduction?: number | null
+          signed_at?: string | null
+          signed_sell_amount?: number | null
+          signed_session_id?: string | null
+          signed_variance?: number | null
+          status?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "selections_allowance_budget_item_id_fkey"
+            columns: ["allowance_budget_item_id"]
+            isOneToOne: false
+            referencedRelation: "project_budget_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "selections_area_id_fkey"
+            columns: ["area_id"]
+            isOneToOne: false
+            referencedRelation: "selection_areas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "selections_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "selections_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "selections_signed_session_id_fkey"
+            columns: ["signed_session_id"]
+            isOneToOne: false
+            referencedRelation: "selection_signing_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       signing_sessions: {
         Row: {
           company_id: string
