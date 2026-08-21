@@ -20,7 +20,7 @@ restart cannot lose the outcome. (Committed on `main`, path-scoped, **not pushed
 | 3 | `npm run build --force` (FULL TURBO ≠ evidence) | 🟢 PASS | fresh: **0 cached, 1 total**, `✓ Compiled successfully`, 2m23.2s, exit 0 |
 | 4 | Full committed vitest suite | 🟢 PASS | 59 files, **894/894**, exit 0 — identical to S166 |
 | 5 | Every live harness, all 89 files (cold + warm re-run of reds) | 🟢 PASS (effectively) | cold exit 1 (2 files red of 89); warm re-run of both **exit 0, 23/23**. Zero tree defects. Red set **disjoint** from both prior batteries |
-| 6 | Playwright, four chunks from `apps/web` | ⏳ PENDING | |
+| 6 | Playwright, four chunks from `apps/web` | 🟢 PASS | **521 passed, 9 skipped, 0 failed**; all four shards exit 0 |
 | 7 | `npx supabase migration list` (repo root) | 🟢 PASS | **130 files = 130 applied**, every row `local == remote`, latest `20261023000000`, exit 0 |
 | 8 | `fixture-snapshot.mjs` AFTER + diff vs. BEFORE | ⏳ PENDING | |
 
@@ -190,7 +190,27 @@ partly self-inflicted by *how* the suite is run — S166's kill at the 10-minute
 worst residue, and running detached here meant the one residue red cleared itself via teardown with
 no manual restore at all.
 
-### 6. Playwright (4 chunks) — ⏳ PENDING
+### 6. Playwright (4 chunks) — 🟢 PASS
+
+- Command: `npx playwright test --shard=k/4 --workers=1` (k=1..4), from `apps/web`, against the
+  **warm production build** from step 3 served by `npm run start` (up in 455ms), which Playwright
+  attaches to via `reuseExistingServer`. Serial and sharded for the `/dev/shm` reason documented in
+  `playwright.config.ts` (the corrected #145 diagnosis), not for speed.
+- Finished: 2026-08-21T10:15:46Z. **Every shard PRINTED exit: 0**, and `✘` markers across the whole
+  log: **0** — the independent corroborating signal.
+
+| Shard | Result | Wall |
+|---|---|---|
+| 1/4 | 136 passed, 0 failed | 8.1m |
+| 2/4 | 157 passed, 3 skipped | 3.8m |
+| 3/4 | 124 passed, 4 skipped | 3.4m |
+| 4/4 | 104 passed, 2 skipped | 3.8m |
+| **Total** | **521 passed, 9 skipped, 0 failed** | 19.2m |
+
+- **Up 3 on S166's 518 passed / 9 skipped**, with skips unchanged. The three new tests are S168's —
+  the portal split is covered by `e2e/portal-pages.spec.ts`.
+- Shard 1 is the slow one (8.1m vs ~3.5m) because it carries the anonymous `chromium` project
+  including `auth.setup.ts` and the sign-in flows; that matches S166's shape.
 
 ### 7. migration list — 🟢 PASS
 
