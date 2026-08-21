@@ -76,7 +76,7 @@ material uses unit_cost alone"*.
 | V2 | `next lint` (0) | 🟢 | **PRINTED exit 0**, "No ESLint warnings or errors" — still 0 |
 | V3 | `turbo run build --force` | 🟢 | 12:47:42Z, **PRINTED exit 0**, **0 cached**, `✓ Compiled successfully`, 2m04.9s |
 | V4 | committed vitest | 🟢 | 12:46:28Z, **PRINTED exit 0**, 59 files, **902/902** (894 + 8 new: 1 inverted + 7 added in `money-representation.test.ts`) |
-| V5 | every live harness (cold + warm re-run) | ⏳ | |
+| V5 | every live harness (cold + warm re-run) | 🟢 | 12:53:59Z, **PRINTED exit 0 on the COLD pass** — **90/90 files, 1214/1214 tests, 0 failed, 0 skipped**, 6m01s. **No warm re-run needed — the first of four batteries with zero cold reds.** 90 = S168's 89 + `s170-allowance-row-type`; 1214 = 1198 + 16. Every writer-arm probe, CHECK probe and floor probe passed inside the full run, alongside `s97ct-budget-writers`, `s97ct-derivation` and `s97ct-multi-instrument` — the pinned four-value tests went green with the new type present |
 | V6 | Playwright ×4 from `apps/web` | ⏳ | |
 | V7 | `supabase migration list` (repo root) | 🟢 | 12:48:12Z, **PRINTED exit 0**, **132 files = 132 applied**, 0 local-only, 0 remote-only, 0 mismatch; latest `20261025000000` (up 2 from S168: stage 0 + stage 1) |
 | V8 | `fixture-snapshot.mjs` AFTER + diff | ⏳ | |
