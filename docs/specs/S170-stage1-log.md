@@ -77,6 +77,54 @@ material uses unit_cost alone"*.
 | V3 | `turbo run build --force` | 🟢 | 12:47:42Z, **PRINTED exit 0**, **0 cached**, `✓ Compiled successfully`, 2m04.9s |
 | V4 | committed vitest | 🟢 | 12:46:28Z, **PRINTED exit 0**, 59 files, **902/902** (894 + 8 new: 1 inverted + 7 added in `money-representation.test.ts`) |
 | V5 | every live harness (cold + warm re-run) | 🟢 | 12:53:59Z, **PRINTED exit 0 on the COLD pass** — **90/90 files, 1214/1214 tests, 0 failed, 0 skipped**, 6m01s. **No warm re-run needed — the first of four batteries with zero cold reds.** 90 = S168's 89 + `s170-allowance-row-type`; 1214 = 1198 + 16. Every writer-arm probe, CHECK probe and floor probe passed inside the full run, alongside `s97ct-budget-writers`, `s97ct-derivation` and `s97ct-multi-instrument` — the pinned four-value tests went green with the new type present |
-| V6 | Playwright ×4 from `apps/web` | ⏳ | |
+| V6 | Playwright ×4 from `apps/web` | 🟢 | 13:13:54Z, **all four shards PRINTED exit 0**: 136 / 157+3sk / 124+4sk / 104+2sk = **521 passed, 9 skipped, 0 failed**, `✘` count 0 — identical to S168. ⚠️ A first launch exited 1 ×4 in 24s with 0 `✘` — it had run from the **repo root** (my detached launcher lost the cwd) and collected vitest files as specs. Not a test result; relaunched with `cd apps/web` inside the detached shell. Recorded because "from `apps/web`" is a standing rule for exactly this reason |
 | V7 | `supabase migration list` (repo root) | 🟢 | 12:48:12Z, **PRINTED exit 0**, **132 files = 132 applied**, 0 local-only, 0 remote-only, 0 mismatch; latest `20261025000000` (up 2 from S168: stage 0 + stage 1) |
-| V8 | `fixture-snapshot.mjs` AFTER + diff | ⏳ | |
+| V8 | `fixture-snapshot.mjs` AFTER + diff | ⚠️ PASS-WITH-NOTES | 13:14:18Z, exit 0. Three deltas, all the S168 profile: `company_members` +6 (Playwright team/hub churn), `change_orders` +3 **all soft-deleted** (`ZZ-S168-…-6` L1d, two `CO-QA-M9-*`; live count **25 → 25**), `files` +3. All three named-identity arrays identical. **S170 residue: 0 projects, 0 estimates, 0 COs, 0 line rows, 0 budget items.** |
+
+---
+
+## Closing verdict — 🟢 STAGES 0 + 1 BUILT AND VERIFIED on `feature/s170-allowance-row-type`
+
+**Finished 2026-08-21T13:14:18Z.** Battery wall clock 29 min; build + battery 2h02m.
+
+| | Printed exit | Numbers |
+|---|---|---|
+| type-check --force | 0 | 5/5, 0 cached |
+| lint | 0 | 0 / 0 |
+| build --force | 0 | 0 cached, compiled |
+| committed vitest | 0 | 59 files, 902/902 |
+| **live harnesses** | **0 cold** | **90/90, 1214/1214 — no warm pass needed** |
+| Playwright ×4 | 0,0,0,0 | 521 / 9 sk / 0 |
+| migration list | 0 | 132 = 132 |
+| snapshot diff | 0 | S168 profile; 0 S170 residue |
+
+### What shipped
+
+- **Stage 0** — `cost_catalog` SELECT floored to owner/admin/PM. `#2-m9` CLOSED.
+- **Stage 1** — `allowance` is a fifth `row_type` on four CHECKs; both `_type_columns` CHECKs carry
+  an explicit arm **and `ELSE false`**; `unit_of_measure` no longer admits `allowance` (0 rows moved
+  — rebuild-test had none); the three SQL functions carry the arm; **every one of the 14 silent TS
+  sites has an explicit arm**, and the four places that used to absorb an unknown type silently
+  (`computeRowCost`'s `default: 0`, both row builders' `case 'other': default:`, the desktop CO
+  `buildFields`) now **throw**.
+- **Q3 resolved without new columns:** the allowance rides material's markup at every level;
+  `cost_plus_allowance_percent` was not added because it would have had no reader.
+- **Parity:** the `/m` CO editor took the arm alongside the desktop builder.
+- **A latent bug fixed in passing, proven by 3a:** the proposal PDF's allowance box read `unit_cost`
+  alone; it now prices `quantity × unit_cost`.
+
+### Stop conditions — none fired
+
+- No consumer needed behaviour changed for an existing type; every arm is additive.
+- No live row was in the `unit_cost`-with-`amount`-writer shape — there were **zero** rows.
+- No production migration — both migrations went to rebuild-test (`nmyphyhmfttxkdoposvf`) only.
+  The prod batch is Josh's supervised release.
+- No ruling was unbuildable.
+
+### Owed to Josh before stages 2–7
+
+1. **Click-test** the items-tab allowance row (add, qty, cost, UoM; catalog button absent), the
+   desktop and `/m` CO allowance row, and a proposal PDF with a 2-quantity allowance.
+2. **Production migration** of `20261024000000` + `20261025000000` at the next supervised release.
+   The rewrite NOTICE will print the prod row counts; read it.
+3. Release stages 2–7 per the spec §11 plan. Stage 5 is the other attended one.
