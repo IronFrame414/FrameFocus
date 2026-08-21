@@ -78,5 +78,5 @@ material uses unit_cost alone"*.
 | V4 | committed vitest | 🟢 | 12:46:28Z, **PRINTED exit 0**, 59 files, **902/902** (894 + 8 new: 1 inverted + 7 added in `money-representation.test.ts`) |
 | V5 | every live harness (cold + warm re-run) | ⏳ | |
 | V6 | Playwright ×4 from `apps/web` | ⏳ | |
-| V7 | `supabase migration list` (repo root) | ⏳ | |
+| V7 | `supabase migration list` (repo root) | 🟢 | 12:48:12Z, **PRINTED exit 0**, **132 files = 132 applied**, 0 local-only, 0 remote-only, 0 mismatch; latest `20261025000000` (up 2 from S168: stage 0 + stage 1) |
 | V8 | `fixture-snapshot.mjs` AFTER + diff | ⏳ | |
