@@ -19,7 +19,7 @@ restart cannot lose the outcome. (Committed on `main`, path-scoped, **not pushed
 | 2 | `next lint` (expect 0) | 🟢 PASS | "No ESLint warnings or errors", exit 0 — still at 0 |
 | 3 | `npm run build --force` (FULL TURBO ≠ evidence) | 🟢 PASS | fresh: **0 cached, 1 total**, `✓ Compiled successfully`, 2m23.2s, exit 0 |
 | 4 | Full committed vitest suite | 🟢 PASS | 59 files, **894/894**, exit 0 — identical to S166 |
-| 5 | Every live harness, all 89 files (cold + warm re-run of reds) | ⏳ cold done, warm pending | cold: exit 1, 2 files / 1 test red of 1198; `s168-co-lifecycle` green |
+| 5 | Every live harness, all 89 files (cold + warm re-run of reds) | 🟢 PASS (effectively) | cold exit 1 (2 files red of 89); warm re-run of both **exit 0, 23/23**. Zero tree defects. Red set **disjoint** from both prior batteries |
 | 6 | Playwright, four chunks from `apps/web` | ⏳ PENDING | |
 | 7 | `npx supabase migration list` (repo root) | 🟢 PASS | **130 files = 130 applied**, every row `local == remote`, latest `20261023000000`, exit 0 |
 | 8 | `fixture-snapshot.mjs` AFTER + diff vs. BEFORE | ⏳ PENDING | |
@@ -124,7 +124,7 @@ for all five packages.
 - **Identical to the S166 battery** (59 / 894). S168 added no committed unit tests — its work is
   covered by the live harness `s168-co-lifecycle.live.ts` (step 5) and the portal Playwright spec.
 
-### 5. live harnesses (89) — cold run recorded, warm re-run pending
+### 5. live harnesses (89) — 🟢 PASS (effectively; see verdict)
 
 Run **detached via `nohup`**, deliberately. S166's foreground attempt was killed at the tool's
 10-minute cap, its `afterAll` never ran, and the residue it left reddened two *later* files — the
@@ -144,6 +144,51 @@ tally read alone would under-count it.
 | `s140-compliance-floor` S140-3 | `crew_member could not read projects — session is broken: expected null to be truthy` (`:172`), **36248ms** | **Cold-cache.** This is the harness's own *non-vacuity guard*, not the floor assertion — it checks the crew session can read *something* before concluding it reads zero compliance rows. It spent 36s and came back `null`, the signature of a cold auth/PostgREST round-trip timing out, not of a policy change. |
 
 Neither red is on an S168 surface. `s168-co-lifecycle.live.ts` itself: **green.**
+
+**Warm re-run of exactly those two files, 2026-08-21T09:55:41Z — PRINTED exit: 0.**
+`Test Files  2 passed (2)` · `Tests  23 passed (23)` · Duration **9.67s**.
+
+- `s123-cron-loops` → **GREEN**, including §3j. Unlike S166 — where residue survived a warm re-run
+  and needed a manual restore — nothing had to be cleaned here: the cold run reached its own
+  `afterAll`, so its teardown removed the open session that had blocked the seed.
+- `s140-compliance-floor` → **GREEN**, all 14.
+- The timing is the corroborating signal rule 3 asks for: **9.67s warm for both files against
+  48.1s + 36.2s cold for the two failing paths alone.** A policy or tree defect does not get
+  faster on a second run; a cold round-trip does.
+- Note the two files carry 23 tests and the warm run shows `23 passed`, **0 skipped**, where the
+  cold run had marked 4 of `s123-cron-loops`' 9 as skipped — those skips are conditional on
+  fixture state that the cold run had disturbed.
+
+**VERDICT — 🟢 effectively green. All 89 live harness files pass on merged `main` at `555c9f2`;
+ZERO tree defects.** Both reds were environmental (one residue, one cold-cache) and both cleared
+without touching a line of code — which is the whole point of running the warm pass.
+
+Effective coverage: **1198 cold (1193 pass / 1 fail / 4 conditional skips) + 23/23 on the warm
+re-run of the two red files.**
+
+#### ⇒ Answer to question 2: **NOT the same four. Not four at all — two.**
+
+| Battery | Cold-red files |
+|---|---|
+| Two sessions ago | `s97ct-isolation`, `s118-m6m`, `s137`, `s138` |
+| S166 | `s133-subcontractor-read-floor`, `s164-m9-client-writes`, `s164-m9-portal-shell`, `s123-reminders-loop` |
+| **S168 (this one)** | **`s123-cron-loops`, `s140-compliance-floor`** |
+
+**Across three batteries the sets are pairwise disjoint — not one file has repeated.** Ten
+distinct files have now been cold-red exactly once each, and the count itself moved 4 → 4 → **2**.
+
+That is the evidence for calling them environmental, and it is now strong enough to state
+positively rather than as an absence of counter-evidence: **if these were tree defects, the same
+files would recur, because the tree has only grown across the three runs.** A defect is a property
+of the code and would be stable; what actually varies run to run is cache warmth and leftover
+fixture state, and that is exactly what the red set tracks.
+
+One refinement this battery adds to the story: **the two failure *categories* do repeat even though
+the files do not** — cold-cache round-trips and fixture residue, the same two S166 diagnosed. The
+category is the stable thing; the file it lands on is a lottery. And the residue half is at least
+partly self-inflicted by *how* the suite is run — S166's kill at the 10-minute cap caused its own
+worst residue, and running detached here meant the one residue red cleared itself via teardown with
+no manual restore at all.
 
 ### 6. Playwright (4 chunks) — ⏳ PENDING
 
