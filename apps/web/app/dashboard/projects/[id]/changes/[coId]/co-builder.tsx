@@ -13,6 +13,8 @@ import {
   recalculateChangeOrderTotals,
   sendChangeOrder,
   updateChangeOrder,
+  deleteChangeOrder,
+  reissueChangeOrder,
   updateCoLineRow,
   voidChangeOrder,
   type ChangeOrderLineRow,
@@ -156,6 +158,15 @@ interface CoBuilderProps {
   pendingSigningToken: string | null;
   companyName: string;
   hasSavedSignature: boolean;
+  /** Owner/Admin only [S168]. DELETE is narrower than void on purpose — it is
+   *  destructive and unrecoverable, so it does not inherit `canManage`'s PM. */
+  canDelete: boolean;
+  /** [S168] The CO this one REPLACES, and the CO that replaced IT. Two
+   *  directions, resolved server-side by `getCoSupersession()` — the row's own
+   *  `supersedes_change_order_id` only answers the first question, and reading
+   *  it for the second is the trap that function's docstring names. */
+  supersedes: { id: string; co_number: string } | null;
+  supersededBy: { id: string; co_number: string } | null;
 }
 
 export function CoBuilder({
@@ -168,11 +179,19 @@ export function CoBuilder({
   pendingSigningToken,
   companyName,
   hasSavedSignature,
+  canDelete,
+  supersedes,
+  supersededBy,
 }: CoBuilderProps) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
+  // [S168] The void REASON is required in every case, so voiding is a panel and
+  // no longer a window.confirm(). Josh ruled against a signed/unsigned split:
+  // "user should give reason for void."
+  const [voidOpen, setVoidOpen] = useState(false);
+  const [voidReason, setVoidReason] = useState('');
   const [recipientName, setRecipientName] = useState('');
   const [recipientEmail, setRecipientEmail] = useState('');
   const [signingUrl, setSigningUrl] = useState<string | null>(null);
@@ -257,19 +276,59 @@ export function CoBuilder({
   }
 
   async function handleVoid() {
-    if (!window.confirm(`Void ${co.co_number}? Revising a sent CO means writing a new one.`)) {
+    if (!voidReason.trim()) {
+      setError('A reason is required to void a change order.');
       return;
     }
     setBusy(true);
     setError(null);
-    const result = await voidChangeOrder(co.id);
+    const result = await voidChangeOrder(co.id, voidReason);
     setBusy(false);
     if (!result.success) {
       setError(result.error ?? 'Void failed');
       return;
     }
     setSigningUrl(null);
+    setVoidOpen(false);
+    setVoidReason('');
     router.refresh();
+  }
+
+  // [S168] `enforce_change_order_immutability()` has said "void and reissue
+  // instead" since 2026-08-09 and there was no reissue — the user had to retype
+  // the document. This is that path: a fresh draft carrying the lines forward.
+  async function handleReissue() {
+    setBusy(true);
+    setError(null);
+    const result = await reissueChangeOrder(co.id);
+    setBusy(false);
+    if (!result.success || !result.id) {
+      setError(result.error ?? 'Reissue failed');
+      return;
+    }
+    router.push(`/dashboard/projects/${projectId}/changes/${result.id}`);
+  }
+
+  // [S168] UNSIGNED only, and the database says so — this button not being
+  // rendered is a courtesy, not the boundary.
+  async function handleDelete() {
+    if (
+      !window.confirm(
+        `Delete ${co.co_number} permanently? This cannot be undone. ` +
+          'To keep a record of the withdrawal, void it instead.'
+      )
+    ) {
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    const result = await deleteChangeOrder(co.id);
+    if (!result.success) {
+      setBusy(false);
+      setError(result.error ?? 'Delete failed');
+      return;
+    }
+    router.push(`/dashboard/projects/${projectId}/changes`);
   }
 
   async function copyLink() {
@@ -384,9 +443,37 @@ export function CoBuilder({
                     Send for Signature
                   </button>
                 )}
-                {(co.status === 'draft' || co.status === 'sent') && (
-                  <button type="button" onClick={handleVoid} disabled={busy} style={subtleButtonStyle}>
+                {/* [S168] Void is now available on a SIGNED CO too. The
+                    signed copy is retained — signed-artifact-spec.md: a
+                    document the client actually saw is never destroyed. */}
+                {co.status !== 'voided' && (
+                  <button
+                    type="button"
+                    onClick={() => setVoidOpen((v) => !v)}
+                    disabled={busy}
+                    style={subtleButtonStyle}
+                  >
                     Void
+                  </button>
+                )}
+                {co.status === 'voided' && supersededBy === null && (
+                  <button
+                    type="button"
+                    onClick={handleReissue}
+                    disabled={busy}
+                    style={primaryButtonStyle(busy)}
+                  >
+                    Reissue as a new draft
+                  </button>
+                )}
+                {canDelete && co.signed_at === null && co.status !== 'signed' && (
+                  <button
+                    type="button"
+                    onClick={handleDelete}
+                    disabled={busy}
+                    style={{ ...subtleButtonStyle, color: '#991b1b', borderColor: '#fecaca' }}
+                  >
+                    Delete
                   </button>
                 )}
               </div>
@@ -403,6 +490,122 @@ export function CoBuilder({
             isDraft={co.status === 'draft'}
             sourceEstimateId={sourceEstimateId}
           />
+        )}
+
+        {/* ── [S168] THE VOID REASON. Required in every case, signed or not. ──
+            Josh ruled against the split: "user should give reason for void."
+            A textarea rather than a confirm(), because a reason is a record —
+            it is frozen the moment it is written (`enforce_change_order_
+            immutability`) and read back below for the life of the document. */}
+        {voidOpen && co.status !== 'voided' && (
+          <div
+            style={{
+              marginTop: '0.75rem',
+              paddingTop: '0.75rem',
+              borderTop: '1px solid #e5e7eb',
+            }}
+          >
+            <label style={smallLabelStyle} htmlFor="co-void-reason">
+              Why is {co.co_number} being voided? (required)
+            </label>
+            <textarea
+              id="co-void-reason"
+              value={voidReason}
+              onChange={(e) => setVoidReason(e.target.value)}
+              rows={2}
+              placeholder="e.g. Sent to the wrong client — replaced by a corrected change order."
+              style={{
+                width: '100%',
+                maxWidth: '520px',
+                display: 'block',
+                marginTop: '0.25rem',
+                padding: '0.5rem',
+                border: '1px solid #d1d5db',
+                borderRadius: '6px',
+                fontSize: '0.875rem',
+                fontFamily: 'inherit',
+              }}
+            />
+            <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0.375rem 0 0' }}>
+              {co.status === 'signed'
+                ? 'This change order is signed. Voiding withdraws it — the signed copy stays on file.'
+                : 'Voiding withdraws this change order. You can reissue it as a new draft afterwards.'}
+              {' The reason is permanent and cannot be edited later.'}
+            </p>
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+              <button
+                type="button"
+                onClick={handleVoid}
+                disabled={busy || !voidReason.trim()}
+                style={primaryButtonStyle(busy || !voidReason.trim())}
+              >
+                Void {co.co_number}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setVoidOpen(false);
+                  setVoidReason('');
+                }}
+                disabled={busy}
+                style={subtleButtonStyle}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* The supersession pair, both directions, wherever it exists. */}
+        {(supersedes || supersededBy) && (
+          <div
+            style={{
+              marginTop: '0.75rem',
+              paddingTop: '0.75rem',
+              borderTop: '1px solid #e5e7eb',
+              fontSize: '0.8125rem',
+            }}
+          >
+            {supersedes && (
+              <div>
+                Replaces{' '}
+                <Link
+                  href={`/dashboard/projects/${projectId}/changes/${supersedes.id}`}
+                  style={{ color: '#1a56db', textDecoration: 'none' }}
+                >
+                  {supersedes.co_number}
+                </Link>
+              </div>
+            )}
+            {supersededBy && (
+              <div>
+                Replaced by{' '}
+                <Link
+                  href={`/dashboard/projects/${projectId}/changes/${supersededBy.id}`}
+                  style={{ color: '#1a56db', textDecoration: 'none' }}
+                >
+                  {supersededBy.co_number}
+                </Link>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* The void record, read back. A reason nobody can see afterwards is
+            not a record of anything. */}
+        {co.status === 'voided' && co.void_reason && (
+          <div
+            style={{
+              marginTop: '0.75rem',
+              paddingTop: '0.75rem',
+              borderTop: '1px solid #e5e7eb',
+            }}
+          >
+            <div style={smallLabelStyle}>Voided</div>
+            <p style={{ fontSize: '0.875rem', color: '#374151', margin: '0.25rem 0 0' }}>
+              {co.void_reason}
+            </p>
+          </div>
         )}
 
         {sendOpen && co.status === 'draft' && (

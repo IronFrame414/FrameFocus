@@ -26,7 +26,7 @@
  * RUN: cd apps/web && npx vitest run --config test/live.vitest.config.ts s97ct-multi-instrument
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { admin, assertRebuildTest } from './live-session';
+import { admin, assertRebuildTest, disposeChangeOrdersError, sweepChangeOrders } from './live-session';
 import { deriveInvoiceLines } from '@/lib/services/invoice-derivation-server';
 import { computeInvoiceTotals } from '@framefocus/shared/utils/invoice-derivation';
 import type { InvoiceLineAmount } from '@framefocus/shared/utils/invoice-derivation';
@@ -101,6 +101,14 @@ async function rate(
 
 beforeAll(async () => {
   assertRebuildTest();
+  // ⚠️ [S168] START FROM A DIRTY DATABASE. `afterAll` does not run when a run
+  // is interrupted, and this suite's `co_number`s are FIXED — so one killed run
+  // used to brick every later one on `change_orders_company_co_number_key`,
+  // permanently, until somebody cleaned the table by hand. Sweeping first makes
+  // the suite runnable twice in a row from ANY starting state, which is the
+  // property that was actually missing and the one a single green run cannot
+  // demonstrate.
+  await sweepChangeOrders(MARKER);
 
   const { data: company } = await admin
     .from('companies').select('id').eq('name', 'Bishop Contracting').single();
@@ -420,7 +428,7 @@ afterAll(async () => {
   for (const coId of [coCostPlusId, coTmId]) {
     if (!coId) continue;
     check('rates', (await admin.from('instrument_rates').delete().eq('change_order_id', coId)).error);
-    check('change order', (await admin.from('change_orders').delete().eq('id', coId)).error);
+    check('change order', await disposeChangeOrdersError([coId]));
   }
   if (projectId) {
     const { data: expenses } = await admin.from('expenses').select('id').eq('project_id', projectId);
@@ -439,4 +447,12 @@ afterAll(async () => {
   const { count } = await admin
     .from('projects').select('id', { count: 'exact', head: true }).like('name', `${MARKER}%`);
   console.log(`\n[${MARKER} TEARDOWN] projects left: ${count}; errors: ${errors.length ? JSON.stringify(errors) : 'NONE'}`);
+  // ⚠️ [S168] THIS THROW IS THE POINT. The teardown has always collected
+  // `errors` and only PRINTED them, so when the S168 delete boundary began
+  // refusing this suite's signed change order the cleanup failed in silence,
+  // the project FK-blocked behind it, and the NEXT run died on a duplicate
+  // `co_number` in `beforeAll` — a failure reported by a different suite, one
+  // run later, with no trace of the cause. A cleanup that cannot fail its own
+  // run is not a cleanup.
+  if (errors.length) throw new Error(`[${MARKER}] teardown failed: ${JSON.stringify(errors)}`);
 }, 240_000);

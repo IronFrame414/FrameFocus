@@ -137,3 +137,57 @@ export const rowStyle: CSSProperties = {
   fontSize: '13.5px',
   color: color.body,
 };
+
+/**
+ * A labelled fact in a row of them. [moved here S168 from the one-page project
+ * view, when it stopped being one page — three of the four routes need it.]
+ */
+export function Fact({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div>
+      <div
+        style={{
+          fontFamily: font.mono,
+          fontSize: '10.5px',
+          fontWeight: 600,
+          textTransform: 'uppercase',
+          letterSpacing: '0.04em',
+          color: color.mutedAlt,
+          marginBottom: '4px',
+        }}
+      >
+        {label}
+      </div>
+      <div style={{ fontSize: '14px', color: color.navy, fontWeight: 600 }}>{value}</div>
+    </div>
+  );
+}
+
+/** One line of a totals block. */
+export function Total({
+  label,
+  value,
+  strong,
+}: {
+  label: string;
+  value: number;
+  strong?: boolean;
+}) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13.5px' }}>
+      <span style={{ color: color.bodyAlt, fontWeight: strong ? 700 : 400 }}>{label}</span>
+      <span style={{ color: color.navy, fontWeight: strong ? 800 : 600 }}>{money(value)}</span>
+    </div>
+  );
+}
+
+/** A cell in the full-detail invoice table. */
+export function cell(align: 'left' | 'right'): CSSProperties {
+  return {
+    textAlign: align,
+    fontSize: '12.5px',
+    color: color.body,
+    padding: '6px',
+    borderBottom: `1px solid ${color.rowDivider}`,
+  };
+}

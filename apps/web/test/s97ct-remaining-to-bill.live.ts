@@ -21,7 +21,7 @@
  * RUN: cd apps/web && npx vitest run --config test/live.vitest.config.ts s97ct-remaining-to-bill
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { admin, assertRebuildTest } from './live-session';
+import { admin, assertRebuildTest, disposeChangeOrdersError, sweepChangeOrders } from './live-session';
 
 const MARKER = 'S97REMAIN';
 
@@ -142,6 +142,14 @@ async function send(invoiceId: string): Promise<void> {
 
 beforeAll(async () => {
   assertRebuildTest();
+  // ⚠️ [S168] START FROM A DIRTY DATABASE. `afterAll` does not run when a run
+  // is interrupted, and this suite's `co_number`s are FIXED — so one killed run
+  // used to brick every later one on `change_orders_company_co_number_key`,
+  // permanently, until somebody cleaned the table by hand. Sweeping first makes
+  // the suite runnable twice in a row from ANY starting state, which is the
+  // property that was actually missing and the one a single green run cannot
+  // demonstrate.
+  await sweepChangeOrders(MARKER);
 
   const { data: company } = await admin
     .from('companies').select('id').eq('name', 'Bishop Contracting').single();
@@ -360,10 +368,16 @@ afterAll(async () => {
   }
   for (const id of [depositAId, depositBId, depositCId, tmDepositInvoiceId, draftInvoiceId]) {
     if (!id) continue;
-    check('lines', (await admin.from('invoice_lines').delete().eq('invoice_id', id)).error);
+    // ⚠️ [S168] THE LINE DELETE IS GONE, AND THAT IS THE FIX.
+    // `enforce_invoice_line_parent_open` refuses a direct line delete on a sent
+    // invoice (7D §8), so this always failed — silently, because the teardown
+    // only logged. Deleting the INVOICE takes its lines by `ON DELETE CASCADE`,
+    // and the same trigger early-returns during the cascade. The pattern was
+    // already documented in `s97ct-deposit-credit`'s teardown; these two files
+    // never adopted it, and nothing said so until the throw was added.
     check('invoice', (await admin.from('invoices').delete().eq('id', id)).error);
   }
-  if (coTmId) check('change order', (await admin.from('change_orders').delete().eq('id', coTmId)).error);
+  if (coTmId) check('change order', await disposeChangeOrdersError([coTmId]));
   if (projectId) {
     check('financials', (await admin.from('project_financials').delete().eq('project_id', projectId)).error);
     check('project', (await admin.from('projects').delete().eq('id', projectId)).error);
@@ -374,4 +388,12 @@ afterAll(async () => {
   const { count } = await admin
     .from('projects').select('id', { count: 'exact', head: true }).like('name', `${MARKER}%`);
   console.log(`\n[${MARKER} TEARDOWN] projects left: ${count}; errors: ${errors.length ? JSON.stringify(errors) : 'NONE'}`);
+  // ⚠️ [S168] THIS THROW IS THE POINT. The teardown has always collected
+  // `errors` and only PRINTED them, so when the S168 delete boundary began
+  // refusing this suite's signed change order the cleanup failed in silence,
+  // the project FK-blocked behind it, and the NEXT run died on a duplicate
+  // `co_number` in `beforeAll` — a failure reported by a different suite, one
+  // run later, with no trace of the cause. A cleanup that cannot fail its own
+  // run is not a cleanup.
+  if (errors.length) throw new Error(`[${MARKER}] teardown failed: ${JSON.stringify(errors)}`);
 }, 240_000);

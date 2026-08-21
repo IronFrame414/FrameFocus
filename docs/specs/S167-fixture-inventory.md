@@ -5,7 +5,68 @@
 > **Parent debt:** [`TECH_DEBT.md` #149](../../TECH_DEBT.md) — *"the pinned fixtures are hand-curated
 > on rebuild-test and reproducible from no script."* This document is that problem in miniature and
 > at a scale we can actually work through.
-> **Related:** `#1-s167fx` (a sent CO with a line item is undeletable), `docs/specs/S165-m9-clicktest.md` §A.0 / §B.5.
+> **Related:** `#1-s167fx` — **CLOSED at S168** (`20261023000000`); see the update below.
+> `docs/specs/S165-m9-clicktest.md` §A.0 / §B.5.
+
+---
+
+## ⚠️ UPDATE [S168] — half of the worked example below is no longer true
+
+**`#1-s167fx` is fixed.** An UNSIGNED change order now deletes cleanly, line items and all: the
+`ON DELETE CASCADE` that `enforce_co_line_parent_open()`'s comment always assumed now exists, and
+void gained a required reason and a reissue path. Josh's ruling and the migration are
+`20261023000000`.
+
+**What did NOT change, and is the reason the repair block still stands:** a **signed** change order
+is refused by `enforce_change_order_delete_boundary()` for *every* caller, service role included —
+*"a change order is a legal document, and being able to prove you never sent one is a claim the
+system must not be able to make falsely"* [Josh, S168]. `CO-QA-M9-DRAFT` was signed, so it is still
+unrepairable and still renamed aside rather than rebuilt.
+
+### ⚠️ AND THE SECOND HALF OF THE PAIR WENT THE SAME WAY — `CO-QA-M9-SENT`, 2026-08-20 23:15 [found S168]
+
+**`QA M9 — sent CO` is now `signed`.** Found while investigating unrelated residue; nobody reported
+it, and nothing went red. Evidence, from `co_signing_sessions`:
+
+```
+status            completed
+signer_channel    portal_session
+signer_name       QA Client Linked
+signed_at         2026-08-20T23:15:43
+```
+
+**It was signed from the PORTAL, during the Part B click-test** — not by a harness and not by a
+migration. `9-spec.md` R10 puts a **Sign** affordance on exactly that row, B.2.2's expected-contents
+table says so in as many words, and B.5 §1 says not to sign it. Both statements were true at once.
+
+**Three things this proves that the CO-QA-M9-DRAFT incident did not:**
+
+1. **The inventory's "reachable" column was too narrow.** It asked whether a fixture is reachable
+   from *the product UI*, meaning the dashboard. This one was reached from the **portal** — a third
+   surface, by a different identity, on a page built the same week.
+2. **It is silent.** ARM 4a only requires the CO to be non-draft and ARM 5a only requires its line
+   to be visible, so `s164-m9-read-arms` stayed **188/188 green over a moved fixture** across three
+   separate runs. This is CLAUDE.md's S157 rule from the other end: not a test that contradicts a
+   shipped rule, but a test whose assertions are all *satisfied* by the wrong state.
+3. **It is unrepairable, and now for a reason the repo chose.** `signed_at` cannot be cleared
+   (S164) and the row cannot be deleted (`enforce_change_order_delete_boundary`, S168). Unlike the
+   draft, it cannot even be renamed aside and rebuilt: `CO-QA-M9-SENT`'s `co_number` is frozen, and
+   the seed's `ensureRow` key is its **title**, so a rename frees the title but the number stays
+   taken — a rebuild must take `CO-QA-M9-SENT-2`.
+
+**Not repaired in S168, deliberately** — Josh's click-test is mid-flight against these rows and
+re-seeding under him is the S167 mistake repeated. **What is owed:** the same rename-aside-and-rebuild
+the draft got, plus a decision on whether the seeded pair should carry a Sign affordance in the
+portal at all. A fixture whose whole job is to sit in one state should probably not be the row the
+click-test is told to click.
+
+**And the tests should not have stayed green.** ARM 4a should assert the seeded sent CO is
+specifically `sent`, not merely non-draft — that is the assertion that would have caught this at
+23:15 instead of two hours later by accident.
+
+**And the inventory's own point survives intact** — arguably it is sharpened. The fixture was still
+reachable in two clicks from the product UI; the class of problem was never the FK. Everything below
+this line reads as written, with that one correction applied to the "Not deletable" bullet.
 
 ---
 
@@ -44,8 +105,10 @@ link the moment it was sent. It was signed on 2026-08-20.
   to clear `contractor_signed_at`, and refuses to restore `net_delta`. Those refusals are *correct*
   — they are the S164 signature fix and the S123-era money freeze doing their jobs. Service role
   does not help; it bypasses RLS, not triggers.
-- **Not deletable** — the line-item FK has no `ON DELETE CASCADE`, so the parent cannot go first,
-  and the line is frozen with its parent, so the line cannot go first either (`#1-s167fx`).
+- **Not deletable** — at S167, because the line-item FK had no `ON DELETE CASCADE` so the parent
+  could not go first, and the line was frozen with its parent so the line could not go first either
+  (`#1-s167fx`). **At S168 that deadlock is fixed and this row is still not deletable, for a
+  different and deliberate reason: it is SIGNED.**
 
 So the seed's S167 repair does the only thing left: **renames the corpse aside and builds a new
 draft next to it.** Each accident of this kind leaves one more permanent row in the fixture project,
@@ -69,10 +132,14 @@ that caused this. **This is a start, not a survey** — the seed creates far mor
 the rest have not yet been walked. Rows are marked ❓ where reachability or repair was inferred from
 the click-test doc rather than confirmed against the seed code.
 
+> ⚠️ **"Reachable from the UI" means EVERY surface, not the dashboard.** The `CO-QA-M9-SENT`
+> casualty above was reached from the **portal**, which this table did not consider when it was
+> written. Re-read every row with `/m` and `/portal` in mind, not just `/dashboard`.
+
 | Fixture | Reachable from the UI? | Repaired by a reseed? | Notes |
 | --- | --- | --- | --- |
 | **`QA M9 — draft CO`** (`CO-QA-M9-DRAFT-2`) — must stay `draft` | 🔴 **Yes, in two clicks** — Send, then the signing link on the page | 🔴 **NO.** Only renamed aside and rebuilt | The S167 incident. Seed: S167 repair block. Sits directly under the click-test throwaway. |
-| **`QA M9 — sent CO`** (`CO-QA-M9-SENT`) — must stay `sent`, with its line | 🔴 **Yes** — the signing link is on the page | 🟠 **Partly.** A *lineless* sent CO is dropped and rebuilt; a **signed** one is stuck exactly as above | The pre-existing repair block covers the wrong failure mode: it handles "sent too early", not "signed by hand". |
+| **`QA M9 — sent CO`** (`CO-QA-M9-SENT`) — must stay `sent`, with its line | 🔴 **Yes, from TWO surfaces** — the staff signing link, **and the portal's own Sign button** | 🔴 **NO — and it has now happened.** Signed from the portal 2026-08-20 23:15. Not even renameable-and-rebuildable: `co_number` is frozen | The pre-existing repair block covers the wrong failure mode: it handles "sent too early", not "signed by hand". See the S168 section above. |
 | **`qa-m9-visible.jpg` / `qa-m9-hidden.jpg`** `client_visible` flags | 🟠 Yes ❓ | 🟢 **Yes** — the seed re-asserts both flags every run and logs `REPAIRED` | **This is the pattern to copy.** The flags *are* the test, so the seed states them rather than assuming them. |
 | **Client R17 state** (`profiles.client_access_state`) | 🔴 Yes — a settings toggle | 🟢 **Yes** — reset to `active` every run, logged `REPAIRED` | Also reset in `s164-m9-read-arms`'s own `afterAll`. |
 | **`QA A — M9 completed 200d`** — `status`, `actual_end_date` | 🟠 Yes ❓ | 🟢 **Yes** — the seed re-asserts both and rewrites them if they drift | Guards the R5 45-day window. |
@@ -98,7 +165,18 @@ the click-test doc rather than confirmed against the seed code.
    blanket in a document a human is following while clicking.
 4. **Finish the survey.** Walk the rest of `seed-test-identities.mjs` and place every fixture on the
    two axes above. The rows marked ❓ get confirmed in the same pass.
-5. **Prefer fixtures the product cannot reach.** Where a proof needs a row in a state a user can
+5. **⚠️ THE HARNESSES NOW LEAK ~3 INVISIBLE ROWS PER FULL RUN, AND THAT IS THE RULING'S PRICE
+   [S168].** Three probes genuinely CONSUME a signature-bearing change order —
+   `s168-co-lifecycle` L1d (signed → voided), and `s164-m9-client-writes` W7 (portal signature) and
+   W8 (the first-stamp guard). A signed change order cannot be deleted by anyone, so each run leaves
+   one row apiece. They are **soft-deleted**, so they leave every listing and stop contributing to
+   the revised-contract derivation (`CONTRACT_CONTRIBUTING_CO_FILTER` includes `is_deleted: false`),
+   and the teardown PRINTS the count rather than hiding it. Their `co_number`s are timestamped, so
+   they can never collide with a later run — the growth is invisible, bounded per run, and
+   deliberate. **Do not "fix" it by adding a service-role escape to
+   `enforce_change_order_delete_boundary()`.** That is the one thing the boundary exists to refuse.
+
+6. **Prefer fixtures the product cannot reach.** Where a proof needs a row in a state a user can
    change, ask whether a *dedicated* row — not one shown in a list the click-test walks through —
    would do. This is the cheap version of #149's real fix and it does not need the reproducible
    seed to land first.

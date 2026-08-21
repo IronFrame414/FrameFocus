@@ -51,6 +51,55 @@ export type CoSigningSession = CoSigningSessionRow;
 // bundle. Re-exported here for server-side consumers.
 export { CO_STATUS_LABELS } from './change-orders-client';
 
+/**
+ * The supersession pair for one change order — what it replaces, and what
+ * replaced it. [S168]
+ *
+ * ⚠️ TWO DIRECTIONS, AND THE SECOND IS THE ONE THAT IS EASY TO GET WRONG.
+ * `supersedes_change_order_id` on a row points BACKWARDS — it names the voided
+ * CO this one replaces. It cannot answer "has this CO been reissued?", which is
+ * a question about a DIFFERENT row pointing AT this one. Reading the column on
+ * the row in front of you and calling that "already reissued" is a real trap; a
+ * voided CO that has been replaced still has a NULL column of its own.
+ *
+ * Both reads are RLS-scoped, so a caller who cannot see the counterpart CO gets
+ * null and no link — the same answer they would get from the list.
+ */
+export async function getCoSupersession(changeOrderId: string): Promise<{
+  supersedes: { id: string; co_number: string } | null;
+  supersededBy: { id: string; co_number: string } | null;
+}> {
+  const supabase = await createClient();
+
+  const { data: self } = await supabase
+    .from('change_orders')
+    .select('supersedes_change_order_id')
+    .eq('id', changeOrderId)
+    .maybeSingle();
+
+  const [{ data: back }, { data: forward }] = await Promise.all([
+    self?.supersedes_change_order_id
+      ? supabase
+          .from('change_orders')
+          .select('id, co_number')
+          .eq('id', self.supersedes_change_order_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    // `change_orders_supersedes_once` makes this at most one row, so there is
+    // nothing to order and nothing to choose between.
+    supabase
+      .from('change_orders')
+      .select('id, co_number')
+      .eq('supersedes_change_order_id', changeOrderId)
+      .maybeSingle(),
+  ]);
+
+  return {
+    supersedes: back ?? null,
+    supersededBy: forward ?? null,
+  };
+}
+
 const AUTHOR_JOIN =
   'author:company_members!change_orders_author_member_id_fkey(id, display_name)';
 

@@ -27,7 +27,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { readFileSync } from 'node:fs';
-import { admin, assertRebuildTest, sessionFor } from './live-session';
+import { admin, assertRebuildTest, disposeChangeOrders, sessionFor } from './live-session';
 
 const LINKED = 'josh+qa-client-linked@worthprop.com';
 const CONTROL = 'josh+qa-client@worthprop.com';
@@ -499,7 +499,9 @@ describe('W7 — R10 END TO END: a real portal signature through the shared writ
     await admin.from('co_signing_sessions').delete().eq('change_order_id', coId);
     await admin.from('project_budget_items').delete().eq('source_change_order_id', coId);
     await admin.from('change_order_line_items').delete().eq('change_order_id', coId);
-    await admin.from('change_orders').delete().eq('id', coId);
+    // ⚠️ [S168] W7 signs it through the portal, so the delete boundary refuses
+    // it. Soft-deleted instead, and loudly — see the W8 teardown.
+    await disposeChangeOrders([coId]);
   });
 
   it('W7a — she signs it, and the CO becomes signed', async () => {
@@ -622,7 +624,7 @@ describe('W7 — R10 END TO END: a real portal signature through the shared writ
       expect((still as { status: string }).status).toBe('sent');
     } finally {
       await admin.from('co_signing_sessions').delete().eq('change_order_id', denyId);
-      await admin.from('change_orders').delete().eq('id', denyId);
+      await disposeChangeOrders([denyId]);
     }
   }, 60_000);
 });
@@ -672,7 +674,13 @@ describe('W8 — 🔴 the signature stamp: the regression guard for a LIVE defec
   });
 
   afterAll(async () => {
-    if (coId) await admin.from('change_orders').delete().eq('id', coId);
+    // ⚠️ [S168] W8 SIGNS THIS CO, AND A SIGNED CO CANNOT BE DELETED BY ANYONE
+    // (`enforce_change_order_delete_boundary`, no service-role escape). The bare
+    // delete below used to fail with its error unread, and this file quietly
+    // left five `CO-QA-M9-SIGN-*` and five `CO-QA-M9-STAMP-*` rows on
+    // rebuild-test. `disposeChangeOrders` soft-deletes what it cannot remove
+    // and THROWS if a row is still live, so the cost stops being invisible.
+    if (coId) await disposeChangeOrders([coId]);
   });
 
   it('W8a — ⚠️ the FIRST stamp is allowed, on the transition into `signed`', async () => {
@@ -730,7 +738,7 @@ describe('W8 — 🔴 the signature stamp: the regression guard for a LIVE defec
       expect(error, 'a sent CO took a signature date without being signed').not.toBeNull();
       expect(error!.message).toMatch(/without being signed/i);
     } finally {
-      await admin.from('change_orders').delete().eq('id', id);
+      await disposeChangeOrders([id]);
     }
   });
 });

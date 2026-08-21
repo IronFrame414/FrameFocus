@@ -70,10 +70,23 @@ The CO list on **"QA A — isolation fixture"** is ordered by **CO number, ascen
 | 1 | `CO-159-64` | **ZZ click-test CO** | sent → you sign it | ✅ **THIS is the one you sign.** Yours, disposable. |
 | 2 | `CO-QA-M9-DRAFT` | ZZ SUPERSEDED — QA M9 draft CO | signed | ⛔ dead row, left by the S167 accident. Ignore. |
 | 3 | `CO-QA-M9-DRAFT-2` ⁽*⁾ | **QA M9 — draft CO** | **draft** | 🚨 **DO NOT SEND OR SIGN.** `s164-m9-read-arms` ARM 4c/5b need it to stay a **draft**. |
-| 4 | `CO-QA-M9-SENT` | **QA M9 — sent CO** | **sent** | 🚨 **DO NOT SIGN, VOID OR EDIT.** ARM 4a/5a need it to stay **sent** with its line. |
+| 4 | `CO-QA-M9-SENT` | **QA M9 — sent CO** | ~~sent~~ **SIGNED — already lost, 2026-08-20** | ☠️ **This one is gone.** Signed from the PORTAL during Part B (`signer_channel = portal_session`). It cannot be reverted, deleted, or even renamed-and-rebuilt — its `co_number` is frozen. Awaiting a rebuild as `CO-QA-M9-SENT-2`. |
 
 ⁽*⁾ The **title** is stable; the **number** is not. Each rebuild takes the next free
 `CO-QA-M9-DRAFT-n`, so check the list rather than the suffix.
+
+> ### ☠️ AND ROW 4 WAS LOST THE SAME NIGHT, FROM THE OTHER DIRECTION [S168]
+>
+> **The portal's Documents card puts a Sign button on `QA M9 — sent CO`** — R10 by design, and
+> B.2.2's expected-contents table below says to expect it. So Part B tells you the button is
+> correct, and B.5 §1 tells you not to press it, and both are true. It was pressed at 23:15 on
+> 2026-08-20 and the fixture is permanently signed.
+>
+> **Nothing went red.** ARM 4a only requires the CO to be non-draft; ARM 5a only requires its line
+> to be visible. `s164-m9-read-arms` stayed 188/188 across three runs over a broken fixture.
+>
+> **Until it is rebuilt, expect row 4 to read `Signed` in the portal, not `Awaiting your
+> signature`.** That is the damage, not a bug in the page.
 
 > **Row 3 is the trap.** It sits **directly under your throwaway** in the list, it is a *draft* so
 > the page offers you **Send** in one click and the signing link the moment you do, and its title
@@ -89,10 +102,17 @@ If it does not say **ZZ click-test CO**, close the tab.
 
 **⚠️ AND THIS ONE IS NOT REPAIRABLE BY RESEEDING.** B.5 says most mistakes are fixed by re-running
 `seed-test-identities.mjs`. **A signed change order is not.** The immutability trigger refuses to
-clear `signed_at` or restore `net_delta`, and the row cannot be deleted either — its line item's
-FK has no `ON DELETE CASCADE` and the line is frozen with its parent (**#1-s167fx**). The seed's
-S167 repair block can only **rename the corpse out of the way and build a new draft beside it**,
-which is what rows 2 and 3 above are. Every accidental signature leaves one more permanent row.
+clear `signed_at` or restore `net_delta`, and a signed CO cannot be deleted either —
+`enforce_change_order_delete_boundary()` refuses it for **every** caller, service role included,
+because *"being able to prove you never sent one is a claim the system must not be able to make
+falsely"* [Josh, S168]. The seed's S167 repair block can only **rename the corpse out of the way
+and build a new draft beside it**, which is what rows 2 and 3 above are. Every accidental signature
+leaves one more permanent row.
+
+_[S168] The FK/trigger deadlock that once made even an UNSIGNED change order undeletable
+(**#1-s167fx**) is fixed. It changes nothing here: rows 2 and 3 are signed and the throwaway becomes
+signed the moment Part A succeeds. But if you send row 3 by mistake and stop **before** signing it,
+an Owner or Admin can now simply delete it._
 
 ### A.1 — create and send a throwaway CO
 
@@ -138,9 +158,11 @@ which is what rows 2 and 3 above are. Every accidental signature leaves one more
 Optionally **void** `ZZ click-test CO` from the CO page so it does not linger. Leaving it is
 harmless — no test keys on that title.
 
-> **You cannot delete it** — a signed CO carrying a line item is undeletable (#1-s167fx), so each
-> run of Part A leaves one more `ZZ click-test CO` behind for good. Number them (`ZZ click-test CO
-> 2`, …) rather than reusing the title.
+> **You cannot delete it once it is signed** — `enforce_change_order_delete_boundary()` refuses a
+> signed change order for every caller [S168], so each completed run of Part A leaves one more
+> `ZZ click-test CO` behind for good. Number them (`ZZ click-test CO 2`, …) rather than reusing the
+> title. (A run that stops before the signature leaves an UNSIGNED CO, and Owner/Admin can delete
+> that outright — the **Delete** button on the CO page.)
 
 ---
 

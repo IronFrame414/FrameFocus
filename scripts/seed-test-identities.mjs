@@ -1051,14 +1051,19 @@ const ownerMemberIdA = await memberIdFor(aOwnerProfile.id);
 //             rewritten."), and refuses to restore `net_delta` ("A sent change
 //             order is immutable — void and reissue instead."). Service role is
 //             no help: it bypasses RLS, not triggers.
-//   DELETE  — `change_order_line_items_change_order_id_fkey` has NO
-//             `ON DELETE CASCADE`, so the parent cannot go first; and
-//             `enforce_co_line_parent_open()` refuses to delete the line while
-//             the parent is not a draft, so the line cannot go first either.
-//             ⚠️ A change order that has left draft WITH a line is undeletable
-//             by any path — filed as #1-s167fx. `enforce_co_line_parent_open()`
-//             returns early "so a CASCADE delete stays possible"; that CASCADE
-//             does not exist.
+//   DELETE  — ⚠️ **STILL TRUE FOR THIS ROW, BUT NO LONGER TRUE IN GENERAL.**
+//             _Superseded text, quoted rather than rewritten:_ "`change_order_
+//             line_items_change_order_id_fkey` has NO `ON DELETE CASCADE` … A
+//             change order that has left draft WITH a line is undeletable by any
+//             path — filed as #1-s167fx." **S168 closed #1-s167fx**
+//             (`20261023000000`): the CASCADE now exists, and an UNSIGNED change
+//             order deletes cleanly, line items and all. This row is SIGNED, and
+//             `enforce_change_order_delete_boundary()` refuses a signed change
+//             order for every caller including the service role — deliberately,
+//             because "being able to prove you never sent one is a claim the
+//             system must not be able to make falsely" [Josh, S168]. So the
+//             repair below stands for exactly the reason it always did, and for
+//             a narrower reason than it was written for.
 //
 // So the moved row is renamed OUT OF THE WAY — `title` is not frozen — and a
 // fresh draft is created below under the canonical title, which keeps

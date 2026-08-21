@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { admin, assertRebuildTest } from './live-session';
+import { admin, assertRebuildTest, disposeChangeOrders, sweepChangeOrders } from './live-session';
 import { notifyCoSignedInApp } from '@/lib/services/co-signing-service';
 import {
   getManagerNotifyRecipients,
@@ -71,6 +71,13 @@ const rowFor = (all: Awaited<ReturnType<typeof rows>>, email: string) =>
 
 beforeAll(async () => {
   assertRebuildTest();
+  // ⚠️ [S168] `CO-S123-TEST` is a FIXED co_number and this suite signs the CO —
+  // so after the S168 delete boundary shipped, the bare delete in `afterAll`
+  // began failing with its error unread, and the NEXT run died here on
+  // `change_orders_company_co_number_key`. Sweep first so a dirty database (an
+  // interrupted run, or the residue of the run that discovered this) cannot
+  // brick the suite.
+  await sweepChangeOrders('CO-S123-TEST');
 
   const { data: profiles } = await admin
     .from('profiles')
@@ -150,7 +157,11 @@ afterAll(async () => {
   if (madeNotifications.length) {
     await admin.from('notifications').delete().in('id', madeNotifications);
   }
-  if (madeCo) await admin.from('change_orders').delete().eq('id', coId);
+  // ⚠️ [S168] This CO ends up SIGNED — that is the whole subject of the suite —
+  // and a signed change order cannot be deleted by anyone, service role
+  // included (`enforce_change_order_delete_boundary`). `disposeChangeOrders`
+  // soft-deletes what it cannot remove and THROWS if anything is still live.
+  if (madeCo) await disposeChangeOrders([coId]);
   if (madeAssignments.length) {
     await admin.from('project_assignments').delete().in('id', madeAssignments);
   }

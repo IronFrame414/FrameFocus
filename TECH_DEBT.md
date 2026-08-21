@@ -78,11 +78,110 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
 ## Open Tech Debt
 
+### Branch-scoped, awaiting real numbers — `feature/s168-co-lifecycle-portal-split` [S168]
+
+> Provisional ids per the S136 rule: never allocate a bare `#N` on a branch. Tag `s168`.
+> **Both came out of Josh's Part B click-test and NEITHER was built in S168**, on the brief's own
+> instruction: *"establish what removing them touches before changing it, and if it is more than
+> cosmetic, file and report rather than building it here."* It is more than cosmetic. The scope
+> below is the establishing work, done, so the fix session starts from a map instead of a survey.
+
+- **#1-s168 — A CLIENT IS NOT A TEAM MEMBER, BUT `/dashboard/team` LISTS THEM AND OFFERS THEM THE
+  STAFF INVITE. The invite link it offers a client is a dead end.** Raised S168 (2026-08-20), from
+  Josh's click-test: *"client should be removed from team side."*
+
+  The portal invite Josh actually wants is already built and already lives in the right place —
+  `portal-panel.tsx`, on the **project's Contacts tab** (M9 B.4). The Team page is a second,
+  older door to the same idea, and it is the wrong one: a client has no seat, no dashboard, and
+  nothing on that page applies to them.
+
+  **WHY THIS IS NOT A ONE-LINE FILTER.** `client` is not incidentally present on the Team side —
+  it was deliberately wired in, before the portal existed, and the wiring has five limbs:
+
+  | Site | What it does today |
+  | --- | --- |
+  | `lib/services/team.ts:97` `getTeamMembers()` | `select … from profiles` with **no role filter** — every client in the company is a row. Called only by `team-page-client.tsx:45`. |
+  | `app/dashboard/team/invite/invite-form.tsx:10` | A **LOCAL `INVITABLE_ROLES` duplicate** that includes `client` with the description *"Portal access to project timeline, payments, and documents"*. |
+  | `packages/shared/constants/roles.ts:42` | The shared `INVITABLE_ROLES` **also** includes `'client'`. Two lists, and the local one is the one the form renders. |
+  | `invite-form.tsx:64,77` `isClientRole` | A real behavioural branch — **client invites skip the seat-limit check**. Removing the role without removing this leaves dead logic that will read as a bug. |
+  | `app/dashboard/team/[id]` | The detail route is reachable by URL for a client's profile id whether or not the list shows it. **Dropping the row from the list is cosmetic on its own.** |
+
+  Plus the pending-invitations table on the same page, which lists client invites and offers Copy
+  link / Resend / Cancel for them, and **`#2-s168` below, which is the same defect seen from the
+  invitee's side and resolves with this.**
+
+  **Fix direction.** Decide first whether a client invite should exist on the Team side *at all* or
+  only be re-pointed. If removed: filter `getTeamMembers()` by `DASHBOARD_ROLES` (which already
+  excludes `client` **and** `subcontractor` — note that second one, it is a scope decision, not a
+  freebie); delete `client` from BOTH `INVITABLE_ROLES` lists and collapse the local duplicate into
+  the shared one while you are there; remove `isClientRole`; gate `/dashboard/team/[id]` on the same
+  list; and sweep the invite pipeline (`/api/invites`, `email_type`, the acceptance page) for the
+  client arm. **Sweep the tests before finishing** — anything asserting a team-roster row count or
+  the invite role list encodes today's behaviour, per CLAUDE.md's S157 rule.
+
+- **#3-s168 — `CO-QA-M9-SENT` WAS SIGNED FROM THE PORTAL AND IS PERMANENTLY LOST. THE READ ARMS
+  STAYED GREEN OVER IT FOR THREE RUNS.** Raised S168 (2026-08-21), found while chasing unrelated
+  fixture residue. Nobody reported it, because nothing failed.
+
+  ```
+  co_signing_sessions:  status=completed  signer_channel=portal_session
+                        signer_name="QA Client Linked"  signed_at=2026-08-20T23:15:43
+  ```
+
+  Signed from the **portal**, during the Part B click-test. `9-spec.md` R10 puts a **Sign** button
+  on exactly that row and `S165-m9-clicktest.md` B.2.2 tells the tester to expect it; B.5 §1 tells
+  them not to press it. Both were true at once.
+
+  **Two defects, and the second is the one that generalises.**
+
+  1. **The fixture is unrepairable, and now more thoroughly than `CO-QA-M9-DRAFT` was.** `signed_at`
+     cannot be cleared (S164) and the row cannot be deleted (S168's own boundary). It cannot even be
+     renamed-aside-and-rebuilt the way the draft was: the seed's `ensureRow` key is the **title**, so
+     a rename frees the title, but `co_number` is frozen by the immutability trigger and
+     `CO-QA-M9-SENT` stays taken. A rebuild must take `CO-QA-M9-SENT-2`.
+
+  2. **⚠️ `s164-m9-read-arms` STAYED 188/188 ACROSS THREE RUNS OVER A BROKEN FIXTURE.** ARM 4a
+     asserts only `status !== 'draft'`, and ARM 5a only that the sent CO's line is visible. `signed`
+     satisfies both. This is CLAUDE.md's S157 rule seen from the other end: not a test that
+     contradicts a shipped rule, but a test **whose every assertion is satisfied by the wrong
+     state**. A fixture pinned to one specific state needs an assertion that names that state.
+
+  **Fix, in one pass, and not before Josh's click-test is finished** — re-seeding under a live
+  click-test is the S167 mistake repeated:
+  - Rename the signed row aside (`ZZ SUPERSEDED — QA M9 sent CO …`) and rebuild as
+    `CO-QA-M9-SENT-2`, draft → line → flip to `sent`, per the existing S167 repair block's shape.
+  - **Then tighten ARM 4a to assert the seeded CO is specifically `sent`** — that assertion is what
+    would have caught this at 23:15 instead of two hours later by accident. It is deliberately NOT
+    added now, because it would be red against the live database until the rebuild lands, and a
+    knowingly-red test in the battery is noise rather than a task.
+  - Decide whether the seeded pair should carry a portal Sign affordance at all. A fixture whose
+    only job is to sit in one state probably should not be the row the click-test is told to click.
+  Cross-ref `docs/specs/S167-fixture-inventory.md`, which now carries this as its second worked
+  example and has had its "reachable from the UI" column widened from `/dashboard` to every surface.
+
+- **#2-s168 — AN EXPIRED CLIENT INVITE POINTS AT THE ONE PAGE A CLIENT SHOULD NOT BE ON.** Raised
+  S168 (2026-08-20), from the same click-test.
+
+  `app/invite/accept/accept-invite.tsx:63`:
+
+  ```
+  'This invitation has expired. Ask the company to resend it — they can do that from their Team page.'
+  ```
+
+  Two things are wrong with one sentence. It names an **internal** screen to an external
+  counterparty, who cannot see it and cannot act on it; and once `#1-s168` lands, the Team page is
+  not where a client invite is resent from either — the project's Contacts tab is. So the message is
+  a dead end today and a **false statement** afterwards.
+
+  It is not simply "reword it": the honest sentence depends on where client invites come from, which
+  is `#1-s168`'s decision. **Resolve them together.** The message also needs to know whether the
+  expired invite was a staff invite or a client one, and today it does not — the copy is shared.
+
 ### Branch-scoped, awaiting real numbers — `fix/s167-restore-m9-draft-co-fixture` [S167]
 
 > Provisional id per the S136 rule: never allocate a bare `#N` on a branch. Tag `s167fx`.
 
-- **#1-s167fx — A CHANGE ORDER THAT HAS LEFT DRAFT AND CARRIES A LINE ITEM IS UNDELETABLE BY ANY
+- **#1-s167fx — ✅ CLOSED [S168] — A CHANGE ORDER THAT HAS LEFT DRAFT AND CARRIES A LINE ITEM IS UNDELETABLE BY ANY
   PATH, INCLUDING SERVICE ROLE. The two guards close on each other, and one of them documents an
   escape hatch that does not exist.** Raised S167 (2026-08-20).
 
@@ -121,7 +220,43 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   `voided` hides it from most surfaces but the row, its number and its line items remain, and
   `20260809000000` freezes `voided` too ("A voided change order is frozen forever").
 
-  **Fix direction — do NOT just add `ON DELETE CASCADE`.** Decide first whether a sent CO *should*
+  > ### ✅ CLOSED [S168] — `20261023000000_co_void_reissue_delete.sql`
+  >
+  > **Josh ruled all three paths** and the fix direction below was followed rather than short-cut:
+  > the question *"should a sent CO be deletable at all"* was answered first, and the answer draws
+  > the line at the **signature**, not at the FK.
+  >
+  > | Path | What shipped |
+  > | --- | --- |
+  > | **VOID** | Any sent CO, **signed or unsigned**, with a **REQUIRED reason** — Josh ruled against distinguishing the two. `void_reason`/`voided_by`/`voided_at` + `change_orders_void_shape_check`, authority in `enforce_change_order_void_authority` (owner/admin/authoring-PM, mirroring the #117 read floor). `voided_by` is stamped from `auth.uid()`, not the payload, and the whole record is frozen afterwards by the amended immutability trigger. **The signed artifact is retained** — only `pending` signing sessions are invalidated. |
+  > | **REISSUE** | `supersedes_change_order_id`, the `contract_documents.supersedes_document_id` shape (7I §10.4). `enforce_change_order_supersedes_valid` requires the target to be VOIDED, same company, same project, never itself; `change_orders_supersedes_once` allows exactly one reissue per withdrawal. `/api/change-orders/[id]/reissue` copies lines and rows and rolls the new draft back on any partial failure — a rollback only possible *because* this item was fixed. |
+  > | **DELETE** | **UNSIGNED ONLY.** `change_orders_delete_unsigned` (RLS: Owner/Admin, in-tenant) answers WHO; `enforce_change_order_delete_boundary` answers WHAT and **has no service-role escape**, because the claim it protects is *"we never sent that"*. |
+  >
+  > **The deadlock: CASCADE, and the comment is now true.** `ON DELETE CASCADE` added to
+  > `change_order_line_items.change_order_id`, `change_order_line_rows.line_item_id`,
+  > `co_signing_sessions.change_order_id` and `instrument_rates.change_order_id` (forced there —
+  > `instrument_rates_one_instrument` makes SET NULL invalid); `tasks.change_order_id` takes SET NULL
+  > because field work outlives its paperwork. An ordered delete was rejected: PostgREST has no
+  > transaction, so it is three round trips that can strand a half-deleted document, **and it would
+  > have required relaxing `enforce_co_line_parent_open()` as well** — CASCADE requires relaxing
+  > nothing, because that function's unreachable early-return was written for exactly this.
+  >
+  > **⚠️ TWO FKs KEPT `NO ACTION` ON PURPOSE, and they are a feature:**
+  > `invoice_lines.source_change_order_id` and `project_budget_items.source_change_order_id`. A CO
+  > that has been billed or budgeted against is load-bearing elsewhere; the FK refusing is the guard,
+  > and the route translates `23503` into a sentence.
+  >
+  > **Two judgement calls the ruling did not reach**, flagged in the migration header and repeated
+  > here so they are easy to overturn: **(i)** delete is Owner/Admin, narrower than void's
+  > owner/admin/PM, because it is destructive and unrecoverable; **(ii)** "unsigned" means
+  > `signed_at IS NULL AND status <> 'signed'`, so a draft and a voided-but-never-signed CO are both
+  > deletable — the ruling's boundary is the signature and the predicate is the signature.
+  >
+  > Evidence: `apps/web/test/s168-co-lifecycle.live.ts`, 21 probes, every refusal mutation-proved by
+  > re-reading through the service role. Both surfaces updated (`co-builder.tsx`, `co-actions.tsx`)
+  > through the same `voidChangeOrder`/`reissueChangeOrder`/`deleteChangeOrder`, per PARITY.
+
+  **Fix direction as filed at S167 — do NOT just add `ON DELETE CASCADE`.** Decide first whether a sent CO *should*
   be deletable at all. If yes, the narrow change is `ON DELETE CASCADE` on
   `change_order_line_items.change_order_id` (and `change_order_line_rows.line_item_id`), which
   `enforce_co_line_parent_open()` is **already written to accommodate**, plus an Owner-only guard so
