@@ -15,7 +15,7 @@ restart cannot lose the outcome. (Committed on `main`, path-scoped, **not pushed
 | # | Step | Status | Result |
 |---|------|--------|--------|
 | 0 | `fixture-snapshot.mjs` BEFORE | 🟢 DONE | exit 0; baseline captured, incl. a **pre-existing** CO-residue census (44 suspect rows / 64 total) |
-| 1 | `npx turbo run type-check` | ⏳ PENDING | |
+| 1 | `npx turbo run type-check` | 🟢 PASS | 5/5 successful, **0 cached** (forced, genuinely fresh), exit 0 |
 | 2 | `next lint` (expect 0) | ⏳ PENDING | |
 | 3 | `npm run build --force` (FULL TURBO ≠ evidence) | ⏳ PENDING | |
 | 4 | Full committed vitest suite | ⏳ PENDING | |
@@ -71,7 +71,18 @@ read-only census via `scripts/live-sql.mjs`:
 - Whether that single `-6` voided row is a genuine residual leak or an intended persistent fixture
   is resolved in step 8 against this run's own delta.
 
-### 1. type-check — ⏳ PENDING
+### 1. type-check — 🟢 PASS
+
+- Command: `npx turbo run type-check`, then re-run as `npx turbo run type-check --force`
+- Finished: 2026-08-21T09:36:26Z
+
+**First run — PRINTED exit: 0**, but `Cached: 5 cached, 5 total`, `Time: 118ms >>> FULL TURBO`.
+That is a **replay of a cached log, not a compile**, so it is not evidence about this tree —
+the same reason step 3 forces the build. Re-run forced:
+
+**Forced run — PRINTED exit: 0.** `Tasks: 5 successful, 5 total`, **`Cached: 0 cached, 5 total`**,
+Time 19.065s. Zero lines matching `error|warning` in the whole log. `tsc --noEmit` genuinely ran
+for all five packages.
 
 ### 2. lint — ⏳ PENDING
 
