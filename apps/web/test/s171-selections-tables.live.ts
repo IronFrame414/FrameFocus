@@ -302,7 +302,7 @@ describe('S171-2F — signing sessions: owner/admin/PM read; the client reads HE
   });
   it('F2 — no authenticated role can INSERT a session (service only) — owner refused, count unchanged', async () => {
     const { count: before } = await admin.from('selection_signing_sessions').select('id', { count: 'exact', head: true }).eq('selection_id', liveId);
-    const { error } = await S.owner!.from('selection_signing_sessions').insert({ selection_id: liveId, signer_profile_id: profileId.linked! });
+    const { error } = await S.owner!.from('selection_signing_sessions').insert({ company_id: companyId, selection_id: liveId, signer_profile_id: profileId.linked! });
     expect(error).not.toBeNull();
     const { count: after } = await admin.from('selection_signing_sessions').select('id', { count: 'exact', head: true }).eq('selection_id', liveId);
     expect(after).toBe(before);
