@@ -71,9 +71,9 @@ material uses unit_cost alone"*.
 
 | # | Step | Status | Result |
 |---|---|---|---|
-| V0 | `fixture-snapshot.mjs` BEFORE | ⏳ | |
-| V1 | `turbo run type-check --force` | ⏳ | |
-| V2 | `next lint` (0) | ⏳ | |
+| V0 | `fixture-snapshot.mjs` BEFORE | 🟢 | 12:45:02Z, exit 0. Identical to the S168 battery's AFTER snapshot (companies 4, projects 10, change_orders 67, files 199, chat 0/0 …) — the S170 harness left nothing |
+| V1 | `turbo run type-check --force` | 🟢 | 12:45:24Z, **PRINTED exit 0**, 5/5, **0 cached**, 21.2s |
+| V2 | `next lint` (0) | 🟢 | **PRINTED exit 0**, "No ESLint warnings or errors" — still 0 |
 | V3 | `turbo run build --force` | ⏳ | |
 | V4 | committed vitest | ⏳ | |
 | V5 | every live harness (cold + warm re-run) | ⏳ | |
