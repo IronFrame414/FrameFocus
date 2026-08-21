@@ -29,6 +29,10 @@ const TABS: { slug: string; label: string; roles?: string[] }[] = [
     label: 'Budget & Cost',
     roles: ['owner', 'admin', 'project_manager', 'foreman'],
   },
+  // [S171] Allowances & Selections §9.2 — visible to EVERY role including
+  // subcontractors (Q10); the page carries no costs, and the amounts side
+  // table's RLS (20261026000000) is what makes that a floor, not this list.
+  { slug: 'selections', label: 'Selections' },
   { slug: 'changes', label: 'Change Orders' },
   // 7D — client invoicing. Owner/Admin/PM only (§12): a PM creates invoices
   // but cannot send without Owner/Admin approval. Foreman/Crew never see
