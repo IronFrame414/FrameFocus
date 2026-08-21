@@ -146,10 +146,10 @@ on this stage (no `contract-value.ts`, `invoice*`, `profitability*`). Nothing wr
 | V0 | `fixture-snapshot.mjs` BEFORE | 🟢 | 14:00:38Z, exit 0 |
 | V1 | `turbo run type-check --force` | 🟢 | exit 0, 5/5, 0 cached |
 | V2 | `next lint` (0) | 🟢 | exit 0, still 0 |
-| V3 | `turbo run build --force` | ⏳ | |
+| V3 | `turbo run build --force` | 🟢 | exit 0, 0 cached, compiled |
 | V4 | committed vitest | 🟢 after 2 guard catches | first run **exit 1, 902/904**: `brand-literals` caught a product-name literal in the link-preview route's user-agent (now `brand.name` — the old name would have gone out in an HTTP header); `s123-still-clocked-in` caught my notifications-CHECK restatement in its producer grep — allowlisted with the S137 reasoning (a CHECK declaration is not an emitter). Re-run **exit 0, 59 files, 904/904** |
 | V5 | every live harness | ⏳ | |
 | V6 | Playwright ×4 from `apps/web` | ⏳ | |
-| V7 | `supabase migration list` (repo root) | ⏳ | |
+| V7 | `supabase migration list` (repo root) | 🟢 | exit 0, **134 = 134**, latest `20261027000000` |
 | V8 | `fixture-snapshot.mjs` AFTER | ⏳ | |
 
