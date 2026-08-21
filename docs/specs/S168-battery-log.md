@@ -213,4 +213,27 @@ no manual restore at all.
   it is the head of both the file tree and the remote history — no drift in either direction.
 - Up one from S166's 129; the single new migration is S168's.
 
-### 8. fixture snapshot AFTER — ⏳ PENDING
+### 8. fixture snapshot AFTER — ⏳ PENDING (interim CO census recorded below)
+
+**Interim, taken 2026-08-21T09:57Z — immediately after the live suite, before Playwright.** Taken
+at this point deliberately: it splits the battery's CO churn into "what the 89 live harnesses did"
+and "what Playwright did", which a single before/after pair cannot separate.
+
+`change_orders`: **total 64 → 67 (+3)**, and the count that actually matters —
+
+| | Before (09:35Z) | After live suite (09:57Z) |
+|---|---|---|
+| total | 64 | 67 |
+| soft-deleted (`is_deleted = true`) | 39 | 42 |
+| **live (`is_deleted = false`)** | **25** | **25 — unchanged** |
+
+All three rows the live suite created are **soft-deleted**:
+
+| Row | Status | `is_deleted` | Created | Origin |
+|---|---|---|---|---|
+| `CO-QA-M9-SIGN-1787305293335` | signed | **true** | 09:41:33Z | `s164-m9-*` portal-signature fixture |
+| `CO-QA-M9-STAMP-1787305297762` | signed | **true** | 09:41:37Z | `s164-m9-*` stamp-regression fixture |
+| `ZZ-S168-mt2rhxfy-6` | voided | **true** | 09:43:36Z | `s168-co-lifecycle` **L1d** — the documented irreducible row |
+
+**The full run added ZERO live change orders.** Every row either deleted outright or, where the
+delete boundary forbids removal, was soft-deleted by its harness's teardown.
