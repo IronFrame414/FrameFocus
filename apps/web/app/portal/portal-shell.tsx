@@ -41,6 +41,7 @@ export interface PortalNavItem {
 export function PortalShell({
   branding,
   nav,
+  navSlot,
   backHref,
   heading,
   subheading,
@@ -48,6 +49,16 @@ export function PortalShell({
 }: {
   branding: PortalBranding;
   nav: PortalNavItem[];
+  /**
+   * [S168] A rendered nav, for the pages that need an ACTIVE state and
+   * therefore a client component. `nav` above stays as it is — a plain list
+   * this server component can render itself — so the front door is unchanged
+   * and nothing was migrated for the sake of consistency.
+   *
+   * The shell takes it as a slot rather than importing it, so this file keeps
+   * no dependency on any particular route tree and stays a server component.
+   */
+  navSlot?: ReactNode;
   backHref?: string;
   heading: string;
   subheading?: string;
@@ -122,6 +133,8 @@ export function PortalShell({
         {subheading && (
           <p style={{ fontSize: '13.5px', color: color.muted, margin: '5px 0 0' }}>{subheading}</p>
         )}
+
+        {navSlot}
 
         {nav.length > 0 && (
           <nav

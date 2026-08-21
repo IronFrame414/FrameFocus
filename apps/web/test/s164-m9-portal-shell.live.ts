@@ -21,7 +21,8 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { admin, assertRebuildTest, sessionFor } from './live-session';
 import {
   getPortalBilling,
@@ -55,6 +56,17 @@ let projectId: string;
 /** Source with `//` and block comments removed. See P7c. */
 const strip = (src: string): string =>
   src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').replace(/[^:]\/\/.*$/gm, '');
+
+/** Every `.ts`/`.tsx` under a directory, recursively. */
+function walk(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = `${dir}/${entry.name}`;
+    if (entry.isDirectory()) out.push(...walk(full));
+    else if (/\.tsx?$/.test(entry.name)) out.push(full);
+  }
+  return out;
+}
 
 const code = (rel: string): string =>
   strip(readFileSync(new URL(rel, import.meta.url), 'utf8'));
@@ -328,8 +340,23 @@ describe('P7 — the service reads with the CALLER’s client, provably', () => 
   });
 
   it('P7b — nor from the portal route tree', () => {
-    for (const f of ['../app/portal/layout.tsx', '../app/portal/page.tsx', '../app/portal/[projectId]/page.tsx']) {
-      expect(code(f), f).not.toContain('getSupabaseAdmin');
+    // ⚠️ [S168] WALKS THE DIRECTORY. IT USED TO BE A LIST OF THREE FILENAMES.
+    //
+    // That list was written when `app/portal` held exactly those three files.
+    // S168 split the project view into four routes plus a layout and a tabs
+    // component, and a hand-written list does not notice: the new files would
+    // simply not have been checked, and the test would have stayed green while
+    // covering less than half the tree. **A guard that has to be maintained by
+    // hand every time the thing it guards grows is a guard that lapses**, and
+    // it lapses silently, which is the worst of the two ways.
+    //
+    // The non-vacuity assertion below is what keeps this honest in the other
+    // direction: a walk that finds nothing also passes every `not.toContain`.
+    const files = walk(fileURLToPath(new URL('../app/portal', import.meta.url)));
+    expect(files.length, 'the portal tree walk found no files — P7b is vacuous').toBeGreaterThan(5);
+    for (const f of files) {
+      expect(strip(readFileSync(f, 'utf8')), f).not.toContain('getSupabaseAdmin');
+      expect(strip(readFileSync(f, 'utf8')), f).not.toContain('SERVICE_ROLE');
     }
   });
 
