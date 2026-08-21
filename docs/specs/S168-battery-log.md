@@ -16,7 +16,7 @@ restart cannot lose the outcome. (Committed on `main`, path-scoped, **not pushed
 |---|------|--------|--------|
 | 0 | `fixture-snapshot.mjs` BEFORE | 🟢 DONE | exit 0; baseline captured, incl. a **pre-existing** CO-residue census (44 suspect rows / 64 total) |
 | 1 | `npx turbo run type-check` | 🟢 PASS | 5/5 successful, **0 cached** (forced, genuinely fresh), exit 0 |
-| 2 | `next lint` (expect 0) | ⏳ PENDING | |
+| 2 | `next lint` (expect 0) | 🟢 PASS | "No ESLint warnings or errors", exit 0 — still at 0 |
 | 3 | `npm run build --force` (FULL TURBO ≠ evidence) | ⏳ PENDING | |
 | 4 | Full committed vitest suite | ⏳ PENDING | |
 | 5 | Every live harness, all 89 files (cold + warm re-run of reds) | ⏳ PENDING | |
@@ -84,7 +84,12 @@ the same reason step 3 forces the build. Re-run forced:
 Time 19.065s. Zero lines matching `error|warning` in the whole log. `tsc --noEmit` genuinely ran
 for all five packages.
 
-### 2. lint — ⏳ PENDING
+### 2. lint — 🟢 PASS
+
+- Command: `npx next lint` (from `apps/web`)
+- Finished: 2026-08-21T09:36:48Z
+- **PRINTED exit: 0.** Sole output line: `✔ No ESLint warnings or errors`. **Still at 0** — S168's
+  merge (CO void/reissue/delete, the four-page portal split, both harness fixes) introduced none.
 
 ### 3. build --force — ⏳ PENDING
 
