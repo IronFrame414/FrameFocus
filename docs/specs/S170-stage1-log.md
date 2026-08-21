@@ -59,9 +59,9 @@ material uses unit_cost alone"*.
 
 | # | Step | Status |
 |---|---|---|
-| B0 | Migration: floor `cost_catalog` SELECT (stage 0) | ⏳ |
-| B1 | Migration: fifth row type, CHECK arms, UoM rewrite, SQL writer arms (stage 1) | ⏳ |
-| B2 | `db:push` + regenerate `database.ts` + type-check | ⏳ |
+| B0 | Migration: floor `cost_catalog` SELECT (stage 0) | ✅ `20261024000000_cost_catalog_select_floor.sql` — pushed 12:29:59Z, exit 0; live policy `cost_catalog_select_manager` = owner/admin/PM |
+| B1 | Migration: fifth row type, CHECK arms, UoM rewrite, SQL writer arms (stage 1) | ✅ `20261025000000_allowance_row_type.sql` — pushed, exit 0. Verified live: 4 row_type/category CHECKs admit `allowance`; both `_type_columns` have an explicit arm **and `ELSE false`**; both UoM CHECKs no longer admit it; all 3 functions carry the arm and none still reads `unit_of_measure = 'allowance'`. **Rows moved: 0 / 0 / 0** (the NOTICE is swallowed by the CLI; confirmed by a post-push count of 0 residual rows). |
+| B2 | `db:push` + regenerate `database.ts` + type-check | ✅ types regenerated, **unchanged** (8368 → 8368 lines, no column added — by design) |
 | B3 | Shared: `estimate-totals.ts`, Zod, `profitability.ts` (shared), `invoice-derivation.ts` | ⏳ |
 | B4 | Services: builders, `estimate-line-billing`, `profitability`, `project-income`, `proposal-data`, `budget`, `change-orders`, `invoices-client` types | ⏳ |
 | B5 | UI: `items-tab`, `co-builder`, `/m co-editor`, `sign-co` labels, `invoice-builder` | ⏳ |
