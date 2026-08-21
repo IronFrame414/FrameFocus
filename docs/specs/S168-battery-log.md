@@ -321,3 +321,55 @@ including Josh's own post-merge `s168 21/21` at 09:26Z and this battery's at 09:
 
 **A leak that only appears in a full run is what step 8 exists to catch, and on this tree it caught
 none.**
+
+---
+
+## Closing verdict — 🟢 MERGED `main` AT `555c9f2` IS VERIFIED GREEN
+
+**Finished 2026-08-21T10:16:35Z. Wall clock 42 minutes.**
+
+| # | Step | Printed exit | Numbers |
+|---|---|---|---|
+| 0 | fixture snapshot BEFORE | **0** | baseline captured |
+| 1 | type-check | **0** | 5/5 tasks, 0 cached (forced) |
+| 2 | lint | **0** | 0 warnings, 0 errors |
+| 3 | build --force | **0** | 0 cached, compiled, 2m23s |
+| 4 | committed vitest | **0** | 59 files, 894/894 |
+| 5 | live harnesses | **1** cold → **0** warm | 89 files; 1193/1198 cold, 23/23 on warm re-run of both reds |
+| 6 | Playwright ×4 | **0, 0, 0, 0** | 521 passed, 9 skipped, 0 failed |
+| 7 | migration list | **0** | 130 files = 130 applied, 0 drift |
+| 8 | fixture snapshot AFTER | **0** | 5 deltas, all explained, no leak |
+
+**Nothing was fixed and nothing was pushed.** The tree at the end of this battery is byte-identical
+to `555c9f2` apart from this log file — `git diff 555c9f2 HEAD` excluding it is **empty**. Twelve
+log commits sit unpushed on local `main`.
+
+### The three findings worth carrying forward
+
+1. **Step 3's background notification reported a green build as `failed with exit code 1`.** It was
+   reading a trailing `grep -c` whose zero count — the *good* answer — exits non-zero. This is the
+   only step in the battery where the notification and the printed line disagreed, and the printed
+   line was right. It is a live demonstration that `CLAUDE.md`'s exit-status rule is load-bearing
+   and not historical.
+
+2. **The cold-red live files are environmental, and the case is now much stronger than "we think
+   so".** Three batteries have produced three **pairwise disjoint** red sets — ten distinct files,
+   each red exactly once — and the count fell 4 → 4 → **2**. A defect is a property of the code and
+   would recur; what varies is cache warmth and residue, which is precisely what the red set
+   tracks. The failure *categories* (cold round-trip, fixture residue) do repeat; the files never
+   have.
+
+3. **The S168 harness-leak fix is confirmed by the residue itself, not just by a green tick.** Runs
+   before `85397da` left three undeleted COs each; every run after it leaves one, soft-deleted and
+   printed. The full run — the scenario the leak question was actually about — added **zero** live
+   change orders, and Playwright added none at all.
+
+### One observation for Josh, not fixed, not filed
+
+The battery ended with `chat_threads`/`chat_messages` at **0/0**, which `chat-fixture.ts` documents
+as the correct clean state. The BEFORE snapshot caught them at **1/30** — i.e. the *starting* tree
+carried chat residue from an earlier run, and this battery removed it. Worth knowing because S166
+logged the same 1→0 movement as the harnesses deleting a *seeded* thread; the fixture's own comment
+says threads are created by the app and never seeded, so that reading was inverted. Nothing to fix
+in the tree — but if a future snapshot shows `chat_threads` non-zero at rest, that is residue to
+clean rather than a fixture to preserve.
