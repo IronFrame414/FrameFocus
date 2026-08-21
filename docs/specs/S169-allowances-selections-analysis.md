@@ -324,3 +324,195 @@ facing option source here, and a client who can read `unit_cost` can reverse the
 change in §4, or a new `selection_threads` table? **Recommend the fourth kind** (§7.2, #129), with the
 policy change listed in the spec as a single migration and a harness that proves crew/foreman cannot
 read it.
+
+
+---
+---
+
+# Phase 2b — re-analysis against the twelve rulings
+
+> Written after Josh's rulings (same session). Live reads again. **One ruling needs a nearest-thing
+> proposal (Q3); none is unbuildable.** Items numbered as in the directive.
+
+## 2b.1 — Q4's contract-value consequence, fully traced
+
+**7B derives revised contract in exactly ONE TypeScript place** — `contract-value.ts`, *"DERIVED here and
+only here — original + Σ(client-signed CO net_delta)"* — through a single constant,
+`CONTRACT_CONTRIBUTING_CO_FILTER`. That is good news: the selection variance is added in one module.
+Three functions derive it and all three must gain the term:
+
+| Function | Consumers (files) | What changes |
+|---|---|---|
+| `getRevisedContract(projectId)` | `projects/page`, `projects/[id]/page`, `invoices/page`, `changes/page` + `changes-panel`, `budget/page`, `projects-list`, `contracts/page`, `lien-releases.ts`, `profitability.ts` — **10** | `revised = original + signedDelta + approvedSelectionDelta` |
+| `getRevisedContractMap()` | `projects-list`, `projects/page`, `contracts/page` — 3 | same, per project |
+| `getPortfolioRevisedContract()` | `dashboard.ts` (KPI) — 1 | same, summed; the fixed/projected split applies to selections exactly as to COs (a selection on a cost-plus job is a projection, P11) |
+
+Two consumers need individual notes:
+
+- **`profitability.ts:307`** — *"Earned: contract value for the fixed-price side (7B derives it)"* —
+  picks the term up **automatically** via `getRevisedContract`. But its per-instrument cost loop
+  (`:124-150`) enumerates the estimate + signed COs as the instruments; an approved selection is a
+  **third instrument kind** and its cost (the selection's `quantity × unit_cost`) must join the loop
+  or 7H shows the sell without the cost — margin overstated.
+- **`lien-releases.ts:171`** reads `revised.original` only (*"ruling C7 — the ORIGINAL contract, not
+  the revised"*). **Unaffected.**
+
+**The derivation also lives in SQL — and there it needs NO change.** `enforce_contract_billing_ceiling`
+(`invoice_lines_z_contract_ceiling`, BEFORE INSERT) refuses a line that would bill past
+`project_financials.contract_value`, **but only for lines carrying `source_estimate_id`** — *"Only lines
+billed against the CONTRACT instrument are constrained. A CO's lines… are other scopes entirely."* CO
+lines escape the ceiling by being their own instrument. **A selection variance must therefore bill as
+its own instrument — `invoice_lines.source_selection_id` — and it escapes the ceiling the same way.**
+If instead it were billed against `source_estimate_id`, the ceiling would refuse the overage with
+*"Raise the scope with a change order instead"* — which Q4 just ruled out. That is the trap.
+
+What `source_selection_id` requires: the column; `invoice_lines_one_instrument_check` widened from a
+two-way to a three-way exclusion; `invoice-derivation.ts` grouping by instrument gains the kind;
+`getChangeOrderBilling`'s sibling for selections (billed vs. signed variance → remaining).
+
+**The portal's financial arms are unaffected by derivation** — `portal.ts:300-334` reads
+`client_contracts.contract_value` (the original, *"HER"* figure) and invoices; it never sums COs. The
+portal Selections page shows the selection's own signed figures (2b.3), not a revised contract.
+
+**Dashboard.ts** uses the constant directly for its attention feed (`awaitingSum` of **sent** COs) —
+selections *awaiting approval* are a parallel feed row, not a change to that sum.
+
+## 2b.2 — Q5's credit mechanism
+
+Today's `credit_allowance` (`invoices-client.ts:378-400`) is a **free-typed amount with no source
+link**, gated only by `invoices.is_final`. It cannot carry "always owed, timing is the company's
+call", because nothing records what is owed or what has been applied.
+
+**The precedent is 7D §4a's negative-CO credit** (`contract-value.ts:400-445`): availability is
+**derived** — the signed credit minus Σ `billed_amount` of live invoice lines carrying that
+`source_change_order_id`. Nothing is stored; void an invoice and the credit is available again.
+
+**Same shape for selections, and `credit_allowance` IS the right vehicle** once it has a source:
+
+- Owed = Σ over approved selections with `signed_variance < 0` of `|signed_variance|`.
+- Applied = Σ `-billed_amount` of `credit_allowance` lines with that `source_selection_id` on live,
+  non-voided invoices.
+- Available = owed − applied. Surfaced on the invoice builder like the negative-CO credit ("available
+  credits"), placed on an invoice of the user's choosing.
+- The `is_final` gate is **lifted for sourced credits and kept for unsourced ones** — that is the
+  superseding of §4b, narrowly: an allowance underage backed by a signed selection is owed and
+  placeable any time; the legacy un-sourced under-credit keeps its final-only rule.
+
+No new table. One column (`source_selection_id`) and the `credit_sign_check` already forces the line
+negative.
+
+## 2b.3 — Q10's shared Selections page: what "no costs" requires at the policy layer
+
+**A renderer that omits a column is not a floor, and Postgres RLS has no column floor.** The house
+answer is already written at `contract-value.ts:10-13`: *"Postgres RLS is row-level and has no column
+equivalent, so a column that only Owner/Admin may read has to be its own row."* That is why
+`contract_value` and `budgeted_amount` were split onto 1:1 side tables.
+
+**Apply the same split, twice**, because two different floors are needed:
+
+| Table | Carries | SELECT floor |
+|---|---|---|
+| `selections`, `selection_areas`, `selection_options`, `selection_threads`/`_messages`/`_photos` | names, area, description, due date, toggles, status, image refs, links, spec detail, chosen option | company-wide for staff **including subcontractors** (project-scoped via `can_view_project`); client arm via `is_client_of_project` |
+| `selection_option_amounts` (1:1 off `selection_options`) | `unit_cost`, `quantity`, `markup_percent` | **Owner/Admin/PM** only — the cost basis |
+| `selection_notes` (1:1 off `selections`) | `internal_notes` (requirement B) | **Owner/Admin/PM/Foreman** — no sub, no client |
+
+**The client's sell figure cannot come from `selection_option_amounts`** — a client who reads
+`unit_cost` and `markup_percent` reverses the markup, the exact thing Q11 floors the catalog for.
+Instead, **sell is stamped, not read**: at the moment the company moves a selection to *Awaiting
+Approval*, the service writes `offered_sell_amount`, `offered_allowance_deduction` and
+`offered_variance` onto the **selection row itself** (client-readable, no cost basis recoverable), and
+at signature the session snapshots the same three as `signed_*`. This is what the signed-artifact
+doctrine wants anyway — the client signs a *figure*, and that figure must not move underneath the
+signature when a cost is edited. **It is also what 7B sums** (`signed_variance`), so an edit after
+approval cannot move contract value without a new signature (Q9).
+
+Is stamping sell a breach of *"sell is derived, never stored on the budget line"*? No — it is not on a
+budget line and it is not a derivation of anything; it is the **price offered and accepted**, the same
+category as `invoice_lines.billed_amount` (which is the one place the house rule already materialises
+sell). The spec says this explicitly.
+
+## 2b.4 — Q6's no-money selection through the pipeline
+
+`client_supplied = true` (the renamed toggle) means no `selection_option_amounts` row is required and
+no `offered_*`/`signed_*` figure is written. Traced:
+
+- **Budget derivation (Q2, §2 subcategory):** the selection must be **excluded from the allowance
+  join**, not joined with zero. If it joined with `selection_total = 0`, the subcategory would render
+  *variance = −allowance* — a full underage the client is owed, which is precisely wrong (Q6: *"the
+  allowance stays whole and unconsumed"*). The filter is `WHERE NOT client_supplied`.
+- **7B contract value:** contributes nothing (no `signed_variance`). ✅
+- **7H profitability:** not an instrument (no cost, no sell). Excluded by the same flag. ✅
+- **Client sheet / portal:** rendered **without** the price block — the signature accepts the
+  *choice* and the binding-wording still applies to the decision, not to money. The Q4 wording must
+  have a no-money variant or it asserts acceptance of "stated costs" that are not stated.
+- **Division hazards:** `budget.ts:214` guards (`e.amount ? a/e : 0`); `invoice-derivation` has no
+  division by a line amount; `estimate-totals.ts:55` divides by `1 − margin%` (margin mode), which a
+  zero *cost* does not trigger. **No divide-by-zero path.**
+- **Specifications sheet:** included — it is a decision record with spec detail. ✅
+
+## 2b.5 — Q9's revision against the derived budget and the retained signature
+
+`co_signing_sessions` has **no unique index on `change_order_id`** — multiple sessions per subject
+already coexist — and its status set is `pending · completed · declined · expired · invalidated`.
+`selection_signing_sessions` copies that. The audit rule that keeps it unambiguous:
+
+- **At most ONE session with `status = 'completed'` is current** — enforced by a partial unique index
+  `(selection_id) WHERE status = 'completed' AND superseded_at IS NULL`.
+- Approved → In Discussion sets `superseded_at` on the current completed session (never deletes it)
+  and clears the selection's `signed_*` stamps. 7B reads only un-superseded completed sessions, so
+  contract value drops by the old variance immediately and rises by the new one only at the next
+  signature.
+- Denial: the pending session goes `declined`, the selection returns to **Draft**, notification to
+  Owner/Admin. Approval: notification to Owner/Admin. Both via the existing notification service.
+- The derived budget (Q2) is free: it reads the selection's current stamps, and a selection in
+  Discussion has none, so the subcategory shows the allowance whole again until re-signed.
+
+**Nothing ambiguous** provided the partial unique index exists; without it two completed sessions
+could both claim to be current.
+
+## 2b.6 — The three per-type column families, under Q3
+
+**Q3 first: there is NO project-level default markup.** `projects` carries `tax_rate` and
+`retainage_percent` only; `project_financials` carries `contract_value` only. Markup defaults exist
+at three levels — **company** (`companies.default_{labor,material,subcontractor}_markup_percent`),
+**instrument** (`estimates.*_markup_percent`, `change_orders.*_markup_percent`, and for cost-plus the
+`instrument_rates` rows keyed by `estimate_id`/`change_order_id`), and **row** (`markup_percent`).
+
+**Nearest thing, proposed rather than invented:** a selection's default markup is **the linked
+allowance row's effective markup** (its own `markup_percent`, else its instrument's default for the
+allowance type) — that is what Josh's *"project default"* resolves to in a system where defaults are
+per instrument; and for an **unlinked** selection, the **contract estimate's** default (reached via
+`client_contracts` → `estimates`). User-editable per selection, as ruled. The alternative — a new
+`projects.default_selection_markup_percent` — is one column but a **fourth** level of default that
+nothing else consults. **Flagged for Josh; the spec proceeds on the inheritance reading.**
+
+Per family, given that:
+
+| Family | Answer |
+|---|---|
+| `estimates` / `change_orders` `*_markup_percent` (labor, material, subcontractor) | **Add `allowance_markup_percent`** to both. Q1 makes allowance a real row type with its own default, and Q3's inheritance needs a per-instrument figure to inherit *from*. `resolveRowMarkupPercent` gets a `case 'allowance'` arm. `switch_pricing_mode` gets the matching arm. |
+| `companies.default_*_markup/margin_percent` | **Add `default_allowance_markup_percent` + `_margin_percent`** — the seed for the instrument column on a new estimate, same as the other three. |
+| `companies.gl_account_*` | **No new column.** The GL account maps *cost category* for QB export of **expenses**, and `expenses_cost_category_check` is three-valued (material/sub/other) — an actual cost incurred against an allowance is booked as the thing it is (a tile purchase is `material`). An allowance is a budget concept, not an expense category. State in the spec so nobody "completes" the family. |
+| `instrument_rates.rate_type` | **Add `cost_plus_allowance_percent`.** A cost-plus instrument prices every non-labor category at its own independent rate (A-9) and `costPlusMarkupFor` returns `undefined` for an unknown type — a fifth row type on a cost-plus estimate would price at no markup. `tm_nonlabor_percent` already covers T&M. |
+| `expenses.cost_category`, `invoice_cost_claims.cost_category` | **No change** — see GL row. |
+
+## 2b.7 — Awkward or impossible, second pass
+
+Nothing is unbuildable. Five things are awkward and each has a named remedy above:
+
+1. **No project-level markup default** (Q3) — inherit from the linked allowance line / contract
+   estimate. *Proposal, flagged.*
+2. **The client cannot be allowed to read cost or markup**, yet must see sell — stamp `offered_*` and
+   `signed_*` on the selection row at the state transition; never give the client a SELECT arm on
+   `selection_option_amounts`. Side-table split for both floors (2b.3).
+3. **The contract-billing ceiling** would refuse a selection overage billed against the contract
+   instrument — bill it as its own instrument (`source_selection_id`), widen the one-instrument CHECK.
+4. **`credit_allowance` has no source link** — add `source_selection_id`; lift `is_final` only for
+   sourced credits.
+5. **A client-supplied selection joined at zero** would show a phantom full underage — exclude it
+   from the allowance join, not zero it.
+
+And two loud sites the spec must not forget, carried from Phase 1: the two `_type_columns` CHECKs
+get an explicit `WHEN 'allowance'` arm (quantity + unit_cost, no rate/labor_unit/amount/
+subcontractor_id), so the shape constraint does not silently vanish; and `s164-m9-financial-arms:263`
+plus `money-representation.test.ts:136` are read, not just re-run, when allowance rows enter fixtures.
