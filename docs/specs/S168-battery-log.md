@@ -19,7 +19,7 @@ restart cannot lose the outcome. (Committed on `main`, path-scoped, **not pushed
 | 2 | `next lint` (expect 0) | 🟢 PASS | "No ESLint warnings or errors", exit 0 — still at 0 |
 | 3 | `npm run build --force` (FULL TURBO ≠ evidence) | 🟢 PASS | fresh: **0 cached, 1 total**, `✓ Compiled successfully`, 2m23.2s, exit 0 |
 | 4 | Full committed vitest suite | 🟢 PASS | 59 files, **894/894**, exit 0 — identical to S166 |
-| 5 | Every live harness, all 89 files (cold + warm re-run of reds) | ⏳ PENDING | |
+| 5 | Every live harness, all 89 files (cold + warm re-run of reds) | ⏳ cold done, warm pending | cold: exit 1, 2 files / 1 test red of 1198; `s168-co-lifecycle` green |
 | 6 | Playwright, four chunks from `apps/web` | ⏳ PENDING | |
 | 7 | `npx supabase migration list` (repo root) | 🟢 PASS | **130 files = 130 applied**, every row `local == remote`, latest `20261023000000`, exit 0 |
 | 8 | `fixture-snapshot.mjs` AFTER + diff vs. BEFORE | ⏳ PENDING | |
@@ -124,7 +124,26 @@ for all five packages.
 - **Identical to the S166 battery** (59 / 894). S168 added no committed unit tests — its work is
   covered by the live harness `s168-co-lifecycle.live.ts` (step 5) and the portal Playwright spec.
 
-### 5. live harnesses (89) — ⏳ PENDING
+### 5. live harnesses (89) — cold run recorded, warm re-run pending
+
+Run **detached via `nohup`**, deliberately. S166's foreground attempt was killed at the tool's
+10-minute cap, its `afterAll` never ran, and the residue it left reddened two *later* files — the
+kill was the biggest single source of noise in that battery. This run had to reach its own teardown.
+
+**Cold run, finished 2026-08-21T09:54:52Z — PRINTED exit: 1.**
+`Test Files  2 failed | 87 passed (89)` · `Tests  1 failed | 1193 passed | 4 skipped (1198)` ·
+Duration 857.06s (14m17s).
+
+Note the asymmetry: **2 files red but only 1 test red.** The second file died in a helper called
+from a test body, so the file is marked failed without a `×` test line — worth stating because a
+tally read alone would under-count it.
+
+| File | Failure | First read |
+|------|---------|-----------|
+| `s123-cron-loops` §3j (`runStillClockedIn`) | `seedSession: duplicate key value violates unique constraint "idx_time_clock_sessions_one_open_per_member"` (`test/s123-cron-loops.live.ts:173`) | **Fixture residue.** An *open* time-clock session for that member already existed, so the unique partial index refused the seed. A leftover from an earlier interrupted run, not this tree. |
+| `s140-compliance-floor` S140-3 | `crew_member could not read projects — session is broken: expected null to be truthy` (`:172`), **36248ms** | **Cold-cache.** This is the harness's own *non-vacuity guard*, not the floor assertion — it checks the crew session can read *something* before concluding it reads zero compliance rows. It spent 36s and came back `null`, the signature of a cold auth/PostgREST round-trip timing out, not of a policy change. |
+
+Neither red is on an S168 surface. `s168-co-lifecycle.live.ts` itself: **green.**
 
 ### 6. Playwright (4 chunks) — ⏳ PENDING
 
