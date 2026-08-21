@@ -78,6 +78,65 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
 ## Open Tech Debt
 
+### Branch-scoped, awaiting real numbers — `feature/s168-co-lifecycle-portal-split` [S168]
+
+> Provisional ids per the S136 rule: never allocate a bare `#N` on a branch. Tag `s168`.
+> **Both came out of Josh's Part B click-test and NEITHER was built in S168**, on the brief's own
+> instruction: *"establish what removing them touches before changing it, and if it is more than
+> cosmetic, file and report rather than building it here."* It is more than cosmetic. The scope
+> below is the establishing work, done, so the fix session starts from a map instead of a survey.
+
+- **#1-s168 — A CLIENT IS NOT A TEAM MEMBER, BUT `/dashboard/team` LISTS THEM AND OFFERS THEM THE
+  STAFF INVITE. The invite link it offers a client is a dead end.** Raised S168 (2026-08-20), from
+  Josh's click-test: *"client should be removed from team side."*
+
+  The portal invite Josh actually wants is already built and already lives in the right place —
+  `portal-panel.tsx`, on the **project's Contacts tab** (M9 B.4). The Team page is a second,
+  older door to the same idea, and it is the wrong one: a client has no seat, no dashboard, and
+  nothing on that page applies to them.
+
+  **WHY THIS IS NOT A ONE-LINE FILTER.** `client` is not incidentally present on the Team side —
+  it was deliberately wired in, before the portal existed, and the wiring has five limbs:
+
+  | Site | What it does today |
+  | --- | --- |
+  | `lib/services/team.ts:97` `getTeamMembers()` | `select … from profiles` with **no role filter** — every client in the company is a row. Called only by `team-page-client.tsx:45`. |
+  | `app/dashboard/team/invite/invite-form.tsx:10` | A **LOCAL `INVITABLE_ROLES` duplicate** that includes `client` with the description *"Portal access to project timeline, payments, and documents"*. |
+  | `packages/shared/constants/roles.ts:42` | The shared `INVITABLE_ROLES` **also** includes `'client'`. Two lists, and the local one is the one the form renders. |
+  | `invite-form.tsx:64,77` `isClientRole` | A real behavioural branch — **client invites skip the seat-limit check**. Removing the role without removing this leaves dead logic that will read as a bug. |
+  | `app/dashboard/team/[id]` | The detail route is reachable by URL for a client's profile id whether or not the list shows it. **Dropping the row from the list is cosmetic on its own.** |
+
+  Plus the pending-invitations table on the same page, which lists client invites and offers Copy
+  link / Resend / Cancel for them, and **`#2-s168` below, which is the same defect seen from the
+  invitee's side and resolves with this.**
+
+  **Fix direction.** Decide first whether a client invite should exist on the Team side *at all* or
+  only be re-pointed. If removed: filter `getTeamMembers()` by `DASHBOARD_ROLES` (which already
+  excludes `client` **and** `subcontractor` — note that second one, it is a scope decision, not a
+  freebie); delete `client` from BOTH `INVITABLE_ROLES` lists and collapse the local duplicate into
+  the shared one while you are there; remove `isClientRole`; gate `/dashboard/team/[id]` on the same
+  list; and sweep the invite pipeline (`/api/invites`, `email_type`, the acceptance page) for the
+  client arm. **Sweep the tests before finishing** — anything asserting a team-roster row count or
+  the invite role list encodes today's behaviour, per CLAUDE.md's S157 rule.
+
+- **#2-s168 — AN EXPIRED CLIENT INVITE POINTS AT THE ONE PAGE A CLIENT SHOULD NOT BE ON.** Raised
+  S168 (2026-08-20), from the same click-test.
+
+  `app/invite/accept/accept-invite.tsx:63`:
+
+  ```
+  'This invitation has expired. Ask the company to resend it — they can do that from their Team page.'
+  ```
+
+  Two things are wrong with one sentence. It names an **internal** screen to an external
+  counterparty, who cannot see it and cannot act on it; and once `#1-s168` lands, the Team page is
+  not where a client invite is resent from either — the project's Contacts tab is. So the message is
+  a dead end today and a **false statement** afterwards.
+
+  It is not simply "reword it": the honest sentence depends on where client invites come from, which
+  is `#1-s168`'s decision. **Resolve them together.** The message also needs to know whether the
+  expired invite was a staff invite or a client one, and today it does not — the copy is shared.
+
 ### Branch-scoped, awaiting real numbers — `fix/s167-restore-m9-draft-co-fixture` [S167]
 
 > Provisional id per the S136 rule: never allocate a bare `#N` on a branch. Tag `s167fx`.
