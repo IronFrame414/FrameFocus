@@ -421,6 +421,16 @@ function rowInsertPayload(input: CreateCoLineRowInput): CoLineRowInsert {
         unit_cost: input.unit_cost ?? null,
         quantity: input.quantity ?? null,
       };
+    case 'allowance':
+      // [S170] the MATERIAL shape (see estimate-items-client.ts — same arm,
+      // same reason; the CO table has no catalog link to omit).
+      return {
+        ...base,
+        apply_tax: input.apply_tax ?? true,
+        unit_of_measure: input.unit_of_measure ?? 'each',
+        unit_cost: input.unit_cost ?? null,
+        quantity: input.quantity ?? 1,
+      };
     case 'subcontractor':
       return {
         ...base,
@@ -429,12 +439,14 @@ function rowInsertPayload(input: CreateCoLineRowInput): CoLineRowInsert {
         subcontractor_id: input.subcontractor_id ?? null,
       };
     case 'other':
-    default:
       return {
         ...base,
         apply_tax: input.apply_tax ?? false, // opt-in
         amount: input.amount ?? null,
       };
+    default:
+      // [S170] no fall-through — see estimate-items-client.ts rowInsertPayload.
+      throw new Error(`coRowInsertPayload: unknown row_type ${String(input.row_type)}`);
   }
 }
 

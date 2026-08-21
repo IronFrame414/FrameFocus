@@ -9,7 +9,8 @@ import {
 
 type BudgetItemRow = Database['public']['Tables']['project_budget_items']['Row'];
 
-export type BudgetRowType = 'labor' | 'material' | 'subcontractor' | 'other';
+/** [S170] 'allowance' added (allowances-selections-spec §2). */
+export type BudgetRowType = 'labor' | 'material' | 'subcontractor' | 'other' | 'allowance';
 
 export type BudgetItem = Omit<BudgetItemRow, 'row_type' | 'budgeted_amount'> & {
   row_type: BudgetRowType | null;

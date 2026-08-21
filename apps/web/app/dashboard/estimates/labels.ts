@@ -39,7 +39,6 @@ export const UNIT_LABELS: Record<MaterialUnitOfMeasure, string> = {
   gallon: 'Gallon',
   pair: 'Pair',
   set: 'Set',
-  allowance: 'Allowance',
   other: 'Other',
 };
 

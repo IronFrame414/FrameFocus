@@ -16,7 +16,8 @@ type CoSigningSessionRow = Database['public']['Tables']['co_signing_sessions']['
 export type ChangeOrderStatus = 'draft' | 'sent' | 'signed' | 'voided';
 export type ChangeOrderType = 'fixed_price' | 'time_and_materials' | 'cost_plus';
 export type CoPricingMode = 'markup' | 'margin';
-export type CoRowType = 'labor' | 'material' | 'subcontractor' | 'other';
+/** [S170] 'allowance' added (allowances-selections-spec §2). */
+export type CoRowType = 'labor' | 'material' | 'subcontractor' | 'other' | 'allowance';
 export type CoLaborUnit = 'hours' | 'days';
 
 export type ChangeOrder = Omit<ChangeOrderRow, 'status' | 'co_type' | 'pricing_mode'> & {

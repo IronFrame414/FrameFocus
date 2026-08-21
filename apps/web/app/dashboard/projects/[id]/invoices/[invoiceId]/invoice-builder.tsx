@@ -1208,7 +1208,7 @@ function LinesPanel({
   // vanish from the by-section presentation. It is also §2's "categories post
   // into project finances" half. Defaults to 'other', never null.
   const [manualCategory, setManualCategory] =
-    useState<'labor' | 'material' | 'subcontractor' | 'other'>('other');
+    useState<'labor' | 'material' | 'subcontractor' | 'other' | 'allowance'>('other');
   // §2 [S97] — STANDALONE vs a lump-sum billing OF an instrument. Two different
   // things were conflated here: only the STANDALONE kind is new income that
   // posts to project finances, and only an instrument-attributed line is
@@ -1393,6 +1393,7 @@ function LinesPanel({
               <option value="material">Material</option>
               <option value="subcontractor">Subcontractor</option>
               <option value="other">Other</option>
+              <option value="allowance">Allowance</option>
             </select>
             <select
               value={manualInstrument}

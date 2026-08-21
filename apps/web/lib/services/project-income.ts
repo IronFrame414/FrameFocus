@@ -83,6 +83,7 @@ const LABEL: Record<RowCategory | 'uncategorized', string> = {
   material: 'Materials',
   subcontractor: 'Subcontractors',
   other: 'Other',
+  allowance: 'Allowances',
   uncategorized: 'Uncategorized',
 };
 

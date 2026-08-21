@@ -154,7 +154,7 @@ export async function getProposalData(
     lineIds.length > 0
       ? await supabase
           .from('estimate_line_rows')
-          .select('line_item_id, row_type, name, total, unit_of_measure, unit_cost, sort_order')
+          .select('line_item_id, row_type, name, total, unit_of_measure, unit_cost, quantity, sort_order')
           .in('line_item_id', lineIds)
           .order('sort_order', { ascending: true })
       : { data: [] };
@@ -224,11 +224,16 @@ export async function getProposalData(
 
   const lineNameById = new Map(lineItems.map((l) => [l.id, l.name]));
   const allowances: ProposalAllowance[] = (allRows ?? [])
-    .filter((r) => r.row_type === 'material' && r.unit_of_measure === 'allowance')
+    // [S170] allowance is a ROW TYPE; the material/unit_of_measure='allowance'
+    // representation was retired by 20261025000000. Same box, new predicate.
+    .filter((r) => r.row_type === 'allowance')
     .map((r) => ({
       name: r.name,
       lineName: lineNameById.get(r.line_item_id) ?? '',
-      amount: r.unit_cost ?? 0,
+      // quantity × unit_cost — the row's cost, same as computeRowCost. The old
+      // box read unit_cost alone because quantity was ignored on the retired
+      // representation; a 2 × $5,000 allowance would have printed as $5,000.
+      amount: Math.round((r.quantity ?? 0) * (r.unit_cost ?? 0) * 100) / 100,
     }));
 
   return {

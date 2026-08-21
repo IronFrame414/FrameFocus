@@ -173,7 +173,7 @@ export interface AddFixedLineInput {
    * charged. A standalone line's category is also the half of §2's "amounts AND
    * categories post into project finances" that had nowhere to come from.
    */
-  category?: 'labor' | 'material' | 'subcontractor' | 'other' | null;
+  category?: 'labor' | 'material' | 'subcontractor' | 'other' | 'allowance' | null;
   sourceEstimateId?: string | null;
   sourceChangeOrderId?: string | null;
 }
@@ -249,7 +249,8 @@ export async function addDrawLine(
 export interface EstimateLineSelection {
   lineItemId: string;
   description: string;
-  category: 'labor' | 'material' | 'subcontractor' | 'other';
+  /** [S170] 'allowance' is a fifth category — same vocabulary as row_type. */
+  category: 'labor' | 'material' | 'subcontractor' | 'other' | 'allowance';
   /** The portion of this line's REMAINING that this invoice bills. */
   amount: number;
 }

@@ -42,6 +42,7 @@ const STATUS_COLORS: Record<ChangeOrderStatus, { bg: string; fg: string }> = {
 const ROW_TYPE_LABELS: Record<CoRowType, string> = {
   labor: 'Labor',
   material: 'Material',
+  allowance: 'Allowance',
   subcontractor: 'Subcontractor',
   other: 'Other',
 };
@@ -56,9 +57,8 @@ const UNIT_OF_MEASURE_OPTIONS = [
   'gallon',
   'pair',
   'set',
-  'allowance',
   'other',
-] as const;
+] as const; // [S170] 'allowance' is a row type, not a unit
 
 /**
  * A figure the caller may not be permitted to see renders as an em-dash.
@@ -1057,7 +1057,7 @@ function RowEntrySummary({ row }: { row: ChangeOrderLineRow }) {
         </>
       );
     case 'material':
-      if (row.unit_of_measure === 'allowance') return <>allowance {money(row.unit_cost ?? 0)}</>;
+    case 'allowance': // [S170] same shape as material; quantity is real
       return (
         <>
           {money(row.unit_cost ?? 0)} × {row.quantity ?? 0} {row.unit_of_measure ?? 'each'}
@@ -1065,8 +1065,9 @@ function RowEntrySummary({ row }: { row: ChangeOrderLineRow }) {
       );
     case 'subcontractor':
     case 'other':
-    default:
       return <>{money(row.amount ?? 0)}</>;
+    default:
+      return <>—</>;
   }
 }
 
@@ -1117,7 +1118,9 @@ function RowFields({
   const [markup, setMarkup] = useState(
     initial?.markup_percent != null ? String(initial.markup_percent) : ''
   );
-  const [applyTax, setApplyTax] = useState(initial?.apply_tax ?? rowType === 'material');
+  const [applyTax, setApplyTax] = useState(
+    initial?.apply_tax ?? (rowType === 'material' || rowType === 'allowance')
+  );
 
   function buildFields(): RowFieldValues {
     const shared = {
@@ -1128,6 +1131,7 @@ function RowFields({
       case 'labor':
         return { ...shared, rate: parseNum(rate), quantity: parseNum(quantity), labor_unit: laborUnit };
       case 'material':
+      case 'allowance': // [S170] material shape
         return {
           ...shared,
           unit_of_measure: uom,
@@ -1143,8 +1147,9 @@ function RowFields({
           apply_tax: applyTax,
         };
       case 'other':
-      default:
         return { ...shared, amount: parseNum(amount), apply_tax: applyTax };
+      default:
+        throw new Error(`buildFields: unknown row_type ${String(rowType)}`);
     }
   }
 
@@ -1190,7 +1195,7 @@ function RowFields({
         </>
       )}
 
-      {rowType === 'material' && (
+      {(rowType === 'material' || rowType === 'allowance') && (
         <>
           <div>
             <label style={smallLabelStyle}>Unit cost ($)</label>

@@ -135,7 +135,8 @@ type SubBidRow = Database['public']['Tables']['estimate_sub_bids']['Row'];
 type EstimateFileRow = Database['public']['Tables']['estimate_files']['Row'];
 
 // 4D-rev: a line item is composed of typed rows.
-export type RowType = 'labor' | 'material' | 'subcontractor' | 'other';
+/** [S170] 'allowance' added (allowances-selections-spec §2). */
+export type RowType = 'labor' | 'material' | 'subcontractor' | 'other' | 'allowance';
 
 export type LaborUnit = 'hours' | 'days';
 
@@ -149,8 +150,8 @@ export type MaterialUnitOfMeasure =
   | 'gallon'
   | 'pair'
   | 'set'
-  | 'allowance'
   | 'other';
+// [S170] 'allowance' left this union — it is a ROW TYPE now (20261025000000).
 
 export type EstimateAttachmentType = 'site_photo' | 'plan' | 'sub_bid' | 'other';
 

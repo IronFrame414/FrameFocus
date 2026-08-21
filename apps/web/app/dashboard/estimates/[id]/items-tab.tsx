@@ -65,6 +65,7 @@ const ROW_TYPE_LABELS: Record<RowType, string> = {
   material: 'Material',
   subcontractor: 'Sub',
   other: 'Other',
+  allowance: 'Allowance',
 };
 
 const ROW_TYPE_DEFAULT_NAME: Record<RowType, string> = {
@@ -72,6 +73,7 @@ const ROW_TYPE_DEFAULT_NAME: Record<RowType, string> = {
   material: 'New material',
   subcontractor: 'Subcontractor',
   other: 'Other cost',
+  allowance: 'Allowance',
 };
 
 export function ItemsTab({ data, canEdit, reload }: TabProps) {
@@ -134,7 +136,8 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
 
   function estimateDefaultMarkup(rowType: RowType): number | null {
     if (rowType === 'labor') return estimate.labor_markup_percent;
-    if (rowType === 'material') return estimate.material_markup_percent;
+    // [S170] allowance rides material's default (Q3) — same as resolveRowMarkupPercent.
+    if (rowType === 'material' || rowType === 'allowance') return estimate.material_markup_percent;
     return estimate.subcontractor_markup_percent;
   }
 
@@ -228,7 +231,7 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
     const input =
       rowType === 'labor'
         ? { ...base, apply_tax: false, rate: laborRowRate ?? 0, quantity: 1, labor_unit: 'hours' as LaborUnit }
-        : rowType === 'material'
+        : rowType === 'material' || rowType === 'allowance'
           ? { ...base, apply_tax: true, unit_of_measure: 'each' as MaterialUnitOfMeasure, unit_cost: 0, quantity: 1 }
           : { ...base, apply_tax: false, amount: 0 };
 
@@ -270,8 +273,12 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
       );
     }
 
-    if (row.row_type === 'material') {
-      const isAllowance = row.unit_of_measure === 'allowance';
+    if (row.row_type === 'material' || row.row_type === 'allowance') {
+      // [S170] allowance is its own row type with a real quantity. _Superseded
+      // UX (4D §4.14), quoted not deleted: "quantity field hides; unit_cost
+      // relabels to Allowance amount."_ The catalog picker stays material-only:
+      // estimate_line_rows_type_columns forbids catalog_item_id on an allowance.
+      const isAllowance = row.row_type === 'allowance';
       return (
         <span style={{ display: 'inline-flex', gap: '0.375rem', alignItems: 'center', flexWrap: 'wrap' }}>
           <InlineNumber
@@ -286,9 +293,11 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
             }
           />
           {isAllowance && (
-            <span style={{ fontSize: '0.625rem', color: '#92400e' }}>allowance = unit cost</span>
+            <span style={{ fontSize: '0.625rem', color: '#92400e' }} title="Client-selected later; budgeted at qty × cost">
+              allowance
+            </span>
           )}
-          {canEdit && (
+          {canEdit && !isAllowance && (
             <button
               type="button"
               onClick={() => setPickerForRow(row)}
@@ -364,22 +373,15 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
       );
     }
 
-    if (row.row_type === 'material') {
-      const isAllowance = row.unit_of_measure === 'allowance';
+    if (row.row_type === 'material' || row.row_type === 'allowance') {
       return (
         <span style={{ display: 'inline-flex', gap: '0.375rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          {isAllowance ? (
-            <span style={rowLabel} title="Allowance rows have no quantity">
-              —
-            </span>
-          ) : (
-            <InlineNumber
-              value={row.quantity}
-              disabled={!canEdit}
-              validate={(v) => (v == null || v < 0 ? 'Qty ≥ 0' : null)}
-              onSave={(v) => mutate(() => updateEstimateLineRow(row.id, { quantity: v }), true)}
-            />
-          )}
+          <InlineNumber
+            value={row.quantity}
+            disabled={!canEdit}
+            validate={(v) => (v == null || v < 0 ? 'Qty ≥ 0' : null)}
+            onSave={(v) => mutate(() => updateEstimateLineRow(row.id, { quantity: v }), true)}
+          />
           <select
             value={row.unit_of_measure ?? 'each'}
             disabled={!canEdit}
@@ -731,6 +733,7 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
         <option value="">+ Add Row…</option>
         <option value="labor">Labor (rate × qty)</option>
         <option value="material">Material</option>
+        <option value="allowance">Allowance (client selects later)</option>
         <option value="subcontractor">Subcontractor</option>
         <option value="other">Other (permit, fee…)</option>
       </select>

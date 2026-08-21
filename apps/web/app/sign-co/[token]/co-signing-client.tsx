@@ -452,6 +452,7 @@ export function CoSigningClient({ token, data, recipientName }: CoSigningClientP
 const ROW_TYPE_LABELS: Record<string, string> = {
   labor: 'Labor',
   material: 'Material',
+  allowance: 'Allowance', // [S170]
   subcontractor: 'Subcontractor',
   other: 'Other',
 };

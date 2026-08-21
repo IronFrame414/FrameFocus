@@ -363,6 +363,17 @@ function rowInsertPayload(input: CreateLineRowInput): LineRowInsert {
         quantity: input.quantity ?? null,
         catalog_item_id: input.catalog_item_id ?? null,
       };
+    case 'allowance':
+      // [S170] the MATERIAL shape — quantity × unit_cost, taxed by default —
+      // minus the catalog link (an allowance is what you have NOT chosen yet).
+      // Mirrors the 'allowance' arm of estimate_line_rows_type_columns.
+      return {
+        ...base,
+        apply_tax: input.apply_tax ?? true,
+        unit_of_measure: input.unit_of_measure ?? 'each',
+        unit_cost: input.unit_cost ?? null,
+        quantity: input.quantity ?? 1,
+      };
     case 'subcontractor':
       return {
         ...base,
@@ -371,12 +382,17 @@ function rowInsertPayload(input: CreateLineRowInput): LineRowInsert {
         subcontractor_id: input.subcontractor_id ?? null,
       };
     case 'other':
-    default:
       return {
         ...base,
         apply_tax: input.apply_tax ?? false, // opt-in
         amount: input.amount ?? null,
       };
+    default:
+      // [S170] no fall-through. The old `case 'other': default:` wrote an
+      // unknown type with the 'other' column shape, which the DB would accept
+      // (its CHECK fell to ELSE NULL) and the budget writers would price from
+      // `amount` — i.e. silently. An unknown type is a bug; say so.
+      throw new Error(`rowInsertPayload: unknown row_type ${String(input.row_type)}`);
   }
 }
 

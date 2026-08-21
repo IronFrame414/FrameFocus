@@ -298,7 +298,13 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   **Belongs to the M1 pass** (billing/subscription is M1's surface).
 
 - **#2-m9 — `cost_catalog` SELECT has no role check, and a client and a subcontractor can read the
-  company's unit-cost book TODAY.** Raised S164 (2026-08-19).
+  company's unit-cost book TODAY.** Raised S164 (2026-08-19). **CLOSED [S170, 2026-08-21]** —
+  `20261024000000_cost_catalog_select_floor.sql` replaces `cost_catalog_select_authenticated` with
+  `cost_catalog_select_manager` (owner/admin/PM; **foreman excluded** — unit costs, per Josh S169
+  Q11). Pulled forward from the M7 pass as **stage 0 of Allowances & Selections**, because the catalog
+  becomes a client-facing option source there. Proven non-vacuously in
+  `s170-allowance-row-type.live.ts` S170-0: owner and PM read ≥1 row; foreman, crew, sub and client
+  read 0 with a working session. _Original text retained below._
 
   ```
   cost_catalog_select_authenticated  SELECT  (company_id = get_my_company_id())
