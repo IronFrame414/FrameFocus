@@ -11,8 +11,15 @@ import { applied } from '@/lib/services/mutation-result';
 // Spec §5.3, §6; rulings Q4, Q7, Q8, Q9; analysis 2b.3, 2b.5.
 //
 //   draft / in_discussion ──offer──▶ awaiting_approval ──sign──▶ approved
-//        ▲                               │                          │
-//        └──────── deny / withdraw ──────┘           revise ────────┘ (→ in_discussion)
+//        ▲                          │          │                    │
+//        │◀──── withdraw (company) ─┘          └─ deny (client) ─▶ DENIED
+//        │                                                          │
+//        └──────────────────── reopen (company) ◀───────────────────┘      revise: approved → in_discussion
+//
+// [S172, Josh] DENIED IS A RESTING STATE. Stage 4 returned a denial straight
+// to draft; Josh: "it should be flagged as denied. A user can choose to
+// re-open it, which moves to draft." Withdraw (company-initiated) still lands
+// in draft directly — the company is already acting.
 //
 // THE SELECTION SIGNATURE IS THE BINDING INSTRUMENT (Q4). No change order is
 // generated. S150's R21 said otherwise and is SUPERSEDED — the spec §1.2 says
@@ -367,7 +374,9 @@ export async function completeSelectionSignature(
   return { success: true };
 }
 
-/** DENY (Q9): awaiting_approval → DRAFT. A return, not a terminus. */
+/** DENY (Q9 as amended S172): awaiting_approval → DENIED, a RESTING state.
+ *  The offered stamps are KEPT so the company can see what was refused;
+ *  `reopenSelection` clears them on the way to draft. */
 export async function declineSelection(
   rls: Db,
   selectionId: string,
@@ -385,13 +394,27 @@ export async function declineSelection(
     .eq('status', 'pending');
   const { data, error } = await admin
     .from('selections')
-    .update({ status: 'draft', offered_sell_amount: null, offered_allowance_deduction: null, offered_variance: null, offered_at: null })
+    .update({ status: 'denied' })
     .eq('id', selectionId)
     .eq('status', 'awaiting_approval')
     .select('id');
   if (error) return { success: false, error: error.message };
   if (!applied(data)) return { success: false, error: 'The selection was no longer awaiting approval.' };
-  await notifyManagers(admin, sel.company_id, sel.project_id, selectionId, 'selection_denied', `Selection declined: ${sel.name}`, null, null, params.notes);
+  await notifyManagers(admin, sel.company_id, sel.project_id, selectionId, 'selection_denied', `Selection denied: ${sel.name}`, null, null, params.notes);
+  return { success: true };
+}
+
+/** REOPEN (company, S172): DENIED → draft. Clears the offered stamps; the
+ *  declined session stays on file. Gated by the caller's RLS UPDATE. */
+export async function reopenSelection(rls: Db, selectionId: string): Promise<{ success: boolean; error?: string }> {
+  const { data, error } = await rls
+    .from('selections')
+    .update({ status: 'draft', offered_sell_amount: null, offered_allowance_deduction: null, offered_variance: null, offered_at: null })
+    .eq('id', selectionId)
+    .eq('status', 'denied')
+    .select('id');
+  if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: 'Only a denied selection can be reopened, and only by a manager.' };
   return { success: true };
 }
 
@@ -422,8 +445,8 @@ async function notifyManagers(
           type === 'selection_approved'
             ? `${signer ? `Signed by ${signer}. ` : ''}${variance == null ? 'Client-supplied — no charge.' : variance >= 0 ? `Added price ${f(variance)}.` : `Credit owed ${f(Math.abs(variance))}.`}`
             : notes
-              ? `Client note: ${notes}`
-              : 'Returned to draft for the team to revise.',
+              ? `Client note: ${notes} — reopen to revise.`
+              : 'Sitting in Denied — reopen to revise.',
       }),
       linkKey: 'selection',
       linkParams: { id: selectionId, projectId },

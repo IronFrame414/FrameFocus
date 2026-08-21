@@ -21,6 +21,7 @@ const STATUS: Record<string, string> = {
   in_discussion: 'In discussion',
   awaiting_approval: 'Awaiting approval',
   approved: 'Approved',
+  denied: 'Denied',
 };
 
 export default async function MobileSelectionsPage({ params }: { params: { projectId: string } }) {

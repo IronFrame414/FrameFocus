@@ -35,7 +35,7 @@ export function SelectionLifecycle({ selection, role, sessions, onDone }: { sele
       <h3 style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', margin: '0 0 0.5rem' }}>Approval</h3>
       {err && <p data-testid="sel-lifecycle-error" style={{ color: '#b91c1c', fontSize: '0.8125rem' }}>{err}</p>}
 
-      {(selection.status === 'awaiting_approval' || selection.status === 'approved') && !selection.client_supplied && (
+      {(selection.status === 'awaiting_approval' || selection.status === 'approved' || selection.status === 'denied') && !selection.client_supplied && selection.offered_sell_amount != null && (
         <div data-testid="sel-price-block" style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.875rem', display: 'grid', gridTemplateColumns: 'auto auto', gap: '0.125rem 1.5rem', marginBottom: '0.75rem', maxWidth: 360 }}>
           <span>Selections Price</span><span style={{ textAlign: 'right' }}>{money(selection.status === 'approved' ? selection.signed_sell_amount : selection.offered_sell_amount)}</span>
           <span>Allowance Deduction</span><span style={{ textAlign: 'right' }}>-{money(selection.status === 'approved' ? selection.signed_allowance_deduction : selection.offered_allowance_deduction)}</span>
@@ -55,13 +55,19 @@ export function SelectionLifecycle({ selection, role, sessions, onDone }: { sele
             <button type="button" style={btnGhost} disabled={busy} onClick={() => window.confirm('Withdraw this offer and return it to draft?') && call('withdraw')} data-testid="sel-withdraw">Withdraw</button>
           </>
         )}
+        {canManage && selection.status === 'denied' && (
+          <>
+            <span style={{ fontSize: '0.8125rem', color: '#991b1b' }} data-testid="sel-denied-note">Denied by the client. Reopen to revise and resend.</span>
+            <button type="button" style={btn} disabled={busy} onClick={() => call('reopen')} data-testid="sel-reopen">Reopen</button>
+          </>
+        )}
         {canManage && selection.status === 'approved' && (
           <>
             <span style={{ fontSize: '0.8125rem', color: '#166534' }}>Signed {selection.signed_at ? new Date(selection.signed_at).toLocaleDateString() : ''}. The signature is binding.</span>
             <button type="button" style={btnGhost} disabled={busy} onClick={() => window.confirm('Revise this approved selection? The client will need to sign again; the prior signature is kept on file.') && call('revise')} data-testid="sel-revise">Revise</button>
           </>
         )}
-        {!canManage && <span style={{ fontSize: '0.8125rem', color: '#6b7280' }}>{selection.status === 'approved' ? 'Approved and signed by the client.' : selection.status === 'awaiting_approval' ? 'Awaiting the client’s signature.' : 'Not yet sent to the client.'}</span>}
+        {!canManage && <span style={{ fontSize: '0.8125rem', color: '#6b7280' }}>{selection.status === 'approved' ? 'Approved and signed by the client.' : selection.status === 'awaiting_approval' ? 'Awaiting the client’s signature.' : selection.status === 'denied' ? 'Denied by the client.' : 'Not yet sent to the client.'}</span>}
       </div>
 
       {sessions.length > 0 && canManage && (

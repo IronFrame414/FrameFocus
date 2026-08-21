@@ -1,6 +1,8 @@
 import 'server-only';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase-server';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { SIGNED_URL_TTL_SECONDS } from '@/lib/services/signed-url-ttl';
 import type { Database } from '@framefocus/shared/types/database';
 
 // ============================================================================
@@ -24,7 +26,7 @@ export type SelectionSigningSessionRow = Tables['selection_signing_sessions']['R
 export type SelectionMessageRow = Tables['selection_messages']['Row'];
 
 export type SelectionMode = 'options' | 'discussion';
-export type SelectionStatus = 'draft' | 'in_discussion' | 'awaiting_approval' | 'approved';
+export type SelectionStatus = 'draft' | 'in_discussion' | 'awaiting_approval' | 'approved' | 'denied';
 export type SelectionOptionSource = 'scratch' | 'catalog' | 'budget';
 
 /** `selections` with its CHECK'd columns re-narrowed (CLAUDE.md Generated Types). */
@@ -266,4 +268,37 @@ export async function getSelectionSigningSessions(
     .eq('selection_id', selectionId)
     .order('created_at', { ascending: false });
   return data ?? [];
+}
+
+/**
+ * Signed URLs for a selection's option images — the SECURITY DEFINER read
+ * [S172, Josh]. `selection_option_images()` returns paths ONLY if the CALLER
+ * can see the selection (it restates the staff and client arms inside the
+ * function, because RLS does not run in a definer). The storage signing is
+ * then done with the ADMIN client, because storage RLS keys on
+ * files.client_visible and that flag is deliberately NOT involved here: "if
+ * you can see the selection, you can see its option images." The general
+ * client_visible mechanism stays exactly as it is for documents and photos.
+ */
+export async function signSelectionOptionImages(
+  selectionId: string,
+  supabase?: SupabaseClient<Database>
+): Promise<Record<string, { image?: string; link_thumbnail?: string }>> {
+  const db = supabase ?? (await createClient());
+  const { data, error } = await db.rpc('selection_option_images', { p_selection_id: selectionId });
+  if (error || !data?.length) return {};
+  const admin = getSupabaseAdmin() as SupabaseClient<Database>;
+  const out: Record<string, { image?: string; link_thumbnail?: string }> = {};
+  await Promise.all(
+    (data as { option_id: string; kind: string; file_path: string }[]).map(async (row) => {
+      const { data: signed } = await admin.storage
+        .from('project-files')
+        .createSignedUrl(row.file_path, SIGNED_URL_TTL_SECONDS);
+      if (!signed?.signedUrl) return;
+      const slot = (out[row.option_id] ??= {});
+      if (row.kind === 'image') slot.image = signed.signedUrl;
+      else slot.link_thumbnail = signed.signedUrl;
+    })
+  );
+  return out;
 }

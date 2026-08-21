@@ -222,6 +222,17 @@ one current signature (2b.5).
 **The client's one rule, from S164:** she sees what she is offered — `offered_*`/`signed_*` stamps on
 `selections` — never a cost or a markup. **Enforced by the side-table split, not by the renderer.**
 
+**Option images — RULED [Josh, S172]: served through a SECURITY DEFINER read keyed on the selection,
+`selection_option_images(p_selection_id)` (`20261028000000`).** *"If you can see the selection, you
+can see its option images."* No flag involved. The alternative — auto-setting `files.client_visible`
+on upload — was raised and rejected, and the two are **not** interchangeable: an auto-set flag is
+still a flag that can be unset with no signal that a selection lost its picture; it puts the image
+into the **general** client-visible pool (portal photo gallery, every `client_visible` listing)
+rather than scoping it to the selection; and under `files_insert_non_client` a PM could not set it
+at all. The general `client_visible` mechanism stays exactly as it is for documents and photos. RLS
+does not run inside a definer, so the function restates the staff and client arms verbatim and the
+harness pins every role to it.
+
 ---
 
 ## §5 — Money
@@ -270,11 +281,18 @@ underage (analysis 2b.4). Computed in `budget.ts`; nothing touches `project_budg
 
 ## §6 — Lifecycle and signature
 
-### §6.1 — States
-`draft → in_discussion → awaiting_approval → approved`, with two returns (Q9):
+### §6.1 — States — **AMENDED [Josh, S172]**
+`draft → in_discussion → awaiting_approval → approved`, plus **`denied`, a RESTING state**:
 - `approved → in_discussion` (revision): service sets `superseded_at` on the current completed
   session, clears `signed_*`, keeps `offered_*` until re-offered.
-- `awaiting_approval → draft` (denial): session → `declined`; notify Owner/Admin.
+- `awaiting_approval → denied` (the client declines): session → `declined`; **offered stamps KEPT**
+  so the company sees what was refused; notify Owner/Admin. _Superseded: "`awaiting_approval →
+  draft` (denial)"_ — Josh: *"it should be flagged as denied. A user can choose to re-open it, which
+  moves to draft."* Denial does not auto-return.
+- `denied → draft` (**reopen**, company): clears `offered_*`; the declined session stays on file.
+- `awaiting_approval → draft` (**withdraw**, company — kept at S172): pending session invalidated.
+  Withdraw lands in draft directly because the company is already acting; denial lands in `denied`
+  because the company must act. Two causes, two landing states, one company-owned path forward.
 
 Transition `→ awaiting_approval` **stamps `offered_*`** from the live derivation (§5.3) and creates a
 `pending` signing session. A cost edit after that point does not move the offered figure; it

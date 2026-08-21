@@ -148,9 +148,9 @@ export async function POST(request: NextRequest) {
   }
 
   // Stored with the SERVICE ROLE: the caller passed the role gate and the
-  // project read above. client_visible=true is what lets the portal show it
-  // (stage 7); a PM could not set that under files_insert_non_client, which is
-  // the reason this write is not done with the user's session.
+  // project read above. NOT client_visible [S172]: option images reach the
+  // client through selection_option_images(), the definer read keyed on the
+  // selection — never through the general client_visible pool.
   const admin = getSupabaseAdmin();
   const ext = mime === 'image/png' ? 'png' : mime === 'image/webp' ? 'webp' : mime === 'image/gif' ? 'gif' : 'jpg';
   const fileName = `link-preview-${imgUrlObj.hostname}.${ext}`;
@@ -170,7 +170,6 @@ export async function POST(request: NextRequest) {
       file_path: path,
       file_size: bytes.byteLength,
       mime_type: mime,
-      client_visible: true,
       created_by: user.id,
       updated_by: user.id,
       tags: ['selection-link-preview'],
