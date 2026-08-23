@@ -12,10 +12,17 @@ import {
   submitForReview,
   updateEstimate,
 } from '@/lib/services/estimates-client';
+import { getContactEmail } from '@/lib/services/contacts-client';
+import { getProposalEmailDefaults } from '@/lib/services/company-client';
+import {
+  DEFAULT_PROPOSAL_BODY,
+  DEFAULT_PROPOSAL_SUBJECT,
+} from '@/lib/proposal/proposal-defaults';
 import { fmtMoney } from '../labels';
 import { StatusBadge } from '../estimates-list';
 import { InlineText } from '../inline-edit';
 import { CloneModal } from '../clone-modal';
+import { SendProposalModal } from '../send-proposal-modal';
 import { DetailsTab } from './details-tab';
 import { ConvertToProject } from './convert-to-project';
 import { ItemsTab } from './items-tab';
@@ -67,6 +74,12 @@ export function EstimateBuilder({ estimateId, role, userId }: EstimateBuilderPro
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [cloneOpen, setCloneOpen] = useState(false);
+  const [sendOpen, setSendOpen] = useState(false);
+  const [sendPrefill, setSendPrefill] = useState<{
+    email: string | null;
+    subject: string;
+    body: string;
+  } | null>(null);
 
   const reload = useCallback(async () => {
     const fresh = await getEstimate(estimateId);
@@ -111,6 +124,25 @@ export function EstimateBuilder({ estimateId, role, userId }: EstimateBuilderPro
     }
   }
 
+  // S173 Job 1: open the same SendProposalModal / api/proposals/send the
+  // preview page uses (parity: one mechanism, two entry points). The route
+  // accepts draft AND review — on review it stamps reviewed_by/reviewed_at.
+  async function openSendModal() {
+    setActionBusy(true);
+    setActionError(null);
+    const [email, defaults] = await Promise.all([
+      estimate.contact_id ? getContactEmail(estimate.contact_id) : Promise.resolve(null),
+      getProposalEmailDefaults(),
+    ]);
+    setSendPrefill({
+      email,
+      subject: defaults.subject || DEFAULT_PROPOSAL_SUBJECT,
+      body: defaults.body || DEFAULT_PROPOSAL_BODY,
+    });
+    setActionBusy(false);
+    setSendOpen(true);
+  }
+
   function statusActionButton() {
     const buttonStyle: React.CSSProperties = {
       padding: '0.5rem 1rem',
@@ -122,25 +154,44 @@ export function EstimateBuilder({ estimateId, role, userId }: EstimateBuilderPro
       borderRadius: '0.375rem',
       cursor: actionBusy ? 'not-allowed' : 'pointer',
     };
+    const secondaryStyle: React.CSSProperties = {
+      ...buttonStyle,
+      color: '#374151',
+      backgroundColor: '#f3f4f6',
+      border: '1px solid #d1d5db',
+    };
 
     if (estimate.status === 'draft' && isManager) {
       return (
-        <button
-          type="button"
-          disabled={actionBusy}
-          style={buttonStyle}
-          onClick={() => {
-            if (
-              window.confirm(
-                'Mark this estimate as sent? It will be frozen — no further edits without a new version.'
-              )
-            ) {
-              runAction(() => markAsSent(estimate.id));
-            }
-          }}
-        >
-          Mark as Sent
-        </button>
+        <>
+          <button
+            type="button"
+            data-testid="est-send"
+            disabled={actionBusy}
+            style={buttonStyle}
+            onClick={openSendModal}
+          >
+            Send to Client
+          </button>
+          <button
+            type="button"
+            data-testid="est-mark-sent"
+            disabled={actionBusy}
+            style={secondaryStyle}
+            title="Freeze the estimate without emailing it — use when you deliver the PDF yourself."
+            onClick={() => {
+              if (
+                window.confirm(
+                  'Mark this estimate as sent WITHOUT emailing it? Use this when you deliver the PDF yourself. It will be frozen — no further edits without a new version.'
+                )
+              ) {
+                runAction(() => markAsSent(estimate.id));
+              }
+            }}
+          >
+            Mark as Sent
+          </button>
+        </>
       );
     }
     if (estimate.status === 'draft' && role === 'project_manager') {
@@ -157,20 +208,35 @@ export function EstimateBuilder({ estimateId, role, userId }: EstimateBuilderPro
     }
     if (estimate.status === 'review' && isManager) {
       return (
-        <button
-          type="button"
-          disabled={actionBusy}
-          style={buttonStyle}
-          onClick={() => {
-            if (
-              window.confirm('Approve and send this estimate? It will be frozen after sending.')
-            ) {
-              runAction(() => approveAndSend(estimate.id));
-            }
-          }}
-        >
-          Approve &amp; Send
-        </button>
+        <>
+          <button
+            type="button"
+            data-testid="est-approve-send"
+            disabled={actionBusy}
+            style={buttonStyle}
+            onClick={openSendModal}
+          >
+            Approve &amp; Send
+          </button>
+          <button
+            type="button"
+            data-testid="est-approve-mark-sent"
+            disabled={actionBusy}
+            style={secondaryStyle}
+            title="Approve and freeze without emailing — use when you deliver the PDF yourself."
+            onClick={() => {
+              if (
+                window.confirm(
+                  'Approve this estimate and mark it sent WITHOUT emailing it? It will be frozen after this.'
+                )
+              ) {
+                runAction(() => approveAndSend(estimate.id));
+              }
+            }}
+          >
+            Approve &amp; Mark as Sent
+          </button>
+        </>
       );
     }
     return null;
@@ -391,6 +457,21 @@ export function EstimateBuilder({ estimateId, role, userId }: EstimateBuilderPro
           sourceName={estimate.name}
           sourceNumber={estimate.estimate_number}
           onClose={() => setCloneOpen(false)}
+        />
+      )}
+
+      {sendOpen && sendPrefill && (
+        <SendProposalModal
+          estimateId={estimate.id}
+          mode="send"
+          recipientEmail={sendPrefill.email}
+          defaultSubject={sendPrefill.subject}
+          defaultBody={sendPrefill.body}
+          onClose={() => setSendOpen(false)}
+          onSent={async () => {
+            setSendOpen(false);
+            await reload();
+          }}
         />
       )}
     </div>
