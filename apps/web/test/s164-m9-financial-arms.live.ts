@@ -88,6 +88,21 @@ beforeAll(async () => {
     .eq('estimate_id', (est as { id: string }).id)
     .eq('rate_type', 'tm_labor_hourly').single();
   agreedRateId = (rate as { id: string }).id;
+
+  // [S173] RESTORE the counterfactual before asserting on it. ARM 15b says
+  // "the UNSENT one is never returned" by reading a LIVE row any owner click
+  // can flip — Josh's S172 click-test marked it as sent (2026-08-21 22:46)
+  // and the arm went red two days later with nothing wrong in the code. The
+  // seed's ensureRow is insert-if-missing and cannot heal this, so the probe
+  // re-pins the fields its assertion depends on. (CLAUDE.md, S157: "if an
+  // assertion's name says 'never', check that it is reading the schema and
+  // not a row" — here the row is the only place the fact lives, so pin it.)
+  const { error: unsentErr } = await admin
+    .from('estimates')
+    .update({ status: 'draft', sent_at: null, expires_at: null })
+    .eq('company_id', companyId)
+    .eq('estimate_number', 'EST-QA-M9-UNSENT');
+  if (unsentErr) throw new Error(`restoring EST-QA-M9-UNSENT: ${unsentErr.message}`);
 });
 
 const rows = async (c: SupabaseClient, table: string, select: string) => {
