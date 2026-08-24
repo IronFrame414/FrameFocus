@@ -139,3 +139,41 @@ Both INVERTED, superseded assertions quoted in place:
 - `tsc --noEmit`: exit 0. `next lint`: exit 0, clean.
 - `vitest --config test/live.vitest.config.ts s171-selections-lifecycle`: **34 passed**, exit 0.
 - `playwright test desktop-selections`: **13 passed**, exit 0.
+
+---
+
+## ARM 15b — the full battery's one red, and it was the S157 trap in live form (`11be200`)
+
+The first full-battery pass turned exactly one live arm red: `s164-m9-financial-arms.live.ts`
+15b, "an UNSENT proposal's token never returns" — `client_proposals` returned
+`EST-QA-M9-UNSENT`. **Not a code regression.** The row had been marked `sent` on 2026-08-21
+22:46 by a signed-in click-test (Josh's), and the arm asserts "never returned" against a LIVE
+row any owner click can flip. The seed's `ensureRow` is insert-if-missing and cannot heal
+drift, so the probe now re-pins `status`/`sent_at`/`expires_at` in `beforeAll` — restore the
+counterfactual before asserting on it. An assertion named "never" was reading a row, not the
+schema. 30/30 after.
+
+## Verification battery — all printed exit lines
+
+| # | Step | Result |
+|---|---|---|
+| V0 | `fixture-snapshot.mjs` BEFORE | exit 0 — but the census carried the PRIOR interrupted battery's residue: 4 `M6MP —` projects, +4 assignments, +5 files (see V8) |
+| V1 | type-check --force | **exit 0**, 5/5, 0 cached |
+| V2 | lint | **exit 0**, "No ESLint warnings or errors" |
+| V3 | build --force | **exit 0**, compiled, 0 cached — **on the third attempt.** Two sandboxed runs died identically: `✓ Compiled successfully`, then `Next.js build worker exited with code: null and signal: SIGTERM` at the type-check phase — the same sandbox kill class as Job 1's foreground-tsc note, now caught reaching INTO a child worker (kernel `oom_kill` 0, `/dev/shm` 0% — not memory). Unsandboxed run completes. Judged on the completed run's printed exit |
+| V4 | committed vitest | **exit 0**, 59 files, 904/904 |
+| V5 | every live harness | **exit 0 COLD — 92/92 files, 1289/1289** (1285 + 4 net new in the lifecycle harness, 30 → 34) |
+| V6 | Playwright ×4 from `apps/web` | 🟢 after one invalid pass. Shards 2/3/4 **exit 0 first pass** (124+3sk / 157+4sk / 104+2sk, `✘` 0). Shard 1 first pass exit 1 with 76 ✘ — **an invalid run, not 76 regressions**: 67 of them `net::ERR_CONNECTION_REFUSED`, because the preflight-started dev server was reaped when its launcher's background task exited (this box kills orphaned children of finished bg tasks; the S170 "detached launcher" trap, server edition). Playwright's own `webServer` then served shards 2–4, which is why only shard 1 drowned. **Full re-run with Playwright owning the server: 151/152, exit 1 — the one ✘ `m-capture.spec.ts:622` via `page.goto: Page crashed`, the #145 renderer-crash class, 0ms of assertion.** That file in isolation: **28/28, exit 0.** Totals across the four: **537 passed, 9 skipped, 0 assertion failures** (532 + 3 send-spec + 2 selections) |
+| V7 | migration list (repo root, linked `nmyphyhmfttxkdoposvf`) | **exit 0**, 135 = 135, latest `20261028000000` — no migration this session, as designed |
+| V8 | `fixture-snapshot.mjs` AFTER | ⚠️ PASS-WITH-NOTES, exit 0. **The census RETURNED TO the canonical baseline** in the script's own header (11 projects / 27 assignments): the M6MP projects and 5 files that V0 carried were the prior run's leaked fixtures, and this battery's sweeps removed them. Known churn: `company_members` +6, `change_orders` +3 all soft-deleted. **Zero harness residue**: 0 `E2ESEL`/`E2ESEND` rows anywhere, 0 selection signing sessions/threads/messages/photos/notes, 0 selection notifications, 0 marker budget lines. **Three HUMAN rows left deliberately untouched** — all created by `josh+test50` click-testing on Aug 21/23, none marker-named, so no sweep may claim them: `selection_areas` "12" and "Kitchen", draft selection "Tile", and draft CO "afwas" (live COs 25 → 26 by that row) |
+
+## Closing — 🟢 all three jobs landed and verified on `feature/s173-send-and-selections`
+
+- **Job 1:** the builder now sends — Send to Client (draft) and a real Approve & Send (review)
+  through the ONE modal/route pair; the affordance test exists so its disappearance goes red.
+- **Jobs 2+3:** chosen is the client's act — the offer stamps nothing, the signature is the
+  pricing moment, the batch is delivery only, one signature per selection. Both S173 rulings in
+  spec §1.3; every encoder of the old model inverted, superseded text quoted.
+- **ARM 15b:** the battery's one red was a drifted live row, re-pinned before asserting.
+- **Stage 5 not started.** No 7B/7D/7H file touched; nothing written to `project_budget_items`.
+  Nothing pushed.
