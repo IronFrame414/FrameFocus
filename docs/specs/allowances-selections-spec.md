@@ -66,6 +66,39 @@ Plus two requirements outside the questions: **(A)** four option-image input pat
 → thumbnail, drag-and-drop, paste; **(B)** internal notes readable by **Owner/Admin/PM/Foreman**
 only, floored in the database.
 
+### §1.3 — S173 rulings: the client chooses, and the batch is delivery — **RULED [Josh, S173]**
+
+**R-S173-1 — "Chosen" is the CLIENT's act.** Josh, from the click-test: *"to me, 'chosen' indicates
+that it is the option the client has decided to use… This is supposed to be a list to send to the
+client for the client to pick and sign off on."* The company **assembles** priced options and
+releases them; the **client** picks — the green-box interaction from the company sheet, reused in
+the portal — and signs. This is a design inversion of stage 3/4 as shipped, where the company
+ticked `is_chosen` and the offer refused until one was ticked. Consequences, applied at S173:
+
+- The company sheet has **no chosen checkbox**; `is_chosen` renders read-only as "Client's choice".
+- The **offer gate** is *at least one priced option exists*, not *one has been selected*.
+- The offer **stamps nothing** — `offered_*` stays NULL (the four travel together; all-null is the
+  constraint-legal shape). The figures are computed **once, at the signature**, from the client's
+  chosen set (Q7), and stamped into `signed_*`. `allow_multiple` is enforced there: one-of or
+  several-of, per selection.
+- Above the signature the portal shows **totals**: selections price, allowance deduction, added
+  cost — Josh: *"above the signature, the system should have totals listed, like additional cost."*
+
+**R-S173-2 — Release Selections: the batch is a DELIVERY mechanism, not a signing unit.** The
+company releases N pending selections in one action (*"different rooms, 3 selections for floor
+allowance, 5 for wall tile allowance, 3 selections for paint color"*); the client sees them
+together in the portal; and there is **one signature PER SELECTION** — Josh, changing his mind
+deliberately: *"let's change to 1 signature per selection category and allow partial batch. This
+will give the client a chance to think about options if they aren't decided on 1. Then the company
+can move forward with the selections that have been made."* **Partial batches are supported**: an
+unsigned selection stays in its state and blocks nothing.
+
+> **Why not one signature over the batch** — recorded because it is the obvious design and a later
+> reader will propose it: each signature binds **one selection against one allowance**, so no
+> instrument ever spans several allowance lines and there is **no cross-allowance variance to
+> reconcile**. Per-selection signatures *resolve* the cross-allowance question rather than
+> answering it. Q7 still governs **within** a selection: several options, summed, one signature.
+
 ### §1.2 — Superseded, stated so it cannot be cited against this spec
 
 - **`9-spec.md` §8 and `S150-module9-interview.md` R21 are SUPERSEDED on the instrument** [Josh,
@@ -219,8 +252,10 @@ one current signature (2b.5).
 | `selection_threads/_messages/_photos` | as `selections`, plus the client arm | author arms: staff who can read; client via `is_client_of_project` | mirror the `chat_*` client arms' shape, not their `kind` test |
 | `selection_signing_sessions` | Owner/Admin/PM; client reads **her own** (`signer_profile_id = get_my_profile_id()`) | service role only (written by the service) | append-only; `superseded_at` is the one UPDATE, by service |
 
-**The client's one rule, from S164:** she sees what she is offered — `offered_*`/`signed_*` stamps on
-`selections` — never a cost or a markup. **Enforced by the side-table split, not by the renderer.**
+**The client's one rule, from S164:** she sees SELL, never a cost or a markup — per-option sell
+(derived, §5.2) while choosing, `signed_*` stamps once she signs. _Superseded [S173]: "she sees what
+she is offered — `offered_*`/`signed_*` stamps" — the offer no longer stamps (§1.3)._ **Enforced by
+the side-table split, not by the renderer.**
 
 **Option images — RULED [Josh, S172]: served through a SECURITY DEFINER read keyed on the selection,
 `selection_option_images(p_selection_id)` (`20261028000000`).** *"If you can see the selection, you
@@ -262,10 +297,16 @@ User-editable per selection in every case. _Superseded: the S169 flag proposing
 `projects.default_selection_markup_percent` — withdrawn; there is no project-level default and none is
 needed._
 
-### §5.3 — Variance (Q7, Q8)
+### §5.3 — Variance (Q7, Q8) — **AMENDED [Josh, S173]: computed at the SIGNATURE**
 `sell_total = Σ chosen options' sell` (sum-then-compare). `allowance_deduction = allowance sell` (from
 the allowance row, same derivation) or 0 if unlinked. `variance = sell_total − allowance_deduction`.
 One signature covers the set.
+
+**[S173] "Chosen" is the client's pick (§1.3), so this derivation runs at the SIGNATURE**
+(`computeChosenFigures`, called by `completeSelectionSignature`), never at the offer. `allow_multiple`
+is enforced in the same computation — a single-choice selection with two picks is refused, not
+summed. _Superseded: the offer computed these figures over company-ticked options and stamped
+`offered_*`._
 
 ### §5.4 — The budget subcategory (Q2) — derived, never written
 For each allowance budget line with ≥1 **approved, non-client-supplied** selection linked:
@@ -281,28 +322,42 @@ underage (analysis 2b.4). Computed in `budget.ts`; nothing touches `project_budg
 
 ## §6 — Lifecycle and signature
 
-### §6.1 — States — **AMENDED [Josh, S172]**
+### §6.1 — States — **AMENDED [Josh, S172]; the offer arm re-cut [Josh, S173]**
 `draft → in_discussion → awaiting_approval → approved`, plus **`denied`, a RESTING state**:
 - `approved → in_discussion` (revision): service sets `superseded_at` on the current completed
-  session, clears `signed_*`, keeps `offered_*` until re-offered.
-- `awaiting_approval → denied` (the client declines): session → `declined`; **offered stamps KEPT**
-  so the company sees what was refused; notify Owner/Admin. _Superseded: "`awaiting_approval →
-  draft` (denial)"_ — Josh: *"it should be flagged as denied. A user can choose to re-open it, which
-  moves to draft."* Denial does not auto-return.
-- `denied → draft` (**reopen**, company): clears `offered_*`; the declined session stays on file.
+  session, clears `signed_*`. The client's picks (`is_chosen`) persist as her standing choice until
+  she changes them.
+- `awaiting_approval → denied` (the client declines): session → `declined` with her note; notify
+  Owner/Admin. _Superseded [S172 wording]: "**offered stamps KEPT** so the company sees what was
+  refused" — under §1.3 there is no offered figure to keep; **what was refused is the released
+  option set, and the record of the refusal is the declined session and its note.**_ _Superseded
+  [pre-S172]: "`awaiting_approval → draft` (denial)"_ — Josh: *"it should be flagged as denied. A
+  user can choose to re-open it, which moves to draft."* Denial does not auto-return.
+- `denied → draft` (**reopen**, company): the declined session stays on file. (The `offered_*`
+  clears in the service are legacy hygiene for rows stamped before S173.)
 - `awaiting_approval → draft` (**withdraw**, company — kept at S172): pending session invalidated.
   Withdraw lands in draft directly because the company is already acting; denial lands in `denied`
   because the company must act. Two causes, two landing states, one company-owned path forward.
 
-Transition `→ awaiting_approval` **stamps `offered_*`** from the live derivation (§5.3) and creates a
-`pending` signing session. A cost edit after that point does not move the offered figure; it
-requires returning to draft and re-offering.
+Transition `→ awaiting_approval` (**release**) is gated on *at least one priced option existing*
+(§1.3), **stamps nothing**, and creates a `pending` signing session. _Superseded: "stamps
+`offered_*` from the live derivation (§5.3)… A cost edit after that point does not move the offered
+figure."_ The figure the client signs is computed at the signature; a cost edit while awaiting
+moves what the portal shows and what a subsequent signature stamps — the signature and its consent
+text come from ONE computation, so the signed figure and the stated figure cannot diverge.
+
+**Batch (S173 Job 3):** `releaseSelections` releases N ids in one action by looping the single
+release — deliberately **not transactional**: a refusal on one selection must not un-release the
+others; per-id results return to the UI. Route: `POST /api/selections/release`.
 
 ### §6.2 — The signature (Q4)
 Portal only. Reuses M9's **caller-context** shape — `completeSelectionSignature({ caller: {kind:
 'portal_session', profileId} })` mirroring `completeCoSignature` (`co-signing-service.ts:169`), one
 write path, one entry. On completion: session `completed`; selection `approved`; `signed_*` stamped
-from `offered_*`; `snapshot` stored; notify Owner/Admin.
+**from the sign-time derivation over the client's picks (§5.3 as amended)** — _superseded: "stamped
+from `offered_*`"_; `snapshot` stored (its figures key is `agreed`, renamed from `offered` at S173);
+notify Owner/Admin. Signing refuses when nothing is picked, and when a single-choice selection has
+more than one pick.
 
 **Binding wording (Josh, S169) — on the sheet and in `consent_text`:** *"By signing, I confirm my
 selection and accept the stated price of {signed_sell_amount}, less my allowance of
@@ -312,10 +367,12 @@ supplying this item myself; no charge applies. This signature is binding."*
 
 ### §6.3 — Why sell is stamped here and nowhere else
 The house rule is *derive, never store* (`project-income.ts:11`) and `project_budget_amounts` holds
-cost. The `offered_*`/`signed_*` stamps are **not** a stored derivation: they are the price offered
-and accepted, the same category as `invoice_lines.billed_amount`, the one place sell is already
-materialised. They exist so (a) the client can read a figure without reading its cost basis, and
-(b) the figure she signed cannot move under her signature. State this in the migration comment.
+cost. The `signed_*` stamps are **not** a stored derivation: they are the price accepted, the same
+category as `invoice_lines.billed_amount`, the one place sell is already materialised. They exist so
+(a) the client can read a figure without reading its cost basis, and (b) the figure she signed
+cannot move under her signature. **[S173] `offered_*` no longer receives writes** — the offer
+stamps nothing under client-choice (§1.3); the columns stay for rows stamped before S173 and the
+UI still renders them when present. Only the signature stamps.
 
 ---
 
@@ -368,20 +425,34 @@ show differences, **client supplies item**). **Options mode:** option cards — 
 the four paths** (upload / link → fetched thumbnail / drag-drop / paste), link, cost + markup
 (Owner/Admin/PM only; rendered blank for Foreman); sources: scratch, **catalog picker** (the 4D
 picker, now floored), **from budget** (any budget line). **Discussion mode:** the thread inline.
-**Internal notes** panel (Owner/Admin/PM/Foreman). Footer: offered price block (sell, deduction,
-variance) · status control with the four states and the two returns · "Send for approval".
+**Internal notes** panel (Owner/Admin/PM/Foreman). Footer: price block (signed figures once the
+client signs; legacy `offered_*` rendered if present) · status control with the states and the two
+returns · "Send to client for approval", gated on *a priced option existing* (§1.3).
+**[S173] There is NO chosen checkbox** — _superseded: a per-option company-ticked `chosen`
+checkbox gating the offer_ — `is_chosen` is the client's act and renders read-only as a
+"Client's choice" badge plus the green card border.
 
 ### §9.2 — Project Selections tab — `/dashboard/projects/[id]/selections`
 **Nav:** a new project tab between *Budget* and *Changes*. **Roles: every role that can view the
 project, including subcontractors.** Grouped by area; per selection: image thumbnail, name, chosen
 option, spec detail, status, due date, link. **No costs of any kind — not a column, not a tooltip,
 not a sum.** Owner/Admin/PM additionally get the "New selection" button and "Generate specifications".
+**[S173 Job 3] Release Selections:** managers get a checkbox per draft/in-discussion row and one
+"Release N selections to the client" action → `POST /api/selections/release`; per-selection
+refusals (e.g. no priced option) are listed by name and those rows stay ticked.
 
 ### §9.3 — Client portal Selections — `/portal/[projectId]/selections` (the S168 dead route)
-**Last stage.** Replaces the `PortalEmpty` body. Grouped by area; draft selections hidden by policy.
-Per selection: options with images and **sell** prices (from `offered_*`), or the discussion thread
-(client can post, attach a link and photos, per 9-spec §7.2's one-unit rule). Awaiting approval →
-the price block in the ruled layout —
+**Last stage (stage 7). Job 2/3 [S173] specify it; they do not build it.** Replaces the
+`PortalEmpty` body. Grouped by area; draft selections hidden by policy. Released selections from a
+batch appear together, **each with its own signature** (§1.3 R-S173-2); a partial batch is normal —
+signing one does not touch the others.
+
+Per selection: options with images and **per-option sell prices** (derived live, §5.2 — _superseded:
+"from `offered_*`"_), or the discussion thread (client can post, attach a link and photos, per
+9-spec §7.2's one-unit rule). **The client PICKS here — the green-box interaction from the company
+sheet, reused** (tap an option → green border; `allow_multiple` decides one-of or several-of; the
+pick writes `is_chosen` through stage 7's portal write path). Above the signature, **totals over
+the current picks** in the ruled layout —
 
 ```
 Selections Price      $17,857.14
@@ -389,8 +460,9 @@ Allowance Deduction  -$10,714.29
 Added Price            $7,142.85
 ```
 
-— the binding wording (§6.2), **Sign** (signature pad, M9's) and **Decline**. Approved → signed
-figures + signed date, read-only. Client-supplied → no price block, choice-only wording.
+— the binding wording (§6.2), **Sign** (signature pad, M9's) and **Decline**. The signature refuses
+until at least one option is picked (§6.2). Approved → signed figures + signed date, read-only.
+Client-supplied → no price block, choice-only wording.
 
 ### §9.4 — Specifications sheet (PDF)
 Company header · project · date · per area: option image, name, spec detail, link/vendor. No money.
@@ -420,12 +492,19 @@ helper.
    `selection_option_amounts`; Foreman reads `selection_notes`, sub and crew read 0.
 8. Client reads a non-draft selection, 0 draft rows, 0 `selection_option_amounts` rows, and her own
    signing session only.
-9. Offer → stamps written; editing an option cost afterwards leaves `offered_*` unchanged.
-10. Sign via portal → session `completed`, `signer_channel='portal_session'`, selection `approved`,
-    `signed_*` = `offered_*`; `getRevisedContract` rises by `signed_variance`.
+9. **[AMENDED S173]** Release → NO stamps written (`offered_*` NULL); refused unless a priced
+   option exists; a batch release reports per-selection results and a refusal does not un-release
+   the rest. _Superseded: "Offer → stamps written; editing an option cost afterwards leaves
+   `offered_*` unchanged."_
+10. **[AMENDED S173]** Sign via portal → session `completed`, `signer_channel='portal_session'`,
+    selection `approved`, `signed_*` stamped from the sign-time derivation over the client's picks
+    (refused with nothing picked; refused on a single-choice selection with two picks);
+    `getRevisedContract` rises by `signed_variance`. _Superseded: "`signed_*` = `offered_*`"._
 11. Revision: second session; first has `superseded_at`; partial unique index refuses a second
     un-superseded completed session; contract value drops by the old variance.
-12. Denial: session `declined`, selection `draft`, Owner/Admin notification row exists.
+12. Denial: session `declined`, selection **`denied`** (a resting state; reopen → draft — S172;
+    _the original "selection `draft`" predates S172 and was stale here_), Owner/Admin notification
+    row exists.
 13. Under-selection: contract value unchanged; `available credit` = `|variance|`; placing a
     `credit_allowance` with `source_selection_id` on a **non-final** invoice succeeds; unsourced one
     still refused off-final.

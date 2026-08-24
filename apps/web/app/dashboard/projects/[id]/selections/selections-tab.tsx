@@ -95,7 +95,46 @@ export function SelectionsTab({ projectId, role, areas }: { projectId: string; r
   const [newArea, setNewArea] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // [S173 Job 3] Release Selections — the batch is a DELIVERY mechanism, not a
+  // signing unit: N selections go out together, the client signs each one
+  // separately, and a partial batch is fine (an unsigned selection stays put
+  // and blocks nothing). One signature per selection because each signature
+  // binds one selection against one allowance — so no instrument ever spans
+  // several allowance lines (this is why one-signature-over-the-batch, the
+  // obvious design, is wrong here).
+  const [selected, setSelected] = useState<string[]>([]);
+  const [releaseErrors, setReleaseErrors] = useState<string[]>([]);
   const base = `/dashboard/projects/${projectId}/selections`;
+
+  const nameById = new Map(areas.flatMap((a) => a.selections.map((s) => [s.id, s.name] as const)));
+
+  function toggleSelected(id: string, on: boolean) {
+    setSelected((prev) => (on ? [...prev, id] : prev.filter((x) => x !== id)));
+  }
+
+  async function release() {
+    if (!selected.length) return;
+    setBusy(true);
+    setReleaseErrors([]);
+    try {
+      const res = await fetch('/api/selections/release', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: selected }),
+      });
+      const body = (await res.json().catch(() => ({}))) as { results?: { id: string; success: boolean; error?: string }[]; error?: string };
+      if (!res.ok || !body.results) {
+        setReleaseErrors([body.error ?? 'The release did not go through.']);
+        return;
+      }
+      const failed = body.results.filter((r) => !r.success);
+      setReleaseErrors(failed.map((f) => `${nameById.get(f.id) ?? f.id}: ${f.error ?? 'refused'}`));
+      setSelected(failed.map((f) => f.id)); // keep only the refused ones ticked
+      router.refresh();
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function create() {
     if (!name.trim()) return;
@@ -131,12 +170,27 @@ export function SelectionsTab({ projectId, role, areas }: { projectId: string; r
             Finishes, fixtures and materials the client chooses, by area. {total} selection{total === 1 ? '' : 's'}.
           </p>
         </div>
-        {canManage && !creating && (
-          <button type="button" data-testid="selection-new" style={button} onClick={() => setCreating(true)}>
-            + New selection
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          {canManage && selected.length > 0 && (
+            <button type="button" data-testid="selections-release" style={button} disabled={busy} onClick={release}>
+              Release {selected.length} selection{selected.length === 1 ? '' : 's'} to the client
+            </button>
+          )}
+          {canManage && !creating && (
+            <button type="button" data-testid="selection-new" style={button} onClick={() => setCreating(true)}>
+              + New selection
+            </button>
+          )}
+        </div>
       </div>
+
+      {releaseErrors.length > 0 && (
+        <div style={{ ...card, borderColor: '#fecaca', color: '#991b1b', fontSize: '0.8125rem' }} data-testid="selections-release-errors">
+          {releaseErrors.map((e) => (
+            <div key={e}>{e}</div>
+          ))}
+        </div>
+      )}
 
       {creating && (
         <div style={card} data-testid="selection-new-form">
@@ -169,8 +223,20 @@ export function SelectionsTab({ projectId, role, areas }: { projectId: string; r
             {area.selections.map((s) => {
               const chosen = s.options.filter((o) => o.is_chosen);
               const show = chosen.length ? chosen : s.options.slice(0, 1);
+              const releasable = canManage && (s.status === 'draft' || s.status === 'in_discussion');
               return (
-                <Link key={s.id} href={`${base}/${s.id}`} data-testid={`selection-row-${s.id}`} style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start', textDecoration: 'none', color: 'inherit', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #f3f4f6' }}>
+                <div key={s.id} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-start' }}>
+                  {releasable && (
+                    <input
+                      type="checkbox"
+                      aria-label={`Release ${s.name}`}
+                      data-testid={`selection-release-${s.id}`}
+                      checked={selected.includes(s.id)}
+                      onChange={(e) => toggleSelected(s.id, e.target.checked)}
+                      style={{ marginTop: '0.75rem' }}
+                    />
+                  )}
+                <Link href={`${base}/${s.id}`} data-testid={`selection-row-${s.id}`} style={{ flex: 1, display: 'flex', gap: '0.75rem', alignItems: 'flex-start', textDecoration: 'none', color: 'inherit', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #f3f4f6' }}>
                   <RowThumb selectionId={s.id} optionId={show[0]?.id ?? null} />
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -184,7 +250,7 @@ export function SelectionsTab({ projectId, role, areas }: { projectId: string; r
                         {chosen[0]?.spec_detail ? <span style={{ color: '#6b7280' }}> — {chosen[0].spec_detail}</span> : null}
                       </div>
                     )}
-                    {chosen.length === 0 && s.options.length > 0 && <div style={{ fontSize: '0.8125rem', color: '#6b7280', marginTop: '0.125rem' }}>{s.options.length} option{s.options.length === 1 ? '' : 's'} offered</div>}
+                    {chosen.length === 0 && s.options.length > 0 && <div style={{ fontSize: '0.8125rem', color: '#6b7280', marginTop: '0.125rem' }}>{s.options.length} option{s.options.length === 1 ? '' : 's'} for the client to choose from</div>}
                     {s.mode === 'discussion' && s.options.length === 0 && <div style={{ fontSize: '0.8125rem', color: '#6b7280', marginTop: '0.125rem' }}>In discussion with the client</div>}
                     <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.25rem' }}>
                       {s.allowance_description ? `Against allowance: ${s.allowance_description}` : s.client_supplied ? 'No allowance' : 'Not linked to an allowance'}
@@ -193,6 +259,7 @@ export function SelectionsTab({ projectId, role, areas }: { projectId: string; r
                     </div>
                   </div>
                 </Link>
+                </div>
               );
             })}
           </div>

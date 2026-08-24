@@ -243,33 +243,10 @@ export async function deleteSelectionOption(id: string): Promise<Result> {
   return { success: true };
 }
 
-/** Mark the chosen option(s). Single-choice clears the others first. */
-export async function setChosenOptions(
-  selectionId: string,
-  chosenIds: string[],
-  allowMultiple: boolean
-): Promise<Result> {
-  const supabase = createClient();
-  const ids = allowMultiple ? chosenIds : chosenIds.slice(0, 1);
-  const { data: cleared, error: cErr } = await supabase
-    .from('selection_options')
-    .update({ is_chosen: false })
-    .eq('selection_id', selectionId)
-    .eq('is_chosen', true)
-    .select('id');
-  if (cErr) return { success: false, error: cErr.message };
-  void cleared; // zero rows is legitimate here (nothing was chosen yet)
-  if (ids.length === 0) return { success: true };
-  const { data, error } = await supabase
-    .from('selection_options')
-    .update({ is_chosen: true })
-    .in('id', ids)
-    .eq('selection_id', selectionId)
-    .select('id');
-  if (error) return { success: false, error: error.message };
-  if (!applied(data) || data!.length !== ids.length) return { success: false, error: DISCARDED };
-  return { success: true };
-}
+// [S173, Josh] `setChosenOptions` is REMOVED, not moved: "chosen" is the
+// CLIENT's act, made in the portal (stage 7's write path), and the company
+// sheet no longer offers a way to make it. The company assembles and releases;
+// the client picks and signs.
 
 // ── Thread ──────────────────────────────────────────────────────────────────
 
