@@ -12,8 +12,8 @@ export const STATUS_LABELS: Record<EstimateStatus, string> = {
   accepted: 'Accepted',
   declined: 'Declined',
   expired: 'Expired',
-  revised: 'Revised',
   converted: 'Converted',
+  voided: 'Voided',
 };
 
 // badge colors: [background, text]
@@ -25,8 +25,8 @@ export const STATUS_COLORS: Record<EstimateStatus, [string, string]> = {
   accepted: ['#dcfce7', '#166534'],
   declined: ['#fee2e2', '#991b1b'],
   expired: ['#f3f4f6', '#6b7280'],
-  revised: ['#fae8ff', '#86198f'],
   converted: ['#ccfbf1', '#115e59'],
+  voided: ['#fee2e2', '#7f1d1d'],
 };
 
 export const UNIT_LABELS: Record<MaterialUnitOfMeasure, string> = {

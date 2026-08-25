@@ -15,8 +15,14 @@ export type EstimateStatus =
   | 'accepted'
   | 'declined'
   | 'expired'
-  | 'revised'
-  | 'converted'; // Module 5 (5A §8): terminal state after estimate → project conversion
+  | 'converted' // Module 5 (5A §8): terminal state after estimate → project conversion
+  // [S175 #2] The company withdrew this document after the client had it.
+  // _Superseded and RETIRED in the same pass: 'revised'._ It sat in the CHECK
+  // and in this union and was NEVER WRITTEN by anything; it read as "the client
+  // asked for changes" while the mechanism that actually exists is
+  // void-and-reissue. Dropped from the CHECK by 20261032000000 — Josh: "a dead
+  // `revised` beside a live `voided` is a trap."
+  | 'voided';
 
 export type DiscountType = 'percent' | 'fixed';
 
@@ -422,6 +428,130 @@ export async function softDeleteEstimate(
   return { success: true };
 }
 
+
+// ── Void and reissue (S175 #2 / TECH_DEBT #3-s174) ──
+//
+// The S168 change-order shape, because it was ruled once and should not be
+// re-argued: a REQUIRED reason in every case, authority in the database, and
+// the record frozen the moment it is written.
+//
+// ⚠️ WHAT IS DIFFERENT FROM THE CO, AND WHY. S168 ruled that ANY sent change
+// order may be voided, signed or unsigned. That does not carry over: **a change
+// order ADDS to a project, an estimate IS its origin** [Josh, S175]. A
+// converted estimate is refused by `enforce_estimate_void_authority`, with an
+// error naming the project, because its contract value, budget and change
+// orders all derive from it.
+//
+// ⚠️ AND UNSEND IS NOT HERE, DELIBERATELY. `#4-s174` is closed as WON'T BUILD.
+// Until 20261032000000 `sent → draft` simply succeeded, and the only thing
+// defending that boundary was the absence of a button. It is now refused by the
+// freeze. The reasoning is recorded in TECH_DEBT; the short version is that an
+// emailed estimate is a document the client holds, and an unsend would have
+// re-opened the LINE ITEMS too, since their policies key on the same
+// `status = 'draft'`.
+
+export interface VoidEstimateResult {
+  success: boolean;
+  error?: string;
+}
+
+/**
+ * Withdraw a sent estimate, with a reason that is kept permanently.
+ *
+ * Authority, the converted refusal, the `voided_by` stamp and the required
+ * reason are ALL enforced by the database (`enforce_estimate_void_authority`).
+ * This function does not restate them — it passes the reason and lets the
+ * refusal come back as the sentence the trigger wrote, which is the only copy.
+ */
+export async function voidEstimate(
+  id: string,
+  reason: string
+): Promise<VoidEstimateResult> {
+  const supabase = createClient();
+  if (!reason.trim()) {
+    // The one check worth duplicating: an empty box should not cost a round
+    // trip to be told what the box already says. It is NOT the gate — the
+    // database refuses a blank reason too.
+    return { success: false, error: 'A void needs a reason. It is kept permanently.' };
+  }
+  // ⚠️ AN RPC, NOT AN UPDATE, AND THE HARNESS IS WHY. RLS cannot express the
+  // ruled authority: `estimates_update_manager`'s PM arm carries
+  // `status = 'draft'`, so a SENT estimate is filtered out of a PM's UPDATE
+  // before any trigger runs — the ruled "authoring PM may void" arm was
+  // unreachable, silently, returning zero rows and no error. Widening that
+  // policy would have handed a PM UPDATE on every non-frozen column of a
+  // client-facing document, `status` included. See 20261033000000.
+  const { error } = await supabase.rpc('void_estimate', {
+    p_estimate_id: id,
+    p_reason: reason.trim(),
+  });
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
+/**
+ * Reissue: a fresh DRAFT copy of a voided estimate, linked to it.
+ *
+ * ⚠️ IT REUSES `clone_estimate()` RATHER THAN COPYING THE COPY LOGIC. That
+ * function already walks categories, subcategories, line items and rows and has
+ * been exercised since M4; a second traversal that "does the same thing" is the
+ * #129 divergence. The reissue is then the ONE extra fact: the new draft
+ * `supersedes_estimate_id` the voided one, which
+ * `enforce_estimate_supersedes_valid` checks (same company, not itself, target
+ * actually voided) and `estimates_supersedes_once` limits to one per withdrawal.
+ *
+ * The link is written as a SECOND statement, and that is a real if narrow
+ * window: PostgREST has no transaction, so a failure between the two leaves an
+ * unlinked draft. That is the same trade the CO reissue route made, and the
+ * failure is benign and visible — an ordinary draft the user can delete —
+ * whereas the alternative is a fourth copy of the traversal inside a SQL
+ * function. The error says so rather than pretending the clone did not happen.
+ */
+export async function reissueEstimate(
+  voidedId: string
+): Promise<{ success: boolean; id?: string; error?: string }> {
+  const supabase = createClient();
+  // The source's own name and contact carry over: a reissue is the SAME job
+  // re-quoted, not a new one. `clone_estimate` requires a name (it raises "New
+  // estimate name is required" on null) and it is the function's own role gate
+  // that decides whether this caller may copy — a PM may only clone their own,
+  // which matches the void authority exactly.
+  const { data: src, error: srcError } = await supabase
+    .from('estimates')
+    .select('name, contact_id, contact_address_id')
+    .eq('id', voidedId)
+    .maybeSingle();
+  if (srcError) return { success: false, error: srcError.message };
+  if (!src) return { success: false, error: 'The voided estimate could not be read.' };
+
+  const { data: cloned, error: cloneError } = await supabase.rpc('clone_estimate', {
+    p_source_id: voidedId,
+    p_contact_id: src.contact_id,
+    p_contact_address_id: src.contact_address_id,
+    p_name: src.name,
+  });
+  if (cloneError) return { success: false, error: cloneError.message };
+  // clone_estimate RETURNS TABLE, so the payload is a row (or a one-row array),
+  // never a bare id — the same unwrap `cloneEstimate` below does.
+  const cloneRow = Array.isArray(cloned) ? cloned[0] : cloned;
+  const newId = (cloneRow as { new_estimate_id?: string } | null)?.new_estimate_id;
+  if (!newId) return { success: false, error: 'The reissue could not be created.' };
+
+  const { data, error } = await supabase
+    .from('estimates')
+    .update({ supersedes_estimate_id: voidedId })
+    .eq('id', newId)
+    .select('id');
+  if (error) {
+    return {
+      success: false,
+      id: newId,
+      error: `A draft copy was created but could not be linked to the voided estimate: ${error.message}. Delete the draft and try again.`,
+    };
+  }
+  if (!applied(data)) return { success: false, id: newId, error: DISCARDED };
+  return { success: true, id: newId };
+}
 
 // ── Status workflow (4D) ──
 //
