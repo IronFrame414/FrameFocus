@@ -54,6 +54,13 @@ async function sweep(): Promise<string[]> {
     check('selections', (await admin.from('selections').delete().in('id', ids)).error);
   }
   check('areas', (await admin.from('selection_areas').delete().like('name', `${MARKER}%`)).error);
+  // [S174 #1] The release and the offer now MAIL the client, so every run of
+  // this file leaves `email_logs` rows behind. The fixture project's contact is
+  // `qa-client-a@example.invalid`, so nothing reaches a person — but residue is
+  // residue, and the battery counts it.
+  check('email logs', (await admin.from('email_logs').delete()
+    .eq('email_type', 'selection_released')
+    .eq('recipient_email', 'qa-client-a@example.invalid')).error);
   return errors;
 }
 
@@ -257,6 +264,13 @@ test.describe('S173 Job 3 — Release Selections: the batch is delivery, one sig
       .insert({ company_id: company!.id, selection_id: sel2!.id, name: `${MARKER} Zellige`, is_chosen: false })
       .select('id').single();
     await admin.from('selection_option_amounts').insert({ company_id: company!.id, option_id: opt2!.id, quantity: 1, unit_cost: 900, markup_percent: 10 });
+    // [S174 #1] The stage-4 Offer test above ALSO mails now, so the count
+    // asserted at the end of this test would otherwise be measuring two runs.
+    // Cleared here rather than in beforeEach: the sweep is per-file and this is
+    // the only test that counts rows.
+    await admin.from('email_logs').delete()
+      .eq('email_type', 'selection_released')
+      .eq('recipient_email', 'qa-client-a@example.invalid');
 
     await signIn(page, OWNER);
     await page.goto(`/dashboard/projects/${PROJECT_QA_A}/selections`);
@@ -270,5 +284,18 @@ test.describe('S173 Job 3 — Release Selections: the batch is delivery, one sig
     await expect(page.getByTestId('selections-release-errors')).toHaveCount(0);
     const { data: after } = await admin.from('selections').select('id, status').in('id', [selectionId, sel2!.id]);
     expect(after!.every((s) => s.status === 'awaiting_approval')).toBe(true);
+
+    // [S174 #1] ⚠️ AND THE CLIENT WAS TOLD. Josh: *"I have not received the
+    // selections."* He hadn't — this button flipped two rows and mailed nobody.
+    // ONE row for the batch, not one per selection: the batch is the DELIVERY
+    // unit while the signature stays per-selection (Josh, S173).
+    const { data: mailed } = await admin
+      .from('email_logs')
+      .select('id, subject, metadata')
+      .eq('email_type', 'selection_released')
+      .eq('recipient_email', 'qa-client-a@example.invalid');
+    expect(mailed, 'the release sent no email').toHaveLength(1);
+    expect(mailed![0].subject).toContain('2 selections are ready for you to choose');
+    expect((mailed![0].metadata as { selection_count?: number }).selection_count).toBe(2);
   });
 });

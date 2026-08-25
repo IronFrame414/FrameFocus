@@ -15,16 +15,25 @@ const btnGhost: React.CSSProperties = { ...btn, backgroundColor: '#fff', color: 
 export function SelectionLifecycle({ selection, role, sessions, onDone }: { selection: Selection; role: string; sessions: SheetSession[]; onDone: () => void }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // [S174 #1] `offer` now MAILS the client. The send is deliberately not able
+  // to fail the transition (selection-email.ts: "a failed send is not a failed
+  // release"), so the only place a failure can be seen is here. A release that
+  // silently did not reach the client is the exact defect this session fixes.
+  const [emailWarning, setEmailWarning] = useState<string | null>(null);
   const canManage = MANAGER.includes(role);
 
   async function call(path: string) {
     setBusy(true);
     setErr(null);
+    setEmailWarning(null);
     const res = await fetch(`/api/selections/${selection.id}/${path}`, { method: 'POST' });
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
+    const body = (await res.json().catch(() => ({}))) as { error?: string; emailError?: string | null };
     setBusy(false);
     if (!res.ok) setErr(body.error ?? 'That did not go through.');
-    else onDone();
+    else {
+      if (body.emailError) setEmailWarning(body.emailError);
+      onDone();
+    }
   }
 
   // [S173, Josh] The offer gate is "at least one PRICED option exists", not
@@ -47,6 +56,11 @@ export function SelectionLifecycle({ selection, role, sessions, onDone }: { sele
     <section style={card} data-testid="sel-lifecycle">
       <h3 style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', margin: '0 0 0.5rem' }}>Approval</h3>
       {err && <p data-testid="sel-lifecycle-error" style={{ color: '#b91c1c', fontSize: '0.8125rem' }}>{err}</p>}
+      {emailWarning && (
+        <p data-testid="sel-email-warning" style={{ color: '#92400e', backgroundColor: '#fffbeb', border: '1px solid #fed7aa', borderRadius: '0.375rem', padding: '0.5rem 0.625rem', fontSize: '0.8125rem' }}>
+          <strong>Sent, but not emailed.</strong> {emailWarning}
+        </p>
+      )}
 
       {(selection.status === 'awaiting_approval' || selection.status === 'approved' || selection.status === 'denied') && !selection.client_supplied && sell != null && (
         <div data-testid="sel-price-block" style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.875rem', display: 'grid', gridTemplateColumns: 'auto auto', gap: '0.125rem 1.5rem', marginBottom: '0.75rem', maxWidth: 360 }}>

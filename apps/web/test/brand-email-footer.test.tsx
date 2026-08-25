@@ -11,7 +11,9 @@ import { ChangeOrderEmail } from '@/lib/email/templates/change-order-email';
 import { ReminderEmail } from '@/lib/email/templates/reminder-email';
 import { NotificationEmail } from '@/lib/email/templates/notification-email';
 import { AuthEmail, AUTH_EMAIL_COPY, type AuthEmailKind } from '@/lib/email/templates/auth-email';
+import { SelectionReleasedEmail } from '@/lib/email/templates/selection-released-email';
 import { subjectFor } from '@/lib/services/auth-email';
+import { buildSelectionsReleasedSubject } from '@/lib/services/selection-email';
 
 // Renders the five transactional emails through @react-email/render — the SAME
 // function email-service.ts's Resend call uses to turn the component into the
@@ -94,6 +96,23 @@ const CLIENT_FACING = [
       />
     ),
   ],
+  // S174 #1 — the mail a selections RELEASE sends. Client-facing and therefore
+  // white-label on exactly the same terms as the four above.
+  [
+    'selection released',
+    () => (
+      <SelectionReleasedEmail
+        companyName={COMPANY}
+        logoUrl={LOGO}
+        brandColor="#2f49d1"
+        contactName="Dana"
+        projectName="Maple St Remodel"
+        selectionNames={['Kitchen countertop', 'Entry tile']}
+        dueDateLine="The soonest of these is due by September 1, 2026."
+        portalUrl="https://example.com/portal/p1/selections"
+      />
+    ),
+  ],
 ] as const;
 
 // ============================================================================
@@ -120,6 +139,9 @@ const COVERED = new Set([
   // contract is the same as the invite's and for the same reason: the reader is
   // being asked about an ACCOUNT on this product, so the product must be named.
   'auth-email.tsx',
+  // S174 #1 — the selections release. White-label client-facing, rendered in
+  // CLIENT_FACING above.
+  'selection-released-email.tsx',
 ]);
 
 describe('every email template is covered by this file', () => {
@@ -159,6 +181,24 @@ describe('email SUBJECTS name the product from the brand source', () => {
     // reads as itself rather than as a generic mismatch.
     expect(subject).not.toBe('Worth Properties invited you to join them on FrameFocus');
     expect(subject).toBe(`Worth Properties invited you to join them on ${brand.name}`);
+  });
+
+  // S174 #1 — built as a function for the same reason `buildInviteSubject` is:
+  // a subject is not a template, so no render test can see it. This one carries
+  // no product name at all (it is a client-facing white-label send), so what is
+  // asserted is the ABSENCE, plus the singular/plural split that decides whether
+  // the sentence reads correctly at all.
+  it('⚠️ the selections-released subject stays white-label and counts correctly', () => {
+    expect(buildSelectionsReleasedSubject('Worth Properties', 1)).toBe(
+      'Worth Properties: a selection is ready for you to choose'
+    );
+    expect(buildSelectionsReleasedSubject('Worth Properties', 3)).toBe(
+      'Worth Properties: 3 selections are ready for you to choose'
+    );
+    for (const n of [1, 3]) {
+      expect(buildSelectionsReleasedSubject('Worth Properties', n)).not.toContain(brand.name);
+      expect(buildSelectionsReleasedSubject('Worth Properties', n)).not.toContain('FrameFocus');
+    }
   });
 });
 
