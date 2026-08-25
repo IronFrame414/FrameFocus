@@ -52,9 +52,17 @@ interface RenegotiateRateProps {
    *  the row written is still the CO's own. Null/undefined = start blank. */
   defaultRate?: number | null;
   /** Set when the instrument is a DRAFT change order — its totals reprice
-   *  at the new rate. NEVER set for the estimate instrument: on a
-   *  converted/frozen estimate recalculateEstimateTotals is a silent no-op
-   *  that fakes success (spec §7.1 S-4 recompute rules). */
+   *  at the new rate. NEVER set for the estimate instrument.
+   *
+   *  ⚠️ THE REASON HERE WAS FALSE UNTIL S175, and it was load-bearing — this
+   *  comment is why the prop is never set. _Superseded: "on a converted/frozen
+   *  estimate recalculateEstimateTotals is a silent no-op that fakes success"._
+   *  That was true only for a PM: `estimates_update_manager` carries
+   *  `status = 'draft'` only on its project-manager arm, and S174 proved an
+   *  Owner rewriting `grand_total` on a sent estimate live. Since
+   *  20261031000000 the estimate's totals are frozen at `sent`, so the call now
+   *  RAISES rather than half-succeeding. The rule is unchanged; its reason is.
+   *  (spec §7.1 S-4, corrected in the same pass) */
   recomputeDraftCoId?: string;
   /** Client-state refresh hook for parents that hold rates in useState
    *  (router.refresh() only re-renders server components — #114 posture). */
