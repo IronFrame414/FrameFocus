@@ -18,6 +18,7 @@ import { uploadFile } from '@/lib/services/files-client';
 import { CatalogPicker } from '@/app/dashboard/estimates/[id]/catalog-picker';
 import type { CostCatalogItem } from '@/lib/services/cost-catalog-client';
 import { OptionThumb, StatusPill, UrlThumb } from '../selections-tab';
+import { inheritPlaceholder, optionSell } from '@/lib/selections/option-sell';
 import { SelectionLifecycle } from './selection-lifecycle';
 
 // ============================================================================
@@ -98,8 +99,12 @@ export function SelectionSheet({ projectId, role, myProfileId, selection, areas,
   // empty and that is correct — the company assembles, the client chooses.
   const chosen = selection.options.filter((o) => o.is_chosen);
   const priced = chosen.every((o) => o.amounts !== null);
+  // [S174 #2] `markup_percent ?? 0` used to live here, and "inherit" therefore
+  // priced at cost. The formula now lives in ONE place for all three readers
+  // (this line, the editor row below, and the signature) — CLAUDE.md PARITY:
+  // share the mechanism, not the intent.
   const sellOf = (o: SelectionOption) =>
-    o.amounts ? Number(o.amounts.quantity) * Number(o.amounts.unit_cost) * (1 + Number(o.amounts.markup_percent ?? 0) / 100) : 0;
+    o.amounts ? optionSell(o.amounts, selection.inherited_markup_percent) : 0;
   const sellTotal = priced ? chosen.reduce((n, o) => n + sellOf(o), 0) : null;
   const pricedCount = selection.options.filter((o) => o.amounts !== null).length;
 
@@ -335,7 +340,7 @@ function OptionCard({ option, selection, projectId, role, editable, run, imageUr
             {a === null ? (
               <span style={{ color: '#9ca3af' }} title="Pricing is visible to owners, admins and project managers">price —</span>
             ) : (
-              <AmountsEditor option={option} editable={editable} run={run} />
+              <AmountsEditor option={option} inheritedMarkupPercent={selection.inherited_markup_percent} editable={editable} run={run} />
             )}
           </div>
         )}
@@ -344,19 +349,23 @@ function OptionCard({ option, selection, projectId, role, editable, run, imageUr
   );
 }
 
-function AmountsEditor({ option, editable, run }: { option: SelectionOption; editable: boolean; run: (fn: () => Promise<{ success: boolean; error?: string }>) => Promise<unknown> }) {
+function AmountsEditor({ option, inheritedMarkupPercent, editable, run }: { option: SelectionOption; inheritedMarkupPercent: number | null; editable: boolean; run: (fn: () => Promise<{ success: boolean; error?: string }>) => Promise<unknown> }) {
   const a = option.amounts!;
   const [qty, setQty] = useState(String(a.quantity));
   const [cost, setCost] = useState(String(a.unit_cost));
   const [markup, setMarkup] = useState(a.markup_percent == null ? '' : String(a.markup_percent));
-  const sell = Number(qty || 0) * Number(cost || 0) * (1 + Number(markup || 0) / 100);
+  // [S174 #2] THE FIGURE JOSH WATCHED. An empty markup box meant "inherit" and
+  // computed `Number('') === 0`, so 100 × $100 read "= $10,000" — cost — with
+  // the word "inherit" sitting in the box beside it. It now resolves through
+  // the same function the total and the signature use.
+  const sell = optionSell({ quantity: qty, unit_cost: cost, markup_percent: markup === '' ? null : markup }, inheritedMarkupPercent);
   const save = () => run(() => saveSelectionOptionAmounts(option.id, { quantity: Number(qty || 0), unit_cost: Number(cost || 0), markup_percent: markup === '' ? null : Number(markup) }));
   const small: React.CSSProperties = { ...input, width: 90 };
   return (
     <>
       <span style={{ color: '#6b7280' }}>qty</span><input style={small} value={qty} disabled={!editable} onChange={(e) => setQty(e.target.value)} onBlur={save} data-testid="opt-qty" />
       <span style={{ color: '#6b7280' }}>× cost</span><input style={small} value={cost} disabled={!editable} onChange={(e) => setCost(e.target.value)} onBlur={save} data-testid="opt-cost" />
-      <span style={{ color: '#6b7280' }}>+ markup %</span><input style={small} value={markup} disabled={!editable} onChange={(e) => setMarkup(e.target.value)} onBlur={save} placeholder="inherit" data-testid="opt-markup" />
+      <span style={{ color: '#6b7280' }}>+ markup %</span><input style={small} value={markup} disabled={!editable} onChange={(e) => setMarkup(e.target.value)} onBlur={save} placeholder={inheritPlaceholder(inheritedMarkupPercent)} data-testid="opt-markup" />
       <span style={{ fontWeight: 600 }} data-testid="opt-sell">= {money(sell)}</span>
     </>
   );
@@ -427,7 +436,7 @@ function AddOption({ selection, projectId, run }: { selection: Selection; projec
           <>
             <input style={{ ...input, width: 80 }} placeholder="qty" value={qty} onChange={(e) => setQty(e.target.value)} data-testid="opt-new-qty" />
             <input style={{ ...input, width: 100 }} placeholder="unit cost" value={cost} onChange={(e) => setCost(e.target.value)} data-testid="opt-new-cost" />
-            <input style={{ ...input, width: 100 }} placeholder="markup % (inherit)" value={markup} onChange={(e) => setMarkup(e.target.value)} data-testid="opt-new-markup" />
+            <input style={{ ...input, width: 100 }} placeholder={`markup % (${inheritPlaceholder(selection.inherited_markup_percent)})`} value={markup} onChange={(e) => setMarkup(e.target.value)} data-testid="opt-new-markup" />
           </>
         )}
         <button type="button" style={btnPrimary} onClick={add} disabled={!name.trim() || (open === 'budget' && !budgetId)} data-testid="opt-new-save">Add</button>

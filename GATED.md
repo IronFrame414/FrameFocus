@@ -506,6 +506,28 @@ extension of that one, and 410-Gone endpoint pruning has no equivalent anywhere.
 
 ---
 
+## ⚠️ CLICK-TESTED BUT UNVERIFIED — the S173 surface, recorded S174 (2026-08-25)
+
+**Josh's own instruction, and the reason this section exists:** *"ALSO RECORD AS UNVERIFIED, not
+for this session."* These are controls that a click-test **did not reach**, as distinct from
+controls it reached and found working. The distinction matters because S173 Job 1 and S174 Job 1
+were both the same defect — **a mechanism that worked, with nothing connecting it to the user** —
+and a control that was never clicked is exactly where that defect hides. A green live harness does
+not close any line below: every one of these has passing harness coverage of its MECHANISM.
+
+| What | Status | Note |
+| --- | --- | --- |
+| **Batch release** (`selections-release`, the multi-select on the project Selections tab) | **UNVERIFIED — the control was never reached in the click-test** | The route and the service are covered (`s174-selections-email.live.ts` C1/C2 executes the real route; `desktop-selections.spec.ts` clicks the button). Josh has not driven it by hand. |
+| **Denied → reopen** (S172) | **UNVERIFIED** | Shipped S172, harness-covered in `s171-selections-lifecycle.live.ts`, e2e-covered. Not click-tested. |
+| **The four option-image paths** — Upload, paste, drag-and-drop, product-link thumbnail | **1 of 4 VERIFIED.** Only **Upload** was clicked. | Paste, drag-drop and the link-thumbnail fetch (`/api/selections/link-thumbnail`) are unverified by hand. The link path in particular calls out to a third-party URL and degrades to "no preview image was found" — a degradation nobody has watched happen. |
+| **Portal Part B** — the R17 three-state access control and the three billing disclosure levels (`full_detail` / `by_section` / `lump_sum`) | **UNVERIFIED** | Per the S164 ruling, `invoices.presentation_level` is the single source of truth for what a client sees, and it is enforced in RLS rather than the renderer. Untested by hand on all three levels. |
+
+**Two things WERE verified and are recorded so they are not re-tested:** two of the three option
+sources — **catalog** and **job budget** — are confirmed working. (The third, `scratch`, is the
+default path and was exercised throughout.)
+
+---
+
 ## Open defects logged S95 (not gated, just not yet fixed)
 
 - **Overview "Cost to Date" / "Projected Margin" render "—".** NOT a mystery —

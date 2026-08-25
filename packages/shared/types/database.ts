@@ -6642,6 +6642,57 @@ export type Database = {
           },
         ]
       }
+      selection_amounts: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          inherited_markup_percent: number | null
+          selection_id: string
+          snapshot_at: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          inherited_markup_percent?: number | null
+          selection_id: string
+          snapshot_at?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          inherited_markup_percent?: number | null
+          selection_id?: string
+          snapshot_at?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "selection_amounts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "selection_amounts_selection_id_fkey"
+            columns: ["selection_id"]
+            isOneToOne: true
+            referencedRelation: "selections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       selection_areas: {
         Row: {
           company_id: string
@@ -8509,6 +8560,10 @@ export type Database = {
         Args: { p_company_id: string }
         Returns: string
       }
+      allowance_effective_markup_percent: {
+        Args: { p_budget_item_id: string }
+        Returns: number
+      }
       apply_change_order_budget: {
         Args: { p_change_order_id: string }
         Returns: number
@@ -8803,6 +8858,10 @@ export type Database = {
         Returns: Json
       }
       seed_default_tags: { Args: { p_company_id: string }; Returns: undefined }
+      selection_inherited_markup_percent: {
+        Args: { p_selection_id: string }
+        Returns: number
+      }
       selection_option_images: {
         Args: { p_selection_id: string }
         Returns: {

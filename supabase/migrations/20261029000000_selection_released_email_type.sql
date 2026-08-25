@@ -1,0 +1,46 @@
+-- ============================================================================
+-- S174 #1 — `selection_released` becomes a real email type
+-- ============================================================================
+--
+-- ⚠️ THE DEFECT THIS HALF-MIGRATION SERVES.
+--
+-- Josh, click-testing S173: *"I received the estimate via email when I tested
+-- it. I have not received the selections."* He was right, and the reason is
+-- not a broken send — it is that THERE WAS NO SEND. `grep -rn 'sendEmail'` over
+-- `app/api/selections/` and `selection-lifecycle-service.ts` returned nothing.
+-- `releaseSelections()` flipped N rows to `awaiting_approval`, opened N signing
+-- sessions, and told no one. The whole lifecycle worked and the client was
+-- never informed it had started.
+--
+-- This is S173 Job 1's class one module over: *"nothing was ever removed, the
+-- affordance never existed."* There the route worked and no button reached it;
+-- here the transition works and no mail leaves the building. Both are invisible
+-- to a test suite that exercises the mechanism, because the mechanism is fine.
+--
+-- ⚠️ THERE IS ONLY ONE REGISTRY, AND IT IS NOT A CHECK CONSTRAINT.
+-- `20260720000000_email_types_lookup.sql` dropped `email_logs_email_type_check`
+-- and replaced it with a FOREIGN KEY to `email_types`. So this is an INSERT.
+-- Precedent, byte for byte: `20260807000000` (invoice), `20260815000000`
+-- (invoice_reminder), `20260906000000` (mention), `20260915000000` (invite).
+--
+-- ⚠️ THE OTHER HALF OF THE REGISTRY IS IN TYPESCRIPT AND IT HAS BEEN MISSED
+-- BEFORE. `EmailType` in `lib/services/email-service.ts` gains
+-- `'selection_released'` in THIS COMMIT. S126 found `mention` shipped here and
+-- not there — the table half fails at RUNTIME and the union half at COMPILE
+-- time, so shipping one without the other ships silently. Both halves or
+-- neither.
+--
+-- ⚠️ AND WHY THERE IS NO `email_logs.selection_id` COLUMN.
+-- Every other client-facing sender got an FK: `estimate_id`, `change_order_id`,
+-- `invoice_id`. This one deliberately does not, and the reason is Josh's S173
+-- ruling that **the batch is a DELIVERY mechanism**: one release mails ONE
+-- message covering N selections. A single scalar FK cannot describe that row
+-- without either lying (naming one of the N) or forcing one email per
+-- selection, which would undo the ruling in order to satisfy a column. The ids
+-- ride in `metadata.selection_ids`, which is already how `mention` and `invite`
+-- carry their subject.
+-- ============================================================================
+
+INSERT INTO public.email_types (email_type)
+VALUES ('selection_released')
+ON CONFLICT (email_type) DO NOTHING;

@@ -104,6 +104,11 @@ export function SelectionsTab({ projectId, role, areas }: { projectId: string; r
   // obvious design, is wrong here).
   const [selected, setSelected] = useState<string[]>([]);
   const [releaseErrors, setReleaseErrors] = useState<string[]>([]);
+  // [S174 #1] The release now MAILS the client, and a send that did not happen
+  // must reach the screen. The defect being fixed was a release that told the
+  // client nothing; a release that silently fails to mail her is the same
+  // defect wearing a different coat (invite-email.ts, D2).
+  const [emailWarning, setEmailWarning] = useState<string | null>(null);
   const base = `/dashboard/projects/${projectId}/selections`;
 
   const nameById = new Map(areas.flatMap((a) => a.selections.map((s) => [s.id, s.name] as const)));
@@ -116,17 +121,19 @@ export function SelectionsTab({ projectId, role, areas }: { projectId: string; r
     if (!selected.length) return;
     setBusy(true);
     setReleaseErrors([]);
+    setEmailWarning(null);
     try {
       const res = await fetch('/api/selections/release', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids: selected }),
       });
-      const body = (await res.json().catch(() => ({}))) as { results?: { id: string; success: boolean; error?: string }[]; error?: string };
+      const body = (await res.json().catch(() => ({}))) as { results?: { id: string; success: boolean; error?: string }[]; error?: string; emailed?: boolean; emailError?: string | null };
       if (!res.ok || !body.results) {
         setReleaseErrors([body.error ?? 'The release did not go through.']);
         return;
       }
+      if (body.emailError) setEmailWarning(body.emailError);
       const failed = body.results.filter((r) => !r.success);
       setReleaseErrors(failed.map((f) => `${nameById.get(f.id) ?? f.id}: ${f.error ?? 'refused'}`));
       setSelected(failed.map((f) => f.id)); // keep only the refused ones ticked
@@ -189,6 +196,12 @@ export function SelectionsTab({ projectId, role, areas }: { projectId: string; r
           {releaseErrors.map((e) => (
             <div key={e}>{e}</div>
           ))}
+        </div>
+      )}
+
+      {emailWarning && (
+        <div style={{ ...card, borderColor: '#fed7aa', backgroundColor: '#fffbeb', color: '#92400e', fontSize: '0.8125rem' }} data-testid="selections-email-warning">
+          <strong>Released, but not emailed.</strong> {emailWarning}
         </div>
       )}
 

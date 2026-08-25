@@ -14,6 +14,27 @@ import { adminClient } from './hub-fixture';
 // ============================================================================
 
 const MARKER = 'E2ESEL';
+
+// [S174 #1] ⚠️ ASSERTIONS THAT FOLLOW A LIFECYCLE POST NEED ROOM, AND THE
+// REASON CHANGED THIS SESSION.
+//
+// The file already carried two explicit 15s timeouts for "the first POST after
+// an edit compiles the route + service in the dev server". S174 put an
+// OUTBOUND EMAIL in that request path — `/api/selections/release` and
+// `/api/selections/[id]/offer` now pull in `resend`, `@react-email/components`
+// and the template — so the first hit compiles a much larger module graph AND
+// then waits on a network call. Both routes share that graph, so exactly ONE
+// test per run pays it and WHICH ONE depends on shard order: shard 1 of the
+// S174 battery failed at the batch release (line ~282), the same file run in
+// isolation failed at the withdraw (line ~218), and each passed in the other
+// run. That is the signature of a cold compile, not a regression — the DB
+// assertion at the end of the batch test proves the writes land either way.
+//
+// The wait is REAL PRODUCT BEHAVIOUR, not a test artifact: releasing now blocks
+// on the send so it can report `emailed` (the same shape the CO send route
+// uses — "a failed email is a warning, not a rollback"), and the QA fixture's
+// recipient is `@example.invalid`, which is the slowest possible resolution.
+const AFTER_POST = { timeout: 20_000 };
 const FOREMAN = 'josh+qa-foreman@worthprop.com';
 const PM = 'josh+pm@worthprop.com';
 const SUB = 'josh+qa-sub@worthprop.com';
@@ -54,6 +75,13 @@ async function sweep(): Promise<string[]> {
     check('selections', (await admin.from('selections').delete().in('id', ids)).error);
   }
   check('areas', (await admin.from('selection_areas').delete().like('name', `${MARKER}%`)).error);
+  // [S174 #1] The release and the offer now MAIL the client, so every run of
+  // this file leaves `email_logs` rows behind. The fixture project's contact is
+  // `qa-client-a@example.invalid`, so nothing reaches a person — but residue is
+  // residue, and the battery counts it.
+  check('email logs', (await admin.from('email_logs').delete()
+    .eq('email_type', 'selection_released')
+    .eq('recipient_email', 'qa-client-a@example.invalid')).error);
   return errors;
 }
 
@@ -203,13 +231,13 @@ test.describe('stage 4 [as reworked S173] — the sheet\'s lifecycle controls (c
     await page.getByTestId('sel-offer').click();
     // 15s: the first POST after an edit compiles the route + service in the
     // dev server, which can outlast the default 5s expect timeout.
-    await expect(page.getByTestId('sel-lifecycle')).toContainText('Released to the client', { timeout: 15_000 });
-    await expect(page.getByTestId('sel-price-block')).toHaveCount(0);
+    await expect(page.getByTestId('sel-lifecycle')).toContainText('Released to the client', AFTER_POST);
+    await expect(page.getByTestId('sel-price-block')).toHaveCount(0, AFTER_POST);
     await expect(page.getByTestId('sel-name')).toBeDisabled(); // frozen while awaiting
     page.once('dialog', (d) => d.accept());
     await page.getByTestId('sel-withdraw').click();
-    await expect(page.getByTestId('sel-offer')).toBeVisible();
-    await expect(page.getByTestId('sel-price-block')).toHaveCount(0);
+    await expect(page.getByTestId('sel-offer')).toBeVisible(AFTER_POST);
+    await expect(page.getByTestId('sel-price-block')).toHaveCount(0, AFTER_POST);
   });
 
   test('foreman: no lifecycle buttons, only the status sentence', async ({ page }) => {
@@ -238,7 +266,7 @@ test.describe('S172 — DENIED is a resting state the company reopens', () => {
     await expect(page.getByTestId('sel-offer')).toHaveCount(0); // cannot re-offer without reopening
     await page.getByTestId('sel-reopen').click();
     // 15s: POST + router.refresh() under dev-server load can outlast the 5s default.
-    await expect(page.getByTestId('selection-status')).toContainText('Draft', { timeout: 15_000 });
+    await expect(page.getByTestId('selection-status')).toContainText('Draft', AFTER_POST);
     await expect(page.getByTestId('sel-price-block')).toHaveCount(0);
     await expect(page.getByTestId('sel-offer')).toBeVisible();
   });
@@ -257,6 +285,13 @@ test.describe('S173 Job 3 — Release Selections: the batch is delivery, one sig
       .insert({ company_id: company!.id, selection_id: sel2!.id, name: `${MARKER} Zellige`, is_chosen: false })
       .select('id').single();
     await admin.from('selection_option_amounts').insert({ company_id: company!.id, option_id: opt2!.id, quantity: 1, unit_cost: 900, markup_percent: 10 });
+    // [S174 #1] The stage-4 Offer test above ALSO mails now, so the count
+    // asserted at the end of this test would otherwise be measuring two runs.
+    // Cleared here rather than in beforeEach: the sweep is per-file and this is
+    // the only test that counts rows.
+    await admin.from('email_logs').delete()
+      .eq('email_type', 'selection_released')
+      .eq('recipient_email', 'qa-client-a@example.invalid');
 
     await signIn(page, OWNER);
     await page.goto(`/dashboard/projects/${PROJECT_QA_A}/selections`);
@@ -265,10 +300,23 @@ test.describe('S173 Job 3 — Release Selections: the batch is delivery, one sig
     await expect(page.getByTestId('selections-release')).toContainText('Release 2 selections');
     await page.getByTestId('selections-release').click();
     // Both rows re-render as awaiting; the checkboxes (draft-only) disappear.
-    await expect(page.getByTestId(`selection-release-${selectionId}`)).toHaveCount(0);
-    await expect(page.getByTestId(`selection-release-${sel2!.id}`)).toHaveCount(0);
+    await expect(page.getByTestId(`selection-release-${selectionId}`)).toHaveCount(0, AFTER_POST);
+    await expect(page.getByTestId(`selection-release-${sel2!.id}`)).toHaveCount(0, AFTER_POST);
     await expect(page.getByTestId('selections-release-errors')).toHaveCount(0);
     const { data: after } = await admin.from('selections').select('id, status').in('id', [selectionId, sel2!.id]);
     expect(after!.every((s) => s.status === 'awaiting_approval')).toBe(true);
+
+    // [S174 #1] ⚠️ AND THE CLIENT WAS TOLD. Josh: *"I have not received the
+    // selections."* He hadn't — this button flipped two rows and mailed nobody.
+    // ONE row for the batch, not one per selection: the batch is the DELIVERY
+    // unit while the signature stays per-selection (Josh, S173).
+    const { data: mailed } = await admin
+      .from('email_logs')
+      .select('id, subject, metadata')
+      .eq('email_type', 'selection_released')
+      .eq('recipient_email', 'qa-client-a@example.invalid');
+    expect(mailed, 'the release sent no email').toHaveLength(1);
+    expect(mailed![0].subject).toContain('2 selections are ready for you to choose');
+    expect((mailed![0].metadata as { selection_count?: number }).selection_count).toBe(2);
   });
 });

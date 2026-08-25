@@ -5,6 +5,7 @@ import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { notify } from '@/lib/notify/notify';
 import { getManagerNotifyRecipients } from '@/lib/notify/recipients';
 import { applied } from '@/lib/services/mutation-result';
+import { optionSell } from '@/lib/selections/option-sell';
 
 // ============================================================================
 // Allowances & Selections — the LIFECYCLE. [S171, stage 4]
@@ -88,73 +89,40 @@ export function selectionConsentTextFor(input: {
 
 // ── Pricing (§5.2, §5.3) ───────────────────────────────────────────────────
 
-/** Markup chain for the ALLOWANCE's sell (Q3 as ruled): row markup → the
- *  instrument's material markup → company default material markup. Read
- *  service-role; the caller has already been gated by an RLS write. */
+/**
+ * The ALLOWANCE's sell: its budgeted cost × (1 + its effective markup).
+ *
+ * ⚠️ [S174 #2] THE MARKUP CHAIN NO LONGER LIVES HERE. It was ~40 lines of
+ * TypeScript walking project_budget_items → change_order_line_rows /
+ * estimate_line_rows → change_orders / estimates → companies. The SAME walk was
+ * then needed to stamp `selection_amounts.inherited_markup_percent` from a
+ * trigger, where TypeScript cannot run — and writing it twice is the #129
+ * divergence in its purest form: two implementations that agree today, in a
+ * form that looks like agreement.
+ *
+ * So there is ONE implementation, `allowance_effective_markup_percent()` in
+ * 20261030000000, and this calls it. _Superseded: the inline chain, whose rungs
+ * are reproduced rung-for-rung in that function's body and commented there._
+ *
+ * The RPC goes through the ADMIN client on purpose: the function is REVOKEd
+ * from `authenticated` because a markup percent is a floored figure, and an RPC
+ * that returned one to any signed-in caller would defeat the side tables it
+ * exists to populate. The caller here has already been gated by an RLS write.
+ */
 async function allowanceSellFor(admin: Db, budgetItemId: string): Promise<number> {
-  const { data: item } = await admin
-    .from('project_budget_items')
-    .select('id, source_line_row_id, source_change_order_id, company_id')
-    .eq('id', budgetItemId)
-    .maybeSingle();
-  if (!item) return 0;
   const { data: amt } = await admin
     .from('project_budget_amounts')
     .select('budgeted_amount')
     .eq('budget_item_id', budgetItemId)
     .maybeSingle();
   const cost = Number(amt?.budgeted_amount ?? 0);
-
-  let markup: number | null = null;
-  if (item.source_line_row_id) {
-    if (item.source_change_order_id) {
-      const { data: row } = await admin
-        .from('change_order_line_rows')
-        .select('markup_percent, line_item_id')
-        .eq('id', item.source_line_row_id)
-        .maybeSingle();
-      markup = row?.markup_percent == null ? null : Number(row.markup_percent);
-      if (markup == null) {
-        const { data: co } = await admin
-          .from('change_orders')
-          .select('material_markup_percent')
-          .eq('id', item.source_change_order_id)
-          .maybeSingle();
-        markup = co?.material_markup_percent == null ? null : Number(co.material_markup_percent);
-      }
-    } else {
-      const { data: row } = await admin
-        .from('estimate_line_rows')
-        .select('markup_percent, line_item_id')
-        .eq('id', item.source_line_row_id)
-        .maybeSingle();
-      markup = row?.markup_percent == null ? null : Number(row.markup_percent);
-      if (markup == null && row?.line_item_id) {
-        const { data: li } = await admin
-          .from('estimate_line_items')
-          .select('estimate_id')
-          .eq('id', row.line_item_id)
-          .maybeSingle();
-        if (li?.estimate_id) {
-          const { data: est } = await admin
-            .from('estimates')
-            .select('material_markup_percent')
-            .eq('id', li.estimate_id)
-            .maybeSingle();
-          markup = est?.material_markup_percent == null ? null : Number(est.material_markup_percent);
-        }
-      }
-    }
-  }
-  if (markup == null) {
-    const { data: co } = await admin
-      .from('companies')
-      .select('default_material_markup_percent')
-      .eq('id', item.company_id)
-      .maybeSingle();
-    markup = co?.default_material_markup_percent == null ? 0 : Number(co.default_material_markup_percent);
-  }
-  return r2(cost * (1 + markup / 100));
+  const { data: markup } = await admin.rpc('allowance_effective_markup_percent', {
+    p_budget_item_id: budgetItemId,
+  });
+  // NULL means the budget item does not exist — the old code returned 0 for
+  // that case before ever reaching the markup, and so does this.
+  if (markup === null || markup === undefined) return 0;
+  return r2(cost * (1 + Number(markup) / 100));
 }
 
 /**
@@ -182,12 +150,25 @@ export async function computeChosenFigures(admin: Db, selectionId: string): Prom
     .from('selection_option_amounts')
     .select('option_id, quantity, unit_cost, markup_percent')
     .in('option_id', opts.map((o) => o.id));
+  // [S174 #2] The SNAPSHOT an option with a NULL `markup_percent` inherits —
+  // read, never re-derived (Josh: "a snapshot at allowance-creation time, not a
+  // live read of the estimate now"). `?? 0` used to stand where this read is,
+  // which is how "inherit" came to mean "no markup" in the figure a client
+  // would have SIGNED. Service-role read: the stamp is floored, and this runs
+  // in a portal-session context where the client cannot see it.
+  const { data: snap } = await admin
+    .from('selection_amounts')
+    .select('inherited_markup_percent')
+    .eq('selection_id', selectionId)
+    .maybeSingle();
+  const inherited = snap?.inherited_markup_percent ?? null;
+
   const byId = new Map((amts ?? []).map((a) => [a.option_id, a]));
   const lines: OfferedFigures['lines'] = [];
   for (const o of opts) {
     const a = byId.get(o.id);
     if (!a) return { error: `Option "${o.name}" has no price.` };
-    lines.push({ optionId: o.id, name: o.name, sell: r2(Number(a.quantity) * Number(a.unit_cost) * (1 + Number(a.markup_percent ?? 0) / 100)) });
+    lines.push({ optionId: o.id, name: o.name, sell: optionSell(a, inherited) });
   }
   const sellAmount = r2(lines.reduce((n, l) => n + l.sell, 0));
   const allowanceDeduction = sel.allowance_budget_item_id ? await allowanceSellFor(admin, sel.allowance_budget_item_id) : 0;

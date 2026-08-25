@@ -78,6 +78,245 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
 ## Open Tech Debt
 
+### Branch-scoped, awaiting real numbers — `feature/s174-selections-email-and-markup` [S174]
+
+> Provisional ids per the S136 rule: never allocate a bare `#N` on a branch. Tag `s174`.
+> **All four came out of Josh's S173 click-test and NONE was built in S174**, on the brief's own
+> instruction: *"Investigate and report 3, 4, 5, 6 — do not build them."* Items 1 and 2 of that
+> click-test WERE built and are commits `0626e6c` and `9b49cc1`; they are not filed here.
+>
+> **Every claim below was probed against the live rebuild-test database**, not read off the
+> migration files, because the two disagree in one place that matters (`#2-s174`). The probe was
+> a throwaway estimate created, exercised and hard-deleted in one script; the residue check at the
+> end returned zero rows.
+
+- **#1-s174 — A CLIENT WHO CONFIRMS BY PHONE, IN PERSON OR ON PAPER CANNOT BE RECORDED AT ALL.
+  There is no company-side path to a selection decision, and the SCHEMA forbids one twice over.**
+  Raised S174 (2026-08-25). Josh: *"Some clients confirm by phone, in person or on paper. The
+  company must be able to record the client's choice on their behalf — WITH A REQUIRED NOTE saying
+  how the choice was received."*
+
+  **What blocks it today, both halves confirmed in `20261026000000_selections_tables.sql`:**
+
+  | Constraint | Text | Why it blocks |
+  | --- | --- | --- |
+  | `selection_signing_sessions_channel_check` | `CHECK (signer_channel = 'portal_session')` | A single permitted value. There is no channel a company attestation could be written as. The CO table admits `token_link` as well; this one was deliberately tightened, and its comment says so: *"PORTAL ONLY … The CHECK is therefore tighter than the CO one."* |
+  | `selection_signing_sessions_completed_shape` | `status <> 'completed' OR (… signature_data IS NOT NULL AND signer_profile_id IS NOT NULL …)` | A completed session must carry a client's drawn-or-typed signature AND a client profile id. A company attestation has neither: nobody signed in the product. |
+
+  Both are correct for what they were written for, and both must be widened rather than removed.
+
+  **THE PRECEDENT JOSH NAMED IS THE NOTARY PATH, and it fits exactly.** `contract_documents`
+  (`20260926000000_7i_contracts.sql`) carries `delivery_mode` = `'esignature' | 'notary'`, and on
+  the notary path `lien-release-pdf-service.ts` leaves the signature area **BLANK** — ruling C4,
+  S140, in its own words: *"A notary attests to a signature made in their presence, so a signature
+  the product drew would be a second, contradictory claim."* The product does not fabricate a
+  signature it did not witness; it records that the ceremony happened elsewhere and says so.
+
+  **AND THE SHAPE IS Q6's CALLER CONTEXT**, which already exists for change orders
+  (`co-signing-service.ts:130`, `CoSignatureCaller`). Its header is the argument for this item
+  verbatim: *"an authenticated portal session and an anonymous token holder are materially
+  different evidence, and `signer_ip`, `signer_user_agent` and the consent record must be able to
+  say which … Storing those two in one pair of columns with nothing to tell them apart would make
+  the weaker evidence indistinguishable from the stronger, in the row that IS the binding record."*
+  A COMPANY ATTESTATION is a third, and weaker, kind of evidence than either. `signer_ip` and
+  `signer_user_agent` would describe **a member of staff**, not the client — the exact conflation
+  that paragraph forbids.
+
+  **Fix direction — do NOT reuse `signer_profile_id` for the staff member.** That column means
+  "the client who signed", it is what `selections_client_arm`-style reads key on, and overloading
+  it makes a company attestation indistinguishable from a client signature by query. Sketch:
+  - a third channel value, e.g. `company_attested`, added to the CHECK;
+  - `completed_shape` gains an arm: on `company_attested`, `signature_data` and `signer_profile_id`
+    are NULL and **`attested_by` (staff profile) and `attestation_note` are NOT NULL** — Josh's
+    required note, enforced structurally, the way `change_orders_void_shape_check` enforces
+    `void_reason` rather than trusting a form;
+  - `selectionConsentTextFor()` gains a third variant naming the channel inside the sentence, as
+    `coConsentTextFor()` does — so the consent record answers the question on its own without a
+    reader having to join it to `signer_channel`;
+  - the sheet renders it as visibly NOT a signature, the way the notary path renders a blank box.
+
+  **Open question for Josh, and it should be answered before this is built:** may a company
+  attestation be *reversed* by the company that wrote it, or is it a resting record like a signed
+  session? The client never touched it, which argues for reversible; it is the basis for a price
+  the client will be billed, which argues for `revise`-and-re-attest. Cross-ref `#4-s174`.
+
+- **#2-s174 — ⚠️ AN OWNER OR ADMIN CAN SILENTLY REWRITE A SENT ESTIMATE — ITS NAME, ITS
+  `grand_total` AND ITS SCOPE — THROUGH ORDINARY POSTGREST. The freeze is in TypeScript only, and
+  the estimate's own LINE ITEMS are floored at the database while its PARENT ROW is not.**
+  Raised S174 (2026-08-25). **This was found while investigating Josh's items 4 and 5 and is more
+  serious than either.**
+
+  **Probed live, signed in as `josh+test50@worthprop.com` through the anon key — i.e. exactly what
+  a browser console can do — against a throwaway estimate at `status = 'sent'`:**
+
+  | Attempt | Result |
+  | --- | --- |
+  | `UPDATE estimates SET name = …` | **1 row.** Applied. |
+  | `UPDATE estimates SET grand_total = 999999, subtotal = 999999` | **1 row. `grand_total` read back as `999999`.** |
+  | `UPDATE estimates SET scope_summary = …` | **1 row.** Applied. |
+  | `INSERT INTO estimate_line_items …` | **refused** — `new row violates row-level security policy` |
+  | `UPDATE estimates SET status = 'draft'` (unsend) | **1 row.** Applied. |
+  | `DELETE FROM estimates` | 0 rows — no DELETE policy for anyone. Correct. |
+  | the same three UPDATEs as a **PM who did not author it** | 0 rows each. Correct. |
+
+  **The asymmetry, exactly:** `estimate_line_items_insert_manager` and `..._update_manager`
+  (baseline `:3428`, `:3446`) both carry `AND e.status = 'draft'`. `estimates_update_manager`
+  (baseline `:3595`) carries `status = 'draft'` **only on its project-manager arm** — the
+  Owner/Admin arm is `get_my_role() = ANY (ARRAY['owner','admin'])` and nothing else. The children
+  are frozen at the database; the parent is frozen only by
+  `updateEstimate()`'s `if (current.status !== 'draft')` in `estimates-client.ts:353`.
+
+  **This is CLAUDE.md's PARITY rule failing in the way it names:** *"The rules live below the UI —
+  in RLS, a service function, or a shared util — so neither surface can enforce a different version
+  of them."* A service-layer check is not below the UI; it is the UI's own code, and every write
+  path in this app goes to PostgREST directly.
+
+  **Why it matters more than a hypothetical console attack.** It is the mechanism by which items
+  `#3-s174` and `#4-s174` could be "solved" wrongly: an unsend that flips `sent → draft` is already
+  possible and already permitted, so anyone adding an Unsend button gets silent post-send editing
+  for free, with no guard anywhere to stop it.
+
+  **Fix direction.** Widen `estimates_update_manager`'s Owner/Admin arm with an explicit status
+  predicate, and decide in the same pass which columns are legitimately writable after send —
+  `viewed_at`, `accepted_at`, `declined_at`, `reminder_count`, `last_reminder_sent_at`,
+  `client_unsubscribed_at`, `signed_proposal_file_id` and `status` itself are all written by the
+  signing and reminder machinery on rows that are already sent, so a blanket `status = 'draft'`
+  gate would break the proposal flow. The CO precedent is a **trigger** that names the permitted
+  columns (`enforce_change_order_immutability`), not an RLS predicate. Cross-ref `#4-s174`, which
+  should be decided first: what "frozen" means depends on whether void-and-reissue exists.
+
+- **#3-s174 — A SENT ESTIMATE CANNOT BE VOIDED. There is no `voided` status, no `void_reason`, and
+  no supersession chain — the three things S168 gave change orders.** Raised S174 (2026-08-25).
+  Josh: *"Same shape as #1-s167fx, the sent CO you fixed at S168."*
+
+  **He is right about the shape and it is worth being precise about the difference.** `#1-s167fx`
+  was a CO that could not be REMOVED by any path including service role, because two guards closed
+  on each other. A sent estimate is not stuck that way:
+
+  | | sent change order, pre-S168 | sent estimate, today |
+  | --- | --- | --- |
+  | soft delete | n/a | **works** — Owner/Admin, `softDeleteEstimate()`, no status guard, button already on the builder |
+  | hard delete | refused by an FK with no CASCADE | refused — no DELETE policy at all |
+  | void | did not exist | **does not exist** |
+  | reissue / supersedes | did not exist | `parent_estimate_id` and `cloned_from_estimate_id` exist, but neither means "this replaces a withdrawn one" |
+
+  So the estimate's defect is **narrower and cleaner**: there is no deadlock to unpick, only a
+  missing concept. `estimates_status_check` (`20260704212000:19`) is
+  `draft · review · sent · viewed · accepted · declined · expired · revised · converted` — nine
+  values and none of them means "we withdrew this". `declined` is the CLIENT's act and must not be
+  borrowed for the company's.
+
+  **What "void" would have to be, following S168 rather than inventing:** `voided` in the status
+  CHECK; `void_reason` / `voided_by` / `voided_at` with a two-way shape CHECK (a voided row cannot
+  lack its reason, a live row cannot carry one); authority mirroring the estimate READ floor
+  (`estimates_select_authenticated` — Owner/Admin, or the authoring PM) rather than inventing a
+  new one; `voided_by` stamped from `auth.uid()`, never from the payload;
+  `supersedes_estimate_id` with a once-only unique index, the `contract_documents
+  .supersedes_document_id` shape. **And the freeze that makes a void mean anything is `#2-s174`** —
+  voiding a row that can still be edited afterwards records nothing.
+
+  **One thing S168 settled that must NOT be re-litigated silently:** Josh ruled a void requires a
+  reason in **every** case, signed or unsigned, and ruled *against* distinguishing them. The
+  estimate equivalent of "signed" is `accepted` / `converted`.
+
+  **The judgement call this needs from Josh, which the CO ruling does not answer:** an estimate
+  that has been **converted to a project** is load-bearing in a way a signed CO is not —
+  `projects.source_estimate_id`, `project_financials.contract_value` and every budget line derived
+  from it hang off it. `20260806000000` already freezes `source_estimate_id` because *"re-pointing
+  the source instrument silently re-prices"*. Voiding a converted estimate probably must be
+  refused outright rather than allowed-with-a-reason. Cross-ref `#117`.
+
+- **#4-s174 — A SENT ESTIMATE CANNOT BE UNSENT — IN THE UI. THE DATABASE ALLOWS IT TODAY, WHICH IS
+  THE REAL FINDING.** Raised S174 (2026-08-25). Josh: *"Related to 4, and possibly deliberate — an
+  emailed estimate is a document the client holds, and silently editing it is the thing
+  void-and-reissue exists to prevent. Report whether void-and-reissue is the right answer here as
+  it was for COs."*
+
+  **Answer: yes, void-and-reissue is the right answer, and "unsend" should NOT be built.** Three
+  reasons, in order of weight:
+
+  1. **The document is already gone.** `contracts-shared.ts` says it for contracts and it is just
+     as true here: *"nothing can [reach] the counterparty's hands — this is bookkeeping about an
+     instrument that is already out there."* The client has a PDF and an email with a tokenised
+     signing link. An unsend changes the company's record of an estimate the client is still
+     holding, and the two then disagree with no marker saying so. That is the S173 Job 1 failure
+     mode pointed at a document instead of an affordance: everything looks consistent from inside.
+  2. **Unsend would produce exactly the silent edit Josh is describing**, because `#2-s174` means
+     nothing stops the edit once the row reads `draft` again — and `estimate_line_items`' own
+     `status = 'draft'` policy would then **re-open the line items too**. The freeze that makes the
+     document trustworthy is keyed on the same status an unsend button would flip.
+  3. **The estimate has a live signing session.** Sending mints a tokenised link with an expiry;
+     `sent_at`, `expires_at`, `reminder_count`, `last_reminder_sent_at` and the reminder cron all
+     key off "sent". Unsend has to answer what happens to a link already in the client's inbox, and
+     "invalidate it" is precisely what void does — with a record of why.
+
+  **The probe result that makes this urgent rather than theoretical:** `UPDATE estimates SET
+  status = 'draft'` on a sent estimate as Owner returned **1 row**. Unsend is not blocked; it is
+  merely unreachable from the product. Nothing is defending the boundary Josh is describing — the
+  absence of a button is.
+
+  **Recommended sequencing, and it matters:** `#2-s174` (the freeze) → `#3-s174` (void + reissue) →
+  close this one as WON'T BUILD with the reasoning above. Building void first on an unfrozen row
+  gives a void that can be edited around.
+
+- **#5-s174 — 56 NATIVE `window.confirm()` DIALOGS ACROSS 38 DESKTOP FILES, WHILE MOBILE ALREADY
+  USES STYLED PANELS FOR THE SAME ACTIONS.** Raised S174 (2026-08-25). Josh named the
+  convert-to-project one; it is repo-wide, and the sweep he asked for is below.
+
+  **Inventory** — `app/dashboard/**` and `components/**`, `.tsx`:
+
+  | | count |
+  | --- | --- |
+  | `confirm()` call sites | **56**, in **38** files |
+  | `alert()` call sites | 20 |
+  | `prompt()` call sites | 2 — `estimates/[id]/items-tab.tsx:201`, `projects/[id]/files/[fileId]/markup/markup-editor.tsx:92` |
+  | any of the three under `app/m/**` | **0** |
+
+  Heaviest files: `changes/[coId]/co-builder.tsx` (5), `projects/[id]/status-control.tsx` (4),
+  `estimates/[id]/items-tab.tsx` (4), `contracts/contracts-panel.tsx` (3),
+  `estimates/[id]/estimate-builder.tsx` (3).
+
+  **⚠️ THE PARITY ANGLE IS THE REASON THIS IS DEBT AND NOT A PREFERENCE.** The same actions exist
+  on both surfaces and confirm differently: `app/m/p/[projectId]/changes/[coId]/co-actions.tsx`
+  uses an inline panel with `PrimaryButton … tone="danger"` and `SecondaryButton`
+  (`m-co-void-confirm`, `m-co-send-confirm`), while `co-builder.tsx` uses `window.confirm()`.
+  CLAUDE.md permits presentation to differ between surfaces and requires the reason to be recorded
+  where the code is — there is no such note in either file, so this is drift, not a ruled
+  exception.
+
+  **AND THE PRECEDENT FOR CONVERTING THEM ALREADY EXISTS, from S168.** `co-builder.tsx:190` says
+  it: *"The void REASON is required in every case, so voiding is a panel and no longer a
+  `window.confirm()`. Josh ruled against a signed/unsigned split."* The rule that fell out of it is
+  worth stating before any sweep begins: **a confirmation that must CARRY DATA is a panel; a
+  confirmation that is purely yes/no is what these 56 are.** Converting the 56 is a presentation
+  change, not a behaviour change — which is what makes it safely mechanical, and also what makes it
+  low-value to do by hand one at a time.
+
+  **Fix direction — one primitive, not 38 rewrites.** There is no shared modal shell today:
+  `clone-modal.tsx`, `send-proposal-modal.tsx`, `payment-modal.tsx`, `closeout-dialog.tsx` and
+  `clock-modal.tsx` each build their own overlay. A `useConfirm()` hook returning a promise keeps
+  every call site's shape (`if (!(await confirm({…}))) return;`) so the diff is one line per site
+  and the control flow is unchanged. Do the primitive and ONE file first, let Josh look at it, then
+  sweep. **`e2e/**` accepts these dialogs via `page.once('dialog', d => d.accept())` in at least
+  `desktop-selections.spec.ts` and others — every such handler is a test that will go green while
+  clicking nothing once the dialog stops being native.** That is the S157 trap in this item, and it
+  is why the e2e sweep belongs in the same commit as the UI change, not after it.
+
+- **#6-s174 — ✅ NOT A DEFECT — `EST-1951` showing `project = null` is correct; Josh converted
+  `EST-1952`.** Raised and closed S174 (2026-08-25).
+
+  Verified against rebuild-test:
+
+  | estimate | status | project via `projects.source_estimate_id` |
+  | --- | --- | --- |
+  | `EST-1951` "Copy of Copy of test4" | `sent` | none — and it was never converted |
+  | `EST-1952` "Copy of Copy of Copy of test4" | `converted` | **`PRJ-1952` "Copy of Copy of Copy of test4"** |
+
+  Conversion links exactly as expected, through `projects.source_estimate_id`. The two estimates
+  are one clone apart and their names differ by a single "Copy of", which is why they read as the
+  same record. **No fix, and nothing to file** — recorded only so the next reader does not
+  re-investigate a link that works.
+
 ### Branch-scoped, awaiting real numbers — `feature/s168-co-lifecycle-portal-split` [S168]
 
 > Provisional ids per the S136 rule: never allocate a bare `#N` on a branch. Tag `s168`.

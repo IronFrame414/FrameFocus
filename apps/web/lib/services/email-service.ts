@@ -159,7 +159,14 @@ export type EmailType =
   | 'auth_magic_link'
   | 'auth_email_change'
   | 'auth_reauthentication'
-  | 'auth_invite';
+  | 'auth_invite'
+  // S174 #1 — a batch of selections released to the client. The
+  // `email_types.selection_released` row lands in 20261029000000, in the SAME
+  // commit as this line. Third time this rule is written down and it has been
+  // broken once (`mention`): the table half fails at RUNTIME, this half at
+  // COMPILE time, so one without the other ships silently. Both halves or
+  // neither.
+  | 'selection_released';
 
 export interface LogEmailInput {
   company_id: string;
