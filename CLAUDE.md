@@ -217,7 +217,36 @@ understanding. No edits in this phase.
 Phase 2 — QUESTIONS: surface ALL questions / ambiguities / spec↔schema conflicts
 at once, then STOP and wait. If none, say so and continue.
 Phase 3 — BUILD: perform all reads/edits/creates autonomously; show diffs at the
-end; never commit — Josh commits manually.
+end; never commit — Josh commits manually. **In an UNATTENDED run this last
+clause is superseded — see the rule immediately below.**
+
+### UNATTENDED RUNS COMMIT AFTER EACH DISCRETE STEP, NOT AT THE END — **RULED [Josh, S173]**
+
+**A step is one finding, one fix, one battery check — the smallest independently-meaningful unit of
+the session. Commit it path-scoped before starting the next.**
+
+**Rationale, recorded here so nobody tidies it into one clean commit later: this Codespace has
+destroyed unattended work three times.** The S166 and S168 battery logs survived precisely because
+they were committed step by step; **an entire S173 follow-up session was lost** because its commits
+were batched to the end. A branch holding one commit written at the finish is exactly what a
+restart takes.
+
+**⚠️ THIS SUPERSEDES "never commit" IN PHASE 3 ABOVE, AND ONLY FOR UNATTENDED RUNS.** The two
+rules were written for different situations and the contradiction is deliberate rather than an
+oversight:
+
+| | attended | unattended |
+| --- | --- | --- |
+| who commits | **Josh**, path-scoped by concern | **CC**, path-scoped, after every discrete step |
+| why | he is watching the diffs and owns the history | nobody is watching, and the box eats work |
+| pushing | **never CC's**, in both | **never CC's**, in both |
+
+**What does NOT change:** CC never pushes, in either mode; commits stay path-scoped rather than
+`git add -A` over an unrelated working tree; and merging to `main` remains Josh's call.
+
+**And the reason a step is small rather than tidy.** "One finding" means the fix, its tests and its
+spec amendment land together — not that a half-built feature is committed to bank progress. The
+unit is what would still be worth having if the next step never ran.
 
 ### Reading the exit status of a command — **MANDATORY [moved from TECH_DEBT #137, S122]**
 
