@@ -11,7 +11,6 @@ import {
   postSelectionMessage,
   saveSelectionNotes,
   saveSelectionOptionAmounts,
-  setChosenOptions,
   updateSelection,
   updateSelectionOption,
 } from '@/lib/services/selections-client';
@@ -84,26 +83,25 @@ export function SelectionSheet({ projectId, role, myProfileId, selection, areas,
   const canNotes = NOTES_ROLES.includes(role) && selection.notes !== null;
   const editable = canManage && (selection.status === 'draft' || selection.status === 'in_discussion');
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
   const reload = useCallback(() => router.refresh(), [router]);
 
   async function run(fn: () => Promise<{ success: boolean; error?: string }>) {
-    setBusy(true);
     setError(null);
     const r = await fn();
-    setBusy(false);
     if (!r.success) setError(r.error ?? 'Save failed');
     else reload();
     return r;
   }
 
-  // ── Offered figures, derived for display on the COMPANY side only (§5.3).
-  // Stage 4 stamps them at offer; until then this is a live preview.
+  // ── [S173] `is_chosen` is the CLIENT's pick (made in the portal). This is a
+  // company-side readout of what the client chose; before they pick it is
+  // empty and that is correct — the company assembles, the client chooses.
   const chosen = selection.options.filter((o) => o.is_chosen);
   const priced = chosen.every((o) => o.amounts !== null);
   const sellOf = (o: SelectionOption) =>
     o.amounts ? Number(o.amounts.quantity) * Number(o.amounts.unit_cost) * (1 + Number(o.amounts.markup_percent ?? 0) / 100) : 0;
   const sellTotal = priced ? chosen.reduce((n, o) => n + sellOf(o), 0) : null;
+  const pricedCount = selection.options.filter((o) => o.amounts !== null).length;
 
   return (
     <div data-testid="selection-sheet">
@@ -184,13 +182,19 @@ export function SelectionSheet({ projectId, role, myProfileId, selection, areas,
           {selection.options.length === 0 && <p style={{ fontSize: '0.8125rem', color: '#6b7280' }}>No options yet.</p>}
           <div style={{ display: 'grid', gap: '0.75rem' }}>
             {selection.options.map((o) => (
-              <OptionCard key={o.id} option={o} selection={selection} projectId={projectId} role={role} editable={editable} canManage={canManage} busy={busy} run={run} imageUrl={imageUrls[o.id]?.image ?? imageUrls[o.id]?.link_thumbnail ?? null} />
+              <OptionCard key={o.id} option={o} selection={selection} projectId={projectId} role={role} editable={editable} run={run} imageUrl={imageUrls[o.id]?.image ?? imageUrls[o.id]?.link_thumbnail ?? null} />
             ))}
           </div>
           {editable && <AddOption selection={selection} projectId={projectId} run={run} />}
-          {canManage && chosen.length > 0 && (
+          {canManage && (chosen.length > 0 || pricedCount > 0) && (
             <div style={{ marginTop: '0.75rem', fontSize: '0.8125rem', color: '#374151' }} data-testid="sel-preview-total">
-              {selection.client_supplied ? 'Client-supplied — no price.' : sellTotal !== null ? `Chosen options total (with markup): ${money(sellTotal)}` : 'Chosen options are not all priced yet.'}
+              {selection.client_supplied
+                ? 'Client-supplied — no price.'
+                : chosen.length > 0
+                  ? sellTotal !== null
+                    ? `Client’s choice total (with markup): ${money(sellTotal)}`
+                    : 'The client’s chosen options are not all priced.'
+                  : `${pricedCount} priced option${pricedCount === 1 ? '' : 's'} ready for the client to choose from.`}
             </div>
           )}
         </section>
@@ -260,8 +264,8 @@ function useImagePaths(onFile: (f: File) => void) {
   return { inputRef, onDrop, onPaste, onDragOver: (e: DragEvent) => e.preventDefault() };
 }
 
-function OptionCard({ option, selection, projectId, role, editable, canManage, busy, run, imageUrl }: {
-  option: SelectionOption; selection: Selection; projectId: string; role: string; editable: boolean; canManage: boolean; busy: boolean;
+function OptionCard({ option, selection, projectId, role, editable, run, imageUrl }: {
+  option: SelectionOption; selection: Selection; projectId: string; role: string; editable: boolean;
   run: (fn: () => Promise<{ success: boolean; error?: string }>) => Promise<{ success: boolean; error?: string }>;
   imageUrl: string | null;
 }) {
@@ -305,16 +309,14 @@ function OptionCard({ option, selection, projectId, role, editable, canManage, b
           <input style={{ ...input, width: 'auto', flex: 1, minWidth: 160 }} defaultValue={option.name} disabled={!editable} data-testid="opt-name"
             onBlur={(e) => e.target.value.trim() !== option.name && run(() => updateSelectionOption(option.id, { name: e.target.value }))} />
           <span style={{ fontSize: '0.6875rem', color: '#6b7280' }}>{option.source === 'catalog' ? 'from catalog' : option.source === 'budget' ? 'from budget' : 'new'}</span>
-          {canManage && (
-            <label style={{ fontSize: '0.8125rem', display: 'inline-flex', gap: '0.25rem', alignItems: 'center' }}>
-              <input type="checkbox" checked={option.is_chosen} disabled={busy || !(selection.status === 'draft' || selection.status === 'in_discussion')} data-testid="opt-chosen"
-                onChange={(e) => {
-                  const current = selection.options.filter((x) => x.is_chosen).map((x) => x.id);
-                  const next = e.target.checked ? [...current, option.id] : current.filter((id) => id !== option.id);
-                  void run(() => setChosenOptions(selection.id, next, selection.allow_multiple));
-                }} />
-              chosen
-            </label>
+          {/* [S173, Josh] "chosen" is the CLIENT's act. The company checkbox
+              that lived here is REMOVED — the company assembles options; the
+              client picks in the portal (green box there too) and this badge
+              reports it. */}
+          {option.is_chosen && (
+            <span data-testid="opt-client-choice" style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#166534', backgroundColor: '#dcfce7', borderRadius: '9999px', padding: '0.125rem 0.5rem' }}>
+              Client&rsquo;s choice
+            </span>
           )}
           {editable && <button type="button" style={{ ...btn, color: '#b91c1c' }} onClick={() => window.confirm(`Remove option "${option.name}"?`) && run(() => deleteSelectionOption(option.id))} data-testid="opt-delete">Remove</button>}
         </div>

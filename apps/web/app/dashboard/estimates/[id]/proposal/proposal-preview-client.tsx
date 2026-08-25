@@ -168,6 +168,7 @@ export function ProposalPreviewClient({
               </button>
               <button
                 type="button"
+                data-testid="preview-send"
                 onClick={() => setSendOpen(true)}
                 disabled={busy}
                 style={{

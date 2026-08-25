@@ -30,10 +30,22 @@ import { applied } from '@/lib/services/mutation-result';
 // no token-link arm because a selection is portal-only. A second
 // implementation that "does the same thing" is the #129 divergence.
 //
-// SELL IS STAMPED, NOT DERIVED, AT TWO MOMENTS (analysis 2b.3): `offered_*` when
-// the company sends it, `signed_*` (= offered) when the client signs. The client
-// reads stamps, never a cost basis; and a cost edit after signing cannot move
-// contract value (stage 5 sums signed_variance) without a new signature.
+// [S173, Josh] "CHOSEN" IS THE CLIENT'S ACT. _Superseded model, quoted not
+// deleted: the company ticked `is_chosen` on the sheet and the offer stamped
+// `offered_*` = Σ chosen sells — "SELL IS STAMPED, NOT DERIVED, AT TWO MOMENTS
+// (analysis 2b.3): offered_* when the company sends it, signed_* (= offered)
+// when the client signs."_ Josh: "this is supposed to be a list to send to the
+// client for the client to pick and sign off on" — if the company pre-picks,
+// there is nothing left for the client to choose.
+//
+// AS RULED: the company ASSEMBLES priced options and releases them; the CLIENT
+// picks (writing `is_chosen`, stage 7's portal page) and signs. So the offer
+// stamps NOTHING — `offered_*` stays NULL (legal: the four travel together) —
+// and the figures are computed ONCE, at the SIGNATURE, from the client's
+// chosen set, then stamped into `signed_*`. Q7 (sum-then-compare) governs
+// WITHIN the selection at that moment; `allow_multiple` decides one-of or
+// several-of. A cost edit after signing still cannot move contract value
+// (stage 5 sums signed_variance) without a new signature.
 //
 // WHAT THIS FILE DOES NOT DO: touch project_budget_items, change any 7B/7D/7H
 // derivation, or create a CO. Stage 5 owns the money downstream.
@@ -145,22 +157,27 @@ async function allowanceSellFor(admin: Db, budgetItemId: string): Promise<number
   return r2(cost * (1 + markup / 100));
 }
 
-/** Sum-then-compare (Q7): Σ chosen options' sell − allowance sell (or − 0, Q8). */
-export async function computeOfferedFigures(admin: Db, selectionId: string): Promise<OfferedFigures | { error: string }> {
+/**
+ * Sum-then-compare (Q7): Σ CHOSEN options' sell − allowance sell (or − 0, Q8).
+ * [S173] `is_chosen` is the CLIENT's pick, so this runs at the SIGNATURE, not
+ * the offer. `allow_multiple` is enforced here — one-of or several-of.
+ */
+export async function computeChosenFigures(admin: Db, selectionId: string): Promise<OfferedFigures | { error: string }> {
   const { data: sel } = await admin
     .from('selections')
-    .select('id, client_supplied, allowance_budget_item_id, mode')
+    .select('id, client_supplied, allowance_budget_item_id, mode, allow_multiple')
     .eq('id', selectionId)
     .maybeSingle();
   if (!sel) return { error: 'Selection not found.' };
-  if (sel.client_supplied) return { error: 'A client-supplied selection has no price to offer.' };
+  if (sel.client_supplied) return { error: 'A client-supplied selection has no price.' };
   const { data: opts } = await admin
     .from('selection_options')
     .select('id, name, is_chosen')
     .eq('selection_id', selectionId)
     .eq('is_deleted', false)
     .eq('is_chosen', true);
-  if (!opts?.length) return { error: 'Choose at least one option before sending for approval.' };
+  if (!opts?.length) return { error: 'Choose at least one option before approving.' };
+  if (!sel.allow_multiple && opts.length > 1) return { error: 'This selection allows only one choice.' };
   const { data: amts } = await admin
     .from('selection_option_amounts')
     .select('option_id, quantity, unit_cost, markup_percent')
@@ -180,32 +197,38 @@ export async function computeOfferedFigures(admin: Db, selectionId: string): Pro
 // ── Transitions ─────────────────────────────────────────────────────────────
 
 /**
- * OFFER: draft | in_discussion → awaiting_approval. Company side (owner/admin/PM).
- * Gated by the CALLER'S RLS UPDATE on `selections` — the stamping write itself
- * is done with the user's client, so a role the policy excludes affects zero
- * rows and we stop (mutation-result.ts). Money is then read service-role only
- * because a PM may offer but cannot read project_budget_amounts.
+ * OFFER (S173: "release"): draft | in_discussion → awaiting_approval. Company
+ * side (owner/admin/PM). Gated by the CALLER'S RLS UPDATE on `selections` — the
+ * status write is done with the user's client, so a role the policy excludes
+ * affects zero rows and we stop (mutation-result.ts).
+ *
+ * [S173] The gate is "at least one PRICED option exists", not "one has been
+ * chosen" — choosing is the client's act. No figures are computed and nothing
+ * is stamped here; `offered_*` stays NULL and the signature stamps `signed_*`
+ * from the client's picks. The priced-option check reads service-role because
+ * a PM may release but cannot read every amounts row context.
  */
-export async function offerSelection(rls: Db, selectionId: string): Promise<{ success: boolean; error?: string; figures?: OfferedFigures | null }> {
+export async function offerSelection(rls: Db, selectionId: string): Promise<{ success: boolean; error?: string }> {
   const admin = getSupabaseAdmin() as Db;
   const { data: sel } = await rls.from('selections').select('id, status, client_supplied, mode').eq('id', selectionId).maybeSingle();
   if (!sel) return { success: false, error: 'Selection not found.' };
   if (sel.status !== 'draft' && sel.status !== 'in_discussion') return { success: false, error: `A ${sel.status.replace('_', ' ')} selection cannot be sent for approval.` };
 
-  let figures: OfferedFigures | null = null;
   if (!sel.client_supplied) {
-    const f = await computeOfferedFigures(admin, selectionId);
-    if ('error' in f) return { success: false, error: f.error };
-    figures = f;
+    const { data: opts } = await admin
+      .from('selection_options')
+      .select('id')
+      .eq('selection_id', selectionId)
+      .eq('is_deleted', false);
+    const ids = (opts ?? []).map((o) => o.id);
+    const priced = ids.length
+      ? ((await admin.from('selection_option_amounts').select('option_id').in('option_id', ids)).data ?? [])
+      : [];
+    if (!priced.length) return { success: false, error: 'Add at least one priced option before sending to the client.' };
   }
-  const now = new Date().toISOString();
   const { data, error } = await rls
     .from('selections')
-    .update(
-      figures
-        ? { status: 'awaiting_approval', offered_sell_amount: figures.sellAmount, offered_allowance_deduction: figures.allowanceDeduction, offered_variance: figures.variance, offered_at: now }
-        : { status: 'awaiting_approval' }
-    )
+    .update({ status: 'awaiting_approval' })
     .eq('id', selectionId)
     .in('status', ['draft', 'in_discussion'])
     .select('id');
@@ -217,10 +240,41 @@ export async function offerSelection(rls: Db, selectionId: string): Promise<{ su
   await admin.from('selection_signing_sessions').update({ status: 'invalidated' }).eq('selection_id', selectionId).eq('status', 'pending');
   const { error: sErr } = await admin.from('selection_signing_sessions').insert({ company_id: company!.company_id, selection_id: selectionId, status: 'pending' });
   if (sErr) return { success: false, error: `Offered, but the signing session could not be opened: ${sErr.message}` };
-  return { success: true, figures };
+  return { success: true };
 }
 
-/** WITHDRAW (company): awaiting_approval → draft; pending session invalidated; stamps cleared. */
+/**
+ * RELEASE SELECTIONS (S173 Job 3): the batch is a DELIVERY mechanism, not a
+ * signing unit. N pending selections go out in one action; the client sees
+ * them together in the portal and signs ONE SIGNATURE PER SELECTION — Josh,
+ * deliberately: "1 signature per selection category and allow partial batch."
+ * Partial batches are supported by construction: each selection keeps its own
+ * lifecycle, so an unsigned one stays awaiting and blocks nothing.
+ *
+ * Why not one signature over the batch (the obvious design a later reader will
+ * propose): each signature binds ONE selection against ONE allowance, so no
+ * instrument ever spans several allowance lines and there is no cross-
+ * allowance variance to reconcile. The batch existing only as delivery is what
+ * RESOLVES that question rather than answering it.
+ *
+ * Not transactional on purpose — a refusal on one selection (unpriced, wrong
+ * status, not yours) must not un-release the others. Per-id results go back.
+ */
+export async function releaseSelections(
+  rls: Db,
+  selectionIds: string[]
+): Promise<{ results: { id: string; success: boolean; error?: string }[] }> {
+  const results: { id: string; success: boolean; error?: string }[] = [];
+  for (const id of selectionIds) {
+    const r = await offerSelection(rls, id);
+    results.push({ id, success: r.success, ...(r.error ? { error: r.error } : {}) });
+  }
+  return { results };
+}
+
+/** WITHDRAW (company): awaiting_approval → draft; pending session invalidated.
+ *  The offered-stamp clears are LEGACY hygiene — since S173 the offer stamps
+ *  nothing, so on new rows they null out nulls. */
 export async function withdrawSelectionOffer(rls: Db, selectionId: string): Promise<{ success: boolean; error?: string }> {
   const admin = getSupabaseAdmin() as Db;
   const { data, error } = await rls
@@ -269,7 +323,7 @@ async function readAwaitingSelectionAsClient(rls: Db, selectionId: string) {
   // CONTROL client gets no row here, which is the gate.
   const { data } = await rls
     .from('selections')
-    .select('id, company_id, project_id, name, status, client_supplied, offered_sell_amount, offered_allowance_deduction, offered_variance, allow_multiple')
+    .select('id, company_id, project_id, name, status, client_supplied, allow_multiple')
     .eq('id', selectionId)
     .maybeSingle();
   return data;
@@ -285,7 +339,13 @@ export interface CompleteSelectionSignatureParams {
   caller: SelectionSignatureCaller;
 }
 
-/** SIGN (Q4): awaiting_approval → approved. The one write path. */
+/**
+ * SIGN (Q4): awaiting_approval → approved. The one write path.
+ * [S173] The figures are computed HERE, from the client's chosen set (Q7,
+ * `allow_multiple` enforced), and stamped into `signed_*`. `offered_*` is not
+ * read and not written — the offer stamps nothing under the client-choice
+ * model. The consent text and the stamps come from the SAME computation.
+ */
 export async function completeSelectionSignature(
   rls: Db,
   selectionId: string,
@@ -306,6 +366,13 @@ export async function completeSelectionSignature(
     .maybeSingle();
   if (!pending) return { success: false, error: 'No signing session is open for this selection.' };
 
+  let figures: OfferedFigures | null = null;
+  if (!sel.client_supplied) {
+    const f = await computeChosenFigures(admin, selectionId);
+    if ('error' in f) return { success: false, error: f.error };
+    figures = f;
+  }
+
   const { data: opts } = await admin
     .from('selection_options')
     .select('id, name, spec_detail, is_chosen, link_url')
@@ -314,15 +381,19 @@ export async function completeSelectionSignature(
     .eq('is_chosen', true);
   const consentText = selectionConsentTextFor({
     clientSupplied: sel.client_supplied,
-    sellAmount: sel.offered_sell_amount == null ? null : Number(sel.offered_sell_amount),
-    allowanceDeduction: sel.offered_allowance_deduction == null ? null : Number(sel.offered_allowance_deduction),
-    variance: sel.offered_variance == null ? null : Number(sel.offered_variance),
+    sellAmount: figures?.sellAmount ?? null,
+    allowanceDeduction: figures?.allowanceDeduction ?? null,
+    variance: figures?.variance ?? null,
   });
   const signedAt = new Date().toISOString();
   const snapshot = {
     selection: { id: sel.id, name: sel.name, client_supplied: sel.client_supplied, allow_multiple: sel.allow_multiple },
     chosen_options: opts ?? [],
-    offered: { sell_amount: sel.offered_sell_amount, allowance_deduction: sel.offered_allowance_deduction, variance: sel.offered_variance },
+    // [S173] key renamed from `offered` — these are the figures AGREED at the
+    // signature, computed from the client's picks a moment ago.
+    agreed: figures
+      ? { sell_amount: figures.sellAmount, allowance_deduction: figures.allowanceDeduction, variance: figures.variance }
+      : { sell_amount: null, allowance_deduction: null, variance: null },
     consent_text: consentText,
     signed_at: signedAt,
     signer_channel: params.caller.kind,
@@ -353,13 +424,13 @@ export async function completeSelectionSignature(
   const { data: uRows, error: uErr } = await admin
     .from('selections')
     .update(
-      sel.client_supplied
+      sel.client_supplied || !figures
         ? { status: 'approved', signed_session_id: null }
         : {
             status: 'approved',
-            signed_sell_amount: sel.offered_sell_amount,
-            signed_allowance_deduction: sel.offered_allowance_deduction,
-            signed_variance: sel.offered_variance,
+            signed_sell_amount: figures.sellAmount,
+            signed_allowance_deduction: figures.allowanceDeduction,
+            signed_variance: figures.variance,
             signed_at: signedAt,
             signed_session_id: pending.id,
           }
@@ -370,7 +441,7 @@ export async function completeSelectionSignature(
   if (uErr) return { success: false, error: uErr.message };
   if (!applied(uRows)) return { success: false, error: 'The selection was no longer awaiting approval.' };
 
-  await notifyManagers(admin, sel.company_id, sel.project_id, selectionId, 'selection_approved', `Selection approved: ${sel.name}`, sel.offered_variance == null ? null : Number(sel.offered_variance), params.signerName);
+  await notifyManagers(admin, sel.company_id, sel.project_id, selectionId, 'selection_approved', `Selection approved: ${sel.name}`, figures == null ? null : figures.variance, params.signerName);
   return { success: true };
 }
 

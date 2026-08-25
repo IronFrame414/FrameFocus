@@ -68,6 +68,9 @@ test.beforeAll(async () => {
     .insert({ company_id: company!.id, project_id: PROJECT_QA_A, area_id: area!.id, name: `${MARKER} Countertop`, status: 'in_discussion', description: 'Quartz or granite' })
     .select('id').single();
   selectionId = sel!.id;
+  // [S173] `is_chosen: true` now means "the CLIENT picked this" — the company
+  // no longer has a way to set it. The fixture stands in for the stage-7
+  // portal pick so the display surfaces below have something to show.
   const { data: opt } = await admin
     .from('selection_options')
     .insert({ company_id: company!.id, selection_id: selectionId, name: `${MARKER} Calacatta quartz`, spec_detail: '3cm, eased edge', is_chosen: true })
@@ -138,6 +141,17 @@ test.describe('§9.1 — the company sheet, by role', () => {
     await expect(page.getByTestId('opt-add-budget')).toBeVisible();
   });
 
+  test('[S173] the company has NO chosen checkbox — the fixture pick renders as the client\'s act, read-only', async ({ page }) => {
+    // _Superseded affordance: an `opt-chosen` checkbox per option, company-
+    // ticked, gating the offer. Josh: "this is supposed to be a list to send
+    // to the client for the client to pick and sign off on."_
+    await signIn(page, OWNER);
+    await page.goto(`/dashboard/projects/${PROJECT_QA_A}/selections/${selectionId}`);
+    await expect(page.getByTestId('selection-sheet')).toBeVisible();
+    await expect(page.getByTestId('opt-chosen')).toHaveCount(0);
+    await expect(page.getByTestId('opt-client-choice').first()).toContainText('Client’s choice');
+  });
+
   test('PM: same as owner (the floor admits PM to amounts)', async ({ page }) => {
     await signIn(page, PM);
     await page.goto(`/dashboard/projects/${PROJECT_QA_A}/selections/${selectionId}`);
@@ -177,17 +191,20 @@ test.describe('/m parity — the subcontractor reads the list with NO COSTS', ()
   });
 });
 
-test.describe('stage 4 — the sheet\'s lifecycle controls (company side)', () => {
-  test('owner: "Send to client for approval" → price block + Withdraw → back to draft', async ({ page }) => {
+test.describe('stage 4 [as reworked S173] — the sheet\'s lifecycle controls (company side)', () => {
+  test('owner: releasing stamps NO price — "Released to the client", no price block, frozen; Withdraw → back to draft', async ({ page }) => {
+    // _Superseded assertions, quoted not deleted: after the offer the price
+    // block appeared with "$5,040.00" and sel-variance — the offer used to
+    // stamp Σ chosen sells. The price now exists only once the CLIENT signs;
+    // the release stamps nothing._
     await signIn(page, OWNER);
     await page.goto(`/dashboard/projects/${PROJECT_QA_A}/selections/${selectionId}`);
     await expect(page.getByTestId('sel-offer')).toBeVisible();
     await page.getByTestId('sel-offer').click();
-    await expect(page.getByTestId('sel-price-block')).toBeVisible();
-    await expect(page.getByTestId('sel-price-block')).toContainText('Selections Price');
-    await expect(page.getByTestId('sel-price-block')).toContainText('$5,040.00');
-    await expect(page.getByTestId('sel-price-block')).toContainText('Allowance Deduction');
-    await expect(page.getByTestId('sel-variance')).toContainText('$5,040.00'); // unlinked → pure add (Q8)
+    // 15s: the first POST after an edit compiles the route + service in the
+    // dev server, which can outlast the default 5s expect timeout.
+    await expect(page.getByTestId('sel-lifecycle')).toContainText('Released to the client', { timeout: 15_000 });
+    await expect(page.getByTestId('sel-price-block')).toHaveCount(0);
     await expect(page.getByTestId('sel-name')).toBeDisabled(); // frozen while awaiting
     page.once('dialog', (d) => d.accept());
     await page.getByTestId('sel-withdraw').click();
@@ -204,19 +221,54 @@ test.describe('stage 4 — the sheet\'s lifecycle controls (company side)', () =
 });
 
 test.describe('S172 — DENIED is a resting state the company reopens', () => {
-  test('owner: a denied selection shows the Denied pill, what was refused, and Reopen → draft', async ({ page }) => {
-    // Put the fixture into denied the way a client decline leaves it (stamps kept).
+  test('owner: a denied selection shows the Denied pill and Reopen → draft', async ({ page }) => {
+    // [S173] Put the fixture into denied the way a client decline NOW leaves
+    // it: no stamps — the decline happens before any figure is agreed.
+    // _Superseded fixture and assertion, quoted not deleted: the S172 version
+    // wrote offered_* = 5040 and asserted `sel-price-block` shows "$5,040.00"
+    // ("the company still sees what was refused"). What was refused is now the
+    // released option set; the record is the declined session and its note._
     const admin = adminClient();
-    await admin.from('selections').update({ status: 'denied', offered_sell_amount: 5040, offered_allowance_deduction: 0, offered_variance: 5040, offered_at: new Date().toISOString() }).eq('id', selectionId);
+    await admin.from('selections').update({ status: 'denied' }).eq('id', selectionId);
     await signIn(page, OWNER);
     await page.goto(`/dashboard/projects/${PROJECT_QA_A}/selections/${selectionId}`);
     await expect(page.getByTestId('selection-status')).toContainText('Denied');
     await expect(page.getByTestId('sel-denied-note')).toBeVisible();
-    await expect(page.getByTestId('sel-price-block')).toContainText('$5,040.00'); // the company still sees what was refused
+    await expect(page.getByTestId('sel-price-block')).toHaveCount(0);
     await expect(page.getByTestId('sel-offer')).toHaveCount(0); // cannot re-offer without reopening
     await page.getByTestId('sel-reopen').click();
-    await expect(page.getByTestId('selection-status')).toContainText('Draft');
+    // 15s: POST + router.refresh() under dev-server load can outlast the 5s default.
+    await expect(page.getByTestId('selection-status')).toContainText('Draft', { timeout: 15_000 });
     await expect(page.getByTestId('sel-price-block')).toHaveCount(0);
     await expect(page.getByTestId('sel-offer')).toBeVisible();
+  });
+});
+
+test.describe('S173 Job 3 — Release Selections: the batch is delivery, one signature per selection', () => {
+  test('owner ticks two draft selections on the tab and releases them together — both go awaiting', async ({ page }) => {
+    const admin = adminClient();
+    const { data: company } = await admin.from('companies').select('id').eq('name', 'Bishop Contracting').single();
+    const { data: sel2 } = await admin
+      .from('selections')
+      .insert({ company_id: company!.id, project_id: PROJECT_QA_A, name: `${MARKER} Backsplash`, status: 'draft' })
+      .select('id').single();
+    const { data: opt2 } = await admin
+      .from('selection_options')
+      .insert({ company_id: company!.id, selection_id: sel2!.id, name: `${MARKER} Zellige`, is_chosen: false })
+      .select('id').single();
+    await admin.from('selection_option_amounts').insert({ company_id: company!.id, option_id: opt2!.id, quantity: 1, unit_cost: 900, markup_percent: 10 });
+
+    await signIn(page, OWNER);
+    await page.goto(`/dashboard/projects/${PROJECT_QA_A}/selections`);
+    await page.getByTestId(`selection-release-${selectionId}`).check();
+    await page.getByTestId(`selection-release-${sel2!.id}`).check();
+    await expect(page.getByTestId('selections-release')).toContainText('Release 2 selections');
+    await page.getByTestId('selections-release').click();
+    // Both rows re-render as awaiting; the checkboxes (draft-only) disappear.
+    await expect(page.getByTestId(`selection-release-${selectionId}`)).toHaveCount(0);
+    await expect(page.getByTestId(`selection-release-${sel2!.id}`)).toHaveCount(0);
+    await expect(page.getByTestId('selections-release-errors')).toHaveCount(0);
+    const { data: after } = await admin.from('selections').select('id, status').in('id', [selectionId, sel2!.id]);
+    expect(after!.every((s) => s.status === 'awaiting_approval')).toBe(true);
   });
 });

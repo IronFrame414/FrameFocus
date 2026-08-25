@@ -127,3 +127,24 @@ export async function listContactOptions(): Promise<{
   }
   return { options: data ?? [], error: null };
 }
+
+/**
+ * Email for one contact — feeds the proposal send modal on the
+ * estimate builder (S173 Job 1). Null means "no email on the contact
+ * record" (or the read failed); the modal disables Send and says so.
+ */
+export async function getContactEmail(contactId: string): Promise<string | null> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from('contacts')
+    .select('email')
+    .eq('id', contactId)
+    .single();
+
+  if (error) {
+    console.error('getContactEmail: contact query failed', error);
+    return null;
+  }
+  return data?.email ?? null;
+}

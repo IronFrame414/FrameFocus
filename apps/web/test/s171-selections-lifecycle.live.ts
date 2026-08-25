@@ -4,9 +4,10 @@ import type { Database } from '@framefocus/shared/types/database';
 import { admin, assertRebuildTest, sessionFor } from './live-session';
 import {
   completeSelectionSignature,
-  computeOfferedFigures,
+  computeChosenFigures,
   declineSelection,
   offerSelection,
+  releaseSelections,
   reopenSelection,
   reviseSelection,
   selectionConsentTextFor,
@@ -17,6 +18,13 @@ import { signSelectionOptionImages } from '@/lib/services/selections';
 // ============================================================================
 // S171 — Allowances & Selections STAGE 4: offer, sign, deny, revise.
 // Migration 20261027000000 (notification types). Spec §5.3, §6; Q4 Q7 Q8 Q9.
+//
+// [S173, Josh] REWORKED, not deleted: "chosen" is the CLIENT's act. The offer
+// releases priced options and stamps NOTHING; the client picks (`is_chosen`,
+// stage 7's portal write — the admin client stands in for it here) and the
+// SIGNATURE computes Q7's figures from her picks and stamps `signed_*`.
+// Probes that asserted the company-chooses model are INVERTED below, each with
+// its superseded assertion quoted.
 // ============================================================================
 //
 // This file calls the REAL service functions with REAL sessions — the PM's for
@@ -126,8 +134,9 @@ beforeAll(async () => {
     .select('id').single();
   must('selection', sErr);
   selId = s!.id;
-  const { data: a } = await admin.from('selection_options').insert({ company_id: companyId, selection_id: selId, name: `${MARKER} porcelain`, is_chosen: true }).select('id').single();
-  const { data: b } = await admin.from('selection_options').insert({ company_id: companyId, selection_id: selId, name: `${MARKER} trim`, is_chosen: true }).select('id').single();
+  // [S173] Assembled UNCHOSEN — choosing is the client's act, made later (A5).
+  const { data: a } = await admin.from('selection_options').insert({ company_id: companyId, selection_id: selId, name: `${MARKER} porcelain`, is_chosen: false }).select('id').single();
+  const { data: b } = await admin.from('selection_options').insert({ company_id: companyId, selection_id: selId, name: `${MARKER} trim`, is_chosen: false }).select('id').single();
   optA = a!.id; optB = b!.id;
   // Sell: 10 × 500 × 1.20 = 6000 ; 1 × 250 × 1.20 = 300 → 6300
   must('amt A', (await admin.from('selection_option_amounts').insert({ company_id: companyId, option_id: optA, quantity: 10, unit_cost: 500, markup_percent: 20 })).error);
@@ -150,15 +159,22 @@ afterAll(async () => {
 }, 240_000);
 
 // ───────────────────────────────────────────────────────────────────────────
-describe('S171-4A — offer: sum-then-compare (Q7) against the allowance sell', () => {
-  it('A1 — figures: Σ chosen sell 6300, deduction = 5000 × (1 + material default), variance = the difference', async () => {
-    const f = await computeOfferedFigures(admin, selId);
-    if ('error' in f) throw new Error(f.error);
-    const expectedDeduction = Math.round(5000 * (1 + materialMarkup / 100) * 100) / 100;
-    expect(f.sellAmount).toBe(6300);
-    expect(f.allowanceDeduction).toBe(expectedDeduction);
-    expect(f.variance).toBe(Math.round((6300 - expectedDeduction) * 100) / 100);
-    expect(f.lines.map((l) => l.sell).sort()).toEqual([300, 6000]);
+describe('S171-4A [as reworked S173] — release: priced options out, NOTHING chosen, NOTHING stamped', () => {
+  it('A0 — the gate is "a priced option EXISTS": a selection whose only option is unpriced is refused; pricing it opens the gate', async () => {
+    const { data: bare } = await admin.from('selections').insert({ company_id: companyId, project_id: PROJECT, name: `${MARKER} unpriced shelf` }).select('id').single();
+    const { data: o } = await admin.from('selection_options').insert({ company_id: companyId, selection_id: bare!.id, name: `${MARKER} pine`, is_chosen: false }).select('id').single();
+    const refused = await offerSelection(S.pm!, bare!.id);
+    expect(refused.success).toBe(false);
+    expect(refused.error).toMatch(/priced option/);
+    must('price it', (await admin.from('selection_option_amounts').insert({ company_id: companyId, option_id: o!.id, quantity: 1, unit_cost: 100, markup_percent: 0 })).error);
+    expect((await offerSelection(S.pm!, bare!.id)).success).toBe(true);
+  });
+
+  it('A1 — with NOTHING chosen the figures are not computable: that refusal now belongs to the SIGNATURE, not the offer', async () => {
+    // _Superseded probe, quoted not deleted: "A1 — figures: Σ chosen sell
+    // 6300 …" computed BEFORE the offer, over company-ticked options._
+    const f = await computeChosenFigures(admin, selId);
+    expect('error' in f && f.error).toMatch(/Choose at least one option/);
   });
 
   it('A2 — a SUB cannot offer: the RLS update affects zero rows and the status is unchanged', async () => {
@@ -168,23 +184,38 @@ describe('S171-4A — offer: sum-then-compare (Q7) against the allowance sell', 
     expect(await sessions()).toHaveLength(0);
   });
 
-  it('A3 — the PM offers: status awaiting_approval, offered_* STAMPED, one pending session', async () => {
+  it('A3 — the PM releases with NOTHING chosen: awaiting_approval, offered_* NULL, one pending session', async () => {
+    // _Superseded assertion: "offered_* STAMPED … expect(Number(
+    // s.offered_sell_amount)).toBe(6300)". The offer stamps nothing now —
+    // there is no chosen set to price until the client picks._
     const r = await offerSelection(S.pm!, selId);
     expect(r.success, r.error).toBe(true);
     const s = await sel();
     expect(s.status).toBe('awaiting_approval');
-    expect(Number(s.offered_sell_amount)).toBe(6300);
-    expect(s.offered_at).not.toBeNull();
+    expect(s.offered_sell_amount).toBeNull();
+    expect(s.offered_at).toBeNull();
     const ss = await sessions();
     expect(ss).toHaveLength(1);
     expect(ss[0].status).toBe('pending');
     expect(ss[0].signer_channel).toBe('portal_session');
   });
 
-  it('A4 — editing a cost AFTER the offer does not move the offered stamp (the client signs a figure)', async () => {
+  it('A4 — a cost edit after release still writes no stamp; the client signs the figure computed AT the signature', async () => {
     must('edit', (await admin.from('selection_option_amounts').update({ unit_cost: 999 }).eq('option_id', optB)).error);
-    expect(Number((await sel()).offered_sell_amount)).toBe(6300);
+    expect((await sel()).offered_sell_amount).toBeNull();
     must('restore', (await admin.from('selection_option_amounts').update({ unit_cost: 250 }).eq('option_id', optB)).error);
+  });
+
+  it('A5 — the CLIENT picks (stage-7 stand-in) and Q7 prices the picked set: Σ 6300, deduction = 5000 × (1 + material default)', async () => {
+    must('pick A', (await admin.from('selection_options').update({ is_chosen: true }).eq('id', optA)).error);
+    must('pick B', (await admin.from('selection_options').update({ is_chosen: true }).eq('id', optB)).error);
+    const f = await computeChosenFigures(admin, selId);
+    if ('error' in f) throw new Error(f.error);
+    const expectedDeduction = Math.round(5000 * (1 + materialMarkup / 100) * 100) / 100;
+    expect(f.sellAmount).toBe(6300);
+    expect(f.allowanceDeduction).toBe(expectedDeduction);
+    expect(f.variance).toBe(Math.round((6300 - expectedDeduction) * 100) / 100);
+    expect(f.lines.map((l) => l.sell).sort()).toEqual([300, 6000]);
   });
 });
 
@@ -197,13 +228,27 @@ describe('S171-4B — sign (Q4): the binding instrument, portal caller-context, 
     expect((await sessions())[0].status).toBe('pending');
   });
 
-  it('B2 — LINKED client signs: approved, signed_* = offered_*, session completed with consent + snapshot + channel', async () => {
+  it('B1b — signing with NOTHING picked is refused: the choose-first gate moved from the offer to the signature', async () => {
+    must('unpick', (await admin.from('selection_options').update({ is_chosen: false }).in('id', [optA, optB])).error);
+    const r = await completeSelectionSignature(S.linked!, selId, { ...sig, caller: { kind: 'portal_session', profileId: pid.linked! } });
+    expect(r.success).toBe(false);
+    expect(r.error).toMatch(/Choose at least one option/);
+    expect((await sel()).status).toBe('awaiting_approval');
+    must('repick A', (await admin.from('selection_options').update({ is_chosen: true }).eq('id', optA)).error);
+    must('repick B', (await admin.from('selection_options').update({ is_chosen: true }).eq('id', optB)).error);
+  });
+
+  it('B2 — LINKED client signs: approved, signed_* computed AT the signature from HER picks, offered_* still NULL', async () => {
+    // _Superseded assertion: "signed_* = offered_*" — the signature copied the
+    // offer's stamp. There is no offer stamp any more; the signature IS the
+    // pricing moment (Q7 over the client's chosen set)._
     const r = await completeSelectionSignature(S.linked!, selId, { ...sig, caller: { kind: 'portal_session', profileId: pid.linked! } });
     expect(r.success, r.error).toBe(true);
     const s = await sel();
     expect(s.status).toBe('approved');
     expect(Number(s.signed_sell_amount)).toBe(6300);
-    expect(s.signed_variance).toBe(s.offered_variance);
+    expect(s.offered_sell_amount).toBeNull();
+    expect(s.signed_variance).not.toBeNull();
     expect(s.signed_session_id).not.toBeNull();
     const [ss] = await sessions();
     expect(ss.status).toBe('completed');
@@ -212,8 +257,9 @@ describe('S171-4B — sign (Q4): the binding instrument, portal caller-context, 
     expect(ss.consent_given).toBe(true);
     expect(ss.consent_text).toMatch(/This signature is binding and accepts the stated costs/);
     expect(ss.consent_text).toMatch(/\$6,300\.00/);
-    const snap = ss.snapshot as { chosen_options: unknown[]; consent_text: string };
+    const snap = ss.snapshot as { chosen_options: unknown[]; consent_text: string; agreed: { sell_amount: number } };
     expect(snap.chosen_options).toHaveLength(2);
+    expect(snap.agreed.sell_amount).toBe(6300);
     expect(snap.consent_text).toBe(ss.consent_text);
   });
 
@@ -276,14 +322,19 @@ describe('S171-4D — deny (Q9 as amended S172): DENIED is a RESTING state; reop
   // DRAFT, not a terminus" — asserting status 'draft' and stamps cleared right
   // after the client declined._ Josh: "it should be flagged as denied. A user
   // can choose to re-open it, which moves to draft."
-  it('D1 — revise → offer → LINKED declines with a note: session declined, selection DENIED (stamps KEPT), Owner/Admin notified', async () => {
+  it('D1 — revise → offer → LINKED declines with a note: session declined, selection DENIED, Owner/Admin notified', async () => {
+    // _Superseded assertion [S172]: "stamps KEPT … expect(Number(
+    // s.offered_sell_amount), 'the company must still see what was refused')
+    // .toBe(6300)". Under client-choice there IS no offered figure to keep —
+    // what was refused is the released option set, and the record of the
+    // refusal is the DECLINED SESSION and its note, asserted below._
     expect((await reviseSelection(S.pm!, selId)).success).toBe(true);
     expect((await offerSelection(S.pm!, selId)).success).toBe(true);
     const r = await declineSelection(S.linked!, selId, { caller: { kind: 'portal_session', profileId: pid.linked! }, notes: 'Too dark for the bath' });
     expect(r.success, r.error).toBe(true);
     const s = await sel();
     expect(s.status).toBe('denied');
-    expect(Number(s.offered_sell_amount), 'the company must still see what was refused').toBe(6300);
+    expect(s.offered_sell_amount).toBeNull();
     const declined = (await sessions()).filter((x) => x.status === 'declined');
     expect(declined).toHaveLength(1);
     expect(declined[0].decline_notes).toBe('Too dark for the bath');
@@ -352,10 +403,37 @@ describe('S171-4E — client-supplied (Q6): no money, no-money wording, allowanc
     const { data: u } = await admin.from('selections').insert({ company_id: companyId, project_id: PROJECT, name: `${MARKER} unlinked rug` }).select('id').single();
     const { data: o } = await admin.from('selection_options').insert({ company_id: companyId, selection_id: u!.id, name: `${MARKER} rug`, is_chosen: true }).select('id').single();
     must('amt', (await admin.from('selection_option_amounts').insert({ company_id: companyId, option_id: o!.id, quantity: 1, unit_cost: 1000, markup_percent: 10 })).error);
-    const f = await computeOfferedFigures(admin, u!.id);
+    const f = await computeChosenFigures(admin, u!.id);
     if ('error' in f) throw new Error(f.error);
     expect(f.allowanceDeduction).toBe(0);
     expect(f.variance).toBe(1100);
+
+    // [S173] `allow_multiple` is enforced where the figures are computed: the
+    // rug selection is single-choice (column default false), so a second pick
+    // is refused rather than silently summed.
+    const { data: o2 } = await admin.from('selection_options').insert({ company_id: companyId, selection_id: u!.id, name: `${MARKER} rug 2`, is_chosen: true }).select('id').single();
+    must('amt2', (await admin.from('selection_option_amounts').insert({ company_id: companyId, option_id: o2!.id, quantity: 1, unit_cost: 500, markup_percent: 0 })).error);
+    const g = await computeChosenFigures(admin, u!.id);
+    expect('error' in g && g.error).toMatch(/only one choice/);
+  });
+
+  it('E4 — [S173 Job 3] releaseSelections: a PARTIAL batch — the refused one does not un-release the others', async () => {
+    // Two fresh selections: one priced, one with no options at all. Released
+    // together, the priced one goes awaiting and the bare one is refused with
+    // its own error — the batch is delivery, not a transaction.
+    const { data: ok } = await admin.from('selections').insert({ company_id: companyId, project_id: PROJECT, name: `${MARKER} batch ok` }).select('id').single();
+    const { data: opt } = await admin.from('selection_options').insert({ company_id: companyId, selection_id: ok!.id, name: `${MARKER} slate`, is_chosen: false }).select('id').single();
+    must('amt', (await admin.from('selection_option_amounts').insert({ company_id: companyId, option_id: opt!.id, quantity: 1, unit_cost: 200, markup_percent: 0 })).error);
+    const { data: bare } = await admin.from('selections').insert({ company_id: companyId, project_id: PROJECT, name: `${MARKER} batch bare` }).select('id').single();
+
+    const { results } = await releaseSelections(S.pm!, [ok!.id, bare!.id]);
+    expect(results).toHaveLength(2);
+    expect(results.find((r) => r.id === ok!.id)!.success).toBe(true);
+    expect(results.find((r) => r.id === bare!.id)!.success).toBe(false);
+    expect(results.find((r) => r.id === bare!.id)!.error).toMatch(/priced option/);
+    const { data: after } = await admin.from('selections').select('id, status').in('id', [ok!.id, bare!.id]);
+    expect(after!.find((s) => s.id === ok!.id)!.status).toBe('awaiting_approval');
+    expect(after!.find((s) => s.id === bare!.id)!.status).toBe('draft');
   });
 });
 

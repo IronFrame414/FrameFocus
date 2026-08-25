@@ -27,31 +27,44 @@ export function SelectionLifecycle({ selection, role, sessions, onDone }: { sele
     else onDone();
   }
 
-  const chosen = selection.options.filter((o) => o.is_chosen).length;
-  const canOffer = canManage && (selection.status === 'draft' || selection.status === 'in_discussion') && (selection.client_supplied || selection.mode === 'discussion' || chosen > 0);
+  // [S173, Josh] The offer gate is "at least one PRICED option exists", not
+  // "one has been chosen" — choosing is the client's act, in the portal.
+  // _Superseded gate, quoted not deleted: `chosen > 0` over company-ticked
+  // checkboxes, hinted as "Choose at least one priced option to send for
+  // approval."_ The `mode === 'discussion'` arm is dropped too: the service
+  // has always refused a discussion selection with no options, so the button
+  // it enabled was a lie — the hint now says what to do instead.
+  const hasPricedOption = selection.options.some((o) => o.amounts !== null);
+  const canOffer = canManage && (selection.status === 'draft' || selection.status === 'in_discussion') && (selection.client_supplied || hasPricedOption);
+
+  // Price figures exist only once the client has signed (`signed_*`); the
+  // `offered_*` fallback renders rows stamped before S173, which remain legal.
+  const sell = selection.signed_sell_amount ?? selection.offered_sell_amount;
+  const deduction = selection.signed_allowance_deduction ?? selection.offered_allowance_deduction;
+  const variance = selection.signed_variance ?? selection.offered_variance;
 
   return (
     <section style={card} data-testid="sel-lifecycle">
       <h3 style={{ fontSize: '0.6875rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', margin: '0 0 0.5rem' }}>Approval</h3>
       {err && <p data-testid="sel-lifecycle-error" style={{ color: '#b91c1c', fontSize: '0.8125rem' }}>{err}</p>}
 
-      {(selection.status === 'awaiting_approval' || selection.status === 'approved' || selection.status === 'denied') && !selection.client_supplied && selection.offered_sell_amount != null && (
+      {(selection.status === 'awaiting_approval' || selection.status === 'approved' || selection.status === 'denied') && !selection.client_supplied && sell != null && (
         <div data-testid="sel-price-block" style={{ fontFamily: 'ui-monospace, monospace', fontSize: '0.875rem', display: 'grid', gridTemplateColumns: 'auto auto', gap: '0.125rem 1.5rem', marginBottom: '0.75rem', maxWidth: 360 }}>
-          <span>Selections Price</span><span style={{ textAlign: 'right' }}>{money(selection.status === 'approved' ? selection.signed_sell_amount : selection.offered_sell_amount)}</span>
-          <span>Allowance Deduction</span><span style={{ textAlign: 'right' }}>-{money(selection.status === 'approved' ? selection.signed_allowance_deduction : selection.offered_allowance_deduction)}</span>
-          <span style={{ fontWeight: 700 }}>{Number(selection.status === 'approved' ? selection.signed_variance : selection.offered_variance) >= 0 ? 'Added Price' : 'Credit Owed'}</span>
-          <span style={{ textAlign: 'right', fontWeight: 700 }} data-testid="sel-variance">{money(Math.abs(Number(selection.status === 'approved' ? selection.signed_variance : selection.offered_variance)))}</span>
+          <span>Selections Price</span><span style={{ textAlign: 'right' }}>{money(sell)}</span>
+          <span>Allowance Deduction</span><span style={{ textAlign: 'right' }}>-{money(deduction)}</span>
+          <span style={{ fontWeight: 700 }}>{Number(variance) >= 0 ? 'Added Price' : 'Credit Owed'}</span>
+          <span style={{ textAlign: 'right', fontWeight: 700 }} data-testid="sel-variance">{money(Math.abs(Number(variance)))}</span>
         </div>
       )}
 
       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
         {canOffer && <button type="button" style={btn} disabled={busy} onClick={() => call('offer')} data-testid="sel-offer">Send to client for approval</button>}
         {canManage && (selection.status === 'draft' || selection.status === 'in_discussion') && !canOffer && (
-          <span style={{ fontSize: '0.8125rem', color: '#6b7280' }}>Choose at least one priced option to send for approval.</span>
+          <span style={{ fontSize: '0.8125rem', color: '#6b7280' }}>Add at least one priced option to send to the client.</span>
         )}
         {canManage && selection.status === 'awaiting_approval' && (
           <>
-            <span style={{ fontSize: '0.8125rem', color: '#1e40af' }}>Waiting for the client to sign in the portal.</span>
+            <span style={{ fontSize: '0.8125rem', color: '#1e40af' }}>Released to the client — waiting for them to choose and sign in the portal.</span>
             <button type="button" style={btnGhost} disabled={busy} onClick={() => window.confirm('Withdraw this offer and return it to draft?') && call('withdraw')} data-testid="sel-withdraw">Withdraw</button>
           </>
         )}

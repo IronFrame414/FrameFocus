@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { TEMPLATE_VARIABLES } from '@/lib/proposal/proposal-defaults';
 
 // Spec 2 (4E E5/E6, 4F F10) — email editor modal used by "Send
-// Proposal" (preview page) and "Resend Proposal" (builder, status =
+// Proposal" (preview page), "Send to Client" / "Approve & Send"
+// (builder, S173 Job 1), and "Resend Proposal" (builder, status =
 // sent). Pre-filled from company defaults (or hardcoded fallbacks);
 // {{variables}} are replaced server-side at send time. The
 // recipient is the contact's email and is shown, not editable.
