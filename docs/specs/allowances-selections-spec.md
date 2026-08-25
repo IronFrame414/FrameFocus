@@ -51,7 +51,7 @@
 |---|---|
 | Q1 | **Migrate.** `material` + `unit_of_measure = 'allowance'` → `row_type = 'allowance'`; drop the value from the UoM CHECK. |
 | Q2 | **Derived at read.** The budget subcategory is computed from selections joined to the allowance budget line. Nothing is written to `project_budget_items`. |
-| Q3 | **`quantity × unit_cost`; markup from the project default, user-editable per row.** *(No project-level default exists — §5.2 gives the nearest thing; flagged.)* |
+| Q3 | **`quantity × unit_cost`; markup from the project default, user-editable per row.** *(No project-level default exists — §5.2 gives the nearest thing; flagged.)* **⚠️ AMENDED [Josh, S174]: the inherited markup is a SNAPSHOT taken when the allowance was set, not a live read — see §5.2's banner. The chain is unchanged; its timing is.** |
 | Q4 | **The selection signature is the binding instrument. No change order is generated.** 7B adds approved selection variances. The client sheet states the signature is binding and accepts the stated costs. |
 | Q5 | **The allowance stands in contract value on an under-selection; the credit is always owed; the company chooses WHEN to apply it.** Josh: *"allowance stands but credit for the difference is applied. Company user decides when it is applied."* |
 | Q6 | **The toggle is client-supplied and means no money at all.** Linked allowance stays whole and unconsumed. The selection remains as a decision record with spec and thread. |
@@ -279,7 +279,58 @@ existing writers (§2.3) with `row_type = 'allowance'` and `budgeted_amount` = c
 its own budget category** — rendered by `budget.ts` as a group keyed `row_type = 'allowance'` ahead
 of the cost-code groups.
 
-### §5.2 — Selection pricing and Q3 — **RULED [Josh, S170]: one rule, two instruments**
+### §5.2 — Selection pricing and Q3
+
+> ## ⚠️ AMENDED [Josh, S174]: THE INHERITED MARKUP IS A **SNAPSHOT**, NOT A LIVE READ
+>
+> **This supersedes Q3's live-chain wording, and the S170 ruling below only in its
+> TIMING.** Josh, S174: *"the option inherits the markup FROM THE ESTIMATE AS IT STOOD
+> WHEN THE ALLOWANCE WAS SET — a snapshot at allowance-creation time, not a live read
+> of the estimate now."*
+>
+> **The chain is unchanged. WHEN it is walked is what changed.** Everything S170 ruled
+> about *which* rate applies — row → instrument material → company default; cost-plus
+> takes `cost_plus_material_percent`; T&M takes `tm_nonlabor_percent` — stands exactly
+> as written below. What is superseded is the implication that it is re-walked on every
+> read.
+>
+> _Superseded reading, quoted not deleted:_ that §5.2's chain and Q3's row
+> (*"markup from the project default, user-editable per row"*) describe a derivation
+> performed at render time, so that editing an estimate months later silently re-prices
+> every selection assembled against it.
+>
+> **Why.** It is how this module already treats every agreed figure. `selections.signed_*`
+> exists precisely so *"the figure she signed cannot move under her signature"*
+> (`20261026000000`, design fact 3). A live markup chain reintroduces exactly that
+> movement through a side door — the price a client was shown when she picked would not
+> be the price she is billed.
+>
+> **The moment is the writing of `allowance_budget_item_id`**, not option creation: an
+> option added a week later must price on the same basis as the ones beside it, or two
+> options in one list disagree about what "inherit" means. An UNLINKED selection is
+> snapshotted at creation from `projects.source_estimate_id`'s estimate, then re-snapshotted
+> if an allowance is linked later.
+>
+> **Where it lives.** `selection_amounts.inherited_markup_percent` — a 1:1 side table off
+> `selections`, floored **owner/admin/PM**, stamped by a trigger (`20261030000000`).
+> A side table because `selections` is CLIENT-READABLE and a markup percent on that row
+> is a cost-basis leak (*"a client who reads unit_cost and markup_percent reverses the
+> markup"*, `20261026000000`). A trigger because every write reaches `selections` straight
+> from the browser through PostgREST — there is no server hop to put a service call in.
+>
+> **And the chain has ONE implementation.** `allowance_effective_markup_percent()` in SQL.
+> `allowanceSellFor()` in `selection-lifecycle-service.ts` used to walk it in TypeScript
+> and now calls the function; the trigger calls the same one. Two copies would have been
+> the #129 divergence written as agreement.
+>
+> **What was actually broken.** `markup_percent` NULL means "inherit" and three separate
+> readers wrote `?? 0` — the sheet's chosen-total, the per-row `= $x`, and
+> `computeChosenFigures`, which stamps the SIGNED figure. Josh's option at 100 × $100
+> showed **$10,000** — cost — beside a box whose placeholder said "inherit". The formula
+> now lives once, in `lib/selections/option-sell.ts`; the placeholder now names the
+> percent it will actually use.
+
+**RULED [Josh, S170]: one rule, two instruments.**
 Josh: *"it should inherit the markup from the allowance line that it is pulling from. Cost-plus
 projects have a markup set for the project. That is the value that would be used for cost-plus
 allowance selections."* These are not an exception to each other — **sell derives per instrument**

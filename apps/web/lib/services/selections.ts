@@ -21,6 +21,7 @@ type Tables = Database['public']['Tables'];
 export type SelectionAreaRow = Tables['selection_areas']['Row'];
 export type SelectionOptionRow = Tables['selection_options']['Row'];
 export type SelectionOptionAmountsRow = Tables['selection_option_amounts']['Row'];
+export type SelectionAmountsRow = Tables['selection_amounts']['Row'];
 export type SelectionNotesRow = Tables['selection_notes']['Row'];
 export type SelectionSigningSessionRow = Tables['selection_signing_sessions']['Row'];
 export type SelectionMessageRow = Tables['selection_messages']['Row'];
@@ -44,6 +45,14 @@ export interface SelectionOption extends Omit<SelectionOptionRow, 'source'> {
 export interface Selection extends SelectionRow {
   area: Pick<SelectionAreaRow, 'id' | 'name' | 'sort_order'> | null;
   options: SelectionOption[];
+  /**
+   * [S174 #2] The markup an option with a NULL `markup_percent` inherits —
+   * SNAPSHOTTED when the allowance was set (20261030000000), never re-derived
+   * on read. NULL when RLS hid `selection_amounts` from this caller (foreman,
+   * crew, sub, client) — NOT zero. Such a reader also gets no
+   * `option.amounts`, so nothing is priced for them anyway.
+   */
+  inherited_markup_percent: number | null;
   /** NULL when RLS hid selection_notes from this caller (sub, crew, client). */
   notes: string | null;
   /** The linked allowance budget line, if any. Budgeted cost is on
@@ -99,7 +108,7 @@ export async function getProjectSelections(
     .map((s) => s.allowance_budget_item_id)
     .filter((v): v is string => typeof v === 'string');
 
-  const [{ data: options }, { data: amounts }, { data: notes }, { data: allowances }] =
+  const [{ data: options }, { data: amounts }, { data: notes }, { data: allowances }, { data: selAmounts }] =
     await Promise.all([
       ids.length
         ? db
@@ -120,11 +129,20 @@ export async function getProjectSelections(
       allowanceIds.length
         ? db.from('project_budget_items').select('id, description, row_type').in('id', allowanceIds)
         : Promise.resolve({ data: [] as { id: string; description: string; row_type: string | null }[] }),
+      // Floored owner/admin/PM, exactly as selection_option_amounts above: a
+      // reader outside the floor gets [] here BY POLICY. Read it as "not
+      // permitted", never as "no markup".
+      ids.length
+        ? db.from('selection_amounts').select('selection_id, inherited_markup_percent').in('selection_id', ids)
+        : Promise.resolve({ data: [] as Pick<SelectionAmountsRow, 'selection_id' | 'inherited_markup_percent'>[] }),
     ]);
 
   const amountsByOption = new Map((amounts ?? []).map((a) => [a.option_id, a]));
   const notesBySelection = new Map((notes ?? []).map((n) => [n.selection_id, n.internal_notes]));
   const allowanceById = new Map((allowances ?? []).map((a) => [a.id, a]));
+  const markupBySelection = new Map(
+    (selAmounts ?? []).map((a) => [a.selection_id, a.inherited_markup_percent])
+  );
   const areaById = new Map((areas ?? []).map((a) => [a.id, a]));
 
   const optionsBySelection = new Map<string, SelectionOption[]>();
@@ -144,6 +162,7 @@ export async function getProjectSelections(
     area: s.area_id ? (areaById.get(s.area_id) ?? null) : null,
     options: optionsBySelection.get(s.id) ?? [],
     notes: notesBySelection.get(s.id) ?? null,
+    inherited_markup_percent: markupBySelection.get(s.id) ?? null,
     allowance: s.allowance_budget_item_id
       ? (allowanceById.get(s.allowance_budget_item_id) ?? null)
       : null,
