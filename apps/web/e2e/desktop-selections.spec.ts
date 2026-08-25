@@ -14,6 +14,27 @@ import { adminClient } from './hub-fixture';
 // ============================================================================
 
 const MARKER = 'E2ESEL';
+
+// [S174 #1] ⚠️ ASSERTIONS THAT FOLLOW A LIFECYCLE POST NEED ROOM, AND THE
+// REASON CHANGED THIS SESSION.
+//
+// The file already carried two explicit 15s timeouts for "the first POST after
+// an edit compiles the route + service in the dev server". S174 put an
+// OUTBOUND EMAIL in that request path — `/api/selections/release` and
+// `/api/selections/[id]/offer` now pull in `resend`, `@react-email/components`
+// and the template — so the first hit compiles a much larger module graph AND
+// then waits on a network call. Both routes share that graph, so exactly ONE
+// test per run pays it and WHICH ONE depends on shard order: shard 1 of the
+// S174 battery failed at the batch release (line ~282), the same file run in
+// isolation failed at the withdraw (line ~218), and each passed in the other
+// run. That is the signature of a cold compile, not a regression — the DB
+// assertion at the end of the batch test proves the writes land either way.
+//
+// The wait is REAL PRODUCT BEHAVIOUR, not a test artifact: releasing now blocks
+// on the send so it can report `emailed` (the same shape the CO send route
+// uses — "a failed email is a warning, not a rollback"), and the QA fixture's
+// recipient is `@example.invalid`, which is the slowest possible resolution.
+const AFTER_POST = { timeout: 20_000 };
 const FOREMAN = 'josh+qa-foreman@worthprop.com';
 const PM = 'josh+pm@worthprop.com';
 const SUB = 'josh+qa-sub@worthprop.com';
@@ -210,13 +231,13 @@ test.describe('stage 4 [as reworked S173] — the sheet\'s lifecycle controls (c
     await page.getByTestId('sel-offer').click();
     // 15s: the first POST after an edit compiles the route + service in the
     // dev server, which can outlast the default 5s expect timeout.
-    await expect(page.getByTestId('sel-lifecycle')).toContainText('Released to the client', { timeout: 15_000 });
-    await expect(page.getByTestId('sel-price-block')).toHaveCount(0);
+    await expect(page.getByTestId('sel-lifecycle')).toContainText('Released to the client', AFTER_POST);
+    await expect(page.getByTestId('sel-price-block')).toHaveCount(0, AFTER_POST);
     await expect(page.getByTestId('sel-name')).toBeDisabled(); // frozen while awaiting
     page.once('dialog', (d) => d.accept());
     await page.getByTestId('sel-withdraw').click();
-    await expect(page.getByTestId('sel-offer')).toBeVisible();
-    await expect(page.getByTestId('sel-price-block')).toHaveCount(0);
+    await expect(page.getByTestId('sel-offer')).toBeVisible(AFTER_POST);
+    await expect(page.getByTestId('sel-price-block')).toHaveCount(0, AFTER_POST);
   });
 
   test('foreman: no lifecycle buttons, only the status sentence', async ({ page }) => {
@@ -245,7 +266,7 @@ test.describe('S172 — DENIED is a resting state the company reopens', () => {
     await expect(page.getByTestId('sel-offer')).toHaveCount(0); // cannot re-offer without reopening
     await page.getByTestId('sel-reopen').click();
     // 15s: POST + router.refresh() under dev-server load can outlast the 5s default.
-    await expect(page.getByTestId('selection-status')).toContainText('Draft', { timeout: 15_000 });
+    await expect(page.getByTestId('selection-status')).toContainText('Draft', AFTER_POST);
     await expect(page.getByTestId('sel-price-block')).toHaveCount(0);
     await expect(page.getByTestId('sel-offer')).toBeVisible();
   });
@@ -279,8 +300,8 @@ test.describe('S173 Job 3 — Release Selections: the batch is delivery, one sig
     await expect(page.getByTestId('selections-release')).toContainText('Release 2 selections');
     await page.getByTestId('selections-release').click();
     // Both rows re-render as awaiting; the checkboxes (draft-only) disappear.
-    await expect(page.getByTestId(`selection-release-${selectionId}`)).toHaveCount(0);
-    await expect(page.getByTestId(`selection-release-${sel2!.id}`)).toHaveCount(0);
+    await expect(page.getByTestId(`selection-release-${selectionId}`)).toHaveCount(0, AFTER_POST);
+    await expect(page.getByTestId(`selection-release-${sel2!.id}`)).toHaveCount(0, AFTER_POST);
     await expect(page.getByTestId('selections-release-errors')).toHaveCount(0);
     const { data: after } = await admin.from('selections').select('id, status').in('id', [selectionId, sel2!.id]);
     expect(after!.every((s) => s.status === 'awaiting_approval')).toBe(true);
