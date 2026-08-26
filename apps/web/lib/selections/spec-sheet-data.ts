@@ -98,7 +98,18 @@ export interface SpecSheetSelection {
   description: string | null;
   /** Q4.4 — rendered as "Supplied by client — no charge", never as a blank. */
   clientSupplied: boolean;
-  /** ISO; the client's signature. Present on every approved selection. */
+  /**
+   * ISO; when the client signed.
+   *
+   * ⚠️ NOT ALWAYS `selections.signed_at`, and that is the point. A
+   * client-supplied selection is signed exactly like any other, but a CHECK
+   * makes ALL FOUR `signed_*` stamps NULL on it (there is no money to stamp).
+   * Reading the column alone would therefore print an approval date on every
+   * selection EXCEPT the ones Q4.4 exists to make sure are fully listed — the
+   * one row on the sheet that would silently look less approved than its
+   * neighbours. The date falls back to the completed signing session, which is
+   * where the signature actually lives.
+   */
   approvedAt: string | null;
   chosen: SpecSheetOption[];
 }
@@ -198,6 +209,25 @@ export async function getSelectionSpecSheetData(
     const approved = area.selections.filter((s) => s.status === 'approved');
     if (!approved.length) continue;
 
+    // The fallback above, batched for the whole area: the current completed
+    // session per selection. `superseded_at IS NULL` is the partial unique
+    // index's own predicate (§3.7) — at most one current signature — so this
+    // cannot pick a revised-away session, and it needs no ordering to be
+    // deterministic.
+    const sessionSignedAt = new Map<string, string>();
+    const needSession = approved.filter((s) => !s.signed_at).map((s) => s.id);
+    if (needSession.length) {
+      const { data: sessions } = await rls
+        .from('selection_signing_sessions')
+        .select('selection_id, signed_at')
+        .in('selection_id', needSession)
+        .eq('status', 'completed')
+        .is('superseded_at', null);
+      for (const row of sessions ?? []) {
+        if (row.signed_at) sessionSignedAt.set(row.selection_id, row.signed_at);
+      }
+    }
+
     const selections: SpecSheetSelection[] = [];
     for (const s of approved) {
       // An approved selection always has at least one pick — the signature
@@ -258,7 +288,7 @@ export async function getSelectionSpecSheetData(
         name: s.name,
         description: s.description,
         clientSupplied: s.client_supplied,
-        approvedAt: s.signed_at,
+        approvedAt: s.signed_at ?? sessionSignedAt.get(s.id) ?? null,
         chosen,
       });
     }
