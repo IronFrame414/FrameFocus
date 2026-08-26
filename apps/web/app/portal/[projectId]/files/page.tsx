@@ -7,6 +7,7 @@ import {
   getPortalIdentity,
   getPortalPhotos,
   getPortalProjects,
+  getPortalSharedFiles,
   getPortalThread,
   signPortalPaths,
 } from '@/lib/services/portal';
@@ -40,9 +41,14 @@ export default async function PortalFilesPage({
   const project = projects.find((p) => p.id === params.projectId);
   if (!project) notFound();
 
-  const [documents, photos, thread] = await Promise.all([
+  const [documents, photos, sharedFiles, thread] = await Promise.all([
     getPortalDocuments(supabase, project.id),
     getPortalPhotos(supabase, project.id),
+    // [S175 stage 6] The client-visible files that are not photos — today, the
+    // specifications sheet. See getPortalSharedFiles for why the split is by
+    // MIME type and why setting `client_visible` alone would have left Q4.2
+    // nominal.
+    getPortalSharedFiles(supabase, project.id),
     getPortalThread(supabase, project.id, identity.profileId, SIGNED_URL_TTL_SECONDS),
   ]);
 
@@ -50,7 +56,7 @@ export default async function PortalFilesPage({
   // that choice; this only mints the URLs.
   const urls = await signPortalPaths(
     supabase,
-    photos.map((p) => p.display_path),
+    [...photos.map((p) => p.display_path), ...sharedFiles.map((f) => f.file_path)],
     SIGNED_URL_TTL_SECONDS
   );
 
@@ -86,6 +92,45 @@ export default async function PortalFilesPage({
               </span>
             </div>
           ))
+        )}
+      </PortalCard>
+
+      {/* [S175 stage 6] Its own card rather than a row inside "Documents":
+          that list is contracts and change orders, split by `kind` against the
+          Financials page, and it renders names and statuses with no link at
+          all. A downloadable file dropped among them would look like the
+          others and not open. */}
+      <PortalCard title="Shared documents" subtitle="Files your contractor has sent you.">
+        {sharedFiles.length === 0 ? (
+          <PortalEmpty>
+            {limited ? notForYou : 'Nothing has been shared with you for this project yet.'}
+          </PortalEmpty>
+        ) : (
+          sharedFiles.map((f) => {
+            const url = urls.get(f.file_path);
+            return (
+              <div key={f.id} style={rowStyle}>
+                <span>
+                  <span style={{ fontWeight: 600, color: color.navy, display: 'block' }}>
+                    {f.category === 'selections' ? 'Specifications sheet' : f.file_name}
+                  </span>
+                  <span style={{ fontSize: '12.5px', color: color.muted }}>{day(f.created_at)}</span>
+                </span>
+                {url ? (
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{ fontSize: '13px', fontWeight: 600, color: color.navy }}
+                  >
+                    Open
+                  </a>
+                ) : (
+                  <span style={{ fontSize: '12.5px', color: color.muted }}>Unavailable</span>
+                )}
+              </div>
+            );
+          })
         )}
       </PortalCard>
 

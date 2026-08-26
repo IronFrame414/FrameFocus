@@ -105,6 +105,19 @@ export interface PortalPhoto {
   has_markup: boolean;
 }
 
+/**
+ * [S175 stage 6] A client-visible file that is NOT a photo — today, the
+ * specifications sheet. See `getPortalSharedFiles`.
+ */
+export interface PortalSharedFile {
+  id: string;
+  file_name: string;
+  file_path: string;
+  category: string | null;
+  mime_type: string;
+  created_at: string | null;
+}
+
 export interface PortalInvoiceLine {
   id: string;
   description: string | null;
@@ -401,6 +414,17 @@ export async function getPortalPhotos(
     .from('files')
     .select('id, file_name, file_path, category, created_at, markup_data')
     .eq('project_id', projectId)
+    // ⚠️ IMAGES ONLY, ADDED [S175 stage 6] — AND IT IS A FIX, NOT A NARROWING.
+    // This read had no type filter, so it returned EVERY client-visible file on
+    // the project and the page rendered each one as an <img> in the photo grid.
+    // That was invisible until stage 6, because until stage 6 nothing set
+    // `client_visible` on anything but a photo. The specifications sheet is
+    // filed `client_visible` by ruling (Q4.2), and without this filter it would
+    // have appeared in her portal as a BROKEN IMAGE TILE — which is worse than
+    // being absent, because it reads as a defect in her contractor's software
+    // rather than as a document. Non-image files are served by
+    // `getPortalSharedFiles()` below.
+    .like('mime_type', 'image/%')
     .order('created_at', { ascending: false });
   if (error) throw error;
 
@@ -423,6 +447,42 @@ export async function getPortalPhotos(
       has_markup: hasMarkup,
     };
   });
+}
+
+/**
+ * [S175 stage 6] The client-visible files that are NOT photos.
+ *
+ * ⚠️ THIS IS THE OTHER HALF OF Q4.2, and without it the ruling is nominal.
+ * Josh ruled the specifications sheet is filed `client_visible` because *"she
+ * was emailed the sheet; the same document being invisible in her own portal
+ * is precisely the inconsistency M9's doctrine warns about."* Setting the flag
+ * alone would not have satisfied that: the portal's only `files` reader was
+ * `getPortalPhotos()`, which had no type filter, so the sheet would have landed
+ * in the photo grid as a broken <img> — present, unopenable, and looking like a
+ * fault in the software.
+ *
+ * The split is by MIME type rather than by category on purpose. A category
+ * list would have to be extended by every future client-visible artifact and
+ * would silently drop the one somebody forgot; "is it an image" is a property
+ * of the file and cannot go stale. The two readers are exact complements, so no
+ * client-visible file belongs to neither.
+ *
+ * RLS is the gate, as everywhere in this module: `files_select_client` requires
+ * `client_visible`, `is_client_of_project` and `client_has_full_access()`. This
+ * adds a shape filter, never a permission.
+ */
+export async function getPortalSharedFiles(
+  supabase: SupabaseClient<Database>,
+  projectId: string
+): Promise<PortalSharedFile[]> {
+  const { data, error } = await supabase
+    .from('files')
+    .select('id, file_name, file_path, category, mime_type, created_at')
+    .eq('project_id', projectId)
+    .not('mime_type', 'like', 'image/%')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as unknown as PortalSharedFile[];
 }
 
 /** Signed URLs for the paths above, through the caller's session. */
