@@ -721,3 +721,47 @@ Grepped `test/`, `e2e/`, `lib/`, `app/` and the specs for the dead page, `portal
 - **Nothing else needed inverting**, and that is the correct outcome rather than a thin sweep: the
   table policies did not change. Every probe asserting the client cannot write `selection_options`
   stays true, and C13 was added so the property is stated rather than merely implied.
+
+## Battery — every exit code read from its own printed line, nothing judged through a pipe
+
+| check | how | result |
+| --- | --- | --- |
+| `turbo run type-check --force` | 5 tasks, all `cache bypass, force executing` | **exit 0** |
+| `turbo run lint --force` | `cache bypass`; `✔ No ESLint warnings or errors` | **exit 0** |
+| `turbo run build --force` | `Cached: 0 cached, 1 total`; `✓ Compiled successfully` | **exit 0** |
+| committed vitest (`apps/web`) | 61 files | **932 / 932**, exit 0 (unchanged from item 4 — this item added no unit test; its assertions need a real client session and a real database, so they are live probes) |
+| every live harness (`test/live.vitest.config.ts`) | 99 files, 950s | **1466 / 1466**, `LIVE_EXIT=0`, zero `UNVERIFIED` warnings (item 4 was 1421 / 98 — +1 file, +45 probes, all this item's) |
+| Playwright, from `apps/web`, after `scripts/e2e-preflight.sh` | see the four chunks below | every failure re-run green, and none of them this item's |
+| `supabase migration list` from the repo root | 144 migrations, local = remote through `20261037000000` | **exit 0**, zero drift |
+| fixture residue | service-role count over `S175S7` **and** `E2EPSEL` — and over `S175S6`, `S171LIFE` and `E2ESEL` besides — across selections, options, areas, projects, contacts and budget items | **0 rows in every one** |
+| dev server left behind | port 3000 listeners, and the process list, after the last chunk | **0** (killed by PID, never `pkill -f` — #137) |
+
+### The four chunks, as measured
+
+| chunk | files | result |
+| --- | --- | --- |
+| 1 | `desktop-chat-*` ×7 | 32 passed, **1 failed** — `desktop-chat-mentions`, the FIRST test of the run, a 30s timeout on `page.goto('/dashboard')`. The five later tests in the SAME file through the SAME `openThread` helper passed. Cold compile. Re-ran the file warm: **6 / 6, exit 0** |
+| 2 | `desktop-*` + `harness` + both `portal-*` ×11 | 76 passed, **1 failed** — `portal-pages` at **line 44, the Financials tab**, a 5s navigation timeout on the first hit to that route. That is BEFORE this item's edit at line 83 and is the identical failure item 4 recorded. Re-ran warm: **3 / 3, exit 0**. `portal-selections.spec.ts` passed IN the chunk |
+| 3 | `m-*` first 8 | ⚠️ **THE DEV SERVER DIED MID-CHUNK.** `Page crashed` on `m-capture`, then `ERR_CONNECTION_REFUSED` on everything after it — 92 failures from one cause. `oom_kill 0` in `/proc/vmstat`, so not the kernel; #145's real diagnosis (a 64 MB `/dev/shm`, plus `next dev`'s monotonic RSS) fits. Restarted the server and re-ran the eight files in two halves: **53 + 89 passed, 3 skipped, both exit 0** |
+| 4 | `m-*` last 9 | Run in two halves on a restarted server: **120 passed** (exit 0) and **164 passed, 6 skipped, 2 failed**. The two are `m-writes` A-68, on `/m/subs/[id]` and `/m/contacts/[id]` detail views, 18 minutes into the half. Re-ran `-g "A-68"` warm: **7 passed, 2 skipped, exit 0** |
+
+**Stated rather than smoothed over:** chunks 3 and 4 were not re-run as single green chunks. Chunk 3
+could not be — its server died — and both were completed as halves on a restarted server, which is
+the same remedy item 4 used for its OOM. The nine skips are the pre-existing data-conditional
+`test.skip`s in `m-destinations`, `m-sections` and `m-writes`, plus two `A-68` subcontractor cases
+in the targeted re-run; none is this item's. **Nothing in this item's diff touches `/m`, chat, subs
+or contacts** — it is the portal, the selections services, one migration and the extracted
+signature capture.
+
+### ⚠️ THE NOTIFICATION LIED ABOUT THREE OF THE PLAYWRIGHT CHUNKS
+
+The background task reported **exit code 0** for chunk 1, chunk 2 and chunk 4b. All three printed
+`CHUNK…_EXIT=1`. That is the wrapper's status against the compound command's, exactly as CLAUDE.md
+§"Reading the exit status" says it will be — **only the printed line is true**, and this is the third
+consecutive item where that rule earned its place. Every result in the tables above is read off the
+printed line, and every tally is corroborated by the runner's own `N passed / N failed` summary.
+
+Not run, and said so: no production migration (`20261037000000` is rebuild-test only); nothing
+pushed; **the green-box FEEL is unverified and is Josh's** (§Y) — whether the totals updating live
+as she picks reads right, tap-target sizing, and how a single-choice selection communicates that
+picking B un-picks A.
