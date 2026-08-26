@@ -33,11 +33,23 @@
 /** [S170] 'allowance' added — a fifth budget row type (allowances-selections-spec §2). */
 export type ProfitCategory = 'labor' | 'material' | 'subcontractor' | 'other' | 'allowance';
 
+/**
+ * [S175 stage 5] 'allowance' ADDED HERE TOO. S170 widened the TYPE and
+ * enumerated the category in profitability.ts's slice loop — with a comment
+ * that a category missing from the list "is OMITTED from the report, not
+ * bucketed anywhere" — but left this constant at four. aggregateCategories
+ * seeds its rows from THIS list and `continue`s on any slice whose category
+ * has no row, so every allowance slice S170 built was dropped on the floor and
+ * the report showed four categories with a fifth silently absent. Stage 5 puts
+ * a selection's cost AND sell in that category (spec §10 #17), which is what
+ * made the drop visible.
+ */
 export const PROFIT_CATEGORIES: ProfitCategory[] = [
   'labor',
   'material',
   'subcontractor',
   'other',
+  'allowance',
 ];
 
 function roundMoney(n: number): number {
@@ -241,7 +253,11 @@ export type ProfitCaveatCode =
   /** A rate required to price a cost is not in force on that cost's date. */
   | 'rate_missing'
   /** The earned→billed switch has just moved the profit figure (§7H.2 #1). */
-  | 'basis_switched';
+  | 'basis_switched'
+  /** [S175 stage 5, Q3.2] An approved selection on a FIXED-PRICE instrument of
+   *  a cost-plus / T&M job: its signed variance is excluded from contract value
+   *  (the P11 projection) but is earned, so it is added here and named. */
+  | 'selection_variance_outside_contract';
 
 export interface ProfitCaveat {
   code: ProfitCaveatCode;
@@ -289,6 +305,13 @@ export function caveatMessage(
         'This job is complete, so profit is now billed minus actual cost rather ' +
         'than earned minus actual cost. Any discount given reduces profit at ' +
         'this point, because earned counted the full value and billed does not.'
+      );
+    case 'selection_variance_outside_contract':
+      return (
+        `Approved selections totalling ${money(detail.amount ?? 0)} sit on a ` +
+        'fixed-price change order of this cost-plus / T&M job. Their signed ' +
+        'variance is not part of the projected contract value, but it is earned ' +
+        'and is included in Earned above.'
       );
   }
 }

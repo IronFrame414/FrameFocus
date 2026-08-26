@@ -70,7 +70,10 @@ interface InstrumentGroup {
   estimateId?: string;
   changeOrderId?: string;
   /** Set only for DRAFT COs — their totals reprice after a rate write; the
-   *  estimate instrument never recomputes here (§7.1 S-4 recompute rules). */
+   *  estimate instrument never recomputes here (§7.1 S-4 recompute rules —
+   *  ⚠️ whose stated reason was FALSE until S175: the "RLS-match zero rows"
+   *  claim held only for a PM. The rule stands; since 20261031000000 the call
+   *  raises on a sent estimate instead of silently half-succeeding). */
   draftCoId?: string;
 }
 

@@ -35,6 +35,7 @@ import {
   lineInstrumentKey,
 } from '@/lib/services/invoices-shared';
 import type { InvoiceDelivery } from '@/lib/services/invoice-delivery-shared';
+import type { SelectionBilling } from '@/lib/services/contract-value';
 import type { EstimateLineBilling } from '@/lib/services/estimate-line-billing';
 import { InvoiceDeliveryPanel } from './invoice-delivery-panel';
 import type {
@@ -91,6 +92,8 @@ interface InvoiceBuilderProps {
   pickableCostsByInstrument: Record<string, PickableCost[]>;
   pickableHours: PickableHour[];
   availableCredits: AvailableCredit[];
+  /** [S175 stage 5] Approved selections and what is left to bill on each. */
+  selectionBilling: SelectionBilling;
   originalContractValue: number | null;
   alreadyBilled: number;
   projectRetainagePercent: number | null;
@@ -141,6 +144,7 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
     pickableCostsByInstrument,
     pickableHours,
     availableCredits,
+    selectionBilling,
     originalContractValue,
     alreadyBilled,
     timeZone,
@@ -834,6 +838,20 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
         presented={presented}
       />
 
+      {/* [S175 stage 5] Approved SELECTIONS — the overage bills against the
+          selection's OWN instrument (Q4), never the estimate's. Only
+          fixed-remaining selections are offered: an as-incurred one bills
+          through its instrument's cost picker, a credit through Adjustments. */}
+      {isDraft && selectionBilling.selections.some((s) => s.kind === 'fixed_remaining') && (
+        <SelectionsPanel
+          invoiceId={invoice.id}
+          billing={selectionBilling}
+          instrumentTypes={instrumentTypes}
+          busy={busy}
+          run={run}
+        />
+      )}
+
       {/* Adjustments — §8 discount, §4a/§4b/§3a credits */}
       {isDraft && (
         <AdjustmentsPanel
@@ -1464,6 +1482,82 @@ function TotalRow({ label, value, bold, muted, warn }: { label: string; value: n
 
 // ── §8 discount + §4a/§4b/§3a credits ───────────────────────────────────────
 
+// ── [S175 stage 5] Selections — bill the approved overage ───────────────────
+//
+// Spec §7.1: an invoice line with source_selection_id, line_type 'fixed',
+// category 'allowance'. It ESCAPES the contract ceiling by construction (that
+// trigger is scoped to source_estimate_id) and is capped by its own —
+// enforce_selection_billing_ceiling(), at signed_variance. The remaining shown
+// here is getSelectionBilling()'s READ of the same figure; the DB refuses the
+// over-bill regardless of what this panel offers.
+function SelectionsPanel({
+  invoiceId,
+  billing,
+  instrumentTypes,
+  busy,
+  run,
+}: {
+  invoiceId: string;
+  billing: SelectionBilling;
+  instrumentTypes: InstrumentTypes;
+  busy: boolean;
+  run: (fn: () => Promise<{ success: boolean; error?: string }>, msg?: string) => Promise<boolean>;
+}) {
+  const [amounts, setAmounts] = useState<Record<string, string>>({});
+  const fixed = billing.selections.filter((s) => s.kind === 'fixed_remaining');
+  return (
+    <div style={{ ...cardStyle, padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+      <p style={{ ...h2Style, margin: 0 }}>Selections</p>
+      <p style={{ fontSize: '12px', color: color.muted, margin: 0 }}>
+        The client signed each of these; the added price bills against the selection itself, not
+        the original contract, and cannot exceed what was signed.
+      </p>
+      {fixed.map((s) => {
+        const remaining = s.remaining ?? 0;
+        const raw = amounts[s.selectionId];
+        const amount = raw === undefined || raw.trim() === '' ? remaining : Number(raw);
+        return (
+          <div key={s.selectionId} style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: '13px', color: color.body, minWidth: '220px' }}>
+              {s.name} — signed {money(s.signedVariance)}, {money(s.billed)} billed,{' '}
+              <strong>{money(remaining)}</strong> remaining
+            </span>
+            <input
+              value={raw ?? ''}
+              onChange={(e) => setAmounts((prev) => ({ ...prev, [s.selectionId]: e.target.value }))}
+              placeholder={remaining.toFixed(2)}
+              inputMode="decimal"
+              disabled={busy || remaining <= 0}
+              style={{ ...inputStyle, width: '110px' }}
+            />
+            <button
+              type="button"
+              disabled={busy || remaining <= 0 || !(amount > 0)}
+              style={secondaryButtonStyle}
+              onClick={async () => {
+                const ok = await run(
+                  () =>
+                    addFixedLine({
+                      invoiceId,
+                      description: `Selection — ${s.name}`,
+                      amount,
+                      category: 'allowance',
+                      sourceSelectionId: s.selectionId,
+                    }).then(async (r) => (r.success ? recalculateInvoiceTotals(invoiceId, { instrumentTypes }) : r)),
+                  'Selection billed.'
+                );
+                if (ok) setAmounts((prev) => ({ ...prev, [s.selectionId]: '' }));
+              }}
+            >
+              Bill selection
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function AdjustmentsPanel({
   invoice,
   credits,
@@ -1538,7 +1632,10 @@ function AdjustmentsPanel({
                         credit.label,
                         credit.amount
                       )
-                    : applyDepositCredit(
+                    : credit.kind === 'selection'
+                      ? // §7.2 — sourced, so is_final is lifted; any invoice the user chooses.
+                        addAllowanceCredit(invoice.id, credit.label, credit.amount, credit.selectionId as string)
+                      : applyDepositCredit(
                         invoice.id,
                         credit.depositInvoiceId as string,
                         credit.amount,

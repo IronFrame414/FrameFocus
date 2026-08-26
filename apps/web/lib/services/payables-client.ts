@@ -319,7 +319,7 @@ export interface BillInput {
   awaiting_paper?: boolean;
   /** SPLIT AT CAPTURE (money representation §4.4/P7): ≥1 line, Σ exactly =
    *  amount. Same rule as receipts — bills are expenses too. */
-  allocations: { budget_item_id: string; amount: number }[];
+  allocations: { budget_item_id: string; amount: number; source_selection_id?: string | null }[];
 }
 
 async function insertPayableRow(input: BillInput): Promise<CreateResult> {
@@ -357,6 +357,8 @@ async function insertPayableRow(input: BillInput): Promise<CreateResult> {
       expense_id: data.id,
       budget_item_id: a.budget_item_id,
       amount: a.amount,
+      // [S175 stage 5] One expense per selection — see AllocationInput.
+      source_selection_id: a.source_selection_id ?? null,
     }))
   );
   if (allocError) {

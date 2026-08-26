@@ -420,8 +420,8 @@ export async function getAvailableCredits(projectId: string): Promise<AvailableC
 
   const { data: placedLines } = await supabase
     .from('invoice_lines')
-    .select('line_type, source_change_order_id, source_deposit_invoice_id, billed_amount, invoice_id')
-    .in('line_type', ['credit_negative_co', 'credit_deposit']);
+    .select('line_type, source_change_order_id, source_deposit_invoice_id, source_selection_id, billed_amount, invoice_id')
+    .in('line_type', ['credit_negative_co', 'credit_deposit', 'credit_allowance']);
 
   // Only lines on live (non-voided) invoices consume a credit — voiding an
   // invoice must return its credit to AVAILABLE.
@@ -448,6 +448,39 @@ export async function getAvailableCredits(projectId: string): Promise<AvailableC
       amount: Math.abs(Number(co.net_delta)),
       label: `${co.co_number}${co.title ? ` — ${co.title}` : ''}`,
       changeOrderId: co.id,
+    });
+  }
+
+  // [S175 stage 5] §7.2 — a selection signed UNDER its allowance is a credit
+  // the client is owed. Owed = |signed_variance|; applied = Σ |billed_amount|
+  // of credit_allowance lines carrying that source_selection_id on LIVE
+  // invoices (drafts included — a credit placed on a draft is spoken for, the
+  // negative-CO shape); available = owed − applied, DERIVED so a void returns
+  // it. Contract value is NOT reduced — the allowance stands (Q5).
+  const { data: underSelections } = await supabase
+    .from('selections')
+    .select('id, name, signed_variance')
+    .eq('project_id', projectId)
+    .eq('status', 'approved')
+    .eq('is_deleted', false)
+    .lt('signed_variance', 0);
+  const appliedBySelection = new Map<string, number>();
+  for (const l of live) {
+    if (l.line_type !== 'credit_allowance' || !l.source_selection_id) continue;
+    appliedBySelection.set(
+      l.source_selection_id,
+      Math.round(((appliedBySelection.get(l.source_selection_id) ?? 0) + Math.abs(Number(l.billed_amount))) * 100) / 100
+    );
+  }
+  for (const s of underSelections ?? []) {
+    const owed = Math.abs(Number(s.signed_variance));
+    const available = Math.round((owed - (appliedBySelection.get(s.id) ?? 0)) * 100) / 100;
+    if (available <= 0) continue;
+    out.push({
+      kind: 'selection',
+      amount: available,
+      label: `Selection — ${s.name} (under allowance)`,
+      selectionId: s.id,
     });
   }
 

@@ -92,14 +92,29 @@ describe('aggregateCategories', () => {
     expect(rows.find((r) => r.category === 'labor')!.remaining).toBe(3500);
   });
 
-  it('always returns all four categories, in a fixed order', () => {
+  it('always returns all FIVE categories, in a fixed order — allowance included [S175 stage 5]', () => {
+    // _Superseded assertion, quoted not deleted: "always returns all four
+    // categories" — 'labor', 'material', 'subcontractor', 'other'. S170 widened
+    // the type and the slice loop to five but not PROFIT_CATEGORIES, so every
+    // allowance slice was silently dropped by aggregateCategories._
     const rows = aggregateCategories([]);
     expect(rows.map((r) => r.category)).toEqual([
       'labor',
       'material',
       'subcontractor',
       'other',
+      'allowance',
     ]);
+  });
+
+  it('an allowance slice is AGGREGATED, not dropped [S175 stage 5]', () => {
+    const rows = aggregateCategories([
+      slice({ category: 'allowance', budget: 5000, actual: 500, committed: 0, sell: 6300 }),
+    ]);
+    const row = rows.find((r) => r.category === 'allowance')!;
+    expect(row.actual).toBe(500);
+    expect(row.sell).toBe(6300);
+    expect(row.margin).toBe(5800);
   });
 });
 

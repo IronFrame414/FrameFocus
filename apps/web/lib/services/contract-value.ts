@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase-server';
+import { loadApprovedSelectionMoney } from '@/lib/services/selection-money';
 
 // 7B — Contract Value (docs/specs/7B-spec.md §2). The original contract value
 // is NEVER mutated: it holds the figure set at conversion. The revised total is
@@ -30,12 +31,49 @@ export const CONTRACT_CONTRIBUTING_CO_FILTER = {
   is_deleted: false,
 } as const;
 
+/**
+ * [S175 stage 5] The selection twin of the constant above, and it exists for
+ * the same reason: every consumer derives from THIS, never re-states it.
+ *
+ * `approved` is reachable only through `completeSelectionSignature` — the one
+ * write path, portal-only, no token arm — so this is the selection's exact
+ * equivalent of "client-signed only". `signed_variance` is NULL on a
+ * client-supplied selection by CHECK, and those rows contribute nothing.
+ */
+export const CONTRACT_CONTRIBUTING_SELECTION_FILTER = {
+  status: 'approved',
+  is_deleted: false,
+} as const;
+
 export interface RevisedContract {
   /** project_financials.contract_value — never mutated. NULL for a project
    *  with no value set AND for any caller below Owner/Admin (RLS). */
   original: number | null;
   signedDelta: number; // Σ net_delta of contributing COs (signed values, ±)
-  revised: number | null; // original + signedDelta; null when original is null
+  /**
+   * [S175 stage 5, Q4] Σ `signed_variance` over APPROVED selections — the
+   * client's signature on a selection is the binding instrument and no change
+   * order is generated, so this is a third term rather than a CO.
+   *
+   * **FIXED-PRICE ONLY** [Josh, S175 Q2]. Zero on cost-plus/T&M, where
+   * `contract_value` holds the user-entered PROJECTION that money-rep P11
+   * forbids from feeding billing math — the same reason
+   * `enforce_contract_billing_ceiling` and `getContractBilling` both skip
+   * non-fixed projects.
+   */
+  selectionDelta: number;
+  /**
+   * ⚠️ TRUE when selection variances EXIST on this project but were excluded
+   * because it is not fixed-price.
+   *
+   * It is a value a screen must render rather than an omission it can
+   * overlook — Josh's `final_hold` argument: a silent absence is accepted by
+   * the schema, acted on nowhere, and invisible to anyone reading the screen.
+   * FALSE means "no exclusion happened", which is different from "no
+   * selections".
+   */
+  selectionDeltaExcluded: boolean;
+  revised: number | null; // original + signedDelta + selectionDelta; null when original is null
 }
 
 export interface PortfolioRevisedContract {
@@ -43,7 +81,10 @@ export interface PortfolioRevisedContract {
    *  Owner/Admin that is zero rows, so the sum is 0 — see visibleCount. */
   originalSum: number;
   signedDeltaSum: number; // Σ net_delta of contributing COs on those projects
-  revisedSum: number; // originalSum + signedDeltaSum
+  /** [S175 stage 5] Σ signed_variance of approved selections — FIXED-PRICE
+   *  projects only. A projected project's variances are not in this figure. */
+  selectionDeltaSum: number;
+  revisedSum: number; // originalSum + signedDeltaSum + selectionDeltaSum
   /** How many projects actually contributed a value. Zero below Owner/Admin,
    *  which lets a caller tell "no contracts" apart from "not permitted". */
   visibleCount: number;
@@ -69,19 +110,35 @@ export interface PortfolioRevisedContract {
   projectedCount: number;
 }
 
-function toRevised(original: number | null, signedDelta: number): RevisedContract {
+function toRevised(
+  original: number | null,
+  signedDelta: number,
+  // Defaulted so the two callers that predate stage 5 keep their shape; a
+  // project with no selections is indistinguishable from one on an old path,
+  // which is correct — both contribute nothing.
+  selectionDelta = 0,
+  selectionDeltaExcluded = false
+): RevisedContract {
   return {
     original,
     signedDelta,
-    revised: original !== null ? original + signedDelta : null,
+    selectionDelta,
+    selectionDeltaExcluded,
+    revised: original !== null ? original + signedDelta + selectionDelta : null,
   };
+}
+
+/** Σ signed_variance, rounded once at the end — the same money discipline as
+ *  the CO sum above. Nulls (client-supplied selections) contribute nothing. */
+function sumVariance(rows: { signed_variance: number | null }[] | null): number {
+  return Math.round((rows ?? []).reduce((n, r) => n + (r.signed_variance ?? 0), 0) * 100) / 100;
 }
 
 /** Per-project derivation — the only legal read of revised contract value. */
 export async function getRevisedContract(projectId: string): Promise<RevisedContract> {
   const supabase = await createClient();
 
-  const [{ data: financials }, { data: cos }] = await Promise.all([
+  const [{ data: financials }, { data: cos }, { data: project }, { data: sels }] = await Promise.all([
     // maybeSingle, not single: below Owner/Admin RLS returns NO row, and that
     // is a legitimate answer rather than an error.
     supabase
@@ -94,10 +151,26 @@ export async function getRevisedContract(projectId: string): Promise<RevisedCont
       .select('net_delta')
       .eq('project_id', projectId)
       .match(CONTRACT_CONTRIBUTING_CO_FILTER),
+    supabase.from('projects').select('project_type').eq('id', projectId).maybeSingle(),
+    // [S175 stage 5] Fetched for EVERY project type, not only fixed-price —
+    // otherwise `selectionDeltaExcluded` could never be true and the exclusion
+    // would be exactly the silent absence it exists to make visible.
+    supabase
+      .from('selections')
+      .select('signed_variance')
+      .eq('project_id', projectId)
+      .match(CONTRACT_CONTRIBUTING_SELECTION_FILTER),
   ]);
 
   const signedDelta = (cos ?? []).reduce((sum, co) => sum + (co.net_delta ?? 0), 0);
-  return toRevised(financials?.contract_value ?? null, signedDelta);
+  const variance = sumVariance(sels);
+  const isFixed = project?.project_type === 'fixed_price';
+  return toRevised(
+    financials?.contract_value ?? null,
+    signedDelta,
+    isFixed ? variance : 0,
+    !isFixed && variance !== 0
+  );
 }
 
 // ── §3 / acceptance #4 — REMAINING TO BILL on the contract [S97, 2026-08-03] ─
@@ -450,7 +523,7 @@ export async function getRevisedContractMap(
   if (projectIds.length === 0) return {};
   const supabase = await createClient();
 
-  const [{ data: financials }, { data: cos }] = await Promise.all([
+  const [{ data: financials }, { data: cos }, { data: projects }, { data: sels }] = await Promise.all([
     supabase
       .from('project_financials')
       .select('project_id, contract_value')
@@ -460,11 +533,23 @@ export async function getRevisedContractMap(
       .select('project_id, net_delta')
       .in('project_id', projectIds)
       .match(CONTRACT_CONTRIBUTING_CO_FILTER),
+    supabase.from('projects').select('id, project_type').in('id', projectIds),
+    supabase
+      .from('selections')
+      .select('project_id, signed_variance')
+      .in('project_id', projectIds)
+      .match(CONTRACT_CONTRIBUTING_SELECTION_FILTER),
   ]);
 
   const deltas: Record<string, number> = {};
   for (const co of cos ?? []) {
     deltas[co.project_id] = (deltas[co.project_id] ?? 0) + (co.net_delta ?? 0);
+  }
+  const isFixedById = new Map((projects ?? []).map((p) => [p.id, p.project_type === 'fixed_price']));
+  const variances: Record<string, number> = {};
+  for (const sel of sels ?? []) {
+    variances[sel.project_id] =
+      Math.round(((variances[sel.project_id] ?? 0) + (sel.signed_variance ?? 0)) * 100) / 100;
   }
 
   // Key off the REQUESTED ids, not the rows returned: below Owner/Admin there
@@ -475,7 +560,14 @@ export async function getRevisedContractMap(
 
   const map: Record<string, RevisedContract> = {};
   for (const id of projectIds) {
-    map[id] = toRevised(byProject[id] ?? null, deltas[id] ?? 0);
+    const variance = variances[id] ?? 0;
+    const isFixed = isFixedById.get(id) === true;
+    map[id] = toRevised(
+      byProject[id] ?? null,
+      deltas[id] ?? 0,
+      isFixed ? variance : 0,
+      !isFixed && variance !== 0
+    );
   }
   return map;
 }
@@ -515,6 +607,19 @@ export async function getPortfolioRevisedContract(): Promise<PortfolioRevisedCon
         .match(CONTRACT_CONTRIBUTING_CO_FILTER)
     : { data: [] as { project_id: string; net_delta: number }[] };
 
+  // [S175 stage 5] Approved selection variances — FIXED-PRICE ONLY, per the
+  // same split the CO deltas already respect below. On a projected project the
+  // variance is neither added nor summed: the portfolio KPI is the one place a
+  // single number would silently absorb it, which is precisely what the
+  // fixed/projected split was introduced to stop.
+  const { data: sels } = activeIds.length
+    ? await supabase
+        .from('selections')
+        .select('project_id, signed_variance')
+        .in('project_id', activeIds)
+        .match(CONTRACT_CONTRIBUTING_SELECTION_FILTER)
+    : { data: [] as { project_id: string; signed_variance: number | null }[] };
+
   let originalSum = 0;
   let fixedRevisedSum = 0;
   let projectedRevisedSum = 0;
@@ -542,14 +647,176 @@ export async function getPortfolioRevisedContract(): Promise<PortfolioRevisedCon
     else projectedRevisedSum += delta;
   }
 
+  let selectionDeltaSum = 0;
+  for (const sel of sels ?? []) {
+    // Only the FIXED side. A projected project's variance is dropped here and
+    // reported as excluded by the per-project derivers — the KPI headline has
+    // no caveat channel of its own, so the exclusion is made visible one level
+    // down rather than hidden one level up.
+    if (!isFixedById.get(sel.project_id)) continue;
+    const v = sel.signed_variance ?? 0;
+    selectionDeltaSum += v;
+    fixedRevisedSum += v;
+  }
+
   return {
     originalSum,
     signedDeltaSum,
-    revisedSum: originalSum + signedDeltaSum,
+    selectionDeltaSum: Math.round(selectionDeltaSum * 100) / 100,
+    revisedSum: originalSum + signedDeltaSum + selectionDeltaSum,
     visibleCount: (financials ?? []).length,
     fixedRevisedSum: Math.round(fixedRevisedSum * 100) / 100,
     fixedCount,
     projectedRevisedSum: Math.round(projectedRevisedSum * 100) / 100,
     projectedCount,
+  };
+}
+
+// ── [S175 stage 5] REMAINING ON SELECTIONS — the §7.1 sibling of the CO read ─
+//
+// §7.1 proposed `getSelectionBilling()` as billed-vs-signed → remaining. It is
+// exactly that and nothing more: a READ. The thing that actually stops a $400
+// variance being billed five times is `enforce_selection_billing_ceiling()`
+// (20261034000000), because a read does not constrain a write [Josh, S175
+// Q3.3]. This function exists so the Budget page and the invoice builder can
+// SHOW the figure the trigger enforces, from the same definition.
+//
+// THREE KINDS, mirroring ChangeOrderRemainingKind, and for the same reason —
+// only one of them has a remaining at all:
+//
+//   fixed_remaining  the allowance's instrument is FIXED-PRICE: the overage
+//                    bills as a fixed line; remaining = signed_variance − billed.
+//   as_incurred      the allowance's instrument is COST-PLUS / T&M: the
+//                    selection's cost bills as incurred through that
+//                    instrument's rates (getPickableCosts already offers the
+//                    tagged allocation), so a fixed "overage" line on top would
+//                    bill the same money twice. No line is offered; no number.
+//   credit           signed_variance < 0 (§7.2): money to GIVE, placed as a
+//                    sourced credit_allowance line. `billed` here is the
+//                    APPLIED magnitude; remaining is null.
+//
+// The kind comes from selection-money.ts, which is also what profitability
+// reads — one answer to "fixed or as-incurred", not two.
+
+
+export type SelectionRemainingKind = 'fixed_remaining' | 'as_incurred' | 'credit';
+
+export interface SelectionRemaining {
+  selectionId: string;
+  name: string;
+  kind: SelectionRemainingKind;
+  /** Signed variance — negative on a credit. */
+  signedVariance: number;
+  /** fixed_remaining: Σ billed on ISSUED (sent/paid), non-voided invoices.
+   *  credit: Σ |credit_allowance| applied on LIVE (non-voided) invoices, drafts
+   *  included — a credit placed on a draft is already spoken for (§4a's shape). */
+  billed: number;
+  /** signed_variance − billed, ONLY on fixed_remaining. NULL otherwise — never
+   *  0-as-unknown. */
+  remaining: number | null;
+}
+
+export interface SelectionBilling {
+  selections: SelectionRemaining[];
+  /** Σ remaining over fixed_remaining selections only. */
+  fixedRemaining: number;
+  fixedCount: number;
+  asIncurredCount: number;
+  creditCount: number;
+}
+
+export async function getSelectionBilling(
+  projectId: string,
+  /** The invoice being BUILT — its own draft lines are excluded from `billed`
+   *  on the fixed side so the builder does not count what it is editing. */
+  excludeInvoiceId?: string
+): Promise<SelectionBilling> {
+  const supabase = await createClient();
+  const empty: SelectionBilling = {
+    selections: [],
+    fixedRemaining: 0,
+    fixedCount: 0,
+    asIncurredCount: 0,
+    creditCount: 0,
+  };
+
+  const approved = await loadApprovedSelectionMoney(supabase, projectId);
+  if (approved.length === 0) return empty;
+
+  const { data: invoices } = await supabase
+    .from('invoices')
+    .select('id, status')
+    .eq('project_id', projectId)
+    .eq('is_deleted', false)
+    .neq('status', 'voided');
+  const live = (invoices ?? []).filter((i) => i.id !== excludeInvoiceId);
+  const liveIds = live.map((i) => i.id);
+  const issued = new Set(live.filter((i) => i.status === 'sent' || i.status === 'paid').map((i) => i.id));
+
+  const billedById = new Map<string, number>();
+  const appliedById = new Map<string, number>();
+  if (liveIds.length > 0) {
+    const { data: lines } = await supabase
+      .from('invoice_lines')
+      .select('invoice_id, source_selection_id, billed_amount, line_type')
+      .in('invoice_id', liveIds)
+      .in('source_selection_id', approved.map((s) => s.id));
+    for (const l of lines ?? []) {
+      if (!l.source_selection_id) continue;
+      const amount = Number(l.billed_amount);
+      if (l.line_type === 'credit_allowance') {
+        // Applied credit — live invoices, drafts included.
+        appliedById.set(
+          l.source_selection_id,
+          Math.round(((appliedById.get(l.source_selection_id) ?? 0) + Math.abs(amount)) * 100) / 100
+        );
+      } else if (issued.has(l.invoice_id)) {
+        billedById.set(
+          l.source_selection_id,
+          Math.round(((billedById.get(l.source_selection_id) ?? 0) + amount) * 100) / 100
+        );
+      }
+    }
+  }
+
+  const selections: SelectionRemaining[] = approved.map((s) => {
+    if (s.signedVariance < 0) {
+      return {
+        selectionId: s.id,
+        name: s.name,
+        kind: 'credit',
+        signedVariance: s.signedVariance,
+        billed: appliedById.get(s.id) ?? 0,
+        remaining: null,
+      };
+    }
+    if (s.asIncurred) {
+      return {
+        selectionId: s.id,
+        name: s.name,
+        kind: 'as_incurred',
+        signedVariance: s.signedVariance,
+        billed: billedById.get(s.id) ?? 0,
+        remaining: null,
+      };
+    }
+    const billed = billedById.get(s.id) ?? 0;
+    return {
+      selectionId: s.id,
+      name: s.name,
+      kind: 'fixed_remaining',
+      signedVariance: s.signedVariance,
+      billed,
+      remaining: Math.round((s.signedVariance - billed) * 100) / 100,
+    };
+  });
+
+  const fixed = selections.filter((s) => s.kind === 'fixed_remaining');
+  return {
+    selections,
+    fixedRemaining: Math.round(fixed.reduce((n, s) => n + (s.remaining ?? 0), 0) * 100) / 100,
+    fixedCount: fixed.length,
+    asIncurredCount: selections.filter((s) => s.kind === 'as_incurred').length,
+    creditCount: selections.filter((s) => s.kind === 'credit').length,
   };
 }

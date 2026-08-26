@@ -185,8 +185,57 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   columns (`enforce_change_order_immutability`), not an RLS predicate. Cross-ref `#4-s174`, which
   should be decided first: what "frozen" means depends on whether void-and-reissue exists.
 
-- **#3-s174 — A SENT ESTIMATE CANNOT BE VOIDED. There is no `voided` status, no `void_reason`, and
-  no supersession chain — the three things S168 gave change orders.** Raised S174 (2026-08-25).
+- **#1-s175 — `softDeleteEstimate()` HAS NO STATUS GUARD: A SENT ESTIMATE REACHES THE TRASH WITH NO
+  REASON RECORDED.** Raised S175 (2026-08-25), found while building void-and-reissue.
+  **Live today.**
+
+  Void requires a reason in every case and freezes it permanently (`#3-s174`, closed below). The
+  trash bin, beside it, asks for nothing: `softDeleteEstimate()` checks the caller is Owner/Admin
+  and writes `is_deleted = true` at any status. So the *documented* remedy for withdrawing a
+  client-facing document keeps a permanent record, and the *undocumented* one sitting next to it on
+  the same screen keeps none.
+
+  **Deliberately NOT fixed at S175 [Josh].** Delete was ruled out of scope for that session and the
+  reason is recorded rather than assumed: widening scope mid-queue is how sessions stop finishing.
+  This is the filing, not a deferral by neglect.
+
+  **Fix direction.** Not "add a reason to delete" — decide first whether a sent estimate should be
+  soft-deletable at all now that void exists. The change-order answer is instructive and does not
+  transfer wholesale: S168 allowed DELETE only for UNSIGNED COs, with `void` as the path for
+  anything the client had seen. The estimate equivalent of "the client has seen it" is `sent`, and
+  the equivalent of "signed" is `accepted`/`converted` — which `#3-s174`'s ruling already refuses to
+  void, so a delete path there would be the only way to remove one. Cross-ref `#2-s174` (the freeze)
+  and `#3-s174`.
+
+- **#3-s174 — ✅ CLOSED [S175] — A SENT ESTIMATE CANNOT BE VOIDED. There is no `voided` status, no
+  `void_reason`, and no supersession chain — the three things S168 gave change orders.** Raised
+  S174 (2026-08-25).
+
+  > ### ✅ CLOSED [S175] — `20261032000000_estimate_void_reissue.sql` + `20261033000000_void_estimate_rpc.sql`
+  >
+  > `voided` in the status CHECK, `void_reason`/`voided_by`/`voided_at` with a two-way shape CHECK,
+  > `supersedes_estimate_id` with `estimates_supersedes_once`, and the void record frozen the moment
+  > it is written. Reason REQUIRED in every case, as ruled for COs. Reissue reuses
+  > `clone_estimate()` rather than copying its traversal.
+  >
+  > **Two things the build found that the filing did not anticipate:**
+  >
+  > **(i) The ruled PM arm was UNREACHABLE.** Q2.4 was ruled Owner/Admin + the authoring PM.
+  > `estimates_update_manager`'s PM arm carries `status = 'draft'`, so a SENT estimate is filtered
+  > out of a PM's UPDATE **before any trigger runs** — zero rows, no error. The authority trigger
+  > was correct and could never fire for the one role it was written to admit. Fixed with a
+  > SECURITY DEFINER `void_estimate()` RPC; **widening the RLS policy was rejected** because it
+  > would hand a PM UPDATE on every non-frozen column of a client-facing document, `status`
+  > included — so a PM could mark an estimate `accepted` on the client's behalf.
+  >
+  > **(ii) The three dead vocabularies were retired in the same pass** [Josh]: `'revised'` dropped
+  > from the CHECK (verified zero rows), `parent_estimate_id` and `version_number` commented as
+  > vestigial with what each was for quoted. *"A dead `revised` beside a live `voided` is a trap."*
+  >
+  > A CONVERTED estimate is refused outright, with the error naming the project — the one place the
+  > S168 CO ruling deliberately does NOT carry over, because **a change order adds to a project and
+  > an estimate is its origin.** Evidence: `s175-estimate-void-reissue.live.ts`, 18 probes, every
+  > refusal mutation-proved through the service role.
   Josh: *"Same shape as #1-s167fx, the sent CO you fixed at S168."*
 
   **He is right about the shape and it is worth being precise about the difference.** `#1-s167fx`
@@ -226,8 +275,24 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   the source instrument silently re-prices"*. Voiding a converted estimate probably must be
   refused outright rather than allowed-with-a-reason. Cross-ref `#117`.
 
-- **#4-s174 — A SENT ESTIMATE CANNOT BE UNSENT — IN THE UI. THE DATABASE ALLOWS IT TODAY, WHICH IS
-  THE REAL FINDING.** Raised S174 (2026-08-25). Josh: *"Related to 4, and possibly deliberate — an
+- **#4-s174 — ✅ CLOSED [S175] AS WON'T BUILD, AND THE DATABASE NOW ENFORCES IT — A SENT ESTIMATE
+  CANNOT BE UNSENT.** Raised S174 (2026-08-25).
+
+  > ### ✅ CLOSED [S175] — WON'T BUILD, and the boundary is now defended by something
+  >
+  > Josh accepted the recommendation: void-and-reissue is the answer and unsend is not built.
+  > **But "won't build" was not enough on its own**, and that was the whole finding —
+  > `UPDATE estimates SET status = 'draft'` on a sent estimate returned **1 row**, so nothing
+  > defended the boundary except the absence of a button.
+  >
+  > `enforce_estimate_immutability` now refuses any transition to `draft` or `review` from a
+  > client-facing status: *"A sent estimate cannot be returned to draft — void it and reissue
+  > instead."* Backwards only — forward transitions (accepted, declined, expired, converted, voided)
+  > are untouched, and `s175-estimate-void-reissue` D3 is the paired positive that proves the rule
+  > did not over-reach.
+  >
+  > The second reason unsend is wrong is now also structural: `estimate_line_items`' own policies
+  > key on the same `status = 'draft'`, so an unsend would have re-opened the LINE ITEMS too. Josh: *"Related to 4, and possibly deliberate — an
   emailed estimate is a document the client holds, and silently editing it is the thing
   void-and-reissue exists to prevent. Report whether void-and-reissue is the right answer here as
   it was for COs."*

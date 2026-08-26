@@ -41,10 +41,24 @@ describe('S150-E1 — R16 decoupling', () => {
     //
     // `id` is the tiebreak because `created_at` can collide on seeded rows, and
     // two rows sharing a timestamp put us straight back in heap order.
+    //
+    // ⚠️ SCOPED TO `draft` AT S175, AND THE ORDERING WAS NOT THE FIX.
+    // This query was ordered but never constrained to the property R16 actually
+    // depends on: that the row can BE EDITED. It toggles
+    // `include_client_contract` as its arrange step, and since
+    // `20261031000000_estimate_immutability.sql` that column is frozen once an
+    // estimate reaches the client — so the oldest estimate in the database, a
+    // long-sent one, now refuses the write with "A sent estimate is immutable".
+    //
+    // CLAUDE.md's `.limit(1)` rule, category 2, exactly: *"the caller depends on
+    // the row having a property the query never filtered for … ordering would
+    // only make the wrong pick stable."* The comment above was right that
+    // ordering fixed determinism and wrong that determinism was the dependency.
     const { data: est } = await admin
       .from('estimates')
       .select('id')
       .eq('is_deleted', false)
+      .eq('status', 'draft')
       .order('created_at', { ascending: true })
       .order('id', { ascending: true })
       .limit(1)
@@ -54,8 +68,9 @@ describe('S150-E1 — R16 decoupling', () => {
     // failing on a property read three lines later.
     if (!est) {
       throw new Error(
-        'No estimates in rebuild-test — seed one before running this harness. ' +
-          '(node scripts/seed-test-identities.mjs)'
+        'No DRAFT estimate in rebuild-test — seed one before running this harness. ' +
+          '(node scripts/seed-test-identities.mjs). A sent estimate cannot be ' +
+          'used: R16 toggles include_client_contract, which is frozen after send.'
       );
     }
 

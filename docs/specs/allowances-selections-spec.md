@@ -236,6 +236,16 @@ one current signature (2b.5).
 ### §3.8 — Changes to existing tables
 - `invoice_lines.source_selection_id NULL → selections`; `invoice_lines_one_instrument_check` widened
   to a **three-way** exclusion (estimate / CO / selection). Enables §7.1 billing and §7.2 credits.
+  **[S175 stage 5, shipped — `20261034000000`]** The at-most-one shape is kept (zero stays legal for a
+  standalone line). **`instrument_rates_one_instrument` is deliberately NOT widened** [Josh, S175
+  Q3.4]: a selection bears no negotiated rates — its markup is the S174 snapshot in
+  `selection_amounts` — and widening that XOR would permit a rate row with no reader.
+  `invoice_lines_estimate_line_shape_check` needs no third arm either: line item ⇒ estimate and
+  estimate ⇒ no selection already refuse the combination together (`s175-stage5-selection-money` A3).
+- **[S175 stage 5] `expense_allocations.source_selection_id NULL → selections`** (`20261034000000`) —
+  the COST side of §5.4, see there. Shape trigger `expense_allocations_selection_shape` and
+  `approve_expense()` carrying the key: `20261035000000`.
+- **[S175 stage 5] `enforce_selection_billing_ceiling()`** on `invoice_lines` — see §7.1.
 - `estimates`, `change_orders`, `companies`, `instrument_rates` per §2.1.
 - `cost_catalog` SELECT policy replaced (stage 0, §4).
 
@@ -369,6 +379,45 @@ For each allowance budget line with ≥1 **approved, non-client-supplied** selec
 underage (analysis 2b.4). Computed in `budget.ts`; nothing touches `project_budget_items`;
 `s97ct-budget-immutability` stands.
 
+**[S175 stage 5, shipped]** `getBudgetRollup` derives `BudgetItem.selection_subcategory` (selections at
+chosen cost = Σ `quantity × unit_cost` over `is_chosen` options; `selectionTotal`; `variance` vs the
+original; `resulting`), and `effectiveBudget()` is the one place the resulting total is substituted
+into every sum — group, instrument, project **and** profitability's allowance category. Built only for a
+reader who can see `budgeted_amount` (Owner/Admin): a variance needs the original, and building it from
+option amounts alone would hand a PM a budget figure through a floored column.
+
+> ### ⚠️ WHAT IDENTIFIES A COST AS THE SELECTION'S — **RULED [Josh, S175 Q3.1]: ONE EXPENSE PER SELECTION**
+>
+> **The contradiction this resolves.** §7.1 requires the selection as a third instrument in
+> `profitability.ts`'s cost loop. This section rules that nothing touches `project_budget_items`. But
+> profitability attributes cost **transitively** — `expense_allocations → project_budget_items →
+> source_*` — and a selection's overage is booked against the **allowance** line, whose source points
+> at the **estimate**. So before stage 5 that cost was attributed to the estimate instrument and **no
+> column anywhere said a cost was the selection's.**
+>
+> **The column is `expense_allocations.source_selection_id`** — at the cost row, where the person
+> booking the expense knows the answer — and §5.4 above is untouched.
+>
+> **The apportionment ruling, in Josh's example:** tile allowance $10,000, client picks $12,000, plus
+> a $3,000 backsplash against the same allowance — **that is two expense rows, one per selection**,
+> not one against the allowance line. Several selections sharing an allowance line simply produce
+> several rows and **nothing needs apportioning.**
+>
+> **Derivation was rejected, and must not be reintroduced.** "Cost above the budgeted amount is the
+> selection's" cannot split one overage between two selections — there is no way to apportion a
+> single figure between them by derivation. The split editor refuses two selections on one line with
+> the ruling's own words (`resolveSplit`) rather than merging them.
+>
+> **The shape** (`expense_allocations_selection_shape`, `20261035000000`): same project as the
+> expense; not client-supplied; booked against the allowance the selection draws on (an unlinked
+> selection may sit on any line). **Approval is NOT required for the tag** — the tile is ordered
+> before the signature comes through, and refusing until then would push the cost back onto the
+> allowance, the very loss the column prevents. Downstream readers attribute approved selections only.
+>
+> **And `approve_expense()` had to change**, because it reconciles by delete-and-reinsert and read
+> exactly two JSON keys: a tag set at capture vanished at approval — populated on every pending row,
+> empty on every approved one, which is the only kind that counts. It now carries the key through.
+
 ---
 
 ## §6 — Lifecycle and signature
@@ -429,18 +478,58 @@ UI still renders them when present. Only the signature stamps.
 
 ## §7 — Downstream
 
-### §7.1 — Contract value (Q4) and billing
-`contract-value.ts`: `revised = original + signedDelta + approvedSelectionDelta`, where the new term
-is Σ `signed_variance` over selections with `status = 'approved'` and a current completed session.
-All three derivers gain it (analysis 2b.1). The fixed/projected split applies as for COs.
-`profitability.ts` gains the selection as a **third instrument kind** in its cost loop or margin is
-overstated.
+### §7.1 — Contract value (Q4) and billing — **AMENDED [Josh, S175]: FIXED-PRICE ONLY, and the exclusion is a VALUE**
+`contract-value.ts`: `revised = original + signedDelta + selectionDelta`, where the new term
+is Σ `signed_variance` over selections with `status = 'approved'` (reachable only through
+`completeSelectionSignature`; a client-supplied selection's NULL stamp contributes nothing).
+All **five** derivers gain it (the spec's "three" was stale — `getRevisedContract`,
+`getRevisedContractMap`, `getPortfolioRevisedContract`, plus `getContractBilling` and
+`getChangeOrderBilling` which read the same module).
+
+> **[S175 Q3.2] The selection term is added on FIXED-PRICE PROJECTS ONLY.** On cost-plus and T&M,
+> `project_financials.contract_value` is the user-entered projection money-rep P11 forbids from
+> billing math — the same reason `enforce_contract_billing_ceiling` and `getContractBilling` skip
+> non-fixed projects — and the selection's cost bills as incurred there.
+> _Superseded, quoted not deleted: "The fixed/projected split applies as for COs."_ The ruling is
+> **narrower** than that sentence: a CO's `net_delta` joins the projected sum; a selection variance
+> does not.
+>
+> **The absence is a value, not a note.** `RevisedContract` carries **both** `selectionDelta` and an
+> explicit `selectionDeltaExcluded: boolean`, and the selections are fetched for every project type
+> precisely so the flag can be true. Josh ruled against a UI-only caveat: a silent absence is the
+> `final_hold` shape — accepted by the schema, acted on nowhere, invisible on screen. The Budget page
+> renders an "Approved selections — excluded" card carrying the excluded magnitude; the project page
+> renders the sentence.
+
+`profitability.ts` gains the selection as a **third instrument kind** — **[S175, shipped]** at the
+**allocation**, not the budget line (Q3.1): a cost tagged with a selection whose allowance sits on a
+**fixed-price** instrument belongs to `sel:<id>`, carries its contribution to actual (recompute's own
+rule, given up by the allowance line's slice so nothing double-counts), and the slice's sell is
+`signed_sell_amount`. On a **cost-plus / T&M parent** the tagged cost stays transitive and prices
+through the parent's rates — it bills as incurred, and `selection-money.ts` is the one place that
+decides which. `aggregateCategories` was **dropping the allowance category** since S170
+(`PROFIT_CATEGORIES` had four entries); fixed in the same step.
 
 **Billing the overage:** an invoice line with `source_selection_id`, `line_type = 'fixed'`,
 `category = 'allowance'`. **It escapes the contract-billing ceiling because the ceiling is scoped to
 `source_estimate_id`** (analysis 2b.1); billing it against the estimate instrument would be refused
-with *"raise the scope with a change order"*. A `getSelectionBilling()` sibling of
-`getChangeOrderBilling()` gives billed vs. signed → remaining.
+with *"raise the scope with a change order"*.
+
+> **[S175 Q3.3] BUT ESCAPING THE CONTRACT CEILING MUST NOT MEAN ESCAPING EVERY CEILING.**
+> `enforce_selection_billing_ceiling()` (`20261034000000`) caps Σ live billing against a selection at
+> `signed_variance`. The contract ceiling's own argument applies verbatim — *"a 30% draw plus 80% of
+> the line items is a 110% invoice in which every individual figure is legal"* — and without it a
+> signed variance of $400 could be billed five times. **A read does not constrain a write:**
+> `getSelectionBilling()` shows the figure; the trigger enforces it. It refuses an unsigned selection,
+> treats a variance of exactly 0.00 as a cap of zero (not a credit), passes credits and credit lines
+> through, restores headroom on void, and is **not gated on project type** — a signed variance is not
+> a P11 projection.
+
+A `getSelectionBilling()` sibling of `getChangeOrderBilling()` gives billed vs. signed → remaining, in
+the same **three kinds**: `fixed_remaining` (fixed parent instrument), `as_incurred` (the allowance sits
+on a cost-plus / T&M instrument — no line is offered, the cost bills through the picker), `credit`
+(§7.2). The invoice builder offers a fixed line per `fixed_remaining` selection; the Budget page shows
+"Remaining on selections" beside the CO figure.
 
 ### §7.2 — The credit (Q5)
 Owed = Σ `|signed_variance|` over approved selections with `signed_variance < 0`. Applied = Σ
@@ -448,7 +537,8 @@ Owed = Σ `|signed_variance|` over approved selections with `signed_variance < 0
 applied, derived** — the §4a negative-CO shape. Surfaced on the invoice builder as an available
 credit, placed on any invoice the user chooses; **`is_final` is lifted for sourced credits** and kept
 for the legacy unsourced under-credit (§1.2). Contract value is **not** reduced — the allowance
-stands (Q5).
+stands (Q5). **[S175, shipped]** `getAvailableCredits` kind `'selection'`; "live" includes drafts —
+a credit placed on a draft is spoken for, as a negative CO's is; `addAllowanceCredit(…, selectionId)`.
 
 ### §7.3 — Specifications sheet (Q10)
 Eighth `@react-pdf` template on the `*-pdf-service.ts` pattern: approved selections to date, grouped
@@ -498,8 +588,9 @@ refusals (e.g. no priced option) are listed by name and those rows stay ticked.
 batch appear together, **each with its own signature** (§1.3 R-S173-2); a partial batch is normal —
 signing one does not touch the others.
 
-Per selection: options with images and **per-option sell prices** (derived live, §5.2 — _superseded:
-"from `offered_*`"_), or the discussion thread (client can post, attach a link and photos, per
+Per selection: options with images and **per-option sell prices** (from the S174 **snapshot** —
+`optionSell()` over `selection_amounts.inherited_markup_percent`, §5.2 as amended; _superseded twice,
+quoted not deleted: "derived live, §5.2" [S173] and, before that, "from `offered_*`"_), or the discussion thread (client can post, attach a link and photos, per
 9-spec §7.2's one-unit rule). **The client PICKS here — the green-box interaction from the company
 sheet, reused** (tap an option → green border; `allow_multiple` decides one-of or several-of; the
 pick writes `is_chosen` through stage 7's portal write path). Above the signature, **totals over
@@ -586,7 +677,7 @@ Blast radius counts the ~14 silent money sites from analysis §1 touched by the 
 | **2** | Selections data model (§3.1–§3.7) + policies (§4) + services. Harnesses #7, #8. | 1 (allowance budget lines exist) | 3, 4, 5 | unattended (new tables, no shipped code touched) | 0 |
 | **3** | Company sheet + project tab UI (§9.1, §9.2), four image paths, catalog/budget option sources, internal notes, thread. Playwright. | 2 | 4 | unattended | 0 |
 | **4** | Offer/sign/deny/revise lifecycle: stamps, `selection_signing_sessions`, portal signature via caller-context, notifications. Harnesses #9–#12. | 2 (3 for the UI trigger) | 5, 7 | **Attended** — extends M9's one-write-path signature | 0 |
-| **5** | Money downstream: `contract-value.ts` (three derivers), `profitability.ts` third instrument, `source_selection_id` + three-way CHECK, selection billing, sourced `credit_allowance` with lifted `is_final`, budget subcategory in `budget.ts`. Harnesses #10 (second half), #13–#17. | 1, 4 | 7 | **Attended — touches 7B/7D/7H shipped money code and a 7D CHECK** | 6 (`computeRowCost` chain already done in 1; here: `contract-value` ×3, `profitability`, `invoice-derivation` sections, `budget.ts`) |
+| **5** | **SHIPPED [S175, unattended by ruling — every question ruled in advance, `S175-questions.md`]** Money downstream: `contract-value.ts` (five derivers), `profitability.ts` third instrument, `source_selection_id` on BOTH `invoice_lines` and `expense_allocations` + three-way CHECK + the selection's own ceiling, selection billing, sourced `credit_allowance` with lifted `is_final`, budget subcategory in `budget.ts`, the cost tag on both capture surfaces and review. Harness `s175-stage5-selection-money` covers #10 (second half), #11, #13–#17. | 1, 4 | 7 | ~~Attended~~ — ruled unattended at S175 | 6 (`computeRowCost` chain already done in 1; here: `contract-value` ×5, `profitability`, `invoice-derivation` sections, `budget.ts`) |
 | **6** | Specifications PDF + email + file (§7.3, §9.4). Harness #18. | 3, 4 | — | unattended | 0 |
 | **7** | **Portal Selections page** (§9.3) — replaces the S168 dead route. Playwright on the four portal pages. | 2, 4, 5 | — (last) | unattended | 0 |
 

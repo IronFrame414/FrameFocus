@@ -9,6 +9,8 @@ import {
   getEstimate,
   markAsSent,
   softDeleteEstimate,
+  voidEstimate,
+  reissueEstimate,
   submitForReview,
   updateEstimate,
 } from '@/lib/services/estimates-client';
@@ -74,6 +76,14 @@ export function EstimateBuilder({ estimateId, role, userId }: EstimateBuilderPro
   const [actionError, setActionError] = useState<string | null>(null);
   const [actionBusy, setActionBusy] = useState(false);
   const [cloneOpen, setCloneOpen] = useState(false);
+  // [S175 #2] The void REASON is required in every case, so voiding is a PANEL
+  // and never a window.confirm(). Same decision S168 made for change orders,
+  // and for the same reason: a reason is a RECORD — it is frozen the moment it
+  // is written (`enforce_estimate_immutability`) and read back for the life of
+  // the document. A confirm() cannot carry one.
+  const [voidOpen, setVoidOpen] = useState(false);
+  const [voidReason, setVoidReason] = useState('');
+  const [busyVoid, setBusyVoid] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
   const [sendPrefill, setSendPrefill] = useState<{
     email: string | null;
@@ -258,6 +268,35 @@ export function EstimateBuilder({ estimateId, role, userId }: EstimateBuilderPro
     }
   }
 
+  async function handleVoid() {
+    setBusyVoid(true);
+    setActionError(null);
+    const result = await voidEstimate(estimate.id, voidReason);
+    setBusyVoid(false);
+    if (result.success) {
+      setVoidOpen(false);
+      setVoidReason('');
+      await reload();
+    } else {
+      // The refusal sentence comes from the database — the converted-estimate
+      // message names the project — so it is shown verbatim rather than
+      // replaced with a generic one.
+      setActionError(result.error || 'Void failed');
+    }
+  }
+
+  async function handleReissue() {
+    setBusyVoid(true);
+    setActionError(null);
+    const result = await reissueEstimate(estimate.id);
+    setBusyVoid(false);
+    if (result.success && result.id) {
+      router.push(`/dashboard/estimates/${result.id}`);
+    } else {
+      setActionError(result.error || 'Reissue failed');
+    }
+  }
+
   const tabProps: TabProps = { data, role, userId, canEdit, reload };
 
   return (
@@ -399,6 +438,140 @@ export function EstimateBuilder({ estimateId, role, userId }: EstimateBuilderPro
           >
             This estimate is {estimate.status === 'review' ? 'in review' : estimate.status} and
             frozen — fields cannot be edited.
+          </div>
+        )}
+
+        {/* ── [S175 #2] VOID AND REISSUE ─────────────────────────────────────
+            A sent estimate can no longer be un-sent or silently edited, so
+            withdrawing it IS the remedy and it has to be reachable. Owner,
+            Admin or the authoring PM; the database decides and this only
+            offers. A CONVERTED estimate is refused there, with the project
+            named — deliberately not hidden here, so the reason is stated
+            rather than the button simply being absent. */}
+        {isManager && estimate.status !== 'draft' && estimate.status !== 'review' && (
+          <div style={{ marginTop: '0.75rem' }}>
+            {estimate.status === 'voided' ? (
+              <div
+                data-testid="est-void-record"
+                style={{
+                  padding: '0.75rem',
+                  border: '1px solid #fecaca',
+                  backgroundColor: '#fef2f2',
+                  borderRadius: '0.375rem',
+                  fontSize: '0.8125rem',
+                  color: '#7f1d1d',
+                }}
+              >
+                <strong>Voided.</strong> {estimate.void_reason}
+                <div style={{ marginTop: '0.5rem' }}>
+                  <button
+                    type="button"
+                    data-testid="est-reissue"
+                    disabled={busyVoid}
+                    onClick={handleReissue}
+                    style={{
+                      padding: '0.45rem 0.875rem',
+                      borderRadius: '0.375rem',
+                      border: '1px solid #1f2937',
+                      backgroundColor: '#1f2937',
+                      color: '#fff',
+                      fontSize: '0.8125rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Reissue as a new draft
+                  </button>
+                </div>
+              </div>
+            ) : voidOpen ? (
+              <div
+                data-testid="est-void-panel"
+                style={{
+                  padding: '0.75rem',
+                  border: '1px solid #fecaca',
+                  backgroundColor: '#fef2f2',
+                  borderRadius: '0.375rem',
+                }}
+              >
+                <p style={{ fontSize: '0.8125rem', color: '#7f1d1d', margin: '0 0 0.5rem' }}>
+                  Withdraw {estimate.estimate_number}? The client keeps the copy they were sent —
+                  this records that it no longer stands. <strong>The reason is kept permanently
+                  and cannot be edited afterwards.</strong>
+                </p>
+                <textarea
+                  data-testid="est-void-reason"
+                  value={voidReason}
+                  onChange={(e) => setVoidReason(e.target.value)}
+                  rows={2}
+                  placeholder="Why is this being withdrawn?"
+                  style={{
+                    width: '100%',
+                    padding: '0.5rem',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '0.375rem',
+                    fontSize: '0.8125rem',
+                  }}
+                />
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                  <button
+                    type="button"
+                    data-testid="est-void-confirm"
+                    disabled={busyVoid || !voidReason.trim()}
+                    onClick={handleVoid}
+                    style={{
+                      padding: '0.45rem 0.875rem',
+                      borderRadius: '0.375rem',
+                      border: '1px solid #b91c1c',
+                      backgroundColor: '#b91c1c',
+                      color: '#fff',
+                      fontSize: '0.8125rem',
+                      fontWeight: 600,
+                      cursor: voidReason.trim() ? 'pointer' : 'not-allowed',
+                    }}
+                  >
+                    Void this estimate
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="est-void-cancel"
+                    disabled={busyVoid}
+                    onClick={() => {
+                      setVoidOpen(false);
+                      setVoidReason('');
+                    }}
+                    style={{
+                      padding: '0.45rem 0.875rem',
+                      borderRadius: '0.375rem',
+                      border: '1px solid #d1d5db',
+                      backgroundColor: '#fff',
+                      fontSize: '0.8125rem',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                data-testid="est-void"
+                onClick={() => setVoidOpen(true)}
+                style={{
+                  padding: '0.45rem 0.875rem',
+                  borderRadius: '0.375rem',
+                  border: '1px solid #b91c1c',
+                  backgroundColor: '#fff',
+                  color: '#b91c1c',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Void this estimate
+              </button>
+            )}
           </div>
         )}
 

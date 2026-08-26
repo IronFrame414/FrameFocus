@@ -28,8 +28,10 @@ import {
 } from '@/lib/services/invoices-shared';
 import { getCompanyTimeSettings } from '@/lib/services/company';
 import { getJobCostRollup } from '@/lib/services/expenses';
-import { getBudgetRollup } from '@/lib/services/budget';
+import { effectiveBudget, getBudgetRollup } from '@/lib/services/budget';
 import { getRevisedContract } from '@/lib/services/contract-value';
+import { loadApprovedSelectionMoney, selectionInstrumentKey } from '@/lib/services/selection-money';
+import { isPayableRow } from '@/lib/services/payables-shared';
 
 // Module 7H — the per-job profitability report. READ-ONLY. Writes nothing,
 // enforces nothing, owns no table and ships no migration.
@@ -100,6 +102,16 @@ interface LoadedInstrument {
   /** estimate_id or change_order_id — how instrument_rates is keyed. */
   estimateId: string | null;
   changeOrderId: string | null;
+  /**
+   * [S175 stage 5] The THIRD KIND. Set on a `sel:<id>` instrument — an
+   * approved selection whose allowance sits on a FIXED-PRICE instrument (Q4:
+   * the signature is the binding instrument; no CO is generated). It carries
+   * no rate rows: its sell is the SIGNED figure, not a per-cost derivation.
+   */
+  selectionId: string | null;
+  /** signed_sell_amount / signed_variance, on a selection instrument only. */
+  selectionSell: number | null;
+  selectionVariance: number | null;
   rates: RateRow[];
 }
 
@@ -140,6 +152,9 @@ export async function getProfitabilityReport(
       contractType: projectType,
       estimateId: project.source_estimate_id,
       changeOrderId: null,
+      selectionId: null,
+      selectionSell: null,
+      selectionVariance: null,
       rates: [],
     });
   }
@@ -150,8 +165,43 @@ export async function getProfitabilityReport(
       contractType: (co.co_type ?? 'fixed_price') as ContractType,
       estimateId: null,
       changeOrderId: co.id,
+      selectionId: null,
+      selectionSell: null,
+      selectionVariance: null,
       rates: [],
     });
+  }
+
+  // ── [S175 stage 5] THE THIRD INSTRUMENT KIND: an approved SELECTION ──────
+  // Spec §7.1: "profitability.ts gains the selection as a third instrument
+  // kind in its cost loop or margin is overstated." Without it a selection's
+  // cost sat on its ALLOWANCE line and was attributed TRANSITIVELY to the
+  // estimate (or, on a source-less line, to nothing), while its sell — the
+  // figure the client signed — reached no slice at all.
+  //
+  // Only a selection whose allowance sits on a FIXED-PRICE instrument becomes
+  // an instrument here. On a cost-plus / T&M parent the tagged cost bills AS
+  // INCURRED through the parent's rates (getPickableCosts offers it that way),
+  // so it stays transitive below and is priced by deriveCostLine like any
+  // other cost — selection-money.ts is the one place that decides which.
+  const approvedSelections = await loadApprovedSelectionMoney(supabase, projectId);
+  const selectionInstrumentById = new Map<string, LoadedInstrument>();
+  for (const sel of approvedSelections) {
+    if (sel.asIncurred) continue;
+    const inst: LoadedInstrument = {
+      key: selectionInstrumentKey(sel.id),
+      label: `Selection — ${sel.name}`,
+      // Fixed BY CONSTRUCTION: the sell is signed, never derived per cost.
+      contractType: 'fixed_price',
+      estimateId: null,
+      changeOrderId: null,
+      selectionId: sel.id,
+      selectionSell: sel.signedSellAmount,
+      selectionVariance: sel.signedVariance,
+      rates: [],
+    };
+    instruments.push(inst);
+    selectionInstrumentById.set(sel.id, inst);
   }
 
   // Rate rows, read under the caller's session. Owner/Admin passes
@@ -198,7 +248,7 @@ export async function getProfitabilityReport(
   // ── Approved costs, per allocation ───────────────────────────────────────
   const { data: allocations } = await supabase
     .from('expense_allocations')
-    .select('id, expense_id, budget_item_id, amount')
+    .select('id, expense_id, budget_item_id, amount, source_selection_id')
     .eq('is_deleted', false)
     .in('budget_item_id', [...instrumentForBudgetItem.keys(), ...unattributedItems]);
 
@@ -206,12 +256,55 @@ export async function getProfitabilityReport(
   const { data: expenses } = expenseIds.length
     ? await supabase
         .from('expenses')
-        .select('id, description, supplier, expense_date, cost_category, status, is_deleted')
+        .select(
+          'id, description, supplier, expense_date, cost_category, status, is_deleted, amount, state, sub_contract_id, purchase_order_id, is_retainage'
+        )
         .in('id', expenseIds)
         .eq('status', 'approved') // §7H.2 #7 — approved only, always
         .eq('is_deleted', false)
     : { data: [] };
   const expenseById = new Map((expenses ?? []).map((e) => [e.id, e]));
+
+  // [S175 stage 5] The ACTUAL a tagged allocation contributed to its allowance
+  // line — recompute_budget_item_actual()'s rule, per allocation: a plain
+  // actual counts its amount; a commitment (PO / sub-contract / retainage /
+  // state=committed / anything paid) counts only what has been PAID, net of
+  // retainage, prorated by the allocation's share. The selection's slice
+  // carries this figure and the allowance line's slice is reduced by it, so
+  // the category total counts each dollar once. Payments are read only for
+  // the tagged expenses, which are few.
+  const taggedExpenseIds = [
+    ...new Set(
+      (allocations ?? [])
+        .filter((a) => a.source_selection_id && selectionInstrumentById.has(a.source_selection_id))
+        .map((a) => a.expense_id)
+    ),
+  ];
+  const { data: taggedPayments } = taggedExpenseIds.length
+    ? await supabase
+        .from('expense_payments')
+        .select('expense_id, amount, retainage_withheld, is_deleted')
+        .in('expense_id', taggedExpenseIds)
+        .eq('is_deleted', false)
+    : { data: [] as { expense_id: string; amount: number; retainage_withheld: number | null; is_deleted: boolean }[] };
+  const paidByExpense = new Map<string, number>();
+  for (const p of taggedPayments ?? []) {
+    paidByExpense.set(
+      p.expense_id,
+      round2((paidByExpense.get(p.expense_id) ?? 0) + Number(p.amount) - Number(p.retainage_withheld ?? 0))
+    );
+  }
+  const allocationActual = (alloc: { expense_id: string; amount: number }): number => {
+    const e = expenseById.get(alloc.expense_id);
+    if (!e) return 0;
+    const paid = paidByExpense.has(e.id);
+    if (!isPayableRow(e, paid)) return round2(Number(alloc.amount));
+    const share = Number(e.amount) ? Number(alloc.amount) / Number(e.amount) : 0;
+    return round2((paidByExpense.get(e.id) ?? 0) * share);
+  };
+  /** Per selection instrument and per allowance line: the tagged actual. */
+  const selectionActual = new Map<string, number>();
+  const taggedActualByItem = new Map<string, number>();
 
   // ── Price each cost through ITS OWN instrument ───────────────────────────
   const sellByInstrumentCategory = new Map<string, number>();
@@ -222,6 +315,26 @@ export async function getProfitabilityReport(
   for (const alloc of allocations ?? []) {
     const expense = expenseById.get(alloc.expense_id);
     if (!expense) continue; // unapproved, rejected or deleted
+
+    // [S175 stage 5] THE THIRD ARM, at the ALLOCATION — the cost row is where
+    // the person booking it knew the answer (Q3.1). A cost tagged with a
+    // fixed-parent selection belongs to that selection, wherever its allowance
+    // line would otherwise have sent it — including out of `unattributed`.
+    const selInst = alloc.source_selection_id
+      ? selectionInstrumentById.get(alloc.source_selection_id)
+      : undefined;
+    if (selInst) {
+      const contributed = allocationActual(alloc);
+      selectionActual.set(selInst.key, round2((selectionActual.get(selInst.key) ?? 0) + contributed));
+      taggedActualByItem.set(
+        alloc.budget_item_id,
+        round2((taggedActualByItem.get(alloc.budget_item_id) ?? 0) + contributed)
+      );
+      // A selection instrument is FIXED: its sell is the signed figure, and
+      // pricing its cost through a rate would be the double count the parent
+      // arm below avoids for the contract.
+      continue;
+    }
 
     if (unattributedItems.has(alloc.budget_item_id)) {
       unattributedActual = round2(unattributedActual + Number(alloc.amount));
@@ -284,6 +397,8 @@ export async function getProfitabilityReport(
     rollup,
     sellByInstrumentCategory,
     laborSell: labor.sell,
+    selectionActual,
+    taggedActualByItem,
   });
   const categories = aggregateCategories(slices);
 
@@ -306,15 +421,37 @@ export async function getProfitabilityReport(
 
   // Earned: contract value for the fixed-price side (7B derives it — never
   // re-derived here), plus the derived revenue of every non-fixed instrument.
-  const hasFixed = instruments.some((i) => !isDerivedContract(i.contractType));
+  //
+  // [S175 stage 5] A selection instrument is fixed but is NOT what decides
+  // `hasFixed`: on a fixed-price job its variance is already INSIDE
+  // revised.revised (contract-value.ts, Q3.2), and on a cost-plus / T&M job a
+  // fixed-parent selection can only exist under a fixed-price CO — which has
+  // made hasFixed true already. Counting the selection here would pull the
+  // P11 projection into earned on a job that had no fixed instrument at all.
+  const contractInstruments = instruments.filter((i) => i.selectionId === null);
+  const hasFixed = contractInstruments.some((i) => !isDerivedContract(i.contractType));
   const revised = hasFixed ? await getRevisedContract(projectId) : null;
   const derivedRevenue =
     [...sellByInstrumentCategory.values()].reduce((s, v) => s + v, 0) + (labor.sell ?? 0);
 
-  const anyDerived = instruments.some((i) => isDerivedContract(i.contractType));
+  // [S175 stage 5, Q3.2] On a non-fixed job the selection term is EXCLUDED
+  // from contract value — but a fixed-parent selection there (an allowance on
+  // a fixed-price CO) is still signed, earned revenue. It is added here, and
+  // SAID, so the exclusion is a value on this screen too rather than a figure
+  // that quietly went missing between two derivations.
+  const selectionSellOutsideContract =
+    revised?.selectionDeltaExcluded === true
+      ? round2(
+          instruments
+            .filter((i) => i.selectionId !== null)
+            .reduce((s, i) => s + (i.selectionVariance ?? 0), 0)
+        )
+      : 0;
+
+  const anyDerived = contractInstruments.some((i) => isDerivedContract(i.contractType));
   const earned =
     hasFixed && revised?.revised !== null && revised?.revised !== undefined
-      ? round2(revised.revised + (anyDerived ? derivedRevenue : 0))
+      ? round2(revised.revised + (anyDerived ? derivedRevenue : 0) + selectionSellOutsideContract)
       : anyDerived
         ? round2(derivedRevenue)
         : null;
@@ -359,6 +496,15 @@ export async function getProfitabilityReport(
   }
   if (rateMissing.size > 0) {
     caveats.push({ code: 'rate_missing', message: caveatMessage('rate_missing') });
+  }
+  if (selectionSellOutsideContract !== 0) {
+    caveats.push({
+      code: 'selection_variance_outside_contract',
+      message: caveatMessage('selection_variance_outside_contract', {
+        amount: selectionSellOutsideContract,
+      }),
+      amount: selectionSellOutsideContract,
+    });
   }
   if (headline.basis === 'billed') {
     caveats.push({ code: 'basis_switched', message: caveatMessage('basis_switched') });
@@ -506,6 +652,10 @@ function buildSlices(input: {
   rollup: Awaited<ReturnType<typeof getJobCostRollup>>;
   sellByInstrumentCategory: Map<string, number>;
   laborSell: number | null;
+  /** [S175 stage 5] Tagged actual per selection instrument key, and the same
+   *  money keyed by the allowance line it was booked to — see below. */
+  selectionActual: Map<string, number>;
+  taggedActualByItem: Map<string, number>;
 }): InstrumentCategorySlice[] {
   const slices: InstrumentCategorySlice[] = [];
 
@@ -536,11 +686,19 @@ function buildSlices(input: {
       let committed = 0;
       let actual = 0;
       for (const item of items) {
-        if (item.budgeted_amount !== null && item.budgeted_amount !== undefined) {
-          budgetSum = (budgetSum ?? 0) + item.budgeted_amount;
+        // [S175 stage 5] §5.4 — an allowance with an approved selection is
+        // budgeted at the selection's RESULTING total, not its original.
+        const budgeted = effectiveBudget(item);
+        if (budgeted !== null && budgeted !== undefined) {
+          budgetSum = (budgetSum ?? 0) + budgeted;
         }
         committed += item.committed_remaining;
-        actual += item.actual_amount ?? 0;
+        // [S175 stage 5] A cost tagged with a selection is carried by the
+        // SELECTION's slice below; the allowance line it was booked to gives it
+        // up here so the category counts it once. Clamped at zero because the
+        // stored actual and the per-allocation rule can disagree by a rounding
+        // cent, and a negative allowance actual would be a new lie.
+        actual += Math.max(0, (item.actual_amount ?? 0) - (input.taggedActualByItem.get(item.id) ?? 0));
       }
 
       slices.push({
@@ -557,6 +715,29 @@ function buildSlices(input: {
             : (input.sellByInstrumentCategory.get(`${key}|${category}`) ?? null),
       });
     }
+  }
+
+  // [S175 stage 5] One slice per SELECTION instrument: its tagged cost and its
+  // SIGNED sell. Budget stays on the allowance line (§5.4 shows the selection
+  // re-budgeting it there); committed stays on the allowance line too, because
+  // 7C's remaining is derived per budget line and has no selection grain.
+  // Sell is signed_sell_amount, NOT the variance: the variance is what the
+  // selection ADDS to the contract, the sell is what the client is paying for
+  // the chosen options — and actual is what they cost, so margin = sell − actual
+  // is the selection's own margin. On a fixed-price job the allowance's own
+  // contract sell is not sliced (fixed instruments carry null sell), so this
+  // is the one category where a fixed job shows a per-category sell; it is
+  // the signed figure, which is why it can.
+  for (const inst of input.instruments) {
+    if (inst.selectionId === null) continue;
+    slices.push({
+      instrumentKey: inst.key,
+      category: 'allowance',
+      budget: null,
+      committed: 0,
+      actual: round2(input.selectionActual.get(inst.key) ?? 0),
+      sell: inst.selectionSell,
+    });
   }
 
   // Labor COST is not on the budget lines — it is derived from frozen rate

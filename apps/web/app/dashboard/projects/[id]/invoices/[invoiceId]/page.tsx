@@ -1,7 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
 import { getInvoiceDeliveries } from '@/lib/services/invoice-delivery';
-import { getContractBilling } from '@/lib/services/contract-value';
+import { getContractBilling, getSelectionBilling } from '@/lib/services/contract-value';
 import { getEstimateLineBilling } from '@/lib/services/estimate-line-billing';
 import { getProject } from '@/lib/services/projects';
 import { getChangeOrders } from '@/lib/services/change-orders';
@@ -154,6 +154,13 @@ export default async function InvoiceDetailPage({
   // falling back to zero.
   const contractBilling = await getContractBilling(params.id, params.invoiceId);
 
+  // [S175 stage 5] Approved SELECTIONS with something left to bill (spec
+  // §7.1). The builder offers a fixed line per fixed-remaining selection; the
+  // DB ceiling (enforce_selection_billing_ceiling) is what actually caps it —
+  // this read shows the figure the trigger enforces. Excludes this invoice's
+  // own draft lines, as getContractBilling does.
+  const selectionBilling = await getSelectionBilling(params.id, params.invoiceId);
+
   // §2 [S97] — the estimate's LINE ITEMS, with what is left to bill on each.
   // Fixed-price contract only: a derived instrument bills from incurred cost
   // and worked hours (§6/§7), not from the estimate's agreed prices.
@@ -200,6 +207,7 @@ export default async function InvoiceDetailPage({
       pickableCostsByInstrument={pickableCostsByInstrument}
       pickableHours={pickableHours}
       availableCredits={credits}
+      selectionBilling={selectionBilling}
       originalContractValue={originalContractValue}
       alreadyBilled={alreadyBilled}
       projectRetainagePercent={project.retainage_percent ?? null}

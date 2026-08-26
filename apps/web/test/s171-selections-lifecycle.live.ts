@@ -36,7 +36,10 @@ import { signSelectionOptionImages } from '@/lib/services/selections';
 // THE SENTENCE THIS FILE EXISTS TO PROVE: approving a selection changes
 // NEITHER input of 7B's contract-value derivation (project_financials
 // .contract_value and Σ signed CO net_delta) and writes NOTHING to
-// project_budget_items. Stage 5 is not here, and the test says so.
+// project_budget_items. [S175] Stage 5 READS those inputs (contract-value.ts
+// sums signed_variance as a THIRD term) and still writes none of them — B3's
+// assertion is about the writes and stands. _Superseded wording, quoted not
+// deleted: "Stage 5 is not here, and the test says so."_
 
 const MARKER = 'S171LIFE';
 const PROJECT = '4a4f8567-67f8-4394-baae-181229974bd9'; // QA A — isolation fixture
@@ -263,7 +266,7 @@ describe('S171-4B — sign (Q4): the binding instrument, portal caller-context, 
     expect(snap.consent_text).toBe(ss.consent_text);
   });
 
-  it('B3 — ⚠️ NO CHANGE ORDER was generated, 7B inputs are UNCHANGED, project_budget_items UNCHANGED (stage 5 is not here)', async () => {
+  it('B3 — ⚠️ NO CHANGE ORDER was generated, 7B inputs are UNCHANGED, project_budget_items UNCHANGED (stage 5 reads them; it writes none of them)', async () => {
     const { count } = await admin.from('change_orders').select('id', { count: 'exact', head: true }).eq('project_id', PROJECT).like('title', `%${MARKER}%`);
     expect(count).toBe(0);
     expect(await financials()).toEqual(financialsBaseline);

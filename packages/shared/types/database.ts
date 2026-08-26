@@ -3202,6 +3202,7 @@ export type Database = {
           subcontractor_markup_percent: number | null
           substantial_completion_days: number | null
           subtotal: number
+          supersedes_estimate_id: string | null
           target_end_date: string | null
           tax_rate: number | null
           tax_total: number
@@ -3210,6 +3211,9 @@ export type Database = {
           updated_by: string | null
           version_number: string
           viewed_at: string | null
+          void_reason: string | null
+          voided_at: string | null
+          voided_by: string | null
         }
         Insert: {
           accepted_at?: string | null
@@ -3263,6 +3267,7 @@ export type Database = {
           subcontractor_markup_percent?: number | null
           substantial_completion_days?: number | null
           subtotal?: number
+          supersedes_estimate_id?: string | null
           target_end_date?: string | null
           tax_rate?: number | null
           tax_total?: number
@@ -3271,6 +3276,9 @@ export type Database = {
           updated_by?: string | null
           version_number?: string
           viewed_at?: string | null
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
         }
         Update: {
           accepted_at?: string | null
@@ -3324,6 +3332,7 @@ export type Database = {
           subcontractor_markup_percent?: number | null
           substantial_completion_days?: number | null
           subtotal?: number
+          supersedes_estimate_id?: string | null
           target_end_date?: string | null
           tax_rate?: number | null
           tax_total?: number
@@ -3332,6 +3341,9 @@ export type Database = {
           updated_by?: string | null
           version_number?: string
           viewed_at?: string | null
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
         }
         Relationships: [
           {
@@ -3397,6 +3409,13 @@ export type Database = {
             referencedRelation: "files"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "estimates_supersedes_estimate_id_fkey"
+            columns: ["supersedes_estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
         ]
       }
       expense_allocations: {
@@ -3410,6 +3429,7 @@ export type Database = {
           expense_id: string
           id: string
           is_deleted: boolean | null
+          source_selection_id: string | null
           updated_at: string | null
           updated_by: string | null
         }
@@ -3423,6 +3443,7 @@ export type Database = {
           expense_id: string
           id?: string
           is_deleted?: boolean | null
+          source_selection_id?: string | null
           updated_at?: string | null
           updated_by?: string | null
         }
@@ -3436,6 +3457,7 @@ export type Database = {
           expense_id?: string
           id?: string
           is_deleted?: boolean | null
+          source_selection_id?: string | null
           updated_at?: string | null
           updated_by?: string | null
         }
@@ -3459,6 +3481,13 @@ export type Database = {
             columns: ["expense_id"]
             isOneToOne: false
             referencedRelation: "expenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_allocations_source_selection_id_fkey"
+            columns: ["source_selection_id"]
+            isOneToOne: false
+            referencedRelation: "selections"
             referencedColumns: ["id"]
           },
         ]
@@ -4325,6 +4354,7 @@ export type Database = {
           source_deposit_invoice_id: string | null
           source_estimate_id: string | null
           source_estimate_line_item_id: string | null
+          source_selection_id: string | null
           unit_rate: number | null
           updated_at: string | null
           updated_by: string | null
@@ -4348,6 +4378,7 @@ export type Database = {
           source_deposit_invoice_id?: string | null
           source_estimate_id?: string | null
           source_estimate_line_item_id?: string | null
+          source_selection_id?: string | null
           unit_rate?: number | null
           updated_at?: string | null
           updated_by?: string | null
@@ -4371,6 +4402,7 @@ export type Database = {
           source_deposit_invoice_id?: string | null
           source_estimate_id?: string | null
           source_estimate_line_item_id?: string | null
+          source_selection_id?: string | null
           unit_rate?: number | null
           updated_at?: string | null
           updated_by?: string | null
@@ -4423,6 +4455,13 @@ export type Database = {
             columns: ["source_estimate_line_item_id"]
             isOneToOne: false
             referencedRelation: "estimate_line_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_lines_source_selection_id_fkey"
+            columns: ["source_selection_id"]
+            isOneToOne: false
+            referencedRelation: "selections"
             referencedColumns: ["id"]
           },
         ]
@@ -8931,6 +8970,10 @@ export type Database = {
         Returns: undefined
       }
       unlock_trial_company: { Args: { p_company_id: string }; Returns: number }
+      void_estimate: {
+        Args: { p_estimate_id: string; p_reason: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

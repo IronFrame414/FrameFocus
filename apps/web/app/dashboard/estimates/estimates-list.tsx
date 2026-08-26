@@ -18,7 +18,8 @@ const STATUS_FILTERS: Array<EstimateStatus | 'all'> = [
   'accepted',
   'declined',
   'expired',
-  'revised',
+  // [S175 #2] 'revised' retired (never written); 'voided' is the real one.
+  'voided',
 ];
 
 export function StatusBadge({ status }: { status: EstimateStatus }) {

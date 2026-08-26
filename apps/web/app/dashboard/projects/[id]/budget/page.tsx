@@ -5,7 +5,12 @@ import { getProject } from '@/lib/services/projects';
 import { getBudgetRollup, type InstrumentGroup } from '@/lib/services/budget';
 import { getProjectIncome } from '@/lib/services/project-income';
 import { getDepositCredits } from '@/lib/services/deposit-credit';
-import { getChangeOrderBilling, getContractBilling, getRevisedContract } from '@/lib/services/contract-value';
+import {
+  getChangeOrderBilling,
+  getContractBilling,
+  getRevisedContract,
+  getSelectionBilling,
+} from '@/lib/services/contract-value';
 import { budgetColumnsFor } from '@/lib/services/invoices-shared';
 import { getExpenses, getJobCostRollup } from '@/lib/services/expenses';
 import { getPayablesSummary } from '@/lib/services/payables';
@@ -144,6 +149,13 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
   // job can carry a cost-plus CO and vice versa (P4).
   const coBilling = isOwnerAdmin ? await getChangeOrderBilling(params.id) : null;
 
+  // [S175 stage 5] Approved SELECTIONS — the third term in revised contract
+  // value (Q4: the signature is the binding instrument) and, like the COs, a
+  // figure with its own remaining. getSelectionBilling is the READ of the
+  // ceiling enforce_selection_billing_ceiling() enforces; the two share one
+  // definition of "billed against this selection".
+  const selBilling = isOwnerAdmin ? await getSelectionBilling(params.id) : null;
+
   const depositCredits = isOwnerAdmin ? await getDepositCredits(params.id) : [];
   const undrawnDeposit = Math.round(
     depositCredits.reduce((sum, d) => sum + d.remaining, 0) * 100
@@ -200,6 +212,34 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                 : '—',
             valueColor: contract && contract.signedDelta !== 0 ? color.warning : color.faint,
           },
+          // [S175 stage 5, Q3.2] The selection term. On a fixed-price job it is
+          // IN Revised. On cost-plus / T&M it is EXCLUDED — contract_value is
+          // the P11 projection there and the selection bills as incurred — and
+          // the exclusion is RENDERED, not omitted: Josh ruled a silent absence
+          // is the `final_hold` shape, accepted by the schema and visible
+          // nowhere. The card appears whenever there is something to say.
+          ...(contract && (contract.selectionDelta !== 0 || contract.selectionDeltaExcluded)
+            ? [
+                contract.selectionDeltaExcluded
+                  ? {
+                      label: 'Approved selections — excluded',
+                      value: selBilling
+                        ? money(
+                            selBilling.selections.reduce((n, s) => n + s.signedVariance, 0)
+                          )
+                        : '—',
+                      valueColor: color.faint,
+                      caption:
+                        'not in the projection: on a cost-plus / T&M contract a selection bills as incurred, so its signed variance is not added here',
+                    }
+                  : {
+                      label: 'Approved selections',
+                      value: `${contract.selectionDelta > 0 ? '+' : ''}${money(contract.selectionDelta)}`,
+                      valueColor: contract.selectionDelta < 0 ? color.danger : color.warning,
+                      caption: 'signed by the client — in Revised',
+                    },
+              ]
+            : []),
           ...(isFixed
             ? [
                 {
@@ -254,6 +294,38 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                       : null,
                     coBilling.creditCount > 0
                       ? `${coBilling.creditCount} credit CO${coBilling.creditCount === 1 ? '' : 's'} excluded`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · '),
+                },
+              ]
+            : []),
+          // [S175 stage 5] Remaining on SELECTIONS, beside the CO figure and in
+          // its shape: the value covers fixed selections only, and the caption
+          // names every kind not in it. Credits are §7.2's to give, not scope
+          // to bill; as-incurred selections bill through their instrument's
+          // rates and have no fixed amount.
+          ...(selBilling && selBilling.selections.length > 0
+            ? [
+                {
+                  label: 'Remaining on selections',
+                  value: selBilling.fixedCount > 0 ? money(selBilling.fixedRemaining) : '—',
+                  valueColor:
+                    selBilling.fixedCount === 0
+                      ? color.faint
+                      : selBilling.fixedRemaining < 0
+                        ? color.warningDeep
+                        : color.navy,
+                  caption: [
+                    selBilling.fixedCount > 0
+                      ? `${selBilling.fixedCount} fixed selection${selBilling.fixedCount === 1 ? '' : 's'}`
+                      : 'no fixed selections',
+                    selBilling.asIncurredCount > 0
+                      ? `${selBilling.asIncurredCount} billed as incurred (no fixed amount)`
+                      : null,
+                    selBilling.creditCount > 0
+                      ? `${selBilling.creditCount} credit${selBilling.creditCount === 1 ? '' : 's'} excluded`
                       : null,
                   ]
                     .filter(Boolean)
@@ -513,7 +585,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                 </div>
 
                 {instrument.groups.map((group) =>
-                  group.items.map((item) => {
+                  group.items.flatMap((item) => {
                     const cost = lineCost(item.actual_amount, item.committed_remaining);
                     // RULING [S97]: budgeted_amount is NULL when the reader is
                     // not permitted. `?? 0` here produced a variance of MINUS
@@ -526,7 +598,71 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                     // Likewise: an absent figure must not classify the row as
                     // non-credit. Unknown is unknown (D-2 negative CO rows).
                     const credit = item.budgeted_amount !== null && item.budgeted_amount < 0;
-                    return (
+                    // [S175 stage 5] §5.4 — the selection subcategory under an
+                    // allowance: each approved selection at its chosen cost,
+                    // then the RESULTING total, which is what the sums above
+                    // and below count in place of the original. Owner/Admin
+                    // only by construction (needs budgeted_amount).
+                    const sub = item.selection_subcategory;
+                    const subRows = sub
+                      ? [
+                          ...sub.selections.map((s) => (
+                            <div
+                              key={`${item.id}-sel-${s.id}`}
+                              style={{
+                                display: 'grid',
+                                gridTemplateColumns: gridTemplate,
+                                gap: '12px',
+                                alignItems: 'center',
+                                padding: '7px 20px 7px 36px',
+                                borderBottom: `1px solid ${color.rowDivider}`,
+                                backgroundColor: color.blueTint,
+                              }}
+                            >
+                              <span style={{ fontFamily: font.mono, fontSize: '12px', color: color.faint }}>↳</span>
+                              <span style={{ fontFamily: font.sans, fontSize: '12.5px', color: color.body }}>
+                                Selection — {s.name}
+                                <span style={{ color: color.faint, fontSize: '11.5px' }}> · approved, at chosen cost</span>
+                              </span>
+                              {isOwnerAdmin && <span style={{ ...moneyCell, fontSize: '12.5px' }}>{money(s.cost)}</span>}
+                              {seesCommitted && <span style={dashCell}>—</span>}
+                              <span style={dashCell}>—</span>
+                              {seesCommitted && <span style={dashCell}>—</span>}
+                              {isOwnerAdmin && <span style={dashCell}>—</span>}
+                            </div>
+                          )),
+                          <div
+                            key={`${item.id}-resulting`}
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: gridTemplate,
+                              gap: '12px',
+                              alignItems: 'center',
+                              padding: '7px 20px 9px 36px',
+                              borderBottom: `1px solid ${color.rowDivider}`,
+                              backgroundColor: color.blueTint,
+                            }}
+                          >
+                            <span style={{ fontFamily: font.mono, fontSize: '12px', color: color.faint }}>=</span>
+                            <span style={{ fontFamily: font.sans, fontSize: '12.5px', fontWeight: 600, color: color.navy }}>
+                              Resulting allowance budget
+                              <span style={{ color: color.faint, fontWeight: 400, fontSize: '11.5px' }}>
+                                {' '}
+                                · {sub.variance >= 0 ? '+' : '−'}
+                                {money(Math.abs(sub.variance))} vs the original — this is what the totals count
+                              </span>
+                            </span>
+                            {isOwnerAdmin && (
+                              <span style={{ ...moneyCell, fontWeight: 600, fontSize: '12.5px' }}>{money(sub.resulting)}</span>
+                            )}
+                            {seesCommitted && <span style={dashCell}>—</span>}
+                            <span style={dashCell}>—</span>
+                            {seesCommitted && <span style={dashCell}>—</span>}
+                            {isOwnerAdmin && <span style={dashCell}>—</span>}
+                          </div>,
+                        ]
+                      : [];
+                    return [
                       <div
                         key={item.id}
                         style={{
@@ -606,8 +742,9 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                               : `${variance >= 0 ? '+' : '−'}${money(Math.abs(variance))}`}
                           </span>
                         )}
-                      </div>
-                    );
+                      </div>,
+                      ...subRows,
+                    ];
                   })
                 )}
 

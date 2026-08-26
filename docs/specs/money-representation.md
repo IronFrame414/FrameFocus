@@ -968,11 +968,59 @@ live-contract terms; they are edited and read where the live job lives:
   spec was S-3 estimate-side and stays there; it does not extend to the
   project.)
 - **Recompute rules (live project):** do NOT call
-  `recalculateEstimateTotals` for the estimate instrument — on a
-  converted/frozen estimate its UPDATEs RLS-match zero rows and it still
-  returns success: a silent no-op that fakes a recompute. A rate edit on a
+  `recalculateEstimateTotals` for the estimate instrument. A rate edit on a
   **draft CO** instrument triggers `recalculateChangeOrderTotals` for that
-  CO. Pricing incurred cost/hours at the rate in force when
+  CO.
+
+  > ### ⚠️ CORRECTED [S175]: THE REASON GIVEN HERE WAS FALSE, AND IT WAS LOAD-BEARING
+  >
+  > _Superseded text, quoted rather than deleted:_ _"on a converted/frozen
+  > estimate **its UPDATEs RLS-match zero rows** and it still returns success: a
+  > silent no-op that fakes a recompute."_
+  >
+  > **That held only for a PROJECT MANAGER.** `estimates_update_manager` carries
+  > `status = 'draft'` **only on its project-manager arm**; the Owner/Admin arm
+  > is role-only. S174 proved the write live: `UPDATE estimates SET grand_total
+  > = 999999` on a `sent` estimate, as Owner through the anon key, returned
+  > **1 row** and read back `999999`.
+  >
+  > **And the two roles are inverted from where the risk sat.** This very
+  > section rules that project rates are **Owner/Admin-only** — _"PM and Foreman
+  > do not see project rates."_ So the only roles that can reach the screen this
+  > note protects were the only roles the guard did not catch.
+  >
+  > **What actually happened on a sent estimate, which is worse than a no-op.**
+  > `recalculateEstimateTotals` writes `estimate_line_rows.total` and
+  > `estimate_line_items.total_price` **before** it writes the estimate. Those
+  > two ARE floored to `status = 'draft'`, and an RLS-filtered UPDATE returns
+  > **zero rows with no error**, which the function does not check for. The
+  > child writes were therefore dropped silently and the parent write succeeded:
+  > **a partial write that left the estimate's stored totals disagreeing with
+  > its own line items** — not a fake success, an incoherent one.
+  >
+  > **The rule above is unchanged and is now correct for a better reason.**
+  > Since `20261031000000_estimate_immutability.sql`, `subtotal`, `tax_total`,
+  > `grand_total` and `discount_total` are frozen once an estimate reaches
+  > `sent`, so the call no longer half-succeeds — **it raises**, and
+  > `recalculateEstimateTotals` returns `{ success: false, error: 'A sent
+  > estimate is immutable — void and reissue instead.' }`. Do not call it for
+  > the estimate instrument because it will now fail loudly, not because it
+  > quietly does nothing.
+  >
+  > **Precisely: it raises when the recompute would CHANGE a frozen figure.**
+  > The trigger tests `IS DISTINCT FROM`, so a write that lands the same value
+  > is permitted — an idempotent write must not fail, or every upsert-shaped
+  > caller in the app breaks. On an estimate with no line items the recompute
+  > writes 0 over 0 and passes. `s175-estimate-freeze.live.ts` F1 exists in its
+  > current form because the first version of that probe was exactly this
+  > vacuous pass; F2 and F3 pin both halves.
+  >
+  > **No dependent code needs its own fix.** `recomputeDraftCoId` being *"NEVER
+  > set for the estimate instrument"* was the right behaviour resting on the
+  > wrong reason; the behaviour stands. Every caller of
+  > `recalculateEstimateTotals` sits behind `canEdit = status === 'draft'`
+  > (`estimate-builder.tsx:112`, threaded to the tabs as `disabled={!canEdit}`),
+  > so no shipped path reaches it on a sent estimate. Pricing incurred cost/hours at the rate in force when
   incurred/worked is **deferred to 7D** — no stored recompute preempts it.
 - **Open (flagged, NOT resolved here):** (a) a directly-created
   (no-estimate) project has `source_estimate_id IS NULL` — instrument
