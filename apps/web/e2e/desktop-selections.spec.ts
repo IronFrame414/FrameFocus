@@ -133,6 +133,8 @@ test.describe('§9.2 — the project Selections tab', () => {
     await expect(row).toContainText('3cm, eased edge');
     await expectNoMoney(page, '[data-testid="selections-tab"]');
     await expect(page.getByTestId('selection-new')).toBeVisible();
+    // [S175 stage 6] "Generate & send specifications" (§9.2, §7.3).
+    await expect(page.getByTestId('selections-spec-sheet')).toBeVisible();
   });
 
   test('foreman sees the same rows, no "New selection" button, and NO COSTS', async ({ page }) => {
@@ -140,8 +142,21 @@ test.describe('§9.2 — the project Selections tab', () => {
     await page.goto(`/dashboard/projects/${PROJECT_QA_A}/selections`);
     await expect(page.getByTestId(`selection-row-${selectionId}`)).toContainText('Calacatta quartz');
     await expect(page.getByTestId('selection-new')).toHaveCount(0);
+    // [S175 stage 6] Nor the specifications button: §7.3 puts generation at
+    // Owner/Admin/PM, and the route refuses him besides
+    // (`s175-stage6-spec-sheet` F3). Asserted here as well because a hidden
+    // control and a guarded route are two different claims, and #131 is the
+    // standing reminder that hiding is not guarding.
+    await expect(page.getByTestId('selections-spec-sheet')).toHaveCount(0);
     await expectNoMoney(page, '[data-testid="selections-tab"]');
   });
+
+  // NOT ASSERTED HERE, deliberately: the CLICK. Pressing it files a real PDF
+  // into the shared QA fixture project and attempts a real send, and this suite
+  // has no teardown that would remove either. The whole path — filed row, blob
+  // in the bucket, replacement, client_visible, portal read, email_logs row,
+  // and the 403 for a foreman — is driven end to end through the REAL ROUTE in
+  // `s175-stage6-spec-sheet.live.ts`, on its own swept fixture.
 
   test('the tab is in the project nav, between Budget and Change Orders', async ({ page }) => {
     await signIn(page, OWNER);

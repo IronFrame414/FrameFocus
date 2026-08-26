@@ -246,6 +246,12 @@ one current signature (2b.5).
   the COST side of §5.4, see there. Shape trigger `expense_allocations_selection_shape` and
   `approve_expense()` carrying the key: `20261035000000`.
 - **[S175 stage 5] `enforce_selection_billing_ceiling()`** on `invoice_lines` — see §7.1.
+- **[S175 stage 6] `files_category_check` gains `'selections'`, and `email_types` gains
+  `'selection_specifications'`** (`20261036000000`). No table, no column, no policy — see §7.3.
+  The CATEGORY is load-bearing: it is the key `storeSelectionSpecPdf()` replaces on, so a row
+  reaching it by any other route would be hard-removed by the next generation. It is deliberately
+  absent from the upload picker, exactly as `deliveries`, `compliance`, `safety` and
+  `lien_releases` are.
 - `estimates`, `change_orders`, `companies`, `instrument_rates` per §2.1.
 - `cost_catalog` SELECT policy replaced (stage 0, §4).
 
@@ -540,11 +546,99 @@ for the legacy unsourced under-credit (§1.2). Contract value is **not** reduced
 stands (Q5). **[S175, shipped]** `getAvailableCredits` kind `'selection'`; "live" includes drafts —
 a credit placed on a draft is spoken for, as a negative CO's is; `addAllowanceCredit(…, selectionId)`.
 
-### §7.3 — Specifications sheet (Q10)
+### §7.3 — Specifications sheet (Q10) — **SHIPPED [S175 stage 6]**
 Eighth `@react-pdf` template on the `*-pdf-service.ts` pattern: approved selections to date, grouped
 by area — image, chosen option, spec detail, vendor/link. **One rendering, no costs.** Generated on
 demand by Owner/Admin/PM; `storeSelectionSpecPdf()` files it to project files and `sendEmail()`
 mails it to the project's client contact with the company reply-to (`resolveCompanyReplyTo`).
+
+> ### ⚠️ ONE SHEET, ONE RENDERING — **RULED [Josh, S175]**
+>
+> The proposal on the table was one template with two renderings: **sell for the client, cost and
+> vendor detail for the field.** Josh rejected it — *"Same sheet. Emailed to client and added to
+> project files. **No need to inform field employees.**"* So there is no `variant` prop, no
+> caller-chosen presentation and no cost variant, and **there must not be one added later "for the
+> field"**: the field reads the §9.2 tab, which already exists and carries no money either.
+>
+> **Q4.1 — a regeneration REPLACES the filed artifact; it does not version it.** One current sheet
+> per project, the stale row AND its storage blob hard-removed, exactly as `invoice-pdf-service`
+> and `daily-log-pdf-service` do.
+>
+> ⚠️ **AND THAT DELIBERATELY DIFFERS FROM THE ESTIMATE-FREEZE DOCTRINE ITEM 1 SHIPPED IN THE SAME
+> SESSION.** Without this paragraph the two rules read as contradictory and a later reader will
+> "fix" one of them. A sent estimate is frozen (`20261031000000`) because it is an **agreement the
+> client holds**, so a change means void-and-reissue with a new record. **A specifications sheet is
+> a snapshot of a MOVING LIST** — the selections it lists keep being approved, which is the
+> project's normal life and not a revision of anything. Nothing is agreed BY this sheet: each
+> selection was signed individually and those stamps are already frozen, on `selections`.
+> **`email_logs` is what records which version went out when**, which is why stage 6 has its own
+> `email_type` (`selection_specifications`) rather than sharing `selection_released`.
+> Versioning every generation was refused: with no retention rule, project files accumulate one PDF
+> per press of the button.
+>
+> **Q4.2 — the filed PDF is `client_visible`.** She was emailed it; the same document being
+> invisible in her own portal is the inconsistency M9's doctrine warns about. Set on INSERT through
+> the ADMIN client, which is the same write every PDF service already performs — **not** a widening
+> of who may flip the flag (`files_insert_non_client` still admits it from Owner/Admin only, and
+> `s175-stage6-spec-sheet` D6 proves a PM cannot).
+>
+> **Q4.3 — APPROVED selections only, stamped "Approved as of «date»".** A build document listing
+> unapproved choices invites the crew to install one; the date stamp is what makes the snapshot
+> honest, and it is repeated in the FIXED footer because a build document loses its cover sheet.
+> **An empty sheet is REFUSED before anything is written** — `generate*` still renders the empty
+> case for a preview, but filing it would put a blank specifications sheet in the client's portal
+> under the company's name.
+>
+> **Q4.4 — a client-supplied selection is LISTED and MARKED, with no money column.** It carries no
+> money at all by ruling (the `selections` CHECK nulls every stamp), but **the fixture still has to
+> be installed**, so omitting it hands the crew an incomplete list. It appears with its chosen
+> option, spec detail and image, and says plainly *"Supplied by client — no charge"*. **Not a blank
+> price**, which reads as a missing figure rather than a deliberate absence.
+
+> ### ⚠️ "NO COSTS" IS A FINANCIAL-VISIBILITY-FLOOR DECISION, NOT A LAYOUT ONE
+>
+> Recorded because it looks like the latter and would be undone as one. The sheet is filed under
+> `files.category = 'selections'`, and `files_select_non_client` (`20260728000000`) gates only
+> contracts / change_orders / invoices — so **a FOREMAN, a CREW MEMBER and a SUBCONTRACTOR who can
+> view the project all read this row** (`s175-stage6-spec-sheet` D5 proves it). A sell figure on it
+> would hand those three roles a sell amount **at the database**: the Floor breached by a document
+> rather than by a policy, which is the kind nobody probes for.
+>
+> So putting money on this sheet is not a one-line change. It needs the category moved into the
+> gated set FIRST — and that would in turn stop the field reading the sheet at all, which is the
+> other half of what it is for. `selection-money.ts` is consequently **not imported**: stage 5 made
+> it the one implementation of "fixed or as-incurred", and a no-money document honours that by
+> computing none. If the sheet ever gains a figure it comes from there and from nowhere else.
+
+> ### ⚠️ AND `client_visible` DID NOT MEAN SHE COULD SEE IT — a finding Q4.2 did not anticipate
+>
+> The portal's ONLY reader of `files` was `getPortalPhotos()`, and it had **no type filter**: it
+> returned every client-visible file on the project and the Files page rendered each as an `<img>`
+> in the photo grid. The sheet would have arrived in her portal **as a broken image tile** —
+> present, unopenable, and reading as a fault in her contractor's software. Worse than absent.
+>
+> Latent until now only because nothing had ever set `client_visible` on anything but a photo.
+> Fixed in two halves: `getPortalPhotos()` filters to `mime_type LIKE 'image/%'`, and
+> `getPortalSharedFiles()` is its **exact complement**, rendered as a "Shared documents" card with
+> an Open link. The split is by MIME type rather than by category on purpose — a category list
+> needs extending by every future client-visible artifact and silently drops the one somebody
+> forgot; "is it an image" is a property of the file and cannot go stale. Being exact complements is
+> what stops a client-visible file belonging to neither reader.
+
+**Shipped surface.** `lib/selections/spec-sheet-data.ts` (assembly; the type is the contract and has
+no field that could hold a figure) · `lib/selections/spec-sheet-template.tsx` (the template; **no
+product footer** — `lib/brand.ts` rules client-facing documents white-label) ·
+`lib/services/selection-spec-pdf-service.ts` (`generateSelectionSpecPdf`, `storeSelectionSpecPdf`) ·
+`sendSelectionSpecificationsEmail()` **in `selection-email.ts`, not a second mailer** (Josh, S174) ·
+`POST /api/selections/spec-sheet` · the §9.2 button. Images ride the S172 definer read
+(`selection_option_images`) through the caller's client with the bytes fetched by admin; JPEG/PNG
+only, because react-pdf decodes nothing else and would fail the whole render on a HEIC.
+
+⚠️ **`signed_at` TRAVELS WITH THE MONEY STAMPS.** A client-supplied selection's four `signed_*`
+columns are all NULL by CHECK — `signed_at` included, and it is the one that is not money and is
+easy to assume survives. Reading the column alone printed an approval date on every selection
+**except** the one Q4.4 exists to keep fully listed. The date falls back to the completed,
+un-superseded signing session.
 
 ---
 
@@ -578,6 +672,14 @@ checkbox gating the offer_ — `is_chosen` is the client's act and renders read-
 project, including subcontractors.** Grouped by area; per selection: image thumbnail, name, chosen
 option, spec detail, status, due date, link. **No costs of any kind — not a column, not a tooltip,
 not a sum.** Owner/Admin/PM additionally get the "New selection" button and "Generate specifications".
+**[S175 stage 6, shipped]** That second button is **"Generate & send specifications"** and is ONE
+action doing both halves — Josh: *"Same sheet. Emailed to client and added to project files."*
+There is deliberately no generate-without-sending and no send-the-last-one: the artifact is
+REPLACED on every generation (§7.3 Q4.1), so a filed copy and a sent copy produced separately would
+be two documents each claiming to be the current one. A failed send is a WARNING on screen, never a
+rollback — the sheet is filed and visible in her portal either way. **No `/m` affordance**, matching
+the recorded S171 decision that the `/m` selections page is read-only (release and editing are
+desktop-only there); generation is an action, not a view, so §9.5's parity rule is not engaged.
 **[S173 Job 3] Release Selections:** managers get a checkbox per draft/in-discussion row and one
 "Release N selections to the client" action → `POST /api/selections/release`; per-selection
 refusals (e.g. no priced option) are listed by name and those rows stay ticked.
@@ -606,10 +708,21 @@ Added Price            $7,142.85
 until at least one option is picked (§6.2). Approved → signed figures + signed date, read-only.
 Client-supplied → no price block, choice-only wording.
 
-### §9.4 — Specifications sheet (PDF)
+### §9.4 — Specifications sheet (PDF) — **SHIPPED [S175 stage 6]**
 Company header · project · date · per area: option image, name, spec detail, link/vendor. No money.
-"Generate & send" from §9.2; appears under Files and in the portal's Files tab via the existing
-project-files listing.
+"Generate & send" from §9.2; appears under Files and in the portal's Files tab.
+
+_Amended [S175 stage 6]:_ "**via the existing project-files listing**" was wrong about the portal
+half, and finding out why is recorded in §7.3 — the portal had no project-files listing, only a
+photo grid, and the sheet would have rendered in it as a broken image. It now appears in a **"Shared
+documents"** card served by `getPortalSharedFiles()`. Two further additions the line did not carry:
+the client name (`Prepared for …`), and the **"Approved as of «date»" stamp in the FIXED footer** as
+well as the header, so a page torn off and carried onto the site still says what it is a snapshot
+of. A client-supplied row reads *"Supplied by client — no charge"* (Q4.4).
+
+⚠️ **The LAYOUT is unverified.** A PDF template is a visual artifact — it can be built to every
+ruling above and still be wrong on the page. §Y.2 of `S175-questions.md` says so, and it stays
+Josh's to look at.
 
 ### §9.5 — Parity
 Desktop and `/m` both reach §9.1/§9.2 through the same services (CLAUDE.md S122 rule). No `/m`-only
@@ -656,7 +769,13 @@ helper.
 16. Budget page: allowance group present; subcategory shows selection/variance/resulting; project
     total counts the resulting total once.
 17. Profitability includes the selection's cost and sell.
-18. Specifications PDF generated, `files` row created, email logged.
+18. Specifications PDF generated, `files` row created, email logged. **[S175 stage 6, MET]** —
+    `s175-stage6-spec-sheet.live.ts`, 24 probes: generation and the blob actually in the bucket;
+    approved-only with the released-but-unsigned and the draft absent; the date stamp; the
+    client-supplied row listed and marked; **no currency figure on the sheet, asserted against real
+    priced options in the database**; replacement leaving one row and no orphan blob;
+    `client_visible` read by the client and served as a document rather than a photo; the empty
+    refusal writing nothing; and the REAL ROUTE filing, mailing and refusing a foreman by role.
 19. Every live harness in this module creates rows with a **collidable** key (a fixed `name` per
     test, not a timestamp) and sweeps them in `beforeAll` — the S168 lesson.
 
@@ -678,7 +797,7 @@ Blast radius counts the ~14 silent money sites from analysis §1 touched by the 
 | **3** | Company sheet + project tab UI (§9.1, §9.2), four image paths, catalog/budget option sources, internal notes, thread. Playwright. | 2 | 4 | unattended | 0 |
 | **4** | Offer/sign/deny/revise lifecycle: stamps, `selection_signing_sessions`, portal signature via caller-context, notifications. Harnesses #9–#12. | 2 (3 for the UI trigger) | 5, 7 | **Attended** — extends M9's one-write-path signature | 0 |
 | **5** | **SHIPPED [S175, unattended by ruling — every question ruled in advance, `S175-questions.md`]** Money downstream: `contract-value.ts` (five derivers), `profitability.ts` third instrument, `source_selection_id` on BOTH `invoice_lines` and `expense_allocations` + three-way CHECK + the selection's own ceiling, selection billing, sourced `credit_allowance` with lifted `is_final`, budget subcategory in `budget.ts`, the cost tag on both capture surfaces and review. Harness `s175-stage5-selection-money` covers #10 (second half), #11, #13–#17. | 1, 4 | 7 | ~~Attended~~ — ruled unattended at S175 | 6 (`computeRowCost` chain already done in 1; here: `contract-value` ×5, `profitability`, `invoice-derivation` sections, `budget.ts`) |
-| **6** | Specifications PDF + email + file (§7.3, §9.4). Harness #18. | 3, 4 | — | unattended | 0 |
+| **6** | **SHIPPED [S175 item 4, unattended by ruling — Q4.1–Q4.4 ruled in advance]** Specifications PDF + email + file (§7.3, §9.4): `20261036000000` (two registry rows, no table/column/policy), the data module and template, `selection-spec-pdf-service`, `sendSelectionSpecificationsEmail()` inside the EXISTING mailer, `POST /api/selections/spec-sheet`, the §9.2 button, and the portal "Shared documents" card the `client_visible` ruling turned out to need. Harness #18 met, 24 probes. **Layout unverified — Josh's.** | 3, 4 | — | ~~unattended~~ shipped unattended | 0 |
 | **7** | **Portal Selections page** (§9.3) — replaces the S168 dead route. Playwright on the four portal pages. | 2, 4, 5 | — (last) | unattended | 0 |
 
 **Where the risk concentrates:** stage 1 touches every silent site at once and rewrites live rows;

@@ -384,3 +384,140 @@ pure `presentInvoice` math on the legacy unsourced credit, whose final-only rule
 
 Not run, and said so: no production migration (`20261034`/`20261035` are rebuild-test only);
 nothing pushed; the click-test register is Josh's.
+
+---
+
+# ITEM 4 — STAGE 6: THE SPECIFICATIONS SHEET (S175, unattended)
+
+Eight path-scoped commits, one per discrete step, per the S173 rule. Every ruling came from the
+prompt (Q4.1–Q4.4); nothing here needed a stop.
+
+| step | commit | what landed |
+| --- | --- | --- |
+| 1 | `75d5988` | `20261036000000` — `files_category_check` gains `'selections'`, `email_types` gains `'selection_specifications'`, and BOTH TypeScript halves in the same commit |
+| 2 | `e0308bd` | `spec-sheet-data.ts` + `spec-sheet-template.tsx`; the no-money rule proved on a real rendered PDF |
+| 3 | `71f634a` | `selection-spec-pdf-service.ts` — one current sheet per project, replaced not versioned, `client_visible` |
+| 4 | `a46b9f6` | `sendSelectionSpecificationsEmail()` **inside** `selection-email.ts`; its own template and `email_type`; the brand guards extended |
+| 5 | `178cf6e` | `POST /api/selections/spec-sheet` + the §9.2 button; the empty sheet refused in the SERVICE |
+| 6 | `c958023` | the portal side of Q4.2 — `getPortalPhotos` filtered, `getPortalSharedFiles` added, "Shared documents" card |
+| 7 | `accc8a6` | `s175-stage6-spec-sheet.live.ts`, 24 probes; three findings; `pdfText()` rewritten |
+| 8 | this | spec amendments (§3.8, §7.3, §9.2, §9.4, §10 #18, §11) and this record |
+
+## ⚠️ FIVE THINGS THE BUILD FOUND THAT THE RULINGS DID NOT ANTICIPATE
+
+1. **`client_visible` DID NOT MEAN SHE COULD SEE IT.** Q4.2's stated purpose is that the sheet is
+   not *"invisible in her own portal"*. Setting the flag does not achieve that: the portal's only
+   reader of `files` was `getPortalPhotos()`, and it had **no type filter** — every client-visible
+   file came back and the Files page rendered each as an `<img>` in the photo grid. The sheet would
+   have arrived **as a broken image tile**: present, unopenable, and reading as a fault in her
+   contractor's software rather than as a document. Latent only because nothing had ever set the
+   flag on a non-photo. Fixed as two exact complements (`mime_type LIKE 'image/%'` and its
+   negation) plus a "Shared documents" card, split by MIME rather than by category so no future
+   client-visible artifact can fall between them.
+
+2. **`signed_at` TRAVELS WITH THE MONEY STAMPS.** A client-supplied selection has all four
+   `signed_*` columns NULL by CHECK — including `signed_at`, which is not money and is easy to
+   assume survives. Reading the column alone printed "Approved «date»" on every selection **except
+   the one Q4.4 exists to keep fully listed**: the single row that would have looked less approved
+   than its neighbours, on a build document. The date now falls back to the completed,
+   un-superseded signing session, and B6 pins the fallback while asserting the stamp is still NULL
+   so it cannot go quietly vacuous.
+
+3. **`pdfText()` COULD NOT REJOIN A LINE, and it read as "the text is not on the page".** It
+   replaced each TJ group in place and returned the whole stream, operators included — which works
+   only while a string lands in one group, and @react-pdf splits ONE LINE across several complete
+   `BT … ET` blocks whenever glyph positioning changes. `"3cm eased edge"` came back with forty
+   characters of PDF operators between the `3` and the `cm`. It also skipped nothing: an embedded
+   image (the tenant logo, the option pictures) inflates to pixel data or fails to inflate at all,
+   and either way swamped the text and offered random bytes to the hex patterns. Now: text-showing
+   runs only, in order, from streams that carry `BT`/`ET` and are ≥90% printable. The three field
+   PDFs never tripped either, because their fixtures carry no images and their strings happen to
+   fall in one group.
+
+4. **THE FIRST SWEEP LEAKED AND ITS RESIDUE CHECK SAID ZERO.** `email_logs` was swept and counted
+   on `subject LIKE '%MARKER%'` — but the subject is the COMPANY's (*"Bishop Contracting: your
+   specifications sheet"*) and carries no marker at all, so both halves passed while every run left
+   two rows behind. **Six orphans from the development runs were found by hand**, each pointing at
+   a project that no longer existed. Now keyed on `metadata->>project_id` and swept before the
+   projects are deleted, because their ids are what identifies the rows. Verified after the fix by
+   counting every table AND the email logs directly rather than by re-reading the residue check.
+
+5. **THE EMPTY-SHEET GUARD WAS IN THE WRONG PLACE FIRST.** The route's first draft checked
+   `selectionCount === 0` AFTER `storeSelectionSpecPdf()` returned — which uploads the blob, inserts
+   a `client_visible` row, and THEN reports an error, leaving an empty specifications sheet in the
+   client's portal under the company's name. Moved into the service, before anything is written, so
+   every caller inherits it. `generate*` still renders the empty case, for a preview.
+
+## The one call I made rather than took, and it is the one to check
+
+**THE SHEET CARRIES NO MONEY.** The prompt's item-3 hand-off says *"`selection-money.ts` … This
+sheet reads it too"*, which reads as though the sheet shows sell figures. The module spec says the
+opposite twice — §7.3 *"One rendering, no costs"* and §9.4 *"No money."* — and I built to the spec.
+
+The reason is not deference to a document. **The sheet is filed under `files.category = 'selections'`
+and `files_select_non_client` gates only contracts/change_orders/invoices, so a FOREMAN, a CREW
+MEMBER and a SUBCONTRACTOR who can view the project all read that row** — proved, not assumed, by
+harness D5. A sell figure on it is the Financial Visibility Floor breached **by a document rather
+than by a policy**, which is the kind nobody probes for. One reading is safe and matches the spec;
+the other ships a Floor breach.
+
+Q4.4 reads consistently either way — *"not a blank price"* is satisfied by the plain sentence
+*"Supplied by client — no charge"* on a sheet that has no price column at all — so it does not
+settle the question. **If Josh wants sell on the sheet it is not a one-line change:** the category
+has to move into the gated set first, and that stops the field reading the sheet, which is the
+other half of what it is for.
+
+## What was deliberately NOT done, and why
+
+- **No `/m` affordance.** The `/m` selections page is read-only by a recorded S171 decision (release
+  and editing are desktop-only there). Generation is an action, not a view, so §9.5's parity rule is
+  not engaged; adding one would be a second unruled decision.
+- **No generate-without-sending, and no send-the-last-one.** The artifact is REPLACED (Q4.1), so a
+  filed copy and a sent copy produced by separate actions would be two documents each claiming to
+  be current.
+- **No `files.selection_id` column.** The sheet is a PROJECT artifact covering N selections and a
+  scalar FK cannot name N — the same reason `email_logs` got none at `20261029000000`. The replace
+  key is `(project_id, category)`, which is why the category is load-bearing and why the migration
+  says not to add it to the upload picker.
+- **No Playwright click on the button.** Pressing it files a real PDF into the shared QA fixture
+  project and attempts a real send, and that suite has no teardown for either. Playwright asserts
+  the button's presence for an owner and its absence for a foreman; the whole path runs end to end
+  through the REAL ROUTE in the live harness, on its own swept fixture.
+- **No production migration, no push.** `20261036000000` is on rebuild-test only.
+
+## Harness — `s175-stage6-spec-sheet.live.ts`, 24 probes in six groups
+
+A generation and the filed row (including that the BLOB is in the bucket, not just the row) ·
+B what is on the sheet, read off the real PDF · C replacement, including the stale storage object ·
+D `client_visible` and the portal · E the empty refusal · F **the real shipped route**.
+
+F executes the ROUTE and not the service, for S174's reason one stage back:
+`s171-selections-lifecycle` was fully green while no client had ever received anything, because the
+mechanism was fine and nothing called it. The foreman's 403 is **non-vacuous** — he is assigned to
+the project and D5 proves he can read its files, so the refusal is the role. No real email leaves:
+the fixture contact is `qa-client-a@example.invalid` (RFC 2606), so the send is attempted for real
+and lands in `email_logs` either way.
+
+B5 is the assertion that matters: **no currency figure and none of Allowance / Variance / Markup /
+Subtotal / Total / Price survives into the document**, against options carrying $6,000 at 20% markup
+and a selection with signed stamps — so a figure leaking out of a SERVICE would show up, not only
+one written into the template.
+
+## Sweep for tests encoding overturned behaviour (S157 rule)
+
+Grepped `test/`, `e2e/` and the specs for `files_category_check`, `FileCategory`, `email_types`,
+`getPortalPhotos`, `client_visible`, `pdfText`, `selections-tab` and the tab's test ids.
+
+- `s164-m9-portal-shell` P2e / P4a–c / P5a–b and `s164-m9-read-arms` 6a–6d pass unchanged: every
+  fixture file is `mime_type: 'image/jpeg'` (`seed-test-identities.mjs:1014`), so the new image
+  filter is non-vacuous for them rather than accidentally empty.
+- `s162-m6-audit` C2 enumerates `email_types` but asserts only that no name contains
+  "notification" — unaffected.
+- **`portal-pages.spec.ts` DID need a change, and its own comment prescribed it.** `'Documents'` is
+  now a substring of `'Shared documents'`, so the loose accessible-name match resolved to two
+  headings and failed on strict mode — `exact: true`, exactly as that file already does for
+  `'Photos'` inside `'Questions and photos'`, plus an assertion on the new heading so the addition
+  is covered rather than merely tolerated.
+- `desktop-selections.spec.ts` gained the button's role gate on both sides (owner sees it, foreman
+  has none). Its `expectNoMoney` scan over the tab is unaffected — the button's label carries no
+  figure.
