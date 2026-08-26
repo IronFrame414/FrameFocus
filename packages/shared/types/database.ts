@@ -3429,6 +3429,7 @@ export type Database = {
           expense_id: string
           id: string
           is_deleted: boolean | null
+          source_selection_id: string | null
           updated_at: string | null
           updated_by: string | null
         }
@@ -3442,6 +3443,7 @@ export type Database = {
           expense_id: string
           id?: string
           is_deleted?: boolean | null
+          source_selection_id?: string | null
           updated_at?: string | null
           updated_by?: string | null
         }
@@ -3455,6 +3457,7 @@ export type Database = {
           expense_id?: string
           id?: string
           is_deleted?: boolean | null
+          source_selection_id?: string | null
           updated_at?: string | null
           updated_by?: string | null
         }
@@ -3478,6 +3481,13 @@ export type Database = {
             columns: ["expense_id"]
             isOneToOne: false
             referencedRelation: "expenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expense_allocations_source_selection_id_fkey"
+            columns: ["source_selection_id"]
+            isOneToOne: false
+            referencedRelation: "selections"
             referencedColumns: ["id"]
           },
         ]
@@ -4344,6 +4354,7 @@ export type Database = {
           source_deposit_invoice_id: string | null
           source_estimate_id: string | null
           source_estimate_line_item_id: string | null
+          source_selection_id: string | null
           unit_rate: number | null
           updated_at: string | null
           updated_by: string | null
@@ -4367,6 +4378,7 @@ export type Database = {
           source_deposit_invoice_id?: string | null
           source_estimate_id?: string | null
           source_estimate_line_item_id?: string | null
+          source_selection_id?: string | null
           unit_rate?: number | null
           updated_at?: string | null
           updated_by?: string | null
@@ -4390,6 +4402,7 @@ export type Database = {
           source_deposit_invoice_id?: string | null
           source_estimate_id?: string | null
           source_estimate_line_item_id?: string | null
+          source_selection_id?: string | null
           unit_rate?: number | null
           updated_at?: string | null
           updated_by?: string | null
@@ -4442,6 +4455,13 @@ export type Database = {
             columns: ["source_estimate_line_item_id"]
             isOneToOne: false
             referencedRelation: "estimate_line_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_lines_source_selection_id_fkey"
+            columns: ["source_selection_id"]
+            isOneToOne: false
+            referencedRelation: "selections"
             referencedColumns: ["id"]
           },
         ]
