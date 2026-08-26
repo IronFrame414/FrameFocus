@@ -321,3 +321,200 @@ export async function signSelectionOptionImages(
   );
   return out;
 }
+
+// ============================================================================
+// STAGE 7 — THE CLIENT'S VIEW OF A PROJECT'S SELECTIONS. [S175 item 5]
+// Spec §9.3. Rulings Q5.1 (the sell read) and Q5.3 (read-only after signing).
+// ============================================================================
+//
+// ⚠️ THIS IS THE SAME READER, NARROWED — NOT A SECOND ONE. It calls
+// `getProjectSelections()` above, exactly as `spec-sheet-data.ts` does, for the
+// reason that file states: a second "does the same thing" query over the same
+// tables is the #129 divergence written as agreement. Four of that function's
+// queries come back EMPTY for a client (`selection_option_amounts`,
+// `selection_notes`, `selection_amounts`, `project_budget_items` are all floored
+// away from her), and that is the floor working rather than waste to optimise
+// out — a narrower hand-written query would be a second place for the draft
+// filter and the area grouping to drift.
+//
+// ⚠️ AND THE DRAFT FILTER IS RLS'S, NOT THIS FILE'S. `selections_select_client`
+// carries `status <> 'draft'`, so a draft never reaches her through PostgREST
+// either. Nothing here re-states it: a TypeScript copy of a policy is the copy
+// an attacker does not run.
+//
+// WHERE THE FIGURES COME FROM, AND WHY NONE OF THEM IS COMPUTED HERE:
+//   * per-option SELL — `selection_client_option_sell()` (20261037000000). She
+//     cannot read `selection_option_amounts`, by design.
+//   * the ALLOWANCE DEDUCTION — `selection_client_allowance_deduction()`. She
+//     cannot read `project_budget_amounts` either.
+//   * option IMAGES — `selection_option_images()`, the S172 definer read, NOT
+//     `files.client_visible`. A PM-uploaded option image is not client-visible
+//     and the flag would be one more thing to forget.
+//   * the APPROVAL DATE — `selections.signed_at`, falling back to her completed
+//     signing session. See `approvedAt` below; this is item 4's finding, and
+//     re-introducing the bug one surface over is exactly what the fallback is
+//     here to prevent.
+
+/** One option as the client sees it: what it is, and what it costs HER. */
+export interface PortalSelectionOption {
+  id: string;
+  name: string;
+  description: string | null;
+  spec_detail: string | null;
+  link_url: string | null;
+  is_chosen: boolean;
+  sort_order: number;
+  /**
+   * The SNAPSHOT sell (S174), through the definer read. NULL means there is no
+   * price to show — a client-supplied selection, or an option the company has
+   * not priced — and renders as nothing, never as $0.
+   */
+  sell: number | null;
+  imageUrl: string | null;
+  linkThumbnailUrl: string | null;
+}
+
+export interface PortalSelection {
+  id: string;
+  name: string;
+  description: string | null;
+  status: SelectionStatus;
+  mode: SelectionMode;
+  allowMultiple: boolean;
+  clientSupplied: boolean;
+  dueDate: string | null;
+  options: PortalSelectionOption[];
+  /**
+   * The allowance this selection draws on, at SELL. 0 when unlinked (Q8:
+   * variance is the full sell).
+   *
+   * ⚠️ NULL ON A CLIENT-SUPPLIED SELECTION, AND THE DEDUCTION IS NOT FETCHED
+   * FOR ONE. Spec §5.4: client-supplied selections are *"EXCLUDED from the
+   * join — joining at zero would show a phantom full underage"*. A client who
+   * bought her own tile must not be shown a screen implying she saved the whole
+   * allowance.
+   */
+  allowanceDeduction: number | null;
+  /** Stamped at the signature and read-only afterwards (Q5.3). */
+  signed: { sellAmount: number; allowanceDeduction: number; variance: number } | null;
+  /**
+   * When she approved it.
+   *
+   * ⚠️ NOT ALWAYS `selections.signed_at` — item 4's finding, and it belongs
+   * here too. A client-supplied selection is signed like any other, but the
+   * CHECK nulls ALL FOUR `signed_*` columns on it, `signed_at` included. The
+   * fallback is the completed, un-superseded signing session — which she can
+   * read, because `selection_signing_sessions_select_own` admits the sessions
+   * she signed.
+   */
+  approvedAt: string | null;
+}
+
+export interface PortalSelectionArea {
+  id: string;
+  name: string;
+  sort_order: number;
+  selections: PortalSelection[];
+}
+
+/**
+ * Every selection on the project that this CLIENT may see, grouped by area,
+ * with the sell figures and images she is entitled to and nothing else.
+ *
+ * Called with her own session, so a caller who is not the project's client gets
+ * an empty result from the policies rather than a branch in this file.
+ */
+export async function getPortalProjectSelections(
+  projectId: string,
+  supabase?: SupabaseClient<Database>
+): Promise<PortalSelectionArea[]> {
+  const db = supabase ?? (await createClient());
+  const areas = await getProjectSelections(projectId, db);
+  const flat = areas.flatMap((a) => a.selections);
+  if (!flat.length) return [];
+
+  // The approval-date fallback, batched. `superseded_at IS NULL` is the partial
+  // unique index's own predicate (§3.7) — at most one current signature — so
+  // this is deterministic without an ORDER BY and needs none.
+  const needSession = flat.filter((s) => s.status === 'approved' && !s.signed_at).map((s) => s.id);
+  const sessionSignedAt = new Map<string, string>();
+  if (needSession.length) {
+    const { data: sessions } = await db
+      .from('selection_signing_sessions')
+      .select('selection_id, signed_at')
+      .in('selection_id', needSession)
+      .eq('status', 'completed')
+      .is('superseded_at', null);
+    for (const row of sessions ?? []) {
+      if (row.signed_at) sessionSignedAt.set(row.selection_id, row.signed_at);
+    }
+  }
+
+  const perSelection = await Promise.all(
+    flat.map(async (s) => {
+      const [sell, images, deduction] = await Promise.all([
+        db.rpc('selection_client_option_sell', { p_selection_id: s.id }),
+        signSelectionOptionImages(s.id, db),
+        // Not fetched at all for a client-supplied selection — see
+        // `allowanceDeduction` above.
+        s.client_supplied
+          ? Promise.resolve({ data: null })
+          : db.rpc('selection_client_allowance_deduction', { p_selection_id: s.id }),
+      ]);
+      const sellByOption = new Map<string, number>(
+        ((sell.data ?? []) as { option_id: string; sell: number | string }[]).map((r) => [
+          r.option_id,
+          Number(r.sell),
+        ])
+      );
+      return { id: s.id, sellByOption, images, deduction: deduction.data };
+    })
+  );
+  const bySelection = new Map(perSelection.map((p) => [p.id, p]));
+
+  return areas
+    .map((area) => ({
+      id: area.id,
+      name: area.name,
+      sort_order: area.sort_order,
+      selections: area.selections.map((s): PortalSelection => {
+        const extra = bySelection.get(s.id);
+        return {
+          id: s.id,
+          name: s.name,
+          description: s.description,
+          status: s.status,
+          mode: s.mode,
+          allowMultiple: s.allow_multiple,
+          clientSupplied: s.client_supplied,
+          dueDate: s.due_date,
+          options: s.options.map((o) => ({
+            id: o.id,
+            name: o.name,
+            description: o.description,
+            spec_detail: o.spec_detail,
+            link_url: o.link_url,
+            is_chosen: o.is_chosen,
+            sort_order: o.sort_order,
+            sell: extra?.sellByOption.get(o.id) ?? null,
+            imageUrl: extra?.images[o.id]?.image ?? null,
+            linkThumbnailUrl: extra?.images[o.id]?.link_thumbnail ?? null,
+          })),
+          allowanceDeduction:
+            s.client_supplied || extra?.deduction === null || extra?.deduction === undefined
+              ? null
+              : Number(extra.deduction),
+          signed:
+            s.signed_sell_amount === null || s.signed_variance === null
+              ? null
+              : {
+                  sellAmount: Number(s.signed_sell_amount),
+                  allowanceDeduction: Number(s.signed_allowance_deduction ?? 0),
+                  variance: Number(s.signed_variance),
+                },
+          approvedAt: s.signed_at ?? sessionSignedAt.get(s.id) ?? null,
+        };
+      }),
+    }))
+    .filter((a) => a.selections.length > 0);
+}
