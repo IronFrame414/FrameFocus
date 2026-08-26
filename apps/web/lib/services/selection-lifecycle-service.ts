@@ -6,6 +6,7 @@ import { notify } from '@/lib/notify/notify';
 import { getManagerNotifyRecipients } from '@/lib/notify/recipients';
 import { applied } from '@/lib/services/mutation-result';
 import { optionSell } from '@/lib/selections/option-sell';
+import { selectionConsentTextFor } from '@/lib/selections/consent-text';
 
 // ============================================================================
 // Allowances & Selections — the LIFECYCLE. [S171, stage 4]
@@ -66,26 +67,13 @@ export interface OfferedFigures {
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
 /**
- * The binding wording — Josh's requirement. Two variants: money, and the
- * client-supplied no-money variant (a "stated costs" clause over no stated
- * costs would be false). Stored verbatim in `consent_text` and in the snapshot.
+ * The binding wording (§6.2). [S175 stage 7] THE IMPLEMENTATION MOVED to
+ * `lib/selections/consent-text.ts` and this is a RE-EXPORT, not a second copy:
+ * the portal panel shows the client the sentence she is about to sign, and a
+ * browser component cannot import a `server-only` module. See that file for the
+ * argument; it is `option-sell.ts`'s, one stage on.
  */
-export function selectionConsentTextFor(input: {
-  clientSupplied: boolean;
-  sellAmount?: number | null;
-  allowanceDeduction?: number | null;
-  variance?: number | null;
-}): string {
-  if (input.clientSupplied) {
-    return 'By signing, I confirm this selection. I am supplying this item myself; no charge applies. This signature is binding. I gave this signature while signed in to my client portal account.';
-  }
-  const f = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
-  const sell = input.sellAmount ?? 0;
-  const ded = input.allowanceDeduction ?? 0;
-  const v = input.variance ?? 0;
-  const net = v >= 0 ? `an added price of ${f(v)}` : `a credit of ${f(Math.abs(v))}`;
-  return `By signing, I confirm my selection and accept the stated price of ${f(sell)}, less my allowance of ${f(ded)}, for ${net}. This signature is binding and accepts the stated costs. I gave this signature while signed in to my client portal account.`;
-}
+export { selectionConsentTextFor };
 
 // ── Pricing (§5.2, §5.3) ───────────────────────────────────────────────────
 
@@ -100,29 +88,28 @@ export function selectionConsentTextFor(input: {
  * divergence in its purest form: two implementations that agree today, in a
  * form that looks like agreement.
  *
- * So there is ONE implementation, `allowance_effective_markup_percent()` in
- * 20261030000000, and this calls it. _Superseded: the inline chain, whose rungs
- * are reproduced rung-for-rung in that function's body and commented there._
+ * ⚠️ [S175 stage 7] AND NEITHER DOES THE MULTIPLY. The CLIENT now needs this
+ * same figure — §9.3's "Allowance Deduction" line, and the deduction named in
+ * the binding wording she signs — and she can read neither of its inputs:
+ * `project_budget_amounts.budgeted_amount` is Owner/Admin DB-enforced and
+ * `allowance_effective_markup_percent()` is REVOKEd from `authenticated`. So
+ * the last two lines of this function moved into SQL as
+ * `allowance_sell_amount()` (20261037000000) and BOTH readers call it — this
+ * one, and `selection_client_allowance_deduction()`, which is what the portal
+ * reaches. _Superseded: the `budgeted_amount` read and the `cost × (1 + m/100)`
+ * multiply, written here in TypeScript._
  *
- * The RPC goes through the ADMIN client on purpose: the function is REVOKEd
- * from `authenticated` because a markup percent is a floored figure, and an RPC
- * that returned one to any signed-in caller would defeat the side tables it
- * exists to populate. The caller here has already been gated by an RLS write.
+ * The RPC goes through the ADMIN client on purpose: like the markup function it
+ * wraps, it is REVOKEd from `authenticated` because an allowance's sell is a
+ * budget/sell figure the Financial Visibility Floor puts at Owner/Admin. The
+ * caller here has already been gated by an RLS write.
+ *
+ * NULL back means the budget item does not exist — the old code returned 0 for
+ * that case before it ever reached the markup, and so does this.
  */
 async function allowanceSellFor(admin: Db, budgetItemId: string): Promise<number> {
-  const { data: amt } = await admin
-    .from('project_budget_amounts')
-    .select('budgeted_amount')
-    .eq('budget_item_id', budgetItemId)
-    .maybeSingle();
-  const cost = Number(amt?.budgeted_amount ?? 0);
-  const { data: markup } = await admin.rpc('allowance_effective_markup_percent', {
-    p_budget_item_id: budgetItemId,
-  });
-  // NULL means the budget item does not exist — the old code returned 0 for
-  // that case before ever reaching the markup, and so does this.
-  if (markup === null || markup === undefined) return 0;
-  return r2(cost * (1 + Number(markup) / 100));
+  const { data } = await admin.rpc('allowance_sell_amount', { p_budget_item_id: budgetItemId });
+  return Number(data ?? 0);
 }
 
 /**
@@ -308,6 +295,41 @@ async function readAwaitingSelectionAsClient(rls: Db, selectionId: string) {
     .eq('id', selectionId)
     .maybeSingle();
   return data;
+}
+
+/**
+ * THE PICK — the client chooses, and this is the only thing in the product that
+ * can perform that write. [S175 stage 7]
+ *
+ * ⚠️ IT GOES THROUGH A `SECURITY DEFINER` RPC, AND `selection_options` MUST NOT
+ * GET A CLIENT UPDATE ARM. Ruled at the Phase 2 gate and restated in
+ * `20261037000000`: Postgres RLS is row-level and cannot restrict COLUMNS, so a
+ * policy letting her set `is_chosen` would equally let her rewrite `name`,
+ * `spec_detail` and `link_url` on the options her contractor assembled. The
+ * client never touches the table directly.
+ *
+ * Run with HER client, not the admin one — `selection_client_pick()` restates
+ * the client arm inside itself (RLS does not run in a definer) and reads
+ * `my_company_id_flat()` / `is_client_of_project()` / `client_has_full_access()`
+ * off the caller's JWT. Handed the service role it would see no auth.uid() and
+ * refuse everything, which is the correct failure but a useless one.
+ *
+ * The RPC raises rather than returning a flag, so its own sentences reach the
+ * client verbatim: the `allow_multiple` refusal, the Q5.3 status refusal, and
+ * the deliberately undifferentiated "Selection not found." for a row she may
+ * not see.
+ */
+export async function setClientSelectionPicks(
+  rls: Db,
+  selectionId: string,
+  optionIds: string[]
+): Promise<{ success: boolean; error?: string; chosen?: number }> {
+  const { data, error } = await rls.rpc('selection_client_pick', {
+    p_selection_id: selectionId,
+    p_option_ids: optionIds,
+  });
+  if (error) return { success: false, error: error.message };
+  return { success: true, chosen: Number(data ?? 0) };
 }
 
 export interface CompleteSelectionSignatureParams {

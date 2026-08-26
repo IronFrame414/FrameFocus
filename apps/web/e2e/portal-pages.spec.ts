@@ -63,10 +63,27 @@ test.describe('S168 · the portal project view is four pages', () => {
     await expect(page.getByRole('heading', { name: 'Photos', exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Questions and photos' })).toBeVisible();
 
-    // Selections — the deliberate dead page.
+    // Selections. ⚠️ **NO LONGER THE DEAD PAGE** — S175 stage 7 built it.
+    //
+    // _Superseded assertion, quoted not deleted:_
+    //   `await expect(page.getByTestId('portal-selections-empty')).toBeVisible();`
+    //   under the comment *"Selections — the deliberate dead page."*
+    //
+    // That assertion cannot survive the page going live, and not because the
+    // testid moved: `desktop-selections.spec.ts` RELEASES selections onto this
+    // very project, concurrently, in the same run. "The client sees nothing
+    // here" would then pass or fail on worker ordering — the S157 trap of an
+    // assertion whose name says "none" reading a live, shared, mutable row
+    // instead of a fact.
+    //
+    // `portal-selections` is present in BOTH of the page's states, so this
+    // proves the ROUTE RENDERS without depending on what happens to be on it.
+    // What is ON it is proved by `portal-selections.spec.ts`, on its own
+    // fixture, and by `s175-stage7-portal-selections.live.ts`.
     await page.getByTestId('portal-tab-selections').click();
     await expect(page).toHaveURL(new RegExp(`/portal/${PROJECT}/selections$`));
-    await expect(page.getByTestId('portal-selections-empty')).toBeVisible();
+    await expect(page.getByTestId('portal-selections')).toBeAttached();
+    await expect(page.getByTestId('portal-tab-selections')).toHaveAttribute('aria-current', 'page');
   });
 
   test('⚠️ the change orders are on Financials and NOT on Files & photos', async ({ page }) => {

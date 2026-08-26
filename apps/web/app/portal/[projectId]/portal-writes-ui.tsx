@@ -17,9 +17,15 @@ import { cardStyle, color, font } from '@/lib/theme';
  * applies just as hard to what is captured before it: a portal signature that
  * produced a different image, or attested to different words, would be a second
  * implementation wearing the first one's name.
+ *
+ * [S175 stage 7] AND IT IS NOW ENFORCED RATHER THAN OBSERVED. The capture was
+ * extracted into `SignatureCapture` below when the selection became the second
+ * signable instrument; `portal-selections-ui.tsx` renders that same component.
+ * The sentence above was true because there was one panel — it is now true
+ * because there is one panel and two callers.
  */
 
-function Panel({ children }: { children: React.ReactNode }) {
+export function Panel({ children }: { children: React.ReactNode }) {
   return (
     <div
       style={{
@@ -34,7 +40,7 @@ function Panel({ children }: { children: React.ReactNode }) {
   );
 }
 
-const buttonStyle = (enabled: boolean): React.CSSProperties => ({
+export const buttonStyle = (enabled: boolean): React.CSSProperties => ({
   fontSize: '13px',
   fontWeight: 700,
   padding: '8px 15px',
@@ -45,18 +51,63 @@ const buttonStyle = (enabled: boolean): React.CSSProperties => ({
   color: '#ffffff',
 });
 
+export const secondaryButtonStyle: React.CSSProperties = {
+  fontSize: '13px',
+  fontWeight: 600,
+  padding: '8px 14px',
+  borderRadius: '9px',
+  border: `1px solid ${color.inputBorder}`,
+  backgroundColor: color.cardBg,
+  color: color.bodyAlt,
+  cursor: 'pointer',
+};
+
 // ───────────────────────────────────────────────────────────────────────────
-export function CoSignPanel({
-  changeOrderId,
+/**
+ * ⚠️ ONE SIGNATURE CAPTURE FOR THE WHOLE PORTAL. [extracted S175 stage 7]
+ *
+ * The header above says the capture is the same capture, and until stage 7 that
+ * was true because there was exactly one of them. Stage 7 adds a SECOND signable
+ * instrument — the selection (§6.2: the selection signature IS the binding
+ * instrument; no change order is generated) — and the tempting move is to copy
+ * `CoSignPanel` and swap the endpoint. That is CLAUDE.md's `#129` in its usual
+ * disguise: two panels that agree today, drifting later into two different
+ * attestations, two different images, or one that quietly stops trimming the
+ * drawn canvas.
+ *
+ * So the panel is extracted and BOTH instruments render this one. What differs
+ * between them is passed in and is exactly what should differ: the words being
+ * attested to, the labels, and where the signature is posted. What must not
+ * differ — draw-or-type, `react-signature-canvas`, `typedSignatureToDataUrl()`,
+ * the trimmed-canvas PNG, the consent gate — is here, and is not a parameter.
+ *
+ * `onSubmit` returns an error STRING or null rather than throwing, so a refusal
+ * from either route surfaces in the panel carrying the SERVER's own sentence.
+ * The selection RPC's refusals are written to be read by a person.
+ */
+export function SignatureCapture({
   title,
   defaultName,
+  consentText,
+  submitLabel,
+  busyLabel,
+  onSubmit,
+  onCancel,
+  testId,
 }: {
-  changeOrderId: string;
   title: string;
   defaultName: string;
+  consentText: string;
+  submitLabel: string;
+  busyLabel: string;
+  onSubmit: (payload: {
+    signature_type: 'draw' | 'type';
+    signature_data: string;
+    signer_name: string;
+  }) => Promise<string | null>;
+  onCancel: () => void;
+  testId?: string;
 }) {
-  const router = useRouter();
-  const [open, setOpen] = useState(false);
   const [method, setMethod] = useState<'draw' | 'type'>('type');
   const [signerName, setSignerName] = useState(defaultName);
   const [typed, setTyped] = useState(defaultName);
@@ -71,7 +122,7 @@ export function CoSignPanel({
     consent &&
     (method === 'draw' ? drawDirty : typed.trim().length > 0);
 
-  async function sign() {
+  async function submit() {
     setError(null);
     let signatureData: string;
     if (method === 'draw') {
@@ -84,44 +135,23 @@ export function CoSignPanel({
     } else {
       signatureData = typedSignatureToDataUrl(typed.trim());
     }
-
     setBusy(true);
     try {
-      const res = await fetch('/api/portal/sign-co', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          changeOrderId,
-          signature_type: method,
-          signature_data: signatureData,
-          signer_name: signerName.trim(),
-          consent_given: true,
-        }),
+      const err = await onSubmit({
+        signature_type: method,
+        signature_data: signatureData,
+        signer_name: signerName.trim(),
       });
-      const body = await res.json();
-      if (!res.ok) {
-        setError(body.error ?? 'That signature could not be recorded.');
-        return;
-      }
-      setOpen(false);
-      router.refresh();
+      if (err) setError(err);
     } finally {
       setBusy(false);
     }
   }
 
-  if (!open) {
-    return (
-      <button type="button" onClick={() => setOpen(true)} style={buttonStyle(true)}>
-        Review and sign
-      </button>
-    );
-  }
-
   return (
     <Panel>
       <p style={{ fontSize: '13.5px', fontWeight: 700, color: color.navy, margin: '0 0 10px' }}>
-        Sign {title}
+        {title}
       </p>
 
       <label style={{ display: 'block', fontSize: '12.5px', color: color.bodyAlt, marginBottom: '4px' }}>
@@ -130,6 +160,7 @@ export function CoSignPanel({
       <input
         value={signerName}
         onChange={(e) => setSignerName(e.target.value)}
+        data-testid={testId ? `${testId}-name` : undefined}
         style={{
           width: '100%',
           padding: '8px 10px',
@@ -179,6 +210,7 @@ export function CoSignPanel({
             value={typed}
             onChange={(e) => setTyped(e.target.value)}
             placeholder="Type your name"
+            data-testid={testId ? `${testId}-typed` : undefined}
             style={{
               width: '100%',
               padding: '8px 10px',
@@ -217,37 +249,91 @@ export function CoSignPanel({
           lineHeight: 1.5,
         }}
       >
-        <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
-        {/* The SAME words the emailed signing page attests to. The channel
-            sentence is appended server-side, so the record says which surface
-            produced the signature without this checkbox having to. */}
-        <span>{CONSENT_TEXT}</span>
+        <input
+          type="checkbox"
+          checked={consent}
+          onChange={(e) => setConsent(e.target.checked)}
+          data-testid={testId ? `${testId}-consent` : undefined}
+        />
+        {/* The words attested to are the caller's, because they differ per
+            instrument and must match what the server stores. A change order
+            attests to `CONSENT_TEXT`; a selection attests to §6.2's binding
+            wording over the figures she is looking at. */}
+        <span data-testid={testId ? `${testId}-consent-text` : undefined}>{consentText}</span>
       </label>
 
-      {error && <p style={{ fontSize: '12.5px', color: color.danger, margin: '0 0 10px' }}>{error}</p>}
+      {error && (
+        <p
+          data-testid={testId ? `${testId}-error` : undefined}
+          style={{ fontSize: '12.5px', color: color.danger, margin: '0 0 10px' }}
+        >
+          {error}
+        </p>
+      )}
 
       <div style={{ display: 'flex', gap: '8px' }}>
-        <button type="button" onClick={sign} disabled={!ready || busy} style={buttonStyle(ready && !busy)}>
-          {busy ? 'Signing…' : 'Sign change order'}
-        </button>
         <button
           type="button"
-          onClick={() => setOpen(false)}
-          style={{
-            fontSize: '13px',
-            fontWeight: 600,
-            padding: '8px 14px',
-            borderRadius: '9px',
-            border: `1px solid ${color.inputBorder}`,
-            backgroundColor: color.cardBg,
-            color: color.bodyAlt,
-            cursor: 'pointer',
-          }}
+          onClick={submit}
+          disabled={!ready || busy}
+          style={buttonStyle(ready && !busy)}
+          data-testid={testId ? `${testId}-submit` : undefined}
         >
+          {busy ? busyLabel : submitLabel}
+        </button>
+        <button type="button" onClick={onCancel} style={secondaryButtonStyle}>
           Cancel
         </button>
       </div>
     </Panel>
+  );
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+export function CoSignPanel({
+  changeOrderId,
+  title,
+  defaultName,
+}: {
+  changeOrderId: string;
+  title: string;
+  defaultName: string;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} style={buttonStyle(true)}>
+        Review and sign
+      </button>
+    );
+  }
+
+  return (
+    <SignatureCapture
+      title={`Sign ${title}`}
+      defaultName={defaultName}
+      /* The SAME words the emailed signing page attests to. The channel
+         sentence is appended server-side, so the record says which surface
+         produced the signature without this checkbox having to. */
+      consentText={CONSENT_TEXT}
+      submitLabel="Sign change order"
+      busyLabel="Signing…"
+      onCancel={() => setOpen(false)}
+      onSubmit={async (payload) => {
+        const res = await fetch('/api/portal/sign-co', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ changeOrderId, ...payload, consent_given: true }),
+        });
+        const body = await res.json();
+        if (!res.ok) return body.error ?? 'That signature could not be recorded.';
+        setOpen(false);
+        router.refresh();
+        return null;
+      }}
+    />
   );
 }
 
