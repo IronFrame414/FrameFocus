@@ -131,6 +131,24 @@ export async function storeSelectionSpecPdf(
   }
   const { buffer, data } = rendered;
 
+  // ⚠️ REFUSED BEFORE ANYTHING IS WRITTEN. Q4.3 makes the sheet approved-only,
+  // so a project with nothing approved renders a document that lists nothing —
+  // and filing THAT would put an empty `client_visible` PDF in the client's
+  // portal under the company's name. `generate*` still renders the empty case,
+  // because a preview of an early project should show what the sheet will be;
+  // what must never happen is that it gets FILED. The check is here rather
+  // than in the route so every caller inherits it.
+  if (data.selectionCount === 0) {
+    return {
+      fileId: null,
+      buffer,
+      data,
+      error:
+        'Nothing has been approved on this project yet, so there is nothing to specify. ' +
+        'The sheet lists approved selections only.',
+    };
+  }
+
   const { data: project } = await rls
     .from('projects')
     .select('company_id')
