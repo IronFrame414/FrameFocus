@@ -28,7 +28,7 @@ import {
 } from '@/lib/services/invoices-shared';
 import { getCompanyTimeSettings } from '@/lib/services/company';
 import { getJobCostRollup } from '@/lib/services/expenses';
-import { getBudgetRollup } from '@/lib/services/budget';
+import { effectiveBudget, getBudgetRollup } from '@/lib/services/budget';
 import { getRevisedContract } from '@/lib/services/contract-value';
 import { loadApprovedSelectionMoney, selectionInstrumentKey } from '@/lib/services/selection-money';
 import { isPayableRow } from '@/lib/services/payables-shared';
@@ -686,8 +686,11 @@ function buildSlices(input: {
       let committed = 0;
       let actual = 0;
       for (const item of items) {
-        if (item.budgeted_amount !== null && item.budgeted_amount !== undefined) {
-          budgetSum = (budgetSum ?? 0) + item.budgeted_amount;
+        // [S175 stage 5] §5.4 — an allowance with an approved selection is
+        // budgeted at the selection's RESULTING total, not its original.
+        const budgeted = effectiveBudget(item);
+        if (budgeted !== null && budgeted !== undefined) {
+          budgetSum = (budgetSum ?? 0) + budgeted;
         }
         committed += item.committed_remaining;
         // [S175 stage 5] A cost tagged with a selection is carried by the

@@ -585,7 +585,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                 </div>
 
                 {instrument.groups.map((group) =>
-                  group.items.map((item) => {
+                  group.items.flatMap((item) => {
                     const cost = lineCost(item.actual_amount, item.committed_remaining);
                     // RULING [S97]: budgeted_amount is NULL when the reader is
                     // not permitted. `?? 0` here produced a variance of MINUS
@@ -598,7 +598,71 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                     // Likewise: an absent figure must not classify the row as
                     // non-credit. Unknown is unknown (D-2 negative CO rows).
                     const credit = item.budgeted_amount !== null && item.budgeted_amount < 0;
-                    return (
+                    // [S175 stage 5] §5.4 — the selection subcategory under an
+                    // allowance: each approved selection at its chosen cost,
+                    // then the RESULTING total, which is what the sums above
+                    // and below count in place of the original. Owner/Admin
+                    // only by construction (needs budgeted_amount).
+                    const sub = item.selection_subcategory;
+                    const subRows = sub
+                      ? [
+                          ...sub.selections.map((s) => (
+                            <div
+                              key={`${item.id}-sel-${s.id}`}
+                              style={{
+                                display: 'grid',
+                                gridTemplateColumns: gridTemplate,
+                                gap: '12px',
+                                alignItems: 'center',
+                                padding: '7px 20px 7px 36px',
+                                borderBottom: `1px solid ${color.rowDivider}`,
+                                backgroundColor: color.blueTint,
+                              }}
+                            >
+                              <span style={{ fontFamily: font.mono, fontSize: '12px', color: color.faint }}>↳</span>
+                              <span style={{ fontFamily: font.sans, fontSize: '12.5px', color: color.body }}>
+                                Selection — {s.name}
+                                <span style={{ color: color.faint, fontSize: '11.5px' }}> · approved, at chosen cost</span>
+                              </span>
+                              {isOwnerAdmin && <span style={{ ...moneyCell, fontSize: '12.5px' }}>{money(s.cost)}</span>}
+                              {seesCommitted && <span style={dashCell}>—</span>}
+                              <span style={dashCell}>—</span>
+                              {seesCommitted && <span style={dashCell}>—</span>}
+                              {isOwnerAdmin && <span style={dashCell}>—</span>}
+                            </div>
+                          )),
+                          <div
+                            key={`${item.id}-resulting`}
+                            style={{
+                              display: 'grid',
+                              gridTemplateColumns: gridTemplate,
+                              gap: '12px',
+                              alignItems: 'center',
+                              padding: '7px 20px 9px 36px',
+                              borderBottom: `1px solid ${color.rowDivider}`,
+                              backgroundColor: color.blueTint,
+                            }}
+                          >
+                            <span style={{ fontFamily: font.mono, fontSize: '12px', color: color.faint }}>=</span>
+                            <span style={{ fontFamily: font.sans, fontSize: '12.5px', fontWeight: 600, color: color.navy }}>
+                              Resulting allowance budget
+                              <span style={{ color: color.faint, fontWeight: 400, fontSize: '11.5px' }}>
+                                {' '}
+                                · {sub.variance >= 0 ? '+' : '−'}
+                                {money(Math.abs(sub.variance))} vs the original — this is what the totals count
+                              </span>
+                            </span>
+                            {isOwnerAdmin && (
+                              <span style={{ ...moneyCell, fontWeight: 600, fontSize: '12.5px' }}>{money(sub.resulting)}</span>
+                            )}
+                            {seesCommitted && <span style={dashCell}>—</span>}
+                            <span style={dashCell}>—</span>
+                            {seesCommitted && <span style={dashCell}>—</span>}
+                            {isOwnerAdmin && <span style={dashCell}>—</span>}
+                          </div>,
+                        ]
+                      : [];
+                    return [
                       <div
                         key={item.id}
                         style={{
@@ -678,8 +742,9 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                               : `${variance >= 0 ? '+' : '−'}${money(Math.abs(variance))}`}
                           </span>
                         )}
-                      </div>
-                    );
+                      </div>,
+                      ...subRows,
+                    ];
                   })
                 )}
 

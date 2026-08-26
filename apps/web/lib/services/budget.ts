@@ -29,7 +29,44 @@ export type BudgetItem = Omit<BudgetItemRow, 'row_type' | 'budgeted_amount'> & {
    *  screen renders that committed italic + "wait on contract signature".
    *  Signing flips it off; no money-model involvement. */
   committed_awaiting_signature: boolean;
+  /**
+   * [S175 stage 5] Spec §5.4 — THE BUDGET SUBCATEGORY, derived and never
+   * written. Present on an ALLOWANCE line with ≥1 approved, non-client-
+   * supplied selection linked to it, and only for a reader who can see
+   * `budgeted_amount` (Owner/Admin): the subcategory re-budgets the allowance
+   * at the chosen options' COST, and a variance needs the original to compare
+   * against. NULL otherwise — never an empty object, so a screen cannot
+   * render a subcategory with nothing in it.
+   *
+   *   row 1        the allowance, at its original budgeted cost (this row)
+   *   subcategory  each selection at its chosen options' cost basis
+   *   resulting    Σ selection cost — the figure that counts toward the
+   *                group, instrument and project totals INSTEAD of the
+   *                original (§5.4: "only the resulting total counts")
+   *
+   * Cost basis, not sell: this is the BUDGET (the client-side sell basis is
+   * the signed_* stamps). Client-supplied selections are excluded from the
+   * join — joining at zero would show a phantom full underage (analysis 2b.4).
+   */
+  selection_subcategory: SelectionSubcategory | null;
 };
+
+export interface SelectionSubcategory {
+  selections: { id: string; name: string; cost: number }[];
+  /** Σ chosen options' quantity × unit_cost over the linked approved selections. */
+  selectionTotal: number;
+  /** selectionTotal − the allowance's original budgeted cost. Positive = over. */
+  variance: number;
+  /** What the allowance is now budgeted at: selectionTotal. */
+  resulting: number;
+}
+
+/** [S175 stage 5] The budget figure a line contributes to every sum: the
+ *  §5.4 resulting total when a subcategory exists, else the original. */
+export function effectiveBudget(item: Pick<BudgetItem, 'budgeted_amount' | 'selection_subcategory'>): number | null {
+  if (item.selection_subcategory) return item.selection_subcategory.resulting;
+  return item.budgeted_amount;
+}
 
 /** One cost-code group with its items and subtotals (5E §3). */
 export interface BudgetGroup {
@@ -76,6 +113,69 @@ export interface BudgetRollup {
 
 const UNCATEGORIZED = 'Uncategorized';
 
+/**
+ * [S175 stage 5] §5.4 — for each allowance line: its approved, non-client-
+ * supplied selections and the cost basis of what the client chose.
+ *
+ * "Approved and money" is `signed_variance IS NOT NULL` — a client-supplied
+ * selection is approved with NULL stamps by CHECK and drops out here, which is
+ * the §5.4 exclusion. Cost is Σ quantity × unit_cost over the CHOSEN options
+ * (is_chosen, the client's pick), read from selection_option_amounts under
+ * the caller's floor (Owner/Admin/PM); a reader who cannot see amounts gets
+ * no subcategory, which is also correct — they cannot see budgeted either.
+ */
+async function loadSelectionSubcategories(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  projectId: string
+): Promise<Map<string, { selections: { id: string; name: string; cost: number }[]; selectionTotal: number }>> {
+  const out = new Map<string, { selections: { id: string; name: string; cost: number }[]; selectionTotal: number }>();
+  const { data: sels } = await supabase
+    .from('selections')
+    .select('id, name, allowance_budget_item_id')
+    .eq('project_id', projectId)
+    .eq('status', 'approved')
+    .eq('is_deleted', false)
+    .not('signed_variance', 'is', null)
+    .not('allowance_budget_item_id', 'is', null)
+    .order('created_at', { ascending: true });
+  if (!sels || sels.length === 0) return out;
+
+  const { data: chosen } = await supabase
+    .from('selection_options')
+    .select('id, selection_id')
+    .in('selection_id', sels.map((s) => s.id))
+    .eq('is_chosen', true)
+    .eq('is_deleted', false);
+  const optionIds = (chosen ?? []).map((o) => o.id);
+  const { data: amounts } = optionIds.length
+    ? await supabase
+        .from('selection_option_amounts')
+        .select('option_id, quantity, unit_cost')
+        .in('option_id', optionIds)
+    : { data: [] as { option_id: string; quantity: number; unit_cost: number }[] };
+  if (!amounts || amounts.length === 0) return out; // floored reader, or unpriced
+
+  const costByOption = new Map(
+    (amounts ?? []).map((a) => [a.option_id, Math.round(Number(a.quantity) * Number(a.unit_cost) * 100) / 100])
+  );
+  const costBySelection = new Map<string, number>();
+  for (const o of chosen ?? []) {
+    costBySelection.set(
+      o.selection_id,
+      Math.round(((costBySelection.get(o.selection_id) ?? 0) + (costByOption.get(o.id) ?? 0)) * 100) / 100
+    );
+  }
+  for (const s of sels) {
+    const itemId = s.allowance_budget_item_id as string;
+    const entry = out.get(itemId) ?? { selections: [], selectionTotal: 0 };
+    const cost = costBySelection.get(s.id) ?? 0;
+    entry.selections.push({ id: s.id, name: s.name, cost });
+    entry.selectionTotal = Math.round((entry.selectionTotal + cost) * 100) / 100;
+    out.set(itemId, entry);
+  }
+  return out;
+}
+
 function groupByCostCode(items: BudgetItem[]): BudgetGroup[] {
   const byCode = new Map<string, BudgetGroup>();
   for (const item of items) {
@@ -89,8 +189,11 @@ function groupByCostCode(items: BudgetItem[]): BudgetGroup[] {
     // NULL-PROPAGATING, deliberately. `?? 0` here would turn "not permitted"
     // into a group total of $0.00 — a plausible, wrong number on screen. A
     // group is budgeted-visible only if its lines are.
-    if (item.budgeted_amount !== null && item.budgeted_amount !== undefined) {
-      group.budgeted = (group.budgeted ?? 0) + item.budgeted_amount;
+    // [S175 stage 5] Through effectiveBudget: an allowance with an approved
+    // selection counts its RESULTING total here, not its original (§5.4).
+    const budgeted = effectiveBudget(item);
+    if (budgeted !== null && budgeted !== undefined) {
+      group.budgeted = (group.budgeted ?? 0) + budgeted;
     }
     group.committedRemaining += item.committed_remaining;
     group.actual += item.actual_amount ?? 0;
@@ -223,6 +326,13 @@ export async function getBudgetRollup(projectId: string): Promise<BudgetRollup> 
     }
   }
 
+  // ── [S175 stage 5] §5.4 — the selection subcategory, per allowance line ──
+  // Approved money selections linked to a line on this project, with their
+  // CHOSEN options' cost. Three reads, none per-row. Under the caller's RLS:
+  // a reader below Owner/Admin has no budgeted_amount to compare against and
+  // the subcategory is not built for them (see BudgetItem.selection_subcategory).
+  const subcategoryByItem = await loadSelectionSubcategories(supabase, projectId);
+
   const items: BudgetItem[] = ((itemRows ?? []) as unknown as Array<
     BudgetItemRow & { project_budget_amounts?: { budgeted_amount: number }[] | { budgeted_amount: number } | null }
   >).map((row) => {
@@ -234,12 +344,23 @@ export async function getBudgetRollup(projectId: string): Promise<BudgetRollup> 
     const budgeted = Array.isArray(embed)
       ? embed[0]?.budgeted_amount ?? null
       : embed?.budgeted_amount ?? null;
+    const budgetedAmount = budgeted === null ? null : Number(budgeted);
+    const sub = subcategoryByItem.get(row.id);
     return {
       ...row,
-      budgeted_amount: budgeted === null ? null : Number(budgeted),
+      budgeted_amount: budgetedAmount,
       row_type: row.row_type as BudgetRowType | null,
       committed_remaining: remainingByItem.get(row.id) ?? 0,
       committed_awaiting_signature: awaitingByItem.has(row.id),
+      selection_subcategory:
+        sub && budgetedAmount !== null && row.row_type === 'allowance'
+          ? {
+              selections: sub.selections,
+              selectionTotal: sub.selectionTotal,
+              variance: Math.round((sub.selectionTotal - budgetedAmount) * 100) / 100,
+              resulting: sub.selectionTotal,
+            }
+          : null,
     };
   });
 
@@ -268,9 +389,10 @@ export async function getBudgetRollup(projectId: string): Promise<BudgetRollup> 
     changeOrder,
     groups: groupByCostCode(groupItems),
     // Same rule as the group sum: absent means not permitted, so the
-    // instrument total is ABSENT rather than zero.
-    budgeted: groupItems.some((i) => i.budgeted_amount !== null && i.budgeted_amount !== undefined)
-      ? groupItems.reduce((s, i) => s + (i.budgeted_amount ?? 0), 0)
+    // instrument total is ABSENT rather than zero. [S175 stage 5] Through
+    // effectiveBudget — the §5.4 resulting total, where one exists.
+    budgeted: groupItems.some((i) => effectiveBudget(i) !== null && effectiveBudget(i) !== undefined)
+      ? groupItems.reduce((s, i) => s + (effectiveBudget(i) ?? 0), 0)
       : null,
     committedRemaining: groupItems.reduce((s, i) => s + i.committed_remaining, 0),
     actual: groupItems.reduce((s, i) => s + (i.actual_amount ?? 0), 0),

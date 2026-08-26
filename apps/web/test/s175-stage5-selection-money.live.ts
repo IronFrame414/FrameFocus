@@ -18,6 +18,7 @@ import { getAvailableCredits } from '@/lib/services/invoices';
 import { addAllowanceCredit, addFixedLine, reissueInvoice } from '@/lib/services/invoices-client';
 import { approveExpense, createExpense, listExpenseAllocations, listTaggableSelections, taggableFor } from '@/lib/services/expenses-client';
 import { resolveSplit } from '@/components/expenses/budget-split-editor';
+import { effectiveBudget, getBudgetRollup } from '@/lib/services/budget';
 
 // ============================================================================
 // S175 #3 — Allowances & Selections STAGE 5: an approved selection becomes
@@ -996,5 +997,51 @@ describe('S175-S5 I — the COST tag through the REAL capture and review paths (
     expect(wrong.success).toBe(false);
     expect(wrong.error).toMatch(/draws on a different allowance line/);
     expect(await listExpenseAllocations(wrong.id!)).toHaveLength(0);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+describe('S175-S5 G — the BUDGET SUBCATEGORY (§5.4): derived in budget.ts, nothing written, only the resulting total counts', () => {
+  it('G1 — the allowance line carries its approved money selections at CHOSEN COST; the client-supplied one is absent; the resulting total replaces the original in every sum', async () => {
+    const rollup = await getBudgetRollup(projectId);
+    const items = rollup.instruments.flatMap((i) => i.groups.flatMap((g) => g.items));
+    const allowance = items.find((i) => i.id === allowanceItemId)!;
+    const lumber = items.find((i) => i.id === otherItemId)!;
+    expect(allowance.budgeted_amount).toBe(5000); // row 1: the original
+    expect(lumber.selection_subcategory).toBeNull(); // not an allowance
+
+    const sub = allowance.selection_subcategory;
+    expect(sub, 'no subcategory on the allowance line').not.toBeNull();
+    // main 10×500 + 1×250 = 5,250 · zero 1×5,000 · credit 1×1,000 · H cheaper 1×2,000
+    const byName = Object.fromEntries(sub!.selections.map((x) => [x.name.replace(`${MARKER} `, ''), x.cost]));
+    expect(byName).toEqual({ 'floor tile': 5250, 'zero variance': 5000, 'cheaper tile': 1000, 'H cheaper vanity': 2000 });
+    expect(sub!.selections.map((x) => x.id)).not.toContain(suppliedSelId);
+    expect(sub!.selectionTotal).toBe(13250);
+    expect(sub!.variance).toBe(8250);
+    expect(sub!.resulting).toBe(13250);
+    expect(effectiveBudget(allowance)).toBe(13250);
+    expect(effectiveBudget(lumber)).toBe(2000);
+
+    // The sums count the RESULTING total once, in place of the original.
+    const adhoc = rollup.instruments.find((i) => i.kind === 'adhoc')!;
+    expect(adhoc.budgeted).toBe(15250);
+    expect(rollup.totalBudgeted).toBe(15250);
+
+    // And NOTHING was written: the allowance row itself is unchanged.
+    const { data: stored } = await admin.from('project_budget_amounts').select('budgeted_amount').eq('budget_item_id', allowanceItemId).single();
+    expect(Number(stored!.budgeted_amount)).toBe(5000);
+    expect(await admin.from('project_budget_items').select('id', { count: 'exact', head: true }).eq('project_id', projectId).then((r) => r.count)).toBe(2);
+  });
+
+  it('G2 — the cost-plus control re-budgets its allowance the same way (the subcategory is about cost, not billing)', async () => {
+    const rollup = await getBudgetRollup(cpProjectId);
+    const allowance = rollup.instruments.flatMap((i) => i.groups.flatMap((g) => g.items)).find((i) => i.id === cpAllowanceItemId)!;
+    expect(allowance.selection_subcategory).toEqual({
+      selections: [{ id: cpSelId, name: `${MARKER} cp floor tile`, cost: 2000 }],
+      selectionTotal: 2000,
+      variance: 1000,
+      resulting: 2000,
+    });
+    expect(rollup.totalBudgeted).toBe(2000);
   });
 });
