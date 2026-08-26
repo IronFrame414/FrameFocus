@@ -521,3 +521,50 @@ Grepped `test/`, `e2e/` and the specs for `files_category_check`, `FileCategory`
 - `desktop-selections.spec.ts` gained the button's role gate on both sides (owner sees it, foreman
   has none). Its `expectNoMoney` scan over the tab is unaffected — the button's label carries no
   figure.
+
+## Battery — every exit code read from its own printed line, nothing judged through a pipe
+
+| check | how | result |
+| --- | --- | --- |
+| `turbo run type-check --force` | 5 tasks, all `cache bypass, force executing` | **exit 0** |
+| `turbo run lint --force` | `cache bypass`; `✔ No ESLint warnings or errors` | **exit 0** |
+| `turbo run build --force` | `Cached: 0 cached, 1 total`; `✓ Compiled successfully` | **exit 0** |
+| committed vitest (`apps/web`) | 61 files | **932 / 932**, exit 0 (item 3 was 920 / 60 — the new `s175-spec-sheet-template` file plus the brand guards' new render block and subject case) |
+| every live harness (`test/live.vitest.config.ts`) | 98 files, 611s | **1421 / 1421**, `LIVE_EXIT=0`, zero `UNVERIFIED` warnings (item 3 was 1397 / 97 — +1 file, +24 probes, all this item's) |
+| Playwright, four chunks from `apps/web`, each after `scripts/e2e-preflight.sh` (exit 0, one server bound 3000) | desktop-chat ×7 · desktop/portal/harness ×10 · m-* first 8 · m-* last 9 | **33 · 76 · 141 (3 skipped) · 285 (6 skipped)** — the same totals as item 3. Chunks 3 and 4 exit 0 outright; chunks 1 and 2 needed re-runs, below |
+| `supabase migration list` from the repo root | 143 migrations, local = remote through `20261036000000` | **exit 0**, zero drift |
+| fixture residue | service-role count over `S175S6` across projects, selections, areas, estimates and budget items, plus `files` category `selections`, `email_logs` type `selection_specifications`, and the e2e `E2ESEL` rows | **0 rows in every one** |
+| dev server left behind | port 3000 listeners after the last chunk | **0** (the only surviving `next dev` match is the grep's own shell — #137's `pkill -f` trap) |
+
+### ⚠️ THE NOTIFICATION LIED ABOUT THE LIVE RUN, EXACTLY AS THE RULE SAYS IT WOULD
+
+The background task reported **"failed with exit code 1"** for the live battery. That is the
+**wrapper's** status — the compound command ended in `grep -c "UNVERIFIED"`, which exits 1 when it
+finds nothing, which is the *good* outcome. The printed line says `LIVE_EXIT=0` and the summary says
+`98 passed`. **Only the printed line is true**, and this is the second consecutive item where that
+rule earned its place.
+
+### The Playwright re-runs, and why none of them is this item's
+
+- **Chunk 1** — `desktop-chat-mentions`, the FIRST test of the whole run, timed out waiting for the
+  chat thread. The five later tests **in the same file, through the same `openThread` helper**,
+  passed. Cold compile. Re-ran the file warm: **6 / 6, exit 0.**
+- **Chunk 2 — 10 failures, and 8 of them say `Page crashed`.** Chromium OOM: the box had **218 MB
+  free of 7.9 GB** after a forced build and a 1421-test live run. Not judged on that reading alone —
+  the server was restarted and every affected file re-run:
+  - `desktop-selections` (4 failures) → **green**, including the two cases this item edited;
+  - `portal-pages` (2 failures) → the surviving one failed at **line 44, the Financials tab**, which
+    is *before* this item's edit and is a 5s navigation timeout on the first hit to that route.
+    Re-ran warm: **3 / 3, exit 0** — and that includes line 30, which now traverses BOTH the exact
+    `Documents` heading and the new `Shared documents` one, so the edit is proved rather than
+    assumed;
+  - `desktop-trial-screens` (4 failures) → 15/16 on the first re-run (a 5s wait on the first POST to
+    the acknowledgement route), then **16 / 16, exit 0**. Nothing in this item's diff touches trial
+    billing; the diff is selections, portal, files, email and PDF.
+
+**Stated rather than smoothed over:** chunk 2 has not been re-run as a single green chunk. Its 76
+tests are accounted for as 66 in the run plus 10 re-run green individually, on a restarted server.
+The reason it was not re-run whole is the same OOM that broke it.
+
+Not run, and said so: no production migration (`20261036000000` is rebuild-test only); nothing
+pushed; **the sheet's LAYOUT is unverified and is Josh's** (§Y.2).
