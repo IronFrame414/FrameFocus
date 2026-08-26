@@ -26,6 +26,20 @@ export default async function TeamMemberEditPage({ params }: { params: { id: str
     redirect('/dashboard');
   }
 
+  // ⚠️ THIS `redirect` IS NOW THE #1-s168 GATE AS WELL AS THE NOT-FOUND PATH,
+  // AND IT DID NOT HAVE TO CHANGE TO BECOME ONE. [S175 item 6]
+  //
+  // `getTeamMember()` returns NULL for a role the Team side does not represent
+  // (`NON_TEAM_ROLES` — today, `client`), off the SAME constant
+  // `getTeamMembers()` filters the list by. TECH_DEBT #1-s168's fifth limb is
+  // that this route is *"reachable by URL for a client's profile id whether or
+  // not the list shows it"*, and that dropping the row from the list is
+  // *"cosmetic on its own"* — an Owner who pasted a client's profile id got the
+  // staff editor for them, with a role dropdown.
+  //
+  // The gate is in the service rather than here because this page is one door of
+  // five: `actions.ts` carries four server actions that take a `targetId` off
+  // the wire and never render this file.
   const target = await getTeamMember(supabase, params.id).catch(() => null);
   if (!target) redirect('/dashboard/team');
   if (target.is_deleted) redirect('/dashboard/team');
@@ -41,8 +55,27 @@ export default async function TeamMemberEditPage({ params }: { params: { id: str
       ? await getCompanyAdmins(supabase, caller.company_id, caller.id)
       : [];
 
-  // Pay rates (S85): keyed by the member row, not the profile. Client-role
-  // profiles have no member row — no rate section for them.
+  // Pay rates (S85): keyed by the member row, not the profile.
+  //
+  // ⚠️ THE ACCOMMODATION IS GONE; THE CONDITIONAL IS NOT, AND THE DIFFERENCE
+  // MATTERS. [#1-s168 limb 5, S175 item 6]
+  //
+  // _Superseded, quoted rather than deleted:_ *"Client-role profiles have no
+  // member row — no rate section for them."* That sentence is why #1-s168 was
+  // ruled STRUCTURAL rather than cosmetic: this page did not merely fail to
+  // exclude clients, it was **written to accommodate them**. A client can no
+  // longer reach this file at all, so that reason is retired.
+  //
+  // **The `memberRow ? … : …` branch stays, because a second role reaches this
+  // page without one.** `create_member_for_new_profile()` skips
+  // `('client','subcontractor')` at INSERT, so a subcontractor-role profile is
+  // not guaranteed a `company_members` row either — and subcontractors stay on
+  // the Team side by ruling [Josh, S175 Q6.1]. Measured on rebuild-test: the
+  // seeded sub DOES have one, created by `create_member_for_new_subcontractor()`
+  // from the `subcontractors` table rather than by the profile trigger. So the
+  // branch is not dead code on today's data by accident — it is load-bearing for
+  // any sub profile that arrives by the other path, and deleting it would crash
+  // this page for them.
   const { data: memberRow } = await supabase
     .from('company_members')
     .select('id')
