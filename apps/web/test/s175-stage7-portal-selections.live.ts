@@ -687,6 +687,24 @@ describe('S175-S7 C — THE PICK: every arm, each refusal re-read through the se
     expect(await chosenOf(suppliedId)).toEqual([optS]);
   });
 
+  it('C13 — ⚠️ THE RPC IS THE ONLY DOOR: her direct UPDATE on `selection_options` moves nothing', async () => {
+    // The Phase-2 gate ruled that `selection_options` must NOT get a client
+    // UPDATE arm — RLS cannot restrict columns, so a policy letting her set
+    // `is_chosen` would equally let her rewrite `name`, `spec_detail` and
+    // `link_url` on the options her contractor assembled. This is the guard
+    // against someone "simplifying" the definer away into a policy.
+    const before = (await admin.from('selection_options').select('name, is_chosen').eq('id', optA).single()).data!;
+    const { data } = await S.linked!
+      .from('selection_options')
+      .update({ is_chosen: true, name: 'pwned' })
+      .eq('id', optA)
+      .select('id');
+    expect(data ?? [], 'the client has a direct UPDATE arm on selection_options').toHaveLength(0);
+    const after = (await admin.from('selection_options').select('name, is_chosen').eq('id', optA).single()).data!;
+    expect(after.name).toBe(before.name);
+    expect(after.is_chosen).toBe(before.is_chosen);
+  });
+
   it('C12 — ⚠️ and the counterfactual on the WRITE: full access, wrong project, refused', async () => {
     // A6's argument, applied to the pick. The CONTROL client (C8) is stopped by
     // `client_has_full_access()`; this principal is not, so only the project

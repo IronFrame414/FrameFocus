@@ -21,7 +21,9 @@ import { signSelectionOptionImages } from '@/lib/services/selections';
 //
 // [S173, Josh] REWORKED, not deleted: "chosen" is the CLIENT's act. The offer
 // releases priced options and stamps NOTHING; the client picks (`is_chosen`,
-// stage 7's portal write — the admin client stands in for it here) and the
+// stage 7's portal write — the admin client stands in for it here; the REAL
+// client write shipped at S175 stage 7 and is exercised as her in
+// `s175-stage7-portal-selections.live.ts`) and the
 // SIGNATURE computes Q7's figures from her picks and stamps `signed_*`.
 // Probes that asserted the company-chooses model are INVERTED below, each with
 // its superseded assertion quoted.

@@ -308,7 +308,21 @@ export function PortalSelectionCard({
   const deduction = selection.allowanceDeduction ?? 0;
   const variance = r2(sellTotal - deduction);
 
-  const showMoney = !selection.clientSupplied && selection.allowanceDeduction !== null;
+  // ⚠️ NO TOTALS UNTIL SHE HAS PICKED SOMETHING, AND THIS WAS FOUND IN A
+  // BROWSER RATHER THAN REASONED OUT.
+  //
+  // The first build rendered the block whenever the selection carried money.
+  // With nothing picked that is `Selections Price $0.00`, `Allowance Deduction
+  // -$6,000.00`, `Credit $6,000.00` — the page telling a client who has chosen
+  // NOTHING that she is owed the entire allowance back. It is §5.4's phantom
+  // underage arriving from a different direction: there the danger was joining a
+  // client-supplied selection at zero, here it is summing an empty pick set
+  // against a real deduction.
+  //
+  // A total over no choices is not a total. It appears when there is something
+  // to total, which is also the moment the signature becomes available.
+  const showMoney =
+    !selection.clientSupplied && selection.allowanceDeduction !== null && picked.length > 0;
   const consentText = selectionConsentTextFor({
     clientSupplied: selection.clientSupplied,
     sellAmount: sellTotal,
