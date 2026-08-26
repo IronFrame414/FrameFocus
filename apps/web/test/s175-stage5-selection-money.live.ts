@@ -13,6 +13,7 @@ import {
   getRevisedContractMap,
   getSelectionBilling,
 } from '@/lib/services/contract-value';
+import { getProfitabilityReport } from '@/lib/services/profitability';
 
 // ============================================================================
 // S175 #3 — Allowances & Selections STAGE 5: an approved selection becomes
@@ -800,5 +801,47 @@ describe('S175-S5 E — getSelectionBilling(): billed vs signed → remaining, p
     expect(b.selections[0].remaining).toBeNull();
     expect(b.asIncurredCount).toBe(1);
     expect(b.fixedCount).toBe(0);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+describe('S175-S5 F — PROFITABILITY: the selection is a THIRD INSTRUMENT (spec §7.1, acceptance #17)', () => {
+  it('F1 — fixed-price: the allowance category carries the selection\'s cost AND its signed sell; the tagged cost left "unattributed"', async () => {
+    // C5 left two APPROVED expenses on the allowance line: $300 tagged with the
+    // selection, $200 untagged. The allowance line has no source row, so the
+    // untagged $200 is genuinely unattributable — and the tagged $300 is not.
+    const report = await getProfitabilityReport(projectId);
+    expect(report).not.toBeNull();
+    const allowance = report!.categories.find((c) => c.category === 'allowance');
+    expect(allowance, 'the allowance category is missing from the report').toBeDefined();
+    expect(allowance!.actual).toBe(500);
+
+    // Sell = Σ signed_sell_amount over the job's approved fixed-parent
+    // selections, read independently as the service role.
+    const { data: sels } = await admin
+      .from('selections').select('signed_sell_amount')
+      .eq('project_id', projectId).eq('status', 'approved').not('signed_sell_amount', 'is', null);
+    const expectedSell = r2((sels ?? []).reduce((n, x) => n + Number(x.signed_sell_amount), 0));
+    expect(expectedSell).toBeGreaterThan(6300);
+    expect(allowance!.sell).toBe(expectedSell);
+    expect(allowance!.margin).toBe(r2(expectedSell - 500));
+
+    // The untagged $200 is unattributed; the tagged $300 is NOT.
+    expect(report!.unattributed).toEqual({ actual: 200, count: 1 });
+
+    // Headline: earned is 7B's revised figure — variance included — and cost
+    // counts every approved dollar once.
+    const c = await getRevisedContract(projectId);
+    expect(report!.headline.earned).toBe(c.revised);
+    expect(report!.headline.actualCost).toBe(500);
+    expect(report!.caveats.map((x) => x.code)).not.toContain('selection_variance_outside_contract');
+  });
+
+  it('F2 — cost-plus control: the selection is NOT a separate revenue instrument — its cost bills as incurred, so the category shows no signed sell', async () => {
+    const report = await getProfitabilityReport(cpProjectId);
+    expect(report).not.toBeNull();
+    const allowance = report!.categories.find((c) => c.category === 'allowance')!;
+    expect(allowance.sell).toBeNull();
+    expect(report!.caveats.map((x) => x.code)).not.toContain('selection_variance_outside_contract');
   });
 });
