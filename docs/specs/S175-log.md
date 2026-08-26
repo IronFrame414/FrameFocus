@@ -278,3 +278,92 @@ Named as Phase 1 requires, worst first:
    fails loudly rather than silently. Recorded here because the sequencing argument it supports is
    still correct, for a different and stronger reason.
 
+
+---
+
+# ITEMS 1 AND 2 — recorded in their commits, not here
+
+The running record for items 1 (`3f74791`, the estimate freeze) and 2 (`6960b3d`, void and
+reissue) lives in those commit messages; this file was not appended by the session that built them.
+Read `git log --format=%B 3f74791 6960b3d` rather than looking for a section that does not exist.
+
+---
+
+# ITEM 3 — STAGE 5: an approved selection becomes money (S175, unattended)
+
+Seven path-scoped commits, one per discrete step, per the S173 rule. Every ruling came from
+`S175-questions.md` Q3.1–Q3.4 and the prompt; nothing here needed a stop.
+
+| step | commit | what landed |
+| --- | --- | --- |
+| 1 | `213dd83` | DB: `source_selection_id` on `invoice_lines` AND `expense_allocations`, the three-way CHECK, the selection's own ceiling, the cost tag's shape trigger, `approve_expense` carrying the key |
+| 2 | `54060d2` | `contract-value.ts` third term (fixed-price only, exclusion rendered), `getSelectionBilling()`, `selection-money.ts`, `sel:` instrument key, Budget/project cards |
+| 3 | `66b26f6` | `profitability.ts` third instrument; `PROFIT_CATEGORIES` gains `allowance` (it was dropping the category since S170); new caveat |
+| 4 | `6c54c28` | invoice builder Selections panel; sourced `credit_allowance` with `is_final` lifted; reissue/recalc/PDF carry the column |
+| 5 | `25fad7d` | the cost tag on both capture surfaces and the review popup; every allocation writer carries it |
+| 6 | `15b6a3f` | `budget.ts` §5.4 subcategory, `effectiveBudget()`, Budget page sub-rows |
+| 7a | `780947b` | spec amendments; `s171` B3 title inverted |
+
+## ⚠️ FOUR THINGS THE BUILD FOUND THAT THE RULINGS DID NOT ANTICIPATE
+
+1. **The drafted ceiling had a hole at exactly zero.** The uncommitted `20261034` in the working
+   tree read `IF v_variance <= 0 THEN RETURN NEW` for the credit arm — so a selection signed at
+   EXACTLY the allowance (variance 0.00, an ordinary outcome) fell into the arm meant for credits
+   and could be billed any amount. Now strictly `< 0`; B6 pins zero as a cap of zero. The function
+   body was re-applied to rebuild-test by hand because `20261034` was already recorded as applied;
+   the committed file is what production will run.
+
+2. **`approve_expense()` was dropping the tag.** It reconciles by delete-and-reinsert and read
+   exactly two JSON keys, so a selection tagged at capture vanished the moment an Owner approved —
+   the column would have been populated on every pending row and empty on every approved one,
+   which is the only kind that counts. `20261035` carries the key through, and C6 proves the RPC
+   cannot smuggle a bad tag past the trigger.
+
+3. **`aggregateCategories` has been dropping the allowance category since S170.** S170 widened the
+   `ProfitCategory` type and the slice loop to five, with a comment that a missing category "is
+   OMITTED from the report", but left `PROFIT_CATEGORIES` at four — and that constant seeds the
+   rows, so every allowance slice was discarded. Putting money in the category is what surfaced it.
+   The unit test asserting "all four categories" is inverted to five with the old assertion quoted.
+
+4. **"Fixed or as-incurred" is decided by the INSTRUMENT, not the project.** A fixed-price CO on a
+   cost-plus job can carry an allowance; a selection against it has a signed, fixed sell while the
+   rest of the job bills as incurred. `selection-money.ts` is the one implementation of that
+   answer — `getSelectionBilling`, the invoice builder and profitability all read it. On a derived
+   parent the tagged cost stays transitive and prices through the parent's rates, because
+   `getPickableCosts` already offers it that way and a fixed "overage" line on top would bill the
+   same money twice. Q3.2's fixed-price-only rule for CONTRACT VALUE stands on project type exactly
+   as ruled; this is the billing/profit side of the same coin, and the spec now says both.
+
+## What was deliberately NOT done, and why
+
+- **`instrument_rates` not widened** (Q3.4) — a selection bears no rates; a widened XOR would permit
+  a rate row with no reader.
+- **`invoice_lines_estimate_line_shape_check` not given a third arm** — line item ⇒ estimate and
+  estimate ⇒ no selection already refuse the combination together; A3 proves the construction.
+- **Approval NOT required for the cost tag** — the tile is ordered before the signature; refusing
+  the tag until then would push the cost back onto the allowance line, the very loss the column
+  prevents. Downstream readers attribute approved selections only.
+- **The §5.4 subcategory is built only for readers who can see `budgeted_amount`** — a variance needs
+  the original, and building it from option amounts alone would hand a PM a budget figure through a
+  floored column.
+- **No production migration, no push** — `20261034`/`20261035` are on rebuild-test only.
+
+## Harness — `s175-stage5-selection-money.live.ts`, 37 probes in nine groups
+
+A shape · B ceiling · C cost tag · D contract value · E selection billing · F profitability ·
+G budget subcategory · H billing through the real client functions · I capture/review through the
+real client functions. Every selection approved through `completeSelectionSignature` with the
+LINKED client's session; every refusal re-read through the service role; its own fixed-price job
+(estimate + $10,000 contract) so B1's "escapes a fully-billed contract" is real, and a cost-plus
+control; zero residue asserted in `afterAll`, and it throws. One sweep defect found on the first run
+— the four `signed_*` stamps travel together by CHECK, so nulling the session id alone failed
+silently and the FK cycle then refused the delete — fixed in the sweep and recorded in the file.
+
+## Sweep for tests encoding overturned behaviour (S157 rule)
+
+Grepped `test/`, `e2e/` and `lib/**/*.test.ts` for `one_instrument`, `credit_allowance`, "final
+invoice", `getAvailableCredits`, `unattributed`, `signedDelta`, `expense_allocations`, "four
+categories". Two hits needed inverting: `profitability.test.ts` "all four categories" → five, and
+`s171` B3 "(stage 5 is not here)" → "(stage 5 reads them; it writes none of them)" — its assertions
+about the WRITES still hold. `invoice-derivation.test.ts`'s "$800 credit at the final invoice" is
+pure `presentInvoice` math on the legacy unsourced credit, whose final-only rule is unchanged.
