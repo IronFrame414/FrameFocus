@@ -109,6 +109,15 @@ export function SelectionsTab({ projectId, role, areas }: { projectId: string; r
   // client nothing; a release that silently fails to mail her is the same
   // defect wearing a different coat (invite-email.ts, D2).
   const [emailWarning, setEmailWarning] = useState<string | null>(null);
+  // [S175 stage 6] Generate & send the specifications sheet (§7.3, §9.4).
+  // ONE action, both halves — Josh: "Same sheet. Emailed to client and added
+  // to project files." There is deliberately no generate-without-sending and
+  // no send-the-last-one: the artifact is REPLACED on every generation (Q4.1),
+  // so a filed copy and a sent copy that were produced separately would be two
+  // documents claiming to be the same one.
+  const [specBusy, setSpecBusy] = useState(false);
+  const [specResult, setSpecResult] = useState<string | null>(null);
+  const [specError, setSpecError] = useState<string | null>(null);
   const base = `/dashboard/projects/${projectId}/selections`;
 
   const nameById = new Map(areas.flatMap((a) => a.selections.map((s) => [s.id, s.name] as const)));
@@ -140,6 +149,46 @@ export function SelectionsTab({ projectId, role, areas }: { projectId: string; r
       router.refresh();
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function sendSpecSheet() {
+    setSpecBusy(true);
+    setSpecResult(null);
+    setSpecError(null);
+    try {
+      const res = await fetch('/api/selections/spec-sheet', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId }),
+      });
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        emailed?: boolean;
+        emailError?: string | null;
+        recipient?: string | null;
+        selectionCount?: number;
+      };
+      if (!res.ok) {
+        setSpecError(body.error ?? 'The specifications sheet could not be sent.');
+        return;
+      }
+      // A send that did not happen must reach the screen. The sheet IS filed
+      // and IS in her portal either way, so this is a warning and not a
+      // failure — but reporting it as success would be the S174 defect
+      // (a UI that implies delivery) wearing a different coat.
+      if (body.emailed) {
+        setSpecResult(
+          `Specifications sheet sent to ${body.recipient ?? 'the client'} and filed under project files.`
+        );
+      } else {
+        setSpecError(
+          `Filed under project files, but not emailed. ${body.emailError ?? ''}`.trim()
+        );
+      }
+      router.refresh();
+    } finally {
+      setSpecBusy(false);
     }
   }
 
@@ -183,6 +232,17 @@ export function SelectionsTab({ projectId, role, areas }: { projectId: string; r
               Release {selected.length} selection{selected.length === 1 ? '' : 's'} to the client
             </button>
           )}
+          {canManage && (
+            <button
+              type="button"
+              data-testid="selections-spec-sheet"
+              style={{ ...button, backgroundColor: '#fff', color: '#1f2937' }}
+              disabled={specBusy}
+              onClick={sendSpecSheet}
+            >
+              {specBusy ? 'Sending…' : 'Generate & send specifications'}
+            </button>
+          )}
           {canManage && !creating && (
             <button type="button" data-testid="selection-new" style={button} onClick={() => setCreating(true)}>
               + New selection
@@ -196,6 +256,18 @@ export function SelectionsTab({ projectId, role, areas }: { projectId: string; r
           {releaseErrors.map((e) => (
             <div key={e}>{e}</div>
           ))}
+        </div>
+      )}
+
+      {specResult && (
+        <div style={{ ...card, borderColor: '#bbf7d0', backgroundColor: '#f0fdf4', color: '#166534', fontSize: '0.8125rem' }} data-testid="selections-spec-sheet-result">
+          {specResult}
+        </div>
+      )}
+
+      {specError && (
+        <div style={{ ...card, borderColor: '#fed7aa', backgroundColor: '#fffbeb', color: '#92400e', fontSize: '0.8125rem' }} data-testid="selections-spec-sheet-error">
+          {specError}
         </div>
       )}
 

@@ -12,8 +12,9 @@ import { ReminderEmail } from '@/lib/email/templates/reminder-email';
 import { NotificationEmail } from '@/lib/email/templates/notification-email';
 import { AuthEmail, AUTH_EMAIL_COPY, type AuthEmailKind } from '@/lib/email/templates/auth-email';
 import { SelectionReleasedEmail } from '@/lib/email/templates/selection-released-email';
+import { SelectionSpecificationsEmail } from '@/lib/email/templates/selection-specifications-email';
 import { subjectFor } from '@/lib/services/auth-email';
-import { buildSelectionsReleasedSubject } from '@/lib/services/selection-email';
+import { buildSelectionSpecificationsSubject, buildSelectionsReleasedSubject } from '@/lib/services/selection-email';
 
 // Renders the five transactional emails through @react-email/render — the SAME
 // function email-service.ts's Resend call uses to turn the component into the
@@ -113,6 +114,26 @@ const CLIENT_FACING = [
       />
     ),
   ],
+  // [S175 stage 6] The specifications sheet's delivery. Client-facing and
+  // white-label on exactly the same terms — and it is a SEPARATE template from
+  // the release above, not a variant of it: one asks her to choose, one tells
+  // her what she chose and carries the PDF.
+  [
+    'selection specifications',
+    () => (
+      <SelectionSpecificationsEmail
+        companyName={COMPANY}
+        logoUrl={LOGO}
+        brandColor="#2f49d1"
+        contactName="Dana"
+        projectName="Maple St Remodel"
+        approvedAsOf="August 26, 2026"
+        selectionCount={2}
+        selectionNames={['Kitchen countertop', 'Entry tile']}
+        portalUrl="https://example.com/portal/p1/files"
+      />
+    ),
+  ],
 ] as const;
 
 // ============================================================================
@@ -142,6 +163,9 @@ const COVERED = new Set([
   // S174 #1 — the selections release. White-label client-facing, rendered in
   // CLIENT_FACING above.
   'selection-released-email.tsx',
+  // [S175 stage 6] The specifications sheet's delivery. White-label
+  // client-facing, rendered in CLIENT_FACING above.
+  'selection-specifications-email.tsx',
 ]);
 
 describe('every email template is covered by this file', () => {
@@ -199,6 +223,16 @@ describe('email SUBJECTS name the product from the brand source', () => {
       expect(buildSelectionsReleasedSubject('Worth Properties', n)).not.toContain(brand.name);
       expect(buildSelectionsReleasedSubject('Worth Properties', n)).not.toContain('FrameFocus');
     }
+  });
+
+  // [S175 stage 6] Same reason again, third time: a subject is not a template.
+  // Client-facing, so the assertion is the ABSENCE of any product name.
+  it('⚠️ the specifications-sheet subject stays white-label', () => {
+    expect(buildSelectionSpecificationsSubject('Worth Properties')).toBe(
+      'Worth Properties: your specifications sheet'
+    );
+    expect(buildSelectionSpecificationsSubject('Worth Properties')).not.toContain(brand.name);
+    expect(buildSelectionSpecificationsSubject('Worth Properties')).not.toContain('FrameFocus');
   });
 });
 

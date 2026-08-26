@@ -384,3 +384,187 @@ pure `presentInvoice` math on the legacy unsourced credit, whose final-only rule
 
 Not run, and said so: no production migration (`20261034`/`20261035` are rebuild-test only);
 nothing pushed; the click-test register is Josh's.
+
+---
+
+# ITEM 4 — STAGE 6: THE SPECIFICATIONS SHEET (S175, unattended)
+
+Eight path-scoped commits, one per discrete step, per the S173 rule. Every ruling came from the
+prompt (Q4.1–Q4.4); nothing here needed a stop.
+
+| step | commit | what landed |
+| --- | --- | --- |
+| 1 | `75d5988` | `20261036000000` — `files_category_check` gains `'selections'`, `email_types` gains `'selection_specifications'`, and BOTH TypeScript halves in the same commit |
+| 2 | `e0308bd` | `spec-sheet-data.ts` + `spec-sheet-template.tsx`; the no-money rule proved on a real rendered PDF |
+| 3 | `71f634a` | `selection-spec-pdf-service.ts` — one current sheet per project, replaced not versioned, `client_visible` |
+| 4 | `a46b9f6` | `sendSelectionSpecificationsEmail()` **inside** `selection-email.ts`; its own template and `email_type`; the brand guards extended |
+| 5 | `178cf6e` | `POST /api/selections/spec-sheet` + the §9.2 button; the empty sheet refused in the SERVICE |
+| 6 | `c958023` | the portal side of Q4.2 — `getPortalPhotos` filtered, `getPortalSharedFiles` added, "Shared documents" card |
+| 7 | `accc8a6` | `s175-stage6-spec-sheet.live.ts`, 24 probes; three findings; `pdfText()` rewritten |
+| 8 | this | spec amendments (§3.8, §7.3, §9.2, §9.4, §10 #18, §11) and this record |
+
+## ⚠️ FIVE THINGS THE BUILD FOUND THAT THE RULINGS DID NOT ANTICIPATE
+
+1. **`client_visible` DID NOT MEAN SHE COULD SEE IT.** Q4.2's stated purpose is that the sheet is
+   not *"invisible in her own portal"*. Setting the flag does not achieve that: the portal's only
+   reader of `files` was `getPortalPhotos()`, and it had **no type filter** — every client-visible
+   file came back and the Files page rendered each as an `<img>` in the photo grid. The sheet would
+   have arrived **as a broken image tile**: present, unopenable, and reading as a fault in her
+   contractor's software rather than as a document. Latent only because nothing had ever set the
+   flag on a non-photo. Fixed as two exact complements (`mime_type LIKE 'image/%'` and its
+   negation) plus a "Shared documents" card, split by MIME rather than by category so no future
+   client-visible artifact can fall between them.
+
+2. **`signed_at` TRAVELS WITH THE MONEY STAMPS.** A client-supplied selection has all four
+   `signed_*` columns NULL by CHECK — including `signed_at`, which is not money and is easy to
+   assume survives. Reading the column alone printed "Approved «date»" on every selection **except
+   the one Q4.4 exists to keep fully listed**: the single row that would have looked less approved
+   than its neighbours, on a build document. The date now falls back to the completed,
+   un-superseded signing session, and B6 pins the fallback while asserting the stamp is still NULL
+   so it cannot go quietly vacuous.
+
+3. **`pdfText()` COULD NOT REJOIN A LINE, and it read as "the text is not on the page".** It
+   replaced each TJ group in place and returned the whole stream, operators included — which works
+   only while a string lands in one group, and @react-pdf splits ONE LINE across several complete
+   `BT … ET` blocks whenever glyph positioning changes. `"3cm eased edge"` came back with forty
+   characters of PDF operators between the `3` and the `cm`. It also skipped nothing: an embedded
+   image (the tenant logo, the option pictures) inflates to pixel data or fails to inflate at all,
+   and either way swamped the text and offered random bytes to the hex patterns. Now: text-showing
+   runs only, in order, from streams that carry `BT`/`ET` and are ≥90% printable. The three field
+   PDFs never tripped either, because their fixtures carry no images and their strings happen to
+   fall in one group.
+
+4. **THE FIRST SWEEP LEAKED AND ITS RESIDUE CHECK SAID ZERO.** `email_logs` was swept and counted
+   on `subject LIKE '%MARKER%'` — but the subject is the COMPANY's (*"Bishop Contracting: your
+   specifications sheet"*) and carries no marker at all, so both halves passed while every run left
+   two rows behind. **Six orphans from the development runs were found by hand**, each pointing at
+   a project that no longer existed. Now keyed on `metadata->>project_id` and swept before the
+   projects are deleted, because their ids are what identifies the rows. Verified after the fix by
+   counting every table AND the email logs directly rather than by re-reading the residue check.
+
+5. **THE EMPTY-SHEET GUARD WAS IN THE WRONG PLACE FIRST.** The route's first draft checked
+   `selectionCount === 0` AFTER `storeSelectionSpecPdf()` returned — which uploads the blob, inserts
+   a `client_visible` row, and THEN reports an error, leaving an empty specifications sheet in the
+   client's portal under the company's name. Moved into the service, before anything is written, so
+   every caller inherits it. `generate*` still renders the empty case, for a preview.
+
+## The one call I made rather than took, and it is the one to check
+
+**THE SHEET CARRIES NO MONEY.** The prompt's item-3 hand-off says *"`selection-money.ts` … This
+sheet reads it too"*, which reads as though the sheet shows sell figures. The module spec says the
+opposite twice — §7.3 *"One rendering, no costs"* and §9.4 *"No money."* — and I built to the spec.
+
+The reason is not deference to a document. **The sheet is filed under `files.category = 'selections'`
+and `files_select_non_client` gates only contracts/change_orders/invoices, so a FOREMAN, a CREW
+MEMBER and a SUBCONTRACTOR who can view the project all read that row** — proved, not assumed, by
+harness D5. A sell figure on it is the Financial Visibility Floor breached **by a document rather
+than by a policy**, which is the kind nobody probes for. One reading is safe and matches the spec;
+the other ships a Floor breach.
+
+Q4.4 reads consistently either way — *"not a blank price"* is satisfied by the plain sentence
+*"Supplied by client — no charge"* on a sheet that has no price column at all — so it does not
+settle the question. **If Josh wants sell on the sheet it is not a one-line change:** the category
+has to move into the gated set first, and that stops the field reading the sheet, which is the
+other half of what it is for.
+
+## What was deliberately NOT done, and why
+
+- **No `/m` affordance.** The `/m` selections page is read-only by a recorded S171 decision (release
+  and editing are desktop-only there). Generation is an action, not a view, so §9.5's parity rule is
+  not engaged; adding one would be a second unruled decision.
+- **No generate-without-sending, and no send-the-last-one.** The artifact is REPLACED (Q4.1), so a
+  filed copy and a sent copy produced by separate actions would be two documents each claiming to
+  be current.
+- **No `files.selection_id` column.** The sheet is a PROJECT artifact covering N selections and a
+  scalar FK cannot name N — the same reason `email_logs` got none at `20261029000000`. The replace
+  key is `(project_id, category)`, which is why the category is load-bearing and why the migration
+  says not to add it to the upload picker.
+- **No Playwright click on the button.** Pressing it files a real PDF into the shared QA fixture
+  project and attempts a real send, and that suite has no teardown for either. Playwright asserts
+  the button's presence for an owner and its absence for a foreman; the whole path runs end to end
+  through the REAL ROUTE in the live harness, on its own swept fixture.
+- **No production migration, no push.** `20261036000000` is on rebuild-test only.
+
+## Harness — `s175-stage6-spec-sheet.live.ts`, 24 probes in six groups
+
+A generation and the filed row (including that the BLOB is in the bucket, not just the row) ·
+B what is on the sheet, read off the real PDF · C replacement, including the stale storage object ·
+D `client_visible` and the portal · E the empty refusal · F **the real shipped route**.
+
+F executes the ROUTE and not the service, for S174's reason one stage back:
+`s171-selections-lifecycle` was fully green while no client had ever received anything, because the
+mechanism was fine and nothing called it. The foreman's 403 is **non-vacuous** — he is assigned to
+the project and D5 proves he can read its files, so the refusal is the role. No real email leaves:
+the fixture contact is `qa-client-a@example.invalid` (RFC 2606), so the send is attempted for real
+and lands in `email_logs` either way.
+
+B5 is the assertion that matters: **no currency figure and none of Allowance / Variance / Markup /
+Subtotal / Total / Price survives into the document**, against options carrying $6,000 at 20% markup
+and a selection with signed stamps — so a figure leaking out of a SERVICE would show up, not only
+one written into the template.
+
+## Sweep for tests encoding overturned behaviour (S157 rule)
+
+Grepped `test/`, `e2e/` and the specs for `files_category_check`, `FileCategory`, `email_types`,
+`getPortalPhotos`, `client_visible`, `pdfText`, `selections-tab` and the tab's test ids.
+
+- `s164-m9-portal-shell` P2e / P4a–c / P5a–b and `s164-m9-read-arms` 6a–6d pass unchanged: every
+  fixture file is `mime_type: 'image/jpeg'` (`seed-test-identities.mjs:1014`), so the new image
+  filter is non-vacuous for them rather than accidentally empty.
+- `s162-m6-audit` C2 enumerates `email_types` but asserts only that no name contains
+  "notification" — unaffected.
+- **`portal-pages.spec.ts` DID need a change, and its own comment prescribed it.** `'Documents'` is
+  now a substring of `'Shared documents'`, so the loose accessible-name match resolved to two
+  headings and failed on strict mode — `exact: true`, exactly as that file already does for
+  `'Photos'` inside `'Questions and photos'`, plus an assertion on the new heading so the addition
+  is covered rather than merely tolerated.
+- `desktop-selections.spec.ts` gained the button's role gate on both sides (owner sees it, foreman
+  has none). Its `expectNoMoney` scan over the tab is unaffected — the button's label carries no
+  figure.
+
+## Battery — every exit code read from its own printed line, nothing judged through a pipe
+
+| check | how | result |
+| --- | --- | --- |
+| `turbo run type-check --force` | 5 tasks, all `cache bypass, force executing` | **exit 0** |
+| `turbo run lint --force` | `cache bypass`; `✔ No ESLint warnings or errors` | **exit 0** |
+| `turbo run build --force` | `Cached: 0 cached, 1 total`; `✓ Compiled successfully` | **exit 0** |
+| committed vitest (`apps/web`) | 61 files | **932 / 932**, exit 0 (item 3 was 920 / 60 — the new `s175-spec-sheet-template` file plus the brand guards' new render block and subject case) |
+| every live harness (`test/live.vitest.config.ts`) | 98 files, 611s | **1421 / 1421**, `LIVE_EXIT=0`, zero `UNVERIFIED` warnings (item 3 was 1397 / 97 — +1 file, +24 probes, all this item's) |
+| Playwright, four chunks from `apps/web`, each after `scripts/e2e-preflight.sh` (exit 0, one server bound 3000) | desktop-chat ×7 · desktop/portal/harness ×10 · m-* first 8 · m-* last 9 | **33 · 76 · 141 (3 skipped) · 285 (6 skipped)** — the same totals as item 3. Chunks 3 and 4 exit 0 outright; chunks 1 and 2 needed re-runs, below |
+| `supabase migration list` from the repo root | 143 migrations, local = remote through `20261036000000` | **exit 0**, zero drift |
+| fixture residue | service-role count over `S175S6` across projects, selections, areas, estimates and budget items, plus `files` category `selections`, `email_logs` type `selection_specifications`, and the e2e `E2ESEL` rows | **0 rows in every one** |
+| dev server left behind | port 3000 listeners after the last chunk | **0** (the only surviving `next dev` match is the grep's own shell — #137's `pkill -f` trap) |
+
+### ⚠️ THE NOTIFICATION LIED ABOUT THE LIVE RUN, EXACTLY AS THE RULE SAYS IT WOULD
+
+The background task reported **"failed with exit code 1"** for the live battery. That is the
+**wrapper's** status — the compound command ended in `grep -c "UNVERIFIED"`, which exits 1 when it
+finds nothing, which is the *good* outcome. The printed line says `LIVE_EXIT=0` and the summary says
+`98 passed`. **Only the printed line is true**, and this is the second consecutive item where that
+rule earned its place.
+
+### The Playwright re-runs, and why none of them is this item's
+
+- **Chunk 1** — `desktop-chat-mentions`, the FIRST test of the whole run, timed out waiting for the
+  chat thread. The five later tests **in the same file, through the same `openThread` helper**,
+  passed. Cold compile. Re-ran the file warm: **6 / 6, exit 0.**
+- **Chunk 2 — 10 failures, and 8 of them say `Page crashed`.** Chromium OOM: the box had **218 MB
+  free of 7.9 GB** after a forced build and a 1421-test live run. Not judged on that reading alone —
+  the server was restarted and every affected file re-run:
+  - `desktop-selections` (4 failures) → **green**, including the two cases this item edited;
+  - `portal-pages` (2 failures) → the surviving one failed at **line 44, the Financials tab**, which
+    is *before* this item's edit and is a 5s navigation timeout on the first hit to that route.
+    Re-ran warm: **3 / 3, exit 0** — and that includes line 30, which now traverses BOTH the exact
+    `Documents` heading and the new `Shared documents` one, so the edit is proved rather than
+    assumed;
+  - `desktop-trial-screens` (4 failures) → 15/16 on the first re-run (a 5s wait on the first POST to
+    the acknowledgement route), then **16 / 16, exit 0**. Nothing in this item's diff touches trial
+    billing; the diff is selections, portal, files, email and PDF.
+
+**Stated rather than smoothed over:** chunk 2 has not been re-run as a single green chunk. Its 76
+tests are accounted for as 66 in the run plus 10 re-run green individually, on a restarted server.
+The reason it was not re-run whole is the same OOM that broke it.
+
+Not run, and said so: no production migration (`20261036000000` is rebuild-test only); nothing
+pushed; **the sheet's LAYOUT is unverified and is Josh's** (§Y.2).

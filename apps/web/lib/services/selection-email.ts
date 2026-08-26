@@ -4,6 +4,8 @@ import type { Database } from '@framefocus/shared/types/database';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { buildSenderAddress, logEmail, sendEmail } from '@/lib/services/email-service';
 import { SelectionReleasedEmail } from '@/lib/email/templates/selection-released-email';
+import { SelectionSpecificationsEmail } from '@/lib/email/templates/selection-specifications-email';
+import type { SelectionSpecSheetData } from '@/lib/selections/spec-sheet-data';
 
 /**
  * S174 #1 — RELEASING SELECTIONS SENDS AN EMAIL, which it never did.
@@ -83,6 +85,24 @@ export function buildSelectionsReleasedSubject(companyName: string, count: numbe
 /** `/portal/<projectId>/selections` — the ONLY destination. See the template. */
 export function buildSelectionsPortalLink(projectId: string, origin: string): string {
   return `${origin.replace(/\/+$/, '')}/portal/${projectId}/selections`;
+}
+
+/**
+ * [S175 stage 6] The specifications sheet's subject.
+ *
+ * ⚠️ EXTRACTED FOR THE SAME REASON AS THE ONE ABOVE, which is the S136 lesson:
+ * a subject is not a template, so no render test can see it, and the stale
+ * product name that reached real recipients was in a subject rather than in
+ * any template. This one is client-facing and therefore names no product at
+ * all — `brand-email-footer.test.tsx` asserts that ABSENCE.
+ */
+export function buildSelectionSpecificationsSubject(companyName: string): string {
+  return `${companyName}: your specifications sheet`;
+}
+
+/** `/portal/<projectId>/files` — where the filed sheet lives (Q4.2). */
+export function buildPortalFilesLink(projectId: string, origin: string): string {
+  return `${origin.replace(/\/+$/, '')}/portal/${projectId}/files`;
 }
 
 function fmtDate(value: string): string {
@@ -235,6 +255,159 @@ export async function sendSelectionsReleasedEmail(
       project_id: input.projectId,
       selection_ids: selections.map((s) => s.id),
       selection_count: selections.length,
+      ...(error ? { error } : {}),
+    },
+  });
+
+  return { emailed: error === null, error, recipient: recipientEmail };
+}
+
+// ============================================================================
+// [S175 stage 6] THE SPECIFICATIONS SHEET'S SEND.
+// ============================================================================
+//
+// ⚠️ IT LIVES IN THIS FILE ON PURPOSE. Josh, S174: *"Do NOT build a second
+// mailer."* The release send and this one are the same module's two messages to
+// the same person; they share `sendEmail()`, the `+REPLY-TO` resolution, the
+// recipient resolution and the `email_logs` discipline. A `selection-spec-email.ts`
+// beside this file would be the divergence CLAUDE.md's PARITY rule describes —
+// written in a form that looks like agreement and found later as two senders
+// that disagree about who the client is.
+//
+// ⚠️ IT IS STILL A DIFFERENT MESSAGE, AND A DIFFERENT `email_type`. The release
+// asks her to CHOOSE; this tells her what she chose and carries the PDF. And
+// because Q4.1 REPLACES the filed artifact on every regeneration, `email_logs`
+// is the only record of which version went out when — a shared type would make
+// exactly that question unanswerable (20261036000000).
+//
+// ⚠️ A FAILED SEND IS NOT A FAILED GENERATION, for the reason the release send
+// states in its own header. The sheet is already rendered and already filed
+// when this runs, and it is `client_visible`, so the client can reach it in the
+// portal whether or not Resend was up. It never throws; it reports
+// `{ emailed, error, recipient }` and the caller surfaces a WARNING — and it
+// must not silently succeed either. `emailed: false` reaches the screen.
+//
+// The BYTES ARE PASSED IN rather than re-rendered. `storeSelectionSpecPdf()`
+// returns the buffer it filed, and attaching those exact bytes is what makes
+// "the email and the portal hold the same document" true rather than probable.
+// ============================================================================
+
+export async function sendSelectionSpecificationsEmail(
+  rls: Db,
+  input: {
+    projectId: string;
+    data: SelectionSpecSheetData;
+    pdf: Buffer;
+    fileName: string;
+    origin: string;
+  }
+): Promise<SelectionEmailResult> {
+  const admin = getSupabaseAdmin() as Db;
+
+  // Read through the CALLER'S client: a caller who cannot see the project does
+  // not get to mail its client. (`getSelectionSpecSheetData` already refused,
+  // but a read that decides a recipient must not rely on an earlier one.)
+  const { data: project } = await rls
+    .from('projects')
+    .select('id, name, company_id, contact_id')
+    .eq('id', input.projectId)
+    .maybeSingle();
+  if (!project) {
+    return { emailed: false, error: 'That project could not be read.', recipient: null };
+  }
+
+  // Company and contact through ADMIN, exactly as the release send resolves
+  // them: a PM may generate the sheet without being able to read `contacts` at
+  // all (Roster Visibility Floor), and that must not become a silent no-send.
+  const { data: company } = await admin
+    .from('companies')
+    .select('name, slug')
+    .eq('id', project.company_id)
+    .maybeSingle();
+  if (!company) {
+    return { emailed: false, error: 'Company not found.', recipient: null };
+  }
+
+  let recipientEmail: string | null = null;
+  let recipientName: string | null = null;
+  if (project.contact_id) {
+    const { data: contact } = await admin
+      .from('contacts')
+      .select('first_name, last_name, email')
+      .eq('id', project.contact_id)
+      .maybeSingle();
+    if (contact?.email && contact.email.trim() !== '') {
+      recipientEmail = contact.email.trim();
+      recipientName = `${contact.first_name ?? ''} ${contact.last_name ?? ''}`.trim() || null;
+    }
+  }
+  if (!recipientEmail) {
+    return {
+      emailed: false,
+      recipient: null,
+      error:
+        'The specifications sheet was filed, but no email went out: this project has no client ' +
+        'contact with an email address. Set a primary contact on the project.',
+    };
+  }
+
+  const names = input.data.areas.flatMap((a) => a.selections.map((s) => s.name));
+  const approvedAsOf = new Date(input.data.approvedAsOf).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    ...(input.data.company.timezone ? { timeZone: input.data.company.timezone } : {}),
+  });
+  const subject = buildSelectionSpecificationsSubject(company.name);
+  const from = buildSenderAddress({ name: company.name, slug: company.slug });
+
+  let messageId: string | null = null;
+  let error: string | null = null;
+  try {
+    const result = await sendEmail({
+      from,
+      to: recipientEmail,
+      subject,
+      // +REPLY-TO [S97]: a reply about her specifications reaches the COMPANY.
+      replyToCompanyId: project.company_id,
+      attachments: [{ filename: input.fileName, content: input.pdf }],
+      react: SelectionSpecificationsEmail({
+        companyName: company.name,
+        logoUrl: input.data.company.logoUrl,
+        brandColor: input.data.company.brandColor,
+        contactName: recipientName ?? 'there',
+        projectName: project.name,
+        approvedAsOf,
+        selectionCount: input.data.selectionCount,
+        selectionNames: names,
+        portalUrl: buildPortalFilesLink(input.projectId, input.origin),
+      }),
+    });
+    messageId = result.messageId;
+    error = result.error;
+  } catch (err: unknown) {
+    error = err instanceof Error ? err.message : 'Failed to send the specifications sheet';
+  }
+
+  // Logged on success AND failure. With the artifact REPLACED rather than
+  // versioned (Q4.1), this row is the record of which sheet the client holds:
+  // the selection ids and the "as of" instant are what identify the version.
+  await logEmail(admin, {
+    company_id: project.company_id,
+    estimate_id: null,
+    signing_session_id: null,
+    resend_message_id: messageId,
+    email_type: 'selection_specifications',
+    recipient_email: recipientEmail,
+    sender_email: from,
+    subject,
+    status: error ? 'failed' : 'sent',
+    metadata: {
+      project_id: input.projectId,
+      selection_ids: input.data.areas.flatMap((a) => a.selections.map((s) => s.id)),
+      selection_count: input.data.selectionCount,
+      approved_as_of: input.data.approvedAsOf,
+      file_name: input.fileName,
       ...(error ? { error } : {}),
     },
   });

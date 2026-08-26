@@ -50,7 +50,13 @@ test.describe('S168 · the portal project view is four pages', () => {
     // Files & photos — documents, photos, and the questions thread.
     await page.getByTestId('portal-tab-files').click();
     await expect(page).toHaveURL(new RegExp(`/portal/${PROJECT}/files$`));
-    await expect(page.getByRole('heading', { name: 'Documents' })).toBeVisible();
+    // `exact` for the same reason as 'Photos' below: [S175 stage 6] added a
+    // "Shared documents" card, of which 'Documents' is a substring, so a loose
+    // name now resolves to two headings and fails on strict mode rather than on
+    // the page. Both cards are asserted, so the addition is covered rather than
+    // merely tolerated.
+    await expect(page.getByRole('heading', { name: 'Documents', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Shared documents' })).toBeVisible();
     // `exact` — 'Photos' is a substring of 'Questions and photos', and the
     // accessible-name match is case-insensitive, so a loose name resolves to two
     // headings and fails on strict mode rather than on the page.

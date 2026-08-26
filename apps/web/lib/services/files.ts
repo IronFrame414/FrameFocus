@@ -29,6 +29,14 @@ export type FileCategory =
   // notarized copy uploaded back. All company-scoped (project_id IS NULL), so
   // Owner/Admin only by the same policy arm.
   | 'lien_releases'
+  // 'selections' added by 20261036000000 (S175 stage 6) — the specifications
+  // sheet (§7.3, §9.4), and NOTHING ELSE. It is generated-only: it is the key
+  // `storeSelectionSpecPdf()` replaces on, `(project_id, category)`, so any
+  // row that reached this category by another route would be hard-removed by
+  // the next generation. It is deliberately absent from the upload picker in
+  // `app/dashboard/projects/[id]/files/upload/upload-form.tsx` for that
+  // reason — see the migration header before adding it.
+  | 'selections'
   | 'other';
 
 export type FileRecord = Omit<FileRow, 'category'> & {
