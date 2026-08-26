@@ -176,6 +176,16 @@ export interface AddFixedLineInput {
   category?: 'labor' | 'material' | 'subcontractor' | 'other' | 'allowance' | null;
   sourceEstimateId?: string | null;
   sourceChangeOrderId?: string | null;
+  /**
+   * [S175 stage 5] The SELECTION whose approved variance this line bills
+   * (spec §7.1). Its own instrument — Q4 made the client's signature binding
+   * and no change order is generated — capped at signed_variance by
+   * enforce_selection_billing_ceiling(), and deliberately OUTSIDE the contract
+   * ceiling: billed against the estimate it would be refused with "raise the
+   * scope with a change order". At most one of the three source ids may be
+   * set (invoice_lines_one_instrument_check).
+   */
+  sourceSelectionId?: string | null;
 }
 
 /**
@@ -212,6 +222,7 @@ export async function addFixedLine(input: AddFixedLineInput): Promise<Result> {
     derived_amount: input.amount,
     source_estimate_id: input.sourceEstimateId ?? null,
     source_change_order_id: input.sourceChangeOrderId ?? null,
+    source_selection_id: input.sourceSelectionId ?? null,
     sort_order: sortOrder,
   });
   if (error) return { success: false, error: error.message };
@@ -371,29 +382,44 @@ export async function addNegativeCoCredit(
   return { success: true };
 }
 
-/** §4b — under-allowance credit: Owner/Admin, FINAL invoice only, user-asked. */
+/**
+ * §4b — under-allowance credit: Owner/Admin, FINAL invoice only, user-asked.
+ *
+ * [S175 stage 5, spec §7.2] A credit SOURCED to a selection — the client
+ * signed for less than the allowance — is the selection's own money to give
+ * and `is_final` is LIFTED for it: it may sit on any invoice the user
+ * chooses, exactly as a negative CO's credit does (§4a). The legacy UNSOURCED
+ * under-credit keeps the final-only rule (§1.2) — that one has no signature
+ * behind it, and the final invoice is the only moment its size is known.
+ * Availability (owed − applied) is derived in getAvailableCredits, never
+ * stored, so voiding the carrying invoice returns it.
+ */
 export async function addAllowanceCredit(
   invoiceId: string,
   description: string,
-  amount: number
+  amount: number,
+  sourceSelectionId: string | null = null
 ): Promise<Result> {
   const supabase = createClient();
-  const { data: invoice } = await supabase
-    .from('invoices')
-    .select('is_final')
-    .eq('id', invoiceId)
-    .single();
-  if (!invoice?.is_final) {
-    return {
-      success: false,
-      error: 'An under-allowance credit is only available on the final invoice (7D §4b).',
-    };
+  if (!sourceSelectionId) {
+    const { data: invoice } = await supabase
+      .from('invoices')
+      .select('is_final')
+      .eq('id', invoiceId)
+      .single();
+    if (!invoice?.is_final) {
+      return {
+        success: false,
+        error: 'An under-allowance credit is only available on the final invoice (7D §4b).',
+      };
+    }
   }
   const { error } = await supabase.from('invoice_lines').insert({
     invoice_id: invoiceId,
     line_type: 'credit_allowance',
     description,
     billed_amount: -Math.abs(amount),
+    source_selection_id: sourceSelectionId,
     sort_order: 920,
   });
   if (error) return { success: false, error: error.message };
@@ -559,7 +585,7 @@ export async function recalculateInvoiceTotals(
   // eligibility is now decided PER LINE from the instrument each line carries.
   const { data: lines, error } = await supabase
     .from('invoice_lines')
-    .select('line_type, derived_amount, billed_amount, source_estimate_id, source_change_order_id')
+    .select('line_type, derived_amount, billed_amount, source_estimate_id, source_change_order_id, source_selection_id')
     .eq('invoice_id', invoiceId);
   if (error) return { success: false, error: error.message };
 
@@ -845,6 +871,7 @@ export async function reissueInvoice(sourceInvoiceId: string): Promise<CreateRes
       instrument_rate_id: line.instrument_rate_id,
       source_estimate_id: line.source_estimate_id,
       source_change_order_id: line.source_change_order_id,
+      source_selection_id: line.source_selection_id,
       source_deposit_invoice_id: line.source_deposit_invoice_id,
       sort_order: line.sort_order,
     });

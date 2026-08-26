@@ -191,11 +191,15 @@ export interface PickableHour {
 }
 
 export interface AvailableCredit {
-  kind: 'negative_co' | 'deposit';
+  /** [S175 stage 5] 'selection' — an approved selection signed UNDER its
+   *  allowance (spec §7.2): owed = |signed_variance|, applied = Σ sourced
+   *  credit_allowance lines on live invoices, available = owed − applied. */
+  kind: 'negative_co' | 'deposit' | 'selection';
   amount: number;
   label: string;
   changeOrderId?: string;
   depositInvoiceId?: string;
+  selectionId?: string;
 }
 
 export interface FlaggedInvoice {

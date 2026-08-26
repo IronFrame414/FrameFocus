@@ -130,6 +130,20 @@ export async function getInvoicePdfData(
       coLabels.set(co.id, `${co.co_number}${co.title ? ` — ${co.title}` : ''}`);
     }
   }
+  // [S175 stage 5] A selection line is its own instrument and groups under
+  // its own name — the client signed the selection, and the bill says so.
+  const selIds = [
+    ...new Set(
+      (linesRes.data ?? [])
+        .map((l) => l.source_selection_id)
+        .filter((id): id is string => Boolean(id))
+    ),
+  ];
+  const selLabels = new Map<string, string>();
+  if (selIds.length > 0) {
+    const { data: sels } = await supabase.from('selections').select('id, name').in('id', selIds);
+    for (const s of sels ?? []) selLabels.set(s.id, `Selection — ${s.name}`);
+  }
 
   // §11 — the client sees BILLED amounts, never the calculated figure (§8:
   // 7G exports and 7H report billed). cost_basis is the row's actual,
@@ -145,7 +159,9 @@ export async function getInvoicePdfData(
       ? coLabels.get(l.source_change_order_id) ?? 'Change order'
       : l.source_estimate_id
         ? 'Original Contract'
-        : '',
+        : l.source_selection_id
+          ? selLabels.get(l.source_selection_id) ?? 'Selection'
+          : '',
   }));
 
   const level = invoice.presentation_level as PresentationLevel;

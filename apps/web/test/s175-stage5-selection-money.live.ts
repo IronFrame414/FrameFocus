@@ -14,6 +14,8 @@ import {
   getSelectionBilling,
 } from '@/lib/services/contract-value';
 import { getProfitabilityReport } from '@/lib/services/profitability';
+import { getAvailableCredits } from '@/lib/services/invoices';
+import { addAllowanceCredit, addFixedLine, reissueInvoice } from '@/lib/services/invoices-client';
 
 // ============================================================================
 // S175 #3 — Allowances & Selections STAGE 5: an approved selection becomes
@@ -57,6 +59,7 @@ import { getProfitabilityReport } from '@/lib/services/profitability';
 
 const state = vi.hoisted(() => ({ client: null as unknown as SupabaseClient }));
 vi.mock('@/lib/supabase-server', () => ({ createClient: async () => state.client }));
+vi.mock('@/lib/supabase-browser', () => ({ createClient: () => state.client }));
 
 const MARKER = 'S175S5';
 const OWNER = 'josh+test50@worthprop.com';
@@ -843,5 +846,88 @@ describe('S175-S5 F — PROFITABILITY: the selection is a THIRD INSTRUMENT (spec
     const allowance = report!.categories.find((c) => c.category === 'allowance')!;
     expect(allowance.sell).toBeNull();
     expect(report!.caveats.map((x) => x.code)).not.toContain('selection_variance_outside_contract');
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+describe('S175-S5 H — BILLING through the REAL client functions (spec §7.1, §7.2; acceptance #13, #14)', () => {
+  let vanitySel: string;
+  let h1Invoice: string;
+
+  it('H1 — addFixedLine with sourceSelectionId bills the overage; the DB ceiling reaches the caller as its own message', async () => {
+    const v = await makeSelection(projectId, 'H vanity', null, [
+      { name: 'vanity H', quantity: 1, unit_cost: 800, markup_percent: 25 },
+    ], { sign: true });
+    vanitySel = v.id;
+    expect(v.variance).toBe(1000);
+    h1Invoice = await makeInvoice(projectId, 'H1 bill');
+
+    const first = await addFixedLine({ invoiceId: h1Invoice, description: 'Selection — H vanity', amount: 400, category: 'allowance', sourceSelectionId: vanitySel });
+    expect(first.success, first.error).toBe(true);
+    const over = await addFixedLine({ invoiceId: h1Invoice, description: 'too much', amount: 601, category: 'allowance', sourceSelectionId: vanitySel });
+    expect(over.success).toBe(false);
+    expect(over.error).toMatch(/approved variance/);
+    const rest = await addFixedLine({ invoiceId: h1Invoice, description: 'the rest', amount: 600, category: 'allowance', sourceSelectionId: vanitySel });
+    expect(rest.success, rest.error).toBe(true);
+
+    const lines = (await linesOn(h1Invoice)).filter((l) => l.source_selection_id === vanitySel);
+    expect(lines).toHaveLength(2);
+    expect(r2(lines.reduce((n, l) => n + Number(l.billed_amount), 0))).toBe(1000);
+    const { data: full } = await admin.from('invoice_lines').select('category, line_type, source_estimate_id').eq('invoice_id', h1Invoice);
+    for (const l of full ?? []) {
+      expect(l.category).toBe('allowance');
+      expect(l.line_type).toBe('fixed');
+      expect(l.source_estimate_id).toBeNull();
+    }
+  });
+
+  it('H2 — an under-allowance selection is an AVAILABLE credit; placing it on a NON-final invoice succeeds (is_final lifted), the unsourced one is still refused', async () => {
+    const under = await makeSelection(projectId, 'H cheaper vanity', allowanceItemId, [
+      { name: 'ceramic H', quantity: 1, unit_cost: 2000, markup_percent: 20 },
+    ], { sign: true });
+    expect(under.variance).toBeLessThan(0);
+    const owed = Math.abs(under.variance!);
+
+    const before = await getAvailableCredits(projectId);
+    const offered = before.find((c) => c.kind === 'selection' && c.selectionId === under.id);
+    expect(offered, 'the selection credit was not offered').toBeDefined();
+    expect(offered!.amount).toBe(owed);
+    // B7's credit is fully placed on a live draft, so it is NOT offered again.
+    expect(before.find((c) => c.kind === 'selection' && c.selectionId === creditSelId)).toBeUndefined();
+
+    const inv = await makeInvoice(projectId, 'H2 not final');
+    const { data: row } = await admin.from('invoices').select('is_final').eq('id', inv).single();
+    expect(row!.is_final).toBe(false);
+
+    const unsourced = await addAllowanceCredit(inv, 'legacy under-run', 10);
+    expect(unsourced.success).toBe(false);
+    expect(unsourced.error).toMatch(/final invoice/);
+
+    const sourced = await addAllowanceCredit(inv, offered!.label, offered!.amount, under.id);
+    expect(sourced.success, sourced.error).toBe(true);
+    const lines = (await linesOn(inv)).filter((l) => l.source_selection_id === under.id);
+    expect(lines).toHaveLength(1);
+    expect(Number(lines[0].billed_amount)).toBe(-owed);
+
+    const after = await getAvailableCredits(projectId);
+    expect(after.find((c) => c.kind === 'selection' && c.selectionId === under.id)).toBeUndefined();
+
+    // Contract value is NOT reduced by a credit's placement — the allowance
+    // stands (Q5); the credit is already in the (negative) variance term.
+    const c = await getRevisedContract(projectId);
+    expect(c.selectionDelta).toBe(r2(selVariance + creditVariance + 1000 + under.variance!));
+  });
+
+  it('H3 — reissueInvoice copies source_selection_id: the reissued lines still bill the selection, within the restored headroom', async () => {
+    must('send', (await admin.from('invoices').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', h1Invoice)).error);
+    must('void', (await admin.from('invoices').update({
+      status: 'voided', voided_at: new Date().toISOString(), voided_by: ownerMemberId, void_reason: `${MARKER} reissue`,
+    }).eq('id', h1Invoice)).error);
+    const r = await reissueInvoice(h1Invoice);
+    expect(r.success, r.error).toBe(true);
+    invoiceIds.push(r.id!);
+    const lines = (await linesOn(r.id!)).filter((l) => l.source_selection_id === vanitySel);
+    expect(lines).toHaveLength(2);
+    expect(r2(lines.reduce((n, l) => n + Number(l.billed_amount), 0))).toBe(1000);
   });
 });
