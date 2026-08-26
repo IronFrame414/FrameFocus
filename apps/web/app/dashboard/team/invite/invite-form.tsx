@@ -6,34 +6,33 @@ import { useState } from 'react';
 // read below still uses this client, and because deleting a service function is
 // a wider change than this defect warrants.
 import { createClient } from '@/lib/supabase-browser';
+import { INVITABLE_ROLES, ROLE_DESCRIPTIONS, ROLE_LABELS } from '@framefocus/shared';
 
-const INVITABLE_ROLES = [
-  {
-    value: 'admin',
-    label: 'Admin',
-    description: 'Full access except billing and promoting to Admin',
-  },
-  {
-    value: 'project_manager',
-    label: 'Project Manager',
-    description: 'Estimates, projects, finances, and team coordination',
-  },
-  {
-    value: 'foreman',
-    label: 'Foreman',
-    description: 'Field crew management, daily logs, and punch lists',
-  },
-  {
-    value: 'crew_member',
-    label: 'Crew Member',
-    description: 'Clock in/out, daily logs, photos, and task updates',
-  },
-  {
-    value: 'client',
-    label: 'Client',
-    description: 'Portal access to project timeline, payments, and documents',
-  },
-];
+/**
+ * ⚠️ THE LOCAL LIST IS GONE. [#1-s168, S175 item 6]
+ *
+ * _Superseded, quoted rather than deleted:_ this file declared its own
+ * `const INVITABLE_ROLES = [{ value, label, description }, …]` — five entries,
+ * the last of them
+ * `{ value: 'client', label: 'Client', description: 'Portal access to project
+ * timeline, payments, and documents' }`.
+ *
+ * `packages/shared/constants/roles.ts` had a list of the same name at the same
+ * time, and **this local one was the one the form rendered**. Two lists, one
+ * name, one of them dead — which is how `client` survived on the Team side
+ * after M9 built the portal invite where it belongs.
+ *
+ * The collapse is provably lossless: the four staff labels and descriptions
+ * here were byte-identical to `ROLE_LABELS` / `ROLE_DESCRIPTIONS`, so nothing
+ * on this screen changes except that `Client` is no longer offered. A client is
+ * invited from the PROJECT's Contacts tab (M9 B.4) — a portal account is created
+ * against a contact and a project, neither of which this form knows about.
+ */
+const INVITE_OPTIONS = INVITABLE_ROLES.map((value) => ({
+  value,
+  label: ROLE_LABELS[value],
+  description: ROLE_DESCRIPTIONS[value],
+}));
 
 interface SeatUsage {
   used: number;
@@ -60,9 +59,28 @@ export default function InviteForm({ companyId, invitedBy, seatUsage, currentUse
   const [emailed, setEmailed] = useState(false);
   const [emailError, setEmailError] = useState<string | null>(null);
 
-  // Client invites don't count toward seat limits
-  const isClientRole = role === 'client';
-  const seatsBlocked = seatUsage && !seatUsage.canInvite && !isClientRole;
+  // ⚠️ `isClientRole` IS GONE, AND SO IS THE BRANCH IT DROVE. [#1-s168]
+  //
+  // _Superseded, quoted rather than deleted:_
+  // ```
+  // // Client invites don't count toward seat limits
+  // const isClientRole = role === 'client';
+  // const seatsBlocked = seatUsage && !seatUsage.canInvite && !isClientRole;
+  // ```
+  //
+  // It was a REAL behavioural branch — a client invite skipped the seat check
+  // here and again on the submit button — not decoration. `client` is no longer
+  // offered by this form, so the exemption has nothing to except and leaving it
+  // would read to the next reader as a bug: a seat rule with a hole in it for a
+  // role that cannot be selected.
+  //
+  // ⚠️ THE SEAT EXEMPTION ITSELF IS NOT REPEALED, and this is not where it
+  // lives. Seat counting is `seats.ts`'s, and a client still holds no seat —
+  // `create_member_for_new_profile()` skips `client` at INSERT, so a client
+  // profile never produces a `company_members` row to count. That is the rule,
+  // enforced in the database; this was a UI restatement of it that only ever
+  // applied to a dropdown entry that no longer exists.
+  const seatsBlocked = seatUsage && !seatUsage.canInvite;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -74,7 +92,6 @@ export default function InviteForm({ companyId, invitedBy, seatUsage, currentUse
       return;
     }
 
-    // Block if seats are full (except for client invites)
     if (seatsBlocked) {
       setError(
         `Your plan allows ${seatUsage!.limit} team members. You're using ${seatUsage!.used}. Upgrade your plan to invite more.`
@@ -183,13 +200,13 @@ export default function InviteForm({ companyId, invitedBy, seatUsage, currentUse
           {emailed ? (
             <p className="text-sm text-green-700 mb-4">
               We emailed <strong>{email}</strong> an invitation to join as{' '}
-              <strong>{INVITABLE_ROLES.find((r) => r.value === role)?.label}</strong>. You can also
+              <strong>{INVITE_OPTIONS.find((r) => r.value === role)?.label}</strong>. You can also
               share this link directly:
             </p>
           ) : (
             <p className="text-sm text-yellow-800 mb-4">
               The invitation for <strong>{email}</strong> to join as{' '}
-              <strong>{INVITABLE_ROLES.find((r) => r.value === role)?.label}</strong> is valid, but
+              <strong>{INVITE_OPTIONS.find((r) => r.value === role)?.label}</strong> is valid, but
               we could not email it{emailError ? ` (${emailError})` : ''}. Send them this link
               yourself, or try Resend from the Team page:
             </p>
@@ -242,7 +259,7 @@ export default function InviteForm({ companyId, invitedBy, seatUsage, currentUse
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Role</label>
               <div className="space-y-2">
-                {INVITABLE_ROLES.filter(
+                {INVITE_OPTIONS.filter(
                   (r) => currentUserRole === 'owner' || r.value !== 'admin'
                 ).map((r) => (
                   <label
@@ -278,7 +295,7 @@ export default function InviteForm({ companyId, invitedBy, seatUsage, currentUse
 
             <button
               onClick={handleSubmit}
-              disabled={loading || (!!seatsBlocked && !isClientRole)}
+              disabled={loading || !!seatsBlocked}
               className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
             >
               {loading ? 'Creating invitation...' : 'Send Invitation'}
