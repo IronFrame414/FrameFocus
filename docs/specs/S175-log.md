@@ -367,3 +367,20 @@ categories". Two hits needed inverting: `profitability.test.ts` "all four catego
 `s171` B3 "(stage 5 is not here)" → "(stage 5 reads them; it writes none of them)" — its assertions
 about the WRITES still hold. `invoice-derivation.test.ts`'s "$800 credit at the final invoice" is
 pure `presentInvoice` math on the legacy unsourced credit, whose final-only rule is unchanged.
+
+## Battery — every exit code read from its own printed line, nothing judged through a pipe
+
+| check | how | result |
+| --- | --- | --- |
+| `turbo run type-check --force` | 5 tasks, all `cache bypass, force executing` | **exit 0** |
+| `turbo run lint --force` | `cache bypass`; `✔ No ESLint warnings or errors` | **exit 0** |
+| `turbo run build --force` | `Cached: 0 cached, 1 total`; `✓ Compiled successfully` | **exit 0** |
+| committed vitest (`apps/web`) | 60 files | **920 / 920**, exit 0 (item 2 was 919 — the new `aggregateCategories` allowance test) |
+| every live harness (`test/live.vitest.config.ts`) | 97 files | **1397 / 1397**, exit 0, zero `UNVERIFIED` warnings |
+| Playwright, four chunks from `apps/web`, each after `scripts/e2e-preflight.sh` (exit 0, one server bound 3000) | desktop-chat ×7 · desktop/portal/harness ×10 · m-* first 8 · m-* last 9 | **33 · 76 · 141 (3 skipped) · 285 (6 skipped)**, every chunk exit 0. The 9 skips are pre-existing data-conditional `test.skip`s in `m-destinations`, `m-sections`, `m-writes` — not this item's |
+| `supabase migration list` from the repo root | local = remote through `20261035000000` | **exit 0**, no drift |
+| fixture residue | service-role count over every `S175%` marker across selections, projects, estimates, invoices, expenses, budget items, contacts | **0 rows in every table** |
+| dev server left behind | listed by pid after the last chunk | **none** |
+
+Not run, and said so: no production migration (`20261034`/`20261035` are rebuild-test only);
+nothing pushed; the click-test register is Josh's.
