@@ -67,9 +67,21 @@ export default async function PortalSelectionsPage({
   const limited = identity.accessLevel !== 'full';
   const signerName = [identity.firstName, identity.lastName].filter(Boolean).join(' ');
 
+  // ⚠️ ONE STABLE MARKER ON BOTH BRANCHES, AND IT IS NOT DECORATION.
+  // `portal-pages.spec.ts` used to prove this route by asserting the DEAD
+  // page's empty sentence. That assertion cannot survive the page going live:
+  // `desktop-selections.spec.ts` releases selections on the SAME shared QA
+  // project and runs concurrently, so "the client sees nothing here" would pass
+  // or fail on worker ordering — the S157 trap, an assertion whose name says
+  // "none" reading a live, mutable row rather than a fact. This testid is
+  // present in BOTH states, so the browser test can prove the route RENDERS
+  // without depending on what happens to be on it.
+  const marker = 'portal-selections';
+
   if (!areas.length) {
     return (
       <PortalCard title="Selections" subtitle="Finishes, fixtures and materials to choose.">
+        <span data-testid={marker} hidden />
         <PortalEmpty>
           <span data-testid="portal-selections-empty">
             {limited
@@ -83,6 +95,7 @@ export default async function PortalSelectionsPage({
 
   return (
     <>
+      <span data-testid={marker} hidden />
       {/* Grouped by area — Kitchen, Breakfast Nook, Dining Room. A selection with
           no area lands in "Unassigned", which `getProjectSelections()` already
           creates, so nothing can fall off the page for want of an area. */}
