@@ -568,3 +568,156 @@ The reason it was not re-run whole is the same OOM that broke it.
 
 Not run, and said so: no production migration (`20261036000000` is rebuild-test only); nothing
 pushed; **the sheet's LAYOUT is unverified and is Josh's** (§Y.2).
+
+---
+
+# ITEM 5 — STAGE 7: THE PORTAL SELECTIONS PAGE (S175, unattended)
+
+**The last stage of Allowances & Selections. The module is complete.**
+
+Path-scoped commits, one per discrete step, per the S173 rule. Every ruling came from the prompt
+(Q5.1–Q5.3 and the Phase-2 gate ruling on the write); nothing here needed a stop.
+
+| step | commit | what landed |
+| --- | --- | --- |
+| 1 | `c9c8179` | `20261037000000` — four functions, no table, no column, no policy: `allowance_sell_amount()`, `selection_client_option_sell()`, `selection_client_allowance_deduction()`, `selection_client_pick()`; `allowanceSellFor()` rewritten to call the first |
+| 2 | `c27e1a4` | `lib/selections/consent-text.ts`; `getPortalProjectSelections()`; `setClientSelectionPicks()` + `POST /api/portal/pick-selection` |
+| 3 | `d45fe8c` | `SignatureCapture` extracted from `CoSignPanel` — one capture, two instruments |
+| 4 | `70ea3b6` | the page and the green-box pick UI, with the totals above the signature |
+| 5 | `26e0fba` | `s175-stage7-portal-selections.live.ts`, 44 probes; the counterfactual finding |
+| 6 | `d8950d5` | `e2e/portal-selections.spec.ts`; the S157 sweep; the empty-pick totals defect |
+| 7 | this | spec amendments (§3.8, §4, §5.2, §9.3, §10 #20, §11) and this record |
+
+## ⚠️ WHAT THE CLIENT COULD NOT DO BEFORE THIS ITEM, AND HOW LONG THAT HAD BEEN TRUE
+
+Stages 2–6 all exercised her half by **standing in for her with the admin client**. Both halves
+were missing from the shipped product, not merely untested:
+
+- **the WRITE** — `selection_options` has no client UPDATE arm, and `selections-client.ts` deleted
+  `setChosenOptions` at S173 with a tombstone. Nothing in the product could set `is_chosen`.
+- **the READ** — `selection_option_amounts` is floored owner/admin/PM with no client arm, so she
+  could neither read a sell price nor compute one, and §9.3 requires per-option sell on her page.
+
+The whole S173 client-choice model rested on a write that did not exist. That is the substance of
+this item.
+
+## ⚠️ SIX THINGS THE BUILD FOUND THAT THE RULINGS DID NOT ANTICIPATE
+
+1. **COPYING `selection_option_images()`'S ARMS WOULD HAVE BEEN A FINANCIAL VISIBILITY FLOOR
+   BREACH.** Q5.1 says the sell RPC is *"exactly the `selection_option_images()` shape S172 built,
+   on the same feature, for the same reason"* — and that function restates the **staff** arm as well
+   as the client arm, because *"if you can see the selection, you can see its option images."* The
+   staff arm on `selections` admits **every role that can view the project, subcontractor included**
+   (§4, Q10). An image is safe for all of them; **a sell price is not.** §9.1 renders option cost and
+   markup blank for a foreman, and stage 6's sheet carries no money at all precisely because
+   foreman, crew and subs read the filed row. The shape is copied; **the arms are client-only**, and
+   harness group A pins owner, PM, foreman, crew and sub to zero rows — each in a test that first
+   proves the same principal can read the selection itself, so none of the five is vacuous. Same
+   class as item 4's finding: a Floor breach through a **function** rather than through a policy, and
+   the policy set still reads correctly either way.
+
+2. **Q5.1 NAMED ONE OF THE TWO FIGURES SHE CANNOT REACH.** The ruled totals block is three lines,
+   and the second — **Allowance Deduction** — derives from `project_budget_amounts.budgeted_amount`
+   (Owner/Admin, DB-enforced) times `allowance_effective_markup_percent()`, which is REVOKEd from
+   `authenticated`. Without its own definer the page could show her a price and a net with no
+   statement of what her allowance covered, and **the binding wording she signs names the deduction
+   explicitly**, so the sentence could not have been rendered honestly either. It got
+   `selection_client_allowance_deduction()`, same client-only arm. And rather than write the
+   arithmetic a second time, `allowance_sell_amount()` was **extracted from `allowanceSellFor()`**
+   and both readers now call it — the move `20261030000000` already made for the markup chain.
+
+3. **THE TOTALS BLOCK TOLD A CLIENT WHO HAD PICKED NOTHING THAT SHE WAS OWED THE WHOLE ALLOWANCE.**
+   Rendered whenever the selection carried money, an empty pick set reads `Selections Price $0.00` /
+   `Allowance Deduction −$6,000.00` / **`Credit $6,000.00`**. It is §5.4's phantom underage arriving
+   from the other direction — there the danger is joining a client-supplied selection at zero, here
+   it is summing an empty pick set against a real deduction. **Every live probe passed while this was
+   on the page**, because each figure was individually correct; the browser test found it on its
+   first run. A total over no choices is not a total, and the block now appears at the same moment
+   the signature does.
+
+4. **THE CONTROL CLIENT IS NOT A COUNTERFACTUAL FOR ANYTHING IN THIS FEATURE.** The first harness
+   run failed on E3: she is refused through the route with **403, not 409**. She is UNLINKED
+   (`contact_id IS NULL`), so `my_client_access_level()` is not `'full'` — and **every client arm in
+   this feature opens with `client_has_full_access()`**. Her refusal is therefore decided *before*
+   the project test is ever reached, which means every "control client reads 0" probe here would
+   pass identically against functions with **no project scoping in them at all**. CLAUDE.md's rule in
+   its own words: *a counterfactual run under the policy it is trying to bypass is not a
+   counterfactual.* The fixture gained a second project owned by a **different contact**, and A6 /
+   C12 / E3b aim the **LINKED** client — full access, a real client of a real project — at a
+   released, priced selection on it. `is_client_of_project()` has exactly two arms and neither
+   reaches that project, so the scoping is the only thing that can refuse her. Each of the three
+   asserts the target really exists. E3 is kept and retitled to say what it actually proves.
+
+5. **`portal-pages.spec.ts` COULD NOT HAVE SURVIVED, AND NOT BECAUSE OF THE TESTID.** It asserted
+   the dead page's empty state on the shared QA A project — and `desktop-selections.spec.ts`
+   **releases selections onto that same project, concurrently, in the same run**. The moment the page
+   went live, "the client sees nothing here" would pass or fail on worker ordering. That is the S157
+   trap exactly: an assertion whose name says "none" reading a live, shared, mutable row instead of a
+   fact. The page carries one state-independent marker in both branches and the browser test proves
+   the route renders; what is ON it is proved on the new spec's own fixture.
+
+6. **THE SELECTION IS THE PORTAL'S SECOND SIGNABLE INSTRUMENT, AND THE CAPTURE WAS A SINGLETON BY
+   ACCIDENT.** `portal-writes-ui.tsx`'s header already said *"a portal signature that produced a
+   different image, or attested to different words, would be a second implementation wearing the
+   first one's name"* — true because there was one panel, not because anything enforced it. The
+   obvious build is to copy `CoSignPanel` and swap the endpoint. `SignatureCapture` is extracted
+   instead, and the binding wording moved to `lib/selections/consent-text.ts` for the same reason
+   `option-sell.ts` exists: **the sentence she READS above the pad must be the one `consent_text`
+   STORES**, and a browser component cannot import a `server-only` module.
+
+## The one thing I built twice on purpose, and where it is declared
+
+**`selection_client_option_sell()` MIRRORS `optionSell()`.** The ruling requires the RPC to return
+`sell`, so the arithmetic is in SQL; `optionSell()` remains the rule and is what stamps
+`signed_sell_amount`. This is the divergence CLAUDE.md permits only when the second copy declares
+itself: the migration header says it is a mirror rung for rung, names the file it mirrors, and
+harness group **B1** asserts the two agree **on the same rows, cent for cent** — with **B2** pinning
+the inherit-NULL case separately, because S174 #2's `markup_percent ?? 0` would pass B1 and still be
+the wrong figure. **She reads the SQL number and signs the TypeScript one**; a divergence would be a
+price that moved between the screen and the signature. The allowance half is *not* mirrored — it was
+extracted, and there is one implementation.
+
+## What was deliberately NOT done, and why
+
+- **No client SELECT arm on `selection_option_amounts`, and no client UPDATE arm on
+  `selection_options`.** Both were ruled out at the Phase 2 gate and both stay out: RLS is row-level
+  and cannot restrict COLUMNS, so the first hands over `unit_cost` and `markup_percent` and the
+  second hands over `name`, `spec_detail` and `link_url`. Harness **C13** asserts the direct UPDATE
+  still moves nothing, against a future "simplification" that replaces the definer with a policy.
+- **No `/m` selections write.** The `/m` selections page is staff-facing and read-only by a recorded
+  S171 decision; the portal is responsive and is the client's only surface. §9.5's parity rule is
+  not engaged.
+- **No re-pick after approval, and no client-side revision.** Q5.3. Revision is the company's
+  `revise` path, which supersedes the session and clears the stamps first.
+- **No signature over a batch.** Recorded in the UI file as well as here, because it is the obvious
+  design a later reader will propose: each signature binds ONE selection against ONE allowance, so
+  no instrument spans several allowance lines and there is no cross-allowance variance to reconcile.
+- **The e2e signing session is created directly rather than by driving Release** — S174 #1 put an
+  outbound email in that path, and a browser test of the client's page has no business waiting on it.
+- **No production migration, no push.** `20261037000000` is on rebuild-test only.
+
+## Harness — `s175-stage7-portal-selections.live.ts`, 44 probes in six groups
+
+A the FLOOR (client-only arms, five staff roles + both client principals + the draft + the
+cross-project counterfactual) · B the MIRROR · C the PICK, twelve arms, every refusal re-read
+through the service role · D the ASSEMBLY the page renders · E the REAL SHIPPED ROUTE and the loop
+through it · F the wording she reads is the wording stored.
+
+E executes the ROUTE and not the service, for S174's reason two stages back:
+`s171-selections-lifecycle` was fully green while no client had ever received anything, because the
+mechanism was fine and nothing called it. Run twice in a row from a clean start; residue verified by
+counting the tables directly rather than by re-reading the residue check.
+
+## Sweep for tests encoding overturned behaviour (S157 rule)
+
+Grepped `test/`, `e2e/`, `lib/`, `app/` and the specs for the dead page, `portal-selections-empty`,
+`PortalEmpty`, `setChosenOptions`, `allowanceSellFor`, `selectionConsentTextFor`, `CoSignPanel`,
+`portal-writes-ui` and `selection_option_images`.
+
+- **`portal-pages.spec.ts` needed inverting** — finding 5 above; the superseded assertion is quoted
+  in place.
+- **`s171-selections-lifecycle`'s header comment** — *"the admin client stands in for it here"* now
+  points at where the real write is exercised as her.
+- **Nothing else needed inverting**, and that is the correct outcome rather than a thin sweep: the
+  table policies did not change. Every probe asserting the client cannot write `selection_options`
+  stays true, and C13 was added so the property is stated rather than merely implied.

@@ -252,6 +252,12 @@ one current signature (2b.5).
   reaching it by any other route would be hard-removed by the next generation. It is deliberately
   absent from the upload picker, exactly as `deliveries`, `compliance`, `safety` and
   `lien_releases` are.
+- **[S175 stage 7] NO table, NO column, NO policy — FOUR FUNCTIONS** (`20261037000000`).
+  `allowance_sell_amount()` (the allowance's sell, extracted from
+  `allowanceSellFor()` so both readers share one implementation);
+  `selection_client_option_sell()` and `selection_client_allowance_deduction()`
+  (the client's two sell reads, Q5.1); `selection_client_pick()` (her write).
+  **`selection_options` deliberately keeps NO client UPDATE arm** — see §4.
 - `estimates`, `change_orders`, `companies`, `instrument_rates` per §2.1.
 - `cost_catalog` SELECT policy replaced (stage 0, §4).
 
@@ -272,6 +278,34 @@ one current signature (2b.5).
 (derived, §5.2) while choosing, `signed_*` stamps once she signs. _Superseded [S173]: "she sees what
 she is offered — `offered_*`/`signed_*` stamps" — the offer no longer stamps (§1.3)._ **Enforced by
 the side-table split, not by the renderer.**
+
+> ### ⚠️ [S175 stage 7] THE CLIENT'S SELL READ AND HER PICK ARE **DEFINER FUNCTIONS**, AND THEIR ARMS ARE **CLIENT-ONLY**
+>
+> `20261037000000`. Neither is a policy change, and neither may become one.
+>
+> - **The READ (Q5.1).** `selection_client_option_sell(p_selection_id)` returns
+>   `{option_id, sell}` and nothing adjacent; `selection_client_allowance_deduction(p_selection_id)`
+>   returns the allowance at sell (0 when unlinked, NULL when she may not see the
+>   selection). **Not a client SELECT arm on `selection_option_amounts`** — RLS is
+>   row-level and cannot restrict COLUMNS, so a policy admitting her hands over
+>   `unit_cost` and `markup_percent` in the same breath, which is the leak the
+>   side table exists to prevent.
+> - **The WRITE.** `selection_client_pick(p_selection_id, p_option_ids[])` replaces
+>   the pick set. **`selection_options` has NO client UPDATE arm and must not get
+>   one**, for the identical reason: a policy letting her set `is_chosen` equally
+>   lets her rewrite `name`, `spec_detail` and `link_url`. It refuses outside
+>   `awaiting_approval` (Q5.3) and enforces `allow_multiple` as a **backstop behind
+>   `computeChosenFigures`** (Q5.2), which its own comment says.
+>
+> ⚠️ **THE ARMS ARE NOT `selection_option_images()`'S, AND COPYING THEM WOULD BE A
+> FLOOR BREACH.** That function restates the STAFF arm as well — *"if you can see
+> the selection, you can see its option images"* — and the staff arm admits every
+> role that can view the project, subcontractor included (Q10). An image is safe
+> for all of them; **a sell price is not.** §9.1 renders option cost and markup
+> blank for a foreman and §7.3's sheet carries no money precisely because foreman,
+> crew and subs read the filed row. `s175-stage7-portal-selections` group A pins
+> owner, PM, foreman, crew and sub to zero rows, each in a test that first proves
+> the same principal can read the selection itself.
 
 **Option images — RULED [Josh, S172]: served through a SECURITY DEFINER read keyed on the selection,
 `selection_option_images(p_selection_id)` (`20261028000000`).** *"If you can see the selection, you
@@ -335,6 +369,17 @@ of the cost-code groups.
 > from the browser through PostgREST — there is no server hop to put a service call in.
 >
 > **And the chain has ONE implementation.** `allowance_effective_markup_percent()` in SQL.
+>
+> **⚠️ [S175 stage 7] AND THE OPTION-SELL ARITHMETIC NOW EXISTS TWICE, DECLARED.**
+> `optionSell()` stays the rule and is what stamps `signed_sell_amount`;
+> `selection_client_option_sell()` (`20261037000000`) MIRRORS it in SQL, rung for
+> rung, because the client may not read the inputs and RLS is what decides whether
+> she may have the figure. Its header says it is a mirror rather than presenting
+> agreement, and `s175-stage7-portal-selections` group B asserts the two agree ON
+> THE SAME ROWS, cent for cent, including the inherit-NULL case — because she
+> reads the SQL figure and signs the TypeScript one. The ALLOWANCE half is not
+> mirrored: `allowance_sell_amount()` was extracted FROM the TypeScript and both
+> readers call it.
 > `allowanceSellFor()` in `selection-lifecycle-service.ts` used to walk it in TypeScript
 > and now calls the function; the trigger calls the same one. Two copies would have been
 > the #129 divergence written as agreement.
@@ -684,9 +729,10 @@ desktop-only there); generation is an action, not a view, so §9.5's parity rule
 "Release N selections to the client" action → `POST /api/selections/release`; per-selection
 refusals (e.g. no priced option) are listed by name and those rows stay ticked.
 
-### §9.3 — Client portal Selections — `/portal/[projectId]/selections` (the S168 dead route)
-**Last stage (stage 7). Job 2/3 [S173] specify it; they do not build it.** Replaces the
-`PortalEmpty` body. Grouped by area; draft selections hidden by policy. Released selections from a
+### §9.3 — Client portal Selections — `/portal/[projectId]/selections` — **SHIPPED [S175 stage 7]**
+_Superseded framing, quoted not deleted: "**(the S168 dead route)** … **Last stage (stage 7). Job
+2/3 [S173] specify it; they do not build it.**"_ It is built; the route is no longer dead. Replaces
+the `PortalEmpty` body. Grouped by area; draft selections hidden by policy. Released selections from a
 batch appear together, **each with its own signature** (§1.3 R-S173-2); a partial batch is normal —
 signing one does not touch the others.
 
@@ -707,6 +753,47 @@ Added Price            $7,142.85
 — the binding wording (§6.2), **Sign** (signature pad, M9's) and **Decline**. The signature refuses
 until at least one option is picked (§6.2). Approved → signed figures + signed date, read-only.
 Client-supplied → no price block, choice-only wording.
+
+> #### ⚠️ WHAT STAGE 7 ADDED THAT THIS SECTION DID NOT SAY — [S175 item 5]
+>
+> 1. **She could not read a sell price, and she could not write a pick.** Both were
+>    holes, not omissions in the prose: `selection_option_amounts` is floored away
+>    from her and `selection_options` has no client UPDATE arm. Closed by
+>    `20261037000000`'s four functions — see §3.8 and §4's stage-7 box. The live
+>    harness had been standing in with the ADMIN client since stage 2, so nothing
+>    that shipped had ever performed her half.
+> 2. **The "Allowance Deduction" line was as unreachable as the first line.** Q5.1
+>    named per-option sell; the deduction derives from `project_budget_amounts`
+>    (Owner/Admin, DB-enforced) times a markup function REVOKEd from
+>    `authenticated`. It has its own definer, and the binding wording names the
+>    figure, so it could not have been left out.
+> 3. **THE TOTALS BLOCK APPEARS ONLY ONCE SHE HAS PICKED SOMETHING.** Rendered
+>    unconditionally it reads `Selections Price $0.00` / `Allowance Deduction
+>    −$6,000.00` / `Credit $6,000.00` — the page telling a client who has chosen
+>    nothing that she is owed the whole allowance. §5.4's phantom underage, from
+>    the other direction. Found in a browser; every figure was individually right.
+> 4. **The states this section did not name.** `denied` reaches her (the client arm
+>    is `status <> 'draft'`) and renders as *"you told your contractor this one is
+>    not right"*, read-only; `in_discussion` renders as *"nothing to do yet"*.
+> 5. **The approval date is NOT `selections.signed_at`** — item 4's finding, and it
+>    applies here identically. The CHECK nulls all four `signed_*` columns on a
+>    client-supplied selection, so the column alone prints a date on every
+>    selection except that one. It falls back to the completed, un-superseded
+>    signing session, which she can read (`selection_signing_sessions_select_own`).
+> 6. **The partial batch is stated on the page**, not left to be inferred from the
+>    buttons. A client who believes she must decide all of them before her
+>    contractor can start will sit on the whole batch, which is the opposite of
+>    what the one-signature ruling was for.
+> 7. **One signature capture, extracted.** The selection is the portal's SECOND
+>    signable instrument, and `SignatureCapture` is now shared with `CoSignPanel`
+>    rather than copied. The binding wording likewise moved to
+>    `lib/selections/consent-text.ts` so the sentence she READS is the one
+>    `consent_text` STORES.
+>
+> ⚠️ **UNVERIFIED AND JOSH'S (§Y):** whether the totals updating live as she picks
+> feels right, tap-target sizing, and how a single-choice selection communicates
+> that picking B un-picks A. The mechanism is proved in Chromium
+> (`e2e/portal-selections.spec.ts`); the feel is not something a test can report.
 
 ### §9.4 — Specifications sheet (PDF) — **SHIPPED [S175 stage 6]**
 Company header · project · date · per area: option image, name, spec detail, link/vendor. No money.
@@ -778,6 +865,21 @@ helper.
     refusal writing nothing; and the REAL ROUTE filing, mailing and refusing a foreman by role.
 19. Every live harness in this module creates rows with a **collidable** key (a fixed `name` per
     test, not a timestamp) and sweeps them in `beforeAll` — the S168 lesson.
+20. **[S175 stage 7, MET]** The CLIENT picks and signs from her portal, as her.
+    `s175-stage7-portal-selections.live.ts`, 44 probes: owner/PM/foreman/crew/sub each read the
+    selection and get **zero** sell rows and a NULL deduction from the two definer reads; the SQL
+    sell equals `optionSell()` cent for cent including the inherit-NULL case; the pick RPC refuses a
+    multi-pick on a single-choice selection, an option from another selection, a staff caller, a
+    draft, and anything outside `awaiting_approval` (Q5.3) — each refusal re-read through the
+    service role; `selection_options` still refuses her direct UPDATE; the assembly hides drafts,
+    carries no cost basis in its serialised payload, gives a client-supplied selection a **NULL**
+    deduction rather than 0, and falls back for the approval date; and the REAL ROUTE picks, signs
+    and then refuses a re-pick, with `signed_*` equal to the figures the page showed.
+    **⚠️ The counterfactual is the LINKED client aimed at ANOTHER contact's project, not the
+    control client** — the control client is unlinked, so `client_has_full_access()` refuses her
+    before the project test is reached and every probe using her would pass against functions with
+    no project scoping at all. `e2e/portal-selections.spec.ts` proves the green box, the live
+    totals and the signature in Chromium.
 
 **Claim-only (reviewed, not asserted):** image paste/drag-drop UX; wording of the binding text;
 the look of the price block; "no costs" on the shared tab is asserted at the policy layer (#7), while
@@ -798,11 +900,11 @@ Blast radius counts the ~14 silent money sites from analysis §1 touched by the 
 | **4** | Offer/sign/deny/revise lifecycle: stamps, `selection_signing_sessions`, portal signature via caller-context, notifications. Harnesses #9–#12. | 2 (3 for the UI trigger) | 5, 7 | **Attended** — extends M9's one-write-path signature | 0 |
 | **5** | **SHIPPED [S175, unattended by ruling — every question ruled in advance, `S175-questions.md`]** Money downstream: `contract-value.ts` (five derivers), `profitability.ts` third instrument, `source_selection_id` on BOTH `invoice_lines` and `expense_allocations` + three-way CHECK + the selection's own ceiling, selection billing, sourced `credit_allowance` with lifted `is_final`, budget subcategory in `budget.ts`, the cost tag on both capture surfaces and review. Harness `s175-stage5-selection-money` covers #10 (second half), #11, #13–#17. | 1, 4 | 7 | ~~Attended~~ — ruled unattended at S175 | 6 (`computeRowCost` chain already done in 1; here: `contract-value` ×5, `profitability`, `invoice-derivation` sections, `budget.ts`) |
 | **6** | **SHIPPED [S175 item 4, unattended by ruling — Q4.1–Q4.4 ruled in advance]** Specifications PDF + email + file (§7.3, §9.4): `20261036000000` (two registry rows, no table/column/policy), the data module and template, `selection-spec-pdf-service`, `sendSelectionSpecificationsEmail()` inside the EXISTING mailer, `POST /api/selections/spec-sheet`, the §9.2 button, and the portal "Shared documents" card the `client_visible` ruling turned out to need. Harness #18 met, 24 probes. **Layout unverified — Josh's.** | 3, 4 | — | ~~unattended~~ shipped unattended | 0 |
-| **7** | **Portal Selections page** (§9.3) — replaces the S168 dead route. Playwright on the four portal pages. | 2, 4, 5 | — (last) | unattended | 0 |
+| **7** | **SHIPPED [S175 item 5, unattended by ruling — Q5.1–Q5.3 ruled in advance]** Portal Selections page (§9.3), replacing the S168 dead route: `20261037000000`'s four functions (no table, no column, no policy), `getPortalProjectSelections()`, `POST /api/portal/pick-selection`, the green-box pick UI with the totals above the signature, and the signature capture extracted so the portal's second signable instrument does not get a second panel. Harness #20 met, 44 probes, plus `e2e/portal-selections.spec.ts`. **The green-box FEEL is unverified — Josh's.** | 2, 4, 5 | — (last) | ~~unattended~~ shipped unattended | 0 |
 
 **Where the risk concentrates:** stage 1 touches every silent site at once and rewrites live rows;
 stage 5 touches the three shipped money modules. Both are attended. Stages 2, 3, 6, 7 are additive
-and can run unattended. Stage 0 is trivial and should go first **because** it is trivial — it
+and can run unattended. **[S175] Every stage is now shipped; the module is complete.** Stage 0 is trivial and should go first **because** it is trivial — it
 removes a live leak before anything here makes it worse.
 
 **Tests to sweep before stage 1 ends (S157 rule):** every file asserting a four-value set —
