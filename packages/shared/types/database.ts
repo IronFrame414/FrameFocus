@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.17"
   }
   public: {
     Tables: {
@@ -8603,6 +8603,10 @@ export type Database = {
         Args: { p_budget_item_id: string }
         Returns: number
       }
+      allowance_sell_amount: {
+        Args: { p_budget_item_id: string }
+        Returns: number
+      }
       apply_change_order_budget: {
         Args: { p_change_order_id: string }
         Returns: number
@@ -8897,6 +8901,21 @@ export type Database = {
         Returns: Json
       }
       seed_default_tags: { Args: { p_company_id: string }; Returns: undefined }
+      selection_client_allowance_deduction: {
+        Args: { p_selection_id: string }
+        Returns: number
+      }
+      selection_client_option_sell: {
+        Args: { p_selection_id: string }
+        Returns: {
+          option_id: string
+          sell: number
+        }[]
+      }
+      selection_client_pick: {
+        Args: { p_option_ids: string[]; p_selection_id: string }
+        Returns: number
+      }
       selection_inherited_markup_percent: {
         Args: { p_selection_id: string }
         Returns: number

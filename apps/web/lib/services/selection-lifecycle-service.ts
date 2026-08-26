@@ -100,29 +100,28 @@ export function selectionConsentTextFor(input: {
  * divergence in its purest form: two implementations that agree today, in a
  * form that looks like agreement.
  *
- * So there is ONE implementation, `allowance_effective_markup_percent()` in
- * 20261030000000, and this calls it. _Superseded: the inline chain, whose rungs
- * are reproduced rung-for-rung in that function's body and commented there._
+ * ⚠️ [S175 stage 7] AND NEITHER DOES THE MULTIPLY. The CLIENT now needs this
+ * same figure — §9.3's "Allowance Deduction" line, and the deduction named in
+ * the binding wording she signs — and she can read neither of its inputs:
+ * `project_budget_amounts.budgeted_amount` is Owner/Admin DB-enforced and
+ * `allowance_effective_markup_percent()` is REVOKEd from `authenticated`. So
+ * the last two lines of this function moved into SQL as
+ * `allowance_sell_amount()` (20261037000000) and BOTH readers call it — this
+ * one, and `selection_client_allowance_deduction()`, which is what the portal
+ * reaches. _Superseded: the `budgeted_amount` read and the `cost × (1 + m/100)`
+ * multiply, written here in TypeScript._
  *
- * The RPC goes through the ADMIN client on purpose: the function is REVOKEd
- * from `authenticated` because a markup percent is a floored figure, and an RPC
- * that returned one to any signed-in caller would defeat the side tables it
- * exists to populate. The caller here has already been gated by an RLS write.
+ * The RPC goes through the ADMIN client on purpose: like the markup function it
+ * wraps, it is REVOKEd from `authenticated` because an allowance's sell is a
+ * budget/sell figure the Financial Visibility Floor puts at Owner/Admin. The
+ * caller here has already been gated by an RLS write.
+ *
+ * NULL back means the budget item does not exist — the old code returned 0 for
+ * that case before it ever reached the markup, and so does this.
  */
 async function allowanceSellFor(admin: Db, budgetItemId: string): Promise<number> {
-  const { data: amt } = await admin
-    .from('project_budget_amounts')
-    .select('budgeted_amount')
-    .eq('budget_item_id', budgetItemId)
-    .maybeSingle();
-  const cost = Number(amt?.budgeted_amount ?? 0);
-  const { data: markup } = await admin.rpc('allowance_effective_markup_percent', {
-    p_budget_item_id: budgetItemId,
-  });
-  // NULL means the budget item does not exist — the old code returned 0 for
-  // that case before ever reaching the markup, and so does this.
-  if (markup === null || markup === undefined) return 0;
-  return r2(cost * (1 + Number(markup) / 100));
+  const { data } = await admin.rpc('allowance_sell_amount', { p_budget_item_id: budgetItemId });
+  return Number(data ?? 0);
 }
 
 /**
