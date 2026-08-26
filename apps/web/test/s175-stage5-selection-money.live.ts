@@ -16,6 +16,8 @@ import {
 import { getProfitabilityReport } from '@/lib/services/profitability';
 import { getAvailableCredits } from '@/lib/services/invoices';
 import { addAllowanceCredit, addFixedLine, reissueInvoice } from '@/lib/services/invoices-client';
+import { approveExpense, createExpense, listExpenseAllocations, listTaggableSelections, taggableFor } from '@/lib/services/expenses-client';
+import { resolveSplit } from '@/components/expenses/budget-split-editor';
 
 // ============================================================================
 // S175 #3 — Allowances & Selections STAGE 5: an approved selection becomes
@@ -929,5 +931,70 @@ describe('S175-S5 H — BILLING through the REAL client functions (spec §7.1, �
     const lines = (await linesOn(r.id!)).filter((l) => l.source_selection_id === vanitySel);
     expect(lines).toHaveLength(2);
     expect(r2(lines.reduce((n, l) => n + Number(l.billed_amount), 0))).toBe(1000);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+describe('S175-S5 I — the COST tag through the REAL capture and review paths (Q3.1: ONE EXPENSE PER SELECTION)', () => {
+  it('I1 — listTaggableSelections offers the money selections and NOT the client-supplied one; taggableFor scopes by line', async () => {
+    const all = await listTaggableSelections(projectId);
+    const ids = all.map((s) => s.id);
+    expect(ids).toContain(selId);
+    expect(ids).toContain(pendingSelId); // approval not required — costs precede signatures
+    expect(ids).not.toContain(suppliedSelId);
+    for (const s of all) expect(s).not.toHaveProperty('signed_variance'); // no money column
+    const onAllowance = taggableFor(allowanceItemId, all).map((s) => s.id);
+    expect(onAllowance).toContain(selId);
+    const onOther = taggableFor(otherItemId, all).map((s) => s.id);
+    expect(onOther).not.toContain(selId); // linked elsewhere
+    // Unlinked selections (Q8) are offered on ANY line.
+    const unlinked = all.find((s) => s.allowance_budget_item_id === null);
+    expect(unlinked, 'fixture: an unlinked selection exists (D5/H1 made two)').toBeDefined();
+    expect(onOther).toContain(unlinked!.id);
+  });
+
+  it('I2 — resolveSplit carries the tag, merges a repeated line, and REFUSES two selections on one line rather than picking one', async () => {
+    const ok = await resolveSplit(projectId, [
+      { key: 1, budget_item_id: allowanceItemId, amount: '100', source_selection_id: selId },
+      { key: 2, budget_item_id: allowanceItemId, amount: '50', source_selection_id: '' },
+    ], 150);
+    expect(ok.allocations).toEqual([{ budget_item_id: allowanceItemId, amount: 150, source_selection_id: selId }]);
+    const bad = await resolveSplit(projectId, [
+      { key: 1, budget_item_id: allowanceItemId, amount: '100', source_selection_id: selId },
+      { key: 2, budget_item_id: allowanceItemId, amount: '50', source_selection_id: zeroSelId },
+    ], 150);
+    expect(bad.allocations).toBeUndefined();
+    expect(bad.error).toMatch(/one expense per selection/);
+  });
+
+  it('I3 — createExpense writes the tag at capture; approveExpense (the reconcile) KEEPS it; the split editor\'s shape refusal reaches the caller', async () => {
+    const created = await createExpense({
+      project_id: projectId, supplier: `${MARKER} I3 tile supplier`, expense_date: '2026-08-02', amount: 250,
+      cost_category: 'material',
+      allocations: [{ budget_item_id: allowanceItemId, amount: 250, source_selection_id: selId }],
+    });
+    expect(created.success, created.error).toBe(true);
+    const captured = await listExpenseAllocations(created.id!);
+    expect(captured).toHaveLength(1);
+    expect(captured[0].source_selection_id).toBe(selId);
+
+    // Review: the popup re-submits what it seeded — the tag included.
+    const approved = await approveExpense(created.id!, captured.map((a) => ({
+      budget_item_id: a.budget_item_id, amount: a.amount, source_selection_id: a.source_selection_id,
+    })));
+    expect(approved.success, approved.error).toBe(true);
+    const after = await listExpenseAllocations(created.id!);
+    expect(after[0].source_selection_id).toBe(selId);
+
+    // A tag the trigger refuses is reported, and the expense is saved
+    // pending-unallocated for review to fix — the existing capture contract.
+    const wrong = await createExpense({
+      project_id: projectId, supplier: `${MARKER} I3 wrong line`, expense_date: '2026-08-02', amount: 10,
+      cost_category: 'material',
+      allocations: [{ budget_item_id: otherItemId, amount: 10, source_selection_id: selId }],
+    });
+    expect(wrong.success).toBe(false);
+    expect(wrong.error).toMatch(/draws on a different allowance line/);
+    expect(await listExpenseAllocations(wrong.id!)).toHaveLength(0);
   });
 });

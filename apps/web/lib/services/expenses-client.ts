@@ -121,6 +121,7 @@ export async function createExpense(input: ExpenseCaptureInput): Promise<CreateR
       expense_id: data.id,
       budget_item_id: a.budget_item_id,
       amount: a.amount,
+      source_selection_id: a.source_selection_id ?? null,
     }))
   );
   if (allocError) {
@@ -173,13 +174,15 @@ export interface ExpenseAllocationRow {
   id: string;
   budget_item_id: string;
   amount: number;
+  /** [S175 stage 5] See AllocationInput.source_selection_id. */
+  source_selection_id: string | null;
 }
 
 export async function listExpenseAllocations(expenseId: string): Promise<ExpenseAllocationRow[]> {
   const supabase = createClient();
   const { data, error } = await supabase
     .from('expense_allocations')
-    .select('id, budget_item_id, amount')
+    .select('id, budget_item_id, amount, source_selection_id')
     .eq('expense_id', expenseId)
     .eq('is_deleted', false)
     .order('created_at', { ascending: true });
@@ -190,7 +193,7 @@ export async function listExpenseAllocations(expenseId: string): Promise<Expense
 /** Review-time split adjustments (Owner/Admin; author-while-pending). */
 export async function updateExpenseAllocation(
   id: string,
-  updates: { budget_item_id?: string; amount?: number }
+  updates: { budget_item_id?: string; amount?: number; source_selection_id?: string | null }
 ): Promise<MutationResult> {
   const supabase = createClient();
   const { error } = await supabase.from('expense_allocations').update(updates).eq('id', id);
@@ -207,9 +210,50 @@ export async function addExpenseAllocation(
     expense_id: expenseId,
     budget_item_id: allocation.budget_item_id,
     amount: allocation.amount,
+    source_selection_id: allocation.source_selection_id ?? null,
   });
   if (error) return { success: false, error: error.message };
   return { success: true };
+}
+
+// ── [S175 stage 5] Selections a cost can be tagged with ──────────────────────
+
+export interface TaggableSelection {
+  id: string;
+  name: string;
+  status: string;
+  /** The allowance line the selection draws on; NULL for an unlinked (Q8)
+   *  selection, which may be booked against any line on the project. */
+  allowance_budget_item_id: string | null;
+}
+
+/**
+ * The selections on a project that a cost may be tagged with: not
+ * client-supplied (no cost to the company), not denied, not deleted. APPROVAL
+ * IS NOT REQUIRED — the tile is ordered before the signature comes through,
+ * and refusing the tag until then would push the cost back onto the
+ * allowance line, which is the attribution loss the column exists to stop.
+ * Read under the caller's RLS: every staff role that can view the project
+ * reads selections (spec §4), and this returns NO money column.
+ */
+export async function listTaggableSelections(projectId: string): Promise<TaggableSelection[]> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('selections')
+    .select('id, name, status, allowance_budget_item_id')
+    .eq('project_id', projectId)
+    .eq('is_deleted', false)
+    .eq('client_supplied', false)
+    .neq('status', 'denied')
+    .order('name', { ascending: true });
+  if (error) return [];
+  return (data ?? []) as TaggableSelection[];
+}
+
+/** The selections offered for ONE budget line: those linked to it, plus the
+ *  unlinked ones (the shape trigger admits an unlinked selection anywhere). */
+export function taggableFor(line: string, all: TaggableSelection[]): TaggableSelection[] {
+  return all.filter((s) => s.allowance_budget_item_id === line || s.allowance_budget_item_id === null);
 }
 
 export async function removeExpenseAllocation(id: string): Promise<MutationResult> {
@@ -257,6 +301,16 @@ export async function restoreExpense(id: string): Promise<MutationResult> {
 export interface AllocationInput {
   budget_item_id: string;
   amount: number;
+  /**
+   * [S175 stage 5] The SELECTION this cost belongs to — Josh's ONE EXPENSE PER
+   * SELECTION ruling: several selections against one allowance line are
+   * several expenses, one row each, and nothing is ever apportioned. NULL (or
+   * absent) means the cost is the allowance's own. The shape — same project,
+   * not client-supplied, booked against the allowance the selection draws on —
+   * is enforced by `expense_allocations_selection_shape` (20261035000000), and
+   * approve_expense() carries the key through its reconcile.
+   */
+  source_selection_id?: string | null;
 }
 
 /**

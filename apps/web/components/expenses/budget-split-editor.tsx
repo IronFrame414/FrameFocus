@@ -14,8 +14,11 @@ import {
   createBudgetLineAtCapture,
   getOrCreateMiscBudgetLine,
   listProjectBudgetLines,
+  listTaggableSelections,
+  taggableFor,
   type AllocationInput,
   type BudgetLineOption,
+  type TaggableSelection,
 } from '@/lib/services/expenses-client';
 import { color } from '@/lib/theme';
 import { fieldLabelStyle, inputStyle } from '@/components/time/clock-modal';
@@ -27,10 +30,13 @@ export interface SplitRowDraft {
   key: number;
   budget_item_id: string; // '' = unpicked; MISC_SENTINEL = lazy Miscellaneous
   amount: string; // text input; '' on the only row = "the full amount"
+  /** [S175 stage 5] The selection this cost is FOR, or '' for the
+   *  allowance's own. Offered only on a line with taggable selections. */
+  source_selection_id?: string;
 }
 
 export function emptySplit(): SplitRowDraft[] {
-  return [{ key: 1, budget_item_id: MISC_SENTINEL, amount: '' }];
+  return [{ key: 1, budget_item_id: MISC_SENTINEL, amount: '', source_selection_id: '' }];
 }
 
 /** Draft rows → validated allocations. Resolves the Miscellaneous sentinel
@@ -47,6 +53,7 @@ export async function resolveSplit(
     budget_item_id: r.budget_item_id,
     amount:
       rows.length === 1 && r.amount.trim() === '' ? totalAmount : Number(r.amount),
+    source_selection_id: r.source_selection_id?.trim() ? r.source_selection_id : null,
   }));
 
   for (const d of drafts) {
@@ -72,16 +79,35 @@ export async function resolveSplit(
   }
 
   // Merge duplicate targets (two drafts on one line would violate the
-  // UNIQUE (expense_id, budget_item_id) key).
-  const merged = new Map<string, number>();
+  // UNIQUE (expense_id, budget_item_id) key). [S175 stage 5] Two rows on one
+  // line naming DIFFERENT selections cannot merge — ONE EXPENSE PER SELECTION
+  // is the ruling, so that is two expenses, and the editor says so rather
+  // than picking one.
+  const merged = new Map<string, { amount: number; source_selection_id: string | null }>();
   for (const d of drafts) {
     const id = d.budget_item_id === MISC_SENTINEL ? (miscId as string) : d.budget_item_id;
-    merged.set(id, Math.round(((merged.get(id) ?? 0) + d.amount) * 100) / 100);
+    const prior = merged.get(id);
+    if (
+      prior &&
+      prior.source_selection_id &&
+      d.source_selection_id &&
+      prior.source_selection_id !== d.source_selection_id
+    ) {
+      return {
+        error:
+          'Two selections on one budget line: log a separate expense for each selection (one expense per selection).',
+      };
+    }
+    merged.set(id, {
+      amount: Math.round(((prior?.amount ?? 0) + d.amount) * 100) / 100,
+      source_selection_id: prior?.source_selection_id ?? d.source_selection_id,
+    });
   }
   return {
-    allocations: Array.from(merged.entries()).map(([budget_item_id, amount]) => ({
+    allocations: Array.from(merged.entries()).map(([budget_item_id, v]) => ({
       budget_item_id,
-      amount,
+      amount: v.amount,
+      source_selection_id: v.source_selection_id,
     })),
   };
 }
@@ -140,6 +166,8 @@ export function BudgetSplitEditor({
   disabled?: boolean;
 }) {
   const [lines, setLines] = useState<BudgetLineOption[] | null>(null);
+  // [S175 stage 5] Selections a cost may be tagged with, keyed by line below.
+  const [taggable, setTaggable] = useState<TaggableSelection[]>([]);
 
   // "New budget line" (A-7): Owner/Admin/PM name a bucket in the field —
   // budgeted_amount 0, via the create_budget_line_at_capture RPC (§5.5).
@@ -158,6 +186,9 @@ export function BudgetSplitEditor({
     let cancelled = false;
     void listProjectBudgetLines(projectId).then((rows) => {
       if (!cancelled) setLines(rows);
+    });
+    void listTaggableSelections(projectId).then((rows) => {
+      if (!cancelled) setTaggable(rows);
     });
     return () => {
       cancelled = true;
@@ -223,10 +254,14 @@ export function BudgetSplitEditor({
     <div style={{ marginBottom: '12px' }}>
       <label style={fieldLabelStyle}>Budget line(s) (required)</label>
       {rows.map((row) => (
-        <div key={row.key} style={{ display: 'flex', gap: '8px', marginBottom: '6px' }}>
+        <div key={row.key} style={{ display: 'flex', gap: '8px', marginBottom: '6px', flexWrap: 'wrap' }}>
           <select
             value={row.budget_item_id}
-            onChange={(e) => update(row.key, { budget_item_id: e.target.value })}
+            onChange={(e) =>
+              // A new line means a new set of taggable selections; the old tag
+              // would fail the shape trigger, so it is cleared with the line.
+              update(row.key, { budget_item_id: e.target.value, source_selection_id: '' })
+            }
             disabled={disabled || !projectId}
             style={{ ...inputStyle, flex: 1 }}
           >
@@ -254,6 +289,29 @@ export function BudgetSplitEditor({
             disabled={disabled}
             style={{ ...inputStyle, width: '110px' }}
           />
+          {/* [S175 stage 5] ONE EXPENSE PER SELECTION — offered only when the
+              chosen line has selections to tag; the blank option is "the
+              allowance's own". The rule itself is the DB trigger; this is
+              the affordance. */}
+          {row.budget_item_id !== '' &&
+            row.budget_item_id !== MISC_SENTINEL &&
+            taggableFor(row.budget_item_id, taggable).length > 0 && (
+              <select
+                value={row.source_selection_id ?? ''}
+                onChange={(e) => update(row.key, { source_selection_id: e.target.value })}
+                disabled={disabled}
+                title="Which selection this cost is for"
+                style={{ ...inputStyle, flex: 1, minWidth: '160px' }}
+              >
+                <option value="">Not for a selection (the allowance&rsquo;s own)</option>
+                {taggableFor(row.budget_item_id, taggable).map((s) => (
+                  <option key={s.id} value={s.id}>
+                    For selection: {s.name}
+                    {s.status === 'approved' ? '' : ' (not yet approved)'}
+                  </option>
+                ))}
+              </select>
+            )}
           {rows.length > 1 && (
             <button
               type="button"

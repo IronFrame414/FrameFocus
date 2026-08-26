@@ -28,6 +28,9 @@ import {
   approveExpense,
   createAdHocBudgetLine,
   listExpenseAllocations,
+  listTaggableSelections,
+  taggableFor,
+  type TaggableSelection,
   listProjectBudgetLines,
   reassignExpenseProject,
   rejectExpense,
@@ -80,6 +83,11 @@ export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: Re
   // Allocation state — line id -> input string.
   const [lines, setLines] = useState<BudgetLineOption[] | null>(null);
   const [allocations, setAllocations] = useState<Record<string, string>>({});
+  // [S175 stage 5] line id -> selection id ('' = the allowance's own). Seeded
+  // from the captured rows so a tag survives review; approve_expense carries
+  // it through its reconcile.
+  const [selectionByLine, setSelectionByLine] = useState<Record<string, string>>({});
+  const [taggable, setTaggable] = useState<TaggableSelection[]>([]);
 
   // Inline add-line (Q4b).
   const [addingLine, setAddingLine] = useState(false);
@@ -95,9 +103,14 @@ export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: Re
 
   const loadLines = useCallback(async (forProject: string) => {
     setLines(null);
-    const rows = await listProjectBudgetLines(forProject);
+    const [rows, sels] = await Promise.all([
+      listProjectBudgetLines(forProject),
+      listTaggableSelections(forProject),
+    ]);
     setLines(rows);
+    setTaggable(sels);
     setAllocations({});
+    setSelectionByLine({});
   }, []);
 
   useEffect(() => {
@@ -108,18 +121,25 @@ export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: Re
       const captured = await listExpenseAllocations(expense.id);
       if (captured.length === 0) return;
       const seeded: Record<string, string> = {};
+      const seededSel: Record<string, string> = {};
       for (const row of captured) {
         const prior = Number(seeded[row.budget_item_id] ?? 0);
         seeded[row.budget_item_id] = (prior + row.amount).toFixed(2);
+        if (row.source_selection_id) seededSel[row.budget_item_id] = row.source_selection_id;
       }
       setAllocations(seeded);
+      setSelectionByLine(seededSel);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const parsedAmount = Number(amount);
   const allocationEntries = Object.entries(allocations)
-    .map(([budget_item_id, v]) => ({ budget_item_id, amount: Number(v) }))
+    .map(([budget_item_id, v]) => ({
+      budget_item_id,
+      amount: Number(v),
+      source_selection_id: selectionByLine[budget_item_id] || null,
+    }))
     .filter((a) => !Number.isNaN(a.amount) && a.amount > 0);
   const allocatedTotal = allocationEntries.reduce((sum, a) => sum + a.amount, 0);
   const unallocated = (Number.isNaN(parsedAmount) ? 0 : parsedAmount) - allocatedTotal;
@@ -412,6 +432,27 @@ export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: Re
                     actual {fmtMoney(l.actual_amount)}
                   </div>
                 </div>
+                {/* [S175 stage 5] ONE EXPENSE PER SELECTION — the tag rides
+                    the allocation; the DB trigger is the rule, this is the
+                    affordance. Offered only where the line has selections. */}
+                {taggableFor(l.id, taggable).length > 0 && (
+                  <select
+                    value={selectionByLine[l.id] ?? ''}
+                    onChange={(e) =>
+                      setSelectionByLine((prev) => ({ ...prev, [l.id]: e.target.value }))
+                    }
+                    title="Which selection this cost is for"
+                    style={{ ...inputStyle, width: '200px' }}
+                  >
+                    <option value="">Not for a selection</option>
+                    {taggableFor(l.id, taggable).map((s) => (
+                      <option key={s.id} value={s.id}>
+                        For: {s.name}
+                        {s.status === 'approved' ? '' : ' (not yet approved)'}
+                      </option>
+                    ))}
+                  </select>
+                )}
                 <input
                   type="number"
                   min="0"
