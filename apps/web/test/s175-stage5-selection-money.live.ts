@@ -5,7 +5,14 @@ import { admin, assertRebuildTest, sessionFor } from './live-session';
 import {
   completeSelectionSignature,
   offerSelection,
+  reviseSelection,
 } from '@/lib/services/selection-lifecycle-service';
+import {
+  getPortfolioRevisedContract,
+  getRevisedContract,
+  getRevisedContractMap,
+  getSelectionBilling,
+} from '@/lib/services/contract-value';
 
 // ============================================================================
 // S175 #3 — Allowances & Selections STAGE 5: an approved selection becomes
@@ -684,5 +691,114 @@ describe('S175-S5 C — the COST side: ONE EXPENSE PER SELECTION has a shape, an
     expect(error!.message).toMatch(/draws on a different allowance line/);
     expect((await admin.from('expenses').select('status').eq('id', e).single()).data!.status).toBe('pending');
     expect(await allocs(e)).toHaveLength(0);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+describe('S175-S5 D — CONTRACT VALUE: the third term, FIXED-PRICE ONLY, and the exclusion is a VALUE (Q3.2)', () => {
+  it('D1 — fixed-price: revised = original + Σ signed_variance over APPROVED selections; client-supplied contributes nothing', async () => {
+    const c = await getRevisedContract(projectId);
+    expect(c.original).toBe(10000);
+    expect(c.signedDelta).toBe(0);
+    // main (+), zero (0), credit (−); "client mirror" is approved with NULL stamps.
+    const expected = r2(selVariance + 0 + creditVariance);
+    expect(c.selectionDelta).toBe(expected);
+    expect(c.selectionDeltaExcluded).toBe(false);
+    expect(c.revised).toBe(r2(10000 + expected));
+  });
+
+  it('D2 — cost-plus: the variance is EXCLUDED, selectionDelta is 0, and selectionDeltaExcluded is TRUE — never a silent absence', async () => {
+    const c = await getRevisedContract(cpProjectId);
+    expect(c.original).toBe(1000);
+    expect(c.selectionDelta).toBe(0);
+    expect(c.selectionDeltaExcluded).toBe(true);
+    expect(c.revised).toBe(1000);
+  });
+
+  it('D3 — the map deriver agrees with the per-project one on both jobs', async () => {
+    const map = await getRevisedContractMap([projectId, cpProjectId]);
+    const one = await getRevisedContract(projectId);
+    expect(map[projectId]).toEqual(one);
+    expect(map[cpProjectId].selectionDeltaExcluded).toBe(true);
+    expect(map[cpProjectId].revised).toBe(1000);
+  });
+
+  it('D4 — the portfolio sums the FIXED side only, and agrees with an independent service-role derivation', async () => {
+    const { data: projs } = await admin
+      .from('projects').select('id, project_type')
+      .eq('company_id', companyId).eq('status', 'active').eq('is_deleted', false);
+    const fixedIds = (projs ?? []).filter((p) => p.project_type === 'fixed_price').map((p) => p.id);
+    const { data: sels } = await admin
+      .from('selections').select('signed_variance')
+      .in('project_id', fixedIds).eq('status', 'approved').eq('is_deleted', false).not('signed_variance', 'is', null);
+    const independent = r2((sels ?? []).reduce((n, s) => n + Number(s.signed_variance), 0));
+    const portfolio = await getPortfolioRevisedContract();
+    expect(portfolio.selectionDeltaSum).toBe(independent);
+    // Non-vacuous: this job's own variance is inside that figure.
+    expect(fixedIds).toContain(projectId);
+    expect(Math.abs(independent)).toBeGreaterThan(0);
+  });
+
+  it('D5 — REVISION drops the term (acceptance #11): revise → in_discussion, stamps cleared, contract value falls by the old variance', async () => {
+    const before = await getRevisedContract(projectId);
+    const extra = await makeSelection(projectId, 'revisable vanity', null, [
+      { name: 'vanity', quantity: 1, unit_cost: 800, markup_percent: 25 },
+    ], { sign: true });
+    expect(extra.variance).toBe(1000); // unlinked (Q8): variance = full sell
+    const during = await getRevisedContract(projectId);
+    expect(during.selectionDelta).toBe(r2(before.selectionDelta + 1000));
+    const r = await reviseSelection(ownerC, extra.id);
+    expect(r.success, r.error).toBe(true);
+    const after = await getRevisedContract(projectId);
+    expect(after.selectionDelta).toBe(before.selectionDelta);
+    expect(after.revised).toBe(before.revised);
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+describe('S175-S5 E — getSelectionBilling(): billed vs signed → remaining, per KIND', () => {
+  let thirdInvoice: string;
+
+  it('E1 — three kinds on the fixed-price job; a DRAFT bills nothing on the fixed side, but a placed credit is already spoken for', async () => {
+    const b = await getSelectionBilling(projectId);
+    const main = b.selections.find((s) => s.selectionId === selId)!;
+    const zero = b.selections.find((s) => s.selectionId === zeroSelId)!;
+    const credit = b.selections.find((s) => s.selectionId === creditSelId)!;
+    expect(b.selections.map((s) => s.selectionId).sort()).toEqual([selId, zeroSelId, creditSelId].sort());
+    expect(main.kind).toBe('fixed_remaining');
+    expect(main.billed).toBe(0); // B4's line sits on a DRAFT
+    expect(main.remaining).toBe(selVariance);
+    expect(zero.kind).toBe('fixed_remaining');
+    expect(zero.remaining).toBe(0);
+    expect(credit.kind).toBe('credit');
+    expect(credit.remaining).toBeNull();
+    expect(credit.billed).toBe(Math.abs(creditVariance)); // B7's credit line, live draft
+    expect(b.fixedCount).toBe(2);
+    expect(b.creditCount).toBe(1);
+    expect(b.asIncurredCount).toBe(0);
+    expect(b.fixedRemaining).toBe(selVariance);
+  });
+
+  it('E2 — SENDING the draft bills it: remaining falls to zero; excluding that invoice restores it for the builder', async () => {
+    const { data: inv } = await admin
+      .from('invoices').select('id').eq('project_id', projectId).eq('title', `${MARKER} B4 third`).single();
+    thirdInvoice = inv!.id;
+    must('send', (await admin.from('invoices').update({ status: 'sent', sent_at: new Date().toISOString() }).eq('id', thirdInvoice)).error);
+    const b = await getSelectionBilling(projectId);
+    const main = b.selections.find((s) => s.selectionId === selId)!;
+    expect(main.billed).toBe(selVariance);
+    expect(main.remaining).toBe(0);
+    expect(b.fixedRemaining).toBe(0);
+    const excl = await getSelectionBilling(projectId, thirdInvoice);
+    expect(excl.selections.find((s) => s.selectionId === selId)!.remaining).toBe(selVariance);
+  });
+
+  it('E3 — the cost-plus control: AS INCURRED — no remaining, no fixed amount', async () => {
+    const b = await getSelectionBilling(cpProjectId);
+    expect(b.selections).toHaveLength(1);
+    expect(b.selections[0].kind).toBe('as_incurred');
+    expect(b.selections[0].remaining).toBeNull();
+    expect(b.asIncurredCount).toBe(1);
+    expect(b.fixedCount).toBe(0);
   });
 });

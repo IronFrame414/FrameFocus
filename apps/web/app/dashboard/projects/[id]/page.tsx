@@ -578,6 +578,36 @@ export default async function ProjectOverviewPage({ params }: { params: { id: st
                       {originalLabel}: {money(contract.original)}
                     </span>
                   )}
+                  {/* [S175 stage 5] The selection term, and — on a non-fixed
+                      job — its EXCLUSION, rendered rather than omitted
+                      (Josh, Q3.2: a silent absence is the final_hold shape). */}
+                  {contract.selectionDelta !== 0 && (
+                    <span
+                      style={{
+                        display: 'block',
+                        fontFamily: font.sans,
+                        fontSize: '11px',
+                        fontWeight: 400,
+                        color: color.faint,
+                      }}
+                    >
+                      Approved selections: {contract.selectionDelta > 0 ? '+' : ''}
+                      {money(contract.selectionDelta)}
+                    </span>
+                  )}
+                  {contract.selectionDeltaExcluded && (
+                    <span
+                      style={{
+                        display: 'block',
+                        fontFamily: font.sans,
+                        fontSize: '11px',
+                        fontWeight: 400,
+                        color: color.faint,
+                      }}
+                    >
+                      Approved selections are not in this projection — they bill as incurred
+                    </span>
+                  )}
                 </span>
               </div>
             )}

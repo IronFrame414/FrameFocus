@@ -64,9 +64,13 @@ export type InstrumentRef =
 export function lineInstrumentKey(line: {
   source_estimate_id?: string | null;
   source_change_order_id?: string | null;
+  /** [S175 stage 5] A selection overage / credit line — its own instrument
+   *  (Q4: the selection signature is binding; no CO is generated). */
+  source_selection_id?: string | null;
 }): string {
   if (line.source_change_order_id) return `co:${line.source_change_order_id}`;
   if (line.source_estimate_id) return `est:${line.source_estimate_id}`;
+  if (line.source_selection_id) return `sel:${line.source_selection_id}`;
   return 'none';
 }
 
@@ -99,9 +103,19 @@ export interface InstrumentOption {
 }
 
 export function contractTypeForLine(
-  line: { source_estimate_id?: string | null; source_change_order_id?: string | null },
+  line: {
+    source_estimate_id?: string | null;
+    source_change_order_id?: string | null;
+    source_selection_id?: string | null;
+  },
   types: InstrumentTypes
 ): ContractType {
+  // A selection line has no entry in byKey (the builder enumerates estimate
+  // and COs) and takes the FALLBACK — the originating contract's type. That is
+  // the right answer on purpose: the selection's allowance sits on that
+  // contract, and §5's retainage rule follows the contract the money belongs
+  // to, so a selection overage on a T&M job is not retained and on a
+  // fixed-price job is.
   return types.byKey[lineInstrumentKey(line)] ?? types.fallback;
 }
 
