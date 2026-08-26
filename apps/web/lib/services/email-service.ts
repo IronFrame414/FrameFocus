@@ -166,7 +166,18 @@ export type EmailType =
   // broken once (`mention`): the table half fails at RUNTIME, this half at
   // COMPILE time, so one without the other ships silently. Both halves or
   // neither.
-  | 'selection_released';
+  | 'selection_released'
+  // [S175 stage 6] The specifications sheet, PDF attached. The
+  // `email_types.selection_specifications` row lands in 20261036000000, in the
+  // SAME commit as this line — fourth time this rule is written down.
+  //
+  // ⚠️ NOT `selection_released`, and the difference is the whole point. That
+  // one asks the client to CHOOSE and links the portal; this one tells her
+  // what she chose and carries the sheet. The filed PDF is REPLACED on every
+  // regeneration (Q4.1), so `email_logs` is the only record of which version
+  // went out when — and one type covering both messages would make that
+  // question unanswerable.
+  | 'selection_specifications';
 
 export interface LogEmailInput {
   company_id: string;
