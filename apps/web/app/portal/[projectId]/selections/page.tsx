@@ -1,39 +1,55 @@
 import { notFound } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
+import { color } from '@/lib/theme';
 import { getPortalIdentity, getPortalProjects } from '@/lib/services/portal';
+import { getPortalProjectSelections } from '@/lib/services/selections';
 import { PortalCard, PortalEmpty } from '../../portal-ui';
+import { PortalSelectionCard } from './portal-selections-ui';
 
 /**
- * PAGE 4 of 4 — Selections. **A DELIBERATE DEAD PAGE.** [Josh, S168]
+ * PAGE 4 of 4 — Selections. **LIVE as of S175 stage 7.** Spec §9.3.
  *
  * ===========================================================================
- * ⚠️ THE ROUTE IS THE DELIVERABLE. THE FEATURE IS NOT.
+ * ⚠️ THIS WAS THE DELIBERATE DEAD PAGE, AND IT IS NOT ONE ANY MORE
  * ===========================================================================
- * Josh: *"add page now. It will be a dead page. It will be built soon and the
- * portal shouldn't be built twice."* So the nav entry and this route exist, and
- * nothing else does.
+ * _Superseded, quoted rather than deleted, because the reasoning was right and
+ * a later reader should be able to see that it was retired on purpose:_
  *
- * ⚠️ DO NOT BUILD AN ALLOWANCE SURFACE HERE. R21 is deferred to its own module,
- * which **starts at the estimate and budget side**, and that foundation does
- * not exist yet. A client-facing selections screen built first would be
- * designed backwards from the tip — it would invent a shape for allowances,
- * and the module that actually owns them would then have to either adopt the
- * guess or break this page. There is no storage, no service call and no query
- * in this file on purpose. Adding one is the mistake this comment exists to
- * prevent.
+ *   > **THE ROUTE IS THE DELIVERABLE. THE FEATURE IS NOT.** Josh: *"add page
+ *   > now. It will be a dead page. It will be built soon and the portal
+ *   > shouldn't be built twice."* … **DO NOT BUILD AN ALLOWANCE SURFACE HERE.
+ *   > R21 is deferred to its own module, which starts at the estimate and
+ *   > budget side, and that foundation does not exist yet. A client-facing
+ *   > selections screen built first would be designed backwards from the tip.**
+ *
+ * That foundation now exists: the allowance row type (stage 1), the selections
+ * tables and their floors (stage 2), the company sheet (stage 3), the lifecycle
+ * and the signature (stage 4), the money downstream (stage 5) and the
+ * specifications sheet (stage 6). This page is the last stage of the module and
+ * it closes the loop the module was built for — **it is the first thing in the
+ * product that lets the client actually choose.**
  *
  * ===========================================================================
- * AND IT MUST NOT READ AS BROKEN
+ * AND THE GUARD IS STILL THE LAYOUT'S
  * ===========================================================================
- * An empty page with no explanation is indistinguishable from a page that
- * failed to load, and a client cannot tell the difference — she has no console
- * and no other tenant to compare against. So it says plainly what it is: not
- * "coming soon" as a product tease, but the one honest fact, which is that
- * selections will appear here when there is something to choose.
+ * `notFound()` below matches the other three routes exactly. Four routes must
+ * not become four guards — the layout owns the identity, the branding and the
+ * project lookup, and what is READABLE comes back through the client arms, not
+ * from any branch in this file.
  *
- * The layout above still runs the guard and the project lookup, so a client who
- * does not own this project gets `notFound()` here exactly as she does on the
- * other three. A dead page is not an unguarded one.
+ * ⚠️ NO SERVICE ROLE HERE, as on all four pages (`portal-shell.live.ts` P7b
+ * walks this directory). `getPortalProjectSelections()` takes the caller's
+ * client; the definer functions behind it decide what she may have, and they do
+ * it in the database where a raw PostgREST call hits them identically.
+ *
+ * ⚠️ ONE EXCEPTION, NAMED RATHER THAN LEFT TO BE DISCOVERED: option images are
+ * signed with the admin client, one layer down in `signSelectionOptionImages()`
+ * — S172's shipped split, shared with the company sheet and the specifications
+ * sheet. The AUTHORISATION is still hers (`selection_option_images()` runs under
+ * her session and returns nothing for a selection she cannot see); only the
+ * storage URL is minted privileged, because storage RLS keys on
+ * `files.client_visible` and that flag is deliberately not involved in option
+ * images. Nothing on THIS page decides visibility.
  */
 export default async function PortalSelectionsPage({
   params,
@@ -47,14 +63,57 @@ export default async function PortalSelectionsPage({
   const projects = await getPortalProjects(supabase);
   if (!projects.some((p) => p.id === params.projectId)) notFound();
 
+  const areas = await getPortalProjectSelections(params.projectId, supabase);
+  const limited = identity.accessLevel !== 'full';
+  const signerName = [identity.firstName, identity.lastName].filter(Boolean).join(' ');
+
+  if (!areas.length) {
+    return (
+      <PortalCard title="Selections" subtitle="Finishes, fixtures and materials to choose.">
+        <PortalEmpty>
+          <span data-testid="portal-selections-empty">
+            {limited
+              ? 'Not included in your current portal access.'
+              : 'Nothing is waiting for you to choose right now. When your contractor sends you finishes, fixtures or materials to pick from, they will appear here.'}
+          </span>
+        </PortalEmpty>
+      </PortalCard>
+    );
+  }
+
   return (
-    <PortalCard title="Selections" subtitle="Finishes, fixtures and materials to choose.">
-      <PortalEmpty>
-        <span data-testid="portal-selections-empty">
-          There is nothing to choose yet. When your contractor sets up the finishes, fixtures and
-          materials for your job, they will appear here for you to pick from and approve.
-        </span>
-      </PortalEmpty>
-    </PortalCard>
+    <>
+      {/* Grouped by area — Kitchen, Breakfast Nook, Dining Room. A selection with
+          no area lands in "Unassigned", which `getProjectSelections()` already
+          creates, so nothing can fall off the page for want of an area. */}
+      {areas.map((area) => (
+        <PortalCard
+          key={area.id}
+          title={area.name}
+          subtitle={`${area.selections.length} selection${area.selections.length === 1 ? '' : 's'}`}
+        >
+          {area.selections.map((selection) => (
+            <PortalSelectionCard
+              key={selection.id}
+              selection={selection}
+              defaultName={signerName}
+            />
+          ))}
+        </PortalCard>
+      ))}
+
+      {/* ⚠️ SAID ONCE, ON THE PAGE, RATHER THAN IMPLIED BY THE BUTTONS. A batch
+          arrives together and a partial batch is NORMAL — Josh ruled one
+          signature per selection precisely so she can think about one while
+          moving the others along. A client who believes she must do all of them
+          before her contractor can proceed will sit on the whole batch. */}
+      <p
+        data-testid="portal-selections-partial-note"
+        style={{ fontSize: '12.5px', color: color.muted, margin: '0 0 16px', lineHeight: 1.6 }}
+      >
+        You can approve these one at a time. Anything you have not decided on yet can wait — your
+        contractor can get on with the ones you have signed.
+      </p>
+    </>
   );
 }
