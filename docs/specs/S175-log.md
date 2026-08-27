@@ -952,3 +952,84 @@ Not run, and said so: no migration of any kind (this item needs none); nothing p
 click-test register is Josh's. **`docs/specs/desktop-redesign-inventory.md` appeared UNTRACKED in
 the working tree during this session and is NOT this item's** — its own header says it was gathered
 for a parallel spec-writing session. It has been left untracked and uncommitted.
+
+---
+
+## SPEC SESSION (post-item-6) — the portal reopen spec, then item 8's canonical-seed spec
+
+**Two spec jobs, no build.** Unattended; committed path-scoped after each; nothing pushed. Three
+inventory files from the parallel desktop-redesign work (`desktop-redesign-inventory.md`,
+`money-section-inventory.md`, `documents-section-inventory.md`) sit untracked and are **not** this
+session's — left as found.
+
+### Job 1 — `docs/specs/client-portal-reopen-spec.md` (written, committed, NOT built)
+
+Turned Josh's S175 reopen ruling into a full design spec. The ruling was captured correctly; the
+build analysis needed verification against the live schema, and one captured claim was **stale**:
+
+- ⚠️ **`client_window_open` is already THREE-argument, not two.** The two-arg version was dropped at
+  `20261018000000_m9_cancellation_window.sql:337`; the live signature is
+  `(text, date, timestamptz)` — cancellation already added a third scalar and **stayed inlinable**
+  (`LANGUAGE sql STABLE`, pure `CASE` over scalars, no table access). **That is the precedent that
+  answers the ruling's own open question:** a reopen date is a fourth scalar of the same kind, so it
+  can stay inlined — the builder must still confirm the arg is a bare column and re-run the S175
+  `EXPLAIN`.
+- **Design:** new `projects.reopened_at timestamptz` (confirmed absent), function → four-arg, the
+  reopen adds a **purely additive OR term** to the completion branch → monotonic in `reopened_at`,
+  which is the formal statement of "must not silently change any other window." `45`/`30` stay
+  written once.
+- **Five callers**, all passing the project row's scalars, verified and listed
+  (`my_client_access_level`, `is_client_of_project`, all three `get_invitation_*`) — they move
+  together, overload-first then drop, as the cancellation migration did.
+- **Coherence proven, not asserted:** every client read arm funnels through `is_client_of_project()`
+  or `my_client_access_level()` (13 policies across `20261019000000` / `20261020000000` /
+  `20261028000000`), both of which read the one function — a **single choke point**, so a reopen
+  restores every surface at once. "Can sign in but can't read invoices" cannot occur.
+- **Distinguished** portal-access reopen from the EXISTING project-status reopen
+  (`20261013000000:90`, `complete → active`) — the spec's whole point is not having to lie about
+  status to give the client another look.
+- **UI section:** control on `contacts/portal-panel.tsx` (Owner/Admin, per-project, beside R17),
+  two notifications (N1 email via a new `email_types` row; N2 persistent portal date), and flagged
+  that **no window-end-date helper exists today** — it must be built to agree with the boolean
+  (#129 divergence risk).
+- **Open questions surfaced, not guessed:** does reopen apply to CANCELLED projects (ruling says
+  "completed" only), repeat-reopen audit trail, countdown-while-open.
+
+Resend behaviour confirmed at `apps/web/app/api/invites/[id]/resend/route.ts:73-77` (resets
+`expires_at`, reuses token, Owner/Admin) — the premise of the whole gap.
+
+### Job 2 — `docs/specs/S167-canonical-seed-spec.md` (item 8, ANALYSIS + SPEC only, committed, NOT built)
+
+The `#149` fixtures-not-reproducible spec. Phase-1 inventory is the deliverable; Phase-2 questions
+surfaced for an unattended Josh; Phase-3 canonical dataset designed. **The seed is untouched; the
+suite is exactly as green as found.**
+
+- **The diagnosis, verified not assumed:** `seed-test-identities.mjs` (1,452 lines) **pins ZERO ids**
+  (grep: 0 explicit-`id:` inserts), **cannot bootstrap an empty DB** (`.single()`-or-throw on
+  Company A at `seed:188-189`), and **name/email-matches every row**. Of the five UUIDs e2e
+  hard-codes, only `eaf0e25b` (m-sections) is even referenced in the seed — and only as a guard that
+  throws, not a create. That IS #149: reproducible from no script. The canon's defining change is
+  **pinned ids + from-empty bootstrap**, not more rows.
+- **Phase-1 inventory:** all **100** live `test/*.live.ts` classified (Appendix A) via 5 fan-out
+  agents — ~27 read-only, ~40 self-seeding creators, ~33 ambient-dependent. **The canon is bounded by
+  the ~33 ambient files**; the creators need only identities + anchors. A **16-property inventory**
+  (§1.5) states what each ambient harness depends on *as a property* (PM-assigned-not-author; invoice
+  per `presentation_level`; linked+control+closed client triad; contact w/ 2 addresses; signed CO
+  that can't be deleted; allowance line w/ approved selection; snapshot-not-live markup; company B
+  distinct; …). The **e2e half (Q8.1)** covered in a separate section: 4 fixture files hard-code
+  `03bb903f`/`18a105e7`/`9b0380c5`/`4a4f8567`/`eaf0e25b`; the drift is A-33c/M9 going vacuous if the
+  two halves seed separately.
+- **Risk register** ties the recurring campaign defects to the fixtures: unordered/unscoped
+  `.limit(1)` (s143, s97ct-invoice-email still driftable, s150 wrong-even-ordered), silent vacuity
+  (the control client's NULL `contact_id`), state-is-the-test re-pins, and the **by-design ~3
+  signed-CO leak/run** (must NOT be "fixed" via a delete-boundary escape).
+- **Phase-2 questions (CQ1-CQ4):** company count/shape, seed size vs per-statement cost (Josh's
+  tradeoff), replace-vs-coexist (recommended replace, needs explicit yes — destructive), and the
+  genuinely-unsolved one: **`company_members` ids are trigger-minted random but e2e hard-codes them**
+  — needs a keyboard.
+- **Phase-3:** canonical dataset entity-by-entity with a stated property per row (a purposeless row
+  is removed), id-pinned, from-empty, idempotent AND self-reporting, leaks budgeted not denied;
+  migration path harness-by-harness; unblocks database-per-shard (#150), does not write the sharding.
+
+Six read-only fan-out agents (5 live batches + 1 e2e) produced the inventory; every risk flag carries
+a file:line in the appendices.
