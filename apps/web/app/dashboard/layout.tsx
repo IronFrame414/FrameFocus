@@ -7,6 +7,7 @@ import { getUnreadCount } from '@/lib/services/notifications';
 import { dashboardDeniedRedirect } from '@/lib/dashboard-access';
 import { DashboardShell } from './dashboard-shell';
 import { RegisterPushSw } from './register-push-sw';
+import { ConfirmProvider } from '@/components/confirm/confirm-provider';
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient();
@@ -84,7 +85,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
       {/* ND-4 — registers the push-only desktop worker. Renders nothing, and
           registering is not subscribing: no prompt fires from here. */}
       <RegisterPushSw />
-      {children}
+      {/* S175 item 9 — the shared confirm/alert overlay behind useConfirm()/
+          useAlert(), replacing native window.confirm/alert across the dashboard.
+          Mounted here because every call site lives under /dashboard. */}
+      <ConfirmProvider>{children}</ConfirmProvider>
     </DashboardShell>
   );
 }
