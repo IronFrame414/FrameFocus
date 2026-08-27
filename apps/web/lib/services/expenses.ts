@@ -108,6 +108,39 @@ export async function getExpenseReceipts(expenseId: string): Promise<FileRow[]> 
   return (data ?? []) as FileRow[];
 }
 
+/**
+ * Receipts for MANY expenses in one query, grouped by expense_id — the batched
+ * form of getExpenseReceipts, so a page reviewing N pending expenses runs one
+ * `.in(...)` instead of N reads. Same rows and same per-expense created_at
+ * order (a global created_at-asc sort is asc within every group). A file has
+ * exactly one expense_id, so no row lands in two groups; an expense with no
+ * receipts is simply absent — callers default to []. Empty ids → empty map,
+ * no round trip.
+ */
+export async function getExpenseReceiptsByExpense(
+  expenseIds: string[]
+): Promise<Map<string, FileRow[]>> {
+  const grouped = new Map<string, FileRow[]>();
+  if (expenseIds.length === 0) return grouped;
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('files')
+    .select('*')
+    .in('expense_id', expenseIds)
+    .eq('is_deleted', false)
+    .order('created_at', { ascending: true });
+  if (error) return grouped;
+
+  for (const row of (data ?? []) as FileRow[]) {
+    const key = row.expense_id as string;
+    const bucket = grouped.get(key);
+    if (bucket) bucket.push(row);
+    else grouped.set(key, [row]);
+  }
+  return grouped;
+}
+
 // ----------------------------------------------------------------------------
 // Job cost rollup (§4) — read-time, role-dependent BY RLS, never persisted.
 // ----------------------------------------------------------------------------

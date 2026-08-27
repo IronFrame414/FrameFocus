@@ -61,6 +61,36 @@ export async function getTemplateBoxes(templateId: string): Promise<TemplateBox[
   return (data ?? []) as TemplateBox[];
 }
 
+/**
+ * Box maps for MANY lien templates in one query, grouped by template_id — the
+ * batched form of getTemplateBoxes, so the settings page runs one `.in(...)`
+ * instead of one read per template. Same `page`-asc order within each group; a
+ * box has one template_id so nothing is duplicated; a template with no boxes is
+ * absent — callers default to []. Empty ids → empty map.
+ */
+export async function getTemplateBoxesByTemplate(
+  templateIds: string[]
+): Promise<Map<string, TemplateBox[]>> {
+  const grouped = new Map<string, TemplateBox[]>();
+  if (templateIds.length === 0) return grouped;
+
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from('lien_release_template_boxes')
+    .select('*')
+    .in('template_id', templateIds)
+    .eq('is_deleted', false)
+    .order('page', { ascending: true });
+
+  for (const row of (data ?? []) as TemplateBox[]) {
+    const key = row.template_id as string;
+    const bucket = grouped.get(key);
+    if (bucket) bucket.push(row);
+    else grouped.set(key, [row]);
+  }
+  return grouped;
+}
+
 /** §8.1 — the Lien Releases list under a job's financials. */
 export async function getReleasesForProject(projectId: string): Promise<LienRelease[]> {
   const supabase = await createClient();

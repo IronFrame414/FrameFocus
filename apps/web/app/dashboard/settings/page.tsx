@@ -6,9 +6,9 @@ import { EstimatingSettingsForm } from './estimating-settings-form';
 import { ProposalSettingsForm } from './proposal-settings-form';
 import { TimeTrackingSettingsForm } from './time-tracking-settings-form';
 import { GLMappingSettingsForm } from './gl-mapping-settings-form';
-import { getTemplateBoxes, getTemplates } from '@/lib/services/lien-releases';
+import { getTemplateBoxesByTemplate, getTemplates } from '@/lib/services/lien-releases';
 import { LienReleaseSettingsForm } from './lien-release-settings-form';
-import { getContractTemplateBoxes, getContractTemplates } from '@/lib/services/contracts';
+import { getContractTemplateBoxesByTemplate, getContractTemplates } from '@/lib/services/contracts';
 import { ContractSettingsForm, type ContractTemplateRow } from './contract-settings-form';
 
 // ⚠️ SLICE A [S150] — WITHOUT THIS, A SAVED BOX MAP READS BACK STALE.
@@ -62,28 +62,32 @@ async function withBoxes(
     is_default: boolean;
   }[]
 ): Promise<ContractTemplateRow[]> {
-  return Promise.all(
-    templates.map(async (t) => ({
-      id: t.id,
-      name: t.name,
-      pdf_file_id: t.pdf_file_id,
-      is_default: t.is_default,
-      boxes: (await getContractTemplateBoxes(t.id)).map((b) => ({
-        page: b.page,
-        // numeric(8,6) arrives from PostgREST as a STRING. Left as one, a
-        // comparison like `width < minWidth` compares lexically and the §2.2
-        // size warning silently stops working.
-        x: Number(b.x),
-        y: Number(b.y),
-        width: Number(b.width),
-        height: Number(b.height),
-        kind: b.kind,
-        value_key: b.value_key,
-        custom_label: b.custom_label,
-        party: b.party,
-      })),
-    }))
-  );
+  // One `.in(...)` for the whole family instead of a box read per template —
+  // the N+1 this replaces ran once for client_contract and once for
+  // sub_contract. getContractTemplateBoxesByTemplate preserves the same
+  // page-asc order per template, so the map is byte-for-byte what the per-row
+  // loop produced.
+  const boxesByTemplate = await getContractTemplateBoxesByTemplate(templates.map((t) => t.id));
+  return templates.map((t) => ({
+    id: t.id,
+    name: t.name,
+    pdf_file_id: t.pdf_file_id,
+    is_default: t.is_default,
+    boxes: (boxesByTemplate.get(t.id) ?? []).map((b) => ({
+      page: b.page,
+      // numeric(8,6) arrives from PostgREST as a STRING. Left as one, a
+      // comparison like `width < minWidth` compares lexically and the §2.2
+      // size warning silently stops working.
+      x: Number(b.x),
+      y: Number(b.y),
+      width: Number(b.width),
+      height: Number(b.height),
+      kind: b.kind,
+      value_key: b.value_key,
+      custom_label: b.custom_label,
+      party: b.party,
+    })),
+  }));
 }
 
 export default async function SettingsPage() {
@@ -150,29 +154,28 @@ export default async function SettingsPage() {
   // and had exactly one caller (the generate route); no settings surface read
   // it. Read here for the same reason 7I's is: the function imports
   // `next/headers` and cannot be called from a client component.
-  const lienTemplatesWithBoxes = await Promise.all(
-    lienTemplates.map(async (t) => ({
-      id: t.id,
-      name: t.name,
-      type: t.type,
-      is_final: t.is_final,
-      jurisdiction_state: t.jurisdiction_state,
-      pdf_file_id: t.pdf_file_id,
-      is_default: t.is_default,
-      boxes: (await getTemplateBoxes(t.id)).map((b) => ({
-        page: b.page,
-        // numeric arrives from PostgREST as a STRING; left as one the size
-        // comparison is lexical and silently stops working.
-        x: Number(b.x),
-        y: Number(b.y),
-        width: Number(b.width),
-        height: Number(b.height),
-        kind: b.kind,
-        value_key: b.value_key,
-        custom_label: b.custom_label,
-      })),
-    }))
-  );
+  const lienBoxesByTemplate = await getTemplateBoxesByTemplate(lienTemplates.map((t) => t.id));
+  const lienTemplatesWithBoxes = lienTemplates.map((t) => ({
+    id: t.id,
+    name: t.name,
+    type: t.type,
+    is_final: t.is_final,
+    jurisdiction_state: t.jurisdiction_state,
+    pdf_file_id: t.pdf_file_id,
+    is_default: t.is_default,
+    boxes: (lienBoxesByTemplate.get(t.id) ?? []).map((b) => ({
+      page: b.page,
+      // numeric arrives from PostgREST as a STRING; left as one the size
+      // comparison is lexical and silently stops working.
+      x: Number(b.x),
+      y: Number(b.y),
+      width: Number(b.width),
+      height: Number(b.height),
+      kind: b.kind,
+      value_key: b.value_key,
+      custom_label: b.custom_label,
+    })),
+  }));
 
   return (
     <div>
