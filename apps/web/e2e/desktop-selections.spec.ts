@@ -249,8 +249,10 @@ test.describe('stage 4 [as reworked S173] — the sheet\'s lifecycle controls (c
     await expect(page.getByTestId('sel-lifecycle')).toContainText('Released to the client', AFTER_POST);
     await expect(page.getByTestId('sel-price-block')).toHaveCount(0, AFTER_POST);
     await expect(page.getByTestId('sel-name')).toBeDisabled(); // frozen while awaiting
-    page.once('dialog', (d) => d.accept());
+    // S175 item 9 — withdraw is now guarded by the shared confirm overlay, not a
+    // native dialog Playwright would auto-dismiss. Click through the overlay.
     await page.getByTestId('sel-withdraw').click();
+    await page.getByTestId('confirm-accept').click();
     await expect(page.getByTestId('sel-offer')).toBeVisible(AFTER_POST);
     await expect(page.getByTestId('sel-price-block')).toHaveCount(0, AFTER_POST);
   });

@@ -40,6 +40,7 @@ vi.mock('@/lib/services/contact-addresses-client', () => ({
 
 import { ContactsList } from '@/app/dashboard/contacts/contacts-list';
 import { ContactDetailSheet } from '@/app/dashboard/contacts/contact-detail-sheet';
+import { ConfirmProvider } from '@/components/confirm/confirm-provider';
 import type { Contact } from '@/lib/services/contacts';
 
 /** A contact row with every column the components read. */
@@ -61,7 +62,10 @@ function contact(overrides: Partial<Contact> = {}): Contact {
 }
 
 function markup(node: React.ReactElement): string {
-  return renderToStaticMarkup(node);
+  // S175 item 9 — ContactDetailSheet now calls useConfirm(), which throws
+  // outside a ConfirmProvider. Wrap; with no dialog pending it renders only its
+  // children, so the asserted markup is unchanged.
+  return renderToStaticMarkup(React.createElement(ConfirmProvider, null, node));
 }
 
 // ============================================================================
