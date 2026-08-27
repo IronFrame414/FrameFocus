@@ -952,3 +952,48 @@ Not run, and said so: no migration of any kind (this item needs none); nothing p
 click-test register is Josh's. **`docs/specs/desktop-redesign-inventory.md` appeared UNTRACKED in
 the working tree during this session and is NOT this item's** — its own header says it was gathered
 for a parallel spec-writing session. It has been left untracked and uncommitted.
+
+---
+
+## SPEC SESSION (post-item-6) — the portal reopen spec, then item 8's canonical-seed spec
+
+**Two spec jobs, no build.** Unattended; committed path-scoped after each; nothing pushed. Three
+inventory files from the parallel desktop-redesign work (`desktop-redesign-inventory.md`,
+`money-section-inventory.md`, `documents-section-inventory.md`) sit untracked and are **not** this
+session's — left as found.
+
+### Job 1 — `docs/specs/client-portal-reopen-spec.md` (written, committed, NOT built)
+
+Turned Josh's S175 reopen ruling into a full design spec. The ruling was captured correctly; the
+build analysis needed verification against the live schema, and one captured claim was **stale**:
+
+- ⚠️ **`client_window_open` is already THREE-argument, not two.** The two-arg version was dropped at
+  `20261018000000_m9_cancellation_window.sql:337`; the live signature is
+  `(text, date, timestamptz)` — cancellation already added a third scalar and **stayed inlinable**
+  (`LANGUAGE sql STABLE`, pure `CASE` over scalars, no table access). **That is the precedent that
+  answers the ruling's own open question:** a reopen date is a fourth scalar of the same kind, so it
+  can stay inlined — the builder must still confirm the arg is a bare column and re-run the S175
+  `EXPLAIN`.
+- **Design:** new `projects.reopened_at timestamptz` (confirmed absent), function → four-arg, the
+  reopen adds a **purely additive OR term** to the completion branch → monotonic in `reopened_at`,
+  which is the formal statement of "must not silently change any other window." `45`/`30` stay
+  written once.
+- **Five callers**, all passing the project row's scalars, verified and listed
+  (`my_client_access_level`, `is_client_of_project`, all three `get_invitation_*`) — they move
+  together, overload-first then drop, as the cancellation migration did.
+- **Coherence proven, not asserted:** every client read arm funnels through `is_client_of_project()`
+  or `my_client_access_level()` (13 policies across `20261019000000` / `20261020000000` /
+  `20261028000000`), both of which read the one function — a **single choke point**, so a reopen
+  restores every surface at once. "Can sign in but can't read invoices" cannot occur.
+- **Distinguished** portal-access reopen from the EXISTING project-status reopen
+  (`20261013000000:90`, `complete → active`) — the spec's whole point is not having to lie about
+  status to give the client another look.
+- **UI section:** control on `contacts/portal-panel.tsx` (Owner/Admin, per-project, beside R17),
+  two notifications (N1 email via a new `email_types` row; N2 persistent portal date), and flagged
+  that **no window-end-date helper exists today** — it must be built to agree with the boolean
+  (#129 divergence risk).
+- **Open questions surfaced, not guessed:** does reopen apply to CANCELLED projects (ruling says
+  "completed" only), repeat-reopen audit trail, countdown-while-open.
+
+Resend behaviour confirmed at `apps/web/app/api/invites/[id]/resend/route.ts:73-77` (resets
+`expires_at`, reuses token, Owner/Admin) — the premise of the whole gap.
