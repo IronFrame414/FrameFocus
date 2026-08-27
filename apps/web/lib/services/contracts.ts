@@ -125,6 +125,38 @@ export async function getContractTemplateBoxes(
   return (data ?? []) as ContractTemplateBox[];
 }
 
+/**
+ * Box maps for MANY templates in one query, grouped by template_id — the
+ * batched form of getContractTemplateBoxes, so the settings page (which reads a
+ * box map per template, for BOTH document_kind families) runs one `.in(...)`
+ * per family instead of one per template. Same `page`-asc order preserved
+ * within each group; a box has one template_id so nothing is duplicated; a
+ * template with no boxes is absent — callers default to []. Empty ids → empty
+ * map.
+ */
+export async function getContractTemplateBoxesByTemplate(
+  templateIds: string[]
+): Promise<Map<string, ContractTemplateBox[]>> {
+  const grouped = new Map<string, ContractTemplateBox[]>();
+  if (templateIds.length === 0) return grouped;
+
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from('contract_template_boxes')
+    .select('*')
+    .in('template_id', templateIds)
+    .eq('is_deleted', false)
+    .order('page', { ascending: true });
+
+  for (const row of (data ?? []) as ContractTemplateBox[]) {
+    const key = row.template_id as string;
+    const bucket = grouped.get(key);
+    if (bucket) bucket.push(row);
+    else grouped.set(key, [row]);
+  }
+  return grouped;
+}
+
 /** §5 — the client contract documents on an estimate. */
 export async function getContractDocumentsForEstimate(
   estimateId: string

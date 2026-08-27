@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getExpenses } from '@/lib/services/expenses';
-import { getExpenseReceipts } from '@/lib/services/expenses';
+import { getExpenseReceiptsByExpense } from '@/lib/services/expenses';
 import { getBillsAndCommitments } from '@/lib/services/payables';
 import { getProjects } from '@/lib/services/projects';
 import { getMyMember } from '@/lib/services/members';
@@ -76,14 +76,14 @@ export default async function ExpensesPage() {
   const pendingReceipts: Record<string, { id: string; name: string; url: string }[]> = {};
   if (isReviewer) {
     const pending = expenses.filter((e) => e.status === 'pending');
-    const receiptRows = await Promise.all(pending.map((e) => getExpenseReceipts(e.id)));
-    const allPaths = receiptRows.flat().map((f) => f.file_path);
+    const receiptsByExpense = await getExpenseReceiptsByExpense(pending.map((e) => e.id));
+    const allPaths = [...receiptsByExpense.values()].flat().map((f) => f.file_path);
     const { data: signed } = allPaths.length
       ? await supabase.storage.from('project-files').createSignedUrls(allPaths, SIGNED_URL_TTL_SECONDS)
       : { data: [] };
     const urlByPath = new Map((signed ?? []).map((s) => [s.path, s.signedUrl]));
-    pending.forEach((e, i) => {
-      pendingReceipts[e.id] = receiptRows[i]
+    pending.forEach((e) => {
+      pendingReceipts[e.id] = (receiptsByExpense.get(e.id) ?? [])
         .map((f) => ({
           id: f.id,
           name: f.file_name,
