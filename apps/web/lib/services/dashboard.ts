@@ -3,6 +3,8 @@ import {
   CONTRACT_CONTRIBUTING_CO_FILTER,
   getPortfolioRevisedContract,
 } from '@/lib/services/contract-value';
+import { getCompanyTimeSettings } from '@/lib/services/company';
+import { companyToday } from '@framefocus/shared/utils/dates';
 
 // ui-02 §S2/§S4 — company-wide dashboard reads. All queries run on the
 // session client, so RLS scopes rows per role (Owner/Admin see all projects;
@@ -41,7 +43,17 @@ export interface DashboardData {
 
 export async function getDashboardData(): Promise<DashboardData> {
   const supabase = await createClient();
-  const today = new Date().toISOString().slice(0, 10);
+  // `today` is compared to `projects.target_end_date`, a DATE column — a
+  // CALENDAR day, which is timezone-dependent. In UTC (`toISOString().slice`)
+  // it rolls to tomorrow ~8pm US-local, so `pastTargetCount` counted a project
+  // whose target is today as overdue a day early. Same class as S140's
+  // complianceToday() fix; the shared companyToday() is that pattern.
+  const { timezone } = await getCompanyTimeSettings();
+  const today = companyToday(timezone);
+  // `sevenDaysAgo` is compared to `change_orders.sent_at`/`signed_at`, which are
+  // timestamptz INSTANTS — a rolling 7-day absolute-time window with no calendar
+  // boundary to get wrong. Per dates.ts's ruling, instants stay `toISOString()`;
+  // converting them to a company-tz day is the sweep that reintroduces the bug.
   const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString();
 
   // Active projects — one fetch powers count, past-target, contract sum, and
