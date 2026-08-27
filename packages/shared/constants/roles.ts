@@ -29,7 +29,16 @@ export const ROLE_LABELS: Record<CompanyRole, string> = {
   client: 'Client',
 };
 
-/** Short descriptions shown in the invite form role picker */
+/**
+ * Short descriptions shown in the invite form role picker.
+ *
+ * ⚠️ KEEPS ITS `client` ENTRY, deliberately. The key set is `InvitableRole` —
+ * every role an INVITATION can carry — and a client invitation still exists; it
+ * is created from the project's Contacts tab. Only `INVITABLE_ROLES` below,
+ * which is the TEAM DROPDOWN, drops it. The form renders descriptions for the
+ * roles in that list, so an unused entry here costs nothing and removing it
+ * would make this record disagree with `invitations.role`.
+ */
 export const ROLE_DESCRIPTIONS: Record<InvitableRole, string> = {
   admin: 'Full access except billing and promoting to Admin',
   project_manager: 'Estimates, projects, finances, and team coordination',
@@ -38,13 +47,41 @@ export const ROLE_DESCRIPTIONS: Record<InvitableRole, string> = {
   client: 'Portal access to project timeline, payments, and documents',
 };
 
-/** Roles available in the invite dropdown (owner excluded) */
+/**
+ * Roles offered in the TEAM invite dropdown (`/dashboard/team/invite`).
+ * Owner excluded — an owner is only created at sign-up.
+ *
+ * ===========================================================================
+ * ⚠️ THIS IS NOT "EVERY ROLE AN INVITATION CAN CARRY" — `client` IS MISSING ON
+ * PURPOSE. [#1-s168, RULED Josh S168; built S175 item 6]
+ * ===========================================================================
+ * _Superseded, quoted rather than deleted:_ this list read
+ * `['admin', 'project_manager', 'foreman', 'crew_member', 'client']`, and
+ * `invite-form.tsx` carried a SECOND, local copy of it — with descriptions —
+ * which was the one the form actually rendered.
+ *
+ * Josh, from a click-test: *"client should be removed from team side."* A client
+ * has no seat, no dashboard and nothing on that page applies to them, and the
+ * invite the Team form offered them was a dead end.
+ *
+ * **`invitations.role` still accepts `'client'`, and the `InvitableRole` type
+ * still includes it — both correctly.** A client invitation is a real thing; it
+ * is created from the PROJECT's Contacts tab (`portal-panel.tsx` →
+ * `POST /api/portal/invite` → `inviteClientToPortal()`), which is where M9 B.4
+ * put it and where it belongs, because a portal account is created against a
+ * CONTACT and a PROJECT — neither of which the Team form knows about.
+ *
+ * ⚠️ AND `subcontractor` IS ABSENT FOR A DIFFERENT REASON, not this one: it has
+ * never been invitable here (it is not in `InvitableRole` at all). **Do not
+ * "tidy" this list into `DASHBOARD_ROLES`** — that constant also excludes
+ * `subcontractor`, and dropping subs from the Team side is a separate, unruled
+ * scope decision [Josh, S175 Q6.1]. `TECH_DEBT` #1-s168 flags exactly that trap.
+ */
 export const INVITABLE_ROLES: InvitableRole[] = [
   'admin',
   'project_manager',
   'foreman',
   'crew_member',
-  'client',
 ];
 
 /**

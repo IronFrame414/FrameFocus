@@ -26,6 +26,25 @@ async function getCallerProfile() {
   return { supabase, profile, userId: user.id };
 }
 
+/**
+ * ⚠️ [#1-s168, S175 item 6] `getTeamMember()` NOW RETURNS NULL FOR A ROLE THE
+ * TEAM SIDE DOES NOT REPRESENT, and that is why these four actions changed.
+ *
+ * The detail PAGE was never the only door. Each server action below takes a
+ * `targetId` straight off the wire and is callable without ever rendering the
+ * page — so before this, `updateTeamMemberAction` would happily rewrite a
+ * CLIENT's role and notes through the staff editor's action, and
+ * `deleteTeamMemberAction` would soft-delete their portal account. Filtering the
+ * list would not have touched any of it.
+ *
+ * Putting the rule in the service closes the page and all four actions at once,
+ * off one constant, rather than five gates somebody has to remember to add.
+ */
+function assertIsTeamMember<T>(target: T | null): T {
+  if (!target) throw new Error('That person is not on your team.');
+  return target;
+}
+
 function assertCanEdit(callerRole: string, callerProfileId: string, targetProfileId: string, targetRole: string) {
   if (callerProfileId === targetProfileId) {
     throw new Error('Cannot edit your own profile from this page');
@@ -45,7 +64,7 @@ export async function updateTeamMemberAction(
   updates: { first_name: string; last_name: string; phone: string | null; role: string; notes: string | null }
 ) {
   const { supabase, profile } = await getCallerProfile();
-  const target = await getTeamMember(supabase, targetId);
+  const target = assertIsTeamMember(await getTeamMember(supabase, targetId));
   assertCanEdit(profile.role, profile.id, target.id, target.role);
 
   if (profile.role === 'admin' && (updates.role === 'owner' || updates.role === 'admin')) {
@@ -59,7 +78,7 @@ export async function updateTeamMemberAction(
 
 export async function deleteTeamMemberAction(targetId: string) {
   const { supabase, profile } = await getCallerProfile();
-  const target = await getTeamMember(supabase, targetId);
+  const target = assertIsTeamMember(await getTeamMember(supabase, targetId));
   assertCanEdit(profile.role, profile.id, target.id, target.role);
 
   const supabaseAdmin = getSupabaseAdmin();
@@ -70,7 +89,7 @@ export async function deleteTeamMemberAction(targetId: string) {
 
 export async function resetPasswordAction(targetId: string) {
   const { supabase, profile } = await getCallerProfile();
-  const target = await getTeamMember(supabase, targetId);
+  const target = assertIsTeamMember(await getTeamMember(supabase, targetId));
   assertCanEdit(profile.role, profile.id, target.id, target.role);
 
   const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL}/reset-password`;
@@ -123,6 +142,11 @@ export async function transferOwnershipAction(
   } catch {
     return { ok: false, error: 'Target not found' };
   }
+  // A null here is the #1-s168 gate, not a missing row: ownership cannot be
+  // transferred to a role the Team side does not represent. Reported with the
+  // same sentence as an unreadable id on purpose — naming the difference would
+  // report the existence of a profile the caller may not be entitled to see.
+  if (!target) return { ok: false, error: 'Target not found' };
 
   const plain = createPlainClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

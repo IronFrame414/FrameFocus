@@ -382,6 +382,47 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   same record. **No fix, and nothing to file** — recorded only so the next reader does not
   re-investigate a link that works.
 
+### Branch-scoped, awaiting real numbers — `feature/s175-clients-off-team` [S175 item 6]
+
+> Provisional id per the S136 rule: never allocate a bare `#N` on a branch. Tag `s175i6`.
+
+- **#1-s175i6 — A PENDING CLIENT INVITATION IS VISIBLE AND CANCELLABLE IN EXACTLY ONE PLACE, AND IT
+  IS THE TEAM PAGE — the page `#1-s168` just took clients off.** Raised S175 (2026-08-27), while
+  closing `#1-s168`.
+
+  `#1-s168`'s filing lists, after its five limbs: *"Plus the pending-invitations table on the same
+  page, which lists client invites and offers Copy link / Resend / Cancel for them."* It was
+  **deliberately not changed**, and the reason is worth more than the change would have been.
+
+  **The portal panel has no pending-invitation surface at all.** `PortalAccountRow` is
+  `{contactId, contactName, email, profileId, state}`, and `profileId` is null until an invite is
+  **accepted** — so between sending and acceptance the panel shows the same "Invite to portal"
+  button and nothing else. Hiding `role = 'client'` rows from the Team page would therefore make a
+  pending client invite **invisible everywhere and impossible to cancel**.
+
+  **And one such row exists on rebuild-test right now**, which is how this was noticed:
+
+  ```
+  josh+qa1-client@worthprop.com   role=client  status=pending
+  contact_id=NULL  project_id=NULL            (created via the STAFF route, pre-fix)
+  ```
+
+  `contact_id IS NULL` means it maps to **no project**, so it would not appear in any project's
+  portal panel even if that panel grew a pending list. Legacy rows created through the Team form
+  before this session all have that shape.
+
+  **What is owed, and it is a build, not a filter:**
+  - a pending-invitation row in `portal-panel.tsx` — sent-at, expiry, Copy link, Resend, Cancel —
+    keyed on `invitations` where `role = 'client'` and `project_id = <this project>`;
+  - a decision about the orphans: legacy client invites with `project_id IS NULL` belong to no
+    project and need either a backfill or a company-level surface;
+  - **only then** filter the Team page's pending table. Doing it first strands rows.
+
+  Not urgent: the Team page listing a pending client invite is untidy, not harmful, and Copy
+  link / Resend / Cancel all still work correctly on it.
+
+---
+
 ### Branch-scoped, awaiting real numbers — `feature/s168-co-lifecycle-portal-split` [S168]
 
 > Provisional ids per the S136 rule: never allocate a bare `#N` on a branch. Tag `s168`.
@@ -390,9 +431,45 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 > cosmetic, file and report rather than building it here."* It is more than cosmetic. The scope
 > below is the establishing work, done, so the fix session starts from a map instead of a survey.
 
-- **#1-s168 — A CLIENT IS NOT A TEAM MEMBER, BUT `/dashboard/team` LISTS THEM AND OFFERS THEM THE
-  STAFF INVITE. The invite link it offers a client is a dead end.** Raised S168 (2026-08-20), from
-  Josh's click-test: *"client should be removed from team side."*
+- **#1-s168 — ✅ CLOSED [S175 item 6] — A CLIENT IS NOT A TEAM MEMBER, BUT `/dashboard/team` LISTS
+  THEM AND OFFERS THEM THE STAFF INVITE. The invite link it offers a client is a dead end.** Raised
+  S168 (2026-08-20), from Josh's click-test: *"client should be removed from team side."*
+
+  > ### ✅ CLOSED [S175 item 6] — no migration, no policy change, one constant
+  >
+  > `NON_TEAM_ROLES = ['client']` and `isTeamRole()` in `lib/services/team.ts`, read by BOTH
+  > surfaces. All five limbs, in the order this file listed them:
+  >
+  > 1. the local `INVITABLE_ROLES` duplicate is **deleted**; the form builds from the shared
+  >    `INVITABLE_ROLES` × `ROLE_LABELS` × `ROLE_DESCRIPTIONS`, giving the shared list its FIRST
+  >    consumer — it had none, which is how the two diverged unnoticed;
+  > 2. `isClientRole` and its seat-limit branch **deleted**, both sites;
+  > 3. `getTeamMembers()` filters with `.not('role','in',…)` — a deny-list, so it cannot over-reach;
+  > 4. `getTeamMember()` returns **null**, so `/dashboard/team/[id]` inherits the gate;
+  > 5. the accommodation comment is quoted and retired.
+  >
+  > **⚠️ THE FILING UNDERCOUNTED THE DOORS: IT IS FIVE, NOT ONE.** `app/dashboard/team/[id]/actions.ts`
+  > carries four server actions that take a `targetId` straight off the wire and never render the
+  > page. Before this, `updateTeamMemberAction` would rewrite a CLIENT's role and notes through the
+  > staff editor's action and `deleteTeamMemberAction` would soft-delete their portal account **and
+  > ban their auth user for 876000 hours**. None of that is touched by a list filter, and none of it
+  > was named in the five limbs. Putting the rule in the SERVICE closed the page and all four at
+  > once; TypeScript then made every call site declare how it refuses.
+  >
+  > **That is not a theory — it was measured.** Inverting the gate and re-running the harness
+  > performed exactly those writes on `josh+qa-client@`, which had to be repaired by hand. See
+  > `docs/specs/S175-log.md`.
+  >
+  > **⚠️ Q6.1 [Josh, S175]: `subcontractor` is NOT filtered**, and this file's own warning about
+  > `DASHBOARD_ROLES` — *"a scope decision, not a freebie"* — is why. Both the live harness (A3, B3)
+  > and the browser spec assert the sub is STILL on the list and STILL has a detail page, so the
+  > tidy reach fails loudly rather than silently dropping rows.
+  >
+  > **⚠️ THE PENDING-INVITATIONS TABLE IS DELIBERATELY UNCHANGED — see `#1-s175i6` in the section above.** Hiding
+  > client rows there would strand them.
+  >
+  > Proof: `s175-team-clients-off.live.ts` (17 probes) and `e2e/desktop-team.spec.ts` (2). Both were
+  > proved non-vacuous by inverting the gate and watching them go red.
 
   The portal invite Josh actually wants is already built and already lives in the right place —
   `portal-panel.tsx`, on the **project's Contacts tab** (M9 B.4). The Team page is a second,
@@ -463,8 +540,31 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   Cross-ref `docs/specs/S167-fixture-inventory.md`, which now carries this as its second worked
   example and has had its "reachable from the UI" column widened from `/dashboard` to every surface.
 
-- **#2-s168 — AN EXPIRED CLIENT INVITE POINTS AT THE ONE PAGE A CLIENT SHOULD NOT BE ON.** Raised
-  S168 (2026-08-20), from the same click-test.
+- **#2-s168 — ✅ CLOSED [S175 item 6] — AN EXPIRED CLIENT INVITE POINTS AT THE ONE PAGE A CLIENT
+  SHOULD NOT BE ON.** Raised S168 (2026-08-20), from the same click-test.
+
+  > ### ✅ CLOSED [S175 item 6] — one sentence, and the role-aware version was the WRONG fix
+  >
+  > `'This invitation has expired. Ask the company to send you a new one.'` — matching the
+  > `cancelled` sibling, which was already screen-free.
+  >
+  > **⚠️ IT DID NOT RESOLVE BY ITSELF, WHICH IS WHAT THE SESSION WAS ASKED TO CONFIRM.** Removing
+  > clients from the Team side makes the old sentence WORSE — a misleading pointer becomes a wrong
+  > one. The copy change is the resolution.
+  >
+  > **⚠️ AND THERE IS A THIRD FAULT NOBODY HAD NAMED, which is what decided the remedy.**
+  > `get_invitation_status()` (`20261017000000`) branches on role: for `role = 'client'`, "expired"
+  > means **the project's window closed**, and `expires_at` is not read at all.
+  > `/api/invites/[id]/resend` resets `expires_at`. So telling a client to ask for a resend
+  > prescribes an action that resets a clock their invitation does not read — from the Team page or
+  > from anywhere else.
+  >
+  > So the requirement filed below — *"the message also needs to know whether the expired invite was
+  > a staff invite or a client one"* — **is withdrawn rather than met.** Naming ANY screen repeats
+  > fault one; promising a resend repeats fault three. Both halves of the honest sentence are
+  > identical for both roles, so no new RPC, no widening of what an anonymous token-holder can learn
+  > from a token, and no migration. Measured live: `s175-team-clients-off` C2 pins an expired client
+  > invite whose `expires_at` is a year in the FUTURE.
 
   `app/invite/accept/accept-invite.tsx:63`:
 

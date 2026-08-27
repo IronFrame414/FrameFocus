@@ -57,10 +57,45 @@ export default function AcceptInviteContent() {
    * is wrapped by GoTrue and reaches the browser as "Database error saving new
    * user". The trigger is the backstop; this is the explanation.
    */
+  /**
+   * ⚠️ `#2-s168` [S168 → resolved S175 item 6] — THE EXPIRED SENTENCE NAMED AN
+   * INTERNAL SCREEN, AND PRESCRIBED AN ACTION THAT CANNOT WORK.
+   *
+   * _Superseded, quoted rather than rewritten:_
+   * ```
+   * 'This invitation has expired. Ask the company to resend it — they can do
+   *  that from their Team page.'
+   * ```
+   *
+   * TECH_DEBT filed two faults in that one sentence: it names an **internal**
+   * screen to an external counterparty who cannot see it or act on it, and once
+   * `#1-s168` landed it would be a **false statement** as well, because a client
+   * invite is not created or resent from the Team page — it comes from the
+   * project's Contacts tab.
+   *
+   * ⚠️ AND THERE IS A THIRD FAULT, WHICH IS THE ONE THAT DECIDES THE REMEDY.
+   * `get_invitation_status()` (`20261017000000`) branches on role: for
+   * `role = 'client'`, "expired" means **the project's window closed** — the
+   * function does not look at `expires_at` at all. A resend
+   * (`/api/invites/[id]/resend`) resets `expires_at` and reuses the token. So
+   * telling a CLIENT to ask for a resend prescribes an action that resets a
+   * clock their invitation does not read. It would not have worked from the
+   * Team page, and it does not work from the Contacts tab either.
+   *
+   * ⚠️ SO THE ROLE-AWARE MESSAGE TECH_DEBT ANTICIPATED IS THE WRONG FIX, and
+   * that is why this needed no new RPC. *"The message also needs to know whether
+   * the expired invite was a staff invite or a client one"* — it does not: both
+   * halves of the honest sentence are identical for both. Naming ANY screen
+   * repeats fault one, and naming a mechanism repeats fault three. What is true
+   * for both, and actionable by the person actually reading it, is that the
+   * company has to send them a new one.
+   *
+   * The other three cases were already screen-free and stay untouched.
+   */
   function messageFor(reason: string): string {
     switch (reason) {
       case 'expired':
-        return 'This invitation has expired. Ask the company to resend it — they can do that from their Team page.';
+        return 'This invitation has expired. Ask the company to send you a new one.';
       case 'already_used':
         return 'This invitation has already been used. If that was you, sign in instead.';
       case 'cancelled':
