@@ -907,3 +907,48 @@ Grepped `test/`, `e2e/` and the specs for `getTeamMembers`, `dashboard/team`, `I
   is about `/m/team` reading `company_members` instead, and is unaffected.
 - `desktop-dashboard-guard` navigates to `/dashboard/team` for a sub (bounces) and an owner
   (arrives). Both still hold — the guard is routing, this is a projection.
+
+## Battery — every exit code read from its own printed line, nothing judged through a pipe
+
+| check | how | result |
+| --- | --- | --- |
+| `turbo run type-check --force` | 5 tasks, all `cache bypass, force executing` | **exit 0** |
+| `turbo run lint --force` | `cache bypass`; `✔ No ESLint warnings or errors` | **exit 0** |
+| `turbo run build --force` | `Cached: 0 cached, 1 total`; `✓ Compiled successfully` | **exit 0** |
+| committed vitest (`apps/web`) | 61 files | **932 / 932**, exit 0 (unchanged from item 5 — this item's assertions need a real session, a real database and the real server actions, so they are live probes) |
+| every live harness (`test/live.vitest.config.ts`) | 100 files, 882s | **1483 / 1483**, `LIVE_EXIT=0`, zero `UNVERIFIED` warnings (item 5 was 1466 / 99 — +1 file, +17 probes, all this item's) |
+| Playwright, from `apps/web`, after `scripts/e2e-preflight.sh` | four chunks, below | every failure re-run green, and none of them this item's |
+| `supabase migration list` from the repo root | 144 migrations, local = remote through `20261037000000` | **exit 0**, zero drift — **this item adds none** |
+| fixture residue | service-role count over `S175I6` (invitations, projects, contacts, throwaway profiles) plus `S175S7`, `E2EPSEL`, `E2ESEL` | **0 rows in every one** |
+| seeded identity integrity | all six read back: role, name, `is_deleted`, and `banned_until` | **all correct, no bans** — the repair from finding 2 verified at the end as well as at the time |
+| dev server left behind | port 3000 listeners and the process list | **0** (killed by PID, never `pkill -f` — #137) |
+
+### The four chunks, as measured
+
+| chunk | result |
+| --- | --- |
+| 1 · `desktop-chat-*` ×7 | 31 passed, **2 failed** — `desktop-chat-mentions`, the FIRST test of the run, `Target page, context or browser has been closed`; and `desktop-chat-sub:95`, a seeded message not found, collateral from the same crash. Re-ran both files warm: **10 / 10, exit 0** |
+| 2 · `desktop-*` + `harness` + both `portal-*` ×12 | 78 passed, **1 failed** — `portal-pages` at **line 44, the Financials tab**, a 5s navigation timeout on the first hit to that route. That is the identical failure items 4 AND 5 recorded, in the same place, and it is nowhere near this item's diff. Re-ran warm: **3 / 3, exit 0**. **`desktop-team.spec.ts` passed IN the chunk** (tests 49 and 50) |
+| 3 · `m-*` first 8, in two halves | **53 passed** (exit 0) · **88 passed, 3 skipped, 1 failed** — `m-destinations` A-41 on `/m/contacts`, the nav sheet not opening on a first hit. Re-ran `-g "A-41"` warm: **8 / 8, exit 0** |
+| 4 · `m-*` last 9, in two halves | **120 passed** (exit 0) · **164 passed, 6 skipped, 2 failed** — `m-writes` A-68 on the subs and contacts detail views, 17 minutes in. ⚠️ **THE DEV SERVER THEN DIED**: the first re-run produced `net::ERR_ABORTED` on `/m/subs`, `oom_kill 0` in `/proc/vmstat`, port 3000 empty afterwards — item 5's chunk-3 failure, one chunk over. Restarted; A-68b went green and A-68's first case failed once more as a cold compile of `/m/subs/[subId]`, then passed warm: **exit 0** |
+
+**Stated rather than smoothed over:** chunks 3 and 4 were run as halves on restarted servers, as in item 5, and neither was re-run as a single green chunk. The nine skips are the pre-existing data-conditional `test.skip`s in `m-destinations`, `m-sections` and `m-writes`.
+
+**And the reason none of it is this item's, stated as a fact rather than a hope.** The whole diff is
+ten files: `TECH_DEBT.md`, `S175-log.md`, four files under `app/dashboard/team/`, `accept-invite.tsx`,
+`lib/services/team.ts`, `packages/shared/constants/roles.ts`, and two test files. **`git diff --stat
+main..HEAD -- apps/web/app/m` is EMPTY**, and every mention of `getTeamMember`/`getTeamMembers` under
+`app/m/` is a COMMENT warning not to use them — those screens bind to `getMember()`/`getMembers()`
+on `company_members`, which this item does not touch. Checked, not assumed.
+
+### ⚠️ THE NOTIFICATION LIED ABOUT FOUR OF THE PLAYWRIGHT CHUNKS
+
+Chunks 1, 2, 3b and 4b all printed `CHUNK…_EXIT=1` and were all reported by the background task as
+**exit code 0**. That is the wrapper's status against the compound command's, exactly as CLAUDE.md
+§"Reading the exit status" says it will be — **only the printed line is true**. Fourth consecutive
+item where that rule earned its place.
+
+Not run, and said so: no migration of any kind (this item needs none); nothing pushed; the
+click-test register is Josh's. **`docs/specs/desktop-redesign-inventory.md` appeared UNTRACKED in
+the working tree during this session and is NOT this item's** — its own header says it was gathered
+for a parallel spec-writing session. It has been left untracked and uncommitted.
