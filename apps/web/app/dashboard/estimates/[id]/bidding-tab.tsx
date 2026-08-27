@@ -16,6 +16,7 @@ import {
   uploadEstimateBidDocument,
 } from '@/lib/services/files-client';
 import { fmtMoney } from '../labels';
+import { useConfirm } from '@/components/confirm/confirm-provider';
 import type { TabProps } from './estimate-builder';
 
 // 4D-rev Bidding tab — grouped by line item that carries a
@@ -35,6 +36,7 @@ export function BiddingTab({ data, canEdit, reload }: TabProps) {
   const [subs, setSubs] = useState<SubcontractorOption[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [addingFor, setAddingFor] = useState<string | null>(null);
+  const confirm = useConfirm();
 
   useEffect(() => {
     listSubcontractorOptions().then(setSubs);
@@ -61,7 +63,7 @@ export function BiddingTab({ data, canEdit, reload }: TabProps) {
   }
 
   async function handleDeleteBid(subBidId: string) {
-    if (!window.confirm('Remove this sub bid?')) return;
+    if (!(await confirm('Remove this sub bid?'))) return;
     setError(null);
     const result = await softDeleteEstimateSubBid(subBidId);
     if (!result.success) {

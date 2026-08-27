@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useAssigneePicker } from '@/lib/assignee-picker';
 import { useRouter } from 'next/navigation';
+import { useConfirm } from '@/components/confirm/confirm-provider';
 import Link from 'next/link';
 import type { PunchItem, PunchList } from '@/lib/services/punch-client';
 import {
@@ -74,6 +75,7 @@ export function PunchPanel({
   role,
 }: PunchPanelProps) {
   const router = useRouter();
+  const confirm = useConfirm();
   const canForeman = FOREMAN_PLUS.includes(role);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -243,8 +245,8 @@ export function PunchPanel({
                 </button>
                 {canForeman && (
                   <button
-                    onClick={() => {
-                      if (!confirm(`Delete punch list "${list.name}"?`)) return;
+                    onClick={async () => {
+                      if (!(await confirm(`Delete punch list "${list.name}"?`))) return;
                       void run(() => deletePunchList(list.id, role));
                     }}
                     style={smallButton('#991b1b', '#fecaca')}
@@ -449,8 +451,8 @@ export function PunchPanel({
                     )}
                     {canForeman && (
                       <button
-                        onClick={() => {
-                          if (!confirm(`Delete item "${item.title}"?`)) return;
+                        onClick={async () => {
+                          if (!(await confirm(`Delete item "${item.title}"?`))) return;
                           void run(() => deletePunchItem(item.id, role));
                         }}
                         style={smallButton('#6b7280', '#d1d5db')}

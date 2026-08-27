@@ -19,6 +19,7 @@ import {
   type ReleaseType,
 } from '@/lib/services/lien-releases-shared';
 import { BoxMapEditor, type EditorBox } from '@/components/box-map/box-map-editor';
+import { useConfirm } from '@/components/confirm/confirm-provider';
 import {
   cardStyle,
   color,
@@ -80,6 +81,7 @@ export function LienReleaseSettingsForm({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [placing, setPlacing] = useState<TemplateRow | null>(null);
+  const confirm = useConfirm();
 
   const [name, setName] = useState(signatoryName ?? '');
   const [title, setTitle] = useState(signatoryTitle ?? '');
@@ -130,7 +132,7 @@ export function LienReleaseSettingsForm({
   }
 
   async function remove(template: TemplateRow) {
-    if (!confirm(`Remove "${template.name}"? Releases already issued from it are kept.`)) return;
+    if (!(await confirm(`Remove "${template.name}"? Releases already issued from it are kept.`))) return;
     setBusy(true);
     const result = await softDeleteTemplate(template.id);
     setBusy(false);

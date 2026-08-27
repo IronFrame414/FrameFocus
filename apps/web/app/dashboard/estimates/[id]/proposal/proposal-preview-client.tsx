@@ -11,6 +11,7 @@ import {
   updateEstimate,
 } from '@/lib/services/estimates-client';
 import { SendProposalModal } from '../../send-proposal-modal';
+import { useConfirm } from '@/components/confirm/confirm-provider';
 
 // Spec 2 (4E E4/E5) — full-page preview. The pricing-level toggle
 // persists to estimates.proposal_pricing_level and re-renders the
@@ -40,6 +41,7 @@ export function ProposalPreviewClient({
   defaultBody,
 }: ProposalPreviewClientProps) {
   const router = useRouter();
+  const confirm = useConfirm();
   const [data, setData] = useState(initialData);
   const [sendOpen, setSendOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -87,9 +89,9 @@ export function ProposalPreviewClient({
 
   async function handleMarkAsSent() {
     if (
-      !window.confirm(
+      !(await confirm(
         'Mark this estimate as sent without emailing it? Use this when you deliver the PDF yourself. The estimate will be frozen.'
-      )
+      ))
     ) {
       return;
     }

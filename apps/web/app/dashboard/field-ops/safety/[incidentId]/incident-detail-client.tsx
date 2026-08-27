@@ -10,6 +10,7 @@ import {
   softDeleteIncident,
 } from '@/lib/services/safety-client';
 import { getFileSignedUrl } from '@/lib/services/daily-logs-client';
+import { useConfirm, useAlert } from '@/components/confirm/confirm-provider';
 
 // 6C detail — client pieces: Owner/Admin resolution card (status/outcome,
 // §2 [S87]), the Owner/Admin retry banner for failed notifications (§4 /
@@ -191,10 +192,12 @@ export function IncidentPdfButton({
 
 export function DeleteIncidentButton({ incidentId }: { incidentId: string }) {
   const router = useRouter();
+  const confirm = useConfirm();
+  const alert = useAlert();
   const [busy, setBusy] = useState(false);
 
   async function handleDelete() {
-    if (!window.confirm('Move this incident to the trash? An incident is a record — be sure.'))
+    if (!(await confirm('Move this incident to the trash? An incident is a record — be sure.')))
       return;
     setBusy(true);
     const result = await softDeleteIncident(incidentId);
@@ -203,7 +206,7 @@ export function DeleteIncidentButton({ incidentId }: { incidentId: string }) {
       router.push('/dashboard/field-ops/safety');
       router.refresh();
     } else {
-      window.alert(result.error ?? 'Delete failed');
+      void alert(result.error ?? 'Delete failed');
     }
   }
 

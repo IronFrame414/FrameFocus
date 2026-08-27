@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import type { Subcontractor } from '@/lib/services/subcontractors';
 import { deleteSubcontractor } from '@/lib/services/subcontractors-client';
 import { color, font, microLabelStyle } from '@/lib/theme';
+import { useConfirm } from '@/components/confirm/confirm-provider';
 
 // ===========================================================================
 // SUBS MATCH CONTACTS. [S159 · RULED Josh — "subs should match contacts with a
@@ -125,6 +126,7 @@ export function SubcontractorDetailSheet({
   onClose,
 }: SubcontractorDetailSheetProps) {
   const router = useRouter();
+  const confirm = useConfirm();
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -163,10 +165,10 @@ export function SubcontractorDetailSheet({
 
   async function handleDelete() {
     if (
-      !confirm(
+      !(await confirm(
         `Delete ${subcontractor.company_name}?\n\nThe record moves to Trash and can be restored ` +
           `from there. Contracts, purchase orders and payments that reference it are not affected.`
-      )
+      ))
     ) {
       return;
     }

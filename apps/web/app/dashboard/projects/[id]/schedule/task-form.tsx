@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useConfirm } from '@/components/confirm/confirm-provider';
 import type { Phase, Task, TaskPriority, TaskStatus } from '@/lib/services/tasks-client';
 import { createTask, updateTask, deleteTask, createDependency } from '@/lib/services/tasks-client';
 import { findOverlaps } from '@/lib/services/schedule-client';
@@ -40,6 +41,7 @@ export function TaskForm({
   onDone,
   onCancel,
 }: TaskFormProps) {
+  const confirm = useConfirm();
   const [title, setTitle] = useState(editing?.title ?? '');
   const [description, setDescription] = useState(editing?.description ?? '');
   const [phaseId, setPhaseId] = useState(editing?.phase_id ?? '');
@@ -112,7 +114,7 @@ export function TaskForm({
 
   async function handleDelete() {
     if (!editing) return;
-    if (!confirm(`Delete task "${editing.title}"?`)) return;
+    if (!(await confirm(`Delete task "${editing.title}"?`))) return;
     setBusy(true);
     const result = await deleteTask(editing.id);
     if (result.success) onDone();

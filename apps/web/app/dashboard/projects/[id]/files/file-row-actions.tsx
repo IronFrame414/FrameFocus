@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useConfirm, useAlert } from '@/components/confirm/confirm-provider';
 import { softDeleteFile } from '@/lib/services/files-client';
 
 export default function FileRowActions({
@@ -18,6 +19,8 @@ export default function FileRowActions({
   projectId: string;
 }) {
   const router = useRouter();
+  const confirm = useConfirm();
+  const alert = useAlert();
   const [busy, setBusy] = useState(false);
   const isImage = mimeType?.startsWith('image/') ?? false;
 
@@ -33,7 +36,7 @@ export default function FileRowActions({
     const url = await getSignedUrl();
     setBusy(false);
     if (!url) {
-      alert('Could not generate download link.');
+      void alert('Could not generate download link.');
       return;
     }
     // Append ?download=<filename> to force browser to download with original name.
@@ -42,12 +45,12 @@ export default function FileRowActions({
   }
 
   async function handleDelete() {
-    if (!confirm('Move this file to trash?')) return;
+    if (!(await confirm('Move this file to trash?'))) return;
     setBusy(true);
     const result = await softDeleteFile(fileId);
     setBusy(false);
     if (!result.success) {
-      alert(`Delete failed: ${result.error}`);
+      void alert(`Delete failed: ${result.error}`);
       return;
     }
     router.refresh();

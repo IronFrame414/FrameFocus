@@ -11,6 +11,7 @@ import { getFileSignedUrlClient } from '@/lib/services/files-client';
 import type { ComplianceDocWithStatus } from '@/lib/services/payables';
 import type { ComplianceDocType, ComplianceStatus } from '@/lib/services/payables-shared';
 import { cardStyle, color, font, microLabelStyle, primaryButtonStyle, secondaryButtonStyle } from '@/lib/theme';
+import { useConfirm } from '@/components/confirm/confirm-provider';
 
 // 7C §4 screen 6 — compliance documents on the sub record.
 //
@@ -47,6 +48,7 @@ export function ComplianceSection({
   initialDocs: ComplianceDocWithStatus[];
 }) {
   const router = useRouter();
+  const confirm = useConfirm();
   const [pending, startTransition] = useTransition();
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +62,7 @@ export function ComplianceSection({
   }
 
   async function remove(id: string) {
-    if (!confirm('Remove this document from the sub record?')) return;
+    if (!(await confirm('Remove this document from the sub record?'))) return;
     setBusy(true);
     const result = await softDeleteComplianceDocument(id);
     setBusy(false);

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { checkInDelivery } from '@/lib/services/deliveries-client';
 import { uploadFile } from '@/lib/services/files-client';
+import { useAlert } from '@/components/confirm/confirm-provider';
 
 // 6D — check-in form: the crew's two-slips comparison, on desktop. Against a
 // PO the lines prefill from the order with received at 0 — the crew counts
@@ -88,6 +89,7 @@ const EMPTY_ROW: ItemRow = {
 
 export function CheckInForm({ projectId, todayYmd, preselectedPoId, openPos }: CheckInFormProps) {
   const router = useRouter();
+  const alert = useAlert();
   const initialPo = openPos.find((p) => p.id === preselectedPoId) ?? null;
 
   const [poId, setPoId] = useState<string>(initialPo?.id ?? '');
@@ -208,7 +210,7 @@ export function CheckInForm({ projectId, todayYmd, preselectedPoId, openPos }: C
       return;
     }
     if (result.emailErrors && result.emailErrors.length > 0) {
-      window.alert(
+      void alert(
         `Delivery recorded, but the notification email had problems:\n${result.emailErrors.join('\n')}`
       );
     }

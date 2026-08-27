@@ -4,12 +4,15 @@ import { useCallback, useEffect, useState } from 'react';
 import type { CatalogCategory, CostCatalogItem } from '@/lib/services/cost-catalog-client';
 import { listCatalog, softDeleteCatalogItem } from '@/lib/services/cost-catalog-client';
 import { CATEGORY_LABELS, UNIT_LABELS } from './catalog-labels';
+import { useConfirm, useAlert } from '@/components/confirm/confirm-provider';
 
 interface CatalogListProps {
   canManage: boolean;
 }
 
 export function CatalogList({ canManage }: CatalogListProps) {
+  const confirm = useConfirm();
+  const alert = useAlert();
   const [items, setItems] = useState<CostCatalogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -39,13 +42,13 @@ export function CatalogList({ canManage }: CatalogListProps) {
   );
 
   async function handleDelete(id: string, name: string) {
-    if (!confirm(`Are you sure you want to delete "${name}" from the catalog?`)) return;
+    if (!(await confirm(`Are you sure you want to delete "${name}" from the catalog?`))) return;
     setDeleting(id);
     const result = await softDeleteCatalogItem(id);
     if (result.success) {
       await load();
     } else {
-      alert(result.error || 'Failed to delete catalog item');
+      void alert(result.error || 'Failed to delete catalog item');
     }
     setDeleting(null);
   }

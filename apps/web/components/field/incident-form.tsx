@@ -17,6 +17,7 @@ import {
   type InjuryRowInput,
   type PersonRowInput,
 } from '@/lib/services/safety-client';
+import { useAlert } from '@/components/confirm/confirm-provider';
 
 // 6C §U — incident create/edit form (path A — no handoff design; mobile
 // foundation). Injured parties and witnesses are member-OR-outsider rows
@@ -185,6 +186,7 @@ export function IncidentForm({
   initialWitnesses,
 }: IncidentFormProps) {
   const router = useRouter();
+  const alert = useAlert();
 
   const [projectId, setProjectId] = useState<string>(
     fixedProjectId ?? initialFields.project_id ?? NO_PROJECT
@@ -302,7 +304,7 @@ export function IncidentForm({
         }
       }
       if (failed.length > 0) {
-        window.alert(
+        void alert(
           `The incident saved, but ${failed.length} photo(s) did not attach:\n${failed.join('\n')}`
         );
       }
@@ -311,7 +313,7 @@ export function IncidentForm({
         await generateIncidentPdf(targetId);
       }
       if (createEmailErrors && createEmailErrors.length > 0) {
-        window.alert(
+        void alert(
           `Incident recorded, but some notifications failed (retry is available to Owner/Admin on the incident page):\n${createEmailErrors.join('\n')}`
         );
       }

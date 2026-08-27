@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useConfirm, useAlert } from '@/components/confirm/confirm-provider';
 import type { FileRecord } from '@/lib/services/files';
 import { restoreFile, permanentDeleteFile } from '@/lib/services/files-client';
 
@@ -13,6 +14,8 @@ export default function TrashRow({
   canPermanentDelete: boolean;
 }) {
   const router = useRouter();
+  const confirm = useConfirm();
+  const alert = useAlert();
   const [busy, setBusy] = useState(false);
 
   async function handleRestore() {
@@ -20,7 +23,7 @@ export default function TrashRow({
     const result = await restoreFile(file.id);
     setBusy(false);
     if (!result.success) {
-      alert(`Restore failed: ${result.error}`);
+      void alert(`Restore failed: ${result.error}`);
       return;
     }
     router.refresh();
@@ -28,9 +31,9 @@ export default function TrashRow({
 
   async function handlePermanentDelete() {
     if (
-      !confirm(
+      !(await confirm(
         `Permanently delete "${file.file_name}"? This cannot be undone and will remove the file from storage.`
-      )
+      ))
     ) {
       return;
     }
@@ -38,7 +41,7 @@ export default function TrashRow({
     const result = await permanentDeleteFile(file.id);
     setBusy(false);
     if (!result.success) {
-      alert(`Permanent delete failed: ${result.error}`);
+      void alert(`Permanent delete failed: ${result.error}`);
       return;
     }
     router.refresh();

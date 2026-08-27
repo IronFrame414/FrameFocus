@@ -6,6 +6,7 @@ import { closePurchaseOrder, softDeletePurchaseOrder } from '@/lib/services/deli
 import { setPoTotal } from '@/lib/services/payables-client';
 import { getOrCreateMiscBudgetLine } from '@/lib/services/expenses-client';
 import { BudgetLineSelect, MISC_SENTINEL } from '@/components/expenses/budget-line-select';
+import { useConfirm, useAlert } from '@/components/confirm/confirm-provider';
 
 // 6D §5.1 — manual close (Owner/Admin; closed_reason required) and
 // Owner/Admin soft-delete. Reopen is deliberately NOT offered (TECH_DEBT #93
@@ -232,10 +233,12 @@ export function ClosePoButton({ poId }: { poId: string }) {
 
 export function DeletePoButton({ poId, projectId }: { poId: string; projectId: string }) {
   const router = useRouter();
+  const confirm = useConfirm();
+  const alert = useAlert();
   const [busy, setBusy] = useState(false);
 
   async function handleDelete() {
-    if (!window.confirm('Move this purchase order to the trash?')) return;
+    if (!(await confirm('Move this purchase order to the trash?'))) return;
     setBusy(true);
     const result = await softDeletePurchaseOrder(poId);
     setBusy(false);
@@ -243,7 +246,7 @@ export function DeletePoButton({ poId, projectId }: { poId: string; projectId: s
       router.push(`/dashboard/field-ops/${projectId}/deliveries`);
       router.refresh();
     } else {
-      window.alert(result.error ?? 'Delete failed');
+      void alert(result.error ?? 'Delete failed');
     }
   }
 

@@ -27,6 +27,7 @@ import {
 } from '@/lib/services/instrument-rates-client';
 import { InlineNumber } from '../inline-edit';
 import { fmtMoney, fmtPercent } from '../labels';
+import { useConfirm } from '@/components/confirm/confirm-provider';
 
 interface ContractSectionProps {
   estimate: Estimate;
@@ -65,6 +66,7 @@ export function ContractSection({ estimate, canEditSettings, reload }: ContractS
   const contractType = estimate.contract_type;
   const [rates, setRates] = useState<InstrumentRate[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const confirm = useConfirm();
 
   const refetchRates = useCallback(async () => {
     if (contractType === 'fixed_price') return;
@@ -91,7 +93,7 @@ export function ContractSection({ estimate, canEditSettings, reload }: ContractS
 
   async function handleTypeChange(next: ContractType) {
     if (next === contractType) return;
-    const ok = window.confirm(
+    const ok = await confirm(
       `Switch this estimate to ${CONTRACT_TYPE_LABELS[next]}? Sell derivation follows the contract type — totals recalculate. No mixing within one instrument.`
     );
     if (!ok) return;

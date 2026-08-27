@@ -11,6 +11,7 @@ import {
   primaryButtonStyle,
   secondaryButtonStyle,
 } from '@/lib/theme';
+import { useConfirm } from '@/components/confirm/confirm-provider';
 
 // THE box-placement editor. ONE component, shared by 7F (lien releases) and
 // 7I (contracts) — #1-7i, extracted at S150 [R7].
@@ -151,6 +152,7 @@ export function BoxMapEditor({
   onSaved: () => void;
   footnote?: string;
 }) {
+  const confirm = useConfirm();
   const [boxes, setBoxes] = useState<EditorBox[]>(initialBoxes);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -373,7 +375,7 @@ export function BoxMapEditor({
       const names = tooSmall
         .map(({ box }) => catalog.find((v) => v.key === box.value_key)?.label ?? box.value_key)
         .join(', ');
-      const proceed = confirm(
+      const proceed = await confirm(
         `These boxes look too small for what they will hold: ${names}.\n\n` +
           `Nothing will be shrunk or cut short to fit. This check errs on the ` +
           `cautious side, so a box flagged here may still be fine — but a value ` +

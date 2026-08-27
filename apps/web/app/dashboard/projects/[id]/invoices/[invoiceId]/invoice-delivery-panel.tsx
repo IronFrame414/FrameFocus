@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useConfirm } from '@/components/confirm/confirm-provider';
 import {
   DELIVERY_LABEL,
   isDeliveryFailure,
@@ -71,6 +72,7 @@ export function InvoiceDeliveryPanel({
   lienReleasePrompt?: { projectId: string } | null;
 }) {
   const router = useRouter();
+  const confirm = useConfirm();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ text: string; bad: boolean } | null>(null);
 
@@ -82,9 +84,9 @@ export function InvoiceDeliveryPanel({
     // changes nothing and needs no confirm.
     if (
       willIssue &&
-      !window.confirm(
+      !(await confirm(
         'Send this invoice to the client? It will be numbered and emailed, and a sent invoice is immutable — corrections go through void and reissue.'
-      )
+      ))
     ) {
       return;
     }
