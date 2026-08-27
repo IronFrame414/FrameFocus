@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useConfirm } from '@/components/confirm/confirm-provider';
 import type { RedactedCo } from '@/lib/co-redaction';
 import {
   createChangeOrder,
@@ -80,6 +81,7 @@ export function ChangesPanel({
   canSeeSums,
 }: ChangesPanelProps) {
   const router = useRouter();
+  const confirm = useConfirm();
   const [formOpen, setFormOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [coType, setCoType] = useState<ChangeOrderType>(
@@ -121,7 +123,7 @@ export function ChangesPanel({
   }
 
   async function handleDelete(co: RedactedCo<ChangeOrderWithAuthor>) {
-    if (!window.confirm(`Move ${co.co_number} to trash?`)) return;
+    if (!(await confirm(`Move ${co.co_number} to trash?`))) return;
     const result = await softDeleteChangeOrder(co.id);
     if (!result.success) {
       setError(result.error ?? 'Delete failed');

@@ -15,6 +15,7 @@ import {
   taxRateSchema,
 } from '@framefocus/shared/validation/company-settings';
 import { termsSectionSchema } from '@framefocus/shared/validation/estimate';
+import { useConfirm } from '@/components/confirm/confirm-provider';
 
 interface EstimatingSettingsFormProps {
   settings: EstimatingSettings;
@@ -38,6 +39,7 @@ type FieldKey =
 const SAVE_DEBOUNCE_MS = 1000;
 
 export function EstimatingSettingsForm({ settings }: EstimatingSettingsFormProps) {
+  const confirm = useConfirm();
   const [prefix, setPrefix] = useState(settings.estimate_number_prefix || 'EST');
   const [pricingMode, setPricingMode] = useState<PricingMode>(settings.default_pricing_mode);
   const [percents, setPercents] = useState<Record<string, string>>({
@@ -199,9 +201,9 @@ export function EstimatingSettingsForm({ settings }: EstimatingSettingsFormProps
     saveTerms(next);
   }
 
-  function removeSection(index: number) {
+  async function removeSection(index: number) {
     const name = terms[index].name || 'this section';
-    if (!window.confirm(`Remove "${name}" from the default terms?`)) return;
+    if (!(await confirm(`Remove "${name}" from the default terms?`))) return;
     saveTerms(terms.filter((_, i) => i !== index));
   }
 

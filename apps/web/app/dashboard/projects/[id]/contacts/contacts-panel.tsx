@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useConfirm } from '@/components/confirm/confirm-provider';
 import { CONTACT_TYPES, CONTACT_TYPE_LABELS } from '@framefocus/shared/constants';
 import type { ContactType } from '@framefocus/shared/constants';
 import type { ProjectContact } from '@/lib/services/project-contacts-client';
@@ -28,6 +29,7 @@ export function ContactsPanel({
   canManage,
 }: ContactsPanelProps) {
   const router = useRouter();
+  const confirm = useConfirm();
   const [mode, setMode] = useState<'existing' | 'new'>('existing');
   const [contactId, setContactId] = useState('');
   const [role, setRole] = useState('');
@@ -93,7 +95,7 @@ export function ContactsPanel({
   }
 
   async function handleDetach(pcId: string, name: string) {
-    if (!confirm(`Remove ${name} from this project?`)) return;
+    if (!(await confirm(`Remove ${name} from this project?`))) return;
     setBusy(true);
     const result = await detachContact(pcId);
     if (result.success) {

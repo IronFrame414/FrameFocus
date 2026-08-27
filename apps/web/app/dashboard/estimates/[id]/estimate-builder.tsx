@@ -30,6 +30,7 @@ import { ConvertToProject } from './convert-to-project';
 import { ItemsTab } from './items-tab';
 import { BiddingTab } from './bidding-tab';
 import { CoverTab, FilesTab, NotesTab, ScopeTab, TermsTab } from './text-tabs';
+import { useConfirm } from '@/components/confirm/confirm-provider';
 
 export type BuilderRole = 'owner' | 'admin' | 'project_manager';
 
@@ -70,6 +71,7 @@ interface EstimateBuilderProps {
 
 export function EstimateBuilder({ estimateId, role, userId }: EstimateBuilderProps) {
   const router = useRouter();
+  const confirm = useConfirm();
   const [data, setData] = useState<EstimateWithChildren | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabKey>('details');
@@ -189,9 +191,9 @@ export function EstimateBuilder({ estimateId, role, userId }: EstimateBuilderPro
             disabled={actionBusy}
             style={secondaryStyle}
             title="Freeze the estimate without emailing it — use when you deliver the PDF yourself."
-            onClick={() => {
+            onClick={async () => {
               if (
-                window.confirm(
+                await confirm(
                   'Mark this estimate as sent WITHOUT emailing it? Use this when you deliver the PDF yourself. It will be frozen — no further edits without a new version.'
                 )
               ) {
@@ -234,9 +236,9 @@ export function EstimateBuilder({ estimateId, role, userId }: EstimateBuilderPro
             disabled={actionBusy}
             style={secondaryStyle}
             title="Approve and freeze without emailing — use when you deliver the PDF yourself."
-            onClick={() => {
+            onClick={async () => {
               if (
-                window.confirm(
+                await confirm(
                   'Approve this estimate and mark it sent WITHOUT emailing it? It will be frozen after this.'
                 )
               ) {
@@ -254,9 +256,9 @@ export function EstimateBuilder({ estimateId, role, userId }: EstimateBuilderPro
 
   async function handleDelete() {
     if (
-      !window.confirm(
+      !(await confirm(
         `Delete estimate ${estimate.estimate_number} — "${estimate.name}"? It moves to trash.`
-      )
+      ))
     ) {
       return;
     }

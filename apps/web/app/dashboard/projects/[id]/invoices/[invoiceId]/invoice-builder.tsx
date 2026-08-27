@@ -10,6 +10,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useConfirm } from '@/components/confirm/confirm-provider';
 import {
   addAllowanceCredit,
   addDiscountLine,
@@ -1859,6 +1860,7 @@ function LifecycleActions({
   voidState: { hasPayment: boolean; syncedToQuickBooks: boolean };
 }) {
   const router = useRouter();
+  const confirm = useConfirm();
   const [voidOpen, setVoidOpen] = useState(false);
   const [reason, setReason] = useState('');
 
@@ -1904,8 +1906,8 @@ function LifecycleActions({
           type="button"
           disabled={busy || invoice.lines.length === 0}
           style={primaryButtonStyle}
-          onClick={() => {
-            if (!window.confirm('Issue this invoice WITHOUT emailing it? It will be numbered and frozen — corrections go through void and reissue. Use "Send to client" if you want it emailed.')) return;
+          onClick={async () => {
+            if (!(await confirm('Issue this invoice WITHOUT emailing it? It will be numbered and frozen — corrections go through void and reissue. Use "Send to client" if you want it emailed.'))) return;
             run(() => markInvoiceSent(invoice.id, timeZone), 'Invoice issued. Nothing was emailed — print or download it to deliver.');
           }}
         >

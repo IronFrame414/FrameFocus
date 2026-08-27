@@ -1,8 +1,10 @@
 'use client';
 
 import { useState } from 'react';
+import { useAlert } from '@/components/confirm/confirm-provider';
 
 export function ManageSubscriptionButton() {
+  const alert = useAlert();
   const [loading, setLoading] = useState(false);
 
   async function handleClick() {
@@ -16,14 +18,14 @@ export function ManageSubscriptionButton() {
       const data = await res.json();
 
       if (!res.ok) {
-        alert(data.error || 'Something went wrong');
+        void alert(data.error || 'Something went wrong');
         setLoading(false);
         return;
       }
 
       window.location.href = data.url;
     } catch (err) {
-      alert('Failed to open billing portal. Please try again.');
+      void alert('Failed to open billing portal. Please try again.');
       setLoading(false);
     }
   }

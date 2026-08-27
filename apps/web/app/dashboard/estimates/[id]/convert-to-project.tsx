@@ -9,6 +9,7 @@ import {
   setLineOverrideCost,
 } from '@/lib/services/estimate-items-client';
 import { fmtMoney } from '../labels';
+import { useConfirm } from '@/components/confirm/confirm-provider';
 
 type PreflightLine = { id: string; name: string; total_price_override: number | null };
 
@@ -41,6 +42,7 @@ export function ConvertToProject({
   const [preflight, setPreflight] = useState<PreflightLine[] | null>(null);
   const [costs, setCosts] = useState<Record<string, string>>({});
   const [preflightError, setPreflightError] = useState<string | null>(null);
+  const confirm = useConfirm();
 
   if (projectId || status === 'converted') {
     if (variant === 'banner') {
@@ -95,9 +97,9 @@ export function ConvertToProject({
     }
 
     if (
-      !window.confirm(
+      !(await confirm(
         `Convert ${estimateNumber} to a project? All estimate data carries over and the estimate is marked converted.`
-      )
+      ))
     ) {
       setBusy(false);
       return;

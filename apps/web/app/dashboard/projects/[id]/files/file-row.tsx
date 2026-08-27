@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useAlert } from '@/components/confirm/confirm-provider';
 import type { FileRecord } from '@/lib/services/files';
 import FavoriteToggle from './favorite-toggle';
 import FileRowActions from './file-row-actions';
@@ -8,6 +9,7 @@ import AiTagEditor from './ai-tag-editor';
 import type { TagOption } from '@/lib/services/tag-options';
 
 export default function FileRow({ file, projectId, activeTags }: { file: FileRecord; projectId: string; activeTags: TagOption[] }) {
+  const alert = useAlert();
   const [hover, setHover] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -17,7 +19,7 @@ export default function FileRow({ file, projectId, activeTags }: { file: FileRec
     const res = await fetch(`/api/files/signed-url?path=${encodeURIComponent(file.file_path)}`);
     setBusy(false);
     if (!res.ok) {
-      alert('Could not open file.');
+      void alert('Could not open file.');
       return;
     }
     const { url } = await res.json();

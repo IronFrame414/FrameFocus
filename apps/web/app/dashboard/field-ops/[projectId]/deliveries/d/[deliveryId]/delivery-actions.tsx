@@ -6,6 +6,7 @@ import { generateDeliveryPdf, softDeleteDelivery } from '@/lib/services/deliveri
 // Shared signed-URL helper (6C precedent: incident-detail-client imports it
 // from daily-logs-client too).
 import { getFileSignedUrl } from '@/lib/services/daily-logs-client';
+import { useConfirm, useAlert } from '@/components/confirm/confirm-provider';
 
 export function DownloadDeliveryPdfButton({
   deliveryId,
@@ -67,10 +68,12 @@ export function DeleteDeliveryButton({
   projectId: string;
 }) {
   const router = useRouter();
+  const confirm = useConfirm();
+  const alert = useAlert();
   const [busy, setBusy] = useState(false);
 
   async function handleDelete() {
-    if (!window.confirm('Move this delivery to the trash? PO usable totals will recompute.'))
+    if (!(await confirm('Move this delivery to the trash? PO usable totals will recompute.')))
       return;
     setBusy(true);
     const result = await softDeleteDelivery(deliveryId);
@@ -79,7 +82,7 @@ export function DeleteDeliveryButton({
       router.push(`/dashboard/field-ops/${projectId}/deliveries`);
       router.refresh();
     } else {
-      window.alert(result.error ?? 'Delete failed');
+      void alert(result.error ?? 'Delete failed');
     }
   }
 

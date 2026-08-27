@@ -1033,3 +1033,88 @@ suite is exactly as green as found.**
 
 Six read-only fan-out agents (5 live batches + 1 e2e) produced the inventory; every risk flag carries
 a file:line in the appendices.
+
+---
+
+## ITEM 9 — the native dialog sweep (built, alone, with its own battery)
+
+Branch `feature/s175-dialog-sweep` off `main @ 1718c24`. The item that runs last and alone, so the
+e2e result reads as new information rather than a regression check.
+
+### Counts verified before starting — and the brief was WRONG on `prompt()`
+
+| brief said | measured | note |
+| --- | --- | --- |
+| 56 `confirm()` / 38 files | **54 call sites / 38 files** | minor drift; every site handled |
+| 20 `alert()` | **20** ✓ | |
+| 2 `prompt()` | **5** ⚠️ | the brief named two; there are five value-collectors — filed as `#1-dialogsweep`, all left untouched |
+| 0 under `app/m` | **0** ✓ | so the provider mounts in the dashboard layout and covers everything |
+
+The two stray components with call sites outside a page (`components/field/incident-form.tsx`,
+`components/box-map/box-map-editor.tsx`) are **dashboard-only** (verified — the `/m` safety page has
+its own local incident-form), so one provider in `app/dashboard/layout.tsx` reaches all 74 sites.
+
+### What was built (four commits, path-scoped)
+
+1. **The mechanism** — `components/confirm/confirm-provider.tsx`: one promise-hook overlay,
+   `useConfirm()`/`useAlert()`, styled from `lib/theme` in the shape of `app/m`'s panels, mounted in
+   the dashboard layout. testids `confirm-dialog/-accept/-cancel`, `alert-dialog/-ok`.
+2. **The sweep** — 54 `confirm` → `await confirm(...)`, 20 `alert` → `void alert(...)`, across 45
+   files (5 parallel agents, one rule set; inline sync JSX handlers rewritten to async arrows). No
+   message text changed.
+3. **Test adaptations** — the two committed `.test.tsx` that SSR-render a converted detail-sheet, and
+   the one e2e `page.once('dialog')` handler (desktop-selections withdraw → now clicks the overlay).
+4. **The live harness** — `s97ct-roles` 4a-ii SSR-renders the converted CoBuilder; wrapped in the
+   provider. **Swept every test that SSR-renders a converted component — exactly three (s158, s159,
+   s97ct-roles).**
+
+### The battery
+
+| check | result |
+| --- | --- |
+| `type-check --force` | **5/5, exit 0** |
+| `lint --force` | **0 warnings/errors** |
+| `build --force` | **✓ Compiled successfully, exit 0** |
+| committed vitest | **932 / 932** (10 initial fails in s158/s159 — the hook throws without a provider; wrapped the render helpers → green) |
+| every live harness (100 files, 834s) | **1483 / 1483 achievable.** First full run: 3 red — `s97ct-roles` 4a-ii (**MINE**: rendered CoBuilder without the provider, fixed) and `s164-m9-read-arms` 7a/7b (**NOT mine**: a missing `.markup.jpg` storage object; pure storage probes, no React; **pass in isolation** → transient fixture flakiness, the S167 storage-object class). Re-run of both files: 69/69. |
+| Playwright, four chunks, from `apps/web` | below — **zero failures attributable to the sweep** |
+| `migration list` (repo root) | local = remote through `20261037000000`, **zero drift, this item adds none** |
+| fixture residue | none — the item is UI-only and creates no fixtures |
+| dev server | killed by PID (never `pkill -f`); port 3000 clear, zero `next` procs |
+
+### The e2e run, chunk by chunk — read as new information
+
+| chunk | result |
+| --- | --- |
+| 2 · desktop non-chat + harness + both portal ×11 | **75 passed, 0 failed.** ⭐ Includes `desktop-selections` "Withdraw → back to draft" (`:238`), the ONE test that drives a confirm-guarded action — it now goes native-dialog-free through the overlay's `confirm-accept` and completes. **The overlay works in a real browser.** |
+| 1 · desktop-chat ×7 | 24 passed, then the **dev server died** (`/dev/shm` Chromium crash, #145) → 9 cascade `ERR_CONNECTION_REFUSED` in chat-sub/chat-switcher. Restarted; re-ran the two files warm: **9/9**. No chat spec touches a dialog. |
+| 3 · m-* first 8 | 140 passed, **1 page-crash** (`m-destinations:469`, the flaky offline-strip test) → passed warm. |
+| 4a · m-details/hubs/hydration/logs | **79 passed, 0 failed.** (Chunk 4 whole died mid-run — server death at 18min, 206 cascade reds — so it was split into halves on a restarted server, as the S166/S168 batteries were.) |
+| 4b · m-photos/pwa/sections/shell/writes | 205 passed, **2 page-crashes** (`m-sections:101`, `m-writes:742` A-57) → `m-sections` warm green; `m-writes` A-57 is the item-6 battery's exact flake (`ERR_ABORTED` on the heavy `/m/p/eaf0e25b` cold-compile) — passed on a fresh server with the route pre-warmed. |
+
+**Every red across ~600 e2e tests was infrastructure** — server death, `/dev/shm` renderer crash, or
+`ERR_ABORTED` on a cold-compiled heavy route — and every one re-ran green. **Not one was a dialog
+assertion.** The `/m` chunks cannot be otherwise: they have no dialogs and the provider is not even in
+their tree.
+
+### ⚠️ THE FINDING THE BRIEF ANTICIPATED — and the honest shape of it
+
+The brief expected these clicks to "start landing" and be "observed for the first time." **They did
+not, automatically, and that is itself the finding:** of the 54 converted `confirm()` sites (the
+confirm-guarded actions, most of them destructive), **exactly ONE had an e2e test that clicked it** —
+`sel-withdraw`, via the single `page.once('dialog')`
+handler. That one now works through the overlay. **The other 53 confirm sites and all 20 alert sites
+are still not clicked by any e2e test.** The sweep removes the auto-dismiss trap and makes every one
+of them *clickable and testable* (the buttons carry testids), but it does not manufacture the
+coverage — writing tests for 53 destructive actions is a separate body of work, not part of "replace
+the dialog mechanism." The value delivered: the trap is gone, the overlay is proven in-browser on the
+one action that exercised it, and the coverage gap is now explicit and addressable rather than hidden
+behind a green suite that was dismissing every dialog.
+
+### Not run / said so
+
+No migration (this item needs none); nothing pushed; the click-test register is Josh's. The three
+desktop-redesign inventory files remain untracked from the parallel spec session, left as found. The
+five `prompt()` sites are filed (`#1-dialogsweep`) and untouched. **The notification reported exit 0
+for several chunks whose logs showed the server had died mid-run — only the printed pass/fail tally is
+true, as CLAUDE.md says; each red was read from the tally, not the wrapper status.**

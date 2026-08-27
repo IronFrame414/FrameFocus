@@ -13,6 +13,7 @@ import {
   type DailyLogFields,
   type SubEntryInput,
 } from '@/lib/services/daily-logs-client';
+import { useAlert } from '@/components/confirm/confirm-provider';
 
 // 6B-1 §4 — shared create/edit form (path A: no handoff design; ui-01
 // tokens). Crew auto-fills from the presence RPC on date change (create
@@ -52,6 +53,7 @@ export function LogForm({
   initialSubs,
 }: LogFormProps) {
   const router = useRouter();
+  const alert = useAlert();
 
   const [fields, setFields] = useState<DailyLogFields>({
     log_date: initialFields.log_date,
@@ -187,7 +189,7 @@ export function LogForm({
         if (!result.success) failed.push(`${file.name}: ${result.error ?? 'upload failed'}`);
       }
       if (failed.length > 0) {
-        window.alert(
+        void alert(
           `The log saved, but ${failed.length} photo(s) did not attach:\n${failed.join('\n')}\nYou can re-attach them from Edit.`
         );
       }

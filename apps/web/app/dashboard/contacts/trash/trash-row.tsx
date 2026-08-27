@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import type { Contact } from '@/lib/services/contacts';
 import { CONTACT_TYPE_LABELS } from '@framefocus/shared/constants';
 import { restoreContact } from '@/lib/services/contacts-client';
+import { useAlert } from '@/components/confirm/confirm-provider';
 
 // One deleted contact, with the way back. [S158 · Finding 2]
 //
@@ -28,6 +29,7 @@ export default function ContactTrashRow({
   canRestore: boolean;
 }) {
   const router = useRouter();
+  const alert = useAlert();
   const [busy, setBusy] = useState(false);
 
   const name =
@@ -44,7 +46,7 @@ export default function ContactTrashRow({
       // policy DISCARDED as well as on a real error. Both must reach the user:
       // a restore that silently did nothing is the defect this whole view
       // exists to end.
-      alert(`Restore failed: ${result.error}`);
+      void alert(`Restore failed: ${result.error}`);
       return;
     }
     router.refresh();

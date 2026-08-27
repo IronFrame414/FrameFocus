@@ -33,6 +33,7 @@ import {
   primaryButtonStyle,
   secondaryButtonStyle,
 } from '@/lib/theme';
+import { useConfirm } from '@/components/confirm/confirm-provider';
 
 interface ExpensesPageClientProps {
   role: string;
@@ -71,6 +72,7 @@ export function ExpensesPageClient({
   todayYmd,
 }: ExpensesPageClientProps) {
   const router = useRouter();
+  const confirm = useConfirm();
   const isReviewer = role === 'owner' || role === 'admin';
   // §4 roles: Bills tab for Owner/Admin/PM/Foreman (Foreman read-only); Crew
   // has nothing in 7C — receipts only.
@@ -110,7 +112,7 @@ export function ExpensesPageClient({
   }, [expenses, tab, projectFilter, statusFilter, payableIds]);
 
   async function handleDelete(id: string) {
-    if (!confirm('Move this expense to trash?')) return;
+    if (!(await confirm('Move this expense to trash?'))) return;
     setBusyId(id);
     setError(null);
     const res = await softDeleteExpense(id);

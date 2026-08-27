@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useConfirm } from '@/components/confirm/confirm-provider';
 import type { ProjectStatus } from '@/lib/services/projects-client';
 import {
   allowedStatusTransitions,
@@ -29,6 +30,7 @@ export function StatusControl({
   actualEndDate,
 }: StatusControlProps) {
   const router = useRouter();
+  const confirm = useConfirm();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Re-complete end-date prompt (§5.7) — open while the user decides.
@@ -57,17 +59,17 @@ export function StatusControl({
 
   async function handleTransition(to: ProjectStatus) {
     const label = PROJECT_STATUS_LABELS[to];
-    if (to === 'cancelled' && !confirm(`Cancel this project? This marks it ${label}.`)) return;
+    if (to === 'cancelled' && !(await confirm(`Cancel this project? This marks it ${label}.`))) return;
     // Reopen (7A Q1, Owner/Admin only — service enforces too): confirm with
     // the §5.7 consequences spelled out.
     if (isReopen(to)) {
       if (
-        !confirm(
+        !(await confirm(
           'Reopen this completed project?\n\n' +
             'The punch gate will re-run when it is completed again, and you will be ' +
             'asked whether to keep the original completion date. The completion date ' +
             'and any warranty record persist — nothing is cleared.'
-        )
+        ))
       ) {
         return;
       }
@@ -79,11 +81,11 @@ export function StatusControl({
       const stillCommitted = await getCommittedRemaining(projectId);
       if (
         stillCommitted > 0 &&
-        !confirm(
+        !(await confirm(
           `${fmtMoney(stillCommitted)} is still committed on this job (open bills or ` +
             'sub stages). You can complete anyway — a late bill can be recorded by ' +
             'reopening the project.\n\nComplete this project?'
-        )
+        ))
       ) {
         return;
       }
@@ -98,7 +100,7 @@ export function StatusControl({
   }
 
   async function handleDelete() {
-    if (!confirm('Move this project to trash?')) return;
+    if (!(await confirm('Move this project to trash?'))) return;
     setBusy(true);
     const result = await deleteProject(projectId, userRole);
     if (result.success) {

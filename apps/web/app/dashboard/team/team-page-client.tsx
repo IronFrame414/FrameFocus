@@ -11,6 +11,7 @@ import {
   type Invitation,
 } from '@/lib/services/team';
 import { ROLE_LABELS, type CompanyRole } from '@framefocus/shared';
+import { useConfirm, useAlert } from '@/components/confirm/confirm-provider';
 
 export default function TeamPageClient({ userRole }: { userRole: string }) {
   // ⚠️ MEMOISED [S163]. `createClient()` returns a NEW object on every call —
@@ -20,6 +21,8 @@ export default function TeamPageClient({ userRole }: { userRole: string }) {
   // real dependencies instead of silencing the rule.
   const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
+  const confirm = useConfirm();
+  const alert = useAlert();
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   // D4 — per-row UI state for Copy link / Resend.
@@ -108,12 +111,12 @@ export default function TeamPageClient({ userRole }: { userRole: string }) {
   }
 
   async function handleCancelInvite(invitationId: string) {
-    if (!confirm('Cancel this invitation?')) return;
+    if (!(await confirm('Cancel this invitation?'))) return;
     try {
       await cancelInvitation(supabase, invitationId);
       setInvitations((prev) => prev.filter((inv) => inv.id !== invitationId));
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Failed to cancel invitation');
+      void alert(err instanceof Error ? err.message : 'Failed to cancel invitation');
     }
   }
 

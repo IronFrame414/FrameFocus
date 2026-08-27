@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useConfirm } from '@/components/confirm/confirm-provider';
 import type { RedactedCoDetail } from '@/lib/co-redaction';
 import {
   CO_STATUS_LABELS,
@@ -184,6 +185,7 @@ export function CoBuilder({
   supersededBy,
 }: CoBuilderProps) {
   const router = useRouter();
+  const confirm = useConfirm();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
@@ -313,10 +315,10 @@ export function CoBuilder({
   // rendered is a courtesy, not the boundary.
   async function handleDelete() {
     if (
-      !window.confirm(
+      !(await confirm(
         `Delete ${co.co_number} permanently? This cannot be undone. ` +
           'To keep a record of the withdrawal, void it instead.'
-      )
+      ))
     ) {
       return;
     }
@@ -794,8 +796,8 @@ export function CoBuilder({
               {editable && (
                 <button
                   type="button"
-                  onClick={() => {
-                    if (window.confirm(`Remove line item "${item.name}" and its rows?`)) {
+                  onClick={async () => {
+                    if (await confirm(`Remove line item "${item.name}" and its rows?`)) {
                       void run(() => deleteCoLineItem(item.id));
                     }
                   }}
@@ -973,6 +975,7 @@ function RowLine({
   onSave: (input: UpdateCoLineRowInput) => Promise<boolean>;
   onDelete: () => Promise<boolean>;
 }) {
+  const confirm = useConfirm();
   const [editing, setEditing] = useState(false);
 
   if (editing && editable) {
@@ -1034,8 +1037,8 @@ function RowLine({
             </button>
             <button
               type="button"
-              onClick={() => {
-                if (window.confirm(`Remove row "${row.name}"?`)) void onDelete();
+              onClick={async () => {
+                if (await confirm(`Remove row "${row.name}"?`)) void onDelete();
               }}
               style={dangerButtonStyle}
             >

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useConfirm } from '@/components/confirm/confirm-provider';
 import type { ProjectAssignment } from '@/lib/services/project-assignments-client';
 import { reassignMember, unassignMember } from '@/lib/services/project-assignments-client';
 
@@ -14,6 +15,7 @@ interface TeamPanelProps {
 
 export function TeamPanel({ projectId, assignments, members, canManage }: TeamPanelProps) {
   const router = useRouter();
+  const confirm = useConfirm();
   const [memberId, setMemberId] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +38,7 @@ export function TeamPanel({ projectId, assignments, members, canManage }: TeamPa
   }
 
   async function handleRemove(assignmentId: string, name: string) {
-    if (!confirm(`Remove ${name} from this project?`)) return;
+    if (!(await confirm(`Remove ${name} from this project?`))) return;
     setBusy(true);
     const result = await unassignMember(assignmentId);
     if (result.success) {

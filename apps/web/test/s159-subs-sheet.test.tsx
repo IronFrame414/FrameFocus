@@ -23,6 +23,7 @@ vi.mock('next/navigation', () => ({
 
 import { SubcontractorsList } from '@/app/dashboard/subcontractors/subcontractors-list';
 import { SubcontractorDetailSheet } from '@/app/dashboard/subcontractors/subcontractor-detail-sheet';
+import { ConfirmProvider } from '@/components/confirm/confirm-provider';
 import type { Subcontractor } from '@/lib/services/subcontractors';
 
 const SUB_ID = '33333333-3333-3333-3333-333333333333';
@@ -52,7 +53,11 @@ function sub(overrides: Partial<Subcontractor> = {}): Subcontractor {
   } as unknown as Subcontractor;
 }
 
-const markup = (node: React.ReactElement): string => renderToStaticMarkup(node);
+// S175 item 9 — SubcontractorDetailSheet now calls useConfirm(), which throws
+// outside a ConfirmProvider. Wrap every render in the provider; with no dialog
+// pending it renders only its children, so the asserted markup is unchanged.
+const markup = (node: React.ReactElement): string =>
+  renderToStaticMarkup(React.createElement(ConfirmProvider, null, node));
 
 const sheet = (props: Partial<React.ComponentProps<typeof SubcontractorDetailSheet>> = {}) =>
   markup(

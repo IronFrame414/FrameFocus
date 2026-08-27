@@ -18,6 +18,7 @@ import { STATUS_LABELS } from '../labels';
 import type { TabProps } from './estimate-builder';
 import { ContractSection } from './contract-section';
 import { SigningActivity } from './signing-activity';
+import { useConfirm } from '@/components/confirm/confirm-provider';
 
 interface DetailsTabProps extends TabProps {
   onDelete?: () => void;
@@ -37,6 +38,7 @@ export function DetailsTab({
   const { estimate, lineItems } = data;
   const [menuOpen, setMenuOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const confirm = useConfirm();
 
   const mode = estimate.pricing_mode;
   const modeNoun = mode === 'markup' ? 'markup' : 'margin';
@@ -66,7 +68,7 @@ export function DetailsTab({
   async function handleModeToggle(newMode: PricingMode) {
     if (newMode === mode) return;
     if (lineItems.length > 0) {
-      const ok = window.confirm(
+      const ok = await confirm(
         `Switch this estimate to ${newMode} pricing? Percentages still at your company default swap to the ${newMode} default; anything you have edited stays as-is. Totals recalculate with the ${newMode} equations.`
       );
       if (!ok) return;

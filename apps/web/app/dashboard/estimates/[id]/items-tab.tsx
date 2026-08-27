@@ -39,6 +39,7 @@ import { materialUnitsOfMeasure } from '@framefocus/shared/validation/estimate-i
 import { InlineNumber, InlineText } from '../inline-edit';
 import { UNIT_LABELS, fmtMoney, fmtPercent } from '../labels';
 import { CatalogPicker } from './catalog-picker';
+import { useConfirm } from '@/components/confirm/confirm-provider';
 import type { TabProps } from './estimate-builder';
 
 type Result = { success: boolean; error?: string };
@@ -81,6 +82,7 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
   const [error, setError] = useState<string | null>(null);
   const [pickerForRow, setPickerForRow] = useState<EstimateLineRow | null>(null);
   const [defaultLaborRate, setDefaultLaborRate] = useState<number | null>(null);
+  const confirm = useConfirm();
 
   useEffect(() => {
     getCompanyDefaultLaborRate().then(setDefaultLaborRate);
@@ -482,7 +484,7 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
             <button
               type="button"
               onClick={async () => {
-                if (!window.confirm(`Remove ${ROW_TYPE_LABELS[row.row_type]} row "${row.name}"?`)) return;
+                if (!(await confirm(`Remove ${ROW_TYPE_LABELS[row.row_type]} row "${row.name}"?`))) return;
                 const r = await mutate(() => deleteEstimateLineRow(row.id), true);
                 if (!r.success) setError(r.error || 'Delete failed');
               }}
@@ -637,7 +639,7 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
               <button
                 type="button"
                 onClick={async () => {
-                  if (!window.confirm(`Delete line "${line.name}"?`)) return;
+                  if (!(await confirm(`Delete line "${line.name}"?`))) return;
                   const result = await mutate(() => deleteEstimateLineItem(line.id), true);
                   if (!result.success) setError(result.error || 'Delete failed');
                 }}
@@ -778,9 +780,9 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
                 type="button"
                 onClick={async () => {
                   if (
-                    !window.confirm(
+                    !(await confirm(
                       `Delete subcategory "${sub.name}"? Its line items move up to the category.`
-                    )
+                    ))
                   ) {
                     return;
                   }
@@ -846,9 +848,9 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
                 type="button"
                 onClick={async () => {
                   if (
-                    !window.confirm(
+                    !(await confirm(
                       `Delete category "${category.name}" and everything in it? This cannot be undone.`
-                    )
+                    ))
                   ) {
                     return;
                   }

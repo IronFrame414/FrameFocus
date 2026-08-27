@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { TermsSection, updateEstimate } from '@/lib/services/estimates-client';
 import { termsSectionSchema } from '@framefocus/shared/validation/estimate';
+import { useConfirm } from '@/components/confirm/confirm-provider';
 import type { TabProps } from './estimate-builder';
 
 const inputStyle: React.CSSProperties = {
@@ -70,6 +71,7 @@ export function TermsTab({ data, canEdit, reload }: TabProps) {
   const initial = (data.estimate.terms_sections as unknown as TermsSection[] | null) ?? [];
   const [terms, setTerms] = useState<TermsSection[]>(initial);
   const { error, saved, run } = useSaveState();
+  const confirm = useConfirm();
 
   async function persist(next: TermsSection[]) {
     setTerms(next);
@@ -98,9 +100,9 @@ export function TermsTab({ data, canEdit, reload }: TabProps) {
     persist(next);
   }
 
-  function remove(index: number) {
+  async function remove(index: number) {
     const name = terms[index].name || 'this section';
-    if (!window.confirm(`Remove "${name}" from this estimate's terms?`)) return;
+    if (!(await confirm(`Remove "${name}" from this estimate's terms?`))) return;
     persist(terms.filter((_, i) => i !== index));
   }
 
@@ -199,6 +201,7 @@ export function ScopeTab({ data, canEdit, reload }: TabProps) {
   const [summary, setSummary] = useState(data.estimate.scope_summary ?? '');
   const [sections, setSections] = useState<ScopeSection[]>(initialSections);
   const { error, saved, run } = useSaveState();
+  const confirm = useConfirm();
 
   async function persist(nextSummary: string, nextSections: ScopeSection[]) {
     setSummary(nextSummary);
@@ -296,8 +299,8 @@ export function ScopeTab({ data, canEdit, reload }: TabProps) {
             />
             <button
               type="button"
-              onClick={() => {
-                if (!window.confirm(`Remove section "${section.title || 'Untitled'}"?`)) return;
+              onClick={async () => {
+                if (!(await confirm(`Remove section "${section.title || 'Untitled'}"?`))) return;
                 persist(summary, sections.filter((_, i) => i !== si));
               }}
               disabled={!canEdit}

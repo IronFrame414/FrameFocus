@@ -10,6 +10,7 @@ import {
   type ContactAddressOption,
 } from '@/lib/services/contact-addresses-client';
 import { color, font, microLabelStyle } from '@/lib/theme';
+import { useConfirm } from '@/components/confirm/confirm-provider';
 
 // ===========================================================================
 // CONTACT DETAIL — A SHEET, NOT A PAGE. [S158 · Finding 1, RULED Josh]
@@ -123,6 +124,7 @@ function Field({
 
 export function ContactDetailSheet({ contact, canEdit, onClose }: ContactDetailSheetProps) {
   const router = useRouter();
+  const confirm = useConfirm();
   const [addresses, setAddresses] = useState<ContactAddressOption[] | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -175,10 +177,10 @@ export function ContactDetailSheet({ contact, canEdit, onClose }: ContactDetailS
 
   async function handleDelete() {
     if (
-      !confirm(
+      !(await confirm(
         `Delete ${displayName}?\n\nThe contact moves to Trash and can be restored from there. ` +
           `Estimates, projects, invoices and contracts that reference it are not affected.`
-      )
+      ))
     ) {
       return;
     }

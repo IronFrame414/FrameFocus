@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useConfirm } from '@/components/confirm/confirm-provider';
 import type {
   CalendarEvent,
   GeneralKind,
@@ -91,6 +92,7 @@ export function SchedulePanel({
   role,
 }: SchedulePanelProps) {
   const router = useRouter();
+  const confirm = useConfirm();
   const [view, setView] = useState<ViewMode>('list');
   const [taskFormOpen, setTaskFormOpen] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -351,7 +353,7 @@ export function SchedulePanel({
                 {canManage && (
                   <button
                     onClick={async () => {
-                      if (!confirm(`Delete phase "${rollup.phase.name}"? Its tasks stay, unphased.`))
+                      if (!(await confirm(`Delete phase "${rollup.phase.name}"? Its tasks stay, unphased.`)))
                         return;
                       const r = await deletePhase(rollup.phase.id);
                       if (r.success) router.refresh();
@@ -567,7 +569,7 @@ export function SchedulePanel({
                 )}
                 <button
                   onClick={async () => {
-                    if (!confirm(`Delete inspection "${i.inspection_type}"?`)) return;
+                    if (!(await confirm(`Delete inspection "${i.inspection_type}"?`))) return;
                     const r = await deleteInspection(i.id);
                     if (r.success) router.refresh();
                     else setError(r.error || 'Delete failed');

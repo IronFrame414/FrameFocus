@@ -9,6 +9,7 @@ import {
   setFileClientVisible,
   softDeleteDailyLog,
 } from '@/lib/services/daily-logs-client';
+import { useConfirm, useAlert } from '@/components/confirm/confirm-provider';
 
 // Client-side pieces of the 4c detail view: photo grid with the per-photo
 // client_visible toggle (Q4 REVISED [S87] — flag only in v1, portal
@@ -157,10 +158,12 @@ export function DownloadPdfButton({
 
 export function DeleteLogButton({ logId, projectId }: { logId: string; projectId: string }) {
   const router = useRouter();
+  const confirm = useConfirm();
+  const alert = useAlert();
   const [busy, setBusy] = useState(false);
 
   async function handleDelete() {
-    if (!window.confirm('Move this daily log to the trash?')) return;
+    if (!(await confirm('Move this daily log to the trash?'))) return;
     setBusy(true);
     const result = await softDeleteDailyLog(logId);
     setBusy(false);
@@ -168,7 +171,7 @@ export function DeleteLogButton({ logId, projectId }: { logId: string; projectId
       router.push(`/dashboard/field-ops/${projectId}/daily-logs`);
       router.refresh();
     } else {
-      window.alert(result.error ?? 'Delete failed');
+      void alert(result.error ?? 'Delete failed');
     }
   }
 

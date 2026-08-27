@@ -6,6 +6,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useConfirm } from '@/components/confirm/confirm-provider';
 import type {
   ClientContract,
   SubcontractorContract,
@@ -77,6 +78,7 @@ export function ContractsPanel({
   schedules,
 }: ContractsPanelProps) {
   const router = useRouter();
+  const confirm = useConfirm();
   const isOwnerAdmin = role === 'owner' || role === 'admin';
   const [memberId, setMemberId] = useState('');
   const [scope, setScope] = useState('');
@@ -129,7 +131,7 @@ export function ContractsPanel({
       const msg = hasOpenCommitted
         ? 'Void this contract? Its open committed rows will be closed out ("contract voided") and drop from the job’s committed total. Dollars already paid stay actual.'
         : 'Void this contract?';
-      if (!confirm(msg)) return;
+      if (!(await confirm(msg))) return;
       setBusy(true);
       const result = hasOpenCommitted
         ? await voidContractWithCloseout(id)
@@ -145,7 +147,7 @@ export function ContractsPanel({
       return;
     }
 
-    if (!confirm('Void this contract?')) return;
+    if (!(await confirm('Void this contract?'))) return;
     setBusy(true);
     const result = await updateClientContract(id, { status: 'void' });
     if (result.success) router.refresh();
@@ -481,6 +483,7 @@ function SubSchedulePanel({
   editMode: boolean;
 }) {
   const router = useRouter();
+  const confirm = useConfirm();
   const isOwnerAdmin = role === 'owner' || role === 'admin';
   const isOwner = role === 'owner';
 
@@ -601,7 +604,7 @@ function SubSchedulePanel({
     ) : null;
 
   async function handleDeletePayment(paymentId: string) {
-    if (!confirm('Delete this payment? A recorded payment is immutable — delete and re-enter to correct it.')) return;
+    if (!(await confirm('Delete this payment? A recorded payment is immutable — delete and re-enter to correct it.'))) return;
     setBusy(true);
     const res = await softDeletePayment(paymentId);
     setBusy(false);

@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAlert } from '@/components/confirm/confirm-provider';
 import { toggleFavorite } from '@/lib/services/files-client';
 
 export default function FavoriteToggle({
@@ -12,6 +13,7 @@ export default function FavoriteToggle({
   initialIsFavorite: boolean;
 }) {
   const router = useRouter();
+  const alert = useAlert();
   const [isFavorite, setIsFavorite] = useState(initialIsFavorite);
   const [isPending, startTransition] = useTransition();
 
@@ -23,7 +25,7 @@ export default function FavoriteToggle({
 
     if (!result.success) {
       setIsFavorite(!next); // revert on failure
-      alert(`Failed to update favorite: ${result.error ?? 'Unknown error'}`);
+      void alert(`Failed to update favorite: ${result.error ?? 'Unknown error'}`);
       return;
     }
 

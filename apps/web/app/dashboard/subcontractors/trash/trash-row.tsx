@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Subcontractor } from '@/lib/services/subcontractors';
 import { restoreSubcontractor } from '@/lib/services/subcontractors-client';
+import { useAlert } from '@/components/confirm/confirm-provider';
 
 // One deleted sub or vendor, with the way back. [S158 · Finding 2]
 //
@@ -24,6 +25,7 @@ export default function SubcontractorTrashRow({
   canRestore: boolean;
 }) {
   const router = useRouter();
+  const alert = useAlert();
   const [busy, setBusy] = useState(false);
 
   async function handleRestore() {
@@ -31,7 +33,7 @@ export default function SubcontractorTrashRow({
     const result = await restoreSubcontractor(subcontractor.id);
     setBusy(false);
     if (!result.success) {
-      alert(`Restore failed: ${result.error}`);
+      void alert(`Restore failed: ${result.error}`);
       return;
     }
     router.refresh();

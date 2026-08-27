@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type DragEvent } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useConfirm } from '@/components/confirm/confirm-provider';
 import type { Selection, SelectionOption, SelectionOptionSource } from '@/lib/services/selections-client';
 import {
   createSelectionOption,
@@ -274,6 +275,7 @@ function OptionCard({ option, selection, projectId, role, editable, run, imageUr
   run: (fn: () => Promise<{ success: boolean; error?: string }>) => Promise<{ success: boolean; error?: string }>;
   imageUrl: string | null;
 }) {
+  const confirm = useConfirm();
   const [linkBusy, setLinkBusy] = useState(false);
   const [linkMsg, setLinkMsg] = useState<string | null>(null);
   const paths = useImagePaths(async (f) => {
@@ -323,7 +325,7 @@ function OptionCard({ option, selection, projectId, role, editable, run, imageUr
               Client&rsquo;s choice
             </span>
           )}
-          {editable && <button type="button" style={{ ...btn, color: '#b91c1c' }} onClick={() => window.confirm(`Remove option "${option.name}"?`) && run(() => deleteSelectionOption(option.id))} data-testid="opt-delete">Remove</button>}
+          {editable && <button type="button" style={{ ...btn, color: '#b91c1c' }} onClick={async () => { if (await confirm(`Remove option "${option.name}"?`)) run(() => deleteSelectionOption(option.id)); }} data-testid="opt-delete">Remove</button>}
         </div>
         <input style={{ ...input, marginTop: '0.375rem' }} placeholder="Spec detail (model, finish, size…)" defaultValue={option.spec_detail ?? ''} disabled={!editable} data-testid="opt-spec"
           onBlur={(e) => (e.target.value || null) !== (option.spec_detail ?? null) && run(() => updateSelectionOption(option.id, { spec_detail: e.target.value || null }))} />

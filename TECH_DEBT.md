@@ -78,6 +78,35 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
 ## Open Tech Debt
 
+### Branch-scoped, awaiting real numbers — `feature/s175-dialog-sweep` [S175 item 9]
+
+> Provisional id per the S136 rule (never a bare `#N` on a branch). Tag `dialogsweep`.
+> Filed, NOT built — the Q9.2 ruling says the `prompt()` value-collectors each need their own small
+> design and must not be papered over with an improvised text-input modal to make the sweep look
+> complete.
+
+- **#1-dialogsweep — the native `prompt()` sweep is owed, and there are FIVE sites, not the two the
+  item-9 brief named.** Raised S175 (2026-08-27), during the confirm/alert sweep. The brief's Q9.2
+  said *"2 `prompt()` calls: a markup text label, and an items-tab entry."* Measured against the
+  tree, there are **five**, and all five collect a value (a form, not a confirmation), so the
+  ruling's reasoning — *"each needs its own small design"* — applies to all five, not two:
+
+  | # | Site | What it collects |
+  | --- | --- | --- |
+  | 1 | `apps/web/app/dashboard/estimates/[id]/items-tab.tsx:201` | an items-tab entry (the brief's example) |
+  | 2 | `apps/web/app/dashboard/projects/[id]/files/[fileId]/markup/markup-editor.tsx:92` | a markup text label (the brief's example) |
+  | 3 | `apps/web/app/dashboard/projects/[id]/lien-releases/releases-panel.tsx:85` | a void reason |
+  | 4 | `apps/web/app/dashboard/settings/contract-settings-form.tsx:307` | a form name (picker label) |
+  | 5 | `apps/web/app/dashboard/settings/lien-release-settings-form.tsx:104` | a form name (picker label) |
+
+  All five were **left exactly as-is** by item 9 (out of scope, correctly). The build owed is a
+  small text-input dialog — a `usePrompt()` companion to the shipped `useConfirm()`/`useAlert()`
+  (`apps/web/components/confirm/confirm-provider.tsx`) — returning `Promise<string | null>`. Sites 3
+  (a void reason) and 4/5 (a name that becomes a stored label) are the ones with real validation
+  needs; sites 1/2 are the simplest. **Same Playwright hazard as the confirms:** a native `prompt()`
+  is auto-dismissed (returns `null`) in every e2e run, so these value-collecting flows are not
+  exercised in a browser either.
+
 ### Branch-scoped, awaiting real numbers — `feature/s174-selections-email-and-markup` [S174]
 
 > Provisional ids per the S136 rule: never allocate a bare `#N` on a branch. Tag `s174`.

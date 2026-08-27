@@ -20,6 +20,7 @@ import {
   type DocumentKind,
 } from '@/lib/services/contracts-shared';
 import { BoxMapEditor, type EditorBox } from '@/components/box-map/box-map-editor';
+import { useConfirm } from '@/components/confirm/confirm-provider';
 
 // 7I's configuration of the SHARED box editor (#1-7i, extracted at S150). The
 // four kinds and the party are 7I's; 7F passes three kinds and no party.
@@ -293,6 +294,7 @@ function TemplateSet({
   onDone: () => void;
 }) {
   const [placing, setPlacing] = useState<ContractTemplateRow | null>(null);
+  const confirm = useConfirm();
 
   async function run(action: () => Promise<{ success: boolean; error?: string }>, fallback: string) {
     setBusy(true);
@@ -331,7 +333,7 @@ function TemplateSet({
     // Soft delete. Contracts already issued from this form keep working —
     // `contract_documents.template_id` still resolves, and the executed PDF is
     // a stored artifact that does not re-render from the template.
-    if (!confirm(`Remove "${template.name}"? Contracts already issued from it are kept.`)) return;
+    if (!(await confirm(`Remove "${template.name}"? Contracts already issued from it are kept.`))) return;
     await run(() => softDeleteContractTemplate(template.id), 'Could not remove.');
   }
 

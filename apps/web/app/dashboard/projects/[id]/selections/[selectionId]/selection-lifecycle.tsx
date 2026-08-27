@@ -1,5 +1,6 @@
 "use client";
 import { useState } from 'react';
+import { useConfirm } from '@/components/confirm/confirm-provider';
 import type { Selection } from '@/lib/services/selections-client';
 import type { SheetSession } from './selection-sheet';
 
@@ -13,6 +14,7 @@ const btn: React.CSSProperties = { padding: '0.45rem 0.875rem', borderRadius: '0
 const btnGhost: React.CSSProperties = { ...btn, backgroundColor: '#fff', color: '#1f2937' };
 
 export function SelectionLifecycle({ selection, role, sessions, onDone }: { selection: Selection; role: string; sessions: SheetSession[]; onDone: () => void }) {
+  const confirm = useConfirm();
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   // [S174 #1] `offer` now MAILS the client. The send is deliberately not able
@@ -79,7 +81,7 @@ export function SelectionLifecycle({ selection, role, sessions, onDone }: { sele
         {canManage && selection.status === 'awaiting_approval' && (
           <>
             <span style={{ fontSize: '0.8125rem', color: '#1e40af' }}>Released to the client — waiting for them to choose and sign in the portal.</span>
-            <button type="button" style={btnGhost} disabled={busy} onClick={() => window.confirm('Withdraw this offer and return it to draft?') && call('withdraw')} data-testid="sel-withdraw">Withdraw</button>
+            <button type="button" style={btnGhost} disabled={busy} onClick={async () => { if (await confirm('Withdraw this offer and return it to draft?')) call('withdraw'); }} data-testid="sel-withdraw">Withdraw</button>
           </>
         )}
         {canManage && selection.status === 'denied' && (
@@ -91,7 +93,7 @@ export function SelectionLifecycle({ selection, role, sessions, onDone }: { sele
         {canManage && selection.status === 'approved' && (
           <>
             <span style={{ fontSize: '0.8125rem', color: '#166534' }}>Signed {selection.signed_at ? new Date(selection.signed_at).toLocaleDateString() : ''}. The signature is binding.</span>
-            <button type="button" style={btnGhost} disabled={busy} onClick={() => window.confirm('Revise this approved selection? The client will need to sign again; the prior signature is kept on file.') && call('revise')} data-testid="sel-revise">Revise</button>
+            <button type="button" style={btnGhost} disabled={busy} onClick={async () => { if (await confirm('Revise this approved selection? The client will need to sign again; the prior signature is kept on file.')) call('revise'); }} data-testid="sel-revise">Revise</button>
           </>
         )}
         {!canManage && <span style={{ fontSize: '0.8125rem', color: '#6b7280' }}>{selection.status === 'approved' ? 'Approved and signed by the client.' : selection.status === 'awaiting_approval' ? 'Awaiting the client’s signature.' : selection.status === 'denied' ? 'Denied by the client.' : 'Not yet sent to the client.'}</span>}
