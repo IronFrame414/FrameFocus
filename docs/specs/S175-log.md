@@ -765,3 +765,145 @@ Not run, and said so: no production migration (`20261037000000` is rebuild-test 
 pushed; **the green-box FEEL is unverified and is Josh's** (§Y) — whether the totals updating live
 as she picks reads right, tap-target sizing, and how a single-choice selection communicates that
 picking B un-picks A.
+
+---
+
+# ITEM 6 — `#1-s168`: CLIENTS OFF THE TEAM SIDE (S175, unattended)
+
+Path-scoped commits, one per discrete step, per the S173 rule. One ruling (Q6.1); everything else
+answered from the repo, as §X said it would be. **No migration, no policy change** — this item is a
+service-layer projection, a set of route gates, and one sentence of copy.
+
+| step | commit | what landed |
+| --- | --- | --- |
+| 1 | `07e23ad` | limbs 1 + 2 — the local `INVITABLE_ROLES` duplicate deleted, `isClientRole` and its seat branch deleted |
+| 2 | `9df5a58` | limbs 3 + 4 + 5 — `NON_TEAM_ROLES` / `isTeamRole()`, both surfaces, and the four server actions |
+| 3 | `8e4aa07` | `#2-s168` — the expired-invite sentence |
+| 4 | `8f5a5ed` | `s175-team-clients-off.live.ts`, 17 probes |
+| 5 | `705f0b7` | `e2e/desktop-team.spec.ts`, the browser proof of the URL gate |
+| 6 | this | `TECH_DEBT` closures, `#1-s175i6`, and this record |
+
+## What was measured before anything changed
+
+| | |
+| --- | --- |
+| The Owner's Team list | **9 rows** — one each of owner / admin / project_manager / foreman / crew_member / **subcontractor**, and **THREE clients** |
+| `company_members` per role | every staff role and the SUB have one; all three clients have none |
+| Pending invitations | three, one of them `role = 'client'`, `contact_id` and `project_id` **NULL** |
+| Shared `INVITABLE_ROLES` consumers | **zero** — the local duplicate was the only list the product used |
+
+## ⚠️ SIX THINGS THE BUILD FOUND THAT THE FILING DID NOT ANTICIPATE
+
+1. **THE DETAIL ROUTE IS ONE DOOR OF FIVE.** `#1-s168`'s fifth limb names
+   `/dashboard/team/[id]`. `app/dashboard/team/[id]/actions.ts` carries **four server actions** that
+   take a `targetId` straight off the wire and never render that page. Before this,
+   `updateTeamMemberAction` would rewrite a CLIENT's role and notes through the staff editor's
+   action, and `deleteTeamMemberAction` would soft-delete their portal account **and ban their auth
+   user for 876000 hours**. A list filter touches none of it, and neither does a gate written into
+   the page. Putting the rule in the SERVICE — `getTeamMember()` returning null — closed the page
+   and all four at once, and TypeScript then forced every call site to declare how it refuses
+   rather than letting one be forgotten.
+
+2. **⚠️ THE INVERSION EXPERIMENT PERFORMED THE DEFECT ON A LIVE QA IDENTITY.** To prove the harness
+   was not vacuous the gate was inverted (`NON_TEAM_ROLES = []`) and the file re-run. Seven probes
+   went red — the evidence wanted — and the pre-fix product did this to `josh+qa-client@`:
+
+   ```
+   role  client -> admin      first_name/last_name/notes -> "PWNED"
+   is_deleted -> true         auth user BANNED for 876000h
+   ```
+
+   Repaired by hand — role, names, notes, the soft-delete, the ban — and her sign-in re-verified;
+   `contact_id` is still NULL, so the control-client invariant M9 rests on survived. **The lesson
+   generalises past this item and is written into the harness header: a probe whose failure mode is
+   a WRITE must not aim at a row anything else depends on.** B4–B8 now target two identities the
+   file creates and deletes, at `@example.invalid` addresses so a regression cannot mail a real
+   person either. The inversion was then re-run safely: same seven reds, every seeded identity
+   intact, no bans, zero residue — verified by reading them back rather than by trusting teardown.
+
+3. **`#2-s168` DOES NOT RESOLVE BY ITSELF — IT GETS WORSE — AND THE ROLE-AWARE FIX IT ASKED FOR IS
+   THE WRONG ONE.** Removing clients from the Team side turns a misleading pointer into a false one.
+   But the decisive fault is a third one nobody had named: `get_invitation_status()`
+   (`20261017000000`) branches on role, and for `role = 'client'` "expired" means **the project's
+   window closed** — `expires_at` is not read at all, while `/api/invites/[id]/resend` resets
+   exactly that column. So *"ask them to resend it"* prescribes an action that resets a clock the
+   invitation does not read, from any screen. TECH_DEBT's requirement — *"the message also needs to
+   know whether the expired invite was a staff invite or a client one"* — is therefore **withdrawn
+   rather than met**: naming any screen repeats fault one, promising a resend repeats fault three,
+   and the honest sentence is identical for both roles. No RPC, no migration, and nothing new
+   learnable from a token by an anonymous caller.
+
+4. **LIMB 5'S ACCOMMODATION IS GONE; THE CODE AROUND IT IS LOAD-BEARING AND STAYS.** The comment
+   *"Client-role profiles have no member row — no rate section for them"* is the evidence the page
+   was WRITTEN to accommodate clients, and it is quoted and retired. The `memberRow ? … : …` branch
+   is NOT: `create_member_for_new_profile()` skips `('client','subcontractor')` at INSERT, so a
+   subcontractor-role profile is not guaranteed a `company_members` row either — and subs stay on
+   the Team side by ruling. Measured: the seeded sub DOES have one, created by
+   `create_member_for_new_subcontractor()` from the `subcontractors` table rather than by the
+   profile trigger. Deleting the branch would crash the page for any sub arriving by the other path.
+
+5. **THE PENDING-INVITATIONS TABLE MUST NOT BE FILTERED YET, AND THE REASON IS THE OPPOSITE OF
+   TIDINESS.** `PortalAccountRow` carries no pending state — `profileId` is null until an invite is
+   **accepted** — so the portal panel has no pending surface at all. Hiding `role = 'client'` rows
+   from the Team page would make a pending client invite **invisible everywhere and impossible to
+   cancel**. One such row exists on rebuild-test with `project_id IS NULL`, so it maps to no project
+   and would not appear in a per-project panel even if one were built. Filed as **`#1-s175i6`** with
+   the build it actually needs; the Team page listing it is untidy, not harmful.
+
+6. **THE PLAYWRIGHT PROJECT SPLIT IS AN UNANCHORED REGEX ON THE FILENAME.**
+   `playwright.config.ts` routes on `/m-.*\.spec\.ts/`. The new spec was first called
+   `team-clients-off.spec.ts` — `tea` + `m-clients-off.spec.ts` matches — so it ran under
+   `chromium-auth`, at the 402×874 MOBILE viewport, carrying the CREW storage state, for a desktop
+   roster test signed in as the Owner. **It passed anyway**, because `signIn()` clears cookies first
+   and the assertions are DOM-level: routed to the wrong project and silent about it. Renamed to
+   `desktop-team.spec.ts` and the trap recorded in the file. No existing spec hits it; any future
+   one whose name contains `m-` anywhere will.
+
+## The ruling, and the guard that makes it stick
+
+**Q6.1 — filter `client` ONLY.** `NON_TEAM_ROLES` is a **deny-list**, not an allow-list, precisely
+so it cannot over-reach: `.in('role', DASHBOARD_ROLES)` reads tidier and silently drops
+subcontractors, which is the change TECH_DEBT calls *"a scope decision, not a freebie"*. Three
+probes exist only to make that reach fail loudly — live **A3** (the sub is on the list), live **B3**
+(the sub has a detail page), and the browser spec's `toContain('Subcontractor')`. A probe that only
+checked "no clients" would pass against the forbidden change.
+
+## What was deliberately NOT done, and why
+
+- **No policy change.** `profiles` still returns client rows to an Owner through a raw PostgREST
+  call, and must — the portal, the invite pipeline and `getPortalIdentity()` all depend on it. Live
+  **A1** pins that, so nobody later reads these probes as evidence of an RLS floor that does not
+  exist.
+- **`InvitableRole` keeps `'client'`, and so does `ROLE_DESCRIPTIONS`.** A client invitation is a
+  real row written by `inviteClientToPortal()`. Removing it from the TYPE would make the type lie
+  about the data model; only the DROPDOWN drops it.
+- **The seat exemption is not repealed** — it was never in the UI branch that was deleted.
+  `create_member_for_new_profile()` skips `client`, so a client never produces a row to count.
+- **The pending table is untouched** — finding 5, filed as `#1-s175i6`.
+- **No migration, and nothing pushed.**
+
+## Harness — `s175-team-clients-off.live.ts`, 17 probes in three groups
+
+A the list (with the Q6.1 guard) · B the gate, five doors, every refusal re-read through the service
+role · C `#2-s168`, including a comment-stripped source assertion with a stripper self-check and the
+live measurement of the client clock.
+
+Run twice in a row; residue asserted and zero. **Proved non-vacuous by inverting the gate**: seven
+probes go red, and the browser spec's list assertion with them.
+
+## Sweep for tests encoding overturned behaviour (S157 rule)
+
+Grepped `test/`, `e2e/` and the specs for `getTeamMembers`, `dashboard/team`, `INVITABLE`,
+`isClientRole`, `team-page-client`, `invite/accept`, `messageFor` and `get_invitation_status`.
+
+- **Nothing needed inverting**, and that is the correct outcome rather than a thin sweep: no test
+  asserted the Team list's contents or the invite role list. The eight files that matched all
+  concern the invite RPCs' statuses (`s135-invite-fallthrough`, `s135-invite-send-resend`,
+  `s160-invite-send`, `s164-m9-client-lifecycle`, `s133-subcontractor-read-floor`), which this item
+  does not touch.
+- `s131-roster-floor` reads `profiles` **raw**, not `getTeamMembers()`, so the S131 floor's
+  assertions are unaffected — and A1 now guards the same property from the other side.
+- `m-destinations` A-47's comment mentions *"the failure a `getTeamMembers()` binding produces"*; it
+  is about `/m/team` reading `company_members` instead, and is unaffected.
+- `desktop-dashboard-guard` navigates to `/dashboard/team` for a sub (bounces) and an owner
+  (arrives). Both still hold — the guard is routing, this is a projection.
