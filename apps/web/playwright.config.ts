@@ -46,7 +46,31 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
 
   // CI machines are noisier; a browser test that flakes once is not news.
-  retries: process.env.CI ? 2 : 0,
+  //
+  // ---------------------------------------------------------------------------
+  // LOCAL IS 1, NOT 0 — TECH_DEBT #152(a) [S123]. THIS NUMBER IS THE EVIDENCE.
+  // ---------------------------------------------------------------------------
+  // ⚠️ `trace: 'on-first-retry'` below produces a trace ONLY IF THERE IS A FIRST
+  // RETRY. With `retries: 0` there never is one, so for the whole life of this
+  // config a local failure recorded NOTHING — no trace, no error-context. That
+  // is not a hypothetical: #145 went four sessions undiagnosed partly because
+  // every investigator was asked to "capture a trace from the next occurrence"
+  // by a config that could not write one.
+  //
+  // So these two settings are COUPLED, and the coupling is invisible from either
+  // line on its own. **Setting this back to 0 deletes the evidence without
+  // touching `trace:` at all** — which is exactly how the gap arose. If you want
+  // no retries locally, change `trace` to 'retain-on-failure' in the same edit,
+  // or you are back where #145 started.
+  //
+  // ⚠️ THE COST, STATED RATHER THAN DISCOVERED LATER: a genuinely flaky test can
+  // now PASS ON RETRY locally and report as a pass, where before it failed and
+  // you saw it. Playwright marks it `flaky` in the run summary — read that line,
+  // it is the only place a hidden flake surfaces. This trade is already accepted
+  // in CI at `retries: 2`; local now makes the same trade at 1, one order less
+  // forgiving, and both are a deliberate exchange of "a flake is loud" for "a
+  // failure is explainable".
+  retries: process.env.CI ? 2 : 1,
   workers: process.env.CI ? 1 : undefined,
 
   reporter: process.env.CI

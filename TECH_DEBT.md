@@ -26,13 +26,13 @@ is touched by S136.**
 | branch | its number | becomes |
 | --- | --- | --- |
 | ~~`feat/notifications`~~ | ~~`#149` push enrolment not tappable~~ | ~~**`#151`**~~ — ✅ **APPLIED** when `feat/notifications` merged |
-| `feature/m6m-mobile` | `#147` residue of #145 | **`#152`** |
-| `feature/m6m-mobile` | `#148` LEAN-REPO SWEEP | **`#153`** |
-| `feature/m6m-mobile` | `#149` `updateProject()` zero callers | **`#154`** |
+| ~~`feature/m6m-mobile`~~ | ~~`#147` residue of #145~~ | ~~**`#152`**~~ — ✅ **APPLIED** when `feature/m6m-mobile` merged |
+| ~~`feature/m6m-mobile`~~ | ~~`#148` LEAN-REPO SWEEP~~ | ~~**`#153`**~~ — ✅ **APPLIED** |
+| ~~`feature/m6m-mobile`~~ | ~~`#149` `updateProject()` zero callers~~ | ~~**`#154`**~~ — ✅ **APPLIED** |
 
 Whichever branch merges second must re-check this table against the file as it then stands, not
-against this snapshot. **`feat/notifications` has merged and its row is struck above; the three
-`feature/m6m-mobile` rows remain owed.**
+against this snapshot. **✅ BOTH branches have now merged and all four rows are struck — this
+reconciliation block is fully discharged and can be removed.**
 
 **The rule that stops it recurring is in CLAUDE.md → "Tech-debt numbering", not here.** A note in
 this header is a statement, and a statement is exactly what failed: the S134 header already said
@@ -43,6 +43,9 @@ this header is a statement, and a statement is exactly what failed: the S134 hea
 > **Last updated:** August 11, 2026 — S134 (**#149 AND #150 RAISED**, filing the fallout of reverting the S133 Playwright sharding (Option D, Josh's ruling). **#150** records the concurrency hazard precisely — four shards shared one rebuild-test DB, so any test asserting the absence/count of something another shard writes to a shared fixture was exposed; CI #201 (`desktop-payload.spec.ts:175`) is the instance, NOT a payload leak — the #117 read floor holds at the query. **#149** is the constraint that blocked every safe fix: the pinned e2e fixtures are hand-curated on rebuild-test and reproducible from no script — `seed-test-identities.mjs` only *warns* if `eaf0e25b` is missing — which is what blocks a database-per-shard, the fix that is safe by construction. The sharding work is kept on branch `ci/shard-playwright`, not deleted. **⚠️ #149 is also speculatively used on two unmerged branches (`feat/notifications`, `feature/m6m-mobile`) for different items — a merge-time reconciliation is owed there regardless; main's file is the assignment authority.**)
 > **Previously:** August 10, 2026 — S123 (**#151 RAISED** from a real-device test — the push enrolment control does not read as tappable. **A UI pass, not a defect:** the component carries **zero `className` attributes**, and with `@tailwind base` Preflight in force an unstyled `<button>` has no background, no border and no radius, so it renders as a line of body text that happens to click. It is also the ONE control between a user and ever receiving a push, and on iOS the prompt is one-shot and sticky, so a bad first encounter is permanent. Constraints recorded, including that the **iOS install-gate branch must NOT become pressable** — and that **no test references this component at all**, so that constraint has no safety net today)
 > **Previously:** August 9, 2026 — S123 (**#147 AND #148 RAISED**, both from Josh, both investigated before filing rather than described from the request. **#147 multi-address is a UI GAP, not a schema gap** — `contact_addresses` has no unique constraint on `contact_id`, only a PARTIAL one-primary index, and `listAddressesForContact()` plus the 4D estimate address picker already handle N; exactly one form, `contact-form.tsx`, only ever writes the primary. No migration needed. **#148 inline contact-create is a SHARED COMPONENT's change** — `ContactAddressPicker` has three consumers, and `contacts_insert_authorized` matches `estimates_insert_manager` exactly, so there is no permission gap. The two meet at `contact-form.tsx` and should be sequenced together)
+> **Previously:** August 9, 2026 — S123 (**#153 RAISED — the lean-repo sweep, one entry for one pass.** Whole return is **~9,060 lines (4.0%)** and **8,068 of it is a single finding**: five byte-identical `support.js` and three `ios-frame.jsx` in `docs/`. Everything else is small or needs a ruling; **dead code recommended SKIPPED** — 38 sites, ~990 lines, in service files where complete-CRUD-ahead-of-UI is deliberate. ⛔ **`/workspaces/rafterworks-s89` and `feat/module-8-architecture` are NOT deletable** — they hold the only copies of `notifications-architecture.md` (212 lines; notifications is the next project) and two context files; they need MERGING. **#154 RAISED** — `updateProject()` has zero callers, and that is the DOCUMENTED INTENT of S63/S64, not drift: a latent write path neutralised before it has a caller. Not a defect; **must not be deleted**, or the guard goes with it)
+> **Previously:** August 9, 2026 — S123 (**#130 CLOSED as not-a-defect** — the stale wordmark lives in an unimported prototype, the file is NOT deleted, and it is byte-identical in two cited locations so any future fix or deletion must take both. **#131 AMENDED — RULED: e2e becomes a required check**, which makes the three CI Supabase secrets **permanent infrastructure** and reverses this entry's "remove them later" premise. ⚠️ Required checks gate PULL REQUESTS and this repo has never opened one — every merge is a local `merge:` pushed straight to `main` — so **requiring the check alone changes nothing**; requiring PRs is the piece that makes it real, and its cost is 15–25 min per change. Direct-push decision OPEN)
+> **Previously:** August 9, 2026 — S123 (**#145 CLOSED as MITIGATED — and the `oom_kill 0` argument that made its cause "unknown" was INVALID.** The kernel is not the only thing that can kill a renderer: V8 aborts it itself on allocation failure, leaving `oom_kill` at 0 in exactly the case being excluded. Reproduced the signature on demand — `V8 javascript OOM (Reached heap limit)` on stderr, then **`page.goto: Page crashed` on the NEXT navigation**, which is why the report always named a bystander test. Also established: **no crash dump was ever possible** (`chrome-headless-shell` ships no crashpad handler; `--enable-crash-reporter` is fatal at launch) and **no local trace was ever captured** (`retries: 0` + `on-first-retry`). Measured for the first time: fds **3.9k/524k**, pids **396/9.5k**, Chromium RSS **flat**, `next-server` the only thing that grows. Still did NOT reproduce naturally in ~347 executions. **Do not move local e2e to a production build** — it does not build on this box. Residue filed as **#152**. Also: **#132 fallout** — a trigger outlived its columns and no PM could edit any sub or vendor)
 > **Previously:** August 8, 2026 — S120 (**#145 FIXED, and its diagnosis was WRONG.** Not memory: `/dev/shm` is **64 MB**, the Docker default, and Chromium's renderer dies when it fills. `oom_kill` is **0** in `/proc/vmstat` and in every cgroup — nothing on this box was ever OOM-killed. One flag, `--disable-dev-shm-usage`, took the same 217-test group from **53 failures to 2** in a single unsplit process, and made it faster. **The four-process split is retired.** Also: M6M §6 camera capture + M-22, and §4.6's M-6 daily-logs screen, replacing a placeholder that had let A-12d/A-12e pass on a stub)
 > **Previously:** August 7, 2026 — S120 (**#145 RAISED** — the Codespace OOMs during a full Playwright chunk and Chromium's renderer is killed mid-navigation: 7.9 GB total, **130 MB free**, no swap, `next-server` at **1.4 GB RSS**. Presents as `Page crashed` on a different test each run, which reads as a flake and is a resource ceiling. Worked around by splitting the e2e gate into **four** processes with a server restart; **#135's `next build && next start` would remove the cause instead**. Also: **A-30f** — the detail views had no back chevron, found on a phone)
 > **Previously:** August 7, 2026 — S119 (**#143 AND #144 BOTH CLOSED.** #143: the seed now assigns PM/foreman/crew to the m-sections project — it created exactly one row, the foreman's, confirming the diagnosis — and the crew-for-foreman substitutions are reverted. **The reachability guard needed a new negative**: with every company-A identity reaching every company-A project, the table no longer contained a `false`, so it now asserts the cross-tenant refusal against company B as well. #144 below)
@@ -1849,7 +1852,39 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   "db:types": "supabase gen types typescript --linked 2>/dev/null > packages/shared/types/database.ts"
   ```
   (`package.json:17`). Two independent faults compound. The shell performs `>` redirection **before** running the command, so the target file is truncated to zero bytes the instant the pipeline starts — the previous good contents are gone before generation is even attempted. And `2>/dev/null` discards the generator's stderr, so an expired token, a lost CLI link (a routine Codespace-rebuild casualty), or a network failure produces **no visible error**. The exit status is the redirect's, not the generator's. Net effect: a failed run leaves an empty or partial `database.ts`, the chained `npm run db:push` (`:16`) continues to `type-check`, and the failure surfaces later as hundreds of unrelated type errors — or, worse, as a committed truncated file. **Verify every regeneration by line count, md5 and a grep for a known symbol; do not trust the exit code.** Fix shape: drop `2>/dev/null`, generate to a temp file, and only move it into place when the command exits 0 and the output is non-empty. Observed Session 100.
-- **#131** GitHub Actions repo secrets `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` were added pointing at **rebuild-test** so the Playwright job can boot the app (`.github/workflows/ci.yml:94-95`). **They are meant to be removed later, and the consequence of removing them is not a skipped test — it is a whole-suite failure that misreports its own cause.** Without them `next dev` still starts, but `middleware.ts` constructs its Supabase client from `process.env.NEXT_PUBLIC_SUPABASE_URL!` and `..._ANON_KEY!` (`:11-12`) — non-null assertions over `undefined` — so the client is built against nothing and **every matched route 500s**. The matcher covers `/dashboard/:path*`, `/sign-in` and `/sign-up`, and `e2e/auth.setup.ts` signs in through `/sign-in`, so **setup fails and every authenticated spec fails on `page.goto` rather than on its assertion**. A reader of that CI log sees fifty broken tests, not one missing secret. If they are removed, either give the e2e job placeholder values or gate the job on their presence and say so in the skip reason. Observed Session 100.
+- **#131 — AMENDED [S123]. RULED [Josh]: e2e becomes a REQUIRED CHECK. Half of this entry is now settled and the other half depends on a decision that has not been made.**
+
+  **⚠️ THE PREMISE THAT REVERSES.** This entry was filed on the assumption that the secrets are *"meant to be removed later"*. **They are not, any more.** A required check must pass on every gated change, forever, so the secrets it needs become **permanent infrastructure**. That is now **three** secrets, not two — `SUPABASE_SERVICE_ROLE_KEY` joined them in S123 (`ci.yml:159`) because the fixtures build a service-role client and `/api/change-orders/[id]/recalculate` constructs one at request time. Removing any of the three no longer degrades a test job; it **breaks the gate**. The original body's advice — "if they are removed, give the e2e job placeholder values or gate the job on their presence" — is **superseded**: under the ruling they are not removed at all. Everything the original says about *how* their absence misreports (below) remains accurate and is why this was never a small question.
+
+  **WHAT JOSH CLICKS.** The check names are the job `name:` values in `.github/workflows/ci.yml` — **`E2E (Playwright)`** (`:70`) and **`Lint & Type Check`** (`:34`). A check is only offered in the picker after it has reported at least once; both have, so both will be findable.
+
+  _Rulesets (current GitHub UI, preferred):_
+  1. Repo → **Settings** → **Rules** → **Rulesets** → **New ruleset** → **New branch ruleset**
+  2. Name it; set **Enforcement status: Active**
+  3. **Target branches** → **Add target** → **Include default branch** (or add `main` by name)
+  4. Tick **Require status checks to pass** → **Add checks** → add **`E2E (Playwright)`** (and `Lint & Type Check`)
+  5. Leave the **Bypass list EMPTY** — an admin in the bypass list makes the whole thing advisory
+  6. **Create**
+
+  _Classic equivalent:_ **Settings** → **Branches** → **Add branch protection rule** → pattern `main` → **Require status checks to pass before merging** → select the checks → tick **Do not allow bypassing the above settings** → **Create**.
+
+  **⚠️ AS THINGS STAND, THE RULING BUYS ALMOST NOTHING, AND THIS IS THE PART THAT MATTERS.**
+
+  **Required status checks gate PULL REQUESTS. This repo has never had one.** Every merge commit on `main` is a hand-written `merge: …` — `9a2be5e`, `3f9ad56`, `9fc9bc9`, `6b6830e` — and never GitHub's `Merge pull request #N from …`. Verified S123 across the last 20 commits: work is merged **locally** and pushed straight to `main`. So a required check has **nothing to attach to**, and CI's `on: push: [main, dev]` trigger means it keeps doing exactly what it already does — running **after** the commit is already on `main`, and after Vercel has already begun deploying it. **A required check on a repo with no PRs changes nothing about what can reach production.**
+
+  **The piece that makes it real is requiring a pull request** — Rulesets: **Require a pull request before merging**; classic: the same-named option. That is what forbids the direct push and forces every change through a PR the status check can gate. **Without it, step 4 above is decoration.**
+
+  **THE COST, STATED PLAINLY, BECAUSE IT CHANGES HOW EVERY FUTURE SESSION SHIPS.**
+  - The current workflow **ends**. CLAUDE.md's run protocol — *"Merging to `main` is Josh's call, done manually"* — stays true in spirit but becomes: branch → push → open PR → wait → merge.
+  - **Every change waits for the full e2e job**: `npm ci` + `playwright install --with-deps chromium` + a ~175 s production build + the suite (11.3 m measured) — realistically **15–25 minutes per PR**, against a job `timeout-minutes: 20`. A one-line docs fix pays the same toll as a schema change.
+  - **A red or flaky e2e run blocks the merge.** CI runs `retries: 2`, so a flake usually self-clears, but the tail risk is a genuine block on a bad afternoon. There is no partial credit.
+  - **Emergency fixes need an explicit bypass** — and any standing bypass reopens the hole the rule was created to close.
+
+  **STATUS: the ruling is recorded; the clicks have not been made, and the direct-push question is OPEN and is Josh's.** Requiring the check alone is cheap and near-pointless. Requiring PRs is what buys the guarantee, and costs the workflow above. **Do not treat this item as discharged by ticking the status check.** Ruled S123.
+
+  _Original entry retained below — its account of what the secrets' absence does is unchanged and is the reason this was never trivial._
+
+- **#131 (original entry)** GitHub Actions repo secrets `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` were added pointing at **rebuild-test** so the Playwright job can boot the app (`.github/workflows/ci.yml:94-95`). **They are meant to be removed later, and the consequence of removing them is not a skipped test — it is a whole-suite failure that misreports its own cause.** Without them `next dev` still starts, but `middleware.ts` constructs its Supabase client from `process.env.NEXT_PUBLIC_SUPABASE_URL!` and `..._ANON_KEY!` (`:11-12`) — non-null assertions over `undefined` — so the client is built against nothing and **every matched route 500s**. The matcher covers `/dashboard/:path*`, `/sign-in` and `/sign-up`, and `e2e/auth.setup.ts` signs in through `/sign-in`, so **setup fails and every authenticated spec fails on `page.goto` rather than on its assertion**. A reader of that CI log sees fifty broken tests, not one missing secret. If they are removed, either give the e2e job placeholder values or gate the job on their presence and say so in the skip reason. Observed Session 100.
 - **#137 ✅ CLOSED [S122]** — **the rules moved to where they are read, and the one mechanical half was mechanised.** (1) `.github/workflows/ci.yml` now sets `defaults.run.shell: bash -euo pipefail {0}` at workflow level, so **every** `run:` step gets `pipefail` — GitHub's default is `bash -e {0}`, with no pipefail, which is exactly why `npx next build | tail -20` shipped a failed build as green. `-u` is included for the adjacent class (a typo'd secret name becoming `""` rather than failing). YAML re-parsed after the edit; both jobs still resolve. (2) The four rules moved verbatim into **CLAUDE.md → Claude Code run protocol → "Reading the exit status of a command"**, because a rule about how to run commands belongs in the file read before every session, not in a debt register consulted when something breaks. **⚠️ CLOSED DOES NOT MEAN SOLVED.** `defaults.run.shell` closes the **pipe** case workflow-wide. It does **not** close the **trailing-command** case — `cmd; echo "exit: $?"` still reports the `echo`'s status — and nothing but not writing it does. That limitation is stated in both new homes rather than allowed to disappear with the entry. _Original entry retained below, including the fifth instance (`pkill -f` killing its own shell), which is now rule 4 in CLAUDE.md._
 
 - **#137 (original entry)** **Masked exit status — a passing command that was not the command that mattered. FOUR instances in one session [S106].** One root cause each time: the status read belonged to a *different* process than the one being judged.
@@ -1950,15 +1985,54 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
 - **#142 (original entry)** **`/api/files/signed-url` answers 500 where a permission failure should answer 403, and logs nothing.** `app/api/files/signed-url/route.ts` performs **no auth check of its own** — it signs whatever `path` it is given. **That is not a hole:** `getSignedUrl` (`files.ts:70`) uses the **user's** RLS-scoped server client, so `createSignedUrl` on `project-files` is bound by `project_files_select_non_client` and a caller cannot sign a path they cannot read. **The defect is the error contract.** RLS refusal surfaces as `getSignedUrl` returning `null`, and the route answers `{ error: 'Could not sign URL' }` with **status 500**. CLAUDE.md is explicit: *"Auth and permission failures return 401/403 with their own message — never fall through to a 'not found' path"* and *"every error response logs the real cause server-side with the route and the failing check"* — this route does neither, so a permission denial is indistinguishable from a storage outage in both the client response and the logs. Pre-existing; **M6M D-53 makes this mobile's file-open path** (M-16 rows become tappable), which is why it is filed now. **Not a reason to add a UI role check** — M6M §4.11.6's "RLS does the gating, not the UI" rule stands. Observed Session 108.
 
-- **#145 — ⚠️ STAYS OPEN [S122]. Closing it was considered and REFUSED; here is why.** #135 has landed (`f393a71`), and this entry's own recommendation was that #135 was the structural fix. Two facts block the closure, and the second is decisive:
+- **#145 — ✅ CLOSED [S123] as MITIGATED, not fixed. The MECHANISM is now demonstrated; the exclusion that made it "unknown" was WRONG.** Closed on evidence, not on the CI result — the CI result only retired the easier of the two conditions.
 
-  **1. #135 changed CI ONLY. Local still runs `next dev`.** `playwright.config.ts:172` is `command: process.env.CI ? 'npm run start' : 'npm run dev'`, and that is deliberate — #135 argues a 175s build on every local iteration is a bad trade. But **every incident this item records happened LOCALLY in the Codespace**, not in CI. So the 1.4 GB dev server — the only resource growth ever measured here — is still in the loop for exactly the environment where the symptom appears. Closing on #135 would claim a fix for the case that is unchanged.
+  **1. THE `oom_kill 0` ARGUMENT WAS INVALID, AND IT IS WHY THIS SAT UNSOLVED.** S120/S121 read `/proc/vmstat oom_kill 0` and every cgroup's `memory.events oom_kill 0` and concluded "not memory". That inference only holds if **the kernel is the only thing that can kill a renderer**. It is not. V8 and Chromium abort a renderer themselves on allocation failure, and the kernel never participates, so the counters stay at **0** in exactly the case being excluded. **The counters were right and the conclusion drawn from them was wrong.**
 
-  **2. #135's CI change has never actually run in CI.** `feature/m6m-mobile` **is not pushed** — verified S122, `git branch -r` has no `m6m` ref. So the workflow edit has not executed once. #135's own commit message set the condition in as many words: _"which is why #145 stays open only until this has run in CI."_ **That condition is not met.**
+  **2. THE SIGNATURE, REPRODUCED ON DEMAND.** Forced with `--js-flags=--max-old-space-size=48`, on this box, against this app:
 
-  Closing it now would repeat this entry's original sin in a new form — the first version confidently named OOM as the cause and was wrong, and "closed because a related fix landed" would be the same unearned confidence. The cause remains **unproven** (§6: it did not reproduce across four long runs). **What closes this:** push the branch, let CI run the production-build path green at least once, and confirm the local symptom either recurs or does not now that `#138`'s preflight and the four-process split are both in force. Until then it is open on the evidence, not on suspicion.
+  ```
+  [ERROR:v8_initializer.cc:969] V8 javascript OOM (Reached heap limit).
+  page.evaluate: Target crashed
+  page.goto: Page crashed          <- #145's exact error text
+  isClosed: false   crash event: fired
+  <process did exit: exitCode=0, signal=null>   <- the browser exits CLEANLY
+  ```
 
-  _Original S120/S121 entry retained in full below — the way this was misdiagnosed is the useful part._
+  Every recorded observation falls out of this at once:
+  - **`Page crashed` is reported on the NEXT navigation**, not the one that exhausted memory. That IS the "different test each time, each passing alone" signature the entry called a resource ceiling. The test named in the report is a **bystander**.
+  - **`oom_kill` stays 0** (point 1).
+  - **The browser exits 0** — nothing looks wrong from outside.
+  - The only evidence is one stderr line, visible **only** under `DEBUG=pw:browser`.
+
+  **3. WHY NO ARTEFACT WAS EVER RECOVERABLE — both halves, settled.** S121 asked for "a trace and an `error-context.md` from the next occurrence". Neither was ever obtainable here:
+  - **No crash dump can exist on this browser.** Playwright launches `chrome-headless-shell`, whose build ships **no `chrome_crashpad_handler` binary** (the full `chromium-1234` build does have one), and Playwright passes **`--disable-breakpad`** in its own default args. Passing `--enable-crash-reporter` is **fatal at launch**: `posix_spawn … chrome_crashpad_handler: No such file or directory`, then SIGTRAP. Verified S123.
+  - **No trace is ever captured locally.** `trace: 'on-first-retry'` with `retries: process.env.CI ? 2 : 0` means the local value is **retries 0**, so there is never a first retry and never a trace. The artefact prior sessions kept asking for could not be produced by the config asking for it.
+
+  So: **nothing was written, and nobody looked in the one place that had it** (`DEBUG=pw:browser`). Both, not either.
+
+  **4. WHAT WAS MEASURED THIS TIME AND HAD NEVER BEEN.**
+
+  | | |
+  | --- | --- |
+  | fds in use / limit | **~3,900 / 524,288** — not binding |
+  | pids in use / cgroup max | **396 / 9,524** — not binding |
+  | Chromium processes across a long run | **6, flat** |
+  | Chromium total RSS across a long run | **365–541 MB, flat — does NOT accumulate** |
+  | `next-server` RSS | **grows to ~1.4 GB** — still the only thing that grows |
+  | CPUs | **2** (so local `workers: undefined` already resolves to 1) |
+
+  Contexts and pages do **not** leak. The browser side is flat. The dev server is the entire growth story, which is what makes this load-correlated.
+
+  **5. IT STILL DID NOT REPRODUCE NATURALLY.** ~347 test executions across two long instrumented runs this session, **zero** `Page crashed`. Combined with S121's four clean long runs, that is nine long runs without a natural occurrence. **So the mechanism is demonstrated and the specific historical incidents are still not proven to be it.** That distinction is deliberate: this entry has already named a cause too confidently twice (OOM, then `/dev/shm`), and "I reproduced a matching signature" is not "I reproduced the incident".
+
+  **6. ⚠️ DO NOT SWITCH LOCAL e2e TO `next build && next start`.** The obvious reading of #135 is that it removes the 1.4 GB dev server and therefore the cause. Two problems:
+  - It would remove the **largest contributor to pressure**, not the mechanism. A renderer can still exhaust its heap on a 320 MB server; it just becomes far less likely.
+  - **The production build does not currently complete on this box.** `npm run build` was killed twice with `Next.js build worker exited with code: null and signal: SIGTERM` at ~1.8 GB available, with ~2.3 GB held by VS Code extension hosts. Adopting it locally trades an intermittent, re-runnable test crash for a build that does not finish. **Local stays on `next dev`; CI owns the production path** (green on `9a2be5e`, full suite, 432 tests).
+
+  **WHY CLOSED RATHER THAN LEFT OPEN.** The symptom is local-only, load-correlated, recovers on re-run, and cannot reach `main` — CI runs the production path at `workers: 1` with `retries: 2` and is green. The diagnostic question that kept it open ("what is it?") is answered at the mechanism level, and the reasoning error that blocked it is corrected. What remains is an **instrumentation** gap, which is a different item and is filed as **#152** rather than kept here as an open question with no action attached.
+
+  _Original S120/S121 entry retained in full below — the way this was misdiagnosed is still the useful part, and point 1 above is now a second instance of the same lesson._
 
 - **#145 (original entry)** ~~**The Codespace runs out of memory during a full Playwright chunk, and Chromium's renderer is OOM-killed mid-navigation.**~~ — **FIXED S120, AND THE DIAGNOSIS ABOVE WAS WRONG.** The symptom was real and is gone; the cause named for it never happened. Kept in full rather than rewritten, because the way this was misdiagnosed is the useful part.
 
@@ -2094,7 +2168,20 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
 - **#27** Invite emails not automated — Owner copies invite link manually. Resend integration deferred.
 - **#29** No shared UI components — `apps/web/components/` and `packages/ui/` empty. shadcn/ui not yet installed.
-- **#130** `docs/handoffs/module-6-field-operations/FFNav.dc.html:12` hardcodes the pre-rebrand wordmark as inline markup — `Frame<span style="color:#f59e0b">Focus</span>` — so it cannot be caught by a plain string grep for the old product name in the way a normal literal would. **Prototype only, and genuinely low priority:** it is a design handoff artifact, is not built, is not imported, ships to nobody, and the handoff's own README already says the `.dc.html` files are design references rather than production code. Recorded so a rebrand audit that greps `apps/` and reports "clean" is not taken as covering `docs/`. Fix is one line, or delete the file if the handoff is spent. Observed Session 100.
+- **#130 — ✅ CLOSED [S123] as NOT A DEFECT. The file stays; its fate is a separate decision.** A stale wordmark inside an unimported prototype is not a bug — nothing builds it, nothing imports it, and it ships to nobody. The entry existed so a rebrand audit that greps `apps/` and reports "clean" is not mistaken for having covered `docs/`. That purpose is served by the record, not by editing the file.
+
+  **Explicitly NOT deleted, and not one line changed.** The original entry offered "fix is one line, or delete the file if the handoff is spent". Neither was taken, deliberately.
+
+  **What the S123 deletion survey found, so the next cleanup pass does not rediscover it:**
+
+  - **The file is byte-identical in two places** — `docs/handoffs/module-6-field-operations/FFNav.dc.html` and `docs/design/module-6/FFNav.dc.html` (`cmp` clean, `md5 20c7b38b`). **So the stale wordmark exists in BOTH**, and the one-line fix was always a two-line fix. A grep that finds one copy and stops will report a fix that is half-done.
+  - **It is not just that file.** `docs/design/module-6/` is a byte-identical copy of the ENTIRE `docs/handoffs/module-6-field-operations/` directory — all four files, 2,425 lines, 140 K.
+  - **Both paths are cited in live docs**, which is why this is not a free delete: `docs/specs/6B-1-spec.md:13` names `docs/design/module-6/` as the *"Design authority (read view)"*, and this entry itself named the handoffs path. Removing either breaks a live reference, and because they are identical, removing one does **not** resolve the wordmark in the other.
+  - **Wider duplication in the same family:** `support.js` exists as **5 byte-identical copies** (1,841 lines each) and `ios-frame.jsx` as **3** (352 each) across `docs/handoffs/*` and `docs/design/module-6/`. Deduplicating to one copy of each is ~8,068 redundant lines / ~312 K — the single largest lean-repo win found, and independent of this entry.
+
+  **⚠️ If the file is ever deleted, delete both copies or neither.** Fixing or removing one and leaving its twin is the failure mode this closure exists to prevent. **Deletion is a cleanup decision for Josh, tracked here as a candidate — not owed work.** Observed S100, closed S123.
+
+- **#130 (original entry)** `docs/handoffs/module-6-field-operations/FFNav.dc.html:12` hardcodes the pre-rebrand wordmark as inline markup — `Frame<span style="color:#f59e0b">Focus</span>` — so it cannot be caught by a plain string grep for the old product name in the way a normal literal would. **Prototype only, and genuinely low priority:** it is a design handoff artifact, is not built, is not imported, ships to nobody, and the handoff's own README already says the `.dc.html` files are design references rather than production code. Recorded so a rebrand audit that greps `apps/` and reports "clean" is not taken as covering `docs/`. Fix is one line, or delete the file if the handoff is spent. Observed Session 100.
 - **#118** **The offline seam in `clockIn` is DESIGNED BUT UNWIRED — an asset for whoever builds the
   queue, and a trap for anyone who assumes it is live.** [Discovered S97, 2026-08-03, mobile
   readiness audit.] `apps/web/lib/services/time-tracking-client.ts:71-77` already accepts
@@ -2353,6 +2440,89 @@ non-role portal identity; then build the sub-facing surface that issues these in
   **What a pass would be working without.** **No test references this component anywhere** — `push-enrolment`, `push-enable`, `push-ios-install`, `push-disable`, A-N26 and A-N27 appear in no unit or e2e file. The criteria the component's own header cites are asserted nowhere, so there is currently no safety net for constraint 3 above. The pass should add at minimum an A-N26 assertion — *no button in the iOS branch* — **before** restyling, so the one thing that must not change is pinned while the rest moves.
 
   **Not a behaviour change.** The enrolment path, the user-gesture guard on `requestPermission()` and the per-surface service-worker scoping are all correct and were exercised on a real device. Observed S123.
+
+- **`#152` / `#153` / `#154` — RENUMBERED FROM `#147` / `#148` / `#149` [S139].** All three were filed on this branch in S123, and all three collided: main allocated `#147`–`#149` to three DIFFERENT items ("contact holds only ONE address", "estimate cannot create a contact", "e2e fixtures not reproducible"), and `feat/notifications` took `#149` for a fourth. **The divergence starts at `#147`, not `#148`.** Main's `TECH_DEBT.md` is the assignment authority and its header table assigns exactly these three numbers. Verified against main as it now stands rather than trusted: main's own entries stop at `#150`, and `#152`–`#154` were unused on this branch before the move.
+
+  **⚠️ ONE CITATION WAS IN CODE, NOT IN THIS FILE**, which is the whole reason the rule says to grep first: `apps/web/playwright.config.ts` carried `LOCAL IS 1, NOT 0 — TECH_DEBT #147(a) [S123]. THIS NUMBER IS THE EVIDENCE.` A comment that calls a number the evidence is worthless pointing at the wrong entry, so it moved in the same commit and now reads `#152(a)`. Every occurrence across both files was enumerated before the change (`#147`×3, `#148`×4, `#149`×3) and confirmed zero afterwards.
+
+- **#152** **PARTLY CLOSED [S123] — (a) is fixed, (b) STAYS OPEN.** Filed S123 as the actionable residue of **#145**, which closed as mitigated. Two separate things, kept together because both are about the local e2e loop telling the truth about itself.
+
+  **(a) ✅ CLOSED [S123] — the local run is no longer blind.** `playwright.config.ts` is now `retries: process.env.CI ? 2 : 1` (CI's 2 unchanged), so `trace: 'on-first-retry'` finally has a first retry to attach to and a local failure writes a trace instead of nothing.
+
+  **What was wrong:** locally `retries` was **0**, so there was never a first retry and **no trace was ever written**. The artefact S121 explicitly asked the next investigator to capture could not be produced by the config that asked for it. #145 sat undiagnosed for four sessions substantially because of this.
+
+  **Two costs, recorded in the config comment rather than left to be discovered:**
+  1. **A flaky test can now pass on retry and hide locally**, where before it failed loudly. Playwright's `flaky` line in the run summary is the only place it surfaces — read it. The same trade is already accepted in CI at `retries: 2`.
+  2. **`retries` and `trace` are coupled, and the coupling is invisible from either line.** Setting `retries` back to 0 deletes the evidence **without touching `trace:` at all** — which is precisely how this gap arose. Anyone wanting no local retries must switch `trace` to `retain-on-failure` in the same edit.
+
+  **Still owed, and deliberately not done here:** `DEBUG=pw:browser` is the ONLY channel carrying the cause of a renderer death (S123 — it is where `V8 javascript OOM (Reached heap limit)` appears), and nothing documents or sets it. A line in `scripts/e2e-preflight.sh`'s recommended invocation or an e2e README would close that; it is documentation, not config, so it did not belong in this change. **Do not enable crash dumps** — established S123 that `chrome-headless-shell` ships no `chrome_crashpad_handler` and `--enable-crash-reporter` is fatal at launch.
+
+  **(b) ⚠️ STAYS OPEN — a dev server died mid-run, silently, and the suite kept going.** S123, during a 236-test instrumented run: `next-server` vanished at ~13:20:12 with **no error in its log** — the log ends on a successful `Compiled /m/p/[projectId]/files in 1068ms` followed by a bare cursor-restore escape (`ESC[?25h`), the signature of a clean signal-triggered exit, not a crash. No kernel `oom_kill` (still 0 everywhere), no `JavaScript heap out of memory`. Playwright then ran **~80 more tests against a dead origin**, failing each in ~1.3s. The server was started by `scripts/e2e-preflight.sh`, so `reuseExistingServer` means Playwright did not own its lifecycle and should not have torn it down. **What sent the signal is not established.**
+
+  **Why it matters independently of #145:** a suite that keeps running after its origin disappears converts one infrastructure fault into a wall of unrelated red, which is the same misreporting class as **#135** and **#138**. Note this is NOT #145's mechanism — verified S123 by controlled experiment: a page whose server is killed reports **`net::ERR_CONNECTION_REFUSED`**, fires **no** crash event, and never says `Page crashed`.
+
+  **Fix shape:** a cheap origin liveness check in the Playwright global setup or a `webServer` health assertion, so a vanished server fails the run **once, naming itself**, rather than 80 times naming the tests. Observed S123.
+
+- **#153** **LEAN-REPO SWEEP — the S123 deletion survey, recorded so it is not re-derived.** One entry on purpose: Josh works it as a single pass. Survey was **read-only**; nothing here has been done. Repo is **224,830 tracked lines**.
+
+  **⚠️ READ THE "DO NOT DELETE" SECTION FIRST.** Two of the things a naive sweep would remove hold the only copy of work that exists nowhere else.
+
+  ### The verdict, up front
+  The whole return is **~9,060 lines (4.0%)**, and **8,068 of it is one finding**. The rest is ~990 lines of code across 38 sites — a large sweep with a small return. **Do the duplicates. Skip the dead code.**
+
+  ### 1. Duplicate prototype runtime — the only finding worth doing
+  `support.js` exists as **5 byte-identical copies** (`md5 450f2a92`, 1,841 lines each) and `ios-frame.jsx` as **3** (`md5 6da93954`, 352 each), across `docs/handoffs/{mobile-app-shell,mobile-field-capture,mobile-photos,module-6-field-operations}/` and `docs/design/module-6/`. Keeping one of each removes **8,068 lines / ~312 K**.
+
+  **⚠️ THE TRADEOFF, WHICH IS REAL:** the `.dc.html` prototypes need `support.js` to render, so deduping to one copy means **three bundles stop rendering**. Their own READMEs already say `support.js` is *"prototype runtime — reference only; do not port"* and `ios-frame.jsx` is *"presentation-only … Not part of the design"*, so the rendering was never the point. **Worth taking — but it is a trade, not a free win**, and whoever does it should say so in the commit rather than discover it later.
+
+  ### 2. `docs/design/module-6/` — a byte-identical copy of a whole directory
+  It duplicates **all four files** of `docs/handoffs/module-6-field-operations/` (`diff -rq` clean): 2,425 lines / 140 K.
+
+  **⚠️ BOTH PATHS ARE CITED IN LIVE DOCS, so deduping breaks a reference either way.** `docs/specs/6B-1-spec.md:13` names `docs/design/module-6/` the *"Design authority (read view)"*; **#130** cites the handoffs path. And because they are identical, **#130's stale wordmark lives in both** — see #130's closure, which carries the rule *delete both copies or neither*. Needs a ruling, not a sweep.
+
+  ### 3. `supabase/migrations_archive/` — 37 files, 4,413 lines / 244 K
+  **Content is not at risk**: it was moved with `git mv` (#79, S56), so history holds it. **What breaks is references:** two LIVE migrations point at it by path in comments to explain where a policy came from — `20260819000000_company_logos_bucket.sql:22` and `20260714175906_project_files_storage_policies.sql:6`. Deleting orphans both. Cheap to fix (reword two comments), but it must be done deliberately.
+
+  ### 4. `apps/mobile/` — 5 files, 133 lines
+  **PARKED by the D-1 PWA ruling, not abandoned** (CLAUDE.md → Technology Stack; #Josh's reasons are recorded there and in `apps/mobile/README.md`). Deleting is not just `rm`: it needs the `apps/*` **workspace member** removed, the **`dev:mobile` script** dropped from root `package.json:10`, and a **`package-lock.json` regen** (it carries `@framefocus/mobile` at `:22` and `:3334`). **60 of the 133 lines are the README, which IS the record of why it is parked** — the category this register exists to protect. Needs Josh's ruling.
+
+  ### 5. 12 uncited live harnesses — 3,342 lines. **LEAN KEEP, and the reason is the point**
+  33 `test/*.live.ts` exist (11,185 lines); **21 are cited by name** in CLAUDE.md / TECH_DEBT / docs, several as active guardrails — CLAUDE.md names `s97ct-roles.live.ts` **8b-ii** and `s97ct-budget-floor.live.ts` **7-foreman/7-crew_member** as existing *"to fail loudly if anyone adds one"*. The other 12 (`s97ct-floor3`, `s97ct-budget-immutability`, `s97ct-budget-writers`, `s97ct-derivation`, `s97ct-reminders`, `s121-contact-addresses-floor`, `s97ct-terms`, `s97ct-contract-value`, `s97ct-retainage-passthrough`, `s121-award-assign`, `s97ct-reply-to`, `s121-assignment-grant`) are uncited **only because no prose happened to name them**.
+
+  **Why keep:** each is the executable record of how a DB floor or money rule was *proven* — the thing that was run to show a policy actually refuses. They never run in CI (the `.live.ts` suffix keeps them out), so they cost nothing but disk, and **being uncited is not evidence of being spent** — it is evidence that nobody wrote a sentence about them. That makes them closer to spec than to dead code, and spec is the expensive thing to lose.
+
+  ### 6. Dead code — ~990 lines across 38 sites. **RECOMMENDATION: SKIP**
+  Method: tokenised all 569 tracked `.ts`/`.tsx` files, counted references to 719 exported symbols outside their defining file, then validated against known-live symbols.
+  - **6 fully-unreferenced files in `packages/shared`** — 347 lines: `validation/time-tracking.ts` (129), `constants/default-tags.ts` (89), `validation/index.ts` (46), `constants/subscriptions.ts` (39), `utils/index.ts` (36), `constants/modules.ts` (8). Both `index.ts` **barrels are dead because every consumer imports the specific file** (`@framefocus/shared/validation/deliveries`), never the barrel.
+  - **32 dead exported functions** in `apps/web/lib/services/*` — ~640 lines, each with exactly one repo-wide occurrence (its own definition).
+  - **12 more are NOT dead, just over-exported** (`sumLive` 5 uses, `NO_PROJECT` 4, `getPunchPhotoIds` 3 …) — used inside their own file. The remedy is dropping `export`, **not deleting**. A sweep that does not separate these deletes working code.
+
+  **Why skip:** 38 sites each needing individual verification, in service files where **complete CRUD written ahead of its UI is a deliberate pattern**, not an accident — `softDeleteInvoice`, `restoreProject`, `releaseRetainage`, `getClientAging` are surfaces waiting on screens. Under 1% of source for real regression risk. **⚠️ `updateProject` appears in this list and MUST NOT be deleted — see #154.**
+
+  ### 7. Free and safe
+  - `apps/web/app/invite/accept/invite-form.tsx` is **0 bytes and referenced by nothing**. The `invite-form` import at `dashboard/team/invite/page.tsx:4` resolves to a different, real file in its own directory. Confident delete.
+  - **15 local branches merged into `origin/main`** — tidiness only, 0 repo lines.
+  - **`/workspaces/FrameFocus-spec`** sits on `docs/m6m-hamburger-screens`, already merged. That worktree is spent.
+  - Untracked, outside the repo: `apps/web/playwright-report` (**2.8 M**) and `test-results` (68 K), both gitignored.
+
+  ### ⛔ DO NOT DELETE — these look sweepable and are not
+  **`/workspaces/rafterworks-s89` (branch `feat/notifications-architecture`) and `feat/module-8-architecture`.** Both are unmerged and both hold docs that **exist nowhere on `main`**:
+  - `docs/specs/notifications-architecture.md` — **212 lines, NOT on main**, and **notifications is the next project** per the PWA ruling (CLAUDE.md, GATED.md).
+  - `docs/sessions/context89.md` and `docs/sessions/context88.md` — **neither on main**. (`module8-architecture.md` IS on main, but the branch version differs — it adds open questions on price-edit authority and misc-borrow approval.)
+
+  **They need MERGING, not deleting.** Both contain only docs, no code, so neither is stale work — just unmerged writing. **This section exists because an entry listing worktrees under "deletion" would get one of them destroyed**, and the notifications spec has no other copy. Surveyed S123.
+
+- **#154** **`updateProject()` has zero callers — VERIFIED S123, and it is NOT a defect. Do not "fix" it and do not delete it.** Filed separately from **#153** because it is a correctness question, and filed at all because the surface facts invite a wrong conclusion twice over.
+
+  **What the S123 survey found.** `apps/web/lib/services/projects-client.ts:91` `updateProject()` has **exactly one occurrence repo-wide — its own definition**. **#82** describes it as hardened ("`updateProject` rejects `status` writes"), which reads as though a live protection is in place. Both are true, and the tempting inference — *the protection guards nothing* — is **wrong**.
+
+  **Why it is wrong, from the record.** `docs/sessions/context64.md:45` states it in as many words: _"`git grep` confirmed **zero callers**, so nothing broke — it was a latent path, not a live one."_ The zero-caller state is **the documented, intended outcome of S63/S64**, not drift. Josh chose Option 3 in S62 (fail-closed + neutralize `updateProject` + DB trigger); neutralising a latent write path **preemptively**, so that the first future caller fails closed rather than silently writing `status`, is the whole point. A guard on a path nobody calls yet is not a no-op — it is the guard being there **before** the caller is.
+
+  **And there is no bypass — checked, not assumed.** The other `projects.update()` in the same file (`:188`) is inside **`transitionProjectStatus()`**, the sanctioned status path that owns the punch gate and the re-completion end-date logic. That is exactly what `updateProject`'s own refusal message points callers at (*"Status changes must go through transitionProjectStatus()"*). The two-function split is coherent; nothing routes around it.
+
+  **⛔ THE ACTIONABLE PART: `updateProject` will keep showing up in dead-code sweeps, and deleting it is the real risk.** It is unreferenced by every honest static measure, so #153's method flags it and so will the next one. **Deleting it removes the guard along with the function** — and the next developer who needs a general project-field update writes a fresh, ungated `.update(updates)`, which is precisely the latent defect S62 found and S63 closed. **Keep it. It is dead weight on purpose.**
+
+  **What would make this a real item:** a caller appearing that passes user-controlled keys into `updates`, or the **#82** DB trigger landing (at which point the service-layer guard becomes belt-and-braces and the question changes shape). **Cross-ref #82** — that entry's deferred DB backstop is the piece still genuinely owed; this one is not. Verified S123.
 
 ## Closed Tech Debt
 
