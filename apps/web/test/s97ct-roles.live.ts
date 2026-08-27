@@ -293,6 +293,10 @@ describe('4. CO builder rate fields', () => {
     const { CoBuilder } = await import(
       '@/app/dashboard/projects/[id]/changes/[coId]/co-builder'
     );
+    // S175 item 9 — CoBuilder now calls useConfirm(), which throws outside a
+    // ConfirmProvider. Wrap the render; no dialog pending -> children-only, so
+    // the "Contract rates" mount assertion below is unaffected.
+    const { ConfirmProvider } = await import('@/components/confirm/confirm-provider');
 
     const co = {
       id: NOWHERE, project_id: NOWHERE, co_type: 'cost_plus', status: 'draft',
@@ -311,10 +315,10 @@ describe('4. CO builder rate fields', () => {
     };
 
     const withRates = renderToStaticMarkup(
-      React.createElement(CoBuilder, { ...base, canSeeRates: true } as never)
+      React.createElement(ConfirmProvider, null, React.createElement(CoBuilder, { ...base, canSeeRates: true } as never))
     );
     const withoutRates = renderToStaticMarkup(
-      React.createElement(CoBuilder, { ...base, canSeeRates: false } as never)
+      React.createElement(ConfirmProvider, null, React.createElement(CoBuilder, { ...base, canSeeRates: false } as never))
     );
 
     expect(withRates).toMatch(/Contract rates/);
