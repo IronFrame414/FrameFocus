@@ -296,6 +296,9 @@ export async function updateFile(
     tags?: string[];
     ai_tags?: string[] | null;
     markup_data?: Record<string, unknown> | null;
+    /** Redesign 6.2 — the per-file share flag. The column and both RLS arms
+     *  shipped long ago; this is the first writer with a UI behind it. */
+    client_visible?: boolean;
   }
 ): Promise<MutationResult> {
   const supabase = createClient();

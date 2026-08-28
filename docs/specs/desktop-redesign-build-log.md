@@ -487,3 +487,23 @@ inventories"). Spec: `docs/specs/desktop-redesign-spec.md` (1358 lines). CLI lin
   `file-categories-client.ts` (new) · `files/page.tsx` · `file-row.tsx` ·
   `upload/upload-form.tsx`.
 - **Verified:** type-check 5/5; live probe above; no test renders FileRow (swept).
+
+### Entry 21 — 6.2 Photos: the surfacing job
+- **Did:** the 20-line stub becomes the desktop gallery. **The mechanism is shared, not
+  re-implemented** (the parity rule): the SAME `getProjectPhotos()` — D-31's display rule
+  included, one flat `<img>` whose src is the derivative when annotated, the original
+  otherwise; no markup_data on the render path. Day-grouped in the company timezone (both
+  sides of the comparison in one zone — the S106 lesson), newest first, URL-param chips. The
+  chip row carries the mobile four PLUS the two data-ready-unrendered ones: **Safety**
+  (the service already derives source `'safety'`) and **Marked up** (`hasMarkup`). A tile
+  opens the EXISTING desktop markup surface — no second lightbox/viewer is built. The
+  **first `client_visible` toggle anywhere** ships on the tiles (staff-only render;
+  `files_update_non_client` is the boundary; `updateFile` gains the field), and
+  `PhotoRecord` now carries `client_visible` at all three mapping sites.
+- **Deferred by ruling, untouched:** create-punch, attach-to-CO (no backing path — pairs with
+  16a's), share-with-client (mobile Web Share only).
+- **Flagged, not done:** the mobile chip row still lacks Safety/Marked-up — widening a ruled
+  `/m` surface is not a rider on a desktop step; it needs its own decision.
+- **Files:** `photos/page.tsx` (rewritten) · `photo-visibility-toggle.tsx` (new) ·
+  `lib/services/photos.ts` · `files-client.ts` (updateFile gains client_visible).
+- **Verified:** type-check 5/5.

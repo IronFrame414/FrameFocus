@@ -28,6 +28,9 @@ export interface PhotoRecord {
   file_path: string;
   created_at: string | null;
   created_by: string | null;
+  /** Redesign 6.2 — the per-file share flag, surfaced for the desktop
+   *  gallery's toggle. RLS (files_select_client) is the enforcement. */
+  client_visible: boolean;
   tags: string[] | null;
   ai_tags: string[] | null;
   /** §4.10 — "a file carrying marks is flagged from markup_data being non-empty". */
@@ -153,6 +156,7 @@ export async function getProjectPhotos(projectId: string): Promise<PhotoRecord[]
         file_path: file.file_path,
         created_at: file.created_at,
         created_by: file.created_by,
+        client_visible: Boolean(file.client_visible),
         tags: file.tags,
         ai_tags: file.ai_tags,
         hasMarkup: annotated,
@@ -220,6 +224,7 @@ export async function getPhoto(fileId: string, projectId: string): Promise<Photo
     id: file.id,
     file_name: file.file_name,
     file_path: file.file_path,
+    client_visible: Boolean(file.client_visible),
     created_at: file.created_at,
     created_by: file.created_by,
     tags: file.tags,
@@ -293,6 +298,7 @@ export async function getReceiptFile(
     id: file.id,
     file_name: file.file_name,
     file_path: file.file_path,
+    client_visible: Boolean(file.client_visible),
     created_at: file.created_at,
     created_by: file.created_by,
     tags: file.tags,
