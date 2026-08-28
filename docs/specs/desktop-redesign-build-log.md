@@ -551,3 +551,35 @@ inventories"). Spec: `docs/specs/desktop-redesign-spec.md` (1358 lines). CLI lin
 - **Files:** `lib/notify/categories.ts` (new) · `notifications/page.tsx` ·
   `notification-list.tsx` · `expenses/expenses-page-client.tsx`.
 - **Verified:** type-check 5/5 each; no unit test renders NotificationList (swept).
+
+### Entry 24 — the steps-5–7 FULL BATTERY
+- **Type-check:** 5/5, exit 0 (read from printed output at every commit).
+- **Lint:** exit 0, whole repo.
+- **`turbo build --force`:** exit 0, cold, 3m15s.
+- **Unit:** **955/955 (63 files)**, exit 0.
+- **Live RLS (full, 100 files):** first pass **1428 passed · 4 failed · 13 files failed** →
+  every failure diagnosed, none left standing:
+  - **10 suite-level failures were a REAL REGRESSION of mine** — the 20261039 seed trigger
+    broke company hard-deletion (`file_categories_company_id_fkey`), exactly the
+    lien-templates precedent. Fixed the designed way (the constraint name → the list):
+    `COMPANY_CHILDREN`, trial deletion's `COMPANY_TABLES` (between `files` and `projects`),
+    and `s97ct-reply-to`'s inline purge. **15 leaked fixture companies purged from
+    rebuild-test; 4 companies / 56 category rows confirmed restored.** All 10 suites green on
+    re-run.
+  - **`s123-reminders-loop` — fixture contamination** (the S167 class): the leaked companies
+    fed the loop a second candidate. Green on re-run after the purge, no code change.
+  - **`s97ct-derivation` 6–7 and `s149` qb_void_memo — the S157 class, missed by `0f5d37e`'s
+    reconciliation:** derivation asserted the OVERTURNED §12a read-anything (title included —
+    retitled); its fixtures are now PM-authored so the reads are non-vacuous. s149's fixture
+    was an S165 category-2 `.limit(1)` (any invoice, when the test depends on one the PM can
+    match through the SELECT policy) — now picked through the PM's own client. 7/7 and 23/23.
+  - Final state: **the 13 previously-failing files all green in isolation; no other file
+    failed.**
+- **Playwright, four chunks (the dev server does not survive one pass):**
+  m-shell **54/54** (2.7m) · m-sections+details+hubs **117 passed, 4 skipped** (7.2m — includes
+  the two inverted palette rgb assertions, proven live) · m-photos+capture+chat+hydration
+  **70/70** then remaining m-specs **187 passed, 5 skipped** (15.1m) · desktop+portal+harness
+  **117 passed** (14.7m). **Zero failures across all chunks; every exit code 0.**
+- **Vacuity check:** the inverted tests carry counter-vacuity guards (derivation 6 asserts
+  line-count > 0; s149's `.single()` fails loudly on no PM invoice; m-hubs' rgb ran against
+  live rendering). Nothing in a touched area passes against an empty result.
