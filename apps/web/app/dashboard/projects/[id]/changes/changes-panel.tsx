@@ -31,7 +31,7 @@ const STATUS_BADGES: Record<ChangeOrderStatus, { label: string; bg: string; fg: 
   sent: { label: 'Awaiting sig.', bg: '#fdece0', fg: '#b45309' },
   signed: { label: 'Signed', bg: '#e4f0e6', fg: '#3d7a4b' },
   voided: { label: 'Voided', bg: '#eef1f6', fg: '#c0362c' },
-  draft: { label: 'Draft', bg: '#eef1f6', fg: '#6b7280' },
+  draft: { label: 'Draft', bg: '#eef1f6', fg: '#7b8699' },
 };
 
 const CO_TYPE_OPTIONS: Array<{ value: ChangeOrderType; label: string }> = [
@@ -168,8 +168,15 @@ export function ChangesPanel({
   // Grid — reflow per financial floor; a trailing auto column carries the
   // delete action for Owner/Admin.
   const gridTemplate = canSeeFinancials
-    ? `0.7fr 2.3fr 1.2fr 1fr 1.3fr${canDelete ? ' auto' : ''}`
-    : '0.7fr 2.9fr 1.1fr 1.3fr';
+    ? `0.7fr 2.1fr 1.2fr 1fr 1fr 1.2fr${canDelete ? ' auto' : ''}`
+    : '0.7fr 2.6fr 1.1fr 1fr 1.3fr';
+
+  // §8.8.2 — schedule impact is NULLABLE, and NULL is a real state ("no
+  // impact entered"), not zero. The count below surfaces it the way the
+  // mockup does; the per-row cell never renders a fake +0.
+  const noImpactCount = changeOrders.filter(
+    (co) => co.status !== 'draft' && co.schedule_impact_days === null
+  ).length;
 
   return (
     <div>
@@ -307,9 +314,24 @@ export function ChangesPanel({
               <span style={{ ...microLabelStyle, textAlign: 'right' }}>Amount</span>
             )}
             <span style={microLabelStyle}>Status</span>
+            <span style={microLabelStyle}>Impact</span>
             <span style={microLabelStyle}>Sent</span>
             {canSeeFinancials && canDelete && <span />}
           </div>
+          {noImpactCount > 0 && (
+            <div
+              style={{
+                padding: '7px 20px',
+                fontSize: '12px',
+                color: color.warningDeep,
+                backgroundColor: color.rowTintAttention,
+                borderBottom: `1px solid ${color.neutralBadgeBg}`,
+              }}
+            >
+              {noImpactCount} CO{noImpactCount === 1 ? ' has' : 's have'} no schedule impact
+              entered
+            </div>
+          )}
 
           {changeOrders.map((co, i) => {
             const badge = STATUS_BADGES[co.status];
@@ -360,6 +382,37 @@ export function ChangesPanel({
                   <span style={{ ...badgeStyle, backgroundColor: badge.bg, color: badge.fg }}>
                     {badge.label}
                   </span>
+                  {/* §8.8.2 CO age — drafts wear how long they have sat. */}
+                  {co.status === 'draft' && co.created_at && (
+                    <span
+                      style={{
+                        display: 'block',
+                        fontSize: '10.5px',
+                        color: color.faint,
+                        marginTop: '3px',
+                      }}
+                    >
+                      in draft{' '}
+                      {Math.max(
+                        0,
+                        Math.floor((Date.now() - new Date(co.created_at).getTime()) / 86_400_000)
+                      )}
+                      d
+                    </span>
+                  )}
+                </span>
+                {/* §8.8.2 schedule impact — NULL renders as the mockup's "no
+                    impact entered" state, never a fake +0. */}
+                <span
+                  style={{
+                    fontFamily: font.mono,
+                    fontSize: '12px',
+                    color: co.schedule_impact_days === null ? color.faintAlt : color.bodyAlt,
+                  }}
+                >
+                  {co.schedule_impact_days === null
+                    ? 'not entered'
+                    : `${co.schedule_impact_days >= 0 ? '+' : ''}${co.schedule_impact_days} days`}
                 </span>
                 <span
                   style={{

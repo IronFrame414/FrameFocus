@@ -409,3 +409,17 @@ inventories"). Spec: `docs/specs/desktop-redesign-spec.md` (1358 lines). CLI lin
   that heuristic is actual + gross committed.
 - **Files:** `projects/[id]/budget/page.tsx`.
 - **Verified:** type-check 5/5. No old-palette hexes were present in this file (grepped).
+
+### Entry 17 — 5.2 `16a` Change Orders
+- **Did:** **the redaction behaviours are preserved untouched** — a redacted amount is an empty
+  grid slot by construction (the span only renders when `net_delta !== null`), and the summary
+  caption still flips "$X pending" → "sent to clients" on `canSeeSums`. NEW: the **Impact
+  column** — `schedule_impact_days` NULL renders "not entered", never a fake `+0`; a
+  tinted strip counts non-draft COs with no impact entered (the mockup's "1 CO has no impact
+  entered", all roles — non-dollar); **draft age** under the status badge ("in draft Nd",
+  from `created_at`). One old-palette badge hex moved (`#6b7280` → `#7b8699`).
+- **DEFERRED, per the prompt's ask-first list:** "Bill on next invoice vs Bill now" (not
+  stored; needs Josh's choice between a new column and an invoice-action shortcut) and
+  "from a photo or punch item" (no FK either direction; pairs with 17b). Neither is built.
+- **Files:** `projects/[id]/changes/changes-panel.tsx`.
+- **Verified:** type-check 5/5.
