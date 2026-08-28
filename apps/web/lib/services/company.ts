@@ -298,6 +298,17 @@ export async function getGLMappingSettings(): Promise<GLMappingSettings | null> 
   return (data as GLMappingSettings | null) ?? null;
 }
 
+// ── Step 8 (desktop redesign §8.11.1) — notification quiet hours ──
+// The two columns notify() reads to gate PUSH delivery (in-app rows always
+// land; `incident` overrides at any hour — ND-5). No UI wrote them before the
+// Settings Notifications tab; the per-type routing grid remains unbuilt (no
+// `notification_preferences` table — a schema change awaiting its own ruling).
+
+export type NotificationHoursSettings = Pick<
+  CompaniesRow,
+  'id' | 'timezone' | 'notify_hours_start' | 'notify_hours_end'
+>;
+
 // ----------------------------------------------------------------------------
 // M1-03 [S152] — the Settings page reads this row ONCE.
 // ----------------------------------------------------------------------------
@@ -329,7 +340,8 @@ export type CompanySettingsBundle = CompanyData &
   TimeTrackingSettings &
   EstimatingSettings &
   ProposalSettings &
-  GLMappingSettings;
+  GLMappingSettings &
+  NotificationHoursSettings;
 
 const SETTINGS_BUNDLE_COLUMNS = [
   // CompanyData
@@ -350,6 +362,8 @@ const SETTINGS_BUNDLE_COLUMNS = [
   // GLMappingSettings
   'gl_account_labor, gl_account_material, gl_account_subcontractor, gl_account_other',
   'fixed_burden_per_hour',
+  // NotificationHoursSettings (timezone already selected above)
+  'notify_hours_start, notify_hours_end',
 ].join(', ');
 
 /**

@@ -3,6 +3,7 @@ import type {
   CompanyData,
   EstimatingSettings,
   GLMappingSettings,
+  NotificationHoursSettings,
   PricingMode,
   ProposalSettings,
   TermsSection,
@@ -15,6 +16,7 @@ export type {
   EstimatingSettings,
   GLMappingSettings,
   GpsClockMode,
+  NotificationHoursSettings,
   PricingMode,
   ProposalSettings,
   TermsSection,
@@ -66,6 +68,35 @@ export type UpdateGLMappingSettingsInput = Partial<Omit<GLMappingSettings, 'id'>
 export async function updateGLMappingSettings(
   companyId: string,
   updates: UpdateGLMappingSettingsInput
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from('companies')
+    .update(updates)
+    .eq('id', companyId)
+    .select('id');
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+  if (!applied(data)) {
+    return { success: false, error: DISCARDED };
+  }
+  return { success: true };
+}
+
+// ── Step 8 (desktop redesign §8.11.1) — notification quiet hours ──
+// Gates PUSH only (`shouldPushNow`); in-app notifications always land and
+// `incident` pushes at any hour (ND-5). `timezone` is read-only here, as in
+// the time-tracking form: it predates this pass and has no UI control yet.
+export type UpdateNotificationHoursInput = Partial<
+  Omit<NotificationHoursSettings, 'id' | 'timezone'>
+>;
+
+export async function updateNotificationHours(
+  companyId: string,
+  updates: UpdateNotificationHoursInput
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = createClient();
 
