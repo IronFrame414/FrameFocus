@@ -1,22 +1,44 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import type { CatalogCategory, CostCatalogItem } from '@/lib/services/cost-catalog-client';
 import { listCatalog, softDeleteCatalogItem } from '@/lib/services/cost-catalog-client';
 import { CATEGORY_LABELS, UNIT_LABELS } from './catalog-labels';
 import { useConfirm, useAlert } from '@/components/confirm/confirm-provider';
+import {
+  AlertStrip,
+  FilterChips,
+  ListPageHeader,
+  ListSearchInput,
+} from '@/components/list-screen/list-screen';
+import { cardStyle, color, font, microLabelStyle, primaryButtonStyle } from '@/lib/theme';
 
 interface CatalogListProps {
   canManage: boolean;
+  /** RULED (§8.6): estimates-plus-selections usage per item, server-grouped.
+   *  Rendered as "used N times" — NO NOUN; a combined count under "estimates"
+   *  would be false. */
+  usage: Record<string, number>;
 }
 
-export function CatalogList({ canManage }: CatalogListProps) {
+// Stale = never verified, or last verified more than 90 days ago. The mockup
+// names no threshold; 90 days is a decision recorded in the build log, in one
+// place so it can be re-ruled without a hunt.
+const STALE_AFTER_DAYS = 90;
+
+function isStale(lastVerifiedAt: string | null, now: number): boolean {
+  if (!lastVerifiedAt) return true;
+  return now - new Date(lastVerifiedAt).getTime() > STALE_AFTER_DAYS * 86_400_000;
+}
+
+export function CatalogList({ canManage, usage }: CatalogListProps) {
   const confirm = useConfirm();
   const alert = useAlert();
   const [items, setItems] = useState<CostCatalogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [filterCategory, setFilterCategory] = useState<string>('all');
+  const [filter, setFilter] = useState<string>('all');
   const [deleting, setDeleting] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -30,8 +52,13 @@ export function CatalogList({ canManage }: CatalogListProps) {
     load();
   }, [load]);
 
+  const now = Date.now();
+  const staleCount = useMemo(() => items.filter((i) => isStale(i.last_verified_at, now)).length, [items, now]);
+
   const filtered = items.filter((item) => {
-    if (filterCategory !== 'all' && item.category !== filterCategory) return false;
+    if (filter === 'stale') {
+      if (!isStale(item.last_verified_at, now)) return false;
+    } else if (filter !== 'all' && item.category !== filter) return false;
     if (search && !item.name.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
@@ -53,151 +80,166 @@ export function CatalogList({ canManage }: CatalogListProps) {
     setDeleting(null);
   }
 
-  const selectStyle: React.CSSProperties = {
-    padding: '0.375rem 0.5rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '0.375rem',
-    fontSize: '0.875rem',
-  };
+  const chips = [
+    { value: 'all', label: 'All' },
+    ...Object.entries(CATEGORY_LABELS).map(([value, label]) => ({ value, label })),
+    { value: 'stale', label: `Stale${staleCount > 0 ? ` ${staleCount}` : ''}` },
+  ];
 
-  const thStyle: React.CSSProperties = { padding: '0.75rem 0.5rem', fontWeight: 600 };
-  const tdStyle: React.CSSProperties = { padding: '0.75rem 0.5rem' };
-
-  if (loading) {
-    return (
-      <p style={{ fontSize: '0.875rem', color: '#6b7280' }}>Loading catalog...</p>
-    );
-  }
+  const cellText: React.CSSProperties = { fontSize: '13px', color: color.bodyAlt };
 
   return (
     <div>
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-        <input
-          type="text"
-          placeholder="Search catalog..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{ ...selectStyle, flexGrow: 1, minWidth: '200px' }}
-        />
-        <select
-          value={filterCategory}
-          onChange={(e) => setFilterCategory(e.target.value)}
-          style={selectStyle}
-        >
-          <option value="all">All Categories</option>
-          {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-      </div>
+      <ListPageHeader
+        title="Cost Catalog"
+        subtitle={
+          loading
+            ? 'Loading…'
+            : `${items.length} item${items.length === 1 ? '' : 's'} · reusable material costs for building estimates`
+        }
+      >
+        <ListSearchInput value={search} onChange={setSearch} placeholder="Search catalog…" />
+        {canManage && (
+          <Link href="/dashboard/catalog/new" style={primaryButtonStyle}>
+            + Add Item
+          </Link>
+        )}
+      </ListPageHeader>
 
-      {/* Count */}
-      <p style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.75rem' }}>
-        {filtered.length} item{filtered.length !== 1 ? 's' : ''}
-      </p>
+      {!loading && staleCount > 0 && (
+        <AlertStrip>
+          <strong>{staleCount}</strong> price{staleCount === 1 ? '' : 's'} not verified in the last{' '}
+          {STALE_AFTER_DAYS} days — stale catalog prices are the quietest way to lose margin on a
+          bid.{' '}
+          <button
+            onClick={() => setFilter('stale')}
+            style={{
+              border: 'none',
+              background: 'none',
+              padding: 0,
+              color: color.primary,
+              fontWeight: 600,
+              fontSize: '13px',
+              fontFamily: font.sans,
+              cursor: 'pointer',
+            }}
+          >
+            Review stale prices
+          </button>
+        </AlertStrip>
+      )}
 
-      {filtered.length === 0 ? (
-        <div
-          style={{
-            textAlign: 'center',
-            padding: '3rem',
-            color: '#9ca3af',
-            backgroundColor: '#f9fafb',
-            borderRadius: '0.5rem',
-          }}
-        >
+      <FilterChips options={chips} selected={filter} onSelect={setFilter} />
+
+      {loading ? (
+        <p style={{ fontSize: '13px', color: color.muted }}>Loading catalog…</p>
+      ) : filtered.length === 0 ? (
+        <div style={{ ...cardStyle, padding: '48px', textAlign: 'center', color: color.muted }}>
           No catalog items found. {canManage && 'Click "+ Add Item" to get started.'}
         </div>
       ) : (
         categories.map((cat) => (
-          <div key={cat} style={{ marginBottom: '2rem' }}>
-            <h2
+          <div key={cat} style={{ ...cardStyle, overflow: 'hidden', marginBottom: '16px' }}>
+            <div
               style={{
-                fontSize: '1rem',
-                fontWeight: 600,
-                marginBottom: '0.5rem',
-                paddingBottom: '0.375rem',
-                borderBottom: '1px solid #e5e7eb',
+                padding: '11px 20px',
+                backgroundColor: color.tableHeadBg,
+                borderBottom: `1px solid ${color.neutralBadgeBg}`,
               }}
             >
-              {CATEGORY_LABELS[cat]}
-            </h2>
+              <span style={{ ...microLabelStyle, color: color.muted }}>{CATEGORY_LABELS[cat]}</span>
+            </div>
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
                 <thead>
-                  <tr style={{ borderBottom: '2px solid #e5e7eb', textAlign: 'left' }}>
-                    <th style={thStyle}>Name</th>
-                    <th style={thStyle}>Unit</th>
-                    <th style={thStyle}>Unit Cost</th>
-                    <th style={thStyle}>Last Verified</th>
-                    <th style={thStyle}>Notes</th>
-                    {canManage && <th style={thStyle}>Actions</th>}
+                  <tr style={{ borderBottom: `1px solid ${color.neutralBadgeBg}`, textAlign: 'left' }}>
+                    <th style={{ ...microLabelStyle, padding: '10px 12px 10px 20px' }}>Name</th>
+                    <th style={{ ...microLabelStyle, padding: '10px 12px' }}>Unit</th>
+                    <th style={{ ...microLabelStyle, padding: '10px 12px' }}>Unit cost</th>
+                    <th style={{ ...microLabelStyle, padding: '10px 12px' }}>Last verified</th>
+                    <th style={{ ...microLabelStyle, padding: '10px 12px' }}>Used</th>
+                    <th style={{ ...microLabelStyle, padding: '10px 12px' }}>Notes</th>
+                    {canManage && <th style={{ ...microLabelStyle, padding: '10px 20px 10px 12px' }}>Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {filtered
                     .filter((item) => item.category === cat)
-                    .map((item) => (
-                      <tr key={item.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                        <td style={{ ...tdStyle, fontWeight: 500 }}>
-                          {item.product_url ? (
-                            <a
-                              href={item.product_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              style={{ color: '#2563eb', textDecoration: 'none' }}
-                            >
-                              {item.name}
-                            </a>
-                          ) : (
-                            item.name
-                          )}
-                        </td>
-                        <td style={{ ...tdStyle, color: '#6b7280' }}>
-                          {UNIT_LABELS[item.unit_of_measure]}
-                        </td>
-                        <td style={tdStyle}>${Number(item.unit_cost).toFixed(2)}</td>
-                        <td style={{ ...tdStyle, color: '#6b7280' }}>
-                          {item.last_verified_at
-                            ? new Date(item.last_verified_at).toLocaleDateString()
-                            : '—'}
-                        </td>
-                        <td style={{ ...tdStyle, color: '#6b7280' }}>{item.notes || '—'}</td>
-                        {canManage && (
-                          <td style={tdStyle}>
-                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    .map((item) => {
+                      const stale = isStale(item.last_verified_at, now);
+                      const used = usage[item.id] ?? 0;
+                      return (
+                        <tr key={item.id} style={{ borderBottom: `1px solid ${color.rowDivider}` }}>
+                          <td style={{ padding: '11px 12px 11px 20px', fontWeight: 600, color: color.navy }}>
+                            {item.product_url ? (
                               <a
-                                href={`/dashboard/catalog/${item.id}/edit`}
-                                style={{
-                                  color: '#2563eb',
-                                  textDecoration: 'none',
-                                  fontSize: '0.875rem',
-                                }}
+                                href={item.product_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ color: color.primary, textDecoration: 'none' }}
                               >
-                                Edit
+                                {item.name}
                               </a>
-                              <button
-                                onClick={() => handleDelete(item.id, item.name)}
-                                disabled={deleting === item.id}
-                                style={{
-                                  color: '#dc2626',
-                                  background: 'none',
-                                  border: 'none',
-                                  cursor: 'pointer',
-                                  fontSize: '0.875rem',
-                                  padding: 0,
-                                }}
-                              >
-                                {deleting === item.id ? '...' : 'Delete'}
-                              </button>
-                            </div>
+                            ) : (
+                              item.name
+                            )}
                           </td>
-                        )}
-                      </tr>
-                    ))}
+                          <td style={{ ...cellText, padding: '11px 12px' }}>
+                            {UNIT_LABELS[item.unit_of_measure]}
+                          </td>
+                          <td style={{ padding: '11px 12px', fontFamily: font.mono, fontWeight: 600, color: color.navy }}>
+                            ${Number(item.unit_cost).toFixed(2)}
+                          </td>
+                          <td
+                            style={{
+                              padding: '11px 12px',
+                              fontFamily: font.mono,
+                              fontSize: '12.5px',
+                              color: stale ? color.warningDeep : color.bodyAlt,
+                              fontWeight: stale ? 600 : 400,
+                            }}
+                          >
+                            {item.last_verified_at
+                              ? new Date(item.last_verified_at).toLocaleDateString()
+                              : 'never'}
+                            {stale && ' · stale'}
+                          </td>
+                          {/* RULED wording: "used N times" — no noun. */}
+                          <td style={{ ...cellText, padding: '11px 12px', fontFamily: font.mono, fontSize: '12.5px' }}>
+                            {used > 0 ? `used ${used} time${used === 1 ? '' : 's'}` : '—'}
+                          </td>
+                          <td style={{ ...cellText, padding: '11px 12px' }}>{item.notes || '—'}</td>
+                          {canManage && (
+                            <td style={{ padding: '11px 20px 11px 12px' }}>
+                              <div style={{ display: 'flex', gap: '10px' }}>
+                                <Link
+                                  href={`/dashboard/catalog/${item.id}/edit`}
+                                  style={{ color: color.primary, textDecoration: 'none', fontSize: '13px', fontWeight: 600 }}
+                                >
+                                  Edit
+                                </Link>
+                                <button
+                                  onClick={() => handleDelete(item.id, item.name)}
+                                  disabled={deleting === item.id}
+                                  style={{
+                                    color: color.danger,
+                                    background: 'none',
+                                    border: 'none',
+                                    cursor: 'pointer',
+                                    fontSize: '13px',
+                                    fontWeight: 600,
+                                    padding: 0,
+                                    fontFamily: font.sans,
+                                  }}
+                                >
+                                  {deleting === item.id ? '…' : 'Delete'}
+                                </button>
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
                 </tbody>
               </table>
             </div>

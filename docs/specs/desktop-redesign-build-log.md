@@ -244,3 +244,29 @@ inventories"). Spec: `docs/specs/desktop-redesign-spec.md` (1358 lines). CLI lin
 - **Verified:** derivation tests 8/8; type-check 5/5. The §5b live render check (Owner + a gated
   role, real Bishop data) runs ONCE for all six screens at the end of the step, as a Playwright
   pass — logged when it runs.
+- **⚠️ INCIDENT, and the step-commit rule earned its keep again:** between committing 14a and
+  pushing it, this worktree was found on a **detached HEAD** and the local
+  `feature/desktop-redesign` branch was **gone** — the other worktree (`/workspaces/FrameFocus`)
+  now has `main` fast-forwarded to `17cdf77`, i.e. the redesign work was merged into local main
+  externally mid-session and the local feature branch deleted under us. The 14a commit
+  (`54eaa94`) was safe in the reflog, parented on the pushed `17cdf77`; the branch was recreated
+  at it and pushed. Remote `feature/desktop-redesign` continues unbroken.
+
+### Entry 9 — `14f` Cost Catalog
+- **Step:** the second screen — nearly pure restyle, proving the pattern travels.
+- **Did:** `catalog/page.tsx` gains the ONE new data piece: the usage map as **two grouped
+  queries** (`estimate_line_rows.catalog_item_id` → distinct estimates via the two-hop
+  `estimate_line_items!inner(estimate_id)` join; `selection_options.catalog_item_id` filtered on
+  its `is_deleted` — `estimate_line_rows` has none, its rows live and die with the estimate's
+  recalc). `catalog-list.tsx` restyled onto the shared anatomy: header + search, **AlertStrip**
+  ("N prices not verified … Review stale prices", the mockup's caption), category chips + a
+  **Stale N** chip, grouped tables on the theme tokens. Browser-fetch shape kept.
+- **Ruled wording applied:** the Used column reads **"used N times" — no noun**; the mockup's
+  "used on 14 estimates" would be false over a combined count.
+- **Decisions a ruling did not cover, recorded:** **stale = never verified OR >90 days old**
+  (the mockup names no threshold; `STALE_AFTER_DAYS = 90`, one constant, re-rulable without a
+  hunt); null `last_verified_at` renders "never" and counts as stale; usage counts do not chase
+  deleted estimates through the two-hop join (noted in code).
+- **Files:** `catalog/page.tsx` · `catalog/catalog-list.tsx`.
+- **Commit:** (this entry's commit).
+- **Verified:** type-check 5/5 (exit 0 read from log).
