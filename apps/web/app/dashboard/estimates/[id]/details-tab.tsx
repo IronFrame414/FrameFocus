@@ -18,6 +18,11 @@ import { STATUS_LABELS } from '../labels';
 import type { TabProps } from './estimate-builder';
 import { ContractSection } from './contract-section';
 import { SigningActivity } from './signing-activity';
+import {
+  BeforeYouSendCard,
+  ClientActivityCard,
+  EstimateHealthCard,
+} from './estimate-health-panel';
 import { useConfirm } from '@/components/confirm/confirm-provider';
 
 interface DetailsTabProps extends TabProps {
@@ -96,7 +101,7 @@ export function DetailsTab({
     fontWeight: 600,
     marginBottom: '0.75rem',
     paddingBottom: '0.375rem',
-    borderBottom: '1px solid #e5e7eb',
+    borderBottom: '1px solid #e4e8ef',
   };
   const rowStyle: React.CSSProperties = {
     display: 'flex',
@@ -105,7 +110,7 @@ export function DetailsTab({
     padding: '0.375rem 0',
     fontSize: '0.875rem',
   };
-  const fieldLabel: React.CSSProperties = { color: '#374151', fontWeight: 500 };
+  const fieldLabel: React.CSSProperties = { color: '#3f4a60', fontWeight: 500 };
 
   return (
     <div style={{ display: 'flex', gap: '2rem', alignItems: 'flex-start' }}>
@@ -116,8 +121,8 @@ export function DetailsTab({
               padding: '0.75rem 1rem',
               borderRadius: '0.375rem',
               marginBottom: '1rem',
-              backgroundColor: '#fef2f2',
-              color: '#991b1b',
+              backgroundColor: '#fdf1f0',
+              color: '#c0362c',
               fontSize: '0.875rem',
             }}
           >
@@ -135,7 +140,7 @@ export function DetailsTab({
               onChange={handleContactChange}
             />
           ) : (
-            <p style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+            <p style={{ fontSize: '0.875rem', color: '#7b8699' }}>
               Client and address are locked while the estimate is{' '}
               {STATUS_LABELS[estimate.status].toLowerCase()}.
             </p>
@@ -205,7 +210,7 @@ export function DetailsTab({
               }}
               style={{
                 padding: '0.25rem 0.5rem',
-                border: '1px solid #d1d5db',
+                border: '1px solid #d5dae4',
                 borderRadius: '0.25rem',
                 fontSize: '0.875rem',
               }}
@@ -284,7 +289,7 @@ export function DetailsTab({
               }}
               style={{
                 padding: '0.25rem 0.5rem',
-                border: '1px solid #d1d5db',
+                border: '1px solid #d5dae4',
                 borderRadius: '0.25rem',
                 fontSize: '0.875rem',
               }}
@@ -319,17 +324,17 @@ export function DetailsTab({
         )}
       </div>
 
-      {/* Right column: status + actions */}
-      <div style={{ width: '220px', flexShrink: 0 }}>
+      {/* Right column: status + actions + the §8.10.4 panels */}
+      <div style={{ width: '260px', flexShrink: 0 }}>
         <div
           style={{
-            border: '1px solid #e5e7eb',
+            border: '1px solid #e4e8ef',
             borderRadius: '0.5rem',
             padding: '1rem',
             marginBottom: '1rem',
           }}
         >
-          <div style={{ fontSize: '0.75rem', color: '#6b7280', marginBottom: '0.25rem' }}>
+          <div style={{ fontSize: '0.75rem', color: '#7b8699', marginBottom: '0.25rem' }}>
             Status
           </div>
           <div style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.75rem' }}>
@@ -346,9 +351,9 @@ export function DetailsTab({
             padding: '0.5rem 1rem',
             fontSize: '0.875rem',
             fontWeight: 600,
-            color: '#1d4ed8',
-            backgroundColor: '#eff6ff',
-            border: '1px solid #bfdbfe',
+            color: '#3b4ae0',
+            backgroundColor: '#f2f4ff',
+            border: '1px solid #dbe0fb',
             borderRadius: '0.375rem',
             textDecoration: 'none',
             marginBottom: '1rem',
@@ -356,6 +361,14 @@ export function DetailsTab({
         >
           Preview Proposal
         </Link>
+
+        {/* §8.10.4 — the three panels with data behind them. Health derives
+            from rows the caller already reads (RLS gates builder entry);
+            History and Coverage are NOT built — see estimate-health-panel.tsx
+            for the reasons, recorded once there. */}
+        <EstimateHealthCard data={data} />
+        <BeforeYouSendCard data={data} />
+        <ClientActivityCard data={data} />
 
         <div style={{ position: 'relative' }}>
           <button
@@ -365,8 +378,8 @@ export function DetailsTab({
               width: '100%',
               padding: '0.5rem 1rem',
               fontSize: '0.875rem',
-              backgroundColor: '#f3f4f6',
-              border: '1px solid #d1d5db',
+              backgroundColor: '#f4f6fa',
+              border: '1px solid #d5dae4',
               borderRadius: '0.375rem',
               cursor: 'pointer',
             }}
@@ -382,7 +395,7 @@ export function DetailsTab({
                 right: 0,
                 marginTop: '0.25rem',
                 backgroundColor: '#fff',
-                border: '1px solid #d1d5db',
+                border: '1px solid #d5dae4',
                 borderRadius: '0.375rem',
                 boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
                 zIndex: 10,
@@ -420,7 +433,7 @@ export function DetailsTab({
                     textAlign: 'left',
                     padding: '0.5rem 0.75rem',
                     fontSize: '0.875rem',
-                    color: '#991b1b',
+                    color: '#c0362c',
                     background: 'none',
                     border: 'none',
                     cursor: 'pointer',
