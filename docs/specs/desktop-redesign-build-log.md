@@ -132,3 +132,20 @@ inventories"). Spec: `docs/specs/desktop-redesign-spec.md` (1358 lines). CLI lin
 - **Verified:** type-check run before commit (see commit message); grep confirms no live old-ramp
   hexes remain under `app/m`; desktop screen-body inline ramp hexes remain owned by steps 4–10,
   same policy as Entry 2.
+
+### Entry 5 — RULED [Josh]: emails follow the repaint, PDFs do not
+- **Step:** ruling 2 of two; applied immediately after ruling 1.
+- **Did:** all nine `lib/email/templates/*.tsx` repainted hex-for-hex (`#374151`→`#3f4a60`,
+  `#6b7280`→`#7b8699`, and auth-email's `#14213d`/`#2f49d1`/`#eef1fb`/`#e6e9ef`/`#9aa1ac` →
+  new values). Tenant identity untouched: `brandColor` props and per-company logos are data, not
+  palette. **Interpretation recorded:** Josh named "auth email and other platform-sent mail"; the
+  client-facing templates (proposal, invoice, CO, reminder, selections ×2) were included because
+  their grey chrome is platform typography, not contractor identity — the headline of the ruling
+  is "emails follow the repaint". **PDF templates left alone by ruling** (incident, spec sheet,
+  delivery, daily log): a client sees their contractor's identity, never the platform's;
+  `invoice-data.ts` already pulls `companies.brand_color` per tenant. Reason recorded in spec §2
+  so it is not re-litigated.
+- **Files:** the nine templates + spec §2 (ruling recorded above the Blast radius section).
+- **Commit:** (this entry's commit).
+- **Verified:** residual grep over `lib/email/templates` → clean (exit 1); no test asserts email
+  hexes (`brand-email-footer.test.tsx` uses `brandColor` fixtures only); type-check before commit.

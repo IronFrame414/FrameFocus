@@ -60,12 +60,12 @@ export function InviteEmail({
           </Text>
           <Hr style={{ borderColor: brandColor, borderWidth: '2px', margin: '12px 0' }} />
 
-          <Text style={{ fontSize: '14px', lineHeight: '22px', color: '#374151' }}>
+          <Text style={{ fontSize: '14px', lineHeight: '22px', color: '#3f4a60' }}>
             {inviterName
               ? `${inviterName} has invited you to join ${companyName} on ${brand.name} as ${roleLabel}.`
               : `You have been invited to join ${companyName} on ${brand.name} as ${roleLabel}.`}
           </Text>
-          <Text style={{ fontSize: '14px', lineHeight: '22px', color: '#374151' }}>
+          <Text style={{ fontSize: '14px', lineHeight: '22px', color: '#3f4a60' }}>
             Accepting takes a minute — you will set your own password.
           </Text>
 
@@ -86,10 +86,10 @@ export function InviteEmail({
             </Button>
           </Section>
 
-          <Text style={{ fontSize: '12px', lineHeight: '18px', color: '#6b7280' }}>
+          <Text style={{ fontSize: '12px', lineHeight: '18px', color: '#7b8699' }}>
             This invitation expires on {expiresOn}. If it lapses, ask {companyName} to resend it.
           </Text>
-          <Text style={{ fontSize: '12px', lineHeight: '18px', color: '#6b7280' }}>
+          <Text style={{ fontSize: '12px', lineHeight: '18px', color: '#7b8699' }}>
             If you were not expecting this, you can ignore this email — nothing happens until you
             accept.
           </Text>

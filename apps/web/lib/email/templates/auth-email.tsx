@@ -124,10 +124,10 @@ export function AuthEmail({ kind, actionUrl, token }: AuthEmailProps) {
             maxWidth: '560px',
           }}
         >
-          <Text style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 8px', color: '#14213d' }}>
+          <Text style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 8px', color: '#0f1729' }}>
             {copy.heading}
           </Text>
-          <Text style={{ fontSize: '14px', color: '#374151', margin: '0 0 24px' }}>
+          <Text style={{ fontSize: '14px', color: '#3f4a60', margin: '0 0 24px' }}>
             {copy.body}
           </Text>
 
@@ -139,8 +139,8 @@ export function AuthEmail({ kind, actionUrl, token }: AuthEmailProps) {
                   fontSize: '28px',
                   fontWeight: 700,
                   letterSpacing: '0.15em',
-                  color: '#14213d',
-                  backgroundColor: '#eef1fb',
+                  color: '#0f1729',
+                  backgroundColor: '#f2f4ff',
                   padding: '14px 20px',
                   borderRadius: '8px',
                   textAlign: 'center' as const,
@@ -156,7 +156,7 @@ export function AuthEmail({ kind, actionUrl, token }: AuthEmailProps) {
                 <Button
                   href={actionUrl}
                   style={{
-                    backgroundColor: '#2f49d1',
+                    backgroundColor: '#3b4ae0',
                     color: '#ffffff',
                     padding: '12px 22px',
                     borderRadius: '6px',
@@ -171,19 +171,19 @@ export function AuthEmail({ kind, actionUrl, token }: AuthEmailProps) {
               {/* The URL in full, because a button is not clickable in every
                   client and a security email must not become unusable in the
                   one place someone is most likely to be reading it carefully. */}
-              <Text style={{ fontSize: '12px', color: '#6b7280', margin: '0 0 24px' }}>
+              <Text style={{ fontSize: '12px', color: '#7b8699', margin: '0 0 24px' }}>
                 Or paste this link into your browser:
                 <br />
-                <span style={{ wordBreak: 'break-all', color: '#2f49d1' }}>{actionUrl}</span>
+                <span style={{ wordBreak: 'break-all', color: '#3b4ae0' }}>{actionUrl}</span>
               </Text>
             </>
           )}
 
-          <Hr style={{ borderColor: '#e6e9ef', margin: '0 0 16px' }} />
-          <Text style={{ fontSize: '12px', color: '#6b7280', margin: '0 0 8px' }}>
+          <Hr style={{ borderColor: '#e4e8ef', margin: '0 0 16px' }} />
+          <Text style={{ fontSize: '12px', color: '#7b8699', margin: '0 0 8px' }}>
             {copy.ignore}
           </Text>
-          <Text style={{ fontSize: '12px', color: '#9aa1ac', margin: 0 }}>
+          <Text style={{ fontSize: '12px', color: '#9aa4b8', margin: 0 }}>
             {brand.name}
           </Text>
         </Container>

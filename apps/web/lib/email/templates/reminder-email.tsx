@@ -55,7 +55,7 @@ export function ReminderEmail({
           )}
           <Hr style={{ borderColor: brandColor, borderWidth: '2px', margin: '16px 0' }} />
           {bodyText.split('\n').map((line, i) => (
-            <Text key={i} style={{ fontSize: '14px', lineHeight: '22px', color: '#374151' }}>
+            <Text key={i} style={{ fontSize: '14px', lineHeight: '22px', color: '#3f4a60' }}>
               {line}
             </Text>
           ))}

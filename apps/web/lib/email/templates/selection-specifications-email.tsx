@@ -91,10 +91,10 @@ export function SelectionSpecificationsEmail({
           )}
           <Hr style={{ borderColor: brandColor, borderWidth: '2px', margin: '16px 0' }} />
 
-          <Text style={{ fontSize: '14px', lineHeight: '22px', color: '#374151' }}>
+          <Text style={{ fontSize: '14px', lineHeight: '22px', color: '#3f4a60' }}>
             Hi {contactName},
           </Text>
-          <Text style={{ fontSize: '14px', lineHeight: '22px', color: '#374151' }}>{heading}</Text>
+          <Text style={{ fontSize: '14px', lineHeight: '22px', color: '#3f4a60' }}>{heading}</Text>
 
           <Section style={{ margin: '8px 0 4px' }}>
             {selectionNames.map((name, i) => (
@@ -115,7 +115,7 @@ export function SelectionSpecificationsEmail({
             ))}
           </Section>
 
-          <Text style={{ fontSize: '13px', lineHeight: '20px', color: '#6b7280' }}>
+          <Text style={{ fontSize: '13px', lineHeight: '20px', color: '#7b8699' }}>
             It lists what has been approved as of {approvedAsOf}. Anything still being chosen is not
             on it yet — we will send an updated sheet as more is decided.
           </Text>
@@ -137,7 +137,7 @@ export function SelectionSpecificationsEmail({
             </Button>
           </Section>
 
-          <Text style={{ fontSize: '12px', color: '#6b7280' }}>
+          <Text style={{ fontSize: '12px', color: '#7b8699' }}>
             The sheet is attached to this email and is also filed in your project portal, so you can
             always find the current one there.
           </Text>

@@ -165,6 +165,16 @@ ships as a named token.
 **Note:** tables are per-page inline styles, not a shared component. The row tints are **tokens, not
 behaviour** — every screen that tints a row hand-applies it, so each screen's spec must say so.
 
+### RULED [Josh, 2026-08-28] — emails follow the repaint; PDFs do NOT
+**Platform-sent mail moves to the new palette** — auth mail and the rest of `lib/email/templates/`
+(their grey chrome is platform typography; the tenant's identity in client-facing mail is the
+`brandColor` prop and logo, which are per-company data and untouched). **The PDF templates —
+incident, spec sheet, delivery, daily log — are LEFT ALONE, and the reason is recorded so it is
+not re-litigated:** PDFs are client-facing documents, and the branding rule (R9) is that a client
+sees their contractor's identity, never the platform's. `invoice-data.ts` already pulls
+`companies.brand_color` per tenant. Putting a product palette on a tenant-branded document is the
+wrong direction, whatever the hex.
+
 ### Blast radius
 The sidebar is styled with **Tailwind classes** (`bg-brand-900`, `bg-brand-500`, `text-brand-200`), not
 `theme.ts`. Repainting it means editing the `brand` scale in `tailwind.config.ts`, which auth pages and

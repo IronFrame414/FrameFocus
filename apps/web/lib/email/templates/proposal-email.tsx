@@ -52,7 +52,7 @@ export function ProposalEmail({
           )}
           <Hr style={{ borderColor: brandColor, borderWidth: '2px', margin: '16px 0' }} />
           {bodyText.split('\n').map((line, i) => (
-            <Text key={i} style={{ fontSize: '14px', lineHeight: '22px', color: '#374151' }}>
+            <Text key={i} style={{ fontSize: '14px', lineHeight: '22px', color: '#3f4a60' }}>
               {line}
             </Text>
           ))}
@@ -72,7 +72,7 @@ export function ProposalEmail({
               Review &amp; Sign Proposal
             </Button>
           </Section>
-          <Text style={{ fontSize: '12px', color: '#6b7280' }}>
+          <Text style={{ fontSize: '12px', color: '#7b8699' }}>
             The full proposal is attached as a PDF. You can review and sign online using the
             button above.
           </Text>

@@ -88,10 +88,10 @@ export function SelectionReleasedEmail({
           )}
           <Hr style={{ borderColor: brandColor, borderWidth: '2px', margin: '16px 0' }} />
 
-          <Text style={{ fontSize: '14px', lineHeight: '22px', color: '#374151' }}>
+          <Text style={{ fontSize: '14px', lineHeight: '22px', color: '#3f4a60' }}>
             Hi {contactName},
           </Text>
-          <Text style={{ fontSize: '14px', lineHeight: '22px', color: '#374151' }}>{heading}</Text>
+          <Text style={{ fontSize: '14px', lineHeight: '22px', color: '#3f4a60' }}>{heading}</Text>
 
           <Section style={{ margin: '8px 0 4px' }}>
             {selectionNames.map((name, i) => (
@@ -113,7 +113,7 @@ export function SelectionReleasedEmail({
           </Section>
 
           {dueDateLine ? (
-            <Text style={{ fontSize: '13px', lineHeight: '20px', color: '#6b7280' }}>
+            <Text style={{ fontSize: '13px', lineHeight: '20px', color: '#7b8699' }}>
               {dueDateLine}
             </Text>
           ) : null}
@@ -135,7 +135,7 @@ export function SelectionReleasedEmail({
             </Button>
           </Section>
 
-          <Text style={{ fontSize: '12px', color: '#6b7280' }}>
+          <Text style={{ fontSize: '12px', color: '#7b8699' }}>
             Sign in to your project portal to see the options, pick what you want, and approve. You
             approve each selection separately, so there is no need to do them all at once.
           </Text>
