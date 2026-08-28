@@ -52,12 +52,18 @@ export function ReminderSettings({
   }
 
   return (
-    <div style={{ marginTop: '1rem', paddingTop: '0.75rem', borderTop: '1px solid #e5e7eb' }}>
+    <div style={{ marginTop: '1rem', paddingTop: '0.75rem', borderTop: `1px solid ${color.cardBorder}` }}>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.625rem', flexWrap: 'wrap' }}>
         <span
-          style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase' }}
+          style={{ fontSize: '0.75rem', fontWeight: 600, color: color.muted, textTransform: 'uppercase' }}
         >
-          Payment reminders
+          {/* RULED (§8.8.4): the control is per-CLIENT — it spans every one of
+              this client's projects — and it sits on a project page, so the
+              label must say so. Never "for this job". */}
+          Payment reminders — chasing rules for this client
+        </span>
+        <span style={{ fontSize: '0.7rem', color: color.faint }}>
+          applies to all of this client&apos;s projects
         </span>
         <span style={{ fontSize: '0.75rem', color: color.faint }}>
           {!enabled
@@ -86,7 +92,7 @@ export function ReminderSettings({
           disabled={busy || !enabled}
           placeholder="7, 14, 30"
           style={{
-            border: '1px solid #d1d5db', borderRadius: '4px', padding: '4px 8px',
+            border: '1px solid #d5dae4', borderRadius: '4px', padding: '4px 8px',
             fontSize: '0.8125rem', width: '140px',
           }}
         />
