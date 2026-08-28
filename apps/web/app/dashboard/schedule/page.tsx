@@ -1,7 +1,10 @@
 import { createClient } from '@/lib/supabase-server';
 import { getCalendarEvents } from '@/lib/services/schedule';
 import { getMyMember } from '@/lib/services/members';
+import { getCompanyTimeSettings } from '@/lib/services/company';
+import { companyToday } from '@framefocus/shared/utils/dates';
 import { CompanyCalendar } from './company-calendar';
+import { ScheduleViews } from './schedule-views';
 import { cardStyle, color, h2Style } from '@/lib/theme';
 
 /**
@@ -25,7 +28,18 @@ export default async function SchedulePage() {
   const isCrew = profile?.role === 'crew_member' || profile?.role === 'subcontractor';
   const myMember = isCrew ? await getMyMember() : null;
 
-  const events = await getCalendarEvents({ ownMemberId: myMember?.id });
+  // Timeline rows (step 10, §8.12.2): active projects, caller-RLS-scoped —
+  // crew receive assigned jobs only. Dates compared as company-calendar days.
+  const [events, { data: projects }, { timezone }] = await Promise.all([
+    getCalendarEvents({ ownMemberId: myMember?.id }),
+    supabase
+      .from('projects')
+      .select('id, name, start_date, target_end_date')
+      .eq('is_deleted', false)
+      .eq('status', 'active')
+      .order('start_date', { ascending: true, nullsFirst: false }),
+    getCompanyTimeSettings(),
+  ]);
 
   return (
     <div>
@@ -37,7 +51,11 @@ export default async function SchedulePage() {
       </div>
 
       <div style={{ ...cardStyle, padding: '18px 20px' }}>
-        <CompanyCalendar events={events} />
+        <ScheduleViews
+          calendar={<CompanyCalendar events={events} />}
+          projects={projects ?? []}
+          todayYmd={companyToday(timezone)}
+        />
       </div>
     </div>
   );
