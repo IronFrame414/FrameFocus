@@ -108,3 +108,27 @@ inventories"). Spec: `docs/specs/desktop-redesign-spec.md` (1358 lines). CLI lin
 - **Commit:** (this entry's commit).
 - **Verified:** every correction traces to a line in `desktop-redesign-spec-citation-audit.md` §2;
   no ruling was altered — only the record of what has shipped.
+
+### Entry 4 — RULED [Josh]: R5 amended, the text ramp and semantic colours move
+- **Step:** ruling 1 of two issued after the Phase B report; applied immediately.
+- **Did:** `theme.ts` ramp → README values: body/bodyAlt `#3f4a60`/`#4b5670`, muted/mutedAlt
+  `#7b8699`/`#8792a8` (neutralBadgeText follows muted), faint/faintAlt `#9aa4b8`/`#c3cad8`,
+  success/successBg `#1f8f4e`/`#e6f0e9`, warning `#b45309`, danger `#c0362c`, tableHeadBg
+  `#fbfcfe`, rowDivider `#f4f6fa`, inputBorder `#d5dae4`. `warning`==`warningDeep` and
+  `danger`==`dangerAlt` now collapse to one value each — deliberate, the design carries one of
+  each; name consolidation deferred. No counterpart, unmoved: `successOnBg`, `primaryHover`,
+  `neutralBadgeBg` (already the README progress-track value), navText/navySecondary (design
+  retains those hexes — Phase B evidence). `m6m` followed per R6: `muted` `#8792a8`, and the
+  judgment call recorded for revisit — `strip-bg`/`strip-border` → the README page-level warning
+  (`#fff5e6`/`#f5cf8f`) and `danger-border` → `#efd3d0`, on the reading that those tokens carry
+  exactly the README's page-level-warning and danger-border roles on mobile. Live `/m` copies
+  moved: switch-screen break grey, schedule fallback dot, check-in usable-count green.
+- **Tests swept:** `e2e/m-hubs.spec.ts:442` photo-badge mono colour → `rgb(135, 146, 168)`
+  (e2e — proves out at the next Playwright battery). No unit test asserts ramp hexes (grepped).
+- **Files:** `theme.ts` · `tailwind.config.ts` · `m/timeclock/switch/switch-screen.tsx` ·
+  `m/schedule/page.tsx` · `m/p/[projectId]/deliveries/check-in/check-in-form.tsx` ·
+  `e2e/m-hubs.spec.ts` · spec §2 R5 (amendment recorded, superseded reading quoted).
+- **Commit:** (this entry's commit).
+- **Verified:** type-check run before commit (see commit message); grep confirms no live old-ramp
+  hexes remain under `app/m`; desktop screen-body inline ramp hexes remain owned by steps 4–10,
+  same policy as Entry 2.

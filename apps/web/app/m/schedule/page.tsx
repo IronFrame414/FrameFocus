@@ -156,7 +156,7 @@ function DayGroup({
               <span
                 aria-hidden
                 className="block h-[8px] w-[8px] rounded-full"
-                style={{ background: e.color ?? '#8a919c' }}
+                style={{ background: e.color ?? '#8792a8' }}
               />
               {SOURCE_LABEL[e.source]}
             </span>

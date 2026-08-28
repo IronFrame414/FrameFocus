@@ -21,29 +21,34 @@ export const color = {
   pageBg: '#f4f6fa',
   cardBg: '#ffffff',
   cardBorder: '#e4e8ef',
-  tableHeadBg: '#f7f9fc', // table header / total-row bg
-  rowDivider: '#f1f3f7',
-  inputBorder: '#e0e4ea',
+  tableHeadBg: '#fbfcfe', // table header / total-row bg
+  rowDivider: '#f4f6fa',
+  inputBorder: '#d5dae4',
 
-  // Text
-  body: '#374151',
-  bodyAlt: '#4b5563',
-  muted: '#6b7280',
-  mutedAlt: '#8a919c',
-  faint: '#9aa1ac', // placeholder / disabled / em-dash
-  faintAlt: '#c3c9d4',
+  // Text — the README ramp, adopted whole (R5 AS AMENDED [Josh, 2026-08-28]:
+  // the original R5 scoped this pass to navy/primary + near-identical shades;
+  // that was under-scoped and the design's text/semantic ramp is ruled in).
+  body: '#3f4a60',
+  bodyAlt: '#4b5670',
+  muted: '#7b8699',
+  mutedAlt: '#8792a8',
+  faint: '#9aa4b8', // placeholder / disabled / em-dash
+  faintAlt: '#c3cad8',
 
-  // Semantic
-  success: '#16a34a',
-  successBg: '#e4f0e6',
+  // Semantic — same amendment. The design carries ONE warning text (#b45309)
+  // and ONE danger red (#c0362c), so `warning` now equals `warningDeep` and
+  // `danger` equals `dangerAlt` — a deliberate collapse, not a paste error.
+  // Consolidating the duplicate names is a later cleanup, not a repaint.
+  success: '#1f8f4e',
+  successBg: '#e6f0e9',
   successOnBg: '#3d7a4b',
-  warning: '#d97706',
+  warning: '#b45309',
   warningDeep: '#b45309',
   warningBg: '#fdece0',
-  danger: '#dc2626',
+  danger: '#c0362c',
   dangerAlt: '#c0362c',
   neutralBadgeBg: '#eef1f6',
-  neutralBadgeText: '#6b7280',
+  neutralBadgeText: '#7b8699',
 
   // Desktop-redesign spec §2 additions. The row tints are TOKENS, NOT
   // BEHAVIOUR — tables are per-page inline styles, so every screen that tints

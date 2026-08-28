@@ -439,7 +439,7 @@ test.describe('M-3 · Project sections hub', () => {
     );
     const photoBadge = page.getByTestId('m-tile-photos').getByTestId('m-tile-badge');
     expect(await photoBadge.evaluate((el) => getComputedStyle(el).color)).toBe(
-      'rgb(138, 145, 156)'
+      'rgb(135, 146, 168)' // #8792a8 — m6m.muted, README ramp
     );
   });
 

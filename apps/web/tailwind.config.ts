@@ -71,16 +71,17 @@ const config: Config = {
           surface: '#f4f6fa', // page background
           card: '#ffffff', // all cards and tiles
           border: '#e4e8ef', // card border
-          muted: '#8a919c', // inactive tab, captions — on light
+          muted: '#8792a8', // inactive tab, captions — on light
           'muted-navy': '#8fa0c4', // the same role, on navy
           canvas: '#0d1220', // photo viewer and markup ONLY (M-9, M-10)
           // §4.4's amber status strip. Not in the §2 table — §4.4 names the two
           // hexes inline, and they appear nowhere else, so they live here
-          // rather than being retyped at each use site.
-          'strip-bg': '#fdf6ec',
-          'strip-border': '#f3e2c4',
-          // §3.3's Sign-out row border. Same reasoning.
-          'danger-border': '#f0d4d1',
+          // rather than being retyped at each use site. Values now follow the
+          // README's page-level warning (R5 as amended — ramp adopted).
+          'strip-bg': '#fff5e6',
+          'strip-border': '#f5cf8f',
+          // §3.3's Sign-out row border. Same reasoning; README danger border.
+          'danger-border': '#efd3d0',
         },
       },
       fontFamily: {

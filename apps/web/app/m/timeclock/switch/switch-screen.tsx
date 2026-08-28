@@ -48,7 +48,7 @@ const TYPE_LABEL: Record<string, string> = Object.fromEntries(
 
 /** Timeline fill per type — work-family blue, break grey, travel/shop amber. */
 function barColor(type: string): string {
-  if (type === 'break') return '#8a919c';
+  if (type === 'break') return '#8792a8';
   if (type === 'travel' || type === 'shop') return '#f59e0b';
   return '#3b4ae0';
 }

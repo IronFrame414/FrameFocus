@@ -104,14 +104,26 @@ position. `costs` is a surviving URL, not a tab. **Money has five sub-tabs, not 
 
 **RULED.** Adopt the README palette for the general UI. Keep brand identity as-is.
 
-### R5 — Values change; brand identity does not
+### R5 — Values change; brand identity does not — **AMENDED [Josh, 2026-08-28]: the ramp moves too**
 - General UI moves: `navy` `#14213d` → `#0f1729`, `primary` `#2f49d1` → `#3b4ae0`, and the near-identical
   shades (`cardBorder`, `pageBg`).
+- **AMENDMENT — the text ramp and semantic colours ALSO move, following the design.** `#1a2437`-family
+  text, success `#1f8f4e`, and the rest of the README's ramp (text body/muted/faint pairs, table
+  header, row divider, input border, warning `#b45309`, danger `#c0362c`, the page-level warning and
+  danger-border tints). _Superseded reading, quoted not deleted: Phase B correctly read the bullet
+  above as scoping the pass to navy/primary + near-identical shades and left the ramp alone. That
+  reading was right about the text as written; the text was **under-scoped**, and this amendment is
+  the ruling that widens it._ Two consequences accepted knowingly: `warning`/`warningDeep` and
+  `danger`/`dangerAlt` collapse to one value each (the design carries one warning and one danger);
+  consolidating the duplicate names is a later cleanup, not a repaint. Values with no README
+  counterpart (`successOnBg`, `primaryHover`, `neutralBadgeBg` — already the README's progress
+  track) still do not move.
 - **Brand identity keeps current colours**: logo mark, wordmark, avatar amber. `accent.500` stays
   `#f59e0b`. `brand.logoAmber` (`#EDA122`) is untouched.
 - **Named stops only.** `brand` is an 11-stop scale and `accent` a 10-stop; the README gives flat values.
   Stops with no README counterpart (`brand.700/800/950`, most of `accent`) are left alone. Re-deriving
-  scales is invention beyond the handoff.
+  scales is invention beyond the handoff. _[Phase B applied this as: 50/100/500/900 move; 200/300 stay
+  because the design files still use those exact hexes; `accent` needed zero changes.]_
 
 ### R6 — REVERSED: `m6m` repaints too. One product, one palette.
 **RULED [Josh]: all mobile colours match desktop.** This **reverses** an earlier ruling in this spec that

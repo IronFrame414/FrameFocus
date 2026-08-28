@@ -311,7 +311,7 @@ export function CheckInForm({
                       <p
                         data-testid={`m-usable-${i}`}
                         className={`font-mono text-[20px] font-bold ${
-                          damaged ? 'text-m6m-danger' : 'text-[#16a34a]'
+                          damaged ? 'text-m6m-danger' : 'text-[#1f8f4e]'
                         }`}
                       >
                         {usable}
