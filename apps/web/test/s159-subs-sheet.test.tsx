@@ -80,7 +80,7 @@ describe('S159 — the subs list row is the way in', () => {
     // page, the Edit link, the Delete button. Rendered with canEdit TRUE,
     // because that is the case that drew the last two.
     const html = markup(
-      <SubcontractorsList subcontractors={[sub()]} canEdit canSeeCompliance />
+      <SubcontractorsList subcontractors={[sub()]} canEdit canSeeCompliance compliance={null} w9={null} committedOpen={{}} spend12mo={{}} />
     );
 
     expect(html).not.toContain('>Actions<');
@@ -89,12 +89,18 @@ describe('S159 — the subs list row is the way in', () => {
     expect(html).not.toContain('>Delete<');
     // The name is still THERE — it just is not a link any more.
     expect(html).toContain('Ridgefield Electric');
-    expect(html).not.toContain('<a');
+    // [Redesign 14d] The list header now carries the Trash and + Add links
+    // (they moved in from the server page with the shared anatomy), so
+    // "no <a> anywhere" would fail on chrome the guard was never about. The
+    // guard's meaning — NO LINK INSIDE THE TABLE, the row is the only way in —
+    // is asserted on the table itself.
+    const table = html.slice(html.indexOf('<table'));
+    expect(table).not.toContain('<a');
   });
 
   it('the row is a real control, keyboard included', () => {
     const html = markup(
-      <SubcontractorsList subcontractors={[sub()]} canEdit canSeeCompliance />
+      <SubcontractorsList subcontractors={[sub()]} canEdit canSeeCompliance compliance={null} w9={null} committedOpen={{}} spend12mo={{}} />
     );
     expect(html).toContain(`data-testid="sub-row-${SUB_ID}"`);
     expect(html).toContain('role="button"');
@@ -102,12 +108,17 @@ describe('S159 — the subs list row is the way in', () => {
     expect(html).toContain('aria-label="Open Ridgefield Electric"');
   });
 
-  it('the sheet is closed on first render, and the six columns survived', () => {
+  it('the sheet is closed on first render, and the nine columns survived', () => {
+    // [Redesign 14d] W-9, Committed open and 12-mo spend joined the set — the
+    // guard grows with the table.
     const html = markup(
-      <SubcontractorsList subcontractors={[sub()]} canEdit canSeeCompliance />
+      <SubcontractorsList subcontractors={[sub()]} canEdit canSeeCompliance compliance={null} w9={null} committedOpen={{}} spend12mo={{}} />
     );
     expect(html).not.toContain('data-testid="sub-detail-sheet"');
-    for (const heading of ['>Company<', '>Contact<', '>Type<', '>Trade<', '>Rating<', '>Phone<']) {
+    for (const heading of [
+      '>Company<', '>Contact<', '>Type<', '>Trade<', '>Rating<', '>Phone<',
+      '>W-9<', '>Committed open<', '>12-mo spend<',
+    ]) {
       expect(html, `the ${heading} column is gone`).toContain(heading);
     }
   });

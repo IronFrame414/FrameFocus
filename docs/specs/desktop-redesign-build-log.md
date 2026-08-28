@@ -315,3 +315,29 @@ inventories"). Spec: `docs/specs/desktop-redesign-spec.md` (1358 lines). CLI lin
 - **Files:** `team/page.tsx` · `team-page-client.tsx`.
 - **Commit:** (this entry's commit).
 - **Verified:** type-check 5/5; no test renders TeamPageClient (swept).
+
+### Entry 12 — `14d` Subs & Vendors
+- **Step:** fifth screen. §8.4 read in full first; the dual insurance-expiry stores are RULED
+  LEAVE AS IS and this build does not pick a side — what renders is the compliance-documents
+  side; `subcontractors.insurance_expiry` stays desktop-invisible as it is today.
+- **Did:** server page — compliance alert + W-9 map **Owner/Admin only with the read SKIPPED
+  for other roles** (the sub-profile posture: an empty list reads as "no problems", a false
+  statement; gated roles get `null` and em-dashes that mean "not yours to know", never
+  "missing"). `getExpiringCompliance()` reused type-blind, counts split expired/expiring-soon
+  per SUB (distinct member_id). **Committed open + 12-mo spend, SUBS ONLY**: one company-wide
+  `getBillsAndCommitments()` (its projectId is optional), rows → subs via
+  `subcontractor_contracts.subcontractor_id`, maths from `payables-shared`
+  (`countsTowardCommitted`/`committedRemaining` — THE definitions, not restated); spend = Σ
+  `expense_payments` in the trailing 12 calendar months. **Vendors get the em-dash by ruling**
+  — `vendor_name`/`supplier` are free text with no FK; no join is invented. List restyled onto
+  the anatomy (type badge now wears §2's purple token); Trash/+Add moved into the client
+  header; S159 row-as-button contract intact.
+- **Live-state note (built against reality):** the compliance table holds zero rows, so the
+  alert is silent and W-9 reads "Missing" for every sub until documents are uploaded.
+- **Tests adapted, not left red (S157):** `s159-subs-sheet.test.tsx` — three render calls gain
+  the new props; the column guard grows 6 → 9; and the "no `<a>` anywhere" assertion was
+  narrowed to **no `<a>` inside the table** — its meaning (the row is the only way in), not its
+  letter, since the header now legitimately carries the Trash/+Add links. 12/12.
+- **Files:** `subcontractors/page.tsx` · `subcontractors-list.tsx` · `test/s159-subs-sheet.test.tsx`.
+- **Commit:** (this entry's commit).
+- **Verified:** type-check 5/5; s159 12/12 (exit 0 + tally).

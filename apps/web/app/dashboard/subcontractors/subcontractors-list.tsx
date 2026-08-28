@@ -1,8 +1,24 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import type { Subcontractor } from '@/lib/services/subcontractors';
 import { SubcontractorDetailSheet } from './subcontractor-detail-sheet';
+import {
+  AlertStrip,
+  FilterChips,
+  ListPageHeader,
+  ListSearchInput,
+} from '@/components/list-screen/list-screen';
+import {
+  badgeStyle,
+  cardStyle,
+  color,
+  font,
+  microLabelStyle,
+  primaryButtonStyle,
+  secondaryButtonStyle,
+} from '@/lib/theme';
 
 // ===========================================================================
 // THE ROW IS THE WAY IN — SAME AS CONTACTS. [S159 · RULED Josh]
@@ -38,12 +54,32 @@ interface SubcontractorsListProps {
   canEdit: boolean;
   /** owner / admin — gates the sheet's link to the compliance section. */
   canSeeCompliance: boolean;
+  /** §8.4 compliance alert counts — NULL for gated roles, whose read was
+   *  SKIPPED server-side rather than rendered empty (an empty list reads as
+   *  "no problems", a false statement). */
+  compliance: { expired: number; expiringSoon: number } | null;
+  /** §8.4 W-9 on file per sub id — NULL for gated roles (read skipped). */
+  w9: Record<string, boolean> | null;
+  /** §8.4 — committed remaining per SUBCONTRACTOR (payables-shared maths over
+   *  one company-wide getBillsAndCommitments). Vendors are deliberately
+   *  absent: their names are free text with no FK, so no join is trusted. */
+  committedOpen: Record<string, number>;
+  spend12mo: Record<string, number>;
+}
+
+function money(value: number | undefined): string {
+  if (value === undefined) return '—';
+  return value.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 }
 
 export function SubcontractorsList({
   subcontractors,
   canEdit,
   canSeeCompliance,
+  compliance,
+  w9,
+  committedOpen,
+  spend12mo,
 }: SubcontractorsListProps) {
   const [filterType, setFilterType] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('active');
@@ -70,20 +106,11 @@ export function SubcontractorsList({
   // while the sheet is open does not blink it out. Same as contacts.
   const openSub = openId ? (subcontractors.find((s) => s.id === openId) ?? null) : null;
 
-  const selectStyle: React.CSSProperties = {
-    padding: '0.375rem 0.5rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '0.375rem',
-    fontSize: '0.875rem',
-  };
-
+  // §2's purple token — the subcontractor category colour.
   const typeBadge = (type: string) => ({
-    padding: '0.125rem 0.5rem',
-    borderRadius: '9999px',
-    fontSize: '0.75rem',
-    fontWeight: 500 as const,
-    backgroundColor: type === 'subcontractor' ? '#ede9fe' : '#fce7f3',
-    color: type === 'subcontractor' ? '#5b21b6' : '#9d174d',
+    ...badgeStyle,
+    backgroundColor: type === 'subcontractor' ? color.purpleBg : '#fce7f3',
+    color: type === 'subcontractor' ? color.purple : '#9d174d',
   });
 
   const stars = (rating: number | null) => {
@@ -91,26 +118,76 @@ export function SubcontractorsList({
     return '★'.repeat(rating) + '☆'.repeat(5 - rating);
   };
 
+  const th: React.CSSProperties = { ...microLabelStyle, padding: '10px 12px', textAlign: 'left' };
+  const td: React.CSSProperties = { padding: '11px 12px', fontSize: '13px', color: color.bodyAlt };
+  const monoCell: React.CSSProperties = { ...td, fontFamily: font.mono, fontSize: '12.5px' };
+
   return (
     <div>
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-        <input
-          type="text"
-          placeholder="Search subs & vendors..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{ ...selectStyle, flexGrow: 1, minWidth: '200px' }}
+      <ListPageHeader
+        title="Subs & Vendors"
+        subtitle={`${filtered.length} record${filtered.length === 1 ? '' : 's'} · subcontractors and vendors`}
+      >
+        <ListSearchInput value={search} onChange={setSearch} placeholder="Search subs & vendors…" />
+        {/* The way into the trash [S158 · Finding 2]. Ungated: reading the
+            deleted list needs no more permission than reading the live one,
+            and the Restore button inside is what carries the role gate. */}
+        <Link href="/dashboard/subcontractors/trash" style={secondaryButtonStyle}>
+          Trash
+        </Link>
+        {canEdit && (
+          <Link href="/dashboard/subcontractors/new" style={primaryButtonStyle}>
+            + Add Sub / Vendor
+          </Link>
+        )}
+      </ListPageHeader>
+
+      {/* §8.4 compliance alert — already built and TYPE-BLIND (covers COIs,
+          licenses, W-9s alike). Renders only for Owner/Admin, whose read
+          actually ran; and only when there is something to say. */}
+      {compliance && compliance.expired + compliance.expiringSoon > 0 && (
+        <AlertStrip>
+          {compliance.expired > 0 && (
+            <>
+              <strong>{compliance.expired}</strong> sub{compliance.expired === 1 ? ' has' : 's have'}{' '}
+              expired compliance documents
+            </>
+          )}
+          {compliance.expired > 0 && compliance.expiringSoon > 0 && ' · '}
+          {compliance.expiringSoon > 0 && (
+            <>
+              <strong>{compliance.expiringSoon}</strong> expiring within 30 days
+            </>
+          )}
+        </AlertStrip>
+      )}
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <FilterChips
+          options={[
+            { value: 'all', label: 'All' },
+            { value: 'subcontractor', label: 'Subcontractors' },
+            { value: 'vendor', label: 'Vendors' },
+          ]}
+          selected={filterType}
+          onSelect={setFilterType}
         />
-        <select value={filterType} onChange={(e) => setFilterType(e.target.value)} style={selectStyle}>
-          <option value="all">All Types</option>
-          <option value="subcontractor">Subcontractors</option>
-          <option value="vendor">Vendors</option>
-        </select>
         {/* Walks `subcontractors.status` only — "All Statuses" is all THREE of
             these, not "including deleted". A deleted sub is in Trash. Same note
             as the contacts list, and for the same reason [S158]. */}
-        <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} style={selectStyle}>
+        <select
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+          style={{
+            padding: '7px 10px',
+            border: `1px solid ${color.inputBorder}`,
+            borderRadius: '8px',
+            fontSize: '13px',
+            fontFamily: font.sans,
+            color: color.bodyAlt,
+            backgroundColor: '#fff',
+          }}
+        >
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
           <option value="archived">Archived</option>
@@ -118,81 +195,101 @@ export function SubcontractorsList({
         </select>
       </div>
 
-      {/* Count */}
-      <p style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.75rem' }}>
-        {filtered.length} record{filtered.length !== 1 ? 's' : ''}
-      </p>
-
       {/* Table */}
       {filtered.length === 0 ? (
-        <div style={{
-          textAlign: 'center',
-          padding: '3rem',
-          color: '#9ca3af',
-          backgroundColor: '#f9fafb',
-          borderRadius: '0.5rem',
-        }}>
+        <div style={{ ...cardStyle, padding: '48px', textAlign: 'center', color: color.muted }}>
           No subs or vendors found. {canEdit && 'Click "+ Add Sub / Vendor" to get started.'}
         </div>
       ) : (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
-            <thead>
-              <tr style={{ borderBottom: '2px solid #e5e7eb', textAlign: 'left' }}>
-                <th style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>Company</th>
-                <th style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>Contact</th>
-                <th style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>Type</th>
-                <th style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>Trade</th>
-                <th style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>Rating</th>
-                <th style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>Phone</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((s) => (
+        <div style={{ ...cardStyle, overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+              <thead>
                 <tr
-                  key={s.id}
-                  onClick={() => setOpenId(s.id)}
-                  // A clickable `<tr>` is invisible to the keyboard without
-                  // these three. Same as the contacts list.
-                  tabIndex={0}
-                  role="button"
-                  aria-label={`Open ${s.company_name}`}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      setOpenId(s.id);
-                    }
+                  style={{
+                    backgroundColor: color.tableHeadBg,
+                    borderBottom: `1px solid ${color.neutralBadgeBg}`,
+                    textAlign: 'left',
                   }}
-                  data-testid={`sub-row-${s.id}`}
-                  style={{ borderBottom: '1px solid #f3f4f6', cursor: 'pointer' }}
                 >
-                  {/* The company name is PLAIN TEXT now. It was an <a> to the
-                      detail page; a link inside a row that is itself a control
-                      gives the same click two meanings. */}
-                  <td style={{ padding: '0.75rem 0.5rem', fontWeight: 500 }}>{s.company_name}</td>
-                  <td style={{ padding: '0.75rem 0.5rem', color: '#6b7280' }}>
-                    {s.contact_first_name || s.contact_last_name
-                      ? `${s.contact_first_name ?? ''} ${s.contact_last_name ?? ''}`.trim()
-                      : '—'}
-                  </td>
-                  <td style={{ padding: '0.75rem 0.5rem' }}>
-                    <span style={typeBadge(s.sub_type)}>
-                      {s.sub_type === 'subcontractor' ? 'Sub' : 'Vendor'}
-                    </span>
-                  </td>
-                  <td style={{ padding: '0.75rem 0.5rem', color: '#6b7280' }}>
-                    {s.trade_type || '—'}
-                  </td>
-                  <td style={{ padding: '0.75rem 0.5rem', color: '#f59e0b', letterSpacing: '1px' }}>
-                    {stars(s.rating)}
-                  </td>
-                  <td style={{ padding: '0.75rem 0.5rem', color: '#6b7280' }}>
-                    {s.phone || '—'}
-                  </td>
+                  <th style={{ ...th, paddingLeft: '20px' }}>Company</th>
+                  <th style={th}>Contact</th>
+                  <th style={th}>Type</th>
+                  <th style={th}>Trade</th>
+                  <th style={th}>Rating</th>
+                  <th style={th}>Phone</th>
+                  <th style={th}>W-9</th>
+                  <th style={th}>Committed open</th>
+                  <th style={{ ...th, paddingRight: '20px' }}>12-mo spend</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filtered.map((s) => {
+                  const isSub = s.sub_type === 'subcontractor';
+                  return (
+                    <tr
+                      key={s.id}
+                      onClick={() => setOpenId(s.id)}
+                      // A clickable `<tr>` is invisible to the keyboard without
+                      // these three. Same as the contacts list.
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`Open ${s.company_name}`}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setOpenId(s.id);
+                        }
+                      }}
+                      data-testid={`sub-row-${s.id}`}
+                      style={{ borderBottom: `1px solid ${color.rowDivider}`, cursor: 'pointer' }}
+                    >
+                      {/* The company name is PLAIN TEXT now. It was an <a> to the
+                          detail page; a link inside a row that is itself a control
+                          gives the same click two meanings. */}
+                      <td style={{ ...td, paddingLeft: '20px', fontWeight: 600, color: color.navy }}>
+                        {s.company_name}
+                      </td>
+                      <td style={td}>
+                        {s.contact_first_name || s.contact_last_name
+                          ? `${s.contact_first_name ?? ''} ${s.contact_last_name ?? ''}`.trim()
+                          : '—'}
+                      </td>
+                      <td style={td}>
+                        <span style={typeBadge(s.sub_type)}>
+                          {s.sub_type === 'subcontractor' ? 'Sub' : 'Vendor'}
+                        </span>
+                      </td>
+                      <td style={td}>{s.trade_type || '—'}</td>
+                      <td style={{ ...td, color: color.amber, letterSpacing: '1px' }}>
+                        {stars(s.rating)}
+                      </td>
+                      <td style={td}>{s.phone || '—'}</td>
+                      {/* W-9 — Owner/Admin only; the read was skipped for other
+                          roles, so the em-dash means "not yours to know", never
+                          "missing". The docs table is empty on live data today,
+                          so "missing" is the honest state for every sub. */}
+                      <td style={{ ...td, fontSize: '12.5px' }}>
+                        {w9 === null ? (
+                          '—'
+                        ) : w9[s.id] ? (
+                          <span style={{ color: color.successOnBg, fontWeight: 600 }}>On file</span>
+                        ) : (
+                          <span style={{ color: color.warningDeep, fontWeight: 600 }}>Missing</span>
+                        )}
+                      </td>
+                      {/* Money columns — SUBS ONLY. A vendor figure would be a
+                          string-match on free text, and is not invented (§8.4). */}
+                      <td style={monoCell}>{isSub ? money(committedOpen[s.id]) : '—'}</td>
+                      <td style={{ ...monoCell, paddingRight: '20px' }}>
+                        {isSub ? money(spend12mo[s.id]) : '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
