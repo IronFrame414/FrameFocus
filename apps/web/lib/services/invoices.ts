@@ -106,6 +106,52 @@ export async function getInvoice(id: string): Promise<InvoiceWithLines | null> {
  * (source_line_row_id/source_line_item_id = the ESTIMATE instrument |
  *  source_change_order_id = that CO | is_miscellaneous = NO instrument).
  */
+/**
+ * §8.8.3 "Cost you've fronted" — the PROJECT-LEVEL aggregate that did not
+ * exist: approved cost on the job not yet claimed on any live invoice.
+ * SAME semantics as the per-instrument picker below (approved only;
+ * remaining = allocation − Σ live claims; claims CASCADE from the invoice so
+ * voiding restores the remainder) — summed across the whole project rather
+ * than one instrument's budget lines. Keep the two in step.
+ */
+export async function getFrontedCostTotal(projectId: string): Promise<number> {
+  const supabase = await createClient();
+
+  const { data: expenses } = await supabase
+    .from('expenses')
+    .select('id')
+    .eq('project_id', projectId)
+    .eq('status', 'approved')
+    .eq('is_deleted', false);
+  if (!expenses || expenses.length === 0) return 0;
+
+  const { data: allocations } = await supabase
+    .from('expense_allocations')
+    .select('id, amount')
+    .in('expense_id', expenses.map((e) => e.id))
+    .eq('is_deleted', false);
+  if (!allocations || allocations.length === 0) return 0;
+
+  const { data: claims } = await supabase
+    .from('invoice_cost_claims')
+    .select('expense_allocation_id, claimed_amount')
+    .in('expense_allocation_id', allocations.map((a) => a.id));
+  const claimedByAllocation = new Map<string, number>();
+  for (const c of claims ?? []) {
+    claimedByAllocation.set(
+      c.expense_allocation_id,
+      (claimedByAllocation.get(c.expense_allocation_id) ?? 0) + Number(c.claimed_amount)
+    );
+  }
+
+  let total = 0;
+  for (const alloc of allocations) {
+    const remaining = Number(alloc.amount) - (claimedByAllocation.get(alloc.id) ?? 0);
+    if (remaining > 0) total += remaining;
+  }
+  return Math.round(total * 100) / 100;
+}
+
 export async function getPickableCosts(
   projectId: string,
   instrument: InstrumentRef,

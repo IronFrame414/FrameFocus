@@ -423,3 +423,18 @@ inventories"). Spec: `docs/specs/desktop-redesign-spec.md` (1358 lines). CLI lin
   "from a photo or punch item" (no FK either direction; pairs with 17b). Neither is built.
 - **Files:** `projects/[id]/changes/changes-panel.tsx`.
 - **Verified:** type-check 5/5.
+
+### Entry 18 — 5.3 `13c` Invoices
+- **Did:** built on the LIVE floor (a PM sees authored invoices only; the aggregate card is
+  already `canSeeContractValue`-gated with the [Fix 4] comment — untouched). NEW:
+  **`getFrontedCostTotal(projectId)`** in `invoices.ts` — the project-level aggregate that did
+  not exist, over `expenses ⋈ expense_allocations ⋈ invoice_cost_claims` with the SAME
+  semantics as the per-instrument picker beside it (approved only; remaining = allocation −
+  live claims; claims cascade on void), documented to be kept in step. Rendered as a
+  "Cost you've fronted" figure in the Owner/Admin position card; a gated role triggers zero
+  calls; zero renders nothing rather than a $0 husk.
+- **Verified, not assumed:** both hardcoded sibling URLs re-checked live —
+  `payments-view.tsx:142` (invoices base ×4 uses) and `invoice-delivery-panel.tsx:177`
+  (lien-releases); slugs unchanged.
+- **Files:** `lib/services/invoices.ts` · `projects/[id]/invoices/page.tsx`.
+- **Verified:** type-check 5/5.

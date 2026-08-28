@@ -5,6 +5,7 @@ import { getRevisedContract } from '@/lib/services/contract-value';
 import { getProject } from '@/lib/services/projects';
 import {
   getAvailableCredits,
+  getFrontedCostTotal,
   getInvoices,
   getInvoicesFlaggedBySupersededRates,
 } from '@/lib/services/invoices';
@@ -119,6 +120,12 @@ export default async function InvoicesPage({ params }: { params: { id: string } 
   // as the role.
   const { original } = await getRevisedContract(params.id);
   const contractValue = original === null ? null : Number(original);
+  // §8.8.3 "Cost you've fronted" — Owner/Admin only, beside the other
+  // aggregates; a gated role triggers zero calls.
+  const frontedCost =
+    profile.role === 'owner' || profile.role === 'admin'
+      ? await getFrontedCostTotal(params.id)
+      : 0;
   // §12a (S97) — the PM carve-out covers amounts ON an invoice, not the job's
   // contract value (CLAUDE.md Financial Visibility Floor keeps that Owner/Admin).
   const canSeeContractValue = profile.role === 'owner' || profile.role === 'admin';
@@ -202,6 +209,8 @@ export default async function InvoicesPage({ params }: { params: { id: string } 
           <Figure label="Billed to date" value={billedToDate} />
           <Figure label="Retainage held" value={retainageHeld} warn />
           <Figure label="Receivable (ages in collections)" value={receivable} bold />
+          {/* §8.8.3 — approved cost not yet claimed on any live invoice. */}
+          {frontedCost > 0 && <Figure label="Cost you've fronted" value={frontedCost} warn />}
           {/* §12a (S97) — the contract value is a figure ABOUT the job, not an
               amount on an invoice being created, so it stays Owner/Admin.
               A PM sees the billed/retainage/receivable figures beside it. */}
