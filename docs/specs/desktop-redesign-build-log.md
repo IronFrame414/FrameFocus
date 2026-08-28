@@ -583,3 +583,29 @@ inventories"). Spec: `docs/specs/desktop-redesign-spec.md` (1358 lines). CLI lin
 - **Vacuity check:** the inverted tests carry counter-vacuity guards (derivation 6 asserts
   line-count > 0; s149's `.single()` fails loudly on no PM invoice; m-hubs' rgb ran against
   live rendering). Nothing in a touched area passes against an empty result.
+
+---
+
+## Build steps 8–10 — Settings · Estimate detail · The five destinations
+
+### Entry 25 — block opened; one inventory claim corrected before any edit
+- **Step:** pre-8 recon, complete. Spec §8.10–§8.12 and all three source inventories re-read;
+  settings page + all seven forms read; theme/token pattern confirmed.
+- **⚠️ INVENTORY CORRECTION (settings inventory UNKNOWN #1, and §8.11.1's Company row):** the
+  `contractor_signature_mode/name/ref` triple is **NOT on `companies` — it is on
+  `change_orders`** (`20260710120000_signed_artifacts.sql:22-41`), written per-CO by the send
+  route at send time (`api/change-orders/[id]/send/route.ts:210-212`), read by the CO PDF
+  renderer (`co-data.ts:182-194`) and the completion route. `companies` carries only
+  `contractor_signature_path`, exactly as the form writes it. **The Company form's contract is
+  therefore clean:** it owns the company image; the triple is a per-CO snapshot the send route
+  takes. No consumer constrains the settings restyle. (Traced writer→reader end to end by a
+  read-only agent pass; verified against the migration.)
+- **Confirmed already honest, needs no copy fix:** the Time Tracking payroll-week caption
+  (`time-tracking-settings-form.tsx:222-226`) already states that approved weeks re-display
+  under a new grouping — the spec's warning is against the MOCKUP's caption, and the shipped
+  one never made the mockup's promise.
+- **Quiet-hours semantics verified before writing the Notifications tab's captions:**
+  `notify_hours_start/end` gate PUSH only (`shouldPushNow`, `notify-hours.ts:110`); in-app rows
+  always land; `incident` overrides at any hour (ND-5). No settings UI writes these columns
+  today — the tab's quiet-hours editor is their first writer.
+- **Commit:** (this entry's commit).
