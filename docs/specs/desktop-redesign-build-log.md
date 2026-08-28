@@ -375,3 +375,17 @@ inventories"). Spec: `docs/specs/desktop-redesign-spec.md` (1358 lines). CLI lin
   all six screens: **955/955 (63 files)**. Type-check 5/5 at every commit.
 - **Files:** `e2e/desktop-lists.spec.ts` (new).
 - **Commit:** (this entry's commit, with 14b).
+
+### Entry 15 — the step-4 constants RULED [Josh, after the step report]
+- **Catalog stale = ONE YEAR, not 90 days.** Never-verified still counts. The mockup's own copy
+  says "haven't been repriced in over a year"; 90 days would badge a June-2026 item and put the
+  flag on too much of a 148-item list to mean anything. `STALE_AFTER_DAYS` 90 → 365, alert copy
+  now says "in over a year".
+- **Estimates expiring soon = 7 days — CONFIRMED as built.** No change.
+- **Row tints STAY UNAPPLIED, ruled open.** §2's tokens are permanent, but where they belong is
+  not yet ruled — the mockups use them for ROW STATE (a lapsed-insurance sub, an over-budget
+  line), which is not the same question as category nesting. They wait for that ruling; no
+  screen applies them until it lands.
+- **Files:** `catalog/catalog-list.tsx`.
+- **Commit:** (this entry's commit).
+- **Verified:** type-check 5/5 before commit.

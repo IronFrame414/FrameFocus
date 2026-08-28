@@ -22,10 +22,11 @@ interface CatalogListProps {
   usage: Record<string, number>;
 }
 
-// Stale = never verified, or last verified more than 90 days ago. The mockup
-// names no threshold; 90 days is a decision recorded in the build log, in one
-// place so it can be re-ruled without a hunt.
-const STALE_AFTER_DAYS = 90;
+// Stale = never verified, or last verified more than A YEAR ago — RULED
+// [Josh, 2026-08-28], superseding the build's provisional 90 days. The
+// mockup's own copy says "haven't been repriced in over a year", and 90 days
+// would badge so much of a 148-item list that the flag would mean nothing.
+const STALE_AFTER_DAYS = 365;
 
 function isStale(lastVerifiedAt: string | null, now: number): boolean {
   if (!lastVerifiedAt) return true;
@@ -108,9 +109,8 @@ export function CatalogList({ canManage, usage }: CatalogListProps) {
 
       {!loading && staleCount > 0 && (
         <AlertStrip>
-          <strong>{staleCount}</strong> price{staleCount === 1 ? '' : 's'} not verified in the last{' '}
-          {STALE_AFTER_DAYS} days — stale catalog prices are the quietest way to lose margin on a
-          bid.{' '}
+          <strong>{staleCount}</strong> price{staleCount === 1 ? '' : 's'} not verified in over a
+          year — stale catalog prices are the quietest way to lose margin on a bid.{' '}
           <button
             onClick={() => setFilter('stale')}
             style={{
