@@ -609,3 +609,44 @@ inventories"). Spec: `docs/specs/desktop-redesign-spec.md` (1358 lines). CLI lin
   always land; `incident` overrides at any hour (ND-5). No settings UI writes these columns
   today — the tab's quiet-hours editor is their first writer.
 - **Commit:** (this entry's commit).
+
+### Entry 26 — STEP 8: Settings (§8.11.1), complete — commits `b5ce9e5`·`df15259`·`e532225`·`019d50c`·`91d469f`
+- **8.1 Company autosaves** (`b5ce9e5`): per-field 1s debounce on blur (selects on change), one
+  column per write so a failing field never blocks a neighbour; `name` required — empty blocks
+  that field's save in place. **The two uploads stay explicit actions** (the ruling's named
+  obstacle): logo/signature/typed-name handlers untouched, their feedback on its own status
+  line. Restyled to the 8a layout (logo+signature side by side; contact+address side by side).
+  The mockup's save-model caption is REMOVED, not corrected, as ruled.
+- **8.2 Accounting autosaves** (`df15259`): same pattern. Two copy burdens land: QB declared
+  **not connected** (7G deferred — "stored now; nothing exports today"), and the GL mapping
+  declared **live, not frozen** — read at export time, retroactive to future exports — in
+  warning colour beside the genuinely-frozen burden caption (inventory D3).
+- **8.3 Notifications tab** (`e532225`): `NotificationHoursSettings` slice + bundle columns +
+  `updateNotificationHours`; the quiet-hours editor is the FIRST writer of
+  `notify_hours_start/end`. Copy states verified semantics only: push-only gating, in-app always
+  lands, incidents override (ND-5), midnight-wrapping windows. **`PushEnrolment` renders here
+  AND stays on the Notifications page** — the mockup's "moved here" is AMENDED: Settings is
+  Owner/Admin-only and enrolment is per-user; moving it would have removed desktop push for
+  PM/foreman/crew. **The per-type App/Email grid and the Roll-up toggle are NOT BUILT** — both
+  need schema (`notification_preferences`; a roll-up column); on the ask list.
+- **8.4 File-categories manager** (`019d50c`): Entry 20's deferral lands on the Documents tab.
+  Service grows `renameFileCategory` (label only — the key is trigger-immutable),
+  `reorderFileCategories` (index → sort_order), company-wide `createFileCategory` (projectId
+  now optional), and `deleteFileCategory` — **refused while any live file uses the key**
+  (client-side count guard; a hidden key would strand files out of the grouped Files view, the
+  #129 silent-loss class), system rows refused here AND by the DB trigger. Deletes go through
+  `useConfirm` (danger tone). Per-job custom rows deliberately absent — they belong to the
+  job's upload picker.
+- **8.5 The tab strip** (`91d469f`): seven tabs, single bottom-border row (raised segments are
+  project-detail only, per the README). **Panels hide with `display:none`, never unmount** — a
+  pending 1s debounce or an in-flight upload survives a tab switch; unmount-on-switch is a
+  lost-write bug by construction. Active tab mirrors to `?tab=` via `history.replaceState`
+  (Documents is linkable); initial tab from `searchParams`. Old-palette hexes swept from the
+  three untouched forms (12-value map, zero residual); stacked-era `marginTop: 3rem` dropped.
+- **Confirmed, no change needed:** Time Tracking's payroll-week caption already honest (Entry
+  25); Lien/Contract forms carry zero old hexes; the two `prompt()` sites in
+  `contract-settings-form` / `lien-release-settings-form` LEFT AS-IS (ask item #6, unruled).
+- **S157 sweep:** no unit/e2e test renders the settings page or asserts the stacked layout
+  (`desktop-chat-panel.spec.ts` only visits the route; `s145-sub-inbound` mentions it in a
+  comment). Nothing to invert.
+- **Verified:** type-check 5/5 exit 0 at every commit (redirected logs, exit read from print).
