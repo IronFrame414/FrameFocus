@@ -26,7 +26,7 @@ function vapidConfigured(): boolean {
 
   if (!configured) {
     webpush.setVapidDetails(
-      process.env.VAPID_SUBJECT || 'mailto:support@frameFocus.app',
+      process.env.VAPID_SUBJECT || 'mailto:framefocus2026@gmail.com',
       publicKey,
       privateKey
     );
