@@ -192,8 +192,12 @@ export default async function InvoicesPage({ params }: { params: { id: string } 
 
       {/* §5 — the job's billing position. Retainage held is shown SEPARATELY
           and deliberately sits OUTSIDE the receivable: it is not overdue,
-          because it is not yet owed. Voided invoices contribute nothing. */}
-      {live.length > 0 && (
+          because it is not yet owed. Voided invoices contribute nothing.
+          [Fix 4] Owner/Admin ONLY. Under the authorship floor a PM's list is
+          only the invoices THEY authored, so these sums would silently mean
+          "my slice", not "the job" — an aggregate that reads as the client's
+          position. Removed for a PM; a PM sees their own invoice rows below. */}
+      {live.length > 0 && canSeeContractValue && (
         <div style={{ ...cardStyle, padding: '12px 16px', marginBottom: '14px', display: 'flex', gap: '28px', flexWrap: 'wrap' }}>
           <Figure label="Billed to date" value={billedToDate} />
           <Figure label="Retainage held" value={retainageHeld} warn />

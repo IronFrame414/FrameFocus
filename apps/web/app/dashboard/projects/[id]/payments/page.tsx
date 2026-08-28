@@ -19,9 +19,14 @@ import { getReminderSettings } from '@/lib/services/reminders';
 // Module 7E1 — the project's money-received screen (docs/specs/7e1-spec.md
 // §2, §3, §4.1, §5, §6, §6a).
 //
-// Owner/Admin/PM only, matching the client_payments RLS policies. Recording is
-// Owner/Admin ONLY (§8) — a PM reads (P-3). Foreman/Crew are redirected rather
-// than shown an empty screen, the invoices-page pattern.
+// Owner/Admin ONLY, matching the client_payments RLS policies. [Fix 4] This
+// supersedes 7E P-3 ("a PM reads it ... a PM who cannot see whether their
+// invoice was paid cannot do the job"): every figure on this screen is an
+// AGGREGATE — collected/spent/ahead, the AR aging table, retainage held, total
+// outstanding, payments received — which IS the client's whole financial
+// position, and cannot be authorship-scoped. A PM keeps the Invoices tab
+// (authorship-scoped) and submits for approval; the job's cash position is the
+// Owner's. Foreman/Crew/PM are redirected rather than shown an empty screen.
 
 export default async function PaymentsPage({ params }: { params: { id: string } }) {
   const supabase = await createClient();
@@ -38,7 +43,7 @@ export default async function PaymentsPage({ params }: { params: { id: string } 
     .single();
   if (!profile) redirect('/dashboard');
 
-  if (!['owner', 'admin', 'project_manager'].includes(profile.role)) {
+  if (!['owner', 'admin'].includes(profile.role)) {
     redirect(`/dashboard/projects/${params.id}`);
   }
 

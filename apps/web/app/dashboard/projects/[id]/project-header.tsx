@@ -42,13 +42,16 @@ const TABS: { slug: string; label: string; roles?: string[] }[] = [
     label: 'Invoices',
     roles: ['owner', 'admin', 'project_manager'],
   },
-  // 7E — money received. Recording a payment is Owner/Admin ONLY (§8); a PM
-  // reads it (P-3) because a PM who cannot see whether their invoice was paid
-  // cannot do the job. Foreman/Crew never see client money.
+  // 7E — money received. OWNER/ADMIN ONLY. [Fix 4] The screen is all AGGREGATES
+  // (collected/spent/ahead, AR aging, retainage held, outstanding, payments
+  // received) — the client's whole financial position, which cannot be
+  // authorship-scoped. This supersedes P-3 ("a PM who cannot see whether their
+  // invoice was paid cannot do the job"): a PM keeps the Invoices tab
+  // (authorship-scoped) and submits for approval. Foreman/Crew/PM never see it.
   {
     slug: 'payments',
     label: 'Payments',
-    roles: ['owner', 'admin', 'project_manager'],
+    roles: ['owner', 'admin'],
   },
   // 7H — job profitability. OWNER/ADMIN ONLY (§7H.6), narrower than Invoices
   // and Payments beside it: a PM legitimately sees invoice amounts (the S97
