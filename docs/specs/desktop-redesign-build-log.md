@@ -650,3 +650,44 @@ inventories"). Spec: `docs/specs/desktop-redesign-spec.md` (1358 lines). CLI lin
   (`desktop-chat-panel.spec.ts` only visits the route; `s145-sub-inbound` mentions it in a
   comment). Nothing to invert.
 - **Verified:** type-check 5/5 exit 0 at every commit (redirected logs, exit read from print).
+
+### Entry 27 — STEP 9: Estimate detail (§8.10), complete — commits `993ad24`·`9ea2aad`·`9ca59ae`·`103c7e2`·`7ad2c53`
+- **9.1 Health derivation** (`993ad24`): `lib/estimate-health.ts` — the convert RPC's budget cost
+  expression VERBATIM (labor rate×qty untaxed; material/allowance unit_cost×qty and sub/other
+  amount, ×(1+tax/100) on apply_tax; 2dp per row; rowless flat lines at override_cost), so the
+  health figure IS the budget the project opens with. Unpriced-row count = the mockup's
+  allowance warning, **unpriced half only — the cap half dropped (no cap concept exists)**.
+  Zero-price margin renders an em-dash, not 0%. New unit suite 4/4, exact-figure assertions.
+- **9.2 Shell** (`9ea2aad`): left rail → top tab row. **The tab SET is the shipped eight,
+  unchanged** — the mockup's seven is wrong (no Review & Send tab exists; Cover Sheet and the
+  disabled Files tab are real). Tab state stays useState — deep-linking is a change, on the ask
+  list. Footer navy with the amber grand total. e2e testids (`est-send` etc.) untouched;
+  no test asserts the rail structure (swept).
+- **9.3 The Details rail** (`9ca59ae`): `estimate-health-panel.tsx` — Health card (no target
+  bar, §6b.2 deferred), **Before-you-send** (five advisory checks: client+site, priced lines,
+  every-row-costed, scope, terms — **the expiration check dropped as near-vacuous**, NOT NULL +
+  default makes it always-true), **Client Activity** ("sent <date>"/"not sent", reminder
+  counters, accepted/expires; "Opens aren't tracked yet" — view tracking stays P3, the write
+  path is the security question). **History and Coverage NOT BUILT**, reasons recorded in the
+  component header (event log to build; free-string matching would confidently lie).
+- **9.4 The rest** (`103c7e2`): NotesTab banner corrected per §8.10.5 — **the mockup's
+  Foreman-read-write is wrong, the code is right**; banner now names the real audience and
+  states whole-blob carry-on-convert (per-note ticks have nothing to tick). Items tab gains the
+  live cost/price/margin strip — SAME derivation, one implementation. Palette swept across all
+  ten builder files incl. the proposal-preview chrome (the ProposalDocument PDF inside is
+  untouched — Entry 5's ruling); zero off-palette hexes remain in the directory.
+- **9.5 THE PROBE, answered live** (`7ad2c53`): on rebuild-test, PM
+  (`josh+pm@worthprop.com`) reads **0** `instrument_rates` rows where owner reads 22 (admin
+  ground truth 20+ estimate-scoped) — the S97 floor applies to estimate-scoped rates; no PM
+  arm exists (verified in migrations: only `_select_owner_admin` + the M9 client arm).
+  **Consequence found and fixed:** a PM's empty read was indistinguishable from "no rates
+  set", so contract-section showed a PM the FALSE "No rate in force … blocks totals" banner on
+  every non-fixed estimate. New `canReadRates` prop (Owner/Admin): gated roles skip the fetch
+  (zero calls) and get "rates are visible to the Owner and Admins only". Probe file deleted,
+  never committed. **Logged, not fixed:** items-tab's labor-rate-in-force fetch also returns
+  [] for a PM — no false caption there, only a missing rate DEFAULT on new labor rows;
+  behaviour unchanged since S97.
+- **markup_percent null-inheritance untouched** — the restyle never writes an explicit value
+  where null was meaningful (no write path was altered anywhere in step 9).
+- **Verified:** type-check 5/5 exit 0 at every commit; health suite 4/4; probe run under the
+  live config with results read from a file, not inferred.
