@@ -54,6 +54,10 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 export const COMPANY_CHILDREN = [
   'lien_release_template_boxes',
   'lien_release_templates',
+  // 20261039 — seeded 14-per-company by `companies_seed_file_categories`, the
+  // same shape as the lien templates above; found exactly the way the design
+  // note promises (the constraint name in the purge error).
+  'file_categories',
   'deletion_jobs',
   'export_jobs',
   'trial_warning_acknowledgements',

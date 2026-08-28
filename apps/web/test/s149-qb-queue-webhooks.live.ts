@@ -100,9 +100,15 @@ beforeAll(async () => {
     .order('created_at', { ascending: true }).limit(1).single();
   contactId = (contact as { id: string }).id;
 
-  const { data: invoice } = await admin
+  // [Invoice floor, 2ff9966 / redesign battery] Picked through the PM's OWN
+  // client, not admin's — the qb_void_memo test needs an invoice the PM can
+  // MATCH through the SELECT policy, or the update matches zero rows, error is
+  // null, and the refusal assertion fails (the exact 0f5d37e trap, mirrored).
+  // This is also the S165 rule: the caller depends on a property (PM-visible)
+  // the old admin-side `.limit(1)` never scoped for; ordering alone would
+  // only have made the wrong pick stable.
+  const { data: invoice } = await pmC
     .from('invoices').select('id').eq('company_id', companyA).eq('is_deleted', false)
-    .in('project_id', assigned)
     .order('created_at', { ascending: true }).limit(1).single();
   invoiceId = (invoice as { id: string }).id;
 

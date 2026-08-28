@@ -26,6 +26,7 @@ const MARKER = 'S97DERIV';
 
 let companyId: string;
 let ownerMemberId: string;
+let pmMemberId: string;
 let pmClient: SupabaseClient;
 let contactId: string;
 let projectId: string;
@@ -95,10 +96,15 @@ async function changeOrder(title: string, coType: string): Promise<string> {
 }
 
 async function draftInvoice(title: string): Promise<string> {
+  // [Invoice floor, 2ff9966] AUTHORED AS THE PM — a PM reads only invoices
+  // they authored (author_member_id), so tests 6–7's reads are only
+  // non-vacuous on the PM's own invoices. §12a's read-anything carve-out is
+  // overturned; the PM-invoices-without-seeing-a-rate claim survives on the
+  // keep-side of the floor, which is exactly what these fixtures now model.
   const { data, error } = await admin
     .from('invoices')
     .insert({
-      company_id: companyId, project_id: projectId, author_member_id: ownerMemberId,
+      company_id: companyId, project_id: projectId, author_member_id: pmMemberId,
       title: `${MARKER} ${title}`, presentation_level: 'full_detail',
     })
     .select('id').single();
@@ -190,6 +196,8 @@ beforeAll(async () => {
     company_id: companyId, project_id: projectId,
     member_id: pmMember!.id, role_on_project: 'project_manager',
   })).error);
+
+  pmMemberId = pmMember!.id;
 
   const { data: budget, error: bErr } = await admin
     .from('project_budget_items')
@@ -340,7 +348,7 @@ describe('S97CT-DERIV — RULING A/B together: a PM invoices without seeing a ra
     }
   });
 
-  it('6. …but CAN read the derived amounts on both invoices (7D §12a intact)', async () => {
+  it('6. …and CAN read the derived amounts on the invoices THEY AUTHORED (the floor keeps the PM write path; §12a read-anything is overturned)', async () => {
     for (const [invoiceId, expected] of [
       [invoiceBId, 5830.42],
       [invoiceCId, 4612.08],

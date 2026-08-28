@@ -136,7 +136,9 @@ export const COMPANY_TABLES: string[] = [
   'project_budget_amounts', 'project_budget_items', 'project_financials',
   'project_contacts', 'project_assignments',
   'subcontractor_financials', 'subcontractor_compliance_documents',
-  'files', 'projects',
+  // file_categories sits between files and projects: files reference it
+  // (files_category_fkey) and its per-job rows reference projects (20261039).
+  'files', 'file_categories', 'projects',
   'contact_addresses', 'contacts', 'subcontractors',
   'member_pay_rates', 'member_burden_settings', 'instrument_rates', 'cost_catalog',
   'tag_options', 'client_reminder_settings', 'sync_conflicts',

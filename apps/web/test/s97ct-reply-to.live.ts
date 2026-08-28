@@ -71,6 +71,13 @@ async function purgeMarkerCompanies(): Promise<void> {
     'purge templates',
     (await admin.from('lien_release_templates').delete().in('company_id', ids)).error
   );
+  // 20261039 — file_categories are trigger-seeded on every company insert,
+  // exactly like the lien templates above; this inline purge is its own list
+  // (COMPANY_CHILDREN carries the same entry) and needs it too.
+  must(
+    'purge file categories',
+    (await admin.from('file_categories').delete().in('company_id', ids)).error
+  );
   must('purge companies', (await admin.from('companies').delete().in('id', ids)).error);
 }
 
