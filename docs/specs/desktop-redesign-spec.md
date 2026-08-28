@@ -12,9 +12,12 @@
 > The rulings hold; the coordinates may not.
 >
 > **Status: all 40 screens specced; all five open items closed.**
-> Seven items deferred to their own specs (§6b). Four fixes ruled (§8b, §8c, §7.1) — **two shipped**
-> (`8de9b4d` tz, `04b67f4` N+1s), **one checkpointed** (§8b, now a three-migration change), **one
-> outstanding** (§7.1, the invoice floor).
+> Seven items deferred to their own specs (§6b). Four fixes ruled (§8b, §8c, §7.1) — **three
+> shipped** (`8de9b4d` tz, `04b67f4` N+1s, **`2ff9966` + `20261038000000_invoice_payment_floor.sql`
+> the §7.1 invoice floor**), **one checkpointed** (§8b, now a three-migration change).
+> _Superseded, quoted not deleted [corrected post-audit, 2026-08-28]: "**one outstanding** (§7.1,
+> the invoice floor)" — it shipped the same night this spec was committed; the citation audit
+> (`desktop-redesign-spec-citation-audit.md`) caught the file saying otherwise._
 
 ---
 
@@ -62,16 +65,22 @@ A section header is not a route. Money lands on Budget & Cost for a foreman, Cha
 **A section with zero visible sub-tabs does not render.**
 
 ### R2 — Role lists are unchanged BY THE REGROUPING
-Grouping is presentation: the regrouping itself changes no gate. ⚠️ **But two of these five gates are
-changed by a separate ruling** — see §7.1. The table below is **the state before that fix lands**:
+Grouping is presentation: the regrouping itself changes no gate. **The §7.1 fix has SHIPPED**
+(`2ff9966`), so the table below is the live state — **this is the table the six-section build
+copies**:
 
 | Tab | Roles |
 |---|---|
 | Budget & Cost | owner · admin · project_manager · foreman |
-| Invoices | owner · admin · project_manager → ⚠️ **becoming authorship-scoped for a PM** (§7.1) |
-| Payments | owner · admin · project_manager → ⚠️ **becoming owner · admin** (§7.1) |
+| Invoices | owner · admin · project_manager — **authorship-scoped for a PM at the database** (§7.1): the tab renders, RLS shows a PM only invoices they authored |
+| Payments | **owner · admin** (§7.1) |
 | Profitability | owner · admin |
 | Lien Releases | owner · admin |
+
+_Superseded [corrected post-audit, 2026-08-28]: the table previously carried both rows as
+"owner · admin · project_manager → ⚠️ becoming …" and was labelled "the state before that fix
+lands". The arrows have become. A build that copies the pre-fix roles for Payments would silently
+undo the invoice floor._
 
 **Chat carries no `roles` entry and that is the ruling, not an oversight** (A-C27) — `can_view_project()`
 already decides who reads a thread. Do not add one while regrouping.
@@ -473,7 +482,18 @@ invoices: authorship, not role.**
 **Net effect:** the **Payments tab becomes Owner/Admin**. The **Invoices tab stays PM but
 authorship-scoped**.
 
-#### How it gets built — not in the restyle
+#### How it got built — SHIPPED [2026-08-28, post-spec]
+**Built exactly as ruled, in its own commit: `2ff9966` +
+`20261038000000_invoice_payment_floor.sql`, tests reconciled at `0f5d37e` (five suites inverted,
+with owner counterfactuals so nothing passes vacuously).** One deliberate deviation from the plan
+below, recorded because the plan predicted the S121 key: **the floor keys on `author_member_id`,
+NOT `created_by`** — `created_by` is NULL on 10 of 18 live invoices, so S121's key would have
+hidden them from everyone. `author_member_id` is never NULL and agrees with `created_by` where
+both exist. A PM keeps write on their own invoices because Postgres matches UPDATE through the
+SELECT policy — the §8b-measured mechanism, used deliberately this time.
+
+_The section below is the plan as written pre-ship, kept because its reasoning is the record:_
+
 **Its own commit, and the floor belongs in the database.** `20260830000000_change_order_read_floor.sql`
 [S121] is the precedent in both shape and documentation: *"PM SCOPE IS AUTHORED-BY."*
 
@@ -487,6 +507,9 @@ supersede it explicitly rather than quietly contradicting it.
 
 ⚠️ **The S97 carve-out is now wrong** — *a PM sees the amounts on an invoice they can reach* — and it
 lives in `money-representation.md`. Amend it there too, or the Floor documents disagree with the Floor.
+**[Post-ship status: still owed. RULED [Josh, 2026-08-28]: the amendment travels with the
+invoice-floor work, not the redesign — the redesign pass leaves `money-representation.md` and
+`7d1-spec.md` §12a alone.]**
 
 ⚠️ **Saved invoice PDFs** must follow the same rule; Josh ruled the documents blocked alongside the
 figures. Check what `files_select_non_client` does with invoice-category files for a PM.
@@ -787,6 +810,12 @@ their caption from "$X pending" to "sent to clients". **The restyle must keep bo
 
 #### §8.8.3 — `13c` Invoices
 
+**⚠️ [Corrected post-audit, 2026-08-28] This section was inventoried PRE-invoice-floor. Since
+`2ff9966`:** the list shows a PM **only invoices they authored** (`author_member_id`, RLS), and the
+summary cards / billing-progress strip are gated `canSeeContractValue` — **a PM sees no
+aggregates on this page**. The presentation_level caveat below still holds, but "a PM who can
+reach a draft" now means **their own draft** only. Build `13c` against that state.
+
 | Mockup element | Status |
 | --- | --- |
 | **Three-step wizard** (What to bill → How it reads → Send) | Restyle. "How it reads" is `presentation_level` ∈ `full_detail \| by_section \| lump_sum`, **DB CHECK-enforced**, default `lump_sum`. ⚠️ No RLS on the column — a PM who can reach a draft can change it until send. |
@@ -796,6 +825,12 @@ their caption from "$X pending" to "sent to clients". **The restyle must keep bo
 | **`Cost you've fronted`** | ⚠️ **Partially.** Per-allocation unbilled approved cost is derived; **no project-level aggregate exists**. One new query over `expense_allocations ⋈ expenses ⋈ invoice_cost_claims`. |
 
 #### §8.8.4 — `13d` Payments
+
+**⚠️ [Corrected post-audit, 2026-08-28] The Payments tab is now Owner/Admin** — `2ff9966` changed
+the TABS gate and `payments/page.tsx` redirects; the RLS floor removed every PM arm on
+`client_payments`, `client_payment_applications` and `retainage_releases`. Everything this section
+says a PM could see, they no longer can — the shipped design this section describes ("read yes,
+write no") is the premise §7.1 rejected. **The rulings below all stand, as Owner/Admin screens.**
 
 **⚠️ RULED: keep FOUR aging buckets, not the mockup's five.** Code has `current (≤30)` · `31–60` ·
 `61–90` · `90+`. The mockup splits *current* from *1–30*. **Splitting is cosmetic until due dates
@@ -1342,8 +1377,10 @@ Carried from the brief; the design predates them and **the rulings win**.
    money figure on every screen against who can read it.
    ⚠️ **The S97 carve-out is OVERTURNED.** *A PM sees the amounts on an invoice they can reach* was the
    premise Josh rejected, and **§7.1 is now closed**: a PM sees invoices **they authored** and no
-   aggregates; the Payments tab becomes Owner/Admin. `money-representation.md` needs amending to match.
-   Everything else in the Floor stands.
+   aggregates; the Payments tab becomes Owner/Admin. `money-representation.md` needs amending to match
+   — **[2026-08-28] RULED [Josh]: that amendment travels with the invoice-floor work; the redesign
+   pass does not touch `money-representation.md` or `7d1-spec.md` §12a.**
+   Everything else in the Floor stands. **[The floor itself shipped — `2ff9966`; see §7.1.]**
 3. **`useConfirm()` HAS SHIPPED.** S175 item 9 merged — *"native dialogs replaced with a shared confirm
    overlay; the coverage gap made explicit."* The redesign uses it and does **not** re-solve the sweep.
    ⚠️ The commit message says the **coverage gap was made explicit**, so some call sites were

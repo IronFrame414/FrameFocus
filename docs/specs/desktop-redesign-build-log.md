@@ -95,3 +95,16 @@ inventories"). Spec: `docs/specs/desktop-redesign-spec.md` (1358 lines). CLI lin
   `npx turbo run type-check --force` → exit 0, **5/5 uncached**; `vitest run test/m6m-pwa.test.ts`
   → exit 0, 7/7. §5b's on-phone splash check (§S2's flagged assumption) still needs a real
   handset — unchanged, as the spec says.
+
+### Entry 3 — the audit's correction sheet applied to the spec [ordered by Josh, before Phase D]
+- **Step:** docs-only, its own commit; required before Phase D because the six-section build copies
+  §1 R2's role table, and the stale table would have silently undone the invoice floor.
+- **Did:** amended the header status line, §1 R2 (the live role table, now marked as the one the
+  build copies), §7.1 (shipped, with the `author_member_id`-not-`created_by` deviation recorded),
+  §8.8.3 and §8.8.4 (post-floor banners), and §9.2's amendment pointer. Superseded text quoted, not
+  deleted, throughout. Also recorded in §7.1 and §9.2: Josh ruled the `money-representation.md` /
+  `7d1-spec.md` §12a amendment travels with the invoice-floor work — the redesign leaves both alone.
+- **Files:** `docs/specs/desktop-redesign-spec.md`.
+- **Commit:** (this entry's commit).
+- **Verified:** every correction traces to a line in `desktop-redesign-spec-citation-audit.md` §2;
+  no ruling was altered — only the record of what has shipped.
