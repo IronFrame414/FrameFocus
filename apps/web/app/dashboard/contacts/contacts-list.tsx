@@ -1,9 +1,16 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import type { Contact } from '@/lib/services/contacts';
 import { CONTACT_TYPE_LABELS } from '@framefocus/shared/constants';
 import { ContactDetailSheet } from './contact-detail-sheet';
+import {
+  FilterChips,
+  ListPageHeader,
+  ListSearchInput,
+} from '@/components/list-screen/list-screen';
+import { badgeStyle, cardStyle, color, font, microLabelStyle, primaryButtonStyle, secondaryButtonStyle } from '@/lib/theme';
 
 // ===========================================================================
 // THE ROW IS THE WAY IN. [S158 · Finding 1, RULED Josh]
@@ -27,9 +34,25 @@ import { ContactDetailSheet } from './contact-detail-sheet';
 interface ContactsListProps {
   contacts: Contact[];
   canEdit: boolean;
+  /** §8.3 Jobs — distinct projects per contact, BOTH arms (projects.contact_id
+   *  + the project_contacts junction), server-grouped. */
+  jobs: Record<string, number>;
+  /** §8.3 Client portal — profiles.client_access_state by contact_id, with
+   *  'invited' for an invitation that has no profile yet. Absent = never
+   *  invited (the derived fifth state). */
+  portal: Record<string, string>;
 }
 
-export function ContactsList({ contacts, canEdit }: ContactsListProps) {
+// The four stored states, the derived pair, and their display copy.
+const PORTAL_LABELS: Record<string, { label: string; bg: string; fg: string }> = {
+  active: { label: 'Active', bg: color.successBg, fg: color.successOnBg },
+  deactivated: { label: 'Deactivated', bg: color.neutralBadgeBg, fg: color.neutralBadgeText },
+  signed_documents_only: { label: 'Signed docs only', bg: color.blueTintAlt, fg: color.primary },
+  documents_for_signature: { label: 'Docs for signature', bg: color.warningBg, fg: color.warningDeep },
+  invited: { label: 'Invited', bg: color.warningBg, fg: color.warningDeep },
+};
+
+export function ContactsList({ contacts, canEdit, jobs, portal }: ContactsListProps) {
   const [filterType, setFilterType] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('active');
   const [search, setSearch] = useState('');
@@ -55,56 +78,53 @@ export function ContactsList({ contacts, canEdit }: ContactsListProps) {
   // for, rather than blinking out because the row behind it no longer matches.
   const openContact = openId ? (contacts.find((c) => c.id === openId) ?? null) : null;
 
-  const selectStyle: React.CSSProperties = {
-    padding: '0.375rem 0.5rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '0.375rem',
-    fontSize: '0.875rem',
-  };
-
   const typeBadge = (type: string) => ({
-    padding: '0.125rem 0.5rem',
-    borderRadius: '9999px',
-    fontSize: '0.75rem',
-    fontWeight: 500 as const,
-    backgroundColor: type === 'client' ? '#dbeafe' : '#fef3c7',
-    color: type === 'client' ? '#1e40af' : '#92400e',
+    ...badgeStyle,
+    backgroundColor: type === 'client' ? color.blueTintAlt : color.warningBg,
+    color: type === 'client' ? color.primary : color.warningDeep,
   });
 
   const statusBadge = (status: string) => ({
-    padding: '0.125rem 0.5rem',
-    borderRadius: '9999px',
-    fontSize: '0.75rem',
-    fontWeight: 500 as const,
+    ...badgeStyle,
     backgroundColor:
-      status === 'active' ? '#dcfce7' : status === 'inactive' ? '#f3f4f6' : '#fef2f2',
-    color: status === 'active' ? '#166534' : status === 'inactive' ? '#374151' : '#991b1b',
+      status === 'active' ? color.successBg : status === 'inactive' ? color.neutralBadgeBg : '#fdf1f0',
+    color:
+      status === 'active' ? color.successOnBg : status === 'inactive' ? color.neutralBadgeText : color.danger,
   });
+
+  const th: React.CSSProperties = { ...microLabelStyle, padding: '10px 12px', textAlign: 'left' };
+  const td: React.CSSProperties = { padding: '11px 12px', fontSize: '13px', color: color.bodyAlt };
 
   return (
     <div>
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-        <input
-          type="text"
-          placeholder="Search contacts..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          style={{
-            ...selectStyle,
-            flexGrow: 1,
-            minWidth: '200px',
-          }}
+      <ListPageHeader
+        title="Contacts"
+        subtitle={`${filtered.length} contact${filtered.length === 1 ? '' : 's'} · leads and clients`}
+      >
+        <ListSearchInput value={search} onChange={setSearch} placeholder="Search contacts…" />
+        {/* The way into the trash [S158 · Finding 2]. Ungated: reading the
+            deleted list needs no more permission than reading the live one,
+            and the Restore button inside is what carries the role gate. */}
+        <Link href="/dashboard/contacts/trash" style={secondaryButtonStyle}>
+          Trash
+        </Link>
+        {canEdit && (
+          <Link href="/dashboard/contacts/new" style={primaryButtonStyle}>
+            + Add Contact
+          </Link>
+        )}
+      </ListPageHeader>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <FilterChips
+          options={[
+            { value: 'all', label: 'All' },
+            { value: 'lead', label: 'Leads' },
+            { value: 'client', label: 'Clients' },
+          ]}
+          selected={filterType}
+          onSelect={setFilterType}
         />
-        <select
-          value={filterType}
-          onChange={(e) => setFilterType(e.target.value)}
-          style={selectStyle}
-        >
-          <option value="all">All Types</option>
-          <option value="lead">Leads</option>
-          <option value="client">Clients</option>
-        </select>
         {/* ⚠️ THIS DROPDOWN WALKS `contacts.status` AND NOTHING ELSE, and "All
             Statuses" means all THREE of these — not "including deleted".
             `is_deleted` is a different column answering a different question,
@@ -115,7 +135,15 @@ export function ContactsList({ contacts, canEdit }: ContactsListProps) {
         <select
           value={filterStatus}
           onChange={(e) => setFilterStatus(e.target.value)}
-          style={selectStyle}
+          style={{
+            padding: '7px 10px',
+            border: `1px solid ${color.inputBorder}`,
+            borderRadius: '8px',
+            fontSize: '13px',
+            fontFamily: font.sans,
+            color: color.bodyAlt,
+            backgroundColor: '#fff',
+          }}
         >
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
@@ -124,82 +152,94 @@ export function ContactsList({ contacts, canEdit }: ContactsListProps) {
         </select>
       </div>
 
-      {/* Count */}
-      <p style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '0.75rem' }}>
-        {filtered.length} contact{filtered.length !== 1 ? 's' : ''}
-      </p>
-
       {/* Table */}
       {filtered.length === 0 ? (
-        <div
-          style={{
-            textAlign: 'center',
-            padding: '3rem',
-            color: '#9ca3af',
-            backgroundColor: '#f9fafb',
-            borderRadius: '0.5rem',
-          }}
-        >
+        <div style={{ ...cardStyle, padding: '48px', textAlign: 'center', color: color.muted }}>
           No contacts found. {canEdit && 'Click "+ Add Contact" to get started.'}
         </div>
       ) : (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
-            <thead>
-              <tr style={{ borderBottom: '2px solid #e5e7eb', textAlign: 'left' }}>
-                <th style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>Name</th>
-                <th style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>Company</th>
-                <th style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>Type</th>
-                <th style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>Status</th>
-                <th style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>Email</th>
-                <th style={{ padding: '0.75rem 0.5rem', fontWeight: 600 }}>Phone</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((c) => (
-                <tr
-                  key={c.id}
-                  // The whole row, per the ruling — not a link on the name cell,
-                  // which is the shape the subs list uses and which leaves most
-                  // of the row inert.
-                  onClick={() => setOpenId(c.id)}
-                  // A clickable `<tr>` is invisible to the keyboard on its own.
-                  // These three are what make the row an actual control rather
-                  // than a mouse-only affordance.
-                  tabIndex={0}
-                  role="button"
-                  aria-label={`Open ${c.first_name} ${c.last_name}`}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      setOpenId(c.id);
-                    }
-                  }}
-                  data-testid={`contact-row-${c.id}`}
-                  style={{ borderBottom: '1px solid #f3f4f6', cursor: 'pointer' }}
-                >
-                  <td style={{ padding: '0.75rem 0.5rem', fontWeight: 500 }}>
-                    {c.first_name} {c.last_name}
-                  </td>
-                  <td style={{ padding: '0.75rem 0.5rem', color: '#6b7280' }}>
-                    {c.company_name || '—'}
-                  </td>
-                  <td style={{ padding: '0.75rem 0.5rem' }}>
-                    <span style={typeBadge(c.contact_type)}>
-                      {CONTACT_TYPE_LABELS[c.contact_type] ?? c.contact_type}
-                    </span>
-                  </td>
-                  <td style={{ padding: '0.75rem 0.5rem' }}>
-                    <span style={statusBadge(c.status)}>
-                      {c.status.charAt(0).toUpperCase() + c.status.slice(1)}
-                    </span>
-                  </td>
-                  <td style={{ padding: '0.75rem 0.5rem', color: '#6b7280' }}>{c.email || '—'}</td>
-                  <td style={{ padding: '0.75rem 0.5rem', color: '#6b7280' }}>{c.phone || '—'}</td>
+        <div style={{ ...cardStyle, overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+              <thead>
+                <tr style={{ backgroundColor: color.tableHeadBg, borderBottom: `1px solid ${color.neutralBadgeBg}`, textAlign: 'left' }}>
+                  <th style={{ ...th, paddingLeft: '20px' }}>Name</th>
+                  <th style={th}>Company</th>
+                  <th style={th}>Type</th>
+                  <th style={th}>Status</th>
+                  <th style={th}>Email</th>
+                  <th style={th}>Phone</th>
+                  <th style={th}>Jobs</th>
+                  <th style={{ ...th, paddingRight: '20px' }}>Client portal</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {filtered.map((c) => {
+                  const portalState = portal[c.id];
+                  const portalBadge = portalState ? PORTAL_LABELS[portalState] : undefined;
+                  return (
+                    <tr
+                      key={c.id}
+                      // The whole row, per the ruling — not a link on the name cell,
+                      // which is the shape the subs list uses and which leaves most
+                      // of the row inert.
+                      onClick={() => setOpenId(c.id)}
+                      // A clickable `<tr>` is invisible to the keyboard on its own.
+                      // These three are what make the row an actual control rather
+                      // than a mouse-only affordance.
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`Open ${c.first_name} ${c.last_name}`}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setOpenId(c.id);
+                        }
+                      }}
+                      data-testid={`contact-row-${c.id}`}
+                      style={{ borderBottom: `1px solid ${color.rowDivider}`, cursor: 'pointer' }}
+                    >
+                      <td style={{ ...td, paddingLeft: '20px', fontWeight: 600, color: color.navy }}>
+                        {c.first_name} {c.last_name}
+                      </td>
+                      <td style={td}>{c.company_name || '—'}</td>
+                      <td style={td}>
+                        <span style={typeBadge(c.contact_type)}>
+                          {CONTACT_TYPE_LABELS[c.contact_type] ?? c.contact_type}
+                        </span>
+                      </td>
+                      <td style={td}>
+                        <span style={statusBadge(c.status)}>
+                          {c.status.charAt(0).toUpperCase() + c.status.slice(1)}
+                        </span>
+                      </td>
+                      <td style={td}>{c.email || '—'}</td>
+                      <td style={td}>{c.phone || '—'}</td>
+                      {/* §8.3 Jobs — both arms, counted server-side. */}
+                      <td style={{ ...td, fontFamily: font.mono, fontSize: '12.5px' }}>
+                        {(jobs[c.id] ?? 0) > 0 ? jobs[c.id] : '—'}
+                      </td>
+                      {/* §8.3 Client portal — stored state, or the derived pair:
+                          'Invited' (invitation, no profile) / 'Not invited'
+                          (neither). Leads render the em-dash: a lead has no
+                          portal to be invited to. */}
+                      <td style={{ ...td, paddingRight: '20px' }}>
+                        {c.contact_type !== 'client' ? (
+                          '—'
+                        ) : portalBadge ? (
+                          <span style={{ ...badgeStyle, backgroundColor: portalBadge.bg, color: portalBadge.fg }}>
+                            {portalBadge.label}
+                          </span>
+                        ) : (
+                          <span style={{ fontSize: '12.5px', color: color.faint }}>Not invited</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

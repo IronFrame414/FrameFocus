@@ -3,6 +3,10 @@ import { redirect } from 'next/navigation';
 import { getContacts } from '@/lib/services/contacts';
 import { ContactsList } from './contacts-list';
 
+/**
+ * 14c Contacts (desktop-redesign §8.3). Two new server-grouped reads feed the
+ * two new columns; everything else is the S158 list, restyled client-side.
+ */
 export default async function ContactsPage() {
   const supabase = await createClient();
 
@@ -20,58 +24,53 @@ export default async function ContactsPage() {
 
   const contacts = await getContacts();
 
+  // ── Jobs (§8.3) — BOTH ARMS, grouped. `projects.contact_id` AND the
+  // `project_contacts` junction: `is_client_of_project()` honours both, and
+  // `getPortalAccountsForProject()` walks exactly this pair. One arm alone
+  // undercounts. Distinct project ids across the union.
+  const [directProjects, junctionRows] = await Promise.all([
+    supabase.from('projects').select('id, contact_id').eq('is_deleted', false).not('contact_id', 'is', null),
+    supabase.from('project_contacts').select('project_id, contact_id'),
+  ]);
+  const jobsByContact = new Map<string, Set<string>>();
+  const addJob = (contactId: string | null, projectId: string) => {
+    if (!contactId) return;
+    if (!jobsByContact.has(contactId)) jobsByContact.set(contactId, new Set());
+    jobsByContact.get(contactId)!.add(projectId);
+  };
+  for (const p of directProjects.data ?? []) addJob(p.contact_id, p.id);
+  for (const j of junctionRows.data ?? []) addJob(j.contact_id, j.project_id);
+  const jobs: Record<string, number> = {};
+  for (const [contactId, ids] of jobsByContact) jobs[contactId] = ids.size;
+
+  // ── Client portal (§8.3) — the company-wide derivation (the existing one is
+  // project-scoped; this is the new read). A profiles row joined by contact_id
+  // carries the stored state; "Not invited" is the DERIVED fifth state (no
+  // profiles row), and invitations.contact_id separates invited-not-accepted
+  // from never-invited. Both reads are caller-RLS-scoped.
+  const [portalProfiles, invitations] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('contact_id, client_access_state')
+      .eq('is_deleted', false)
+      .not('contact_id', 'is', null),
+    supabase.from('invitations').select('contact_id').not('contact_id', 'is', null),
+  ]);
+  const portal: Record<string, string> = {};
+  for (const row of invitations.data ?? []) {
+    if (row.contact_id) portal[row.contact_id] = 'invited';
+  }
+  for (const row of portalProfiles.data ?? []) {
+    // A profile wins over an invitation — acceptance created it.
+    if (row.contact_id && row.client_access_state) portal[row.contact_id] = row.client_access_state;
+  }
+
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <div>
-          <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.25rem' }}>
-            Contacts
-          </h1>
-          <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>
-            Manage your leads and clients
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-          {/* The way into the trash [S158 - Finding 2]. Ungated: reading the
-              deleted list needs no more permission than reading the live one,
-              and the Restore button inside is what carries the role gate. */}
-          <a
-            href="/dashboard/contacts/trash"
-            style={{
-              padding: '0.5rem 1rem',
-              fontSize: '0.875rem',
-              fontWeight: 600,
-              color: '#111827',
-              backgroundColor: '#fff',
-              border: '1px solid #d1d5db',
-              borderRadius: '0.375rem',
-              textDecoration: 'none',
-            }}
-          >
-            Trash
-          </a>
-          {profile && ['owner', 'admin', 'project_manager'].includes(profile.role) && (
-            <a
-              href="/dashboard/contacts/new"
-              style={{
-                padding: '0.5rem 1rem',
-                fontSize: '0.875rem',
-                fontWeight: 600,
-                color: '#fff',
-                backgroundColor: '#2563eb',
-                borderRadius: '0.375rem',
-                textDecoration: 'none',
-              }}
-            >
-              + Add Contact
-            </a>
-          )}
-        </div>
-      </div>
-      <ContactsList
-        contacts={contacts}
-        canEdit={!!profile && ['owner', 'admin', 'project_manager'].includes(profile.role)}
-      />
-    </div>
+    <ContactsList
+      contacts={contacts}
+      canEdit={!!profile && ['owner', 'admin', 'project_manager'].includes(profile.role)}
+      jobs={jobs}
+      portal={portal}
+    />
   );
 }

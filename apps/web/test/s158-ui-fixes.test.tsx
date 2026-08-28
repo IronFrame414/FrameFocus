@@ -83,7 +83,7 @@ describe('S158-F1 — the contacts list no longer carries row actions', () => {
     // Rendered with canEdit TRUE, because that is the case that used to draw
     // them. With canEdit false they were absent before this change too, and
     // asserting on that would pass over the old build as well.
-    const html = markup(<ContactsList contacts={[contact()]} canEdit />);
+    const html = markup(<ContactsList contacts={[contact()]} canEdit jobs={{}} portal={{}} />);
 
     expect(html).not.toContain('>Actions<');
     expect(html).not.toContain('/dashboard/contacts/11111111-1111-1111-1111-111111111111/edit');
@@ -95,7 +95,7 @@ describe('S158-F1 — the contacts list no longer carries row actions', () => {
     // click handler itself is not assertable here. `role` and `tabindex` are —
     // and they are what make the row a control rather than a mouse-only
     // affordance. Their absence is the failure mode this catches.
-    const html = markup(<ContactsList contacts={[contact()]} canEdit />);
+    const html = markup(<ContactsList contacts={[contact()]} canEdit jobs={{}} portal={{}} />);
 
     expect(html).toContain('data-testid="contact-row-11111111-1111-1111-1111-111111111111"');
     expect(html).toContain('role="button"');
@@ -104,16 +104,19 @@ describe('S158-F1 — the contacts list no longer carries row actions', () => {
   });
 
   it('the sheet is CLOSED on first render — the list is still a list', () => {
-    const html = markup(<ContactsList contacts={[contact()]} canEdit />);
+    const html = markup(<ContactsList contacts={[contact()]} canEdit jobs={{}} portal={{}} />);
     expect(html).not.toContain('data-testid="contact-detail-sheet"');
   });
 
-  it('the six data columns survived the change', () => {
+  it('the eight data columns survived the change', () => {
     // The move removed a column. This is the guard that it removed only one:
     // a "tidy the table" edit that also drops Status or Phone would otherwise
-    // pass every assertion above.
-    const html = markup(<ContactsList contacts={[contact()]} canEdit />);
-    for (const heading of ['>Name<', '>Company<', '>Type<', '>Status<', '>Email<', '>Phone<']) {
+    // pass every assertion above. [Redesign 14c] Jobs and Client portal joined
+    // the set — the guard grows with the table.
+    const html = markup(<ContactsList contacts={[contact()]} canEdit jobs={{}} portal={{}} />);
+    for (const heading of [
+      '>Name<', '>Company<', '>Type<', '>Status<', '>Email<', '>Phone<', '>Jobs<', '>Client portal<',
+    ]) {
       expect(html, `the ${heading} column is gone`).toContain(heading);
     }
   });

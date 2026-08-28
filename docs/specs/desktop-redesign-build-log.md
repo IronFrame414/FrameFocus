@@ -270,3 +270,26 @@ inventories"). Spec: `docs/specs/desktop-redesign-spec.md` (1358 lines). CLI lin
 - **Files:** `catalog/page.tsx` · `catalog/catalog-list.tsx`.
 - **Commit:** (this entry's commit).
 - **Verified:** type-check 5/5 (exit 0 read from log).
+
+### Entry 10 — `14c` Contacts
+- **Step:** third screen.
+- **Did:** `contacts/page.tsx` gains the two new server-grouped reads: **Jobs** — distinct
+  projects per contact over BOTH arms (`projects.contact_id` + the `project_contacts` junction;
+  one arm alone undercounts, per `is_client_of_project()`); **Client portal** — the company-wide
+  derivation (the shipped one is project-scoped): `profiles.client_access_state` by
+  `contact_id`, `invitations.contact_id` marking invited-not-accepted, profile wins over
+  invitation, absence = the derived "Not invited". `contacts-list.tsx` restyled onto the
+  anatomy: header + search + Trash + Add, type chips, the status dropdown kept with its S158
+  Finding-2 comment, themed table, two appended columns. **The S158 contract survives intact**:
+  row-as-button semantics (role/tabindex/aria/testid), no row actions, sheet unchanged.
+- **Decisions a ruling did not cover, recorded:** leads render the em-dash in the portal column
+  (a lead has no portal to be invited to); the portal read is caller-RLS-scoped (a role that
+  cannot read `invitations` simply sees "Not invited" less accurately — same posture as 14a's
+  attention counts); no invitation-status filtering (any invitation row = "Invited"; an accepted
+  one has a profile, which wins).
+- **Tests adapted, not left red (S157):** `s158-ui-fixes.test.tsx` — the four render calls gain
+  the new required props, and the six-column guard **grows to eight** (Jobs · Client portal), so
+  it keeps guarding "removed only one column" against the new table. 11/11.
+- **Files:** `contacts/page.tsx` · `contacts-list.tsx` · `test/s158-ui-fixes.test.tsx`.
+- **Commit:** (this entry's commit).
+- **Verified:** type-check 5/5; s158 suite 11/11.
