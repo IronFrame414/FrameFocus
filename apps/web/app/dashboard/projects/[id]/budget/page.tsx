@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase-server';
 import { notFound, redirect } from 'next/navigation';
 import { getProject } from '@/lib/services/projects';
-import { getBudgetRollup, type InstrumentGroup } from '@/lib/services/budget';
+import { effectiveBudget, getBudgetRollup, type InstrumentGroup } from '@/lib/services/budget';
 import { getProjectIncome } from '@/lib/services/project-income';
 import { getDepositCredits } from '@/lib/services/deposit-credit';
 import {
@@ -173,6 +173,16 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
 
   const revised = contract?.revised ?? null;
   const projectedMargin = isFixed && revised !== null ? revised - costToDate : null;
+
+  // §8.8.1 "Cost to complete" — the MOCKUP's number, NOT the shipped field of
+  // a similar name: budget − actual − committed, i.e. budget REMAINING.
+  // `costToDate` above is cost INCURRED — the opposite quantity — and keeps
+  // its name and meaning. Needs `totalBudgeted`, so Owner/Admin only: a PM
+  // and a foreman see their own card rows, never an empty extra card.
+  const budgetRemaining =
+    rollup.totalBudgeted === null
+      ? null
+      : rollup.totalBudgeted - rollup.totalActual - rollup.totalCommittedRemaining;
 
   // Columns per role (§7.1): Owner/Admin 7, PM 5, Foreman 3. The RULE lives in
   // budgetColumnsFor() (invoices-shared) so it can be asserted — it sat
@@ -352,6 +362,17 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
             valueColor: costToDate ? color.navy : color.faint,
             caption: showLabor ? 'actual + remaining committed + labor' : 'actual + remaining committed',
           },
+          // §8.8.1 — the mockup's card, Owner/Admin only (needs budgeted).
+          ...(budgetRemaining !== null
+            ? [
+                {
+                  label: 'Cost to complete',
+                  value: money(budgetRemaining),
+                  valueColor: budgetRemaining >= 0 ? color.navy : color.warningDeep,
+                  caption: 'budget − actual − committed',
+                },
+              ]
+            : []),
           // P11: no margin figure on cost-plus/T&M — the projection must not
           // feed variance or over/under.
           ...(isFixed
@@ -467,6 +488,81 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
           </div>
         )}
       </div>
+
+      {/* §8.8.1 Watch list — NEW panel, Owner/Admin only (every condition
+          reads budgeted figures). Three ruled conditions over the rollup
+          already in memory — no new query. ⚠️ The allowance sentence below is
+          the CORRECTED copy: the mockup's "a client upgrade turns into a
+          change order" is WRONG (§9.1 — the selection signature is the
+          binding instrument and NO change order is generated). */}
+      {isOwnerAdmin &&
+        (() => {
+          const WATCH_BUDGET_PCT = 0.5; // spend fraction for the unsigned-sub flag; one constant
+          const unsignedHot: string[] = [];
+          const unspentAllowances: string[] = [];
+          const laborUnlogged: string[] = [];
+          for (const instrument of rollup.instruments) {
+            for (const group of instrument.groups) {
+              for (const item of group.items) {
+                const label = item.description || group.cost_code;
+                const budget = effectiveBudget(item);
+                const spend = (item.actual_amount ?? 0) + (item.committed_amount ?? 0);
+                if (
+                  item.committed_awaiting_signature &&
+                  budget !== null &&
+                  budget > 0 &&
+                  spend >= budget * WATCH_BUDGET_PCT
+                ) {
+                  unsignedHot.push(label);
+                }
+                if (
+                  item.row_type === 'allowance' &&
+                  budget !== null &&
+                  budget > 0 &&
+                  spend === 0
+                ) {
+                  unspentAllowances.push(label);
+                }
+                if (
+                  item.row_type === 'labor' &&
+                  budget !== null &&
+                  budget > 0 &&
+                  (item.actual_amount ?? 0) === 0 &&
+                  (!showLabor || jobCost.labor.totalCost === 0)
+                ) {
+                  laborUnlogged.push(label);
+                }
+              }
+            }
+          }
+          const rows: { text: string; detail: string }[] = [
+            ...unsignedHot.map((l) => ({
+              text: `${l} — committed past ${WATCH_BUDGET_PCT * 100}% of budget with no signed subcontract`,
+              detail: 'the paperwork is behind the money',
+            })),
+            ...unspentAllowances.map((l) => ({
+              text: `${l} — allowance unspent`,
+              detail:
+                'an approved selection binds by its signature — no change order is generated',
+            })),
+            ...laborUnlogged.map((l) => ({
+              text: `${l} — no labour logged against a labour budget`,
+              detail: 'hours may be landing somewhere else, or not at all',
+            })),
+          ];
+          if (rows.length === 0) return null;
+          return (
+            <div style={{ ...cardStyle, padding: '14px 18px', marginBottom: '18px' }}>
+              <p style={{ ...microLabelStyle, marginBottom: '8px' }}>Watch list</p>
+              {rows.map((r) => (
+                <p key={r.text} style={{ margin: '0 0 6px', fontSize: '13px', color: color.body }}>
+                  <span style={{ fontWeight: 600, color: color.warningDeep }}>{r.text}</span>{' '}
+                  <span style={{ color: color.faint, fontSize: '12px' }}>· {r.detail}</span>
+                </p>
+              ))}
+            </div>
+          );
+        })()}
 
       {/* §7.1 S-4 (amended 2026-07-31) — contract rates + history, with
           renegotiate (Owner/Admin) and supersede (Owner only, §7.3).

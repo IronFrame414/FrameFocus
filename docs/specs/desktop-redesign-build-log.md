@@ -389,3 +389,23 @@ inventories"). Spec: `docs/specs/desktop-redesign-spec.md` (1358 lines). CLI lin
 - **Files:** `catalog/catalog-list.tsx`.
 - **Commit:** (this entry's commit).
 - **Verified:** type-check 5/5 before commit.
+
+---
+
+## Build steps 5–7 — Money · Documents · Notifications & Expenses
+
+### Entry 16 — 5.1 `13a` Budget & Cost
+- **Did:** the mockup's **"Cost to complete" card** — `budget − actual − committed` (budget
+  REMAINING), computed as `budgetRemaining`, **NOT named `costToDate`** (the shipped field is
+  cost INCURRED, the opposite quantity, and keeps its name). Renders only when `totalBudgeted`
+  is non-null — Owner/Admin; a PM/foreman gets their existing card rows, never an empty extra
+  card. The **Watch list panel** lands (Owner/Admin, in-memory over the rollup, no new query):
+  line ≥50% committed with no signed subcontract (`committed_awaiting_signature`), unspent
+  allowances, labour budget with no labour logged. **The mockup's allowance copy is
+  REWRITTEN as ruled (§9.1):** "an approved selection binds by its signature — no change order
+  is generated" — the "turns into a change order" sentence does not ship.
+- **Decisions recorded:** the unsigned-sub flag fires at ≥50% spend fraction
+  (`WATCH_BUDGET_PCT = 0.5`, one constant — the mockup says "N%" and names no N); spend for
+  that heuristic is actual + gross committed.
+- **Files:** `projects/[id]/budget/page.tsx`.
+- **Verified:** type-check 5/5. No old-palette hexes were present in this file (grepped).
