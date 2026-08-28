@@ -507,3 +507,24 @@ inventories"). Spec: `docs/specs/desktop-redesign-spec.md` (1358 lines). CLI lin
 - **Files:** `photos/page.tsx` (rewritten) · `photo-visibility-toggle.tsx` (new) ·
   `lib/services/photos.ts` · `files-client.ts` (updateFile gains client_visible).
 - **Verified:** type-check 5/5.
+
+### Entry 22 — 6.3 Contracts · 6.4 sub-inbound lien releases
+- **6.3 Contracts:** a mechanical palette repaint ONLY — 41 old-hex substitutions in
+  `contracts-panel.tsx` (#374151/#6b7280/#d1d5db/#e5e7eb → tokens' values), zero residual, no
+  behaviour or structure change; `BoxMapEditor` untouched (shared with lien releases). The §8b
+  contract-value exposure is checkpointed as its own session and was **not attempted and not
+  worsened** — `contract_value` render sites unchanged (13 before, 13 after).
+- **6.4 Sub-inbound releases:** discovery first — **everything below the UI already shipped**:
+  the schema (`subject_check` keyed on direction), the four pre-named sub templates per
+  company (S145-S1), the generate route's `sub_inbound` arm (subject columns, no stamping —
+  the sub is the lienor, status stays draft), `markSubContractComplete`/`reopenSubContract`
+  (Owner/Admin at the DB) and `attachSignedSubRelease` (upload-back). **What was missing was
+  only the tab UI**, and that is what landed: a "Sub releases (inbound)" section on the
+  Owner/Admin lien tab — per-subcontract rows with completion state, the completion →
+  **conditional** prompt (generates via the existing route; refuses with the liability
+  posture's wording when no conditional form has a PDF), and the **upload-back** control. Both
+  prompts optional, never blocking, per S145. Payment-triggered unconditionals surface in the
+  same list; the Bills-side prompt is noted in-UI.
+- **Files:** `contracts-panel.tsx` (hexes only) · `lien-releases/page.tsx` ·
+  `sub-releases-section.tsx` (new).
+- **Verified:** type-check 5/5 each.

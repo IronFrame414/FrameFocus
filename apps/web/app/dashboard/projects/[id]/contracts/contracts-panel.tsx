@@ -57,7 +57,7 @@ interface ContractsPanelProps {
 }
 
 const STATUS_COLORS: Record<string, { bg: string; fg: string }> = {
-  draft: { bg: '#f3f4f6', fg: '#374151' },
+  draft: { bg: '#f3f4f6', fg: '#3f4a60' },
   sent: { bg: '#fef3c7', fg: '#92400e' },
   signed: { bg: '#dcfce7', fg: '#166534' },
   void: { bg: '#fee2e2', fg: '#991b1b' },
@@ -157,7 +157,7 @@ export function ContractsPanel({
 
   const cardStyle: React.CSSProperties = {
     backgroundColor: '#fff',
-    border: '1px solid #e5e7eb',
+    border: '1px solid #e4e8ef',
     borderRadius: '0.5rem',
     padding: '1.25rem',
     marginBottom: '1rem',
@@ -165,13 +165,13 @@ export function ContractsPanel({
   const titleStyle: React.CSSProperties = {
     fontSize: '0.8125rem',
     fontWeight: 600,
-    color: '#6b7280',
+    color: '#7b8699',
     textTransform: 'uppercase',
     marginBottom: '0.75rem',
   };
   const inputStyle: React.CSSProperties = {
     padding: '0.5rem',
-    border: '1px solid #d1d5db',
+    border: '1px solid #d5dae4',
     borderRadius: '0.375rem',
     fontSize: '0.875rem',
   };
@@ -198,12 +198,12 @@ export function ContractsPanel({
     <div style={{ maxWidth: '840px' }}>
       <div style={cardStyle}>
         <div style={titleStyle}>Client Contract</div>
-        <p style={{ fontSize: '0.8125rem', color: '#6b7280', marginBottom: '0.75rem' }}>
+        <p style={{ fontSize: '0.8125rem', color: '#7b8699', marginBottom: '0.75rem' }}>
           The signed proposal from conversion auto-attaches here. Re-issued or amended contracts
           are new rows — the most recent signed row is the active contract.
         </p>
         {clientContracts.length === 0 ? (
-          <p style={{ fontSize: '0.875rem', color: '#6b7280' }}>No client contract on record.</p>
+          <p style={{ fontSize: '0.875rem', color: '#7b8699' }}>No client contract on record.</p>
         ) : (
           clientContracts.map((c) => (
             <div
@@ -221,7 +221,7 @@ export function ContractsPanel({
                 {statusBadge(c.status)}
                 <span style={{ fontWeight: 600 }}>{money(c.contract_value)}</span>
                 {c.executed_date && (
-                  <span style={{ color: '#6b7280' }}>
+                  <span style={{ color: '#7b8699' }}>
                     executed{' '}
                     {new Date(c.executed_date + 'T00:00:00').toLocaleDateString('en-US', {
                       month: 'short',
@@ -230,7 +230,7 @@ export function ContractsPanel({
                     })}
                   </span>
                 )}
-                {c.notes && <span style={{ color: '#6b7280' }}>· {c.notes}</span>}
+                {c.notes && <span style={{ color: '#7b8699' }}>· {c.notes}</span>}
               </div>
               {canManage && c.status !== 'void' && (
                 <button
@@ -283,7 +283,7 @@ export function ContractsPanel({
             </button>
           )}
         </div>
-        <p style={{ fontSize: '0.8125rem', color: '#6b7280', marginBottom: '0.75rem' }}>
+        <p style={{ fontSize: '0.8125rem', color: '#7b8699', marginBottom: '0.75rem' }}>
           Payment schedules commit the contract to job cost; payments settle stages as they are
           released.
         </p>
@@ -359,7 +359,7 @@ export function ContractsPanel({
         )}
 
         {subContracts.length === 0 ? (
-          <p style={{ fontSize: '0.875rem', color: '#6b7280' }}>No subcontractor contracts yet.</p>
+          <p style={{ fontSize: '0.875rem', color: '#7b8699' }}>No subcontractor contracts yet.</p>
         ) : (
           subContracts.map((c) => (
             <div key={c.id} style={{ borderBottom: '1px solid #f3f4f6', padding: '0.5rem 0' }}>
@@ -376,7 +376,7 @@ export function ContractsPanel({
                   <span style={{ fontWeight: 500 }}>{c.member?.display_name ?? 'Unknown sub'}</span>
                   <span style={{ fontWeight: 600 }}>{money(c.contract_value)}</span>
                   {c.scope_of_work && (
-                    <span style={{ color: '#6b7280' }}>· {c.scope_of_work}</span>
+                    <span style={{ color: '#7b8699' }}>· {c.scope_of_work}</span>
                   )}
                 </div>
                 {canManage && c.status !== 'void' && (
@@ -408,7 +408,7 @@ export function ContractsPanel({
                 />
               ) : (
                 editingSchedules && (
-                  <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0.25rem 0 0' }}>
+                  <p style={{ fontSize: '0.75rem', color: '#7b8699', margin: '0.25rem 0 0' }}>
                     Void — the schedule is frozen and cannot be edited.
                   </p>
                 )
@@ -443,9 +443,9 @@ const smallButton: React.CSSProperties = {
   padding: '0.25rem 0.625rem',
   fontSize: '0.75rem',
   fontWeight: 600,
-  color: '#374151',
+  color: '#3f4a60',
   backgroundColor: '#fff',
-  border: '1px solid #d1d5db',
+  border: '1px solid #d5dae4',
   borderRadius: '0.375rem',
   cursor: 'pointer',
 };
@@ -590,7 +590,7 @@ function SubSchedulePanel({
   const formalToggle =
     canManage && contract.status !== 'signed' && contract.status !== 'void' ? (
       <label
-        style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.75rem', color: '#374151', margin: '0.25rem 0' }}
+        style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.75rem', color: '#3f4a60', margin: '0.25rem 0' }}
       >
         <input
           type="checkbox"
@@ -677,11 +677,11 @@ function SubSchedulePanel({
         <div style={{ marginTop: '0.5rem' }}>
           {formalToggle}
           {awardLines === null ? (
-            <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0.25rem 0' }}>Loading…</p>
+            <p style={{ fontSize: '0.75rem', color: '#7b8699', margin: '0.25rem 0' }}>Loading…</p>
           ) : (
             <>
               {single && single.budgeted_amount !== null && contract.contract_value !== null && (
-                <p style={{ fontSize: '0.75rem', color: single.budgeted_amount === contract.contract_value ? '#6b7280' : '#92400e', margin: '0.25rem 0' }}>
+                <p style={{ fontSize: '0.75rem', color: single.budgeted_amount === contract.contract_value ? '#7b8699' : '#92400e', margin: '0.25rem 0' }}>
                   Budget line plan {money(single.budgeted_amount)} · contract{' '}
                   {money(contract.contract_value)}
                   {single.budgeted_amount !== contract.contract_value &&
@@ -689,7 +689,7 @@ function SubSchedulePanel({
                 </p>
               )}
               {awardLines.length > 1 && (
-                <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0.25rem 0' }}>
+                <p style={{ fontSize: '0.75rem', color: '#7b8699', margin: '0.25rem 0' }}>
                   This sub won {awardLines.length} lines — pick each stage&rsquo;s budget line
                   explicitly.
                 </p>
@@ -722,13 +722,13 @@ function SubSchedulePanel({
           </p>
         )}
         {editMode && frozen && contract.status === 'signed' && (
-          <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0.25rem 0' }}>
+          <p style={{ fontSize: '0.75rem', color: '#7b8699', margin: '0.25rem 0' }}>
             Signed — the schedule is locked. Corrections go through void and re-enter.
           </p>
         )}
         {/* Owner/Admin/PM all set up schedules (spec §4) — PM's save lands
             pending for Owner/Admin approval. */}
-        <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0.25rem 0' }}>
+        <p style={{ fontSize: '0.75rem', color: '#7b8699', margin: '0.25rem 0' }}>
           No payment schedule yet —{' '}
           {contract.status === 'draft'
             ? 'confirm this draft in “Edit schedules” above.'
@@ -761,7 +761,7 @@ function SubSchedulePanel({
       <div style={{ marginTop: '0.5rem', paddingLeft: '0.75rem', borderLeft: '2px solid #eef1f6' }}>
         {formalToggle}
         {editSeed === null ? (
-          <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0.25rem 0' }}>
+          <p style={{ fontSize: '0.75rem', color: '#7b8699', margin: '0.25rem 0' }}>
             Loading schedule…
           </p>
         ) : (
@@ -780,7 +780,7 @@ function SubSchedulePanel({
           />
         )}
         {retainageRow && (
-          <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0.25rem 0 0' }}>
+          <p style={{ fontSize: '0.75rem', color: '#7b8699', margin: '0.25rem 0 0' }}>
             Retainage already withheld stays exactly as it is — shape/percent changes apply to
             payments from here forward.
           </p>
@@ -808,14 +808,14 @@ function SubSchedulePanel({
         </p>
       )}
       {editMode && contract.status === 'signed' && (
-        <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0.25rem 0' }}>
+        <p style={{ fontSize: '0.75rem', color: '#7b8699', margin: '0.25rem 0' }}>
           Signed — the schedule is locked. Corrections go through void and re-enter.
         </p>
       )}
       {/* PM in edit mode: an existing schedule is read-only (ruling B
           restore) — revise is Owner/Admin, enforced by the RPC. */}
       {editMode && !frozen && !isOwnerAdmin && (
-        <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0.25rem 0' }}>
+        <p style={{ fontSize: '0.75rem', color: '#7b8699', margin: '0.25rem 0' }}>
           An Owner or Admin revises an existing schedule.
         </p>
       )}
@@ -839,9 +839,9 @@ function SubSchedulePanel({
         return (
           <div key={s.id} style={{ padding: '0.375rem 0', fontSize: '0.8125rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', flexWrap: 'wrap' }}>
-              <span style={{ fontWeight: 600, color: '#374151' }}>{s.stage_label ?? 'Stage'}</span>
+              <span style={{ fontWeight: 600, color: '#3f4a60' }}>{s.stage_label ?? 'Stage'}</span>
               <span>{fmtMoney(s.amount)}</span>
-              <span style={{ color: '#6b7280' }}>
+              <span style={{ color: '#7b8699' }}>
                 {fmtMoney(paid)} paid · {closedOut ? 'closed out' : `${fmtMoney(remaining)} remaining`}
               </span>
               {s.status === 'pending' && <span style={{ color: '#92400e' }}>pending</span>}
@@ -867,7 +867,7 @@ function SubSchedulePanel({
             {payments.length > 0 && (
               <div style={{ marginTop: '0.25rem', paddingLeft: '0.75rem' }}>
                 {payments.map((p) => (
-                  <div key={p.id} style={{ fontSize: '0.75rem', color: '#6b7280', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <div key={p.id} style={{ fontSize: '0.75rem', color: '#7b8699', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
                     <span>
                       {p.paid_date} · {fmtMoney(p.amount)}
                       {p.retainage_withheld > 0 &&
@@ -895,7 +895,7 @@ function SubSchedulePanel({
 
       {retainageRow && (
         <div style={{ padding: '0.375rem 0', fontSize: '0.8125rem', display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-          <span style={{ fontWeight: 600, color: '#374151' }}>Retainage held</span>
+          <span style={{ fontWeight: 600, color: '#3f4a60' }}>Retainage held</span>
           <span>{fmtMoney(committedRemaining(retainageRow, retainageRow.payments))}</span>
           {/* B1/Part A [S151] — the line may name a rate ONLY when that rate
               accounts for the whole held total. The old version printed
@@ -906,7 +906,7 @@ function SubSchedulePanel({
               what made it worth fixing. Rule and wording: retainageHeldLabel in
               payables-shared.ts. */}
           {retainageExplanationLabel && (
-            <span style={{ color: '#6b7280' }}>({retainageExplanationLabel})</span>
+            <span style={{ color: '#7b8699' }}>({retainageExplanationLabel})</span>
           )}
           {/* Release is Owner-ONLY (CLAUDE.md owner-only #5) — rendered so. */}
           {isOwner &&
@@ -930,7 +930,7 @@ function SubSchedulePanel({
         <div style={{ border: '1px solid #fde68a', borderRadius: '0.375rem', padding: '0.5rem 0.625rem', margin: '0.375rem 0 0', backgroundColor: '#fffbeb' }}>
           {needsTarget.map((s) => (
             <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.25rem 0', fontSize: '0.8125rem', flexWrap: 'wrap' }}>
-              <span style={{ fontWeight: 600, color: '#374151' }}>{s.stage_label ?? 'Stage'}</span>
+              <span style={{ fontWeight: 600, color: '#3f4a60' }}>{s.stage_label ?? 'Stage'}</span>
               <span>{fmtMoney(s.amount)}</span>
               <BudgetLineSelect
                 projectId={contract.project_id}
@@ -939,7 +939,7 @@ function SubSchedulePanel({
                 excludeMiscellaneous
                 hideAmounts={!isOwnerAdmin}
                 disabled={busy}
-                style={{ padding: '0.25rem 0.375rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', fontSize: '0.75rem', flex: 1, minWidth: '180px' }}
+                style={{ padding: '0.25rem 0.375rem', border: '1px solid #d5dae4', borderRadius: '0.375rem', fontSize: '0.75rem', flex: 1, minWidth: '180px' }}
               />
               <button style={smallButton} disabled={busy} onClick={() => void handleApproveWithTarget(s)}>
                 Approve
@@ -1151,28 +1151,28 @@ function ScheduleSetupEditor({
 
   const input: React.CSSProperties = {
     padding: '0.375rem 0.5rem',
-    border: '1px solid #d1d5db',
+    border: '1px solid #d5dae4',
     borderRadius: '0.375rem',
     fontSize: '0.8125rem',
   };
 
   return (
-    <div style={{ border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '0.75rem', marginTop: '0.25rem' }}>
-      <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
+    <div style={{ border: '1px solid #e4e8ef', borderRadius: '0.5rem', padding: '0.75rem', marginTop: '0.25rem' }}>
+      <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#7b8699', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
         {reviseMode ? 'Edit schedule' : 'Payment schedule'}
       </div>
       {reviseMode && (
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
-          <span style={{ fontSize: '0.8125rem', color: '#374151' }}>Contract value:</span>
+          <span style={{ fontSize: '0.8125rem', color: '#3f4a60' }}>Contract value:</span>
           <input
             type="number"
             min="0.01"
             step="0.01"
             value={reviseValue}
             onChange={(e) => setReviseValue(e.target.value)}
-            style={{ padding: '0.375rem 0.5rem', border: '1px solid #d1d5db', borderRadius: '0.375rem', fontSize: '0.8125rem', width: '130px' }}
+            style={{ padding: '0.375rem 0.5rem', border: '1px solid #d5dae4', borderRadius: '0.375rem', fontSize: '0.8125rem', width: '130px' }}
           />
-          <span style={{ fontSize: '0.6875rem', color: '#6b7280' }}>
+          <span style={{ fontSize: '0.6875rem', color: '#7b8699' }}>
             Unpaid stages are replaced on save and land pending — re-approve to count them toward
             committed. Paid stages update in place.
           </span>
@@ -1191,10 +1191,10 @@ function ScheduleSetupEditor({
                 marginBottom: '0.375rem',
                 padding: '0.375rem 0.5rem',
                 backgroundColor: '#f9fafb',
-                border: '1px dashed #d1d5db',
+                border: '1px dashed #d5dae4',
                 borderRadius: '0.375rem',
                 fontSize: '0.8125rem',
-                color: '#6b7280',
+                color: '#7b8699',
               }}
             >
               <span style={{ fontWeight: 600 }}>{s.label || 'Stage'}</span>
@@ -1287,7 +1287,7 @@ function ScheduleSetupEditor({
 
       {/* Ruling 4 — both directions WARN, never block. The over case gets
           direction-specific wording; under keeps the original. */}
-      <div style={{ fontSize: '0.8125rem', marginBottom: '0.5rem', color: mismatch ? '#92400e' : '#374151' }}>
+      <div style={{ fontSize: '0.8125rem', marginBottom: '0.5rem', color: mismatch ? '#92400e' : '#3f4a60' }}>
         Stages total {money(stageTotal)}
         {compareValue !== null &&
           (mismatch && stageTotal > compareValue
@@ -1299,7 +1299,7 @@ function ScheduleSetupEditor({
       </div>
 
       <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.625rem', flexWrap: 'wrap' }}>
-        <span style={{ fontSize: '0.8125rem', color: '#374151' }}>Retainage:</span>
+        <span style={{ fontSize: '0.8125rem', color: '#3f4a60' }}>Retainage:</span>
         <select
           value={retainageShape}
           onChange={(e) => setRetainageShape(e.target.value as typeof retainageShape)}
