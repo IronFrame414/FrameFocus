@@ -149,6 +149,11 @@ inventories"). Spec: `docs/specs/desktop-redesign-spec.md` (1358 lines). CLI lin
 - **Commit:** (this entry's commit).
 - **Verified:** residual grep over `lib/email/templates` → clean (exit 1); no test asserts email
   hexes (`brand-email-footer.test.tsx` uses `brandColor` fixtures only); type-check before commit.
+- **CONFIRMED [Josh, after the Phase C report]:** both judgment calls upheld — the five
+  client-facing templates were correctly included (contractor identity = `brandColor` + logo,
+  which are data; grey chrome = platform typography), and the `m6m` strip tokens moving to the
+  README page-level warning is right. Recorded in spec §2 so the email/PDF boundary is written
+  down as ruled rather than inferred.
 
 ### Entry 6 — Phase C: sidebar
 - **Step:** build step 2, complete.
@@ -163,3 +168,39 @@ inventories"). Spec: `docs/specs/desktop-redesign-spec.md` (1358 lines). CLI lin
   log, corroborated by the pass tally) — Owner 14/3, Admin −Billing only, PM keeps Estimates +
   Cost Catalog and loses Admin, foreman == crew, empty sections render no header.
   `npx turbo run type-check` → 5/5.
+
+### Entry 7 — Phase D: the six sections
+- **Step:** build step 3, complete.
+- **Did:** `project-header.tsx` — 17 tabs → 6 sections with a sub-tab row. **`TABS` itself is
+  untouched** (its role lists are the live gates verified against the file — Payments is
+  `owner·admin` per the invoice floor — and its comments carry rulings that `s126-chat-ui`
+  asserts on). A `SECTIONS` layer maps slugs to sections in §1's order; the role filter runs per
+  sub-tab against the untouched lists (R2). R1: a section links to the caller's first VISIBLE
+  sub-tab; a section filtering to zero sub-tabs is dropped. R3: People = Contacts · Team, two
+  sub-tabs. R4: Overview and Chat render no sub-row. Chat still carries no `roles` entry (A-C27).
+  Styling per the README tab hierarchy: raised segments (`9px 9px 0 0`, active = primary fill,
+  white text), white sub-strip with the `inset 0 -2.5px 0` underline.
+- **Decisions a ruling did not cover, recorded:**
+  1. **A structurally-multi section role-filtered to ONE sub-tab still renders the row** (crew in
+     Money sees a lone "Change Orders" sub-tab). R4's "sections of one" is read structurally —
+     a reflow, not a disappearance, matching §5b.5. Trivial to flip if Josh prefers.
+  2. The zero-visible-section branch is unreachable with the live gates (every section keeps an
+     ungated sub-tab); noted in the test file so nobody hunts for the missing assertion.
+  3. `data-testid="project-section-*"` / `project-subtab-*` added — constructed identifiers, per
+     the nav's existing pattern.
+- **Couplings verified:** `payments-view.tsx:142` (invoice-detail links) and
+  `invoice-delivery-panel.tsx:177` (lien-releases link) — slugs unchanged, nothing moves.
+- **Tests:** NEW `test/redesign-sections.test.tsx` — 15 cases over owner/admin/PM/foreman/crew:
+  R1 resolution per role (foreman → budget, crew → changes), gated sub-tabs absent (PM keeps
+  Invoices, loses Payments/Profitability — the live floor), §1 sub-tab order, R3, R4 with a
+  counter-vacuity case. **Swept per S157 and caught one:** `s97ct-roles.live.ts` 6a rendered the
+  header at the project BASE and asserted tab labels in the flat bar — under sections the owner
+  arm fails and the foreman/crew arms go vacuous. Adapted to render each role inside Money at a
+  page that role can reach, with a 'Change Orders' counter-vacuity guard.
+- **Files:** `project-header.tsx` · `test/redesign-sections.test.tsx` (new) ·
+  `test/s97ct-roles.live.ts` (6a adapted).
+- **Commit:** (this entry's commit).
+- **Verified:** new suite 15/15; `s126-chat-ui` 24/24 (TABS-source assertions survive);
+  **`s97ct-roles.live.ts` 36/36 LIVE against rebuild-test**; full unit suite **947/947 (62
+  files)**; `npx turbo run type-check` → 5/5. Foreman acceptance proven in both the new suite
+  and the adapted live 6a: Money lands on Budget & Cost, Profitability absent from the markup.

@@ -516,7 +516,16 @@ describe('5. Sub-contract schedules', () => {
 // ════════════════════════════════════════════════════════════════════════════
 describe('6. Invoices tab', () => {
   it('6a. RENDER — the real tab list hides Invoices from Foreman and Crew', async () => {
-    vi.doMock('next/navigation', () => ({ usePathname: () => '/dashboard/projects/x' }));
+    // [Redesign Phase D] The header renders SIX SECTIONS now, and a tab label
+    // appears only in the ACTIVE section's sub-row. Rendering at the project
+    // base (Overview — no sub-row) would fail the owner arm and pass the
+    // foreman/crew arms VACUOUSLY on a page with no tab labels at all. So each
+    // role renders INSIDE Money, at a Money page that role can reach: budget
+    // for owner/admin/PM/foreman, changes for crew (budget is foreman-floored
+    // and crew never sees it). The 'Change Orders' assertion is the
+    // counter-vacuity guard: it proves the sub-row actually rendered.
+    let pathname = '/dashboard/projects/x/budget';
+    vi.doMock('next/navigation', () => ({ usePathname: () => pathname }));
     vi.doMock('next/link', () => ({
       default: ({ children, href }: { children: unknown; href: string }) =>
         ({ type: 'a', props: { href, children }, key: null, $$typeof: Symbol.for('react.element') }),
@@ -531,9 +540,17 @@ describe('6. Invoices tab', () => {
     };
 
     for (const role of ALL_ROLES) {
+      pathname =
+        role === 'crew_member'
+          ? '/dashboard/projects/x/changes'
+          : '/dashboard/projects/x/budget';
       const html = renderToStaticMarkup(
         React.createElement(ProjectHeader, { project, canManage: false, role } as never)
       );
+      expect(
+        /Change Orders/.test(html),
+        `${role} did not render the Money sub-row at all — the absence below would be vacuous`
+      ).toBe(true);
       const showsInvoices = /Invoices/.test(html);
       if (role === 'foreman' || role === 'crew_member') {
         expect(showsInvoices, `${role} was shown the Invoices tab`).toBe(false);

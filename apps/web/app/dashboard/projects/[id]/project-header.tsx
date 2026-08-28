@@ -101,6 +101,31 @@ const TABS: { slug: string; label: string; roles?: string[] }[] = [
   { slug: 'chat', label: 'Chat' },
 ];
 
+// ---------------------------------------------------------------------------
+// Desktop-redesign §1 — 17 tabs become SIX SECTIONS with a sub-tab row.
+// ---------------------------------------------------------------------------
+// R2: grouping is PRESENTATION. The TABS list above — its role lists and its
+//     comments — is untouched and remains the single authority on who sees
+//     what; a section shows whatever of its sub-tabs the caller's role admits.
+// R1: a section header is not a route. Its link resolves to the caller's
+//     FIRST VISIBLE sub-tab (Money → Budget & Cost for a foreman, Change
+//     Orders for crew), and a section with zero visible sub-tabs does not
+//     render at all.
+// R3: People groups Contacts and Team as two sub-tabs; the lists stay separate.
+// R4: sections of one (Overview, Chat) render no sub-tab row.
+// Sub-tab order within a section is §1's table, not TABS declaration order.
+const SECTIONS: { label: string; slugs: string[] }[] = [
+  { label: 'Overview', slugs: [''] },
+  { label: 'Work', slugs: ['schedule', 'selections', 'punch', 'deliveries'] },
+  {
+    label: 'Money',
+    slugs: ['budget', 'changes', 'invoices', 'payments', 'profitability'],
+  },
+  { label: 'Documents', slugs: ['files', 'photos', 'contracts', 'lien-releases'] },
+  { label: 'People', slugs: ['contacts', 'team'] },
+  { label: 'Chat', slugs: ['chat'] },
+];
+
 // ui-03 §4 badge system (shared with the list screen).
 const STATUS_BADGES: Record<string, { bg: string; fg: string }> = {
   active: { bg: '#e4f0e6', fg: '#3d7a4b' },
@@ -114,12 +139,29 @@ export function ProjectHeader({ project, canManage, role }: ProjectHeaderProps) 
   const pathname = usePathname();
   const base = `/dashboard/projects/${project.id}`;
   const badge = STATUS_BADGES[project.status] ?? STATUS_BADGES.archived;
-  const visibleTabs = TABS.filter((t) => !t.roles || t.roles.includes(role));
 
   function isActive(slug: string): boolean {
     if (slug === '') return pathname === base;
     return pathname.startsWith(`${base}/${slug}`);
   }
+
+  function hrefFor(slug: string): string {
+    return slug === '' ? base : `${base}/${slug}`;
+  }
+
+  // The role filter runs per sub-tab, against the untouched TABS lists (R2);
+  // a section that filters to nothing is dropped entirely (R1).
+  const tabBySlug = new Map(TABS.map((t) => [t.slug, t]));
+  const sections = SECTIONS.map((s) => ({
+    label: s.label,
+    structurallySingle: s.slugs.length === 1,
+    tabs: s.slugs
+      .map((slug) => tabBySlug.get(slug))
+      .filter((t): t is (typeof TABS)[number] => t !== undefined)
+      .filter((t) => !t.roles || t.roles.includes(role)),
+  })).filter((s) => s.tabs.length > 0);
+
+  const activeSection = sections.find((s) => s.tabs.some((t) => isActive(t.slug)));
 
   return (
     <div style={{ marginBottom: '20px' }}>
@@ -167,7 +209,9 @@ export function ProjectHeader({ project, canManage, role }: ProjectHeaderProps) 
         )}
       </div>
 
-      {/* Tab bar — active tab carries the inset blue underline (ui-04 §4) */}
+      {/* Section bar — README "Tab hierarchy (project detail only)": primary
+          tabs are raised segments, active = primary fill with white text.
+          Each section links to the caller's first visible sub-tab (R1). */}
       <div
         style={{
           display: 'flex',
@@ -175,27 +219,68 @@ export function ProjectHeader({ project, canManage, role }: ProjectHeaderProps) 
           borderBottom: `1px solid ${color.cardBorder}`,
         }}
       >
-        {visibleTabs.map((tab) => {
-          const active = isActive(tab.slug);
+        {sections.map((section) => {
+          const active = section === activeSection;
           return (
             <Link
-              key={tab.slug}
-              href={tab.slug === '' ? base : `${base}/${tab.slug}`}
+              key={section.label}
+              href={hrefFor(section.tabs[0].slug)}
+              data-testid={`project-section-${section.label.toLowerCase()}`}
               style={{
-                padding: '10px 14px',
+                padding: '10px 16px',
                 fontFamily: font.sans,
                 fontSize: '13px',
                 fontWeight: 600,
-                color: active ? color.navy : color.mutedAlt,
-                boxShadow: active ? `inset 0 -2px 0 ${color.primary}` : 'none',
+                borderRadius: '9px 9px 0 0',
+                backgroundColor: active ? color.primary : 'transparent',
+                color: active ? '#ffffff' : color.mutedAlt,
                 textDecoration: 'none',
               }}
             >
-              {tab.label}
+              {section.label}
             </Link>
           );
         })}
       </div>
+
+      {/* Sub-tab row — a white strip below the segments, active sub-tab carries
+          the inset 0 -2.5px underline. R4: sections of one (Overview, Chat)
+          render no row — the row appears only for structurally multi-tab
+          sections, so a role filtered down to one sub-tab still sees where it
+          is (a reflow, not a disappearance). */}
+      {activeSection && !activeSection.structurallySingle && (
+        <div
+          style={{
+            display: 'flex',
+            gap: '2px',
+            backgroundColor: '#ffffff',
+            borderBottom: `1px solid ${color.cardBorder}`,
+            padding: '0 4px',
+          }}
+        >
+          {activeSection.tabs.map((tab) => {
+            const active = isActive(tab.slug);
+            return (
+              <Link
+                key={tab.slug}
+                href={hrefFor(tab.slug)}
+                data-testid={`project-subtab-${tab.slug === '' ? 'overview' : tab.slug}`}
+                style={{
+                  padding: '9px 12px',
+                  fontFamily: font.sans,
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  color: active ? color.navy : color.mutedAlt,
+                  boxShadow: active ? `inset 0 -2.5px 0 ${color.primary}` : 'none',
+                  textDecoration: 'none',
+                }}
+              >
+                {tab.label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
