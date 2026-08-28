@@ -85,10 +85,10 @@ test.describe('M-2 · Projects list', () => {
     // Chromium rounds the USED border-width to whole device pixels, so
     // getComputedStyle reports the 1.5px rule as "1px" at dpr 1 and a width
     // assertion would fail on a correct build. The colour is the signal that
-    // actually distinguishes the two branches — #2f49d1 highlighted against
-    // #e6e9ef default — and it cannot be produced by the default branch.
+    // actually distinguishes the two branches — #3b4ae0 highlighted against
+    // #e4e8ef default — and it cannot be produced by the default branch.
     const colour = await onSite.evaluate((el) => getComputedStyle(el).borderTopColor);
-    expect(colour).toBe('rgb(47, 73, 209)'); // #2f49d1
+    expect(colour).toBe('rgb(59, 74, 224)'); // #3b4ae0
     const plain = page.locator('[data-testid="m-project-card"][data-on-site="false"]').first();
     expect(await plain.evaluate((el) => getComputedStyle(el).borderTopColor)).not.toBe(colour);
 

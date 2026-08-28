@@ -50,7 +50,7 @@ const TYPE_LABEL: Record<string, string> = Object.fromEntries(
 function barColor(type: string): string {
   if (type === 'break') return '#8a919c';
   if (type === 'travel' || type === 'shop') return '#f59e0b';
-  return '#2f49d1';
+  return '#3b4ae0';
 }
 
 function hhmm(iso: string): string {

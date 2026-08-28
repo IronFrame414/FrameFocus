@@ -231,10 +231,10 @@ export default async function MobileProjectHubPage({
           data-testid="m-up-next"
           className="flex items-start gap-[10px] rounded-[15px] border border-m6m-border bg-m6m-card p-[15px]"
         >
-          {/* Blue dot with a 4px #e7ebf9 halo. */}
+          {/* Blue dot with a 4px #e8ecfb halo. */}
           <span
             aria-hidden
-            className="mt-[5px] h-[8px] w-[8px] shrink-0 rounded-full bg-m6m-blue ring-4 ring-[#e7ebf9]"
+            className="mt-[5px] h-[8px] w-[8px] shrink-0 rounded-full bg-m6m-blue ring-4 ring-[#e8ecfb]"
           />
           <div className="min-w-0 flex-1">
             {upNext ? (

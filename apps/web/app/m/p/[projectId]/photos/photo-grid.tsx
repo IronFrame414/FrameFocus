@@ -222,7 +222,7 @@ function Tile({
       <div
         aria-hidden={loaded}
         data-testid="m-tile-placeholder"
-        className={`absolute inset-0 bg-[#e6e9ef] transition-opacity duration-150 ${
+        className={`absolute inset-0 bg-[#e4e8ef] transition-opacity duration-150 ${
           loaded ? 'pointer-events-none opacity-0' : 'opacity-100'
         }`}
       />
@@ -312,7 +312,7 @@ function Tile({
   );
 
   const shell =
-    'relative block aspect-square overflow-hidden rounded-[11px] bg-[#e6e9ef]';
+    'relative block aspect-square overflow-hidden rounded-[11px] bg-[#e4e8ef]';
 
   // In selection mode the tile is a control, not a link — tapping selects
   // rather than navigating away from the set being built.

@@ -43,3 +43,55 @@ inventories"). Spec: `docs/specs/desktop-redesign-spec.md` (1358 lines). CLI lin
 - **Found, not ruled anywhere:** `money-representation.md` / `7d1-spec.md` §12a still state the
   overturned S97 carve-out — the fix commit did not amend them; the five deliberate `prompt()`
   leftovers (`#1-dialogsweep`) sit on screens later build steps restyle.
+
+### Entry 1b — the VAPID-subject fix (ruled by Josh after reading Phase A)
+- **Step:** standalone fix, ordered separately from the tokens.
+- **Did:** `push.ts:29` fallback `mailto:support@frameFocus.app` → `mailto:framefocus2026@gmail.com`.
+- **Files:** `apps/web/lib/notify/push.ts`.
+- **Commit:** `f64c622`.
+- **Ruled alongside [Josh]:** `money-representation.md` / `7d1-spec.md` §12a are LEFT ALONE — that
+  amendment belongs with the invoice-floor work, not the redesign.
+
+### Entry 2 — Phase B: design tokens
+- **Step:** build step 1, complete.
+- **Did:** README palette adopted per §2. `theme.ts`: navy `#0f1729`, primary `#3b4ae0`, cardBorder
+  `#e4e8ef`, pageBg `#f4f6fa`, blueTint/blueTintAlt `#f2f4ff`/`#e8ecfb`; four additions (`purple`/
+  `purpleBg`, `rowTintAttention`, `rowTintProblem`, `attentionCardStyle` as a composable style
+  fragment, R7 marked permanent). `tailwind.config.ts`: brand 50/100/500/900 moved; **200/300 left**
+  — the design files still use `#cdd6e8`/`#8fa0c4` verbatim and §4 lists no nav-text delta;
+  400/600/700/800/950 left (no README counterpart; re-deriving is invention). `accent`: **zero
+  changes** — its README-named values (warning family) already match, and 500 is ruled to stay.
+  `m6m` repainted per R6 (navy/blue/surface/border), **canvas and danger held**. `brand.ts`
+  themeColor + backgroundColor → `#0f1729`, still two separate literals (§S2).
+- **Decisions a ruling did not cover, recorded:**
+  1. `theme.ts` `blueTint`/`blueTintAlt` moved with brand.50/100 — R5's sentence names only four
+     theme.ts values, but the tailwind bullet moves 50/100, and splitting one token's value across
+     two files is the divergence class (#129) the repo rules against. Both pairs move together.
+  2. The **text ramp, hover, and semantic colours did NOT move** — the design uses a different text
+     ramp (`#1a2437`, `#3f4a60`, success `#1f8f4e`…), but R5 deliberately scopes to navy/primary +
+     near-identical shades; re-ramping is a ruling nobody made.
+  3. Two live shell hexes in `dashboard-shell.tsx` (top-bar border, main bg) and four live `/m`
+     stragglers (photo placeholder ×2, timeline-dot halo, switch-screen bar blue) moved with the
+     tokens — they are the same tokens hand-pasted, and leaving them splits the palette on the
+     surfaces this phase repaints. `/m` now has **zero** live old-palette hexes.
+  4. **Left behind on purpose: ~200 inline old-palette hexes** in desktop screen bodies
+     (field-ops/safety/deliveries/daily-logs families, gantt, dashboard page) and the email/PDF
+     templates (`auth-email`, `incident/spec-sheet/delivery/daily-log` templates). Screen bodies are
+     owned by build steps 4–10, which restyle each screen against its mockup; the old and new
+     navies are near-identical in the interim. **Templates need their own ruling** — emails/PDFs
+     are documents, not UI, and nothing rules whether they follow the repaint.
+- **Tests swept per the S157 rule (existing tests encoding the old palette):**
+  `m6m-pwa.test.ts` A-26b4 inverted to `#0f1729` (run: **7/7**); `e2e/m-hubs.spec.ts` on-site
+  border expectation → `rgb(59, 74, 224)` (needs the next Playwright battery to prove live —
+  e2e, not runnable in this step). `brand-email-footer.test.tsx`'s `#2f49d1` is a tenant-fixture
+  prop, not a palette assertion — untouched. Also caught: A-26b4 asserts `theme.ts` does not
+  contain the substring `brand` (independence guard) — the new comments were worded around it.
+- **Files:** `theme.ts` · `tailwind.config.ts` · `brand.ts` · `dashboard-shell.tsx` ·
+  `m/timeclock/switch/switch-screen.tsx` · `m/p/[projectId]/photos/photo-grid.tsx` ·
+  `m/p/[projectId]/page.tsx` · `test/m6m-pwa.test.ts` · `e2e/m-hubs.spec.ts`.
+- **Commit:** (this entry's commit).
+- **Verified:** guarded values confirmed in place post-edit (`m6m.canvas #0d1220`, `m6m.danger
+  #c0362c`, `accent.500 #f59e0b`, `logoAmber #EDA122`); `/m` grep for live old hexes → 0;
+  `npx turbo run type-check --force` → exit 0, **5/5 uncached**; `vitest run test/m6m-pwa.test.ts`
+  → exit 0, 7/7. §5b's on-phone splash check (§S2's flagged assumption) still needs a real
+  handset — unchanged, as the spec says.

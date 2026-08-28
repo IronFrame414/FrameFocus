@@ -65,8 +65,13 @@ export const brand = {
    * Manifest `theme_color` — status bar and task-switcher card tint.
    * Navy, matching the app bar (M6M §3.1) so the status bar reads as part of
    * the chrome rather than sitting on top of it.
+   *
+   * Moved to the redesign navy with theme.ts — RULED [Josh, desktop-redesign
+   * §S2]. Set to the same NEW value deliberately, not aliased; the
+   * keep-them-separate reasoning above still holds and divergence stays
+   * possible.
    */
-  themeColor: '#14213d',
+  themeColor: '#0f1729',
 
   /**
    * Manifest `background_color` — the splash screen shown while the app boots.
@@ -74,12 +79,14 @@ export const brand = {
    * ASSUMPTION, flagged for confirmation. Josh's S98 ruling said the manifest
    * uses "the existing navy/amber tokens". Navy is the only one of the two that
    * works as a full-screen field — amber would be a full-screen orange flash.
-   * The tradeoff to be aware of: the app's own page background is #f4f6f9
+   * The tradeoff to be aware of: the app's own page background is #f4f6fa
    * (M6M §2 `surface`), so a navy splash means a dark-to-light transition on
    * every cold start. If that flash reads badly on a real handset, this value
-   * — and only this value — becomes #f4f6f9. theme_color stays navy either way.
+   * — and only this value — becomes #f4f6fa. theme_color stays navy either way.
+   * The assumption is UNCHANGED by the §S2 move to the redesign navy — still
+   * worth checking on a phone.
    */
-  backgroundColor: '#14213d',
+  backgroundColor: '#0f1729',
 
   /**
    * The amber the LOGO ARTWORK uses — the "Binder" wordmark and the binder tab

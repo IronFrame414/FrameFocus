@@ -5,20 +5,22 @@
 // client components alike.
 
 export const color = {
-  // Shell / primary
-  navy: '#14213d', // sidebar bg, headings, primary text, dark cards
+  // Shell / primary — README palette values per the desktop-redesign spec §2
+  // R5: navy/primary and their near-identical shades move; text ramp, hover
+  // and semantic colours have no README counterpart and deliberately stay.
+  navy: '#0f1729', // sidebar bg, headings, primary text, dark cards
   navText: '#cdd6e8', // sidebar nav text (inactive)
   navySecondary: '#8fa0c4', // sidebar secondary text
-  primary: '#2f49d1', // buttons, active nav, active tab, progress fill, links
+  primary: '#3b4ae0', // buttons, active nav, active tab, progress fill, links
   primaryHover: '#1f33a8',
-  blueTint: '#eef1fb', // ghost-primary bg
-  blueTintAlt: '#e7ebf9', // info chip bg
+  blueTint: '#f2f4ff', // ghost-primary bg (same token as the Tailwind 50 stop)
+  blueTintAlt: '#e8ecfb', // info chip bg (same token as the Tailwind 100 stop)
   amber: '#f59e0b', // logo "Works", avatar, event accents
 
   // Surfaces
-  pageBg: '#f4f6f9',
+  pageBg: '#f4f6fa',
   cardBg: '#ffffff',
-  cardBorder: '#e6e9ef',
+  cardBorder: '#e4e8ef',
   tableHeadBg: '#f7f9fc', // table header / total-row bg
   rowDivider: '#f1f3f7',
   inputBorder: '#e0e4ea',
@@ -42,6 +44,14 @@ export const color = {
   dangerAlt: '#c0362c',
   neutralBadgeBg: '#eef1f6',
   neutralBadgeText: '#6b7280',
+
+  // Desktop-redesign spec §2 additions. The row tints are TOKENS, NOT
+  // BEHAVIOUR — tables are per-page inline styles, so every screen that tints
+  // a row applies these itself, per that screen's spec.
+  purple: '#5b45c4', // subcontractor category, Owner role, retainage
+  purpleBg: '#ede9f8',
+  rowTintAttention: '#fffdf7', // table row needing attention (amber)
+  rowTintProblem: '#fdf7f6', // table row with a compliance/data failure (red)
 } as const;
 
 export const font = {
@@ -58,6 +68,18 @@ export const cardStyle: React.CSSProperties = {
   backgroundColor: color.cardBg,
   border: `1px solid ${color.cardBorder}`,
   borderRadius: '13px',
+};
+
+/**
+ * Permanent attention-card treatment (desktop-redesign spec §2 R7). The README
+ * calls this a review device that disappears on acceptance; Josh overruled
+ * that FOR THE CARD STYLE ONLY — blocking-work and expiring-soon cards wear it
+ * permanently. The NEW badge still disappears. Compose over cardStyle:
+ * `{...cardStyle, ...attentionCardStyle}`.
+ */
+export const attentionCardStyle: React.CSSProperties = {
+  border: '1.5px solid #f5cf8f',
+  boxShadow: '0 0 0 4px rgba(245,165,36,.09)',
 };
 
 /** Page H2 (25–28px / 800 / navy / −.01em). */

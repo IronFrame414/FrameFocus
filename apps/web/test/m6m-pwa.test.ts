@@ -69,8 +69,8 @@ describe('§7.1 — the manifest', () => {
 
     // Two decisions that happen to share a value today — each side carries
     // its OWN literal…
-    expect(brandSrc).toContain("themeColor: '#14213d'");
-    expect(tailwindSrc).toContain("navy: '#14213d'");
+    expect(brandSrc).toContain("themeColor: '#0f1729'");
+    expect(tailwindSrc).toContain("navy: '#0f1729'");
 
     // …and neither resolves through the other: brand.ts imports nothing at
     // all, and neither the tailwind token block nor theme.ts reaches into the

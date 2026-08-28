@@ -395,7 +395,7 @@ export function DashboardShell({
         {/* Global header strip (S85): the clock button rides top-right on
             every dashboard page. Known cost, accepted: shifts page content
             down by the strip's height. */}
-        <header className="flex h-[54px] shrink-0 items-center justify-end border-b border-[#e6e9ef] bg-white px-[30px]">
+        <header className="flex h-[54px] shrink-0 items-center justify-end border-b border-[#e4e8ef] bg-white px-[30px]">
           <GlobalClockButton
             openSession={openSession}
             myMemberId={myMemberId}
@@ -404,7 +404,7 @@ export function DashboardShell({
             userRole={userRole}
           />
         </header>
-        <main className="flex-1 bg-[#f4f6f9] px-[30px] py-[26px]">{children}</main>
+        <main className="flex-1 bg-[#f4f6fa] px-[30px] py-[26px]">{children}</main>
       </div>
       {/* ND-33 / A-C24 — the chat launcher and panel mount ONCE, here, so they
           render on every /dashboard route including the ones that have nothing
