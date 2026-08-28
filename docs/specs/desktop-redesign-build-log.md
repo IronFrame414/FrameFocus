@@ -293,3 +293,25 @@ inventories"). Spec: `docs/specs/desktop-redesign-spec.md` (1358 lines). CLI lin
 - **Files:** `contacts/page.tsx` · `contacts-list.tsx` · `test/s158-ui-fixes.test.tsx`.
 - **Commit:** (this entry's commit).
 - **Verified:** type-check 5/5; s158 suite 11/11.
+
+### Entry 11 — `14e` Team
+- **Step:** fourth screen.
+- **Did:** the browser-fetch inversion is **kept, not "fixed"** — members and invitations still
+  load client-side. The server page adds only the NEW columns' data, because their mechanisms
+  are server-side and already correct elsewhere: **Hours this week + OT** via ONE
+  `getSessionsForReview({from,to})` + `weekWindowForYmd` + pure `weeklyHoursSummary()` per
+  member (the timeclock/timesheets pattern verbatim — not `getWeeklyHours(memberId)` in a
+  loop); **Burden/hr** derived per the pay-rate-section arithmetic — in-force effective-dated
+  rate, then `rate × multiplier` or `rate + companies.fixed_burden_per_hour` by
+  `burden_source`. Sessions/rates key on `company_members.id`; rows are profiles — mapped via
+  `company_members.profile_id`. **Pending invites became rows of the one table** (presentation
+  only — email/role were always there), keeping all three D4 controls and the resend note.
+  Client restyled onto the anatomy.
+- **Reflow:** pay rates are Owner/Admin by RLS, so a gated role's burden map arrives empty and
+  the column renders em-dashes; hours likewise follow session RLS. Less, not nothing.
+- **Decision recorded:** the new columns' data rides SERVER props while the old data stays
+  browser-fetched — additive, not an inversion; writing a duplicate client-side sessions query
+  would have been the #129 divergence shape.
+- **Files:** `team/page.tsx` · `team-page-client.tsx`.
+- **Commit:** (this entry's commit).
+- **Verified:** type-check 5/5; no test renders TeamPageClient (swept).

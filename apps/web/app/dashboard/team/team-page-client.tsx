@@ -12,8 +12,23 @@ import {
 } from '@/lib/services/team';
 import { ROLE_LABELS, type CompanyRole } from '@framefocus/shared';
 import { useConfirm, useAlert } from '@/components/confirm/confirm-provider';
+import { ListPageHeader } from '@/components/list-screen/list-screen';
+import { badgeStyle, cardStyle, color, font, microLabelStyle, primaryButtonStyle } from '@/lib/theme';
 
-export default function TeamPageClient({ userRole }: { userRole: string }) {
+export default function TeamPageClient({
+  userRole,
+  hours,
+  burden,
+}: {
+  userRole: string;
+  /** §8.5 — per-PROFILE weekly paid hours + OT, server-grouped (one
+   *  getSessionsForReview for the week, weeklyHoursSummary per member). */
+  hours: Record<string, { paid: number; overtime: number }>;
+  /** §8.5 — derived burden $/hr per profile (rate × multiplier or rate +
+   *  company fixed). Empty for roles whose RLS cannot read pay rates —
+   *  the column reflows to em-dashes. */
+  burden: Record<string, number>;
+}) {
   // ⚠️ MEMOISED [S163]. `createClient()` returns a NEW object on every call —
   // `@supabase/ssr`'s `createBrowserClient` does not memoise the instance — so a
   // client created in render cannot go in a dependency array without re-running
@@ -142,144 +157,196 @@ export default function TeamPageClient({ userRole }: { userRole: string }) {
     );
   }
 
+  const th: React.CSSProperties = { ...microLabelStyle, padding: '10px 12px', textAlign: 'left' };
+  const td: React.CSSProperties = { padding: '11px 12px', fontSize: '13px', color: color.bodyAlt };
+  const monoCell: React.CSSProperties = { ...td, fontFamily: font.mono, fontSize: '12.5px' };
+
+  // §8.5 — pending invites render AS ROWS of the one table (presentation
+  // only: invitations.role and .email were always there). The three D4
+  // controls ride along in the trailing cell.
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Team</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {members.length} member{members.length !== 1 ? 's' : ''}
-          </p>
-        </div>
+      <ListPageHeader
+        title="Team"
+        subtitle={`${members.length} member${members.length === 1 ? '' : 's'}${
+          canManageTeam && invitations.length > 0
+            ? ` · ${invitations.length} invited`
+            : ''
+        }`}
+      >
         {canManageTeam && (
-          <a
-            href="/dashboard/team/invite"
-            className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-          >
+          <a href="/dashboard/team/invite" style={primaryButtonStyle}>
             + Invite Team Member
           </a>
         )}
-      </div>
+      </ListPageHeader>
 
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden mb-8">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Name
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Role
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Joined
-              </th>
+      <div style={{ ...cardStyle, overflow: 'hidden' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+          <thead>
+            <tr
+              style={{
+                backgroundColor: color.tableHeadBg,
+                borderBottom: `1px solid ${color.neutralBadgeBg}`,
+                textAlign: 'left',
+              }}
+            >
+              <th style={{ ...th, paddingLeft: '20px' }}>Name</th>
+              <th style={th}>Role</th>
+              <th style={th}>Burden / hr</th>
+              <th style={th}>This week</th>
+              <th style={th}>Joined</th>
+              {canManageTeam && <th style={{ ...th, paddingRight: '20px' }}>Invite</th>}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
-            {members.map((member) => (
-              <tr
-                key={member.id}
-                onClick={() => router.push(`/dashboard/team/${member.id}`)}
-                className="hover:bg-gray-50 cursor-pointer"
-              >
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <p className="text-sm font-medium text-gray-900">
+          <tbody>
+            {members.map((member) => {
+              const b = burden[member.id];
+              const h = hours[member.id];
+              return (
+                <tr
+                  key={member.id}
+                  onClick={() => router.push(`/dashboard/team/${member.id}`)}
+                  style={{ borderBottom: `1px solid ${color.rowDivider}`, cursor: 'pointer' }}
+                >
+                  <td style={{ ...td, paddingLeft: '20px', fontWeight: 600, color: color.navy }}>
                     {member.first_name} {member.last_name}
-                  </p>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-700">
-                    {ROLE_LABELS[member.role as CompanyRole] || member.role}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {member.created_at ? new Date(member.created_at).toLocaleDateString() : '—'}
-                </td>
-              </tr>
-            ))}
+                  </td>
+                  <td style={td}>
+                    <span
+                      style={{
+                        ...badgeStyle,
+                        backgroundColor: color.neutralBadgeBg,
+                        color: color.neutralBadgeText,
+                      }}
+                    >
+                      {ROLE_LABELS[member.role as CompanyRole] || member.role}
+                    </span>
+                  </td>
+                  {/* Burden — derived, never stored; em-dash for roles whose
+                      RLS cannot read pay rates (the reflow, not a broken page). */}
+                  <td style={monoCell}>
+                    {b !== undefined
+                      ? `$${b.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      : '—'}
+                  </td>
+                  <td style={monoCell}>
+                    {h
+                      ? `${h.paid.toFixed(1)}h${h.overtime > 0 ? ` · ${h.overtime.toFixed(1)}h OT` : ''}`
+                      : '—'}
+                  </td>
+                  <td style={monoCell}>
+                    {member.created_at ? new Date(member.created_at).toLocaleDateString() : '—'}
+                  </td>
+                  {canManageTeam && <td style={{ ...td, paddingRight: '20px' }} />}
+                </tr>
+              );
+            })}
+            {canManageTeam &&
+              invitations.map((inv) => (
+                <tr key={inv.id} style={{ borderBottom: `1px solid ${color.rowDivider}` }}>
+                  <td style={{ ...td, paddingLeft: '20px' }}>
+                    <span style={{ fontWeight: 600, color: color.bodyAlt }}>{inv.email}</span>
+                    <span
+                      style={{
+                        ...badgeStyle,
+                        marginLeft: '8px',
+                        backgroundColor: color.warningBg,
+                        color: color.warningDeep,
+                      }}
+                    >
+                      Invited
+                    </span>
+                  </td>
+                  <td style={td}>
+                    <span
+                      style={{
+                        ...badgeStyle,
+                        backgroundColor: color.warningBg,
+                        color: color.warningDeep,
+                      }}
+                    >
+                      {ROLE_LABELS[inv.role as CompanyRole] || inv.role}
+                    </span>
+                  </td>
+                  <td style={monoCell}>—</td>
+                  <td style={monoCell}>—</td>
+                  <td style={monoCell}>
+                    {inv.expires_at
+                      ? `expires ${new Date(inv.expires_at).toLocaleDateString()}`
+                      : '—'}
+                  </td>
+                  {/* D4 [S135] — Cancel used to be the ONLY control here, so a
+                      lost link (or, before D2, a link that was never delivered
+                      because no invite email existed) left cancel-and-re-invite
+                      as the only path. */}
+                  <td style={{ ...td, paddingRight: '20px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <button
+                        onClick={() => handleCopyLink(inv)}
+                        style={{
+                          border: 'none',
+                          background: 'none',
+                          padding: 0,
+                          cursor: 'pointer',
+                          fontSize: '13px',
+                          fontFamily: font.sans,
+                          color: color.bodyAlt,
+                          fontWeight: 600,
+                        }}
+                      >
+                        {copiedId === inv.id ? 'Copied' : 'Copy link'}
+                      </button>
+                      <button
+                        onClick={() => handleResend(inv.id)}
+                        disabled={resendingId === inv.id}
+                        style={{
+                          border: 'none',
+                          background: 'none',
+                          padding: 0,
+                          cursor: 'pointer',
+                          fontSize: '13px',
+                          fontFamily: font.sans,
+                          color: color.primary,
+                          fontWeight: 600,
+                          opacity: resendingId === inv.id ? 0.5 : 1,
+                        }}
+                      >
+                        {resendingId === inv.id ? 'Resending…' : 'Resend'}
+                      </button>
+                      <button
+                        onClick={() => handleCancelInvite(inv.id)}
+                        style={{
+                          border: 'none',
+                          background: 'none',
+                          padding: 0,
+                          cursor: 'pointer',
+                          fontSize: '13px',
+                          fontFamily: font.sans,
+                          color: color.danger,
+                          fontWeight: 600,
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                    {resendNote[inv.id] && (
+                      <p
+                        style={{
+                          margin: '4px 0 0',
+                          fontSize: '11.5px',
+                          color: resendNote[inv.id].ok ? color.successOnBg : color.warningDeep,
+                        }}
+                      >
+                        {resendNote[inv.id].text}
+                      </p>
+                    )}
+                  </td>
+                </tr>
+              ))}
           </tbody>
         </table>
       </div>
-
-      {canManageTeam && invitations.length > 0 && (
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-3">Pending Invitations</h2>
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Email
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Role
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Expires
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Action
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {invitations.map((inv) => (
-                  <tr key={inv.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {inv.email}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-700">
-                        {ROLE_LABELS[inv.role as CompanyRole] || inv.role}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {inv.expires_at ? new Date(inv.expires_at).toLocaleDateString() : '—'}
-                    </td>
-                    {/* D4 [S135] — Cancel used to be the ONLY control here, so
-                        a lost link (or, before D2, a link that was never
-                        delivered because no invite email existed) left
-                        cancel-and-re-invite as the only path. */}
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => handleCopyLink(inv)}
-                          className="text-sm text-gray-700 hover:text-gray-900"
-                        >
-                          {copiedId === inv.id ? 'Copied' : 'Copy link'}
-                        </button>
-                        <button
-                          onClick={() => handleResend(inv.id)}
-                          disabled={resendingId === inv.id}
-                          className="text-sm text-blue-600 hover:text-blue-800 disabled:opacity-50"
-                        >
-                          {resendingId === inv.id ? 'Resending…' : 'Resend'}
-                        </button>
-                        <button
-                          onClick={() => handleCancelInvite(inv.id)}
-                          className="text-sm text-red-600 hover:text-red-800"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                      {resendNote[inv.id] && (
-                        <p
-                          className={`mt-1 text-xs ${
-                            resendNote[inv.id].ok ? 'text-green-700' : 'text-yellow-800'
-                          }`}
-                        >
-                          {resendNote[inv.id].text}
-                        </p>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
