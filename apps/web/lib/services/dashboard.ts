@@ -143,3 +143,92 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   return { kpis, attention: attention.slice(0, 6) };
 }
+
+// ── Step 10 (desktop redesign §8.12.2) — "Money moving" portfolio rollup ──
+//
+// The inventory's finding: only per-project services existed; no company-wide
+// rollup of any of the three. Each figure below REUSES the shared maths its
+// per-project sibling uses — a second derivation of the same figure on a
+// different screen is the #129 divergence class:
+//
+//   Coming in     — Σ remainingOnInvoice() (payments-shared §2: base is
+//                   amount_receivable, NET of retainage — withheld retainage
+//                   is not owed yet) over live sent/partially_paid invoices.
+//                   ⚠️ P-1 caveat inherited: nothing writes due_date, so no
+//                   "due in 30 days" cut is offered — this is the whole open
+//                   receivable, undated.
+//   Going out     — Σ committedRemaining() over countsTowardCommitted()
+//                   payables (payables-shared — THE definitions), company-wide
+//                   getBillsAndCommitments().
+//   Not yet billed — Σ positive headline backlog over ACTIVE projects, the
+//                   SAME per-project getProfitabilityReport loop 14a ships
+//                   (§6: ruled, no batch helper; zero calls for gated roles —
+//                   the caller only invokes this for Owner/Admin). The figure
+//                   agrees with the projects list's "Unbilled work" by
+//                   construction.
+export interface PortfolioMoney {
+  comingIn: number;
+  goingOut: number;
+  notYetBilled: number;
+}
+
+export async function getPortfolioMoney(): Promise<PortfolioMoney> {
+  const supabase = await createClient();
+  const { remainingOnInvoice } = await import('@/lib/services/payments-shared');
+  const { committedRemaining, countsTowardCommitted } = await import(
+    '@/lib/services/payables-shared'
+  );
+  const { getBillsAndCommitments } = await import('@/lib/services/payables');
+  const { getProfitabilityReport } = await import('@/lib/services/profitability');
+
+  // Coming in.
+  const { data: openInvoices } = await supabase
+    .from('invoices')
+    .select('id, amount_receivable')
+    .eq('is_deleted', false)
+    .in('status', ['sent', 'partially_paid']);
+  const invoiceIds = (openInvoices ?? []).map((i) => i.id);
+  const appsByInvoice = new Map<string, { amount: number; is_deleted: boolean | null }[]>();
+  if (invoiceIds.length > 0) {
+    const { data: apps } = await supabase
+      .from('client_payment_applications')
+      .select('invoice_id, amount, is_deleted')
+      .in('invoice_id', invoiceIds)
+      .eq('is_deleted', false);
+    for (const a of apps ?? []) {
+      const list = appsByInvoice.get(a.invoice_id) ?? [];
+      list.push(a);
+      appsByInvoice.set(a.invoice_id, list);
+    }
+  }
+  const comingIn = (openInvoices ?? []).reduce(
+    (sum, inv) => sum + remainingOnInvoice(inv.amount_receivable, appsByInvoice.get(inv.id) ?? []),
+    0
+  );
+
+  // Going out.
+  const payables = await getBillsAndCommitments();
+  const goingOut = payables.reduce(
+    (sum, row) => (countsTowardCommitted(row) ? sum + committedRemaining(row, row.payments) : sum),
+    0
+  );
+
+  // Not yet billed.
+  const { data: activeProjects } = await supabase
+    .from('projects')
+    .select('id')
+    .eq('is_deleted', false)
+    .eq('status', 'active');
+  let notYetBilled = 0;
+  for (const p of activeProjects ?? []) {
+    const report = await getProfitabilityReport(p.id);
+    const backlog = report?.headline.backlog ?? null;
+    if (backlog !== null && backlog > 0) notYetBilled += backlog;
+  }
+
+  return {
+    comingIn: Math.round(comingIn * 100) / 100,
+    goingOut: Math.round(goingOut * 100) / 100,
+    notYetBilled: Math.round(notYetBilled * 100) / 100,
+  };
+}

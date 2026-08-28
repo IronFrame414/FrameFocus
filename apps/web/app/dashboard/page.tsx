@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase-server';
 import Link from 'next/link';
 import { getCalendarEvents } from '@/lib/services/schedule';
 import { getMyMember } from '@/lib/services/members';
-import { getDashboardData } from '@/lib/services/dashboard';
+import { getDashboardData, getPortfolioMoney } from '@/lib/services/dashboard';
 import { ScheduleCard } from './schedule-card';
 import { cardStyle, color, font, h2Style, microLabelStyle, primaryButtonStyle } from '@/lib/theme';
 
@@ -20,7 +20,7 @@ function compactMoney(value: number): string {
   return `$${value.toFixed(0)}`;
 }
 
-const DOT_COLORS = { amber: '#d97706', red: '#dc2626', blue: '#2f49d1', green: '#16a34a' };
+const DOT_COLORS = { amber: '#b45309', red: '#c0362c', blue: '#3b4ae0', green: '#1f8f4e' };
 
 export default async function DashboardPage() {
   const supabase = await createClient();
@@ -40,9 +40,12 @@ export default async function DashboardPage() {
   const isCrew = role === 'crew_member' || role === 'subcontractor';
   const myMember = isCrew ? await getMyMember() : null;
 
-  const [{ kpis, attention }, events] = await Promise.all([
+  // Money-moving rollup is Owner/Admin only ($ floor) — a gated role triggers
+  // ZERO of its queries, the established posture (14a's margin loop).
+  const [{ kpis, attention }, events, money] = await Promise.all([
     getDashboardData(),
     getCalendarEvents({ ownMemberId: myMember?.id }),
+    canSeeFinancials ? getPortfolioMoney() : Promise.resolve(null),
   ]);
 
   const today = new Date();
@@ -162,6 +165,54 @@ export default async function DashboardPage() {
           </div>
         ))}
       </div>
+
+      {/* Money moving (§8.12.2) — Owner/Admin only; the row simply doesn't
+          render for gated roles (less, not nothing: the rest of the page is
+          untouched). No "cash in 30 days" cut — nothing writes due_date (P-1). */}
+      {money && (
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: '14px',
+            marginBottom: '18px',
+          }}
+        >
+          {[
+            {
+              label: 'Coming in',
+              value: compactMoney(money.comingIn),
+              caption: 'open invoices, net of retainage',
+            },
+            {
+              label: 'Going out',
+              value: compactMoney(money.goingOut),
+              caption: 'committed to subs & suppliers, unpaid',
+            },
+            {
+              label: 'Not yet billed',
+              value: compactMoney(money.notYetBilled),
+              caption: 'earned on active jobs, not invoiced',
+            },
+          ].map((m) => (
+            <div key={m.label} style={{ ...cardStyle, padding: '16px 17px' }}>
+              <div style={microLabelStyle}>{m.label}</div>
+              <div
+                style={{
+                  fontFamily: font.mono,
+                  fontSize: '24px',
+                  fontWeight: 600,
+                  color: color.navy,
+                  margin: '4px 0 2px',
+                }}
+              >
+                {m.value}
+              </div>
+              <div style={{ fontSize: '12px', color: color.muted }}>{m.caption}</div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Two-column region */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: '18px' }}>
