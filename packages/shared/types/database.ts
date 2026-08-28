@@ -3805,6 +3805,69 @@ export type Database = {
           },
         ]
       }
+      file_categories: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          is_deleted: boolean
+          is_system: boolean
+          key: string
+          label: string
+          project_id: string | null
+          sort_order: number
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean
+          is_system?: boolean
+          key: string
+          label: string
+          project_id?: string | null
+          sort_order?: number
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean
+          is_system?: boolean
+          key?: string
+          label?: string
+          project_id?: string | null
+          sort_order?: number
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "file_categories_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "file_categories_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       files: {
         Row: {
           ai_tags: string[] | null
@@ -3894,6 +3957,13 @@ export type Database = {
           version?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "files_category_fkey"
+            columns: ["company_id", "category"]
+            isOneToOne: false
+            referencedRelation: "file_categories"
+            referencedColumns: ["company_id", "key"]
+          },
           {
             foreignKeyName: "files_company_id_fkey"
             columns: ["company_id"]
@@ -8901,6 +8971,10 @@ export type Database = {
         Returns: Json
       }
       seed_default_tags: { Args: { p_company_id: string }; Returns: undefined }
+      seed_file_categories: {
+        Args: { p_company_id: string }
+        Returns: undefined
+      }
       selection_client_allowance_deduction: {
         Args: { p_selection_id: string }
         Returns: number

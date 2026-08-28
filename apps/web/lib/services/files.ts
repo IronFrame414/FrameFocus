@@ -39,9 +39,45 @@ export type FileCategory =
   | 'selections'
   | 'other';
 
+/**
+ * [Redesign 6.1, 20261039] The fixed CHECK is gone: `files.category` is now a
+ * STABLE KEY into per-company `file_categories` (composite FK), and a custom
+ * key is as legal as a seeded one. The union above becomes the SYSTEM keys —
+ * the ones app writers target, immutable by trigger — and the open type below
+ * is the honest column type. `(string & {})` keeps the literals autocompleting.
+ */
+export type SystemFileCategory = FileCategory;
+export type AnyFileCategory = FileCategory | (string & {});
+
 export type FileRecord = Omit<FileRow, 'category'> & {
-  category: FileCategory;
+  category: AnyFileCategory;
 };
+
+export interface FileCategoryRow {
+  id: string;
+  key: string;
+  label: string;
+  sort_order: number;
+  is_system: boolean;
+  project_id: string | null;
+}
+
+/** Per-company category rows (labels renameable; keys stable). Company-wide
+ *  rows plus, when `projectId` is given, that project's custom rows. */
+export async function getFileCategories(projectId?: string): Promise<FileCategoryRow[]> {
+  const supabase = await createClient();
+  let query = supabase
+    .from('file_categories')
+    .select('id, key, label, sort_order, is_system, project_id')
+    .eq('is_deleted', false)
+    .order('sort_order', { ascending: true });
+  query = projectId
+    ? query.or(`project_id.is.null,project_id.eq.${projectId}`)
+    : query.is('project_id', null);
+  const { data, error } = await query;
+  if (error) return [];
+  return (data ?? []) as FileCategoryRow[];
+}
 
 // Trash-bin pattern (list): filters is_deleted = false by default so deleted rows never appear in
 // normal listings. Pass include_deleted: true to surface soft-deleted rows for the trash UI. See CLAUDE.md "Trash-bin pattern".

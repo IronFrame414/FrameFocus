@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase-browser';
-import type { FileCategory } from './files';
+import type { AnyFileCategory, FileCategory } from './files';
 import { applied, DISCARDED } from './mutation-result';
 import { SIGNED_URL_TTL_SECONDS } from './signed-url-ttl';
 
@@ -72,7 +72,7 @@ export async function uploadFile(
      * second segment has no project id to take.
      */
     project_id: string | null;
-    category: FileCategory;
+    category: AnyFileCategory;
     /**
      * Second storage-path segment when `project_id` is null (e.g.
      * `compliance/{member_id}`). Ignored when a project id is present.

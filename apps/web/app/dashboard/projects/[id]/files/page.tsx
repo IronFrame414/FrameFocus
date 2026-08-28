@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { getFiles } from '@/lib/services/files';
+import { getFileCategories, getFiles } from '@/lib/services/files';
 import { getActiveTags } from '@/lib/services/tag-options';
 import FileRow from './file-row';
 
@@ -8,10 +8,16 @@ export default async function ProjectFilesPage({ params }: { params: Promise<{ i
   // M3-05 [S157] — these two reads are INDEPENDENT and were awaited in series,
   // so the page paid two round trips end to end for work that takes one. Same
   // shape as M1-03 (five sequential reads for one row), smaller.
-  const [files, activeTags] = await Promise.all([
+  const [files, activeTags, categories] = await Promise.all([
     getFiles({ project_id: projectId }),
     getActiveTags(),
+    getFileCategories(projectId),
   ]);
+  // Redesign 6.1 — labels come from file_categories (renameable); the file
+  // row's `category` is the STABLE KEY. Unknown key → render the key itself.
+  const categoryLabels: Record<string, string> = Object.fromEntries(
+    categories.map((c) => [c.key, c.label])
+  );
 
   return (
     <div style={{ padding: '2rem' }}>
@@ -72,7 +78,13 @@ export default async function ProjectFilesPage({ params }: { params: Promise<{ i
           </thead>
           <tbody>
             {files.map((f) => (
-              <FileRow key={f.id} file={f} projectId={projectId} activeTags={activeTags} />
+              <FileRow
+                key={f.id}
+                file={f}
+                projectId={projectId}
+                activeTags={activeTags}
+                categoryLabel={categoryLabels[f.category] ?? f.category}
+              />
             ))}
           </tbody>
         </table>

@@ -457,3 +457,33 @@ inventories"). Spec: `docs/specs/desktop-redesign-spec.md` (1358 lines). CLI lin
   §6b.3 work).
 - **Files:** `payments/reminder-settings.tsx` · `profitability/page.tsx`.
 - **Verified:** type-check 5/5 each.
+
+### Entry 20 — 6.1 Files: the schema change (custom categories) + revisions UI
+- **The crux, and the shape chosen for it:** `files.category` **KEEPS its role as the stable
+  key** app writers target. `20261039000000_file_categories.sql` adds a per-company
+  `file_categories` table (renameable `label`, immutable `key`, `sort_order`, `is_system`,
+  nullable `project_id` for per-job custom rows), seeds the historical 14 per company
+  (backfill + AFTER INSERT trigger on companies, the lien-template precedent), **replaces the
+  14-value CHECK with a composite FK** `files(company_id, category) →
+  file_categories(company_id, key)`, and enforces the contract with a trigger: **key and
+  is_system immutable; a system row refuses even soft-delete.** A rename can never orphan a
+  writer — that is the trigger's job, not a convention's. RLS: SELECT company-wide,
+  INSERT/UPDATE Owner/Admin, no DELETE policy. Standard per-tenant defaults + update triggers
+  per the checklist.
+- **Applied live** (`npm run db:push`, exit 0, types regenerated): probe on rebuild-test —
+  4 companies × 14 = 56 rows seeded, **0 orphan files**, FK present.
+- **UI/service:** `getFileCategories` (server) + `file-categories-client.ts` (list/create;
+  create slugs the key ONCE from the label); the upload picker reads the table — `MANUAL_KEYS`
+  still excludes the app-written five (a manual 'selections' upload would be hard-removed by
+  the next spec-sheet generation, per the migration header) — with an inline
+  "+ New category for this job" (Owner/Admin by RLS); the files page passes renameable labels
+  down; `file-row` renders **revisions** (v-chip + supersedes note — RULED IN, columns were
+  stored and never rendered) and the **per-FILE "Shared with client" chip** (the design's
+  category badge amended: the column is per-file, the badge follows the column).
+  `FileCategory` stays the system-key union; `AnyFileCategory` is the honest open column type.
+- **Deferred to step 8 (recorded):** the rename/reorder management UI — its natural home is
+  the Settings Documents tab, which is step 8's screen.
+- **Files:** the migration · `database.ts` (regen) · `files.ts` · `files-client.ts` ·
+  `file-categories-client.ts` (new) · `files/page.tsx` · `file-row.tsx` ·
+  `upload/upload-form.tsx`.
+- **Verified:** type-check 5/5; live probe above; no test renders FileRow (swept).
