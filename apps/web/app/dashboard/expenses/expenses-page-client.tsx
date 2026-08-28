@@ -25,6 +25,12 @@ import {
 } from '@/components/expenses/expense-ui';
 import { ReviewPopup } from './review-popup';
 import {
+  committedRemaining,
+  countsTowardCommitted,
+  grossPaid,
+} from '@/lib/services/payables-shared';
+import { MetricStrip } from '@/components/list-screen/list-screen';
+import {
   cardStyle,
   color,
   font,
@@ -111,6 +117,51 @@ export function ExpensesPageClient({
     return list;
   }, [expenses, tab, projectFilter, statusFilter, payableIds]);
 
+  // §8.11.3 metric strips — in-memory over the payload already in hand, maths
+  // from payables-shared (never restated). "Unbilled to client" is RULED
+  // SKIPPED (no expense→invoice link, §6b.6); "not on any job yet" is NOT a
+  // real state (project_id is NOT NULL) — neither renders. The month is the
+  // COMPANY calendar month (todayYmd arrives company-tz from the server).
+  const metrics = useMemo(() => {
+    const monthPrefix = todayYmd.slice(0, 7);
+    const receiptRows = expenses.filter((e) => !payableIds.has(e.id));
+    const spendThisMonth = receiptRows
+      .filter((e) => e.status === 'approved' && (e.expense_date ?? '').startsWith(monthPrefix))
+      .reduce((sum, e) => sum + Number(e.amount ?? 0), 0);
+    const awaitingApproval = expenses.filter((e) => e.status === 'pending').length;
+    // Missing receipts = pending with no receipt file. `pendingReceipts` is
+    // server-populated for reviewers only, so the metric renders only where
+    // the answer is known — an unknowable zero would be a false all-clear.
+    const missingReceipts = isReviewer
+      ? expenses.filter(
+          (e) => e.status === 'pending' && (pendingReceipts[e.id] ?? []).length === 0
+        ).length
+      : null;
+
+    let committedOpen = 0;
+    let paidToDate = 0;
+    let retainageHeld = 0;
+    let missingDueDates = 0;
+    for (const row of billRows) {
+      paidToDate += grossPaid(row.payments);
+      if (countsTowardCommitted(row)) {
+        const remaining = committedRemaining(row, row.payments);
+        committedOpen += remaining;
+        if (row.is_retainage) retainageHeld += remaining;
+      }
+      if (!row.due_date && row.closed_out_at === null) missingDueDates += 1;
+    }
+    return {
+      spendThisMonth,
+      awaitingApproval,
+      missingReceipts,
+      committedOpen,
+      paidToDate,
+      retainageHeld,
+      missingDueDates,
+    };
+  }, [expenses, billRows, payableIds, pendingReceipts, isReviewer, todayYmd]);
+
   async function handleDelete(id: string) {
     if (!(await confirm('Move this expense to trash?'))) return;
     setBusyId(id);
@@ -196,6 +247,29 @@ export function ExpensesPageClient({
             </button>
           ))}
         </div>
+      )}
+
+      {/* §8.11.3 metric strips, per tab. The gated role sees fewer cards,
+          never empty ones. */}
+      {tab === 'bills' ? (
+        <MetricStrip
+          metrics={[
+            { label: 'Committed open', value: fmtMoney(metrics.committedOpen) },
+            { label: 'Paid to date', value: fmtMoney(metrics.paidToDate) },
+            { label: 'Retainage held', value: fmtMoney(metrics.retainageHeld) },
+            { label: 'Missing due dates', value: metrics.missingDueDates },
+          ]}
+        />
+      ) : (
+        <MetricStrip
+          metrics={[
+            { label: 'Spend this month', value: fmtMoney(metrics.spendThisMonth), sub: 'approved receipts' },
+            { label: 'Awaiting approval', value: metrics.awaitingApproval },
+            ...(metrics.missingReceipts !== null
+              ? [{ label: 'Missing receipts', value: metrics.missingReceipts }]
+              : []),
+          ]}
+        />
       )}
 
       {/* 7C — Bills & Commitments tab (own filters, table, and modals). */}

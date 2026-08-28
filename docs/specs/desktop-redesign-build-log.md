@@ -528,3 +528,26 @@ inventories"). Spec: `docs/specs/desktop-redesign-spec.md` (1358 lines). CLI lin
 - **Files:** `contracts-panel.tsx` (hexes only) · `lien-releases/page.tsx` ·
   `sub-releases-section.tsx` (new).
 - **Verified:** type-check 5/5 each.
+
+### Entry 23 — 7.1 Notifications · 7.2 Expenses
+- **7.1:** the RULED type→chip mapping and decision set land in ONE place
+  (`lib/notify/categories.ts`) with both judgment calls recorded in the file
+  (mention/assignment under Everything only; low_stock/discrepancy are Money — the action is
+  purchasing). Page gains the five chips (URL param, composable with All/Unread/Starred) and a
+  "Needs a decision from you" block — UNREAD items of the ruled set, pulled above the stream
+  (read items return to the flow: the block is a to-do list, not a category). **Roll-up** lands
+  in the shared `NotificationList` as a `rollUpRepeats` prop (desktop passes it; `/m` untouched):
+  a run of ≥4 consecutive same-type rows collapses to the first + "N more — Expand", keyed on
+  the first item's id, presentation only — expanding writes nothing.
+- **7.2:** both metric strips land in-memory over the payload already in hand, maths from
+  `payables-shared` (never restated): Receipts — Spend this month (company calendar month via
+  the server's `todayYmd`) · Awaiting approval · Missing receipts (**reviewers only** — the
+  receipt map is server-populated for reviewers, and an unknowable zero would be a false
+  all-clear); Bills — Committed open · Paid to date · Retainage held · Missing due dates.
+  **"Unbilled to client" skipped as ruled; "not on any job yet" does not render — not a real
+  state.** The mockup's QuickBooks over-promise turns out to appear NOWHERE in shipped code —
+  there is no caption to fix, only one not to write; recorded so step 8's Accounting-tab copy
+  (GL mapping is live, not frozen) carries the burden instead.
+- **Files:** `lib/notify/categories.ts` (new) · `notifications/page.tsx` ·
+  `notification-list.tsx` · `expenses/expenses-page-client.tsx`.
+- **Verified:** type-check 5/5 each; no unit test renders NotificationList (swept).
