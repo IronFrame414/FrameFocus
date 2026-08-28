@@ -178,10 +178,16 @@ beforeAll(async () => {
   must('purchase order', poErr);
   poId = po!.id;
 
+  // [Fix 4] AUTHORED BY THE PM. This describe tests "a PM cannot approve THEIR
+  // OWN invoice", and the invoice/payment floor makes that literal: a PM now
+  // reads only invoices they authored. With a PM-authored fixture the PM CAN
+  // reach the row, so 6a's approval refusal comes from the column-scope TRIGGER
+  // (the ruling), not from RLS returning zero rows. It was mis-set to
+  // ownerMemberId, which the floor would have turned into a silent RLS block.
   const { data: inv, error: invErr } = await admin
     .from('invoices')
     .insert({
-      company_id: companyId, project_id: projectId, author_member_id: ownerMemberId,
+      company_id: companyId, project_id: projectId, author_member_id: pmMemberId,
       title: `${MARKER} invoice`, status: 'pending_approval',
     })
     .select('id').single();

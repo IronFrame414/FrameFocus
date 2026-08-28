@@ -116,14 +116,13 @@ beforeAll(async () => {
     .single();
   companyId = (prof as { company_id: string }).company_id;
 
-  const { data: member } = await admin
-    .from('company_members')
-    .select('id')
-    .eq('company_id', companyId)
-    .eq('is_deleted', false)
-    .limit(1)
-    .single();
-  authorMemberId = (member as { id: string }).id;
+  // authorMemberId is the PM's own member — set below once pmMember is derived.
+  // [Fix 4] The invoice/payment floor scopes a PM's invoice reads to
+  // author_member_id = get_my_member_id(), so a PM reaches ONLY invoices they
+  // authored. This file's whole point is that the PM SEES the invoice
+  // (visibility) and is refused by AUTHORITY (the void trigger, Owner/Admin
+  // only). A non-PM author would now fail every PM case on visibility instead —
+  // the exact confusion the assigned-project comment below was written against.
 
   // A project the PM is ASSIGNED to — otherwise can_view_project() refuses and
   // the probe would pass for the wrong reason (no visibility, not no
@@ -144,6 +143,7 @@ beforeAll(async () => {
     .from('company_members').select('id')
     .eq('profile_id', (pmProfile as { id: string }).id)
     .eq('company_id', companyId).eq('is_deleted', false).single();
+  authorMemberId = (pmMember as { id: string }).id;
 
   const { data: assignment } = await admin
     .from('project_assignments')

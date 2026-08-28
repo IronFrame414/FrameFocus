@@ -222,11 +222,15 @@ describe('S143-Q4 — ONE write rule: a PM cannot hand-write sync state (B1)', (
       .select('id, project_id')
       .eq('company_id', companyId)
       .eq('is_deleted', false)
+      // [Fix 4] the PM read floor is authorship-scoped, so the probe needs an
+      // invoice the PM AUTHORED — otherwise the `readable?.length` guard below
+      // escapes vacuously and the QB column-scope is never exercised (S165).
+      .eq('author_member_id', (pmMember as { id: string }).id)
       .in('project_id', assignedProjectIds.length ? assignedProjectIds : ['00000000-0000-0000-0000-000000000000'])
       .order('id')
       .limit(1)
       .maybeSingle();
-    if (!invoice) return; // no invoice on any PM-assigned project — vacuous, not passed
+    if (!invoice) return; // no PM-authored invoice on any PM-assigned project — vacuous, not passed
     const invoiceId = (invoice as { id: string }).id;
 
     // Non-vacuity: the PM can see and update this row. With the scope above this

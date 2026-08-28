@@ -752,10 +752,17 @@ describe('S97CT-7E — 7E1 payments, live', () => {
   });
 
   // ── PM gates ──────────────────────────────────────────────────────────────
-  it('23. P-3 — a PM CAN read the job payments', async () => {
+  it('23. [Fix 4] P-3 SUPERSEDED — a PM reads NONE of the job payments (Owner/Admin)', async () => {
+    // Payments are the client's cash position — an AGGREGATE, now Owner/Admin.
+    // Counterfactual first, so 0 for the PM is the floor working and not an
+    // empty job: the Owner reads the payments this suite recorded.
+    as(ownerClient);
+    const ownerSees = await getProjectPayments(projectId);
+    expect(ownerSees.length, 'no payments exist — the PM probe would be vacuous').toBeGreaterThan(0);
+
     as(pmClient);
-    const payments = await getProjectPayments(projectId);
-    expect(payments.length).toBeGreaterThan(0);
+    const pmSees = await getProjectPayments(projectId);
+    expect(pmSees.length, 'a PM still reads the job payments after the floor').toBe(0);
   });
 
   it('24. §8 — a PM cannot RECORD a payment', async () => {

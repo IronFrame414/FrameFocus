@@ -63,6 +63,10 @@ let qaSubContractId: string;
  *  nothing and reports a vacuous PASS (the 5f failure mode). */
 let qaBudgetItemId: string;
 let invoiceId: string;
+/** [Fix 4] A PM-authored invoice (on the QA project) — the positive case for
+ *  the authorship read floor; `invoiceId` above is authored by someone else. */
+let pmMemberId: string;
+let pmInvoiceId: string;
 
 beforeAll(async () => {
   assertRebuildTest();
@@ -96,6 +100,27 @@ beforeAll(async () => {
   const { data: invoice } = await admin
     .from('invoices').select('id').eq('project_id', richProjectId).limit(1).single();
   invoiceId = invoice!.id;
+
+  // [Fix 4] A PM-AUTHORED invoice on the writable QA project (the PM is assigned
+  // to it, so can_view_project passes). This is the positive half of the
+  // authorship read floor: a PM reads invoices where
+  // author_member_id = get_my_member_id(), and NOT `invoiceId` above, which is
+  // authored by someone else and must now be invisible to the PM.
+  const { data: pmProfile } = await admin
+    .from('profiles').select('id').eq('email', EMAILS.project_manager).eq('is_deleted', false).single();
+  const { data: pmMember } = await admin
+    .from('company_members').select('id')
+    .eq('profile_id', (pmProfile as { id: string }).id)
+    .eq('company_id', companyId).eq('is_deleted', false).single();
+  pmMemberId = (pmMember as { id: string }).id;
+  const { data: pmInv } = await admin
+    .from('invoices')
+    .insert({
+      company_id: companyId, project_id: qaProjectId, author_member_id: pmMemberId,
+      title: 'S97CT PM-authored fixture', status: 'draft',
+    })
+    .select('id').single();
+  pmInvoiceId = (pmInv as { id: string }).id;
 
   // A throwaway sub-contract on the QA fixture project — the only sub-contract
   // this harness is allowed to write to.
@@ -518,11 +543,18 @@ describe('6. Invoices tab', () => {
     }
   });
 
-  it('6b. DB READ — Owner, Admin and PM can read invoices', async () => {
-    for (const role of ['owner', 'admin', 'project_manager'] as const) {
+  it('6b. DB READ — Owner/Admin read any invoice; a PM reads ONLY their own [Fix 4]', async () => {
+    // Owner and Admin stay company-wide.
+    for (const role of ['owner', 'admin'] as const) {
       const { data } = await session[role].from('invoices').select('id').eq('id', invoiceId);
       expect(data ?? [], `${role} could not read the invoice`).toHaveLength(1);
     }
+    // A PM reads the invoice THEY authored…
+    const { data: own } = await session.project_manager.from('invoices').select('id').eq('id', pmInvoiceId);
+    expect(own ?? [], 'a PM could not read their own invoice').toHaveLength(1);
+    // …and NOT one authored by someone else — the authorship floor.
+    const { data: other } = await session.project_manager.from('invoices').select('id').eq('id', invoiceId);
+    expect(other ?? [], 'a PM read an invoice they did not author').toHaveLength(0);
   });
 
   it('6c. DB READ — Foreman and Crew read NO invoices at all', async () => {
@@ -554,11 +586,11 @@ describe('6. Invoices tab', () => {
 //          invoices/page.tsx:197  {contractValue !== null && canSeeContractValue && …}
 // ════════════════════════════════════════════════════════════════════════════
 describe('7. §12a carve-out — invoice amounts yes, contract value no', () => {
-  it('7a. DB READ — a PM CAN read the invoice amounts (the carve-out half that should work)', async () => {
+  it('7a. DB READ — a PM CAN read the amounts on an invoice THEY authored [Fix 4]', async () => {
     const { data } = await session.project_manager
       .from('invoices')
       .select('id, billed_total, amount_receivable, retainage_withheld')
-      .eq('id', invoiceId).single();
+      .eq('id', pmInvoiceId).single();
     expect(data).not.toBeNull();
     expect(data!.billed_total).not.toBeNull();
   });
@@ -789,6 +821,10 @@ describe('8. Budget & Cost data per role', () => {
 afterAll(async () => {
   if (qaBudgetItemId) {
     await admin.from('project_budget_items').delete().eq('id', qaBudgetItemId);
+  }
+  // [Fix 4] remove the PM-authored invoice fixture (before the early return).
+  if (pmInvoiceId) {
+    await admin.from('invoices').delete().eq('id', pmInvoiceId);
   }
   if (!qaSubContractId) return;
   const { error } = await admin
