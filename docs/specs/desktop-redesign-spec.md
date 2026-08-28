@@ -166,6 +166,12 @@ ships as a named token.
 behaviour** — every screen that tints a row hand-applies it, so each screen's spec must say so.
 
 ### RULED [Josh, 2026-08-28] — emails follow the repaint; PDFs do NOT
+**CONFIRMED [Josh, same day]: the boundary below is RULED, not inferred.** Two judgment calls made
+while applying it were put to Josh and both confirmed: (1) the five client-facing templates
+(proposal, invoice, CO, reminder, selections) are correctly INSIDE "emails follow the repaint" —
+the contractor's identity is `brandColor` and the logo, which are data; the grey chrome is platform
+typography; (2) the `m6m` strip tokens moving to the README's page-level warning is right.
+
 **Platform-sent mail moves to the new palette** — auth mail and the rest of `lib/email/templates/`
 (their grey chrome is platform typography; the tenant's identity in client-facing mail is the
 `brandColor` prop and logo, which are per-company data and untouched). **The PDF templates —
