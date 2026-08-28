@@ -170,6 +170,7 @@ export function DetailsTab({
         <ContractSection
           estimate={estimate}
           canEditSettings={canEdit && (role === 'owner' || role === 'admin')}
+          canReadRates={role === 'owner' || role === 'admin'}
           reload={reload}
         />
 

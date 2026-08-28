@@ -33,6 +33,14 @@ interface ContractSectionProps {
   estimate: Estimate;
   /** Owner/Admin AND the estimate is editable — gates type/rate/projection. */
   canEditSettings: boolean;
+  /** Owner/Admin. Step 9.5 PROBE FINDING [live, rebuild-test]: the S97 floor
+   *  (`instrument_rates_select_owner_admin`) applies to ESTIMATE-scoped rates
+   *  too — a PM's read returns 0 rows (owner: 22, same instant). An empty
+   *  read is indistinguishable from "no rates set", so without this flag the
+   *  PM saw the FALSE "No rate in force … blocks totals" banner on every
+   *  non-fixed estimate. Gated callers skip the fetch entirely and get an
+   *  honest caption instead. */
+  canReadRates: boolean;
   reload: () => Promise<void>;
 }
 
@@ -62,16 +70,22 @@ function friendlyRateError(message: string): string {
   return message;
 }
 
-export function ContractSection({ estimate, canEditSettings, reload }: ContractSectionProps) {
+export function ContractSection({
+  estimate,
+  canEditSettings,
+  canReadRates,
+  reload,
+}: ContractSectionProps) {
   const contractType = estimate.contract_type;
   const [rates, setRates] = useState<InstrumentRate[]>([]);
   const [error, setError] = useState<string | null>(null);
   const confirm = useConfirm();
 
   const refetchRates = useCallback(async () => {
-    if (contractType === 'fixed_price') return;
+    // Zero calls for a role the floor filters to nothing (see canReadRates).
+    if (contractType === 'fixed_price' || !canReadRates) return;
     setRates(await listInstrumentRatesClient({ estimate_id: estimate.id }));
-  }, [estimate.id, contractType]);
+  }, [estimate.id, contractType, canReadRates]);
 
   useEffect(() => {
     refetchRates();
@@ -183,7 +197,13 @@ export function ContractSection({ estimate, canEditSettings, reload }: ContractS
         </select>
       </div>
 
-      {contractType !== 'fixed_price' && (
+      {contractType !== 'fixed_price' && !canReadRates && (
+        <p style={{ fontSize: '0.8125rem', color: '#7b8699', margin: '0.25rem 0 0' }}>
+          Negotiated rates on this estimate are visible to the Owner and Admins only.
+        </p>
+      )}
+
+      {contractType !== 'fixed_price' && canReadRates && (
         <>
           {missingRates.length > 0 && (
             <div
