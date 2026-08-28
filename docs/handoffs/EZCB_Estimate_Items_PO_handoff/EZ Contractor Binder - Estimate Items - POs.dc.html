@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics="">
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700;800&amp;family=Barlow+Semi+Condensed:wght@500;600;700&amp;family=IBM+Plex+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;background:#e9e7e1;font-family:'Barlow',system-ui,sans-serif}
+  a{color:#2f49d1;text-decoration:none}a:hover{color:#1f33a8}
+  .dv-turn{padding:48px 52px 40px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px}
+  .dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 26px}
+  .dv-tid{font:700 10px 'IBM Plex Mono',monospace;padding:4px 8px;background:#17181b;color:#fff;border-radius:5px;text-decoration:none}
+  .dv-tname{font:600 13px/1.2 'Barlow',sans-serif;color:#1a1a1a}
+  .dv-opts{display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start}
+  .dv-opt{flex:none;display:flex;flex-direction:column;gap:12px;scroll-margin-top:16px}
+  .dv-oid{font:700 10.5px 'IBM Plex Mono',monospace;padding:3px 7px;background:rgba(0,0,0,.09);color:#1a1a1a;border-radius:5px;text-decoration:none}
+  .dv-olabel{display:flex;align-items:baseline;gap:8px;font:500 12px/1.3 'Barlow',sans-serif;color:rgba(0,0,0,.55)}
+  .dv-card{max-width:100%;border-radius:16px;overflow:hidden;box-shadow:0 12px 34px rgba(20,30,55,.16)}
+  .dv-opt:target .dv-oid{background:#2f49d1;color:#fff}
+  .dv-next{margin:26px 0 0;font:14px/1.6 'Barlow',sans-serif;color:rgba(0,0,0,.55)}
+  .intro{max-width:940px;margin:0 auto;padding:56px 52px 8px}
+  .intro h1{font:800 30px/1.1 'Barlow',sans-serif;color:#14213d;margin:0 0 6px;letter-spacing:-.01em}
+  .intro .sub{font:500 15px 'IBM Plex Mono',monospace;color:#6b7280;margin:0 0 26px}
+  .intro p{font:400 15px/1.65 'Barlow',sans-serif;color:#33383f;margin:0 0 14px}
+  .intro h3{font:700 13px 'IBM Plex Mono',monospace;letter-spacing:.06em;text-transform:uppercase;color:#14213d;margin:26px 0 10px}
+  .intro li{font:400 15px/1.6 'Barlow',sans-serif;color:#33383f;margin:0 0 7px}
+  .intro strong{color:#14213d;font-weight:700}
+</style>
+</helmet>
+
+<div class="intro">
+  <h1>EZ Contractor Binder — Estimate items &amp; purchase orders</h1>
+  <p class="sub">A two-step add sheet for estimate line items, and the POs those materials become</p>
+  <p>Two connected changes. <strong>Turn 17</strong> replaces the one-item-at-a-time add flow with a single sheet that picks a batch and then prices the batch. <strong>Turn 18</strong> carries those material lines into purchase orders when the estimate converts to a project, categories and subcategories intact. Additions beyond today's product are badged <strong>NEW</strong>.</p>
+</div>
+
+<section class="dv-turn" id="t18">
+  <div class="dv-thd"><a class="dv-tid" href="#t18">18</a><span class="dv-tname">EZ Contractor Binder — Estimate materials become purchase orders on conversion</span></div>
+  <div class="dv-opts">
+
+    <!-- 18a Conversion step -->
+    <div class="dv-opt" id="18a">
+      <div class="dv-olabel"><a class="dv-oid" href="#18a">18a</a>Convert to project — draft the POs</div>
+      <div class="dv-card" style="width:1280px;position:relative;display:flex;background:#f4f6fa;font-size:14px;overflow:hidden">
+        <dc-import name="EZNav" active="6" hint-size="228px,880px"></dc-import>
+        <main style="flex:1;min-width:0;display:flex;flex-direction:column;filter:blur(1.5px);opacity:.55">
+          <div style="background:#fff;border-bottom:1px solid #e4e8ef;padding:11px 26px;display:flex;justify-content:flex-end"><button style="font:700 13px 'Barlow';color:#fff;background:#3b4ae0;border:none;padding:9px 18px;border-radius:8px">Clock in</button></div>
+          <div style="padding:18px 26px 0"><h2 style="font:800 25px 'Barlow';color:#1a2437;margin:0">TM Test</h2></div>
+          <div style="padding:20px 26px"><div style="background:#fff;border:1px solid #e4e8ef;border-radius:14px;height:800px"></div></div>
+        </main>
+        <div style="position:absolute;inset:0;background:rgba(15,23,41,.42)"></div>
+        <div style="position:absolute;top:0;right:0;bottom:0;width:1052px;background:#fff;display:flex;flex-direction:column;box-shadow:-18px 0 44px rgba(15,23,41,.18)">
+          <div style="padding:17px 22px;border-bottom:1px solid #e4e8ef;display:flex;align-items:center;gap:12px">
+            <div>
+              <div style="font:800 18px 'Barlow';color:#1a2437">Convert to project</div>
+              <div style="font:500 12px 'Barlow';color:#8792a8;margin-top:1px">EST-106 · TM Test → a new job</div>
+            </div>
+            <div style="flex:1"></div>
+            <div style="display:flex;align-items:center;gap:9px">
+              <span style="display:flex;align-items:center;gap:7px"><span style="width:22px;height:22px;border-radius:50%;background:#e6f0e9;display:flex;align-items:center;justify-content:center"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#1f8f4e" stroke-width="3.4"><path d="M5 12l5 5L20 6"/></svg></span><span style="font:600 12.5px 'Barlow';color:#8792a8">Job details</span></span>
+              <span style="width:22px;height:2px;background:#e6f0e9"></span>
+              <span style="display:flex;align-items:center;gap:7px"><span style="width:22px;height:22px;border-radius:50%;background:#e6f0e9;display:flex;align-items:center;justify-content:center"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#1f8f4e" stroke-width="3.4"><path d="M5 12l5 5L20 6"/></svg></span><span style="font:600 12.5px 'Barlow';color:#8792a8">Budget</span></span>
+              <span style="width:22px;height:2px;background:#3b4ae0"></span>
+              <span style="display:flex;align-items:center;gap:7px"><span style="width:22px;height:22px;border-radius:50%;background:#3b4ae0;color:#fff;font:700 11px 'IBM Plex Mono';display:flex;align-items:center;justify-content:center">3</span><span style="font:700 12.5px 'Barlow';color:#1a2437">Purchase orders</span></span>
+            </div>
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#8792a8" stroke-width="2" style="margin-left:8px"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </div>
+          <div style="padding:16px 22px;background:#fff5e6;border-bottom:1px solid #f5cf8f;display:flex;align-items:center;gap:12px">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#b45309" stroke-width="2" style="flex:none"><path d="M21 16V8l-9-5-9 5v8l9 5 9-5z"/></svg>
+            <div style="flex:1;font:500 13px/1.5 'Barlow';color:#8a5a12"><strong style="font-weight:700">Your 11 material lines are already a buy list.</strong> They carry quantities, units and costs — turning them into purchase orders means nobody retypes the takeoff, and what you ordered can be compared against what you estimated.</div>
+            <span style="font:800 9.5px 'IBM Plex Mono';letter-spacing:.1em;background:#f5a524;color:#0f1729;padding:3px 7px;border-radius:5px">NEW</span>
+          </div>
+          <div style="padding:14px 22px;background:#fbfcfe;border-bottom:1px solid #e4e8ef;display:flex;align-items:center;gap:11px">
+            <span style="font:700 10.5px 'IBM Plex Mono';letter-spacing:.08em;color:#8792a8">GROUP INTO POs BY</span>
+            <span style="font:700 12.5px 'Barlow';background:#0f1729;color:#fff;padding:8px 15px;border-radius:20px">Vendor</span>
+            <span style="font:600 12.5px 'Barlow';background:#fff;border:1px solid #d5dae4;color:#4b5670;padding:8px 15px;border-radius:20px">Category</span>
+            <span style="font:600 12.5px 'Barlow';background:#fff;border:1px solid #d5dae4;color:#4b5670;padding:8px 15px;border-radius:20px">One PO for everything</span>
+            <div style="flex:1"></div>
+            <span style="font:500 12px 'Barlow';color:#8792a8">Categories and subcategories carry through either way</span>
+          </div>
+          <div style="flex:1;overflow:hidden;padding:16px 22px;display:flex;flex-direction:column;gap:14px">
+            <div style="border:1.5px solid #dbe0fb;border-radius:13px;overflow:hidden">
+              <div style="padding:13px 17px;background:#f5f7ff;border-bottom:1px solid #dbe0fb;display:flex;align-items:center;gap:11px">
+                <span style="width:18px;height:18px;border-radius:5px;background:#3b4ae0;display:flex;align-items:center;justify-content:center;flex:none"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5"><path d="M5 12l5 5L20 6"/></svg></span>
+                <div>
+                  <div style="font:700 14.5px 'Barlow';color:#1a2437">Jones Lumber</div>
+                  <div style="font:500 11.5px 'Barlow';color:#8792a8">Draft PO · 5 lines across 2 categories</div>
+                </div>
+                <div style="flex:1"></div>
+                <span style="display:flex;align-items:center;gap:7px;background:#fff;border:1px solid #d5dae4;border-radius:8px;padding:7px 12px"><span style="font:500 11.5px 'Barlow';color:#8792a8">Need by</span><span style="font:600 12.5px 'IBM Plex Mono';color:#1a2437">Sep 08</span></span>
+                <span style="font:700 15px 'IBM Plex Mono';color:#1a2437">$2,478.60</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;padding:8px 17px;background:#eef1f6;border-bottom:1px solid #e4e8ef"><span style="font:700 11px 'IBM Plex Mono';letter-spacing:.07em;color:#1a2437">06 — CARPENTRY</span><span style="font:600 10.5px 'IBM Plex Mono';background:#fff;color:#5c6784;padding:2px 8px;border-radius:20px">3</span><div style="flex:1"></div><span style="font:500 11px 'Barlow';color:#8792a8">subtotal</span><span style="font:600 12px 'IBM Plex Mono';color:#1a2437">$2,222.60</span></div>
+              <div style="display:flex;align-items:center;gap:9px;padding:6px 17px 6px 34px;background:#fbfcfe;border-bottom:1px solid #f4f6fa"><span style="font:600 10.5px 'IBM Plex Mono';letter-spacing:.06em;text-transform:uppercase;color:#5c6784">Sheathing</span></div>
+              <div style="display:grid;grid-template-columns:minmax(0,1.9fr) 70px 74px 96px 96px;gap:11px;padding:9px 17px 9px 34px;border-bottom:1px solid #f4f6fa;align-items:center">
+                <div style="font:600 13px 'Barlow';color:#1a2437">5/8" plywood sheathing</div>
+                <div style="text-align:right;font:600 12.5px 'IBM Plex Mono';color:#1a2437">24</div>
+                <div style="font:500 12px 'Barlow';color:#4b5670">sheet</div>
+                <div style="text-align:right;font:500 12.5px 'IBM Plex Mono';color:#4b5670">$38.40</div>
+                <div style="text-align:right;font:600 12.5px 'IBM Plex Mono';color:#1a2437">$921.60</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:9px;padding:6px 17px 6px 34px;background:#fbfcfe;border-bottom:1px solid #f4f6fa"><span style="font:600 10.5px 'IBM Plex Mono';letter-spacing:.06em;text-transform:uppercase;color:#5c6784">Framing lumber</span></div>
+              <div style="display:grid;grid-template-columns:minmax(0,1.9fr) 70px 74px 96px 96px;gap:11px;padding:9px 17px 9px 34px;border-bottom:1px solid #f4f6fa;align-items:center">
+                <div style="font:600 13px 'Barlow';color:#1a2437">2x6 SPF stud — 8ft</div>
+                <div style="text-align:right;font:600 12.5px 'IBM Plex Mono';color:#1a2437">160</div>
+                <div style="font:500 12px 'Barlow';color:#4b5670">each</div>
+                <div style="text-align:right;font:500 12.5px 'IBM Plex Mono';color:#4b5670">$7.85</div>
+                <div style="text-align:right;font:600 12.5px 'IBM Plex Mono';color:#1a2437">$1,256.00</div>
+              </div>
+              <div style="display:grid;grid-template-columns:minmax(0,1.9fr) 70px 74px 96px 96px;gap:11px;padding:9px 17px 9px 34px;border-bottom:1px solid #f4f6fa;align-items:center">
+                <div style="font:600 13px 'Barlow';color:#1a2437">Blocking</div>
+                <div style="text-align:right;font:600 12.5px 'IBM Plex Mono';color:#1a2437">1</div>
+                <div style="font:500 12px 'Barlow';color:#4b5670">LS</div>
+                <div style="text-align:right;font:500 12.5px 'IBM Plex Mono';color:#4b5670">$45.00</div>
+                <div style="text-align:right;font:600 12.5px 'IBM Plex Mono';color:#1a2437">$45.00</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:10px;padding:8px 17px;background:#eef1f6;border-bottom:1px solid #e4e8ef"><span style="font:700 11px 'IBM Plex Mono';letter-spacing:.07em;color:#1a2437">09 — DRYWALL &amp; FINISHES</span><span style="font:600 10.5px 'IBM Plex Mono';background:#fff;color:#5c6784;padding:2px 8px;border-radius:20px">2</span><div style="flex:1"></div><span style="font:500 11px 'Barlow';color:#8792a8">subtotal</span><span style="font:600 12px 'IBM Plex Mono';color:#1a2437">$256.00</span></div>
+              <div style="display:flex;align-items:center;gap:9px;padding:6px 17px 6px 34px;background:#fbfcfe;border-bottom:1px solid #f4f6fa"><span style="font:600 10.5px 'IBM Plex Mono';letter-spacing:.06em;text-transform:uppercase;color:#5c6784">Board &amp; fasteners</span></div>
+              <div style="display:grid;grid-template-columns:minmax(0,1.9fr) 70px 74px 96px 96px;gap:11px;padding:9px 17px 9px 34px;border-bottom:1px solid #f4f6fa;align-items:center">
+                <div style="font:600 13px 'Barlow';color:#1a2437">Drywall screws — 5lb</div>
+                <div style="text-align:right;font:600 12.5px 'IBM Plex Mono';color:#1a2437">4</div>
+                <div style="font:500 12px 'Barlow';color:#4b5670">box</div>
+                <div style="text-align:right;font:500 12.5px 'IBM Plex Mono';color:#4b5670">$25.00</div>
+                <div style="text-align:right;font:600 12.5px 'IBM Plex Mono';color:#1a2437">$100.00</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:9px;padding:6px 17px 6px 34px;background:#fbfcfe;border-bottom:1px solid #f4f6fa"><span style="font:600 10.5px 'IBM Plex Mono';letter-spacing:.06em;text-transform:uppercase;color:#5c6784">Finishing</span></div>
+              <div style="display:grid;grid-template-columns:minmax(0,1.9fr) 70px 74px 96px 96px;gap:11px;padding:9px 17px 9px 34px;align-items:center">
+                <div style="font:600 13px 'Barlow';color:#1a2437">20 minute drywall mud</div>
+                <div style="text-align:right;font:600 12.5px 'IBM Plex Mono';color:#1a2437">12</div>
+                <div style="font:500 12px 'Barlow';color:#4b5670">bag</div>
+                <div style="text-align:right;font:500 12.5px 'IBM Plex Mono';color:#4b5670">$13.00</div>
+                <div style="text-align:right;font:600 12.5px 'IBM Plex Mono';color:#1a2437">$156.00</div>
+              </div>
+            </div>
+            <div style="border:1px solid #e4e8ef;border-radius:13px;overflow:hidden">
+              <div style="padding:13px 17px;display:flex;align-items:center;gap:11px">
+                <span style="width:18px;height:18px;border-radius:5px;background:#3b4ae0;display:flex;align-items:center;justify-content:center;flex:none"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5"><path d="M5 12l5 5L20 6"/></svg></span>
+                <div>
+                  <div style="font:700 14.5px 'Barlow';color:#1a2437">Coastal Tile &amp; Stone</div>
+                  <div style="font:500 11.5px 'Barlow';color:#8792a8">Draft PO · 4 lines · 12 — Cabinetry, 09 — Drywall &amp; Finishes</div>
+                </div>
+                <div style="flex:1"></div>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8792a8" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+                <span style="font:700 15px 'IBM Plex Mono';color:#1a2437">$3,412.00</span>
+              </div>
+            </div>
+            <div style="border:1.5px solid #f3e2c4;background:#fffdf7;border-radius:13px;padding:14px 17px;display:flex;align-items:center;gap:12px">
+              <span style="width:18px;height:18px;border-radius:5px;border:1.8px solid #c3cad8;flex:none"></span>
+              <div style="flex:1">
+                <div style="font:700 14px 'Barlow';color:#1a2437">2 lines have no vendor yet</div>
+                <div style="font:500 11.5px 'Barlow';color:#8792a8;margin-top:1px">Cabinet install material · A/C register — assign a vendor or leave them off for now</div>
+              </div>
+              <span style="font:600 12.5px 'Barlow';color:#3b4ae0;background:#f2f4ff;border:1px solid #dbe0fb;padding:8px 14px;border-radius:8px">Assign vendors</span>
+            </div>
+          </div>
+          <div style="padding:15px 22px;border-top:1px solid #e4e8ef;background:#fbfcfe;display:flex;align-items:center;gap:26px">
+            <div><div style="font:600 10.5px 'IBM Plex Mono';text-transform:uppercase;color:#8792a8">POs to draft</div><div style="font:600 16px 'IBM Plex Mono';color:#1a2437;margin-top:2px">2</div></div>
+            <div><div style="font:600 10.5px 'IBM Plex Mono';text-transform:uppercase;color:#8792a8">Committed on issue</div><div style="font:700 18px 'IBM Plex Mono';color:#1a2437;margin-top:2px">$5,890.60</div></div>
+            <div style="flex:1;font:400 11.5px/1.45 'Barlow';color:#8792a8;max-width:330px">POs are created as drafts. Nothing is committed to the budget until you issue one.</div>
+            <button style="font:600 13px 'Barlow';color:#3f4a60;background:#fff;border:1px solid #d5dae4;padding:11px 17px;border-radius:9px">Skip POs</button>
+            <button style="font:700 13.5px 'Barlow';color:#fff;background:#1f8f4e;border:none;padding:12px 22px;border-radius:9px">Create project &amp; 2 POs</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 18b The PO -->
+    <div class="dv-opt" id="18b">
+      <div class="dv-olabel"><a class="dv-oid" href="#18b">18b</a>The purchase order — categories intact</div>
+      <div class="dv-card" style="width:1280px;display:flex;background:#f4f6fa;font-size:14px">
+        <dc-import name="EZNav" active="1" hint-size="228px,880px"></dc-import>
+        <main style="flex:1;min-width:0;display:flex;flex-direction:column">
+          <div style="background:#fff;border-bottom:1px solid #e4e8ef;padding:11px 26px;display:flex;justify-content:flex-end"><button style="font:700 13px 'Barlow';color:#fff;background:#3b4ae0;border:none;padding:9px 18px;border-radius:8px">Clock in</button></div>
+          <div style="padding:18px 26px 0">
+            <div style="font:500 12px 'IBM Plex Mono';color:#9aa4b8;margin-bottom:8px">Projects / <span style="color:#5c6784">PRJ-1902</span> / Deliveries / <span style="color:#5c6784">PO-1902-01</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:flex-start">
+              <div style="display:flex;align-items:center;gap:11px">
+                <h2 style="font:800 25px 'Barlow';color:#1a2437;margin:0;letter-spacing:-.01em">PO-1902-01 · Jones Lumber</h2>
+                <span style="font:700 11px 'IBM Plex Mono';letter-spacing:.06em;background:#eef1f6;color:#5c6784;padding:4px 10px;border-radius:20px">DRAFT</span>
+              </div>
+              <div style="display:flex;gap:9px">
+                <button style="font:600 13px 'Barlow';color:#3f4a60;background:#fff;border:1px solid #d5dae4;padding:10px 15px;border-radius:8px">Preview PDF</button>
+                <button style="font:700 13px 'Barlow';color:#fff;background:#3b4ae0;border:none;padding:10px 17px;border-radius:8px">Issue to vendor</button>
+              </div>
+            </div>
+          </div>
+          <div style="padding:20px 26px 26px;display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start">
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div style="background:#fff;border:1.5px solid #f5cf8f;border-radius:13px;padding:13px 17px;display:flex;align-items:center;gap:12px;box-shadow:0 0 0 4px rgba(245,165,36,.09)">
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#b45309" stroke-width="2" style="flex:none"><path d="M4 4h16v5H4zM4 13h16v7H4z"/></svg>
+                <div style="flex:1;font:500 12.5px/1.5 'Barlow';color:#8a5a12">Drafted from <strong style="font-weight:700">EST-106 · TM Test</strong> on conversion. Every line keeps its estimate category and subcategory, so a delivery posts cost back to the budget line it came from.</div>
+                <span style="font:800 9.5px 'IBM Plex Mono';letter-spacing:.1em;background:#f5a524;color:#0f1729;padding:3px 7px;border-radius:5px">NEW</span>
+              </div>
+              <div style="background:#fff;border:1px solid #e4e8ef;border-radius:14px;overflow:hidden">
+                <div style="display:grid;grid-template-columns:minmax(0,2fr) 74px 78px 100px 104px 34px;gap:11px;padding:11px 20px;background:#fbfcfe;border-bottom:1px solid #eef1f6;font:600 10.5px 'IBM Plex Mono';letter-spacing:.06em;text-transform:uppercase;color:#8792a8">
+                  <div>Item</div><div style="text-align:right">Qty</div><div>Unit</div><div style="text-align:right">Unit cost</div><div style="text-align:right">Total</div><div></div>
+                </div>
+                <div style="display:flex;align-items:center;gap:11px;padding:9px 20px;background:#eef1f6;border-bottom:1px solid #e4e8ef"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4b5670" stroke-width="2.4"><path d="M6 9l6 6 6-6"/></svg><span style="font:700 11.5px 'IBM Plex Mono';letter-spacing:.07em;color:#1a2437">06 — CARPENTRY</span><span style="font:600 11px 'IBM Plex Mono';background:#fff;color:#5c6784;padding:2px 8px;border-radius:20px">3</span><div style="flex:1"></div><span style="font:500 11.5px 'Barlow';color:#8792a8">subtotal</span><span style="font:600 12.5px 'IBM Plex Mono';color:#1a2437">$2,222.60</span></div>
+                <div style="padding:6px 20px 6px 38px;background:#fbfcfe;border-bottom:1px solid #f4f6fa"><span style="font:600 10.5px 'IBM Plex Mono';letter-spacing:.06em;text-transform:uppercase;color:#5c6784">Sheathing</span></div>
+                <div style="display:grid;grid-template-columns:minmax(0,2fr) 74px 78px 100px 104px 34px;gap:11px;padding:11px 20px 11px 38px;border-bottom:1px solid #f4f6fa;align-items:center">
+                  <div><div style="font:600 13px 'Barlow';color:#1a2437">5/8" plywood sheathing</div><div style="font:500 11px 'IBM Plex Mono';color:#8792a8">06-220</div></div>
+                  <div style="text-align:right;font:600 13px 'IBM Plex Mono';color:#1a2437">24</div>
+                  <div style="font:500 12.5px 'Barlow';color:#4b5670">sheet</div>
+                  <div style="text-align:right;font:500 13px 'IBM Plex Mono';color:#4b5670">$38.40</div>
+                  <div style="text-align:right;font:600 13px 'IBM Plex Mono';color:#1a2437">$921.60</div>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#c3cad8" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+                </div>
+                <div style="padding:6px 20px 6px 38px;background:#fbfcfe;border-bottom:1px solid #f4f6fa"><span style="font:600 10.5px 'IBM Plex Mono';letter-spacing:.06em;text-transform:uppercase;color:#5c6784">Framing lumber</span></div>
+                <div style="display:grid;grid-template-columns:minmax(0,2fr) 74px 78px 100px 104px 34px;gap:11px;padding:11px 20px 11px 38px;border-bottom:1px solid #f4f6fa;align-items:center">
+                  <div><div style="font:600 13px 'Barlow';color:#1a2437">2x6 SPF stud — 8ft</div><div style="font:500 11px 'IBM Plex Mono';color:#8792a8">06-110</div></div>
+                  <div style="text-align:right;font:600 13px 'IBM Plex Mono';color:#1a2437">160</div>
+                  <div style="font:500 12.5px 'Barlow';color:#4b5670">each</div>
+                  <div style="text-align:right;font:500 13px 'IBM Plex Mono';color:#4b5670">$7.85</div>
+                  <div style="text-align:right;font:600 13px 'IBM Plex Mono';color:#1a2437">$1,256.00</div>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#c3cad8" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+                </div>
+                <div style="display:grid;grid-template-columns:minmax(0,2fr) 74px 78px 100px 104px 34px;gap:11px;padding:11px 20px 11px 38px;border-bottom:1px solid #f4f6fa;align-items:center">
+                  <div><div style="font:600 13px 'Barlow';color:#1a2437">Blocking</div><div style="font:500 11px 'IBM Plex Mono';color:#8792a8">06-130</div></div>
+                  <div style="text-align:right;font:600 13px 'IBM Plex Mono';color:#1a2437">1</div>
+                  <div style="font:500 12.5px 'Barlow';color:#4b5670">LS</div>
+                  <div style="text-align:right;font:500 13px 'IBM Plex Mono';color:#4b5670">$45.00</div>
+                  <div style="text-align:right;font:600 13px 'IBM Plex Mono';color:#1a2437">$45.00</div>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#c3cad8" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+                </div>
+                <div style="display:flex;align-items:center;gap:11px;padding:9px 20px;background:#eef1f6;border-bottom:1px solid #e4e8ef"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#4b5670" stroke-width="2.4"><path d="M6 9l6 6 6-6"/></svg><span style="font:700 11.5px 'IBM Plex Mono';letter-spacing:.07em;color:#1a2437">09 — DRYWALL &amp; FINISHES</span><span style="font:600 11px 'IBM Plex Mono';background:#fff;color:#5c6784;padding:2px 8px;border-radius:20px">2</span><div style="flex:1"></div><span style="font:500 11.5px 'Barlow';color:#8792a8">subtotal</span><span style="font:600 12.5px 'IBM Plex Mono';color:#1a2437">$256.00</span></div>
+                <div style="padding:6px 20px 6px 38px;background:#fbfcfe;border-bottom:1px solid #f4f6fa"><span style="font:600 10.5px 'IBM Plex Mono';letter-spacing:.06em;text-transform:uppercase;color:#5c6784">Board &amp; fasteners</span></div>
+                <div style="display:grid;grid-template-columns:minmax(0,2fr) 74px 78px 100px 104px 34px;gap:11px;padding:11px 20px 11px 38px;border-bottom:1px solid #f4f6fa;align-items:center">
+                  <div><div style="font:600 13px 'Barlow';color:#1a2437">Drywall screws — 5lb</div><div style="font:500 11px 'IBM Plex Mono';color:#8792a8">09-210</div></div>
+                  <div style="text-align:right;font:600 13px 'IBM Plex Mono';color:#1a2437">4</div>
+                  <div style="font:500 12.5px 'Barlow';color:#4b5670">box</div>
+                  <div style="text-align:right;font:500 13px 'IBM Plex Mono';color:#4b5670">$25.00</div>
+                  <div style="text-align:right;font:600 13px 'IBM Plex Mono';color:#1a2437">$100.00</div>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#c3cad8" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+                </div>
+                <div style="padding:6px 20px 6px 38px;background:#fbfcfe;border-bottom:1px solid #f4f6fa"><span style="font:600 10.5px 'IBM Plex Mono';letter-spacing:.06em;text-transform:uppercase;color:#5c6784">Finishing</span></div>
+                <div style="display:grid;grid-template-columns:minmax(0,2fr) 74px 78px 100px 104px 34px;gap:11px;padding:11px 20px 11px 38px;border-bottom:1px solid #f4f6fa;align-items:center">
+                  <div><div style="font:600 13px 'Barlow';color:#1a2437">20 minute drywall mud</div><div style="font:500 11px 'IBM Plex Mono';color:#8792a8">09-250</div></div>
+                  <div style="text-align:right;font:600 13px 'IBM Plex Mono';color:#1a2437">12</div>
+                  <div style="font:500 12.5px 'Barlow';color:#4b5670">bag</div>
+                  <div style="text-align:right;font:500 13px 'IBM Plex Mono';color:#4b5670">$13.00</div>
+                  <div style="text-align:right;font:600 13px 'IBM Plex Mono';color:#1a2437">$156.00</div>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#c3cad8" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+                </div>
+                <div style="padding:12px 20px;display:flex;gap:9px;border-bottom:1px solid #eef1f6"><span style="font:600 12.5px 'Barlow';color:#3b4ae0;background:#f2f4ff;border:1px solid #dbe0fb;padding:8px 14px;border-radius:8px">+ Add line</span><span style="font:600 12.5px 'Barlow';color:#4b5670;background:#fff;border:1px solid #d5dae4;padding:8px 14px;border-radius:8px">Pull more from the estimate</span></div>
+                <div style="display:grid;grid-template-columns:minmax(0,2fr) 74px 78px 100px 104px 34px;gap:11px;padding:13px 20px;background:#fbfcfe;align-items:center">
+                  <div style="font:700 13.5px 'Barlow';color:#1a2437">PO total</div><div></div><div></div><div></div>
+                  <div style="text-align:right;font:700 15px 'IBM Plex Mono';color:#1a2437">$2,478.60</div><div></div>
+                </div>
+              </div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:16px">
+              <div style="background:#fff;border:1px solid #e4e8ef;border-radius:14px;padding:18px 20px">
+                <div style="font:700 11px 'IBM Plex Mono';letter-spacing:.09em;color:#5c6784;margin-bottom:13px">ORDER</div>
+                <div style="display:flex;justify-content:space-between;padding:8px 0;border-top:1px solid #f4f6fa"><span style="font:500 12.5px 'Barlow';color:#8792a8">Vendor</span><span style="font:600 12.5px 'Barlow';color:#1a2437">Jones Lumber</span></div>
+                <div style="display:flex;justify-content:space-between;padding:8px 0;border-top:1px solid #f4f6fa"><span style="font:500 12.5px 'Barlow';color:#8792a8">Need by</span><span style="font:600 12.5px 'IBM Plex Mono';color:#1a2437">Sep 08, 2026</span></div>
+                <div style="display:flex;justify-content:space-between;padding:8px 0;border-top:1px solid #f4f6fa"><span style="font:500 12.5px 'Barlow';color:#8792a8">Deliver to</span><span style="font:600 12.5px 'Barlow';color:#1a2437">Job site</span></div>
+                <div style="display:flex;justify-content:space-between;padding:8px 0;border-top:1px solid #f4f6fa"><span style="font:500 12.5px 'Barlow';color:#8792a8">From estimate</span><span style="font:600 12.5px 'IBM Plex Mono';color:#3b4ae0">EST-106</span></div>
+              </div>
+              <div style="background:#fff;border:1.5px solid #f5cf8f;border-radius:14px;padding:18px 20px;box-shadow:0 0 0 4px rgba(245,165,36,.09)">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+                  <div style="font:700 14.5px 'Barlow';color:#1a2437">Against the estimate</div>
+                  <span style="font:800 9.5px 'IBM Plex Mono';letter-spacing:.1em;background:#f5a524;color:#0f1729;padding:3px 7px;border-radius:5px">NEW</span>
+                </div>
+                <div style="font:400 11.5px 'Barlow';color:#8792a8;margin-bottom:13px">Per category, ordered vs budgeted</div>
+                <div style="display:flex;flex-direction:column;gap:11px">
+                  <div><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font:600 12px 'Barlow';color:#4b5670">06 — Carpentry</span><span style="font:600 12px 'IBM Plex Mono';color:#1f8f4e">95%</span></div><div style="height:6px;background:#eef1f6;border-radius:20px;overflow:hidden"><div style="width:95%;height:100%;background:#1f8f4e"></div></div><div style="font:500 10.5px 'IBM Plex Mono';color:#8792a8;margin-top:3px">$2,223 of $2,340</div></div>
+                  <div><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span style="font:600 12px 'Barlow';color:#4b5670">09 — Drywall</span><span style="font:600 12px 'IBM Plex Mono';color:#1f8f4e">100%</span></div><div style="height:6px;background:#eef1f6;border-radius:20px;overflow:hidden"><div style="width:100%;height:100%;background:#1f8f4e"></div></div><div style="font:500 10.5px 'IBM Plex Mono';color:#8792a8;margin-top:3px">$256 of $256</div></div>
+                </div>
+                <div style="font:400 11.5px/1.45 'Barlow';color:#8792a8;margin-top:12px;padding-top:11px;border-top:1px solid #f4f6fa">Ordering over a category's budget will flag here before you issue, not after the invoice arrives.</div>
+              </div>
+              <div style="background:#fff;border:1px solid #e4e8ef;border-radius:14px;padding:18px 20px">
+                <div style="font:700 14.5px 'Barlow';color:#1a2437;margin-bottom:6px">What happens on issue</div>
+                <div style="display:flex;gap:9px;align-items:flex-start;padding:9px 0;border-top:1px solid #f4f6fa"><span style="width:7px;height:7px;border-radius:50%;background:#3b4ae0;flex:none;margin-top:5px"></span><div style="font:500 12.5px/1.4 'Barlow';color:#4b5670">$2,478.60 becomes <strong style="color:#1a2437;font-weight:700">committed cost</strong> on the budget</div></div>
+                <div style="display:flex;gap:9px;align-items:flex-start;padding:9px 0;border-top:1px solid #f4f6fa"><span style="width:7px;height:7px;border-radius:50%;background:#3b4ae0;flex:none;margin-top:5px"></span><div style="font:500 12.5px/1.4 'Barlow';color:#4b5670">The PDF emails to Jones Lumber</div></div>
+                <div style="display:flex;gap:9px;align-items:flex-start;padding:9px 0;border-top:1px solid #f4f6fa"><span style="width:7px;height:7px;border-radius:50%;background:#3b4ae0;flex:none;margin-top:5px"></span><div style="font:500 12.5px/1.4 'Barlow';color:#4b5670">The crew can check it in from the field against these exact lines</div></div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+
+  </div>
+  <p class="dv-next">The takeoff is entered once. Estimate lines → PO lines → delivery check-in → committed and actual cost, all against the same category and subcategory.</p>
+</section>
+
+
+<section class="dv-turn" id="t17">
+  <div class="dv-thd"><a class="dv-tid" href="#t17">17</a><span class="dv-tname">EZ Contractor Binder — Estimate › Items · the two-step add sheet</span></div>
+  <div class="dv-opts">
+
+    <!-- 17a Step 1 — pick -->
+    <div class="dv-opt" id="17a">
+      <div class="dv-olabel"><a class="dv-oid" href="#17a">17a</a>Step 1 — pick everything for the section</div>
+      <div class="dv-card" style="width:1280px;position:relative;display:flex;background:#f4f6fa;font-size:14px;overflow:hidden">
+        <dc-import name="EZNav" active="6" hint-size="228px,860px"></dc-import>
+        <main style="flex:1;min-width:0;display:flex;flex-direction:column;filter:blur(1.5px);opacity:.55">
+          <div style="background:#fff;border-bottom:1px solid #e4e8ef;padding:11px 26px;display:flex;justify-content:flex-end"><button style="font:700 13px 'Barlow';color:#fff;background:#3b4ae0;border:none;padding:9px 18px;border-radius:8px">Clock in</button></div>
+          <div style="padding:18px 26px 0">
+            <div style="font:500 12px 'IBM Plex Mono';color:#9aa4b8;margin-bottom:8px">Estimates / <span style="color:#5c6784">EST-106</span></div>
+            <h2 style="font:800 25px 'Barlow';color:#1a2437;margin:0">TM Test</h2>
+          </div>
+          <div style="padding:16px 26px 0;border-bottom:1px solid #e4e8ef;display:flex;gap:2px">
+            <span style="font:600 14px 'Barlow';padding:11px 14px;color:#7b8699">Details</span>
+            <span style="font:700 14px 'Barlow';padding:11px 14px;color:#3b4ae0;box-shadow:inset 0 -2.5px 0 #3b4ae0">Line Items</span>
+            <span style="font:600 14px 'Barlow';padding:11px 14px;color:#7b8699">Scope of Work</span>
+            <span style="font:600 14px 'Barlow';padding:11px 14px;color:#7b8699">Terms</span>
+          </div>
+          <div style="padding:20px 26px"><div style="background:#fff;border:1px solid #e4e8ef;border-radius:14px;height:420px"></div></div>
+        </main>
+        <div style="position:absolute;inset:0;background:rgba(15,23,41,.42)"></div>
+        <div style="position:absolute;top:0;right:0;bottom:0;width:1052px;background:#fff;display:flex;flex-direction:column;box-shadow:-18px 0 44px rgba(15,23,41,.18)">
+          <div style="padding:17px 22px;border-bottom:1px solid #e4e8ef;display:flex;align-items:center;gap:12px">
+            <div>
+              <div style="font:800 18px 'Barlow';color:#1a2437">Add items</div>
+              <div style="font:500 12px 'Barlow';color:#8792a8;margin-top:1px">Adding to section <strong style="color:#3b4ae0;font-weight:700">Kitchen — rough</strong></div>
+            </div>
+            <div style="flex:1"></div>
+            <div style="display:flex;align-items:center;gap:9px">
+              <span style="display:flex;align-items:center;gap:8px"><span style="width:23px;height:23px;border-radius:50%;background:#3b4ae0;color:#fff;font:700 11.5px 'IBM Plex Mono';display:flex;align-items:center;justify-content:center">1</span><span style="font:700 13px 'Barlow';color:#1a2437">Pick</span></span>
+              <span style="width:26px;height:2px;background:#e4e8ef"></span>
+              <span style="display:flex;align-items:center;gap:8px"><span style="width:23px;height:23px;border-radius:50%;background:#fff;border:1.5px solid #d5dae4;color:#8792a8;font:700 11.5px 'IBM Plex Mono';display:flex;align-items:center;justify-content:center">2</span><span style="font:600 13px 'Barlow';color:#8792a8">Set details</span></span>
+            </div>
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#8792a8" stroke-width="2" style="margin-left:8px"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </div>
+          <div style="flex:1;display:grid;grid-template-columns:210px minmax(0,1fr) 268px;min-height:0">
+            <div style="border-right:1px solid #e4e8ef;background:#fbfcfe;padding:14px 12px;display:flex;flex-direction:column;gap:3px">
+              <div style="font:700 10.5px 'IBM Plex Mono';letter-spacing:.09em;color:#8792a8;padding:0 10px 8px">FROM YOUR CATALOG</div>
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 11px;border-radius:9px;background:#3b4ae0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M21 16V8l-9-5-9 5v8l9 5 9-5z"/></svg><span style="font:700 13px 'Barlow';color:#fff;flex:1">Material</span><span style="font:700 11px 'IBM Plex Mono';color:#fff;background:rgba(255,255,255,.22);padding:2px 7px;border-radius:20px">94</span></div>
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 11px;border-radius:9px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4b5670" stroke-width="2"><circle cx="12" cy="7" r="4"/><path d="M5 21v-2a5 5 0 015-5h4a5 5 0 015 5v2"/></svg><span style="font:600 13px 'Barlow';color:#4b5670;flex:1">Labor</span><span style="font:600 11px 'IBM Plex Mono';color:#8792a8">22</span></div>
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 11px;border-radius:9px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4b5670" stroke-width="2"><path d="M14 7l-7 7 3 3 7-7z"/><path d="M3 21l4-1 14-14-3-3L4 17z"/></svg><span style="font:600 13px 'Barlow';color:#4b5670;flex:1">Subcontractor</span><span style="font:600 11px 'IBM Plex Mono';color:#8792a8">26</span></div>
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 11px;border-radius:9px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4b5670" stroke-width="2"><rect x="3" y="7" width="18" height="12" rx="2"/><path d="M8 7V5h8v2"/></svg><span style="font:600 13px 'Barlow';color:#4b5670;flex:1">Equipment</span><span style="font:600 11px 'IBM Plex Mono';color:#8792a8">11</span></div>
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 11px;border-radius:9px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4b5670" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8m-4-4h8"/></svg><span style="font:600 13px 'Barlow';color:#4b5670;flex:1">Other</span><span style="font:600 11px 'IBM Plex Mono';color:#8792a8">6</span></div>
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 11px;border-radius:9px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4b5670" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span style="font:600 13px 'Barlow';color:#4b5670;flex:1">Assemblies</span><span style="font:600 11px 'IBM Plex Mono';color:#8792a8">8</span></div>
+              <div style="height:1px;background:#e4e8ef;margin:11px 10px"></div>
+              <div style="font:700 10.5px 'IBM Plex Mono';letter-spacing:.09em;color:#8792a8;padding:0 10px 8px">OTHER SOURCES</div>
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 11px;border-radius:9px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4b5670" stroke-width="2"><path d="M12 5v14m-7-7h14"/></svg><span style="font:600 13px 'Barlow';color:#4b5670;flex:1">Type it manually</span></div>
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 11px;border-radius:9px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4b5670" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg><span style="font:600 13px 'Barlow';color:#4b5670;flex:1">From a sub bid</span><span style="font:600 11px 'IBM Plex Mono';color:#8792a8">3</span></div>
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 11px;border-radius:9px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4b5670" stroke-width="2"><path d="M4 4h16v5H4zM4 13h16v7H4z"/></svg><span style="font:600 13px 'Barlow';color:#4b5670;flex:1">A past estimate</span></div>
+              <div style="flex:1"></div>
+              <div style="background:#fff;border:1px solid #e4e8ef;border-radius:10px;padding:11px 12px;font:400 11.5px/1.45 'Barlow';color:#8792a8">The sheet stays open while you move between sources. Everything you tick lands in the same tray.</div>
+            </div>
+            <div style="display:flex;flex-direction:column;min-height:0">
+              <div style="padding:14px 18px;border-bottom:1px solid #eef1f6;display:flex;gap:10px;align-items:center">
+                <div style="flex:1;display:flex;align-items:center;gap:9px;background:#fff;border:1px solid #d5dae4;border-radius:8px;padding:0 12px;min-height:38px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#9aa4b8" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><span style="font:400 13.5px 'Barlow';color:#9aa4b8">Search material…</span></div>
+                <span style="font:600 12.5px 'Barlow';background:#0f1729;color:#fff;padding:8px 14px;border-radius:20px">All</span>
+                <span style="font:600 12.5px 'Barlow';background:#fff;border:1px solid #d5dae4;color:#4b5670;padding:8px 14px;border-radius:20px">Favorites</span>
+                <span style="font:600 12.5px 'Barlow';background:#fff;border:1px solid #d5dae4;color:#4b5670;padding:8px 14px;border-radius:20px">Used on this job</span>
+              </div>
+              <div style="display:grid;grid-template-columns:34px minmax(0,1fr) 90px 100px 34px;gap:11px;padding:10px 18px;background:#fbfcfe;border-bottom:1px solid #eef1f6;font:600 10.5px 'IBM Plex Mono';letter-spacing:.06em;text-transform:uppercase;color:#8792a8"><div></div><div>Item</div><div>Unit</div><div style="text-align:right">Cost</div><div></div></div>
+              <div style="flex:1;overflow:hidden">
+
+                <div style="display:flex;align-items:center;gap:11px;padding:10px 18px;background:#eef1f6;border-bottom:1px solid #e4e8ef">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4b5670" stroke-width="2.4"><path d="M6 9l6 6 6-6"/></svg>
+                  <span style="width:17px;height:17px;border-radius:5px;background:#3b4ae0;display:flex;align-items:center;justify-content:center;flex:none"><span style="width:8px;height:2px;background:#fff;border-radius:2px"></span></span>
+                  <span style="font:700 11.5px 'IBM Plex Mono';letter-spacing:.07em;color:#1a2437">06 — CARPENTRY</span>
+                  <span style="font:600 11px 'IBM Plex Mono';background:#fff;color:#5c6784;padding:2px 8px;border-radius:20px">4</span>
+                  <div style="flex:1"></div>
+                  <span style="font:600 11.5px 'Barlow';color:#3b4ae0">Select all 4</span>
+                </div>
+
+                <div style="display:flex;align-items:center;gap:9px;padding:7px 18px 7px 40px;background:#fbfcfe;border-bottom:1px solid #f4f6fa">
+                  <span style="width:15px;height:15px;border-radius:4px;background:#3b4ae0;display:flex;align-items:center;justify-content:center;flex:none"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5"><path d="M5 12l5 5L20 6"/></svg></span>
+                  <span style="font:600 11px 'IBM Plex Mono';letter-spacing:.06em;text-transform:uppercase;color:#5c6784">Sheathing</span>
+                  <span style="font:500 11px 'IBM Plex Mono';color:#9aa4b8">1</span>
+                </div>
+                <div style="display:grid;grid-template-columns:34px minmax(0,1fr) 90px 100px 34px;gap:11px;padding:11px 18px 11px 40px;border-bottom:1px solid #f4f6fa;align-items:center;background:#f5f7ff">
+                  <span style="width:18px;height:18px;border-radius:5px;background:#3b4ae0;display:flex;align-items:center;justify-content:center"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5"><path d="M5 12l5 5L20 6"/></svg></span>
+                  <div><div style="font:600 13.5px 'Barlow';color:#1a2437">5/8" plywood sheathing</div><div style="font:500 11px 'IBM Plex Mono';color:#8792a8">06-220 · last priced Mar 2025</div></div>
+                  <div style="font:500 12.5px 'Barlow';color:#4b5670">sheet</div>
+                  <div style="text-align:right;font:600 13px 'IBM Plex Mono';color:#1a2437">$38.40</div>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="#f5a524" stroke="#f5a524" stroke-width="1.6"><path d="M12 3l2.6 5.6 6.4.8-4.7 4.4 1.2 6.2L12 17l-5.5 3 1.2-6.2L3 9.4l6.4-.8z"/></svg>
+                </div>
+
+                <div style="display:flex;align-items:center;gap:9px;padding:7px 18px 7px 40px;background:#fbfcfe;border-bottom:1px solid #f4f6fa">
+                  <span style="width:15px;height:15px;border-radius:4px;background:#3b4ae0;display:flex;align-items:center;justify-content:center;flex:none"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5"><path d="M5 12l5 5L20 6"/></svg></span>
+                  <span style="font:600 11px 'IBM Plex Mono';letter-spacing:.06em;text-transform:uppercase;color:#5c6784">Framing lumber</span>
+                  <span style="font:500 11px 'IBM Plex Mono';color:#9aa4b8">2</span>
+                </div>
+                <div style="display:grid;grid-template-columns:34px minmax(0,1fr) 90px 100px 34px;gap:11px;padding:11px 18px 11px 40px;border-bottom:1px solid #f4f6fa;align-items:center;background:#f5f7ff">
+                  <span style="width:18px;height:18px;border-radius:5px;background:#3b4ae0;display:flex;align-items:center;justify-content:center"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5"><path d="M5 12l5 5L20 6"/></svg></span>
+                  <div><div style="font:600 13.5px 'Barlow';color:#1a2437">2x6 SPF stud — 8ft</div><div style="font:500 11px 'IBM Plex Mono';color:#8792a8">06-110</div></div>
+                  <div style="font:500 12.5px 'Barlow';color:#4b5670">each</div>
+                  <div style="text-align:right;font:600 13px 'IBM Plex Mono';color:#1a2437">$7.85</div>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#c3cad8" stroke-width="1.8"><path d="M12 3l2.6 5.6 6.4.8-4.7 4.4 1.2 6.2L12 17l-5.5 3 1.2-6.2L3 9.4l6.4-.8z"/></svg>
+                </div>
+                <div style="display:grid;grid-template-columns:34px minmax(0,1fr) 90px 100px 34px;gap:11px;padding:11px 18px 11px 40px;border-bottom:1px solid #f4f6fa;align-items:center;background:#f5f7ff">
+                  <span style="width:18px;height:18px;border-radius:5px;background:#3b4ae0;display:flex;align-items:center;justify-content:center"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5"><path d="M5 12l5 5L20 6"/></svg></span>
+                  <div><div style="font:600 13.5px 'Barlow';color:#1a2437">Blocking</div><div style="font:500 11px 'IBM Plex Mono';color:#8792a8">06-130</div></div>
+                  <div style="font:500 12.5px 'Barlow';color:#4b5670">LS</div>
+                  <div style="text-align:right;font:600 13px 'IBM Plex Mono';color:#1a2437">$45.00</div>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#c3cad8" stroke-width="1.8"><path d="M12 3l2.6 5.6 6.4.8-4.7 4.4 1.2 6.2L12 17l-5.5 3 1.2-6.2L3 9.4l6.4-.8z"/></svg>
+                </div>
+
+                <div style="display:flex;align-items:center;gap:11px;padding:10px 18px;background:#eef1f6;border-bottom:1px solid #e4e8ef">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4b5670" stroke-width="2.4"><path d="M6 9l6 6 6-6"/></svg>
+                  <span style="width:17px;height:17px;border-radius:5px;background:#3b4ae0;display:flex;align-items:center;justify-content:center;flex:none"><span style="width:8px;height:2px;background:#fff;border-radius:2px"></span></span>
+                  <span style="font:700 11.5px 'IBM Plex Mono';letter-spacing:.07em;color:#1a2437">09 — DRYWALL &amp; FINISHES</span>
+                  <span style="font:600 11px 'IBM Plex Mono';background:#fff;color:#5c6784;padding:2px 8px;border-radius:20px">3</span>
+                  <div style="flex:1"></div>
+                  <span style="font:600 11.5px 'Barlow';color:#3b4ae0">Select all 3</span>
+                </div>
+
+                <div style="display:flex;align-items:center;gap:9px;padding:7px 18px 7px 40px;background:#fbfcfe;border-bottom:1px solid #f4f6fa">
+                  <span style="width:15px;height:15px;border-radius:4px;background:#3b4ae0;display:flex;align-items:center;justify-content:center;flex:none"><span style="width:7px;height:2px;background:#fff;border-radius:2px"></span></span>
+                  <span style="font:600 11px 'IBM Plex Mono';letter-spacing:.06em;text-transform:uppercase;color:#5c6784">Board &amp; fasteners</span>
+                  <span style="font:500 11px 'IBM Plex Mono';color:#9aa4b8">2</span>
+                </div>
+                <div style="display:grid;grid-template-columns:34px minmax(0,1fr) 90px 100px 34px;gap:11px;padding:11px 18px 11px 40px;border-bottom:1px solid #f4f6fa;align-items:center">
+                  <span style="width:18px;height:18px;border-radius:5px;border:1.8px solid #c3cad8"></span>
+                  <div><div style="font:600 13.5px 'Barlow';color:#1a2437">Drywall — 1/2" 4x8</div><div style="font:500 11px 'IBM Plex Mono';color:#8792a8">09-200</div></div>
+                  <div style="font:500 12.5px 'Barlow';color:#4b5670">sheet</div>
+                  <div style="text-align:right;font:600 13px 'IBM Plex Mono';color:#1a2437">$15.00</div>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#c3cad8" stroke-width="1.8"><path d="M12 3l2.6 5.6 6.4.8-4.7 4.4 1.2 6.2L12 17l-5.5 3 1.2-6.2L3 9.4l6.4-.8z"/></svg>
+                </div>
+                <div style="display:grid;grid-template-columns:34px minmax(0,1fr) 90px 100px 34px;gap:11px;padding:11px 18px 11px 40px;border-bottom:1px solid #f4f6fa;align-items:center;background:#f5f7ff">
+                  <span style="width:18px;height:18px;border-radius:5px;background:#3b4ae0;display:flex;align-items:center;justify-content:center"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5"><path d="M5 12l5 5L20 6"/></svg></span>
+                  <div><div style="font:600 13.5px 'Barlow';color:#1a2437">Drywall screws — 5lb</div><div style="font:500 11px 'IBM Plex Mono';color:#8792a8">09-210</div></div>
+                  <div style="font:500 12.5px 'Barlow';color:#4b5670">box</div>
+                  <div style="text-align:right;font:600 13px 'IBM Plex Mono';color:#1a2437">$25.00</div>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#c3cad8" stroke-width="1.8"><path d="M12 3l2.6 5.6 6.4.8-4.7 4.4 1.2 6.2L12 17l-5.5 3 1.2-6.2L3 9.4l6.4-.8z"/></svg>
+                </div>
+
+                <div style="display:flex;align-items:center;gap:9px;padding:7px 18px 7px 40px;background:#fbfcfe;border-bottom:1px solid #f4f6fa">
+                  <span style="width:15px;height:15px;border-radius:4px;background:#3b4ae0;display:flex;align-items:center;justify-content:center;flex:none"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5"><path d="M5 12l5 5L20 6"/></svg></span>
+                  <span style="font:600 11px 'IBM Plex Mono';letter-spacing:.06em;text-transform:uppercase;color:#5c6784">Finishing</span>
+                  <span style="font:500 11px 'IBM Plex Mono';color:#9aa4b8">1</span>
+                </div>
+                <div style="display:grid;grid-template-columns:34px minmax(0,1fr) 90px 100px 34px;gap:11px;padding:11px 18px 11px 40px;border-bottom:1px solid #f4f6fa;align-items:center;background:#f5f7ff">
+                  <span style="width:18px;height:18px;border-radius:5px;background:#3b4ae0;display:flex;align-items:center;justify-content:center"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5"><path d="M5 12l5 5L20 6"/></svg></span>
+                  <div><div style="font:600 13.5px 'Barlow';color:#1a2437">20 minute drywall mud</div><div style="font:500 11px 'IBM Plex Mono';color:#8792a8">09-250</div></div>
+                  <div style="font:500 12.5px 'Barlow';color:#4b5670">bag</div>
+                  <div style="text-align:right;font:600 13px 'IBM Plex Mono';color:#1a2437">$13.00</div>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#c3cad8" stroke-width="1.8"><path d="M12 3l2.6 5.6 6.4.8-4.7 4.4 1.2 6.2L12 17l-5.5 3 1.2-6.2L3 9.4l6.4-.8z"/></svg>
+                </div>
+
+                <div style="display:flex;align-items:center;gap:11px;padding:10px 18px;background:#eef1f6;border-bottom:1px solid #e4e8ef">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4b5670" stroke-width="2.4"><path d="M9 18l6-6-6-6"/></svg>
+                  <span style="width:17px;height:17px;border-radius:5px;border:1.8px solid #c3cad8;flex:none"></span>
+                  <span style="font:700 11.5px 'IBM Plex Mono';letter-spacing:.07em;color:#1a2437">12 — CABINETRY</span>
+                  <span style="font:600 11px 'IBM Plex Mono';background:#fff;color:#5c6784;padding:2px 8px;border-radius:20px">6</span>
+                  <div style="flex:1"></div>
+                  <span style="font:600 11.5px 'Barlow';color:#8792a8">2 subcategories</span>
+                </div>
+                <div style="display:flex;align-items:center;gap:11px;padding:10px 18px;background:#eef1f6;border-bottom:1px solid #e4e8ef">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#4b5670" stroke-width="2.4"><path d="M9 18l6-6-6-6"/></svg>
+                  <span style="width:17px;height:17px;border-radius:5px;border:1.8px solid #c3cad8;flex:none"></span>
+                  <span style="font:700 11.5px 'IBM Plex Mono';letter-spacing:.07em;color:#1a2437">15 — MECHANICAL</span>
+                  <span style="font:600 11px 'IBM Plex Mono';background:#fff;color:#5c6784;padding:2px 8px;border-radius:20px">9</span>
+                  <div style="flex:1"></div>
+                  <span style="font:600 11.5px 'Barlow';color:#8792a8">3 subcategories</span>
+                </div>
+              </div>
+            </div>
+            <div style="border-left:1px solid #e4e8ef;background:#fbfcfe;display:flex;flex-direction:column;min-height:0">
+              <div style="padding:15px 17px;border-bottom:1px solid #e4e8ef">
+                <div style="font:700 14px 'Barlow';color:#1a2437">Tray</div>
+                <div style="font:500 11.5px 'Barlow';color:#8792a8;margin-top:1px">5 items · nothing added yet</div>
+              </div>
+              <div style="flex:1;padding:11px 13px;display:flex;flex-direction:column;gap:6px;overflow:hidden">
+                <div style="font:700 10px 'IBM Plex Mono';letter-spacing:.08em;color:#1a2437;padding:2px 4px">06 — CARPENTRY · 3</div>
+                <div style="font:600 9.5px 'IBM Plex Mono';letter-spacing:.06em;color:#9aa4b8;padding:0 4px">SHEATHING</div>
+                <div style="display:flex;align-items:center;gap:9px;background:#fff;border:1px solid #e4e8ef;border-radius:9px;padding:9px 11px"><span style="width:6px;height:6px;border-radius:50%;background:#1f8f4e;flex:none"></span><span style="font:600 12.5px 'Barlow';color:#1a2437;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">5/8" plywood sheathing</span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#c3cad8" stroke-width="2.4"><path d="M18 6L6 18M6 6l12 12"/></svg></div>
+                <div style="font:600 9.5px 'IBM Plex Mono';letter-spacing:.06em;color:#9aa4b8;padding:2px 4px 0">FRAMING LUMBER</div>
+                <div style="display:flex;align-items:center;gap:9px;background:#fff;border:1px solid #e4e8ef;border-radius:9px;padding:9px 11px"><span style="width:6px;height:6px;border-radius:50%;background:#1f8f4e;flex:none"></span><span style="font:600 12.5px 'Barlow';color:#1a2437;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">2x6 SPF stud — 8ft</span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#c3cad8" stroke-width="2.4"><path d="M18 6L6 18M6 6l12 12"/></svg></div>
+                <div style="display:flex;align-items:center;gap:9px;background:#fff;border:1px solid #e4e8ef;border-radius:9px;padding:9px 11px"><span style="width:6px;height:6px;border-radius:50%;background:#1f8f4e;flex:none"></span><span style="font:600 12.5px 'Barlow';color:#1a2437;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Blocking</span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#c3cad8" stroke-width="2.4"><path d="M18 6L6 18M6 6l12 12"/></svg></div>
+                <div style="font:700 10px 'IBM Plex Mono';letter-spacing:.08em;color:#1a2437;padding:8px 4px 2px">09 — DRYWALL &amp; FINISHES · 2</div>
+                <div style="font:600 9.5px 'IBM Plex Mono';letter-spacing:.06em;color:#9aa4b8;padding:0 4px">BOARD &amp; FASTENERS</div>
+                <div style="display:flex;align-items:center;gap:9px;background:#fff;border:1px solid #e4e8ef;border-radius:9px;padding:9px 11px"><span style="width:6px;height:6px;border-radius:50%;background:#1f8f4e;flex:none"></span><span style="font:600 12.5px 'Barlow';color:#1a2437;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Drywall screws — 5lb</span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#c3cad8" stroke-width="2.4"><path d="M18 6L6 18M6 6l12 12"/></svg></div>
+                <div style="font:600 9.5px 'IBM Plex Mono';letter-spacing:.06em;color:#9aa4b8;padding:2px 4px 0">FINISHING</div>
+                <div style="display:flex;align-items:center;gap:9px;background:#fff;border:1px solid #e4e8ef;border-radius:9px;padding:9px 11px"><span style="width:6px;height:6px;border-radius:50%;background:#1f8f4e;flex:none"></span><span style="font:600 12.5px 'Barlow';color:#1a2437;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">20 minute drywall mud</span><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#c3cad8" stroke-width="2.4"><path d="M18 6L6 18M6 6l12 12"/></svg></div>
+                <div style="margin-top:5px;background:#fff;border:1px dashed #cbd2df;border-radius:9px;padding:11px;font:400 11.5px/1.45 'Barlow';color:#8792a8;text-align:center">Switch to <strong style="color:#4b5670;font-weight:600">Labor</strong> or <strong style="color:#4b5670;font-weight:600">Subcontractor</strong> and keep picking — the tray groups them the same way.</div>
+              </div>
+              <div style="padding:14px 15px;border-top:1px solid #e4e8ef;background:#fff">
+                <div style="display:flex;justify-content:space-between;margin-bottom:11px"><span style="font:500 12px 'Barlow';color:#8792a8">Cost at qty 1</span><span style="font:600 13px 'IBM Plex Mono';color:#1a2437">$129.25</span></div>
+                <button style="width:100%;font:700 13.5px 'Barlow';color:#fff;background:#3b4ae0;border:none;padding:12px;border-radius:9px">Next — set details</button>
+                <div style="font:400 11px 'Barlow';color:#8792a8;text-align:center;margin-top:8px">Nothing is written to the estimate until step 2</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 17b Step 2 — set details -->
+    <div class="dv-opt" id="17b">
+      <div class="dv-olabel"><a class="dv-oid" href="#17b">17b</a>Step 2 — set quantities and detail, all at once</div>
+      <div class="dv-card" style="width:1280px;position:relative;display:flex;background:#f4f6fa;font-size:14px;overflow:hidden">
+        <dc-import name="EZNav" active="6" hint-size="228px,860px"></dc-import>
+        <main style="flex:1;min-width:0;display:flex;flex-direction:column;filter:blur(1.5px);opacity:.55">
+          <div style="background:#fff;border-bottom:1px solid #e4e8ef;padding:11px 26px;display:flex;justify-content:flex-end"><button style="font:700 13px 'Barlow';color:#fff;background:#3b4ae0;border:none;padding:9px 18px;border-radius:8px">Clock in</button></div>
+          <div style="padding:18px 26px 0"><h2 style="font:800 25px 'Barlow';color:#1a2437;margin:0">TM Test</h2></div>
+          <div style="padding:20px 26px"><div style="background:#fff;border:1px solid #e4e8ef;border-radius:14px;height:790px"></div></div>
+        </main>
+        <div style="position:absolute;inset:0;background:rgba(15,23,41,.42)"></div>
+        <div style="position:absolute;top:0;right:0;bottom:0;width:1052px;background:#fff;display:flex;flex-direction:column;box-shadow:-18px 0 44px rgba(15,23,41,.18)">
+          <div style="padding:17px 22px;border-bottom:1px solid #e4e8ef;display:flex;align-items:center;gap:12px">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#4b5670" stroke-width="2"><path d="M15 19l-7-7 7-7"/></svg>
+            <div>
+              <div style="font:800 18px 'Barlow';color:#1a2437">Set details</div>
+              <div style="font:500 12px 'Barlow';color:#8792a8;margin-top:1px">5 items into <strong style="color:#3b4ae0;font-weight:700">Kitchen — rough</strong></div>
+            </div>
+            <div style="flex:1"></div>
+            <div style="display:flex;align-items:center;gap:9px">
+              <span style="display:flex;align-items:center;gap:8px"><span style="width:23px;height:23px;border-radius:50%;background:#e6f0e9;color:#1f8f4e;display:flex;align-items:center;justify-content:center"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#1f8f4e" stroke-width="3.4"><path d="M5 12l5 5L20 6"/></svg></span><span style="font:600 13px 'Barlow';color:#8792a8">Pick</span></span>
+              <span style="width:26px;height:2px;background:#3b4ae0"></span>
+              <span style="display:flex;align-items:center;gap:8px"><span style="width:23px;height:23px;border-radius:50%;background:#3b4ae0;color:#fff;font:700 11.5px 'IBM Plex Mono';display:flex;align-items:center;justify-content:center">2</span><span style="font:700 13px 'Barlow';color:#1a2437">Set details</span></span>
+            </div>
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#8792a8" stroke-width="2" style="margin-left:8px"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </div>
+          <div style="padding:12px 22px;background:#fbfcfe;border-bottom:1px solid #e4e8ef;display:flex;align-items:center;gap:11px">
+            <span style="font:700 10.5px 'IBM Plex Mono';letter-spacing:.08em;color:#8792a8">APPLY TO ALL</span>
+            <span style="display:flex;align-items:center;gap:7px;background:#fff;border:1px solid #d5dae4;border-radius:8px;padding:6px 11px"><span style="font:500 12px 'Barlow';color:#8792a8">Markup</span><span style="font:600 12.5px 'IBM Plex Mono';color:#1a2437">20%</span></span>
+            <span style="display:flex;align-items:center;gap:7px;background:#fff;border:1px solid #d5dae4;border-radius:8px;padding:6px 11px"><span style="font:500 12px 'Barlow';color:#8792a8">Tax</span><span style="font:600 12.5px 'Barlow';color:#1a2437">Taxable</span></span>
+            <span style="display:flex;align-items:center;gap:7px;background:#fff;border:1px solid #d5dae4;border-radius:8px;padding:6px 11px"><span style="font:500 12px 'Barlow';color:#8792a8">Section</span><span style="font:600 12.5px 'Barlow';color:#1a2437">Kitchen — rough</span></span>
+            <div style="flex:1"></div>
+            <span style="font:600 12px 'Barlow';color:#3b4ae0">Expand all detail</span>
+          </div>
+          <div style="display:grid;grid-template-columns:minmax(0,1.9fr) 78px 92px 100px 84px 108px 34px;gap:10px;padding:10px 22px;background:#fff;border-bottom:1px solid #eef1f6;font:600 10.5px 'IBM Plex Mono';letter-spacing:.06em;text-transform:uppercase;color:#8792a8">
+            <div>Item</div><div style="text-align:right">Qty</div><div>Unit</div><div style="text-align:right">Unit cost</div><div style="text-align:right">Markup</div><div style="text-align:right">Line total</div><div></div>
+          </div>
+          <div style="flex:1;overflow:hidden;background:#fff">
+            <div style="display:flex;align-items:center;gap:11px;padding:9px 22px;background:#eef1f6;border-bottom:1px solid #e4e8ef">
+              <span style="font:700 11.5px 'IBM Plex Mono';letter-spacing:.07em;color:#1a2437">06 — CARPENTRY</span>
+              <span style="font:600 11px 'IBM Plex Mono';background:#fff;color:#5c6784;padding:2px 8px;border-radius:20px">3</span>
+              <div style="flex:1"></div>
+              <span style="font:500 11.5px 'Barlow';color:#8792a8">subtotal</span>
+              <span style="font:600 12.5px 'IBM Plex Mono';color:#1a2437">$2,667.12</span>
+            </div>
+            <div style="padding:7px 22px 7px 34px;background:#fbfcfe;border-bottom:1px solid #f4f6fa;font:600 10.5px 'IBM Plex Mono';letter-spacing:.06em;text-transform:uppercase;color:#5c6784">Sheathing</div>
+            <div style="display:grid;grid-template-columns:minmax(0,1.9fr) 78px 92px 100px 84px 108px 34px;gap:10px;padding:11px 22px 11px 34px;border-bottom:1px solid #f4f6fa;align-items:center">
+              <div><div style="font:600 13.5px 'Barlow';color:#1a2437">5/8" plywood sheathing</div><div style="font:500 11px 'IBM Plex Mono';color:#8792a8">06-220 · material</div></div>
+              <div style="min-height:36px;border:1.5px solid #3b4ae0;border-radius:7px;display:flex;align-items:center;justify-content:flex-end;padding:0 9px;font:600 13px 'IBM Plex Mono';color:#1a2437">24</div>
+              <div style="font:500 12.5px 'Barlow';color:#4b5670">sheet</div>
+              <div style="min-height:36px;border:1px solid #d5dae4;border-radius:7px;display:flex;align-items:center;justify-content:flex-end;padding:0 9px;font:500 13px 'IBM Plex Mono';color:#1a2437">$38.40</div>
+              <div style="min-height:36px;border:1px solid #d5dae4;border-radius:7px;display:flex;align-items:center;justify-content:flex-end;padding:0 9px;font:500 13px 'IBM Plex Mono';color:#1a2437">20%</div>
+              <div style="text-align:right;font:600 13.5px 'IBM Plex Mono';color:#1a2437">$1,105.92</div>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8792a8" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <div style="padding:0 22px 14px 34px;border-bottom:1px solid #f4f6fa;background:#fbfcfe">
+              <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 220px;gap:14px;padding-top:13px">
+                <div><div style="font:600 11.5px 'Barlow';color:#3f4a60;margin-bottom:5px">Description — the client sees this</div><div style="min-height:60px;border:1px solid #d5dae4;border-radius:8px;background:#fff;padding:9px 11px;font:400 12.5px/1.5 'Barlow';color:#4b5670">Roof and wall sheathing, 5/8" CDX, installed per plan.</div></div>
+                <div><div style="font:600 11.5px 'Barlow';color:#3f4a60;margin-bottom:5px">Internal note — never printed</div><div style="min-height:60px;border:1px solid #d5dae4;border-radius:8px;background:#fff;padding:9px 11px;font:400 12.5px/1.5 'Barlow';color:#9aa4b8">Waste factor already in the 24 count.</div></div>
+                <div style="display:flex;flex-direction:column;gap:9px">
+                  <div><div style="font:600 11.5px 'Barlow';color:#3f4a60;margin-bottom:5px">Cost code</div><div style="min-height:34px;border:1px solid #d5dae4;border-radius:7px;background:#fff;padding:0 10px;display:flex;align-items:center;justify-content:space-between;font:500 12.5px 'Barlow';color:#1a2437">06 — Carpentry<svg width="10" height="6" viewBox="0 0 12 8" fill="none" stroke="#8792a8" stroke-width="2"><path d="M1 1l5 5 5-5"/></svg></div></div>
+                  <div style="display:flex;gap:16px">
+                    <span style="display:flex;align-items:center;gap:7px"><span style="width:34px;height:20px;border-radius:20px;background:#3b4ae0;position:relative"><span style="position:absolute;right:2px;top:2px;width:16px;height:16px;border-radius:50%;background:#fff"></span></span><span style="font:600 11.5px 'Barlow';color:#4b5670">Taxable</span></span>
+                    <span style="display:flex;align-items:center;gap:7px"><span style="width:34px;height:20px;border-radius:20px;background:#d5dae4;position:relative"><span style="position:absolute;left:2px;top:2px;width:16px;height:16px;border-radius:50%;background:#fff"></span></span><span style="font:600 11.5px 'Barlow';color:#4b5670">Optional</span></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div style="padding:7px 22px 7px 34px;background:#fbfcfe;border-bottom:1px solid #f4f6fa;font:600 10.5px 'IBM Plex Mono';letter-spacing:.06em;text-transform:uppercase;color:#5c6784">Framing lumber</div>
+            <div style="display:grid;grid-template-columns:minmax(0,1.9fr) 78px 92px 100px 84px 108px 34px;gap:10px;padding:11px 22px 11px 34px;border-bottom:1px solid #f4f6fa;align-items:center">
+              <div><div style="font:600 13.5px 'Barlow';color:#1a2437">2x6 SPF stud — 8ft</div><div style="font:500 11px 'IBM Plex Mono';color:#8792a8">06-110 · material</div></div>
+              <div style="min-height:36px;border:1px solid #d5dae4;border-radius:7px;display:flex;align-items:center;justify-content:flex-end;padding:0 9px;font:600 13px 'IBM Plex Mono';color:#1a2437">160</div>
+              <div style="font:500 12.5px 'Barlow';color:#4b5670">each</div>
+              <div style="min-height:36px;border:1px solid #d5dae4;border-radius:7px;display:flex;align-items:center;justify-content:flex-end;padding:0 9px;font:500 13px 'IBM Plex Mono';color:#1a2437">$7.85</div>
+              <div style="min-height:36px;border:1px solid #d5dae4;border-radius:7px;display:flex;align-items:center;justify-content:flex-end;padding:0 9px;font:500 13px 'IBM Plex Mono';color:#1a2437">20%</div>
+              <div style="text-align:right;font:600 13.5px 'IBM Plex Mono';color:#1a2437">$1,507.20</div>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8792a8" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+            </div>
+            <div style="display:grid;grid-template-columns:minmax(0,1.9fr) 78px 92px 100px 84px 108px 34px;gap:10px;padding:11px 22px;border-bottom:1px solid #f4f6fa;align-items:center;background:#fffdf7">
+              <div><div style="font:600 13.5px 'Barlow';color:#1a2437">Blocking</div><div style="font:500 11px 'Barlow';color:#b45309">lump sum — confirm this covers the whole section</div></div>
+              <div style="min-height:36px;border:1px solid #d5dae4;border-radius:7px;display:flex;align-items:center;justify-content:flex-end;padding:0 9px;font:600 13px 'IBM Plex Mono';color:#1a2437">1</div>
+              <div style="font:500 12.5px 'Barlow';color:#4b5670">LS</div>
+              <div style="min-height:36px;border:1px solid #d5dae4;border-radius:7px;display:flex;align-items:center;justify-content:flex-end;padding:0 9px;font:500 13px 'IBM Plex Mono';color:#1a2437">$45.00</div>
+              <div style="min-height:36px;border:1px solid #d5dae4;border-radius:7px;display:flex;align-items:center;justify-content:flex-end;padding:0 9px;font:500 13px 'IBM Plex Mono';color:#1a2437">20%</div>
+              <div style="text-align:right;font:600 13.5px 'IBM Plex Mono';color:#1a2437">$54.00</div>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8792a8" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+            </div>
+            <div style="display:flex;align-items:center;gap:11px;padding:9px 22px;background:#eef1f6;border-bottom:1px solid #e4e8ef">
+              <span style="font:700 11.5px 'IBM Plex Mono';letter-spacing:.07em;color:#1a2437">09 — DRYWALL &amp; FINISHES</span>
+              <span style="font:600 11px 'IBM Plex Mono';background:#fff;color:#5c6784;padding:2px 8px;border-radius:20px">2</span>
+              <div style="flex:1"></div>
+              <span style="font:500 11.5px 'Barlow';color:#8792a8">subtotal</span>
+              <span style="font:600 12.5px 'IBM Plex Mono';color:#1a2437">$307.20</span>
+            </div>
+            <div style="padding:7px 22px 7px 34px;background:#fbfcfe;border-bottom:1px solid #f4f6fa;font:600 10.5px 'IBM Plex Mono';letter-spacing:.06em;text-transform:uppercase;color:#5c6784">Board &amp; fasteners</div>
+            <div style="display:grid;grid-template-columns:minmax(0,1.9fr) 78px 92px 100px 84px 108px 34px;gap:10px;padding:11px 22px 11px 34px;border-bottom:1px solid #f4f6fa;align-items:center">
+              <div><div style="font:600 13.5px 'Barlow';color:#1a2437">Drywall screws — 5lb</div><div style="font:500 11px 'IBM Plex Mono';color:#8792a8">09-210 · material</div></div>
+              <div style="min-height:36px;border:1px solid #d5dae4;border-radius:7px;display:flex;align-items:center;justify-content:flex-end;padding:0 9px;font:600 13px 'IBM Plex Mono';color:#1a2437">4</div>
+              <div style="font:500 12.5px 'Barlow';color:#4b5670">box</div>
+              <div style="min-height:36px;border:1px solid #d5dae4;border-radius:7px;display:flex;align-items:center;justify-content:flex-end;padding:0 9px;font:500 13px 'IBM Plex Mono';color:#1a2437">$25.00</div>
+              <div style="min-height:36px;border:1px solid #d5dae4;border-radius:7px;display:flex;align-items:center;justify-content:flex-end;padding:0 9px;font:500 13px 'IBM Plex Mono';color:#1a2437">20%</div>
+              <div style="text-align:right;font:600 13.5px 'IBM Plex Mono';color:#1a2437">$120.00</div>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8792a8" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+            </div>
+            <div style="padding:7px 22px 7px 34px;background:#fbfcfe;border-bottom:1px solid #f4f6fa;font:600 10.5px 'IBM Plex Mono';letter-spacing:.06em;text-transform:uppercase;color:#5c6784">Finishing</div>
+            <div style="display:grid;grid-template-columns:minmax(0,1.9fr) 78px 92px 100px 84px 108px 34px;gap:10px;padding:11px 22px 11px 34px;border-bottom:1px solid #f4f6fa;align-items:center">
+              <div><div style="font:600 13.5px 'Barlow';color:#1a2437">20 minute drywall mud</div><div style="font:500 11px 'IBM Plex Mono';color:#8792a8">09-250 · material</div></div>
+              <div style="min-height:36px;border:1px solid #d5dae4;border-radius:7px;display:flex;align-items:center;justify-content:flex-end;padding:0 9px;font:600 13px 'IBM Plex Mono';color:#1a2437">12</div>
+              <div style="font:500 12.5px 'Barlow';color:#4b5670">bag</div>
+              <div style="min-height:36px;border:1px solid #d5dae4;border-radius:7px;display:flex;align-items:center;justify-content:flex-end;padding:0 9px;font:500 13px 'IBM Plex Mono';color:#1a2437">$13.00</div>
+              <div style="min-height:36px;border:1px solid #d5dae4;border-radius:7px;display:flex;align-items:center;justify-content:flex-end;padding:0 9px;font:500 13px 'IBM Plex Mono';color:#1a2437">20%</div>
+              <div style="text-align:right;font:600 13.5px 'IBM Plex Mono';color:#1a2437">$187.20</div>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8792a8" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+            </div>
+          </div>
+          <div style="padding:11px 22px;border-top:1px solid #e4e8ef;background:#fff;display:flex;gap:9px">
+              <span style="font:600 12.5px 'Barlow';color:#3b4ae0;background:#f2f4ff;border:1px solid #dbe0fb;padding:8px 14px;border-radius:8px">+ Back to picking</span>
+              <span style="font:600 12.5px 'Barlow';color:#4b5670;background:#fff;border:1px solid #d5dae4;padding:8px 14px;border-radius:8px">+ One-off line</span>
+              <span style="font:600 12.5px 'Barlow';color:#4b5670;background:#fff;border:1px solid #d5dae4;padding:8px 14px;border-radius:8px">Save these 5 as an assembly</span>
+          </div>
+          <div style="padding:15px 22px;border-top:1px solid #e4e8ef;background:#fbfcfe;display:flex;align-items:center;gap:26px">
+            <div><div style="font:600 10.5px 'IBM Plex Mono';text-transform:uppercase;color:#8792a8">Cost</div><div style="font:600 16px 'IBM Plex Mono';color:#1a2437;margin-top:2px">$2,478.60</div></div>
+            <div><div style="font:600 10.5px 'IBM Plex Mono';text-transform:uppercase;color:#8792a8">Markup</div><div style="font:600 16px 'IBM Plex Mono';color:#1a2437;margin-top:2px">$495.72</div></div>
+            <div><div style="font:600 10.5px 'IBM Plex Mono';text-transform:uppercase;color:#8792a8">Adds to estimate</div><div style="font:700 18px 'IBM Plex Mono';color:#1a2437;margin-top:2px">$2,974.32</div></div>
+            <div style="flex:1"></div>
+            <button style="font:600 13px 'Barlow';color:#3f4a60;background:#fff;border:1px solid #d5dae4;padding:11px 17px;border-radius:9px">Cancel</button>
+            <button style="font:700 13.5px 'Barlow';color:#fff;background:#3b4ae0;border:none;padding:12px 22px;border-radius:9px">Add 5 items</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 17c Manual item -->
+    <div class="dv-opt" id="17c">
+      <div class="dv-olabel"><a class="dv-oid" href="#17c">17c</a>Type it manually — same sheet, one item</div>
+      <div class="dv-card" style="width:1280px;position:relative;display:flex;background:#f4f6fa;font-size:14px;overflow:hidden">
+        <dc-import name="EZNav" active="6" hint-size="228px,780px"></dc-import>
+        <main style="flex:1;min-width:0;display:flex;flex-direction:column;filter:blur(1.5px);opacity:.55">
+          <div style="background:#fff;border-bottom:1px solid #e4e8ef;padding:11px 26px;display:flex;justify-content:flex-end"><button style="font:700 13px 'Barlow';color:#fff;background:#3b4ae0;border:none;padding:9px 18px;border-radius:8px">Clock in</button></div>
+          <div style="padding:18px 26px 0"><h2 style="font:800 25px 'Barlow';color:#1a2437;margin:0">TM Test</h2></div>
+          <div style="padding:20px 26px"><div style="background:#fff;border:1px solid #e4e8ef;border-radius:14px;height:420px"></div></div>
+        </main>
+        <div style="position:absolute;inset:0;background:rgba(15,23,41,.42)"></div>
+        <div style="position:absolute;top:0;right:0;bottom:0;width:1052px;background:#fff;display:flex;flex-direction:column;box-shadow:-18px 0 44px rgba(15,23,41,.18)">
+          <div style="padding:17px 22px;border-bottom:1px solid #e4e8ef;display:flex;align-items:center;gap:12px">
+            <div>
+              <div style="font:800 18px 'Barlow';color:#1a2437">Add items</div>
+              <div style="font:500 12px 'Barlow';color:#8792a8;margin-top:1px">Adding to section <strong style="color:#3b4ae0;font-weight:700">Kitchen — rough</strong></div>
+            </div>
+            <div style="flex:1"></div>
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#8792a8" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </div>
+          <div style="flex:1;display:grid;grid-template-columns:210px minmax(0,1fr) 268px;min-height:0">
+            <div style="border-right:1px solid #e4e8ef;background:#fbfcfe;padding:14px 12px;display:flex;flex-direction:column;gap:3px">
+              <div style="font:700 10.5px 'IBM Plex Mono';letter-spacing:.09em;color:#8792a8;padding:0 10px 8px">FROM YOUR CATALOG</div>
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 11px;border-radius:9px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4b5670" stroke-width="2"><path d="M21 16V8l-9-5-9 5v8l9 5 9-5z"/></svg><span style="font:600 13px 'Barlow';color:#4b5670;flex:1">Material</span><span style="font:600 11px 'IBM Plex Mono';color:#8792a8">94</span></div>
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 11px;border-radius:9px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4b5670" stroke-width="2"><circle cx="12" cy="7" r="4"/><path d="M5 21v-2a5 5 0 015-5h4a5 5 0 015 5v2"/></svg><span style="font:600 13px 'Barlow';color:#4b5670;flex:1">Labor</span><span style="font:600 11px 'IBM Plex Mono';color:#8792a8">22</span></div>
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 11px;border-radius:9px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4b5670" stroke-width="2"><path d="M14 7l-7 7 3 3 7-7z"/><path d="M3 21l4-1 14-14-3-3L4 17z"/></svg><span style="font:600 13px 'Barlow';color:#4b5670;flex:1">Subcontractor</span><span style="font:600 11px 'IBM Plex Mono';color:#8792a8">26</span></div>
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 11px;border-radius:9px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4b5670" stroke-width="2"><rect x="3" y="7" width="18" height="12" rx="2"/><path d="M8 7V5h8v2"/></svg><span style="font:600 13px 'Barlow';color:#4b5670;flex:1">Equipment</span><span style="font:600 11px 'IBM Plex Mono';color:#8792a8">11</span></div>
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 11px;border-radius:9px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4b5670" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8m-4-4h8"/></svg><span style="font:600 13px 'Barlow';color:#4b5670;flex:1">Other</span><span style="font:600 11px 'IBM Plex Mono';color:#8792a8">6</span></div>
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 11px;border-radius:9px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4b5670" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg><span style="font:600 13px 'Barlow';color:#4b5670;flex:1">Assemblies</span><span style="font:600 11px 'IBM Plex Mono';color:#8792a8">8</span></div>
+              <div style="height:1px;background:#e4e8ef;margin:11px 10px"></div>
+              <div style="font:700 10.5px 'IBM Plex Mono';letter-spacing:.09em;color:#8792a8;padding:0 10px 8px">OTHER SOURCES</div>
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 11px;border-radius:9px;background:#3b4ae0"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 5v14m-7-7h14"/></svg><span style="font:700 13px 'Barlow';color:#fff;flex:1">Type it manually</span></div>
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 11px;border-radius:9px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4b5670" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg><span style="font:600 13px 'Barlow';color:#4b5670;flex:1">From a sub bid</span><span style="font:600 11px 'IBM Plex Mono';color:#8792a8">3</span></div>
+              <div style="display:flex;align-items:center;gap:10px;padding:10px 11px;border-radius:9px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4b5670" stroke-width="2"><path d="M4 4h16v5H4zM4 13h16v7H4z"/></svg><span style="font:600 13px 'Barlow';color:#4b5670;flex:1">A past estimate</span></div>
+            </div>
+            <div style="padding:20px 22px;display:flex;flex-direction:column;gap:15px;overflow:hidden">
+              <div style="display:grid;grid-template-columns:minmax(0,1.6fr) 150px;gap:14px">
+                <div><div style="font:600 12.5px 'Barlow';color:#3f4a60;margin-bottom:6px">Item name</div><div style="min-height:42px;border:1px solid #d5dae4;border-radius:8px;padding:0 13px;display:flex;align-items:center;font:400 14px 'Barlow';color:#9aa4b8">e.g. Custom range hood surround</div></div>
+                <div><div style="font:600 12.5px 'Barlow';color:#3f4a60;margin-bottom:6px">Type</div><div style="min-height:42px;border:1px solid #d5dae4;border-radius:8px;padding:0 13px;display:flex;align-items:center;justify-content:space-between;font:500 14px 'Barlow';color:#1a2437">Material<svg width="11" height="7" viewBox="0 0 12 8" fill="none" stroke="#8792a8" stroke-width="2"><path d="M1 1l5 5 5-5"/></svg></div></div>
+              </div>
+              <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px">
+                <div><div style="font:600 12.5px 'Barlow';color:#3f4a60;margin-bottom:6px">Qty</div><div style="min-height:42px;border:1px solid #d5dae4;border-radius:8px;padding:0 12px;display:flex;align-items:center;justify-content:flex-end;font:600 14px 'IBM Plex Mono';color:#1a2437">1</div></div>
+                <div><div style="font:600 12.5px 'Barlow';color:#3f4a60;margin-bottom:6px">Unit</div><div style="min-height:42px;border:1px solid #d5dae4;border-radius:8px;padding:0 12px;display:flex;align-items:center;font:400 13.5px 'Barlow';color:#9aa4b8">each</div></div>
+                <div><div style="font:600 12.5px 'Barlow';color:#3f4a60;margin-bottom:6px">Unit cost</div><div style="min-height:42px;border:1px solid #d5dae4;border-radius:8px;padding:0 12px;display:flex;align-items:center;justify-content:flex-end;font:600 14px 'IBM Plex Mono';color:#1a2437">$0.00</div></div>
+                <div><div style="font:600 12.5px 'Barlow';color:#3f4a60;margin-bottom:6px">Markup</div><div style="min-height:42px;border:1px solid #d5dae4;border-radius:8px;padding:0 12px;display:flex;align-items:center;justify-content:flex-end;font:600 14px 'IBM Plex Mono';color:#1a2437">20%</div></div>
+                <div><div style="font:600 12.5px 'Barlow';color:#3f4a60;margin-bottom:6px">Category</div><div style="min-height:42px;border:1px solid #d5dae4;border-radius:8px;padding:0 11px;display:flex;align-items:center;justify-content:space-between;font:500 13px 'Barlow';color:#1a2437">12 — Cabinetry<svg width="10" height="6" viewBox="0 0 12 8" fill="none" stroke="#8792a8" stroke-width="2"><path d="M1 1l5 5 5-5"/></svg></div></div>
+              </div>
+              <div style="display:grid;grid-template-columns:220px 220px minmax(0,1fr);gap:12px">
+                <div><div style="font:600 12.5px 'Barlow';color:#3f4a60;margin-bottom:6px">Subcategory</div><div style="min-height:42px;border:1px solid #d5dae4;border-radius:8px;padding:0 11px;display:flex;align-items:center;justify-content:space-between;font:500 13px 'Barlow';color:#1a2437">Custom millwork<svg width="10" height="6" viewBox="0 0 12 8" fill="none" stroke="#8792a8" stroke-width="2"><path d="M1 1l5 5 5-5"/></svg></div></div>
+                <div><div style="font:600 12.5px 'Barlow';color:#3f4a60;margin-bottom:6px">Cost code</div><div style="min-height:42px;border:1px solid #d5dae4;border-radius:8px;padding:0 11px;display:flex;align-items:center;justify-content:space-between;font:500 13px 'Barlow';color:#9aa4b8">Select<svg width="10" height="6" viewBox="0 0 12 8" fill="none" stroke="#8792a8" stroke-width="2"><path d="M1 1l5 5 5-5"/></svg></div></div>
+                <div style="display:flex;align-items:flex-end"><div style="font:400 11.5px/1.45 'Barlow';color:#8792a8;padding-bottom:11px">Category and subcategory decide where this lands in the catalog and how it groups on the estimate.</div></div>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+                <div><div style="font:600 12.5px 'Barlow';color:#3f4a60;margin-bottom:6px">Description — the client sees this</div><div style="min-height:76px;border:1px solid #d5dae4;border-radius:8px;padding:10px 12px;font:400 13px/1.5 'Barlow';color:#9aa4b8">What this covers, in the client's words.</div></div>
+                <div><div style="font:600 12.5px 'Barlow';color:#3f4a60;margin-bottom:6px">Internal note — never printed</div><div style="min-height:76px;border:1px solid #d5dae4;border-radius:8px;padding:10px 12px;font:400 13px/1.5 'Barlow';color:#9aa4b8">Pricing assumptions, who quoted it, what could go wrong.</div></div>
+              </div>
+              <div style="display:flex;gap:22px;align-items:center">
+                <span style="display:flex;align-items:center;gap:8px"><span style="width:38px;height:22px;border-radius:20px;background:#3b4ae0;position:relative"><span style="position:absolute;right:2px;top:2px;width:18px;height:18px;border-radius:50%;background:#fff"></span></span><span style="font:600 12.5px 'Barlow';color:#4b5670">Taxable</span></span>
+                <span style="display:flex;align-items:center;gap:8px"><span style="width:38px;height:22px;border-radius:20px;background:#d5dae4;position:relative"><span style="position:absolute;left:2px;top:2px;width:18px;height:18px;border-radius:50%;background:#fff"></span></span><span style="font:600 12.5px 'Barlow';color:#4b5670">Optional — client can decline</span></span>
+              </div>
+              <div style="background:#fff;border:1.5px solid #f5cf8f;border-radius:12px;padding:14px 16px;box-shadow:0 0 0 4px rgba(245,165,36,.09)">
+                <div style="display:flex;align-items:center;gap:11px;margin-bottom:9px">
+                  <span style="width:18px;height:18px;border-radius:5px;background:#3b4ae0;display:flex;align-items:center;justify-content:center;flex:none"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.5"><path d="M5 12l5 5L20 6"/></svg></span>
+                  <span style="font:700 13.5px 'Barlow';color:#1a2437;flex:1">Save this to the cost catalog</span>
+                  <span style="font:800 9px 'IBM Plex Mono';letter-spacing:.08em;background:#f5a524;color:#0f1729;padding:2px 5px;border-radius:4px">NEW</span>
+                </div>
+                <div style="font:400 12px/1.5 'Barlow';color:#8792a8">A manual item you type once should never have to be typed again. Ticked by default — untick for a genuine one-off.</div>
+              </div>
+            </div>
+            <div style="border-left:1px solid #e4e8ef;background:#fbfcfe;display:flex;flex-direction:column;min-height:0">
+              <div style="padding:15px 17px;border-bottom:1px solid #e4e8ef">
+                <div style="font:700 14px 'Barlow';color:#1a2437">Tray</div>
+                <div style="font:500 11.5px 'Barlow';color:#8792a8;margin-top:1px">5 items waiting</div>
+              </div>
+              <div style="flex:1;padding:11px 13px;display:flex;flex-direction:column;gap:6px;overflow:hidden">
+                <div style="font:700 10px 'IBM Plex Mono';letter-spacing:.08em;color:#1a2437;padding:2px 4px">06 — CARPENTRY · 3</div>
+                <div style="font:600 9.5px 'IBM Plex Mono';letter-spacing:.06em;color:#9aa4b8;padding:0 4px">SHEATHING</div>
+                <div style="display:flex;align-items:center;gap:9px;background:#fff;border:1px solid #e4e8ef;border-radius:9px;padding:9px 11px"><span style="width:6px;height:6px;border-radius:50%;background:#1f8f4e;flex:none"></span><span style="font:600 12.5px 'Barlow';color:#1a2437;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">5/8" plywood sheathing</span></div>
+                <div style="font:600 9.5px 'IBM Plex Mono';letter-spacing:.06em;color:#9aa4b8;padding:2px 4px 0">FRAMING LUMBER</div>
+                <div style="display:flex;align-items:center;gap:9px;background:#fff;border:1px solid #e4e8ef;border-radius:9px;padding:9px 11px"><span style="width:6px;height:6px;border-radius:50%;background:#1f8f4e;flex:none"></span><span style="font:600 12.5px 'Barlow';color:#1a2437;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">2x6 SPF stud — 8ft</span></div>
+                <div style="display:flex;align-items:center;gap:9px;background:#fff;border:1px solid #e4e8ef;border-radius:9px;padding:9px 11px"><span style="width:6px;height:6px;border-radius:50%;background:#1f8f4e;flex:none"></span><span style="font:600 12.5px 'Barlow';color:#1a2437;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Blocking</span></div>
+                <div style="font:700 10px 'IBM Plex Mono';letter-spacing:.08em;color:#1a2437;padding:8px 4px 2px">09 — DRYWALL &amp; FINISHES · 2</div>
+                <div style="font:600 9.5px 'IBM Plex Mono';letter-spacing:.06em;color:#9aa4b8;padding:0 4px">BOARD &amp; FASTENERS</div>
+                <div style="display:flex;align-items:center;gap:9px;background:#fff;border:1px solid #e4e8ef;border-radius:9px;padding:9px 11px"><span style="width:6px;height:6px;border-radius:50%;background:#1f8f4e;flex:none"></span><span style="font:600 12.5px 'Barlow';color:#1a2437;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Drywall screws — 5lb</span></div>
+                <div style="font:600 9.5px 'IBM Plex Mono';letter-spacing:.06em;color:#9aa4b8;padding:2px 4px 0">FINISHING</div>
+                <div style="display:flex;align-items:center;gap:9px;background:#fff;border:1px solid #e4e8ef;border-radius:9px;padding:9px 11px"><span style="width:6px;height:6px;border-radius:50%;background:#1f8f4e;flex:none"></span><span style="font:600 12.5px 'Barlow';color:#1a2437;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">20 minute drywall mud</span></div>
+              </div>
+              <div style="padding:14px 15px;border-top:1px solid #e4e8ef;background:#fff">
+                <button style="width:100%;font:700 13px 'Barlow';color:#3b4ae0;background:#f2f4ff;border:1px solid #dbe0fb;padding:11px;border-radius:9px;margin-bottom:9px">Add to tray</button>
+                <button style="width:100%;font:700 13.5px 'Barlow';color:#fff;background:#3b4ae0;border:none;padding:12px;border-radius:9px">Next — set details</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <p class="dv-next">The fix for the Contractor Foreman flaw: picking and pricing are two steps in <em>one</em> sheet, so a batch of items gets its quantities in a single pass instead of one round-trip per item.</p>
+</section>
+
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const V = n => "{" + "{" + n + "}" + "}";
+    return {
+      vCompany: V("company_name"),
+      vContact: V("contact_name"),
+      vEstNum: V("estimate_number"),
+      vEstName: V("estimate_name"),
+      vSignLink: V("signing_link"),
+      vExpDate: V("expiration_date"),
+      vSentDate: V("sent_date")
+    };
+  }
+}
+</script>
+</body>
+</html>
