@@ -1,5 +1,21 @@
 'use client';
 
+// Step 8 (desktop redesign §8.11.1) — the Company tab.
+//
+// RULED [Josh]: everything autosaves. This form moves to the same 1s-debounce
+// per-field pattern as estimating/proposals/time-tracking. ⚠️ The one real
+// obstacle the ruling names: this tab bundles identity fields with TWO
+// independent async file uploads (logo, signature). THE UPLOADS STAY THEIR OWN
+// EXPLICIT ACTIONS — autosave surrounds them, never drives them. A debounced
+// writer racing an in-flight upload is the failure the split prevents.
+//
+// The company `name` is required: an empty name blocks that field's save (the
+// field errors in place) and never reaches updateCompany.
+//
+// `contractor_signature_path` is the COMPANY image. The per-CO
+// `contractor_signature_mode/name/ref` triple lives on change_orders, written
+// by the send route at send time — nothing here touches it (Entry 25).
+
 import { useState, useRef, useEffect } from 'react';
 import {
   CompanyData,
@@ -11,13 +27,29 @@ import {
 } from '@/lib/services/company-client';
 
 import { TRADE_TYPES, US_STATES } from '@framefocus/shared/constants';
+import { color, cardStyle } from '@/lib/theme';
 
 interface SettingsFormProps {
   company: CompanyData;
 }
 
+type TextField =
+  | 'name'
+  | 'address_line1'
+  | 'address_line2'
+  | 'city'
+  | 'state'
+  | 'zip'
+  | 'phone'
+  | 'email'
+  | 'website'
+  | 'trade_type'
+  | 'license_number';
+
+const SAVE_DEBOUNCE_MS = 1000;
+
 export function SettingsForm({ company }: SettingsFormProps) {
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<Record<TextField, string>>({
     name: company.name || '',
     address_line1: company.address_line1 || '',
     address_line2: company.address_line2 || '',
@@ -32,14 +64,17 @@ export function SettingsForm({ company }: SettingsFormProps) {
   });
 
   const [logoUrl, setLogoUrl] = useState(company.logo_url || '');
-  const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  // Upload feedback only — field saves report per field, uploads report here.
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Signed-artifact spec §4.2 — saved contractor signature image. The column is
-  // new (this spec's migration), so it is read off CompanyData with a cast
-  // until database.ts is regenerated.
+  const [errors, setErrors] = useState<Partial<Record<TextField, string>>>({});
+  const [savedField, setSavedField] = useState<TextField | null>(null);
+  const timersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Signed-artifact spec §4.2 — saved contractor signature image.
   const [signaturePath, setSignaturePath] = useState<string | null>(
     (company as { contractor_signature_path?: string | null }).contractor_signature_path ?? null
   );
@@ -62,35 +97,60 @@ export function SettingsForm({ company }: SettingsFormProps) {
     };
   }, [signaturePath]);
 
+  function setFieldError(field: TextField, msg: string | null) {
+    setErrors((prev) => {
+      const next = { ...prev };
+      if (msg) next[field] = msg;
+      else delete next[field];
+      return next;
+    });
+  }
+
+  function showSaved(field: TextField) {
+    setSavedField(field);
+    if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+    savedTimerRef.current = setTimeout(() => setSavedField(null), 2000);
+  }
+
+  // Per-field autosave, mirroring estimating-settings-form. Writes ONE column
+  // per save so a failing field never blocks its neighbours.
+  function scheduleSave(field: TextField, value: string | null) {
+    if (timersRef.current[field]) clearTimeout(timersRef.current[field]);
+    timersRef.current[field] = setTimeout(async () => {
+      const result = await updateCompany(company.id, { [field]: value });
+      if (result.success) {
+        showSaved(field);
+      } else {
+        setFieldError(field, result.error || 'Save failed — try again.');
+      }
+    }, SAVE_DEBOUNCE_MS);
+  }
+
   function handleChange(e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   }
 
-  async function handleSave() {
-    setSaving(true);
-    setMessage(null);
-
-    const result = await updateCompany(company.id, {
-      name: form.name.trim(),
-      address_line1: form.address_line1.trim() || null,
-      address_line2: form.address_line2.trim() || null,
-      city: form.city.trim() || null,
-      state: form.state || null,
-      zip: form.zip.trim() || null,
-      phone: form.phone.trim() || null,
-      email: form.email.trim() || null,
-      website: form.website.trim() || null,
-      trade_type: form.trade_type || null,
-      license_number: form.license_number.trim() || null,
-    });
-
-    setSaving(false);
-
-    if (result.success) {
-      setMessage({ type: 'success', text: 'Settings saved successfully.' });
-    } else {
-      setMessage({ type: 'error', text: result.error || 'Failed to save settings.' });
+  function handleBlur(field: TextField) {
+    const trimmed = form[field].trim();
+    if (trimmed !== form[field]) setForm((prev) => ({ ...prev, [field]: trimmed }));
+    if (field === 'name') {
+      if (!trimmed) {
+        setFieldError('name', 'Company name is required.');
+        return;
+      }
+      setFieldError('name', null);
+      scheduleSave('name', trimmed);
+      return;
     }
+    setFieldError(field, null);
+    scheduleSave(field, trimmed || null);
+  }
+
+  // Selects save on change — there is no blur moment worth waiting for.
+  function handleSelect(field: TextField, value: string) {
+    setForm((prev) => ({ ...prev, [field]: value }));
+    setFieldError(field, null);
+    scheduleSave(field, value || null);
   }
 
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -232,209 +292,243 @@ export function SettingsForm({ company }: SettingsFormProps) {
   const inputStyle: React.CSSProperties = {
     width: '100%',
     padding: '0.5rem 0.75rem',
-    border: '1px solid #d1d5db',
-    borderRadius: '0.375rem',
+    border: `1px solid ${color.inputBorder}`,
+    borderRadius: '8px',
     fontSize: '0.875rem',
+    minHeight: '42px',
+    color: color.navy,
   };
 
   const labelStyle: React.CSSProperties = {
     display: 'block',
-    fontSize: '0.875rem',
-    fontWeight: 500,
+    fontSize: '12.5px',
+    fontWeight: 600,
     marginBottom: '0.25rem',
-    color: '#374151',
+    color: color.body,
   };
 
-  const sectionStyle: React.CSSProperties = {
-    marginBottom: '2rem',
+  const cardSectionStyle: React.CSSProperties = {
+    ...cardStyle,
+    padding: '18px 20px',
   };
 
   const sectionTitleStyle: React.CSSProperties = {
-    fontSize: '1.1rem',
-    fontWeight: 600,
+    fontSize: '15.5px',
+    fontWeight: 700,
     marginBottom: '1rem',
-    paddingBottom: '0.5rem',
-    borderBottom: '1px solid #e5e7eb',
+    color: color.navy,
   };
 
   const gridTwoCol: React.CSSProperties = {
     display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
+    gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)',
     gap: '1rem',
   };
 
+  const secondaryButtonStyle: React.CSSProperties = {
+    padding: '0.5rem 1rem',
+    fontSize: '0.875rem',
+    fontWeight: 600,
+    backgroundColor: '#fff',
+    color: color.body,
+    border: `1px solid ${color.inputBorder}`,
+    borderRadius: '8px',
+  };
+
+  const errorStyle: React.CSSProperties = {
+    color: color.danger,
+    fontSize: '0.75rem',
+    marginTop: '0.25rem',
+  };
+  const savedStyle: React.CSSProperties = {
+    color: color.success,
+    fontSize: '0.75rem',
+    marginTop: '0.25rem',
+  };
+
+  function fieldFeedback(field: TextField) {
+    if (errors[field]) return <div style={errorStyle}>{errors[field]}</div>;
+    if (savedField === field) return <div style={savedStyle}>Saved</div>;
+    return null;
+  }
+
   return (
-    <div style={{ maxWidth: '640px' }}>
-      {/* Logo section */}
-      <div style={sectionStyle}>
-        <div style={sectionTitleStyle}>Company Logo</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-          <div
-            style={{
-              width: '80px',
-              height: '80px',
-              borderRadius: '0.5rem',
-              border: '2px dashed #d1d5db',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              overflow: 'hidden',
-              backgroundColor: '#f9fafb',
-              flexShrink: 0,
-            }}
-          >
-            {logoUrl ? (
-              <img
-                src={logoUrl}
-                alt="Company logo"
-                style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-              />
-            ) : (
-              <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>No logo</span>
-            )}
-          </div>
-          <div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/png,image/jpeg"
-              onChange={handleLogoUpload}
-              style={{ display: 'none' }}
-            />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploading}
+    <div style={{ maxWidth: '860px', display: 'grid', gap: '1rem' }}>
+      <p style={{ color: color.muted, fontSize: '0.8125rem', margin: 0 }}>
+        Changes save automatically. Logo and signature upload when you choose a file.
+      </p>
+
+      {/* Upload feedback (uploads are explicit actions with a shared status line) */}
+      {message && (
+        <div
+          style={{
+            padding: '0.75rem 1rem',
+            borderRadius: '8px',
+            backgroundColor: message.type === 'success' ? color.successBg : '#fdf1f0',
+            color: message.type === 'success' ? color.success : color.danger,
+            fontSize: '0.875rem',
+          }}
+        >
+          {message.text}
+        </div>
+      )}
+
+      {/* Logo + Signature side by side (mockup 8a) */}
+      <div style={gridTwoCol}>
+        <div style={cardSectionStyle}>
+          <div style={sectionTitleStyle}>Company Logo</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+            <div
               style={{
-                padding: '0.5rem 1rem',
-                fontSize: '0.875rem',
-                backgroundColor: '#f3f4f6',
-                border: '1px solid #d1d5db',
-                borderRadius: '0.375rem',
-                cursor: uploading ? 'not-allowed' : 'pointer',
+                width: '80px',
+                height: '80px',
+                borderRadius: '8px',
+                border: `2px dashed ${color.inputBorder}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                overflow: 'hidden',
+                backgroundColor: color.tableHeadBg,
+                flexShrink: 0,
               }}
             >
-              {uploading ? 'Uploading...' : 'Upload Logo'}
-            </button>
-            <p style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.25rem' }}>
-              PNG or JPG, max 2 MB. Prints on your invoice, change-order and estimate PDFs.
-            </p>
+              {logoUrl ? (
+                <img
+                  src={logoUrl}
+                  alt="Company logo"
+                  style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                />
+              ) : (
+                <span style={{ fontSize: '0.75rem', color: color.faint }}>No logo</span>
+              )}
+            </div>
+            <div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg"
+                onChange={handleLogoUpload}
+                style={{ display: 'none' }}
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                style={{
+                  ...secondaryButtonStyle,
+                  cursor: uploading ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {uploading ? 'Uploading...' : 'Upload Logo'}
+              </button>
+              <p style={{ fontSize: '0.75rem', color: color.faint, marginTop: '0.25rem' }}>
+                PNG or JPG, max 2 MB. Prints on your invoice, change-order and estimate PDFs.
+              </p>
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Contractor signature (signed-artifact spec §4.2) */}
-      <div style={sectionStyle}>
-        <div style={sectionTitleStyle}>Contractor Signature</div>
-        <p style={{ fontSize: '0.8125rem', color: '#6b7280', marginBottom: '0.75rem' }}>
-          A saved signature image applied to change orders you send. You can also choose to type a
-          printed name at send time instead of using this image.
-        </p>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
-          <div
-            style={{
-              width: '160px',
-              height: '64px',
-              borderRadius: '0.5rem',
-              border: '2px dashed #d1d5db',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              overflow: 'hidden',
-              backgroundColor: '#f9fafb',
-              flexShrink: 0,
-            }}
-          >
-            {signatureUrl ? (
-              <img
-                src={signatureUrl}
-                alt="Contractor signature"
-                style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
-              />
-            ) : (
-              <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>
-                {signaturePath ? 'Signature on file' : 'No signature'}
-              </span>
-            )}
-          </div>
-          <div>
-            <input
-              ref={sigInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleSignatureUpload}
-              style={{ display: 'none' }}
-            />
-            <button
-              onClick={() => sigInputRef.current?.click()}
-              disabled={sigUploading}
+        {/* Contractor signature (signed-artifact spec §4.2) */}
+        <div style={cardSectionStyle}>
+          <div style={sectionTitleStyle}>Contractor Signature</div>
+          <p style={{ fontSize: '0.8125rem', color: color.muted, marginBottom: '0.75rem' }}>
+            Applied to change orders and lien releases you send. You can also type a printed name
+            at send time instead of using this image.
+          </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+            <div
               style={{
-                padding: '0.5rem 1rem',
-                fontSize: '0.875rem',
-                backgroundColor: '#f3f4f6',
-                border: '1px solid #d1d5db',
-                borderRadius: '0.375rem',
-                cursor: sigUploading ? 'not-allowed' : 'pointer',
+                width: '160px',
+                height: '64px',
+                borderRadius: '8px',
+                border: `2px dashed ${color.inputBorder}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                overflow: 'hidden',
+                backgroundColor: color.tableHeadBg,
+                flexShrink: 0,
               }}
             >
-              {sigUploading ? 'Working...' : signaturePath ? 'Replace' : 'Upload Signature'}
-            </button>
-            {signaturePath && (
+              {signatureUrl ? (
+                <img
+                  src={signatureUrl}
+                  alt="Contractor signature"
+                  style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                />
+              ) : (
+                <span style={{ fontSize: '0.75rem', color: color.faint }}>
+                  {signaturePath ? 'Signature on file' : 'No signature'}
+                </span>
+              )}
+            </div>
+            <div>
+              <input
+                ref={sigInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleSignatureUpload}
+                style={{ display: 'none' }}
+              />
               <button
-                onClick={handleSignatureClear}
+                onClick={() => sigInputRef.current?.click()}
                 disabled={sigUploading}
                 style={{
-                  marginLeft: '0.5rem',
-                  padding: '0.5rem 1rem',
-                  fontSize: '0.875rem',
-                  backgroundColor: '#ffffff',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '0.375rem',
-                  color: '#b91c1c',
+                  ...secondaryButtonStyle,
                   cursor: sigUploading ? 'not-allowed' : 'pointer',
                 }}
               >
-                Remove
+                {sigUploading ? 'Working...' : signaturePath ? 'Replace' : 'Upload Signature'}
               </button>
-            )}
-            <p style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.25rem' }}>
-              PNG or JPG, max 2 MB. Transparent PNG recommended.
+              {signaturePath && (
+                <button
+                  onClick={handleSignatureClear}
+                  disabled={sigUploading}
+                  style={{
+                    ...secondaryButtonStyle,
+                    marginLeft: '0.5rem',
+                    color: color.danger,
+                    cursor: sigUploading ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  Remove
+                </button>
+              )}
+              <p style={{ fontSize: '0.75rem', color: color.faint, marginTop: '0.25rem' }}>
+                PNG or JPG, max 2 MB. Transparent PNG recommended.
+              </p>
+            </div>
+          </div>
+
+          <div style={{ marginTop: '1rem' }}>
+            <label style={{ ...labelStyle, marginBottom: '0.375rem' }}>Or type your name</label>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+              <input
+                value={typedName}
+                onChange={(e) => setTypedName(e.target.value)}
+                placeholder="Full name as it should appear"
+                style={{ ...inputStyle, maxWidth: '320px' }}
+              />
+              <button
+                onClick={handleTypedSignatureSave}
+                disabled={sigUploading || !typedName.trim()}
+                style={{
+                  ...secondaryButtonStyle,
+                  whiteSpace: 'nowrap',
+                  cursor: sigUploading || !typedName.trim() ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {sigUploading ? 'Working...' : 'Save typed signature'}
+              </button>
+            </div>
+            <p style={{ fontSize: '0.75rem', color: color.faint, marginTop: '0.25rem' }}>
+              Rendered in a script font as a transparent PNG and saved as your signature image.
             </p>
           </div>
-        </div>
-
-        <div style={{ marginTop: '1rem' }}>
-          <label style={{ ...labelStyle, marginBottom: '0.375rem' }}>Or type your name</label>
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <input
-              value={typedName}
-              onChange={(e) => setTypedName(e.target.value)}
-              placeholder="Full name as it should appear"
-              style={{ ...inputStyle, maxWidth: '320px' }}
-            />
-            <button
-              onClick={handleTypedSignatureSave}
-              disabled={sigUploading || !typedName.trim()}
-              style={{
-                padding: '0.5rem 1rem',
-                fontSize: '0.875rem',
-                whiteSpace: 'nowrap',
-                backgroundColor: '#f3f4f6',
-                border: '1px solid #d1d5db',
-                borderRadius: '0.375rem',
-                cursor: sigUploading || !typedName.trim() ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {sigUploading ? 'Working...' : 'Save typed signature'}
-            </button>
-          </div>
-          <p style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.25rem' }}>
-            Rendered in a script font as a transparent PNG and saved as your signature image.
-          </p>
         </div>
       </div>
 
       {/* Company info */}
-      <div style={sectionStyle}>
+      <div style={cardSectionStyle}>
         <div style={sectionTitleStyle}>Company Information</div>
         <div style={{ marginBottom: '1rem' }}>
           <label style={labelStyle}>Company Name *</label>
@@ -442,9 +536,11 @@ export function SettingsForm({ company }: SettingsFormProps) {
             name="name"
             value={form.name}
             onChange={handleChange}
+            onBlur={() => handleBlur('name')}
             style={inputStyle}
             required
           />
+          {fieldFeedback('name')}
         </div>
         <div style={gridTwoCol}>
           <div>
@@ -452,7 +548,7 @@ export function SettingsForm({ company }: SettingsFormProps) {
             <select
               name="trade_type"
               value={form.trade_type}
-              onChange={handleChange}
+              onChange={(e) => handleSelect('trade_type', e.target.value)}
               style={inputStyle}
             >
               <option value="">Select a trade...</option>
@@ -462,6 +558,7 @@ export function SettingsForm({ company }: SettingsFormProps) {
                 </option>
               ))}
             </select>
+            {fieldFeedback('trade_type')}
           </div>
           <div>
             <label style={labelStyle}>License Number</label>
@@ -469,46 +566,52 @@ export function SettingsForm({ company }: SettingsFormProps) {
               name="license_number"
               value={form.license_number}
               onChange={handleChange}
+              onBlur={() => handleBlur('license_number')}
               style={inputStyle}
               placeholder="e.g. CGC1234567"
             />
+            {fieldFeedback('license_number')}
           </div>
         </div>
       </div>
 
-      {/* Contact info */}
-      <div style={sectionStyle}>
-        <div style={sectionTitleStyle}>Contact Information</div>
-        <div style={{ marginBottom: '1rem' }}>
-          {/* [S97] The company email. Two shipped behaviors already read this
-              column and it had no control anywhere, so it was always empty —
-              which is why client replies were landing in the owner's personal
-              inbox instead of the company's. */}
-          <label style={labelStyle}>Company Email</label>
-          <input
-            name="email"
-            type="email"
-            value={form.email}
-            onChange={handleChange}
-            style={inputStyle}
-            placeholder="office@yourcompany.com"
-          />
-          <p style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '0.25rem' }}>
-            Where clients reach you. Replies to estimates, change orders and invoices you send go
-            here, and it prints on your PDF letterhead. Leave it blank and replies fall back to the
-            owner&rsquo;s personal address.
-          </p>
-        </div>
-        <div style={gridTwoCol}>
-          <div>
+      {/* Contact + Address side by side (mockup 8a) */}
+      <div style={gridTwoCol}>
+        <div style={cardSectionStyle}>
+          <div style={sectionTitleStyle}>Contact Information</div>
+          <div style={{ marginBottom: '1rem' }}>
+            {/* [S97] The company email. Two shipped behaviors already read this
+                column and it had no control anywhere, so it was always empty —
+                which is why client replies were landing in the owner's personal
+                inbox instead of the company's. */}
+            <label style={labelStyle}>Company Email</label>
+            <input
+              name="email"
+              type="email"
+              value={form.email}
+              onChange={handleChange}
+              onBlur={() => handleBlur('email')}
+              style={inputStyle}
+              placeholder="office@yourcompany.com"
+            />
+            {fieldFeedback('email')}
+            <p style={{ fontSize: '0.75rem', color: color.muted, marginTop: '0.25rem' }}>
+              Where clients reach you. Replies to estimates, change orders and invoices you send go
+              here, and it prints on your PDF letterhead. Leave it blank and replies fall back to
+              the owner&rsquo;s personal address.
+            </p>
+          </div>
+          <div style={{ marginBottom: '1rem' }}>
             <label style={labelStyle}>Phone</label>
             <input
               name="phone"
               value={form.phone}
               onChange={handleChange}
+              onBlur={() => handleBlur('phone')}
               style={inputStyle}
               placeholder="(555) 123-4567"
             />
+            {fieldFeedback('phone')}
           </div>
           <div>
             <label style={labelStyle}>Website</label>
@@ -516,98 +619,84 @@ export function SettingsForm({ company }: SettingsFormProps) {
               name="website"
               value={form.website}
               onChange={handleChange}
+              onBlur={() => handleBlur('website')}
               style={inputStyle}
               placeholder="https://yourcompany.com"
             />
+            {fieldFeedback('website')}
           </div>
         </div>
-      </div>
 
-      {/* Address */}
-      <div style={sectionStyle}>
-        <div style={sectionTitleStyle}>Business Address</div>
-        <div style={{ marginBottom: '1rem' }}>
-          <label style={labelStyle}>Address Line 1</label>
-          <input
-            name="address_line1"
-            value={form.address_line1}
-            onChange={handleChange}
-            style={inputStyle}
-            placeholder="123 Main Street"
-          />
-        </div>
-        <div style={{ marginBottom: '1rem' }}>
-          <label style={labelStyle}>Address Line 2</label>
-          <input
-            name="address_line2"
-            value={form.address_line2}
-            onChange={handleChange}
-            style={inputStyle}
-            placeholder="Suite 200"
-          />
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '1rem' }}>
-          <div>
-            <label style={labelStyle}>City</label>
-            <input name="city" value={form.city} onChange={handleChange} style={inputStyle} />
-          </div>
-          <div>
-            <label style={labelStyle}>State</label>
-            <select name="state" value={form.state} onChange={handleChange} style={inputStyle}>
-              <option value="">--</option>
-              {US_STATES.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label style={labelStyle}>ZIP</label>
+        <div style={cardSectionStyle}>
+          <div style={sectionTitleStyle}>Business Address</div>
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={labelStyle}>Address Line 1</label>
             <input
-              name="zip"
-              value={form.zip}
+              name="address_line1"
+              value={form.address_line1}
               onChange={handleChange}
+              onBlur={() => handleBlur('address_line1')}
               style={inputStyle}
-              placeholder="33426"
+              placeholder="123 Main Street"
             />
+            {fieldFeedback('address_line1')}
+          </div>
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={labelStyle}>Address Line 2</label>
+            <input
+              name="address_line2"
+              value={form.address_line2}
+              onChange={handleChange}
+              onBlur={() => handleBlur('address_line2')}
+              style={inputStyle}
+              placeholder="Suite 200"
+            />
+            {fieldFeedback('address_line2')}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '1rem' }}>
+            <div>
+              <label style={labelStyle}>City</label>
+              <input
+                name="city"
+                value={form.city}
+                onChange={handleChange}
+                onBlur={() => handleBlur('city')}
+                style={inputStyle}
+              />
+              {fieldFeedback('city')}
+            </div>
+            <div>
+              <label style={labelStyle}>State</label>
+              <select
+                name="state"
+                value={form.state}
+                onChange={(e) => handleSelect('state', e.target.value)}
+                style={inputStyle}
+              >
+                <option value="">--</option>
+                {US_STATES.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+              {fieldFeedback('state')}
+            </div>
+            <div>
+              <label style={labelStyle}>ZIP</label>
+              <input
+                name="zip"
+                value={form.zip}
+                onChange={handleChange}
+                onBlur={() => handleBlur('zip')}
+                style={inputStyle}
+                placeholder="33426"
+              />
+              {fieldFeedback('zip')}
+            </div>
           </div>
         </div>
       </div>
-
-      {/* Status message */}
-      {message && (
-        <div
-          style={{
-            padding: '0.75rem 1rem',
-            borderRadius: '0.375rem',
-            marginBottom: '1rem',
-            backgroundColor: message.type === 'success' ? '#f0fdf4' : '#fef2f2',
-            color: message.type === 'success' ? '#166534' : '#991b1b',
-            fontSize: '0.875rem',
-          }}
-        >
-          {message.text}
-        </div>
-      )}
-
-      {/* Save button */}
-      <button
-        onClick={handleSave}
-        disabled={saving || !form.name.trim()}
-        style={{
-          padding: '0.625rem 1.5rem',
-          fontSize: '0.875rem',
-          fontWeight: 600,
-          color: '#fff',
-          backgroundColor: saving || !form.name.trim() ? '#9ca3af' : '#2563eb',
-          border: 'none',
-          borderRadius: '0.375rem',
-          cursor: saving || !form.name.trim() ? 'not-allowed' : 'pointer',
-        }}
-      >
-        {saving ? 'Saving...' : 'Save Settings'}
-      </button>
     </div>
   );
 }
