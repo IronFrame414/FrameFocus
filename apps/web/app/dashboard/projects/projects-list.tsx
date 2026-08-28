@@ -4,16 +4,16 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { ProjectStatus, ProjectWithContact } from '@/lib/services/projects';
-import { PROJECT_STATUS_LABELS, PROJECT_TYPE_LABELS } from '@/lib/services/projects-client';
+import { PROJECT_STATUS_LABELS } from '@/lib/services/projects-client';
+import { attentionFor, progressFor, progressLabel } from '@/lib/project-list-derive';
 import {
-  badgeStyle,
-  cardStyle,
-  color,
-  font,
-  h2Style,
-  microLabelStyle,
-  primaryButtonStyle,
-} from '@/lib/theme';
+  FilterChips,
+  ListPageHeader,
+  ListSearchInput,
+  MetricStrip,
+} from '@/components/list-screen/list-screen';
+import type { Metric } from '@/components/list-screen/list-screen';
+import { badgeStyle, cardStyle, color, font, microLabelStyle, primaryButtonStyle } from '@/lib/theme';
 
 interface ProjectsListProps {
   projects: ProjectWithContact[];
@@ -21,9 +21,25 @@ interface ProjectsListProps {
    *  getRevisedContractMap — the single legal derivation). null = no
    *  original contract value; empty for roles without the Contract column. */
   revisedContracts: Record<string, number | null>;
+  /** §8.1 Billed / Margin — from the per-project profitability report loop
+   *  (§6). Empty objects for gated roles: the server made ZERO calls. */
+  billed: Record<string, number>;
+  marginPercent: Record<string, number | null>;
+  /** Needs-attention inputs (§8.1 — grouped queries, caller-RLS-scoped). */
+  draftCoCounts: Record<string, number>;
+  openPunchCounts: Record<string, number>;
+  acceptedUnconverted: string[];
+  /** Company-calendar today ('YYYY-MM-DD', companyToday — §8c.1 pattern). */
+  today: string;
+  metrics: {
+    contractValueActive: number;
+    unbilledTotal: number;
+    awaitingSignature: number;
+  };
   currentStatus: string;
   canCreate: boolean;
-  /** Financial floor (ui-01 §11): Contract column is Owner/Admin only. */
+  /** Financial floor (ui-01 §11): Contract, Billed, Margin are Owner/Admin
+   *  only — the 8-column grid reflows to 5. */
   canSeeFinancials: boolean;
 }
 
@@ -53,6 +69,13 @@ function money(value: number | null): string {
 export function ProjectsList({
   projects,
   revisedContracts,
+  billed,
+  marginPercent,
+  draftCoCounts,
+  openPunchCounts,
+  acceptedUnconverted,
+  today,
+  metrics,
   currentStatus,
   canCreate,
   canSeeFinancials,
@@ -67,6 +90,26 @@ export function ProjectsList({
       complete: projects.filter((p) => p.status === 'complete').length,
     }),
     [projects]
+  );
+
+  const acceptedSet = useMemo(() => new Set(acceptedUnconverted), [acceptedUnconverted]);
+
+  const attentionByProject = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    for (const p of projects) {
+      map[p.id] = attentionFor({
+        hasDates: Boolean(p.start_date && p.target_end_date),
+        draftCoCount: draftCoCounts[p.id] ?? 0,
+        openPunchCount: openPunchCounts[p.id] ?? 0,
+        hasAcceptedUnconverted: acceptedSet.has(p.id),
+      });
+    }
+    return map;
+  }, [projects, draftCoCounts, openPunchCounts, acceptedSet]);
+
+  const needAttentionCount = useMemo(
+    () => projects.filter((p) => (attentionByProject[p.id] ?? []).length > 0).length,
+    [projects, attentionByProject]
   );
 
   const visible = useMemo(() => {
@@ -86,94 +129,63 @@ export function ProjectsList({
     return rows;
   }, [projects, currentStatus, search]);
 
-  // Financial floor reflow (ui-01 §11): 6 columns for Owner/Admin, 5 without
-  // the Contract column for gated roles.
+  // §8.1 metric strip. The two money cards are Owner/Admin only — a gated
+  // role's strip REFLOWS to the two count cards (less, not nothing).
+  const stripMetrics: Metric[] = [
+    ...(canSeeFinancials
+      ? [
+          {
+            label: 'Contract value',
+            value: money(metrics.contractValueActive),
+            sub: 'active jobs',
+          },
+          { label: 'Unbilled work', value: money(metrics.unbilledTotal) },
+        ]
+      : []),
+    { label: 'Awaiting signature', value: metrics.awaitingSignature },
+    { label: 'Need attention', value: needAttentionCount },
+  ];
+
+  // Financial floor reflow (ui-01 §11): 8 columns for Owner/Admin — Project ·
+  // Client · Status · Progress · Contract · Billed · Margin · Attention — and
+  // 5 without the three money columns for gated roles.
   const gridTemplate = canSeeFinancials
-    ? '1fr 2.2fr 1.5fr 1.2fr 1.2fr 1.3fr'
-    : '1fr 2.4fr 1.7fr 1.3fr 1.3fr';
+    ? '2.1fr 1.3fr 1fr 1.1fr 1.2fr 1fr 0.7fr 1.4fr'
+    : '2.4fr 1.6fr 1.2fr 1.3fr 1.8fr';
 
   const rowBase: React.CSSProperties = {
     display: 'grid',
     gridTemplateColumns: gridTemplate,
     gap: '12px',
     alignItems: 'center',
-    padding: '15px 20px',
+    padding: '13px 20px',
     borderBottom: `1px solid ${color.rowDivider}`,
     cursor: 'pointer',
   };
 
   return (
     <div>
-      {/* Header */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '18px',
-        }}
+      <ListPageHeader
+        title="Projects"
+        subtitle={`${counts.total} total · ${counts.active} active · ${counts.complete} complete`}
       >
-        <div>
-          <h2 style={h2Style}>Projects</h2>
-          <p style={{ color: color.muted, fontSize: '14px', margin: '4px 0 0' }}>
-            {counts.total} total · {counts.active} active · {counts.complete} complete
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search projects…"
-            style={{
-              width: '220px',
-              padding: '9px 12px',
-              backgroundColor: '#fff',
-              border: `1px solid ${color.inputBorder}`,
-              borderRadius: '9px',
-              fontFamily: font.sans,
-              fontSize: '13px',
-              color: color.body,
-            }}
-          />
-          {canCreate && (
-            <Link href="/dashboard/projects/new" style={primaryButtonStyle}>
-              + New Project
-            </Link>
-          )}
-        </div>
-      </div>
+        <ListSearchInput value={search} onChange={setSearch} placeholder="Search projects…" />
+        {canCreate && (
+          <Link href="/dashboard/projects/new" style={primaryButtonStyle}>
+            + New Project
+          </Link>
+        )}
+      </ListPageHeader>
 
-      {/* Filter chips */}
-      <div style={{ display: 'flex', gap: '6px', marginBottom: '14px' }}>
-        {STATUS_FILTERS.map((f) => {
-          const selected = currentStatus === f.value;
-          return (
-            <button
-              key={f.value}
-              onClick={() =>
-                router.push(
-                  f.value === 'all'
-                    ? '/dashboard/projects'
-                    : `/dashboard/projects?status=${f.value}`
-                )
-              }
-              style={{
-                padding: '7px 14px',
-                fontFamily: font.sans,
-                fontSize: '13px',
-                fontWeight: 600,
-                borderRadius: '8px',
-                border: selected ? '1px solid transparent' : `1px solid ${color.cardBorder}`,
-                backgroundColor: selected ? color.navy : '#fff',
-                color: selected ? '#fff' : color.bodyAlt,
-                cursor: 'pointer',
-              }}
-            >
-              {f.label}
-            </button>
-          );
-        })}
-      </div>
+      <MetricStrip metrics={stripMetrics} />
+
+      <FilterChips
+        options={STATUS_FILTERS}
+        selected={currentStatus}
+        onSelect={(value) =>
+          router.push(value === 'all' ? '/dashboard/projects' : `/dashboard/projects?status=${value}`)
+        }
+      />
 
       {/* Table card */}
       {visible.length === 0 ? (
@@ -196,85 +208,156 @@ export function ProjectsList({
               borderBottom: `1px solid ${color.neutralBadgeBg}`,
             }}
           >
-            <span style={microLabelStyle}>Number</span>
-            <span style={microLabelStyle}>Name</span>
+            <span style={microLabelStyle}>Project</span>
             <span style={microLabelStyle}>Client</span>
-            <span style={microLabelStyle}>Type</span>
             <span style={microLabelStyle}>Status</span>
+            <span style={microLabelStyle}>Progress</span>
             {canSeeFinancials && (
-              // [S97] "Contract / projected" — one header over rows of BOTH
-              // kinds, so it cannot claim either. The per-row qualifier below
-              // is what disambiguates each figure (P11: a cost-plus/T&M value
-              // is a non-binding projection, never a contract).
-              <span style={{ ...microLabelStyle, textAlign: 'right' }}>Contract / projected</span>
+              <>
+                {/* [S97] "Contract / projected" — one header over rows of BOTH
+                    kinds, so it cannot claim either. The per-row qualifier
+                    below disambiguates (P11: a cost-plus/T&M value is a
+                    non-binding projection, never a contract). The design's
+                    bare CONTRACT header is AMENDED — the ruling wins. */}
+                <span style={{ ...microLabelStyle, textAlign: 'right' }}>Contract / projected</span>
+                <span style={{ ...microLabelStyle, textAlign: 'right' }}>Billed</span>
+                <span style={{ ...microLabelStyle, textAlign: 'right' }}>Margin</span>
+              </>
             )}
+            <span style={microLabelStyle}>Needs attention</span>
           </div>
 
-          {visible.map((p, i) => (
-            <div
-              key={p.id}
-              onClick={() => router.push(`/dashboard/projects/${p.id}`)}
-              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = color.tableHeadBg)}
-              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
-              style={{
-                ...rowBase,
-                borderBottom: i === visible.length - 1 ? 'none' : rowBase.borderBottom,
-              }}
-            >
-              <span style={{ fontFamily: font.mono, fontSize: '13px', fontWeight: 500, color: color.muted }}>
-                {p.project_number}
-              </span>
-              <span style={{ fontFamily: font.sans, fontWeight: 700, color: color.navy, fontSize: '14px' }}>
-                {p.name}
-              </span>
-              <span style={{ fontSize: '13px', color: color.bodyAlt }}>
-                {p.contact ? `${p.contact.first_name} ${p.contact.last_name}` : '—'}
-              </span>
-              <span style={{ fontSize: '13px', fontWeight: 500, color: color.bodyAlt }}>
-                {PROJECT_TYPE_LABELS[p.project_type]}
-              </span>
-              <span>
-                <span
-                  style={{
-                    ...badgeStyle,
-                    backgroundColor: STATUS_BADGES[p.status].bg,
-                    color: STATUS_BADGES[p.status].fg,
-                  }}
-                >
-                  {PROJECT_STATUS_LABELS[p.status]}
+          {visible.map((p, i) => {
+            const attention = attentionByProject[p.id] ?? [];
+            const progress = progressFor(p.start_date, p.target_end_date, today);
+            return (
+              <div
+                key={p.id}
+                onClick={() => router.push(`/dashboard/projects/${p.id}`)}
+                onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = color.tableHeadBg)}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                style={{
+                  ...rowBase,
+                  borderBottom: i === visible.length - 1 ? 'none' : rowBase.borderBottom,
+                }}
+              >
+                {/* Project — number folded beneath the name (§8.1). The Type
+                    column is dropped; project_type still marks projected rows. */}
+                <span>
+                  <span
+                    style={{
+                      display: 'block',
+                      fontFamily: font.sans,
+                      fontWeight: 700,
+                      color: color.navy,
+                      fontSize: '14px',
+                    }}
+                  >
+                    {p.name}
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: font.mono,
+                      fontSize: '11.5px',
+                      fontWeight: 500,
+                      color: color.faint,
+                    }}
+                  >
+                    {p.project_number}
+                  </span>
                 </span>
-              </span>
-              {canSeeFinancials && (
+                <span style={{ fontSize: '13px', color: color.bodyAlt }}>
+                  {p.contact ? `${p.contact.first_name} ${p.contact.last_name}` : '—'}
+                </span>
+                <span>
+                  <span
+                    style={{
+                      ...badgeStyle,
+                      backgroundColor: STATUS_BADGES[p.status].bg,
+                      color: STATUS_BADGES[p.status].fg,
+                    }}
+                  >
+                    {PROJECT_STATUS_LABELS[p.status]}
+                  </span>
+                </span>
+                {/* Progress — RULED: percent + days left, nothing else. */}
                 <span
                   style={{
                     fontFamily: font.mono,
-                    fontSize: '14px',
-                    fontWeight: 600,
-                    // 7B (Q3a): the Contract column shows the REVISED value.
-                    color: (revisedContracts[p.id] ?? null) === null ? color.faint : color.navy,
-                    textAlign: 'right',
+                    fontSize: '12.5px',
+                    color: progress === null ? color.faint : color.bodyAlt,
                   }}
                 >
-                  {money(revisedContracts[p.id] ?? null)}
-                  {/* [S97] PER-ROW QUALIFIER. A projected row is marked; a
-                      contract row is not, so the unmarked case stays clean. */}
-                  {p.project_type !== 'fixed_price' && (revisedContracts[p.id] ?? null) !== null && (
+                  {progressLabel(progress)}
+                </span>
+                {canSeeFinancials && (
+                  <>
                     <span
                       style={{
-                        display: 'block',
-                        fontFamily: font.sans,
-                        fontSize: '10px',
-                        fontWeight: 400,
-                        color: color.faint,
+                        fontFamily: font.mono,
+                        fontSize: '13.5px',
+                        fontWeight: 600,
+                        // 7B (Q3a): the Contract column shows the REVISED value.
+                        color: (revisedContracts[p.id] ?? null) === null ? color.faint : color.navy,
+                        textAlign: 'right',
                       }}
                     >
-                      projected
+                      {money(revisedContracts[p.id] ?? null)}
+                      {/* [S97] PER-ROW QUALIFIER. A projected row is marked; a
+                          contract row is not, so the unmarked case stays clean. */}
+                      {p.project_type !== 'fixed_price' &&
+                        (revisedContracts[p.id] ?? null) !== null && (
+                          <span
+                            style={{
+                              display: 'block',
+                              fontFamily: font.sans,
+                              fontSize: '10px',
+                              fontWeight: 400,
+                              color: color.faint,
+                            }}
+                          >
+                            projected
+                          </span>
+                        )}
                     </span>
-                  )}
+                    <span
+                      style={{
+                        fontFamily: font.mono,
+                        fontSize: '13.5px',
+                        color: color.bodyAlt,
+                        textAlign: 'right',
+                      }}
+                    >
+                      {money(billed[p.id] ?? null)}
+                    </span>
+                    <span
+                      style={{
+                        fontFamily: font.mono,
+                        fontSize: '13.5px',
+                        fontWeight: 600,
+                        color: (marginPercent[p.id] ?? null) === null ? color.faint : color.navy,
+                        textAlign: 'right',
+                      }}
+                    >
+                      {(marginPercent[p.id] ?? null) === null ? '—' : `${marginPercent[p.id]}%`}
+                    </span>
+                  </>
+                )}
+                {/* Needs attention — RULED: four conditions, closed set;
+                    em-dash when clean. */}
+                <span
+                  style={{
+                    fontFamily: font.sans,
+                    fontSize: '12.5px',
+                    fontWeight: attention.length > 0 ? 600 : 400,
+                    color: attention.length > 0 ? color.warningDeep : color.faint,
+                  }}
+                >
+                  {attention.length > 0 ? attention.join(' · ') : '—'}
                 </span>
-              )}
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

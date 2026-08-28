@@ -204,3 +204,43 @@ inventories"). Spec: `docs/specs/desktop-redesign-spec.md` (1358 lines). CLI lin
   **`s97ct-roles.live.ts` 36/36 LIVE against rebuild-test**; full unit suite **947/947 (62
   files)**; `npx turbo run type-check` → 5/5. Foreman acceptance proven in both the new suite
   and the adapted live 6a: Money lands on Budget & Cost, Profitability absent from the markup.
+
+---
+
+## Build step 4 — the six list screens
+
+### Entry 8 — the shared anatomy + `14a` Projects
+- **Step:** the pattern (once) and the first, most-specced screen.
+- **Did:**
+  - NEW `components/list-screen/list-screen.tsx` — ListPageHeader · ListSearchInput ·
+    MetricStrip · AlertStrip (wears `attentionCardStyle`) · FilterChips. **The table is
+    deliberately NOT shared** — six different column sets/reflows; a generic table would be a
+    framework, not a pattern. Tables stay per-screen on the theme tokens.
+  - NEW `lib/project-list-derive.ts` — the two ruled derivations as pure functions:
+    `progressFor`/`progressLabel` (percent + days left, nothing else; null → "no dates set";
+    past-target renders "Nd over" — a micro-decision, the ruling didn't name the overdue case)
+    and `attentionFor` (four conditions, closed set, ruled order).
+  - `projects/page.tsx` — three grouped attention queries (draft COs · open+in_progress punch,
+    the checkPunchGate statuses matching dashboard.ts · accepted-unconverted estimates, keyed on
+    status='accepted' since conversion flips to 'converted'); `projectHasUnsignedContract()` per
+    project for the Awaiting-signature metric (the one legal mechanism — SECURITY DEFINER,
+    role-safe; N calls on a single-digit list is the same accepted shape as the margin loop);
+    the §6 margin loop — per-project `getProfitabilityReport` behind `canSeeFinancials`, zero
+    calls for gated roles. Billed = headline.billed; margin% = profit over the headline's own
+    basis (profitBasisFor); Unbilled = Σ positive `backlog` (already earned−billed−discounts).
+  - `projects-list.tsx` — number folded under name; Type column dropped (`project_type` kept for
+    the projected qualifier); Progress + Billed + Margin + Needs-attention columns; metric strip
+    Contract value active · Unbilled work · Awaiting signature · Need attention (money cards
+    Owner/Admin only — the strip itself reflows); grid reflow now **8 → 5** on
+    `canSeeFinancials`, same mechanism as the shipped 6 → 5. **[S97] Contract/projected header
+    and per-row qualifier kept — the design's bare CONTRACT header is amended, as ruled.**
+- **Decisions a ruling did not cover, recorded:** overdue renders "Nd over"; multiple attention
+  conditions join with " · "; row tints NOT applied (§8.1 does not order them — the tint tokens
+  exist for screens whose specs do); attention counts are caller-RLS-scoped, so a foreman/crew
+  row never shows draft-CO or accepted-convert conditions (the S121/estimates floors, working);
+  Unbilled sums only positive backlog (an overbilled job is not negative unbilled work).
+- **Files:** the four above + `test/redesign-projects-list.test.ts` (new, 8 cases, non-vacuous).
+- **Commit:** (this entry's commit).
+- **Verified:** derivation tests 8/8; type-check 5/5. The §5b live render check (Owner + a gated
+  role, real Bishop data) runs ONCE for all six screens at the end of the step, as a Playwright
+  pass — logged when it runs.
