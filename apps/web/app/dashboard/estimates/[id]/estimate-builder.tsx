@@ -31,6 +31,7 @@ import { ItemsTab } from './items-tab';
 import { BiddingTab } from './bidding-tab';
 import { CoverTab, FilesTab, NotesTab, ScopeTab, TermsTab } from './text-tabs';
 import { useConfirm } from '@/components/confirm/confirm-provider';
+import { color } from '@/lib/theme';
 
 export type BuilderRole = 'owner' | 'admin' | 'project_manager';
 
@@ -104,16 +105,16 @@ export function EstimateBuilder({ estimateId, role, userId }: EstimateBuilderPro
   }, [reload]);
 
   if (loading) {
-    return <p style={{ color: '#9ca3af', fontSize: '0.875rem' }}>Loading estimate…</p>;
+    return <p style={{ color: '#9aa4b8', fontSize: '0.875rem' }}>Loading estimate…</p>;
   }
 
   if (!data || data.estimate.is_deleted) {
     return (
       <div>
-        <p style={{ color: '#991b1b', fontSize: '0.875rem', marginBottom: '1rem' }}>
+        <p style={{ color: '#c0362c', fontSize: '0.875rem', marginBottom: '1rem' }}>
           Estimate not found.
         </p>
-        <Link href="/dashboard/estimates" style={{ color: '#2563eb', fontSize: '0.875rem' }}>
+        <Link href="/dashboard/estimates" style={{ color: '#3b4ae0', fontSize: '0.875rem' }}>
           ← Back to estimates
         </Link>
       </div>
@@ -161,16 +162,16 @@ export function EstimateBuilder({ estimateId, role, userId }: EstimateBuilderPro
       fontSize: '0.875rem',
       fontWeight: 600,
       color: '#fff',
-      backgroundColor: actionBusy ? '#9ca3af' : '#2563eb',
+      backgroundColor: actionBusy ? '#9aa4b8' : '#3b4ae0',
       border: 'none',
       borderRadius: '0.375rem',
       cursor: actionBusy ? 'not-allowed' : 'pointer',
     };
     const secondaryStyle: React.CSSProperties = {
       ...buttonStyle,
-      color: '#374151',
-      backgroundColor: '#f3f4f6',
-      border: '1px solid #d1d5db',
+      color: '#3f4a60',
+      backgroundColor: '#f4f6fa',
+      border: '1px solid #d5dae4',
     };
 
     if (estimate.status === 'draft' && isManager) {
@@ -301,57 +302,29 @@ export function EstimateBuilder({ estimateId, role, userId }: EstimateBuilderPro
 
   const tabProps: TabProps = { data, role, userId, canEdit, reload };
 
+  // Step 9 (§8.10.1) — left rail → top tabs, the mockup's one structural
+  // change that survives contact with reality. The SET is the shipped eight
+  // (the mockup's seven is wrong: no Review & Send tab exists — send lives in
+  // the Details right rail, preview is its own route; Cover Sheet and the
+  // disabled Files tab are real). Tab state stays a client useState — making
+  // tabs deep-linkable is a change, not a restyle, and is on the ask list.
   return (
-    <div style={{ display: 'flex', gap: '1.5rem', minHeight: '70vh' }}>
-      {/* Sidebar */}
-      <aside style={{ width: '180px', flexShrink: 0 }}>
+    <div style={{ minHeight: '70vh' }}>
+      {/* Main panel */}
+      <div style={{ minWidth: 0, paddingBottom: '5rem' }}>
         <Link
           href="/dashboard/estimates"
           style={{
-            display: 'block',
+            display: 'inline-block',
             fontSize: '0.875rem',
-            color: '#6b7280',
+            color: '#7b8699',
             textDecoration: 'none',
-            marginBottom: '1rem',
+            marginBottom: '0.75rem',
           }}
         >
-          ← Back
+          ← All estimates
         </Link>
-        <nav>
-          {TABS.map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              disabled={tab.disabled}
-              onClick={() => !tab.disabled && setActiveTab(tab.key)}
-              style={{
-                display: 'block',
-                width: '100%',
-                textAlign: 'left',
-                padding: '0.5rem 0.75rem',
-                marginBottom: '0.125rem',
-                fontSize: '0.875rem',
-                fontWeight: activeTab === tab.key ? 600 : 400,
-                color: tab.disabled ? '#9ca3af' : activeTab === tab.key ? '#1d4ed8' : '#374151',
-                backgroundColor: activeTab === tab.key ? '#eff6ff' : 'transparent',
-                border: 'none',
-                borderRadius: '0.375rem',
-                cursor: tab.disabled ? 'not-allowed' : 'pointer',
-              }}
-            >
-              {tab.label}
-              {tab.disabled && (
-                <span style={{ fontSize: '0.625rem', display: 'block', color: '#9ca3af' }}>
-                  Coming soon
-                </span>
-              )}
-            </button>
-          ))}
-        </nav>
-      </aside>
 
-      {/* Main panel */}
-      <div style={{ flex: 1, minWidth: 0, paddingBottom: '5rem' }}>
         {/* Header */}
         <div
           style={{
@@ -381,7 +354,7 @@ export function EstimateBuilder({ estimateId, role, userId }: EstimateBuilderPro
                 gap: '0.75rem',
                 alignItems: 'center',
                 fontSize: '0.875rem',
-                color: '#6b7280',
+                color: '#7b8699',
               }}
             >
               <span style={{ fontWeight: 600 }}>{estimate.estimate_number}</span>
@@ -418,8 +391,8 @@ export function EstimateBuilder({ estimateId, role, userId }: EstimateBuilderPro
               padding: '0.75rem 1rem',
               borderRadius: '0.375rem',
               marginBottom: '1rem',
-              backgroundColor: '#fef2f2',
-              color: '#991b1b',
+              backgroundColor: '#fdf1f0',
+              color: '#c0362c',
               fontSize: '0.875rem',
             }}
           >
@@ -433,8 +406,8 @@ export function EstimateBuilder({ estimateId, role, userId }: EstimateBuilderPro
               padding: '0.5rem 1rem',
               borderRadius: '0.375rem',
               marginBottom: '1rem',
-              backgroundColor: '#fffbeb',
-              color: '#92400e',
+              backgroundColor: '#fff5e6',
+              color: '#b45309',
               fontSize: '0.8125rem',
             }}
           >
@@ -457,11 +430,11 @@ export function EstimateBuilder({ estimateId, role, userId }: EstimateBuilderPro
                 data-testid="est-void-record"
                 style={{
                   padding: '0.75rem',
-                  border: '1px solid #fecaca',
-                  backgroundColor: '#fef2f2',
+                  border: '1px solid #efd3d0',
+                  backgroundColor: '#fdf1f0',
                   borderRadius: '0.375rem',
                   fontSize: '0.8125rem',
-                  color: '#7f1d1d',
+                  color: '#c0362c',
                 }}
               >
                 <strong>Voided.</strong> {estimate.void_reason}
@@ -474,8 +447,8 @@ export function EstimateBuilder({ estimateId, role, userId }: EstimateBuilderPro
                     style={{
                       padding: '0.45rem 0.875rem',
                       borderRadius: '0.375rem',
-                      border: '1px solid #1f2937',
-                      backgroundColor: '#1f2937',
+                      border: '1px solid #0f1729',
+                      backgroundColor: '#0f1729',
                       color: '#fff',
                       fontSize: '0.8125rem',
                       fontWeight: 600,
@@ -491,12 +464,12 @@ export function EstimateBuilder({ estimateId, role, userId }: EstimateBuilderPro
                 data-testid="est-void-panel"
                 style={{
                   padding: '0.75rem',
-                  border: '1px solid #fecaca',
-                  backgroundColor: '#fef2f2',
+                  border: '1px solid #efd3d0',
+                  backgroundColor: '#fdf1f0',
                   borderRadius: '0.375rem',
                 }}
               >
-                <p style={{ fontSize: '0.8125rem', color: '#7f1d1d', margin: '0 0 0.5rem' }}>
+                <p style={{ fontSize: '0.8125rem', color: '#c0362c', margin: '0 0 0.5rem' }}>
                   Withdraw {estimate.estimate_number}? The client keeps the copy they were sent —
                   this records that it no longer stands. <strong>The reason is kept permanently
                   and cannot be edited afterwards.</strong>
@@ -510,7 +483,7 @@ export function EstimateBuilder({ estimateId, role, userId }: EstimateBuilderPro
                   style={{
                     width: '100%',
                     padding: '0.5rem',
-                    border: '1px solid #d1d5db',
+                    border: '1px solid #d5dae4',
                     borderRadius: '0.375rem',
                     fontSize: '0.8125rem',
                   }}
@@ -524,8 +497,8 @@ export function EstimateBuilder({ estimateId, role, userId }: EstimateBuilderPro
                     style={{
                       padding: '0.45rem 0.875rem',
                       borderRadius: '0.375rem',
-                      border: '1px solid #b91c1c',
-                      backgroundColor: '#b91c1c',
+                      border: '1px solid #c0362c',
+                      backgroundColor: '#c0362c',
                       color: '#fff',
                       fontSize: '0.8125rem',
                       fontWeight: 600,
@@ -545,7 +518,7 @@ export function EstimateBuilder({ estimateId, role, userId }: EstimateBuilderPro
                     style={{
                       padding: '0.45rem 0.875rem',
                       borderRadius: '0.375rem',
-                      border: '1px solid #d1d5db',
+                      border: '1px solid #d5dae4',
                       backgroundColor: '#fff',
                       fontSize: '0.8125rem',
                       cursor: 'pointer',
@@ -563,9 +536,9 @@ export function EstimateBuilder({ estimateId, role, userId }: EstimateBuilderPro
                 style={{
                   padding: '0.45rem 0.875rem',
                   borderRadius: '0.375rem',
-                  border: '1px solid #b91c1c',
+                  border: '1px solid #c0362c',
                   backgroundColor: '#fff',
-                  color: '#b91c1c',
+                  color: '#c0362c',
                   fontSize: '0.8125rem',
                   fontWeight: 600,
                   cursor: 'pointer',
@@ -576,6 +549,56 @@ export function EstimateBuilder({ estimateId, role, userId }: EstimateBuilderPro
             )}
           </div>
         )}
+
+        {/* Top tab row (single bottom-border style — raised segments are
+            project-detail only, per the README's tab hierarchy) */}
+        <div
+          role="tablist"
+          style={{
+            display: 'flex',
+            gap: '0.25rem',
+            borderBottom: `1px solid ${color.cardBorder}`,
+            margin: '1.25rem 0 1.5rem',
+            flexWrap: 'wrap',
+          }}
+        >
+          {TABS.map((tab) => {
+            const isActive = activeTab === tab.key;
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                data-testid={`est-tab-${tab.key}`}
+                disabled={tab.disabled}
+                onClick={() => !tab.disabled && setActiveTab(tab.key)}
+                style={{
+                  padding: '10px 14px',
+                  fontSize: '13.5px',
+                  fontWeight: isActive ? 700 : 600,
+                  color: tab.disabled
+                    ? color.faintAlt
+                    : isActive
+                      ? color.primary
+                      : color.mutedAlt,
+                  background: 'none',
+                  border: 'none',
+                  borderRadius: 0,
+                  boxShadow: isActive ? `inset 0 -2.5px 0 ${color.primary}` : 'none',
+                  cursor: tab.disabled ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {tab.label}
+                {tab.disabled && (
+                  <span style={{ fontSize: '0.625rem', marginLeft: '0.375rem', color: color.faintAlt }}>
+                    Soon
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
 
         {/* Active tab */}
         {activeTab === 'details' && (
@@ -602,7 +625,7 @@ export function EstimateBuilder({ estimateId, role, userId }: EstimateBuilderPro
           bottom: 0,
           left: 0,
           right: 0,
-          backgroundColor: '#111827',
+          backgroundColor: color.navy,
           color: '#fff',
           padding: '0.75rem 2rem',
           display: 'flex',
@@ -622,7 +645,8 @@ export function EstimateBuilder({ estimateId, role, userId }: EstimateBuilderPro
           Discount <strong>−{fmtMoney(estimate.discount_total)}</strong>
         </span>
         <span>
-          Grand Total <strong>{fmtMoney(estimate.grand_total)}</strong>
+          Grand Total{' '}
+          <strong style={{ color: color.amber }}>{fmtMoney(estimate.grand_total)}</strong>
         </span>
       </div>
 
