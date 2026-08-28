@@ -149,3 +149,17 @@ inventories"). Spec: `docs/specs/desktop-redesign-spec.md` (1358 lines). CLI lin
 - **Commit:** (this entry's commit).
 - **Verified:** residual grep over `lib/email/templates` → clean (exit 1); no test asserts email
   hexes (`brand-email-footer.test.tsx` uses `brandColor` fixtures only); type-check before commit.
+
+### Entry 6 — Phase C: sidebar
+- **Step:** build step 2, complete.
+- **Did:** the three ruled deltas in `dashboard-shell.tsx`, nothing else: width `w-[236px]` →
+  `w-[228px]` (line 277 — the `w-[236px]` at line 248 is a historical comment and stays); active
+  item + `shadow-[inset_0_0_0_1.5px_#7d8bf5]`; item padding `px-3 py-[10px]` → `px-[11px] py-[9px]`
+  on both branches. **No `NAV_ITEMS` entry, order or gate touched.**
+- **Files:** `apps/web/app/dashboard/dashboard-shell.tsx`.
+- **Commit:** (this entry's commit).
+- **Verified:** `e2e/desktop-ffnav.spec.ts` run LIVE against a fresh dev server, anonymous
+  chromium project, real five-role sign-ins: **10/10 passed** (exit 0 read from the redirected
+  log, corroborated by the pass tally) — Owner 14/3, Admin −Billing only, PM keeps Estimates +
+  Cost Catalog and loses Admin, foreman == crew, empty sections render no header.
+  `npx turbo run type-check` → 5/5.

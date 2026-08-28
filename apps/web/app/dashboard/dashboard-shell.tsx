@@ -217,8 +217,8 @@ export function DashboardShell({
         data-testid={`nav-item-${item.href}`}
         className={
           active
-            ? 'flex items-center gap-[11px] rounded-[9px] bg-brand-500 px-3 py-[10px] text-sm font-semibold text-white'
-            : 'flex items-center gap-[11px] rounded-[9px] px-3 py-[10px] text-sm font-medium text-brand-200 transition-colors duration-150 hover:bg-white/5'
+            ? 'flex items-center gap-[11px] rounded-[9px] bg-brand-500 px-[11px] py-[9px] text-sm font-semibold text-white shadow-[inset_0_0_0_1.5px_#7d8bf5]'
+            : 'flex items-center gap-[11px] rounded-[9px] px-[11px] py-[9px] text-sm font-medium text-brand-200 transition-colors duration-150 hover:bg-white/5'
         }
       >
         <Icon size={17} strokeWidth={1.9} aria-hidden />
@@ -274,7 +274,7 @@ export function DashboardShell({
           the overflow would be unreachable in a different way. A fix that works
           on Settings and breaks a 700px window is not a fix.
           ------------------------------------------------------------------ */}
-      <aside className="sticky top-0 flex h-screen w-[236px] shrink-0 flex-col self-start bg-brand-900 py-[22px]">
+      <aside className="sticky top-0 flex h-screen w-[228px] shrink-0 flex-col self-start bg-brand-900 py-[22px]">
         {/* Header block — the PRODUCT lockup, above the TENANT's company name.
             /logo-full-ice.svg is the FULL-COLOUR variant for navy, and it is
             the deliberate choice here [Josh, S98]: the brand sheet's own
