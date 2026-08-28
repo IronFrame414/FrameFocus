@@ -40,18 +40,51 @@ export function NotificationList({
   surface,
   filter,
   compact = false,
+  rollUpRepeats = false,
 }: {
   initial: NotificationListItem[];
   surface: Surface;
   filter: NotificationFilter;
   compact?: boolean;
+  /** §8.11.2 — desktop roll-up: a run of ≥4 consecutive same-type rows
+   *  collapses to the first plus "N more — Expand". Presentation only: the
+   *  hidden rows are the same rows, and expanding writes nothing. */
+  rollUpRepeats?: boolean;
 }) {
   const router = useRouter();
   const [items, setItems] = useState(initial);
   const [, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [expandedRuns, setExpandedRuns] = useState<ReadonlySet<string>>(new Set());
 
   const unreadCount = useMemo(() => items.filter((i) => !i.read_at).length, [items]);
+
+  // Roll-up entries. Keyed on the FIRST item's id (stable under dismissals),
+  // not the index. A run stays collapsed until its Expand is clicked.
+  const entries = useMemo(() => {
+    type Entry =
+      | { kind: 'item'; item: NotificationListItem }
+      | { kind: 'rollup'; runKey: string; count: number; type: string };
+    const out: Entry[] = [];
+    if (!rollUpRepeats) {
+      for (const item of items) out.push({ kind: 'item', item });
+      return out;
+    }
+    let i = 0;
+    while (i < items.length) {
+      let j = i;
+      while (j < items.length && items[j].type === items[i].type) j++;
+      const run = j - i;
+      if (run >= 4 && !expandedRuns.has(items[i].id)) {
+        out.push({ kind: 'item', item: items[i] });
+        out.push({ kind: 'rollup', runKey: items[i].id, count: run - 1, type: items[i].type });
+      } else {
+        for (let k = i; k < j; k++) out.push({ kind: 'item', item: items[k] });
+      }
+      i = j;
+    }
+    return out;
+  }, [items, rollUpRepeats, expandedRuns]);
 
   /** Optimistic local patch, so a tap feels immediate on a weak jobsite signal. */
   const patch = useCallback((id: string, next: Partial<NotificationListItem>) => {
@@ -155,7 +188,23 @@ export function NotificationList({
       )}
 
       <ul>
-        {items.map((item) => {
+        {entries.map((entry) => {
+          if (entry.kind === 'rollup') {
+            return (
+              <li key={`rollup-${entry.runKey}`} data-testid="notification-rollup">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setExpandedRuns((prev) => new Set([...prev, entry.runKey]))
+                  }
+                  data-testid="notification-rollup-expand"
+                >
+                  {entry.count} more {entry.type.replace(/_/g, ' ')} — Expand
+                </button>
+              </li>
+            );
+          }
+          const item = entry.item;
           const href = resolveLink(
             item.link_key,
             (item.link_params ?? {}) as LinkParams,
