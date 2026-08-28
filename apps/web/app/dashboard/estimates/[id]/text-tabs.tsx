@@ -9,23 +9,23 @@ import type { TabProps } from './estimate-builder';
 const inputStyle: React.CSSProperties = {
   width: '100%',
   padding: '0.5rem 0.75rem',
-  border: '1px solid #d1d5db',
+  border: '1px solid #d5dae4',
   borderRadius: '0.375rem',
   fontSize: '0.875rem',
 };
 const buttonStyle: React.CSSProperties = {
   padding: '0.5rem 1rem',
   fontSize: '0.875rem',
-  backgroundColor: '#f3f4f6',
-  border: '1px solid #d1d5db',
+  backgroundColor: '#f4f6fa',
+  border: '1px solid #d5dae4',
   borderRadius: '0.375rem',
   cursor: 'pointer',
 };
 const iconButtonStyle: React.CSSProperties = {
   padding: '0.25rem 0.5rem',
   fontSize: '0.75rem',
-  backgroundColor: '#f3f4f6',
-  border: '1px solid #d1d5db',
+  backgroundColor: '#f4f6fa',
+  border: '1px solid #d5dae4',
   borderRadius: '0.25rem',
   cursor: 'pointer',
 };
@@ -33,12 +33,12 @@ const errorBoxStyle: React.CSSProperties = {
   padding: '0.75rem 1rem',
   borderRadius: '0.375rem',
   marginBottom: '1rem',
-  backgroundColor: '#fef2f2',
-  color: '#991b1b',
+  backgroundColor: '#fdf1f0',
+  color: '#c0362c',
   fontSize: '0.875rem',
 };
 const savedStyle: React.CSSProperties = {
-  color: '#166534',
+  color: '#1f8f4e',
   fontSize: '0.75rem',
   marginTop: '0.5rem',
 };
@@ -113,7 +113,7 @@ export function TermsTab({ data, canEdit, reload }: TabProps) {
       </h2>
       {error && <div style={errorBoxStyle}>{error}</div>}
       {terms.length === 0 && (
-        <p style={{ fontSize: '0.875rem', color: '#9ca3af', marginBottom: '1rem' }}>
+        <p style={{ fontSize: '0.875rem', color: '#9aa4b8', marginBottom: '1rem' }}>
           No terms sections on this estimate.
         </p>
       )}
@@ -121,7 +121,7 @@ export function TermsTab({ data, canEdit, reload }: TabProps) {
         <div
           key={i}
           style={{
-            border: '1px solid #e5e7eb',
+            border: '1px solid #e4e8ef',
             borderRadius: '0.375rem',
             padding: '0.75rem',
             marginBottom: '0.75rem',
@@ -159,7 +159,7 @@ export function TermsTab({ data, canEdit, reload }: TabProps) {
               type="button"
               onClick={() => remove(i)}
               disabled={!canEdit}
-              style={{ ...iconButtonStyle, color: '#991b1b', opacity: canEdit ? 1 : 0.4 }}
+              style={{ ...iconButtonStyle, color: '#c0362c', opacity: canEdit ? 1 : 0.4 }}
             >
               ✕
             </button>
@@ -239,7 +239,7 @@ export function ScopeTab({ data, canEdit, reload }: TabProps) {
       {error && <div style={errorBoxStyle}>{error}</div>}
 
       {/* Summary — rendered at the top of the proposal scope block */}
-      <label style={{ display: 'block', fontSize: '0.8125rem', color: '#6b7280', marginBottom: '0.25rem' }}>
+      <label style={{ display: 'block', fontSize: '0.8125rem', color: '#7b8699', marginBottom: '0.25rem' }}>
         Summary (shown at the top of the scope on the proposal)
       </label>
       <textarea
@@ -253,7 +253,7 @@ export function ScopeTab({ data, canEdit, reload }: TabProps) {
       />
 
       {sections.length === 0 && (
-        <p style={{ fontSize: '0.875rem', color: '#9ca3af', marginBottom: '1rem' }}>
+        <p style={{ fontSize: '0.875rem', color: '#9aa4b8', marginBottom: '1rem' }}>
           No scope sections yet.
         </p>
       )}
@@ -262,7 +262,7 @@ export function ScopeTab({ data, canEdit, reload }: TabProps) {
         <div
           key={si}
           style={{
-            border: '1px solid #e5e7eb',
+            border: '1px solid #e4e8ef',
             borderRadius: '0.375rem',
             padding: '0.75rem',
             marginBottom: '0.75rem',
@@ -304,7 +304,7 @@ export function ScopeTab({ data, canEdit, reload }: TabProps) {
                 persist(summary, sections.filter((_, i) => i !== si));
               }}
               disabled={!canEdit}
-              style={{ ...iconButtonStyle, color: '#991b1b', opacity: canEdit ? 1 : 0.4 }}
+              style={{ ...iconButtonStyle, color: '#c0362c', opacity: canEdit ? 1 : 0.4 }}
             >
               ✕
             </button>
@@ -322,7 +322,7 @@ export function ScopeTab({ data, canEdit, reload }: TabProps) {
                 marginLeft: '1rem',
               }}
             >
-              <span style={{ color: '#9ca3af' }}>•</span>
+              <span style={{ color: '#9aa4b8' }}>•</span>
               <input
                 value={bullet}
                 disabled={!canEdit}
@@ -366,7 +366,7 @@ export function ScopeTab({ data, canEdit, reload }: TabProps) {
                   )
                 }
                 disabled={!canEdit}
-                style={{ ...iconButtonStyle, color: '#991b1b', opacity: canEdit ? 1 : 0.4 }}
+                style={{ ...iconButtonStyle, color: '#c0362c', opacity: canEdit ? 1 : 0.4 }}
               >
                 ✕
               </button>
@@ -436,6 +436,13 @@ export function CoverTab({ data, canEdit, reload }: TabProps) {
 }
 
 // ── Notes tab (internal_notes — never on the proposal) ──
+//
+// Step 9 (§8.10.5) — the mockup's visibility table grants Foreman read-write.
+// THE MOCKUP IS WRONG AND THE CODE IS RIGHT: a foreman cannot reach estimates
+// at all (route redirect + RLS admits owner/admin/PM, PM scoped to own). The
+// banner states the real audience. The mockup's per-note "carry to the
+// project" tick-boxes have nothing to tick — internal_notes is ONE blob and
+// the convert RPC copies the whole of it; the banner says that instead.
 
 export function NotesTab({ data, canEdit, reload }: TabProps) {
   const [text, setText] = useState(data.estimate.internal_notes ?? '');
@@ -447,14 +454,16 @@ export function NotesTab({ data, canEdit, reload }: TabProps) {
       <p
         style={{
           fontSize: '0.8125rem',
-          color: '#92400e',
-          backgroundColor: '#fffbeb',
+          color: '#b45309',
+          backgroundColor: '#fff5e6',
           padding: '0.5rem 0.75rem',
           borderRadius: '0.375rem',
           marginBottom: '1rem',
         }}
       >
-        Internal notes. Never shown on the proposal.
+        Internal notes — never shown on the proposal. Visible to the Owner, Admins, and the
+        estimate&rsquo;s author; the field team and clients can&rsquo;t reach estimates at all.
+        When this estimate converts, these notes carry to the project as one block.
       </p>
       {error && <div style={errorBoxStyle}>{error}</div>}
       <textarea
@@ -487,8 +496,8 @@ export function FilesTab() {
       style={{
         padding: '3rem',
         textAlign: 'center',
-        color: '#9ca3af',
-        border: '1px dashed #d1d5db',
+        color: '#9aa4b8',
+        border: '1px dashed #d5dae4',
         borderRadius: '0.5rem',
         fontSize: '0.875rem',
       }}

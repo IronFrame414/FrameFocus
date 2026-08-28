@@ -21,7 +21,7 @@ import { useConfirm } from '@/components/confirm/confirm-provider';
 const PdfPreview = dynamic(() => import('./pdf-preview'), {
   ssr: false,
   loading: () => (
-    <p style={{ color: '#9ca3af', fontSize: '0.875rem', padding: '2rem' }}>Rendering preview…</p>
+    <p style={{ color: '#9aa4b8', fontSize: '0.875rem', padding: '2rem' }}>Rendering preview…</p>
   ),
 });
 
@@ -111,9 +111,9 @@ export function ProposalPreviewClient({
     fontWeight: 600,
     borderRadius: '0.375rem',
     cursor: 'pointer',
-    border: '1px solid #d1d5db',
-    backgroundColor: '#f3f4f6',
-    color: '#374151',
+    border: '1px solid #d5dae4',
+    backgroundColor: '#f4f6fa',
+    color: '#3f4a60',
   };
 
   return (
@@ -131,7 +131,7 @@ export function ProposalPreviewClient({
         <div>
           <Link
             href={`/dashboard/estimates/${estimateId}`}
-            style={{ fontSize: '0.875rem', color: '#6b7280', textDecoration: 'none' }}
+            style={{ fontSize: '0.875rem', color: '#7b8699', textDecoration: 'none' }}
           >
             ← Back to builder
           </Link>
@@ -140,7 +140,7 @@ export function ProposalPreviewClient({
           </h1>
         </div>
         <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <label style={{ fontSize: '0.8125rem', color: '#6b7280' }}>
+          <label style={{ fontSize: '0.8125rem', color: '#7b8699' }}>
             Pricing detail{' '}
             <select
               value={data.estimate.pricingLevel}
@@ -148,7 +148,7 @@ export function ProposalPreviewClient({
               onChange={(e) => handlePricingLevel(e.target.value as ProposalPricingLevel)}
               style={{
                 padding: '0.375rem 0.5rem',
-                border: '1px solid #d1d5db',
+                border: '1px solid #d5dae4',
                 borderRadius: '0.375rem',
                 fontSize: '0.875rem',
               }}
@@ -175,8 +175,8 @@ export function ProposalPreviewClient({
                 disabled={busy}
                 style={{
                   ...buttonStyle,
-                  backgroundColor: '#2563eb',
-                  borderColor: '#2563eb',
+                  backgroundColor: '#3b4ae0',
+                  borderColor: '#3b4ae0',
                   color: '#fff',
                 }}
               >
@@ -193,8 +193,8 @@ export function ProposalPreviewClient({
             padding: '0.5rem 1rem',
             borderRadius: '0.375rem',
             marginBottom: '1rem',
-            backgroundColor: '#fffbeb',
-            color: '#92400e',
+            backgroundColor: '#fff5e6',
+            color: '#b45309',
             fontSize: '0.8125rem',
           }}
         >
@@ -209,8 +209,8 @@ export function ProposalPreviewClient({
             padding: '0.75rem 1rem',
             borderRadius: '0.375rem',
             marginBottom: '1rem',
-            backgroundColor: '#fef2f2',
-            color: '#991b1b',
+            backgroundColor: '#fdf1f0',
+            color: '#c0362c',
             fontSize: '0.875rem',
           }}
         >

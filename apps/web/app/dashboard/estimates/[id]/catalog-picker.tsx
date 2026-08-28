@@ -38,7 +38,7 @@ export function CatalogPicker({ onSelect, onClose }: CatalogPickerProps) {
 
   const inputStyle: React.CSSProperties = {
     padding: '0.5rem 0.75rem',
-    border: '1px solid #d1d5db',
+    border: '1px solid #d5dae4',
     borderRadius: '0.375rem',
     fontSize: '0.875rem',
   };
@@ -95,11 +95,11 @@ export function CatalogPicker({ onSelect, onClose }: CatalogPickerProps) {
           </select>
         </div>
 
-        <div style={{ overflowY: 'auto', flex: 1, border: '1px solid #f3f4f6', borderRadius: '0.375rem' }}>
+        <div style={{ overflowY: 'auto', flex: 1, border: '1px solid #f4f6fa', borderRadius: '0.375rem' }}>
           {loading ? (
-            <p style={{ padding: '1rem', color: '#9ca3af', fontSize: '0.875rem' }}>Loading…</p>
+            <p style={{ padding: '1rem', color: '#9aa4b8', fontSize: '0.875rem' }}>Loading…</p>
           ) : items.length === 0 ? (
-            <p style={{ padding: '1rem', color: '#9ca3af', fontSize: '0.875rem' }}>
+            <p style={{ padding: '1rem', color: '#9aa4b8', fontSize: '0.875rem' }}>
               No catalog items match.
             </p>
           ) : (
@@ -112,14 +112,14 @@ export function CatalogPicker({ onSelect, onClose }: CatalogPickerProps) {
                   justifyContent: 'space-between',
                   alignItems: 'center',
                   padding: '0.625rem 0.75rem',
-                  borderBottom: '1px solid #f3f4f6',
+                  borderBottom: '1px solid #f4f6fa',
                   cursor: 'pointer',
                   fontSize: '0.875rem',
                 }}
               >
                 <span>
                   <strong>{item.name}</strong>
-                  <span style={{ color: '#6b7280', marginLeft: '0.5rem', fontSize: '0.75rem' }}>
+                  <span style={{ color: '#7b8699', marginLeft: '0.5rem', fontSize: '0.75rem' }}>
                     {item.category} · per {item.unit_of_measure}
                   </span>
                 </span>
@@ -136,8 +136,8 @@ export function CatalogPicker({ onSelect, onClose }: CatalogPickerProps) {
             style={{
               padding: '0.5rem 1rem',
               fontSize: '0.875rem',
-              backgroundColor: '#f3f4f6',
-              border: '1px solid #d1d5db',
+              backgroundColor: '#f4f6fa',
+              border: '1px solid #d5dae4',
               borderRadius: '0.375rem',
               cursor: 'pointer',
             }}

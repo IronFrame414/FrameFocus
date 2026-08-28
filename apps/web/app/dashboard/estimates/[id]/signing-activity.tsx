@@ -89,19 +89,19 @@ export function SigningActivity({ data, reload }: Pick<TabProps, 'data' | 'reloa
     fontWeight: 600,
     marginBottom: '0.75rem',
     paddingBottom: '0.375rem',
-    borderBottom: '1px solid #e5e7eb',
+    borderBottom: '1px solid #e4e8ef',
   };
   const cellStyle: React.CSSProperties = {
     padding: '0.375rem 0.5rem',
     fontSize: '0.8125rem',
-    borderBottom: '1px solid #f3f4f6',
+    borderBottom: '1px solid #f4f6fa',
     textAlign: 'left',
   };
   const smallButton: React.CSSProperties = {
     padding: '0.375rem 0.875rem',
     fontSize: '0.8125rem',
-    backgroundColor: '#f3f4f6',
-    border: '1px solid #d1d5db',
+    backgroundColor: '#f4f6fa',
+    border: '1px solid #d5dae4',
     borderRadius: '0.375rem',
     cursor: 'pointer',
   };
@@ -123,8 +123,8 @@ export function SigningActivity({ data, reload }: Pick<TabProps, 'data' | 'reloa
             padding: '0.75rem 1rem',
             borderRadius: '0.375rem',
             marginBottom: '1rem',
-            backgroundColor: '#fef2f2',
-            color: '#991b1b',
+            backgroundColor: '#fdf1f0',
+            color: '#c0362c',
             fontSize: '0.875rem',
           }}
         >
@@ -138,7 +138,7 @@ export function SigningActivity({ data, reload }: Pick<TabProps, 'data' | 'reloa
             type="button"
             onClick={() => setResendOpen(true)}
             disabled={busy}
-            style={{ ...smallButton, backgroundColor: '#2563eb', borderColor: '#2563eb', color: '#fff' }}
+            style={{ ...smallButton, backgroundColor: '#3b4ae0', borderColor: '#3b4ae0', color: '#fff' }}
           >
             Resend Proposal
           </button>
@@ -158,7 +158,7 @@ export function SigningActivity({ data, reload }: Pick<TabProps, 'data' | 'reloa
       {sessions.length > 0 && (
         <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '1rem' }}>
           <thead>
-            <tr style={{ fontSize: '0.6875rem', color: '#6b7280' }}>
+            <tr style={{ fontSize: '0.6875rem', color: '#7b8699' }}>
               <th style={cellStyle}>Signing link</th>
               <th style={cellStyle}>Recipient</th>
               <th style={cellStyle}>Created</th>
@@ -187,7 +187,7 @@ export function SigningActivity({ data, reload }: Pick<TabProps, 'data' | 'reloa
       {emails.length > 0 && (
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
-            <tr style={{ fontSize: '0.6875rem', color: '#6b7280' }}>
+            <tr style={{ fontSize: '0.6875rem', color: '#7b8699' }}>
               <th style={cellStyle}>Email</th>
               <th style={cellStyle}>To</th>
               <th style={cellStyle}>Sent</th>

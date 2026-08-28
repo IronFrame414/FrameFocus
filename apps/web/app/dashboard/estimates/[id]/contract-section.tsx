@@ -131,7 +131,7 @@ export function ContractSection({ estimate, canEditSettings, reload }: ContractS
     padding: '0.375rem 0',
     fontSize: '0.875rem',
   };
-  const fieldLabel: React.CSSProperties = { color: '#374151', fontWeight: 500 };
+  const fieldLabel: React.CSSProperties = { color: '#3f4a60', fontWeight: 500 };
 
   return (
     <div style={{ marginBottom: '2rem', maxWidth: '560px' }}>
@@ -141,7 +141,7 @@ export function ContractSection({ estimate, canEditSettings, reload }: ContractS
           fontWeight: 600,
           marginBottom: '0.75rem',
           paddingBottom: '0.375rem',
-          borderBottom: '1px solid #e5e7eb',
+          borderBottom: '1px solid #e4e8ef',
         }}
       >
         Contract
@@ -153,8 +153,8 @@ export function ContractSection({ estimate, canEditSettings, reload }: ContractS
             padding: '0.5rem 0.75rem',
             borderRadius: '0.375rem',
             marginBottom: '0.5rem',
-            backgroundColor: '#fef2f2',
-            color: '#991b1b',
+            backgroundColor: '#fdf1f0',
+            color: '#c0362c',
             fontSize: '0.8125rem',
           }}
         >
@@ -170,7 +170,7 @@ export function ContractSection({ estimate, canEditSettings, reload }: ContractS
           onChange={(e) => handleTypeChange(e.target.value as ContractType)}
           style={{
             padding: '0.25rem 0.5rem',
-            border: '1px solid #d1d5db',
+            border: '1px solid #d5dae4',
             borderRadius: '0.25rem',
             fontSize: '0.875rem',
           }}
@@ -191,9 +191,9 @@ export function ContractSection({ estimate, canEditSettings, reload }: ContractS
                 padding: '0.5rem 0.75rem',
                 borderRadius: '0.375rem',
                 marginBottom: '0.5rem',
-                backgroundColor: '#fffbeb',
-                border: '1px solid #fde68a',
-                color: '#92400e',
+                backgroundColor: '#fff5e6',
+                border: '1px solid #f5cf8f',
+                color: '#b45309',
                 fontSize: '0.8125rem',
               }}
             >
@@ -231,7 +231,7 @@ export function ContractSection({ estimate, canEditSettings, reload }: ContractS
               }}
             />
           </div>
-          <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: '0.25rem 0 0' }}>
+          <p style={{ fontSize: '0.75rem', color: '#7b8699', margin: '0.25rem 0 0' }}>
             Rates take effect today and apply forward — cost and hours price at the rate in
             force when incurred. The projection is user-entered, never derived from totals.
           </p>

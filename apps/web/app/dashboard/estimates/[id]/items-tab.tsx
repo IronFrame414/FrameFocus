@@ -40,6 +40,7 @@ import { InlineNumber, InlineText } from '../inline-edit';
 import { UNIT_LABELS, fmtMoney, fmtPercent } from '../labels';
 import { CatalogPicker } from './catalog-picker';
 import { useConfirm } from '@/components/confirm/confirm-provider';
+import { EstimateHealthStrip } from './estimate-health-panel';
 import type { TabProps } from './estimate-builder';
 
 type Result = { success: boolean; error?: string };
@@ -47,17 +48,17 @@ type Result = { success: boolean; error?: string };
 const smallButton: React.CSSProperties = {
   padding: '0.25rem 0.625rem',
   fontSize: '0.75rem',
-  backgroundColor: '#f3f4f6',
-  border: '1px solid #d1d5db',
+  backgroundColor: '#f4f6fa',
+  border: '1px solid #d5dae4',
   borderRadius: '0.25rem',
   cursor: 'pointer',
 };
-const dangerButton: React.CSSProperties = { ...smallButton, color: '#991b1b' };
-const rowLabel: React.CSSProperties = { color: '#6b7280', fontSize: '0.8125rem' };
+const dangerButton: React.CSSProperties = { ...smallButton, color: '#c0362c' };
+const rowLabel: React.CSSProperties = { color: '#7b8699', fontSize: '0.8125rem' };
 const selectStyle: React.CSSProperties = {
   padding: '0.125rem 0.25rem',
   fontSize: '0.8125rem',
-  border: '1px solid #d1d5db',
+  border: '1px solid #d5dae4',
   borderRadius: '0.25rem',
 };
 
@@ -295,7 +296,7 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
             }
           />
           {isAllowance && (
-            <span style={{ fontSize: '0.625rem', color: '#92400e' }} title="Client-selected later; budgeted at qty × cost">
+            <span style={{ fontSize: '0.625rem', color: '#b45309' }} title="Client-selected later; budgeted at qty × cost">
               allowance
             </span>
           )}
@@ -332,8 +333,8 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
             style={{
               fontSize: '0.625rem',
               fontWeight: 700,
-              color: '#166534',
-              backgroundColor: '#dcfce7',
+              color: '#1f8f4e',
+              backgroundColor: '#e6f0e9',
               padding: '0.0625rem 0.375rem',
               borderRadius: '9999px',
             }}
@@ -421,8 +422,8 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
             style={{
               fontSize: '0.625rem',
               fontWeight: 700,
-              color: '#374151',
-              backgroundColor: '#f3f4f6',
+              color: '#3f4a60',
+              backgroundColor: '#f4f6fa',
               padding: '0.0625rem 0.375rem',
               borderRadius: '9999px',
             }}
@@ -458,7 +459,7 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
         </td>
         <td style={{ padding: '0.25rem 0.5rem', textAlign: 'center' }}>
           {row.row_type === 'labor' ? (
-            <span style={{ color: '#9ca3af', fontSize: '0.75rem' }} title="Labor is never taxed">
+            <span style={{ color: '#9aa4b8', fontSize: '0.75rem' }} title="Labor is never taxed">
               —
             </span>
           ) : (
@@ -550,7 +551,7 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
       <div
         key={line.id}
         style={{
-          border: '1px solid #e5e7eb',
+          border: '1px solid #e4e8ef',
           borderRadius: '0.375rem',
           padding: '0.75rem',
           marginBottom: '0.625rem',
@@ -630,7 +631,7 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
                   );
                   if (!result.success) setError(result.error || 'Save failed');
                 }}
-                style={{ ...smallButton, marginLeft: '0.375rem', color: '#92400e' }}
+                style={{ ...smallButton, marginLeft: '0.375rem', color: '#b45309' }}
               >
                 override ↺
               </button>
@@ -670,7 +671,7 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
         {/* Rows table */}
         <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '0.5rem' }}>
           <thead>
-            <tr style={{ fontSize: '0.6875rem', color: '#6b7280', textAlign: 'left' }}>
+            <tr style={{ fontSize: '0.6875rem', color: '#7b8699', textAlign: 'left' }}>
               <th style={{ padding: '0.25rem 0.5rem' }}>Type</th>
               <th style={{ padding: '0.25rem 0.5rem' }}>Name</th>
               <th style={{ padding: '0.25rem 0.5rem' }}>Price</th>
@@ -684,7 +685,7 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
           <tbody>{lineRows.map(lineRowTr)}</tbody>
         </table>
         {lineRows.length === 0 && (
-          <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginBottom: '0.5rem' }}>
+          <div style={{ fontSize: '0.75rem', color: '#9aa4b8', marginBottom: '0.5rem' }}>
             No rows yet — add labor, materials, a subcontractor bid, or another cost.
           </div>
         )}
@@ -811,11 +812,11 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
       <div
         key={category.id}
         style={{
-          border: '1px solid #e5e7eb',
+          border: '1px solid #e4e8ef',
           borderRadius: '0.5rem',
           padding: '1rem',
           marginBottom: '1rem',
-          backgroundColor: '#f9fafb',
+          backgroundColor: '#fbfcfe',
         }}
       >
         <div
@@ -872,14 +873,17 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
 
   return (
     <div>
+      {/* Step 9 — the live cost/price/margin strip (same derivation as the
+          Details Health card; one implementation, two surfaces). */}
+      <EstimateHealthStrip data={data} />
       {error && (
         <div
           style={{
             padding: '0.75rem 1rem',
             borderRadius: '0.375rem',
             marginBottom: '1rem',
-            backgroundColor: '#fef2f2',
-            color: '#991b1b',
+            backgroundColor: '#fdf1f0',
+            color: '#c0362c',
             fontSize: '0.875rem',
           }}
         >
@@ -892,8 +896,8 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
           style={{
             padding: '3rem',
             textAlign: 'center',
-            color: '#9ca3af',
-            border: '1px dashed #d1d5db',
+            color: '#9aa4b8',
+            border: '1px dashed #d5dae4',
             borderRadius: '0.5rem',
             fontSize: '0.875rem',
           }}
@@ -904,7 +908,7 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
               type="button"
               onClick={addCategory}
               style={{
-                color: '#2563eb',
+                color: '#3b4ae0',
                 background: 'none',
                 border: 'none',
                 cursor: 'pointer',
@@ -928,8 +932,8 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
               style={{
                 padding: '0.5rem 1rem',
                 fontSize: '0.875rem',
-                backgroundColor: '#f3f4f6',
-                border: '1px solid #d1d5db',
+                backgroundColor: '#f4f6fa',
+                border: '1px solid #d5dae4',
                 borderRadius: '0.375rem',
                 cursor: 'pointer',
               }}

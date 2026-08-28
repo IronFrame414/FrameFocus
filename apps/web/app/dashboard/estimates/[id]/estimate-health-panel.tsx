@@ -124,6 +124,68 @@ export function EstimateHealthCard({ data }: Pick<TabProps, 'data'>) {
   );
 }
 
+/** The Items tab's compact strip (the mockup's live cost/price/margin line) —
+ *  the SAME derivation as the Details card, never a second implementation. */
+export function EstimateHealthStrip({ data }: Pick<TabProps, 'data'>) {
+  const { estimate, lineItems, rows } = data;
+  const health = computeEstimateHealth({
+    grandTotal: estimate.grand_total,
+    taxRate: estimate.tax_rate,
+    lineItems,
+    rows,
+  });
+
+  const cell: React.CSSProperties = { display: 'flex', gap: '0.375rem', alignItems: 'baseline' };
+  const label: React.CSSProperties = { fontSize: '0.6875rem', color: color.mutedAlt };
+
+  return (
+    <div
+      data-testid="est-health-strip"
+      style={{
+        display: 'flex',
+        gap: '1.5rem',
+        alignItems: 'baseline',
+        flexWrap: 'wrap',
+        border: `1px solid ${color.cardBorder}`,
+        borderRadius: '9px',
+        padding: '0.5rem 0.875rem',
+        marginBottom: '1rem',
+        backgroundColor: color.tableHeadBg,
+      }}
+    >
+      <span style={cell}>
+        <span style={label}>Your cost</span>
+        <span style={monoValue}>{fmtMoney(health.cost)}</span>
+      </span>
+      <span style={cell}>
+        <span style={label}>Client price</span>
+        <span style={monoValue}>{fmtMoney(health.price)}</span>
+      </span>
+      <span style={cell}>
+        <span style={label}>Margin</span>
+        <span
+          style={{
+            ...monoValue,
+            color:
+              health.marginPercent === null
+                ? color.faint
+                : health.marginPercent < 0
+                  ? color.danger
+                  : color.navy,
+          }}
+        >
+          {health.marginPercent === null ? '—' : `${health.marginPercent}%`}
+        </span>
+      </span>
+      {health.unpricedRowCount + health.flatLinesMissingCost > 0 && (
+        <span style={{ fontSize: '0.75rem', color: color.warning }}>
+          {health.unpricedRowCount + health.flatLinesMissingCost} unpriced — cost is understated
+        </span>
+      )}
+    </div>
+  );
+}
+
 interface Check {
   label: string;
   ok: boolean;

@@ -52,8 +52,8 @@ export function ConvertToProject({
             padding: '0.75rem 1rem',
             borderRadius: '0.375rem',
             marginBottom: '1rem',
-            backgroundColor: '#eff6ff',
-            color: '#1e40af',
+            backgroundColor: '#f2f4ff',
+            color: '#3b4ae0',
             fontSize: '0.875rem',
           }}
         >
@@ -160,7 +160,7 @@ export function ConvertToProject({
         <h2 style={{ fontSize: '1rem', fontWeight: 700, margin: '0 0 0.25rem' }}>
           Enter costs to convert
         </h2>
-        <p style={{ fontSize: '0.8125rem', color: '#6b7280', margin: '0 0 1rem' }}>
+        <p style={{ fontSize: '0.8125rem', color: '#7b8699', margin: '0 0 1rem' }}>
           These flat-priced lines have a price but no cost. The project budget is built from
           cost — enter what each line costs you (not what the client pays) to continue.
         </p>
@@ -179,7 +179,7 @@ export function ConvertToProject({
           >
             <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {line.name}
-              <span style={{ color: '#6b7280', marginLeft: '0.5rem' }}>
+              <span style={{ color: '#7b8699', marginLeft: '0.5rem' }}>
                 priced {fmtMoney(line.total_price_override)}
               </span>
             </span>
@@ -193,7 +193,7 @@ export function ConvertToProject({
               style={{
                 width: '110px',
                 padding: '0.25rem 0.5rem',
-                border: '1px solid #d1d5db',
+                border: '1px solid #d5dae4',
                 borderRadius: '0.25rem',
                 fontSize: '0.875rem',
                 textAlign: 'right',
@@ -204,7 +204,7 @@ export function ConvertToProject({
         ))}
 
         {preflightError && (
-          <div style={{ color: '#991b1b', fontSize: '0.8125rem', margin: '0.5rem 0' }}>
+          <div style={{ color: '#c0362c', fontSize: '0.8125rem', margin: '0.5rem 0' }}>
             {preflightError}
           </div>
         )}
@@ -224,8 +224,8 @@ export function ConvertToProject({
             style={{
               padding: '0.5rem 1rem',
               fontSize: '0.875rem',
-              backgroundColor: '#f3f4f6',
-              border: '1px solid #d1d5db',
+              backgroundColor: '#f4f6fa',
+              border: '1px solid #d5dae4',
               borderRadius: '0.375rem',
               cursor: 'pointer',
             }}
@@ -241,7 +241,7 @@ export function ConvertToProject({
               fontSize: '0.875rem',
               fontWeight: 600,
               color: '#fff',
-              backgroundColor: busy || !allCostsFilled ? '#9ca3af' : '#16a34a',
+              backgroundColor: busy || !allCostsFilled ? '#9aa4b8' : '#1f8f4e',
               border: 'none',
               borderRadius: '0.375rem',
               cursor: busy || !allCostsFilled ? 'not-allowed' : 'pointer',
@@ -264,7 +264,7 @@ export function ConvertToProject({
         fontSize: '0.875rem',
         fontWeight: 600,
         color: '#fff',
-        backgroundColor: busy ? '#9ca3af' : '#16a34a',
+        backgroundColor: busy ? '#9aa4b8' : '#1f8f4e',
         border: 'none',
         borderRadius: '0.375rem',
         cursor: busy ? 'not-allowed' : 'pointer',
@@ -280,7 +280,7 @@ export function ConvertToProject({
         {button}
         {preflightModal}
         {error && (
-          <span style={{ display: 'block', color: '#991b1b', fontSize: '0.75rem', marginTop: '0.25rem' }}>
+          <span style={{ display: 'block', color: '#c0362c', fontSize: '0.75rem', marginTop: '0.25rem' }}>
             {error}
           </span>
         )}
@@ -300,10 +300,10 @@ export function ConvertToProject({
         padding: '0.75rem 1rem',
         borderRadius: '0.375rem',
         marginBottom: '1rem',
-        backgroundColor: '#f0fdf4',
-        border: '1px solid #bbf7d0',
+        backgroundColor: '#e6f0e9',
+        border: '1px solid #e6f0e9',
         fontSize: '0.875rem',
-        color: '#166534',
+        color: '#1f8f4e',
         gap: '1rem',
       }}
     >
@@ -313,7 +313,7 @@ export function ConvertToProject({
       </span>
       <span style={{ flexShrink: 0 }}>{button}</span>
       {preflightModal}
-      {error && <span style={{ color: '#991b1b' }}>{error}</span>}
+      {error && <span style={{ color: '#c0362c' }}>{error}</span>}
     </div>
   );
 }

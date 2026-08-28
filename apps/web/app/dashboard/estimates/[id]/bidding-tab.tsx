@@ -76,13 +76,13 @@ export function BiddingTab({ data, canEdit, reload }: TabProps) {
   const cellStyle: React.CSSProperties = {
     padding: '0.5rem 0.625rem',
     fontSize: '0.8125rem',
-    borderBottom: '1px solid #f3f4f6',
+    borderBottom: '1px solid #f4f6fa',
   };
 
   return (
     <div style={{ maxWidth: '760px' }}>
       <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.25rem' }}>Sub Bidding</h2>
-      <p style={{ fontSize: '0.8125rem', color: '#6b7280', marginBottom: '1.5rem' }}>
+      <p style={{ fontSize: '0.8125rem', color: '#7b8699', marginBottom: '1.5rem' }}>
         Track every bid received per line. Picking a winner updates that line&rsquo;s subcontractor
         row with the winning amount and subcontractor.
       </p>
@@ -93,8 +93,8 @@ export function BiddingTab({ data, canEdit, reload }: TabProps) {
             padding: '0.75rem 1rem',
             borderRadius: '0.375rem',
             marginBottom: '1rem',
-            backgroundColor: '#fef2f2',
-            color: '#991b1b',
+            backgroundColor: '#fdf1f0',
+            color: '#c0362c',
             fontSize: '0.875rem',
           }}
         >
@@ -107,8 +107,8 @@ export function BiddingTab({ data, canEdit, reload }: TabProps) {
           style={{
             padding: '3rem',
             textAlign: 'center',
-            color: '#9ca3af',
-            border: '1px dashed #d1d5db',
+            color: '#9aa4b8',
+            border: '1px dashed #d5dae4',
             borderRadius: '0.5rem',
             fontSize: '0.875rem',
           }}
@@ -125,7 +125,7 @@ export function BiddingTab({ data, canEdit, reload }: TabProps) {
             <div
               key={line.id}
               style={{
-                border: '1px solid #e5e7eb',
+                border: '1px solid #e4e8ef',
                 borderRadius: '0.5rem',
                 padding: '1rem',
                 marginBottom: '1rem',
@@ -147,9 +147,9 @@ export function BiddingTab({ data, canEdit, reload }: TabProps) {
                       style={{
                         fontSize: '0.75rem',
                         fontWeight: 700,
-                        color: '#166534',
-                        backgroundColor: '#f0fdf4',
-                        border: '1px solid #bbf7d0',
+                        color: '#1f8f4e',
+                        backgroundColor: '#e6f0e9',
+                        border: '1px solid #e6f0e9',
                         borderRadius: '9999px',
                         padding: '0.125rem 0.625rem',
                       }}
@@ -158,13 +158,13 @@ export function BiddingTab({ data, canEdit, reload }: TabProps) {
                     </span>
                   )}
                 </span>
-                <span style={{ fontSize: '0.8125rem', color: '#6b7280' }}>
+                <span style={{ fontSize: '0.8125rem', color: '#7b8699' }}>
                   Current sub bid: <strong>{subRow ? fmtMoney(subRow.amount) : '—'}</strong>
                 </span>
               </div>
 
               {bids.length === 0 ? (
-                <p style={{ fontSize: '0.8125rem', color: '#9ca3af', marginBottom: '0.75rem' }}>
+                <p style={{ fontSize: '0.8125rem', color: '#9aa4b8', marginBottom: '0.75rem' }}>
                   No bids recorded for this line yet.
                 </p>
               ) : (
@@ -176,7 +176,7 @@ export function BiddingTab({ data, canEdit, reload }: TabProps) {
                   }}
                 >
                   <thead>
-                    <tr style={{ fontSize: '0.6875rem', color: '#6b7280', textAlign: 'left' }}>
+                    <tr style={{ fontSize: '0.6875rem', color: '#7b8699', textAlign: 'left' }}>
                       <th style={cellStyle}>Winner</th>
                       <th style={cellStyle}>Subcontractor</th>
                       <th style={{ ...cellStyle, textAlign: 'right' }}>Bid</th>
@@ -190,7 +190,7 @@ export function BiddingTab({ data, canEdit, reload }: TabProps) {
                     {bids.map((bid) => (
                       <tr
                         key={bid.id}
-                        style={{ backgroundColor: bid.is_winner ? '#f0fdf4' : undefined }}
+                        style={{ backgroundColor: bid.is_winner ? '#e6f0e9' : undefined }}
                       >
                         <td style={{ ...cellStyle, textAlign: 'center' }}>
                           <input
@@ -229,9 +229,9 @@ export function BiddingTab({ data, canEdit, reload }: TabProps) {
                               style={{
                                 padding: '0.125rem 0.5rem',
                                 fontSize: '0.75rem',
-                                color: '#991b1b',
-                                backgroundColor: '#f3f4f6',
-                                border: '1px solid #d1d5db',
+                                color: '#c0362c',
+                                backgroundColor: '#f4f6fa',
+                                border: '1px solid #d5dae4',
                                 borderRadius: '0.25rem',
                                 cursor: 'pointer',
                               }}
@@ -265,8 +265,8 @@ export function BiddingTab({ data, canEdit, reload }: TabProps) {
                     style={{
                       padding: '0.375rem 0.75rem',
                       fontSize: '0.8125rem',
-                      backgroundColor: '#f3f4f6',
-                      border: '1px solid #d1d5db',
+                      backgroundColor: '#f4f6fa',
+                      border: '1px solid #d5dae4',
                       borderRadius: '0.375rem',
                       cursor: 'pointer',
                     }}
@@ -285,9 +285,9 @@ export function BiddingTab({ data, canEdit, reload }: TabProps) {
 const docButtonStyle: React.CSSProperties = {
   padding: '0.125rem 0.5rem',
   fontSize: '0.75rem',
-  color: '#2563eb',
+  color: '#3b4ae0',
   backgroundColor: 'transparent',
-  border: '1px solid #d1d5db',
+  border: '1px solid #d5dae4',
   borderRadius: '0.25rem',
   cursor: 'pointer',
 };
@@ -344,7 +344,7 @@ function BidDocCell({
           View
         </button>
       ) : (
-        <span style={{ color: '#9ca3af' }}>—</span>
+        <span style={{ color: '#9aa4b8' }}>—</span>
       )}
       {canEdit && (
         <>
@@ -430,7 +430,7 @@ function AddBidForm({ lineItemId, estimateId, subs, onDone }: AddBidFormProps) {
 
   const inputStyle: React.CSSProperties = {
     padding: '0.375rem 0.5rem',
-    border: '1px solid #d1d5db',
+    border: '1px solid #d5dae4',
     borderRadius: '0.25rem',
     fontSize: '0.8125rem',
   };
@@ -438,8 +438,8 @@ function AddBidForm({ lineItemId, estimateId, subs, onDone }: AddBidFormProps) {
   return (
     <div
       style={{
-        border: '1px solid #dbeafe',
-        backgroundColor: '#eff6ff',
+        border: '1px solid #dbe0fb',
+        backgroundColor: '#f2f4ff',
         borderRadius: '0.375rem',
         padding: '0.75rem',
       }}
@@ -494,7 +494,7 @@ function AddBidForm({ lineItemId, estimateId, subs, onDone }: AddBidFormProps) {
             fontSize: '0.8125rem',
             fontWeight: 600,
             color: '#fff',
-            backgroundColor: submitting ? '#9ca3af' : '#2563eb',
+            backgroundColor: submitting ? '#9aa4b8' : '#3b4ae0',
             border: 'none',
             borderRadius: '0.25rem',
             cursor: submitting ? 'not-allowed' : 'pointer',
@@ -508,8 +508,8 @@ function AddBidForm({ lineItemId, estimateId, subs, onDone }: AddBidFormProps) {
           style={{
             padding: '0.375rem 0.875rem',
             fontSize: '0.8125rem',
-            backgroundColor: '#f3f4f6',
-            border: '1px solid #d1d5db',
+            backgroundColor: '#f4f6fa',
+            border: '1px solid #d5dae4',
             borderRadius: '0.25rem',
             cursor: 'pointer',
           }}
@@ -518,7 +518,7 @@ function AddBidForm({ lineItemId, estimateId, subs, onDone }: AddBidFormProps) {
         </button>
       </div>
       {error && (
-        <p style={{ color: '#991b1b', fontSize: '0.75rem', marginTop: '0.5rem' }}>{error}</p>
+        <p style={{ color: '#c0362c', fontSize: '0.75rem', marginTop: '0.5rem' }}>{error}</p>
       )}
     </div>
   );

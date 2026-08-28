@@ -10,7 +10,7 @@ import { ProposalDocument } from '@/lib/proposal/proposal-template';
 export default function PdfPreview({ data }: { data: ProposalData }) {
   return (
     <PDFViewer
-      style={{ width: '100%', height: '72vh', border: '1px solid #e5e7eb', borderRadius: 8 }}
+      style={{ width: '100%', height: '72vh', border: '1px solid #e4e8ef', borderRadius: 8 }}
     >
       <ProposalDocument data={data} />
     </PDFViewer>
