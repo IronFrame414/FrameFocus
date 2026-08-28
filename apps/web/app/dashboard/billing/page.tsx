@@ -4,8 +4,25 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { ManageSubscriptionButton } from './manage-subscription-button';
 import { getAddOns } from '@/lib/services/add-ons';
+import { getSeatUsage } from '@/lib/services/seats';
 import { AddOnsSection } from './add-ons-section';
 import { brand } from '@/lib/brand';
+
+// Step 10 (desktop redesign §8.12.4) — Billing, Owner-only (NOT Owner/Admin;
+// the redirect below stands). The mockup's rows that are NOT built, and why:
+//   · File storage "2.4 GB of 100 GB" — storage is never measured anywhere;
+//     a meter would be display-only fiction.
+//   · QuickBooks sync "Included" — 7G is a stub; no sync exists to include.
+//   · Add-on "Client portal branding $19" — RULED [Josh]: NO CHARGE, removed.
+//     No gate exists and the portal logo renders unconditionally; the toggle
+//     would sell something the customer already has.
+//   · Add-on "Extra storage $15" — does not exist, and storage is unmeasured.
+//   · In-app invoice history — invoices and PDFs live in the STRIPE customer
+//     portal (Manage Subscription); stated in copy instead of duplicated.
+// The 90-day cancellation copy below is COPY ONLY — the paid-cancellation
+// lock/retention/unban path is a separate feature, deliberately not built
+// here (the trial path is the precedent and its comment warns the way back
+// must clear both the ban and the retention clock).
 
 export default async function BillingPage() {
   const supabase = await createClient();
@@ -27,6 +44,7 @@ export default async function BillingPage() {
 
   const subscription = await getSubscription();
   const addOns = await getAddOns();
+  const seatUsage = await getSeatUsage();
 
   if (!subscription) {
     redirect('/dashboard');
@@ -82,11 +100,14 @@ export default async function BillingPage() {
           </span>
         </div>
 
-        {/* Seats */}
+        {/* Seats — usage against the limit (enforced by getSeatUsage; active
+            members + pending invites, clients and subs excluded) */}
         <div className="flex items-center justify-between">
           <span className="text-sm text-gray-500">Team Seats</span>
           <span className="text-sm font-medium text-gray-900">
-            {subscription.seat_limit} included
+            {seatUsage
+              ? `${seatUsage.used} of ${seatUsage.limit} used`
+              : `${subscription.seat_limit} included`}
           </span>
         </div>
 
@@ -110,7 +131,8 @@ export default async function BillingPage() {
           </div>
         )}
 
-        {/* Canceled info */}
+        {/* Canceled info. ⚠️ The retention sentence is the RULED copy — locked,
+            not "read-only"; access requires an active subscription. */}
         {subscription.cancel_at_period_end && subscription.status === 'active' && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4">
             <p className="text-sm text-red-800">
@@ -118,7 +140,8 @@ export default async function BillingPage() {
               {subscription.current_period_end
                 ? ` on ${new Date(subscription.current_period_end).toLocaleDateString()}`
                 : ''}
-              .
+              . Your data is kept for 90 days after cancelling. You&rsquo;ll need an active
+              subscription to access it.
             </p>
           </div>
         )}
@@ -134,6 +157,12 @@ export default async function BillingPage() {
               : 'Change Plan'}
           </Link>
           {hasStripeSubscription && <ManageSubscriptionButton />}
+          {hasStripeSubscription && (
+            <p className="text-xs text-gray-500 text-center">
+              Payment method, invoice history and PDFs live in the Stripe billing portal — Manage
+              Subscription opens it.
+            </p>
+          )}
         </div>
       </div>
       {addOns && <AddOnsSection initialEnabled={addOns.ai_tagging_enabled} />}
