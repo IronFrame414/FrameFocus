@@ -691,3 +691,47 @@ inventories"). Spec: `docs/specs/desktop-redesign-spec.md` (1358 lines). CLI lin
   where null was meaningful (no write path was altered anywhere in step 9).
 - **Verified:** type-check 5/5 exit 0 at every commit; health suite 4/4; probe run under the
   live config with results read from a file, not inferred.
+
+### Entry 28 — STEP 10: the five destinations (§8.12), complete — commits `9a6201a`·`430fd74`·`850c280`·`6a3f8da`
+- **10.1 Dashboard** (`9a6201a`): `getPortfolioMoney()` — the first company-wide money rollup,
+  every figure REUSING its per-project sibling's shared maths (a second derivation of the same
+  figure is the #129 class): Coming in = Σ `remainingOnInvoice()` over live sent/partially_paid
+  invoices (net of retainage; **no 30-day cut — P-1, nothing writes due_date**); Going out =
+  Σ `committedRemaining()` over `countsTowardCommitted()` payables, company-wide
+  `getBillsAndCommitments()`; Not yet billed = Σ positive headline backlog over active
+  projects via the SAME per-project `getProfitabilityReport` loop 14a ships, so the dashboard
+  figure agrees with the projects list's "Unbilled work" by construction. Owner/Admin only —
+  a gated role triggers ZERO of its queries and the row doesn't render. Attention-dot hexes
+  repainted. **Recent activity DEFERRED** — no event table anywhere (same finding as History);
+  per-source assembly is its own build, and the existing "arrives with a later module" button
+  already says so.
+- **10.2 Schedule** (`430fd74`): a Calendar|Timeline toggle. Timeline = one bar per DATED
+  active project (start→target, today marker, overdue in warning + "Nd over"), caller-RLS
+  scoped; below it the derivable half of the hold states — "can't be scheduled until dates are
+  set", naming which date is missing. **NOT built, each with its reason in the component
+  header:** "resumes when permit clears" (no `hold_reason` column exists), **crew-load bars
+  DROPPED** (tasks carry no hours; booked-hours don't exist to show, and swapping in worked
+  hours would be the on-site-badge class of lie — actuals already live on Timeclock), By-crew
+  view (same missing machinery), and **"proposed timeline from your estimate" DEFERRED** (zero
+  machinery; the largest NEW item; ask list #3). Double-booking detection already shipped —
+  untouched.
+- **10.3 Field Ops** (`850c280`): "N of M active jobs logged yesterday" — the page-callable
+  derivation the cron's narrower question couldn't provide: active projects vs. a one-query
+  set of projects with a `log_date = yesterday` row, both sides company-calendar days;
+  caller-RLS-scoped (a crew member's M is the jobs they can see). Per-row "No log yesterday"
+  badge on active projects; all-green when complete. Hub repainted to tokens.
+- **10.4 Timeclock — decision recorded, no code.** The ' · on site' label stays AS-IS, the
+  option the ruling explicitly allows. Reasons: `/m`'s e2e asserts the literal text
+  (`m-capture.spec.ts:776,802`) and `/m` is a ruled surface this handoff must not drift; a
+  desktop-only relabel would split the wording for the same predicate across surfaces. The
+  D-34 comment at the render site already records that the badge means GPS-captured, and
+  nothing was restyled toward the mockup's proximity claim. Everything else on 15d already
+  shipped (live board + poll, strictly-below approval, derived OT, hours-by-job).
+- **10.5 Billing** (`6a3f8da`): Owner-only redirect STANDS. Seats now show **usage against the
+  limit** (`getSeatUsage` — the enforced figure). The RULED retention copy ships on the
+  cancel notice: *"Your data is kept for 90 days after cancelling. You'll need an active
+  subscription to access it."* — **copy only; the paid-cancellation lock/clock/unban path is a
+  separate feature, not built here.** A caption states invoices/PDFs live in the Stripe
+  portal. NOT built, recorded in the page header: storage meter (never measured), QB
+  "Included" (7G stub), **portal-branding $19 (RULED: NO CHARGE — the logo already renders
+  ungated)**, extra-storage $15.
