@@ -154,7 +154,7 @@ export function TimeTrackingSettingsForm({ settings }: TimeTrackingSettingsFormP
   const inputStyle: React.CSSProperties = {
     width: '100%',
     padding: '0.5rem 0.75rem',
-    border: '1px solid #d1d5db',
+    border: '1px solid #d5dae4',
     borderRadius: '0.375rem',
     fontSize: '0.875rem',
   };
@@ -163,7 +163,7 @@ export function TimeTrackingSettingsForm({ settings }: TimeTrackingSettingsFormP
     fontSize: '0.875rem',
     fontWeight: 500,
     marginBottom: '0.25rem',
-    color: '#374151',
+    color: '#3f4a60',
   };
   const sectionStyle: React.CSSProperties = { marginBottom: '2rem' };
   const sectionTitleStyle: React.CSSProperties = {
@@ -171,31 +171,31 @@ export function TimeTrackingSettingsForm({ settings }: TimeTrackingSettingsFormP
     fontWeight: 600,
     marginBottom: '1rem',
     paddingBottom: '0.5rem',
-    borderBottom: '1px solid #e5e7eb',
+    borderBottom: '1px solid #e4e8ef',
   };
   const errorStyle: React.CSSProperties = {
-    color: '#991b1b',
+    color: '#c0362c',
     fontSize: '0.75rem',
     marginTop: '0.25rem',
   };
   const savedStyle: React.CSSProperties = {
-    color: '#166534',
+    color: '#1f8f4e',
     fontSize: '0.75rem',
     marginTop: '0.25rem',
   };
   const captionStyle: React.CSSProperties = {
-    color: '#6b7280',
+    color: '#7b8699',
     fontSize: '0.75rem',
     marginTop: '0.375rem',
     lineHeight: 1.4,
   };
 
   return (
-    <div style={{ maxWidth: '640px', marginTop: '3rem' }}>
+    <div style={{ maxWidth: '640px' }}>
       <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem' }}>
         Time Tracking
       </h2>
-      <p style={{ color: '#6b7280', marginBottom: '2rem', fontSize: '0.875rem' }}>
+      <p style={{ color: '#7b8699', marginBottom: '2rem', fontSize: '0.875rem' }}>
         Payroll week, overtime, breaks, and location capture for the timeclock. Changes save
         automatically.
       </p>
@@ -266,7 +266,7 @@ export function TimeTrackingSettingsForm({ settings }: TimeTrackingSettingsFormP
         {savedField === 'breaks_paid' && <div style={savedStyle}>Saved</div>}
 
         <div style={{ maxWidth: '200px', marginTop: '1rem' }}>
-          <label style={{ ...labelStyle, color: breaksPaid ? '#374151' : '#9ca3af' }}>
+          <label style={{ ...labelStyle, color: breaksPaid ? '#3f4a60' : '#9aa4b8' }}>
             Paid break minutes per day
           </label>
           <input
@@ -275,7 +275,7 @@ export function TimeTrackingSettingsForm({ settings }: TimeTrackingSettingsFormP
             onChange={(e) => setBreakCap(e.target.value)}
             onBlur={handleBreakCapBlur}
             disabled={!breaksPaid}
-            style={{ ...inputStyle, backgroundColor: breaksPaid ? '#fff' : '#f3f4f6' }}
+            style={{ ...inputStyle, backgroundColor: breaksPaid ? '#fff' : '#f4f6fa' }}
           />
           {errors.paid_break_cap_minutes && (
             <div style={errorStyle}>{errors.paid_break_cap_minutes}</div>
@@ -307,7 +307,7 @@ export function TimeTrackingSettingsForm({ settings }: TimeTrackingSettingsFormP
               />
               <span>
                 {opt.label}
-                <span style={{ display: 'block', color: '#6b7280', fontSize: '0.75rem' }}>
+                <span style={{ display: 'block', color: '#7b8699', fontSize: '0.75rem' }}>
                   {opt.hint}
                 </span>
               </span>

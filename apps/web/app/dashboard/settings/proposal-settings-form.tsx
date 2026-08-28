@@ -31,7 +31,7 @@ interface ProposalSettingsFormProps {
 }
 
 export function ProposalSettingsForm({ settings }: ProposalSettingsFormProps) {
-  const [brandColor, setBrandColor] = useState(settings.brand_color || '#1a56db');
+  const [brandColor, setBrandColor] = useState(settings.brand_color || '#3b4ae0');
   const [pricingLevel, setPricingLevel] = useState(settings.default_proposal_pricing_level);
   const [expirationDays, setExpirationDays] = useState(String(settings.default_expiration_days));
   const [proposalSubject, setProposalSubject] = useState(
@@ -179,7 +179,7 @@ export function ProposalSettingsForm({ settings }: ProposalSettingsFormProps) {
   const inputStyle: React.CSSProperties = {
     width: '100%',
     padding: '0.5rem 0.75rem',
-    border: '1px solid #d1d5db',
+    border: '1px solid #d5dae4',
     borderRadius: '0.375rem',
     fontSize: '0.875rem',
     boxSizing: 'border-box',
@@ -189,7 +189,7 @@ export function ProposalSettingsForm({ settings }: ProposalSettingsFormProps) {
     fontSize: '0.875rem',
     fontWeight: 500,
     marginBottom: '0.25rem',
-    color: '#374151',
+    color: '#3f4a60',
   };
   const sectionStyle: React.CSSProperties = { marginBottom: '2rem' };
   const sectionTitleStyle: React.CSSProperties = {
@@ -197,25 +197,25 @@ export function ProposalSettingsForm({ settings }: ProposalSettingsFormProps) {
     fontWeight: 600,
     marginBottom: '1rem',
     paddingBottom: '0.5rem',
-    borderBottom: '1px solid #e5e7eb',
+    borderBottom: '1px solid #e4e8ef',
   };
   const errorStyle: React.CSSProperties = {
-    color: '#991b1b',
+    color: '#c0362c',
     fontSize: '0.75rem',
     marginTop: '0.25rem',
   };
   const savedStyle: React.CSSProperties = {
-    color: '#166534',
+    color: '#1f8f4e',
     fontSize: '0.75rem',
     marginTop: '0.25rem',
   };
 
   return (
-    <div style={{ maxWidth: '640px', marginTop: '3rem' }}>
+    <div style={{ maxWidth: '640px' }}>
       <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem' }}>
         Proposals &amp; Email
       </h2>
-      <p style={{ color: '#6b7280', marginBottom: '2rem', fontSize: '0.875rem' }}>
+      <p style={{ color: '#7b8699', marginBottom: '2rem', fontSize: '0.875rem' }}>
         Branding and defaults for proposal delivery and follow-up reminders. Changes save
         automatically. Available template variables:{' '}
         {TEMPLATE_VARIABLES.map((v) => (
@@ -223,7 +223,7 @@ export function ProposalSettingsForm({ settings }: ProposalSettingsFormProps) {
             key={v}
             style={{
               fontSize: '0.6875rem',
-              backgroundColor: '#f3f4f6',
+              backgroundColor: '#f4f6fa',
               borderRadius: '0.25rem',
               padding: '0 0.25rem',
               marginRight: '0.25rem',
@@ -241,20 +241,20 @@ export function ProposalSettingsForm({ settings }: ProposalSettingsFormProps) {
         <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
           <input
             type="color"
-            value={/^#[0-9a-fA-F]{6}$/.test(brandColor) ? brandColor : '#1a56db'}
+            value={/^#[0-9a-fA-F]{6}$/.test(brandColor) ? brandColor : '#3b4ae0'}
             onChange={(e) => {
               setBrandColor(e.target.value);
               setFieldError('brand_color', null);
               scheduleSave('brand_color', { brand_color: e.target.value });
             }}
-            style={{ width: '48px', height: '36px', padding: 0, border: '1px solid #d1d5db' }}
+            style={{ width: '48px', height: '36px', padding: 0, border: '1px solid #d5dae4' }}
           />
           <input
             value={brandColor}
             onChange={(e) => setBrandColor(e.target.value)}
             onBlur={handleBrandColorBlur}
             style={{ ...inputStyle, maxWidth: '140px' }}
-            placeholder="#1a56db"
+            placeholder="#3b4ae0"
           />
         </div>
         {errors.brand_color && <div style={errorStyle}>{errors.brand_color}</div>}
@@ -333,7 +333,7 @@ export function ProposalSettingsForm({ settings }: ProposalSettingsFormProps) {
           }}
         >
           {scheduleDays.length === 0 && (
-            <span style={{ fontSize: '0.8125rem', color: '#9ca3af' }}>
+            <span style={{ fontSize: '0.8125rem', color: '#9aa4b8' }}>
               No reminders (opted out)
             </span>
           )}
@@ -345,8 +345,8 @@ export function ProposalSettingsForm({ settings }: ProposalSettingsFormProps) {
                 alignItems: 'center',
                 gap: '0.375rem',
                 padding: '0.25rem 0.625rem',
-                backgroundColor: '#eff6ff',
-                border: '1px solid #bfdbfe',
+                backgroundColor: '#f2f4ff',
+                border: '1px solid #dbe0fb',
                 borderRadius: '9999px',
                 fontSize: '0.8125rem',
               }}
@@ -358,7 +358,7 @@ export function ProposalSettingsForm({ settings }: ProposalSettingsFormProps) {
                 style={{
                   background: 'none',
                   border: 'none',
-                  color: '#991b1b',
+                  color: '#c0362c',
                   cursor: 'pointer',
                   padding: 0,
                   fontSize: '0.8125rem',
@@ -388,8 +388,8 @@ export function ProposalSettingsForm({ settings }: ProposalSettingsFormProps) {
             style={{
               padding: '0.375rem 0.75rem',
               fontSize: '0.8125rem',
-              backgroundColor: '#f3f4f6',
-              border: '1px solid #d1d5db',
+              backgroundColor: '#f4f6fa',
+              border: '1px solid #d5dae4',
               borderRadius: '0.375rem',
               cursor: 'pointer',
             }}

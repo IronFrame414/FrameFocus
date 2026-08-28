@@ -10,6 +10,10 @@ import { getTemplateBoxesByTemplate, getTemplates } from '@/lib/services/lien-re
 import { LienReleaseSettingsForm } from './lien-release-settings-form';
 import { getContractTemplateBoxesByTemplate, getContractTemplates } from '@/lib/services/contracts';
 import { ContractSettingsForm, type ContractTemplateRow } from './contract-settings-form';
+import { NotificationSettingsForm } from './notification-settings-form';
+import { FileCategoriesManager } from './file-categories-manager';
+import { SettingsTabs } from './settings-tabs';
+import { color, h2Style } from '@/lib/theme';
 
 // ⚠️ SLICE A [S150] — WITHOUT THIS, A SAVED BOX MAP READS BACK STALE.
 //
@@ -90,7 +94,11 @@ async function withBoxes(
   }));
 }
 
-export default async function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams?: { tab?: string };
+}) {
   const supabase = await createClient();
 
   const {
@@ -177,36 +185,71 @@ export default async function SettingsPage() {
     })),
   }));
 
+  // §8.11.1 — the seven tabs. The Documents tab hosts the categories manager
+  // (Entry 20's deferral) plus BOTH template forms; Notifications hosts the
+  // quiet-hours/push form (the routing grid is a schema change, unbuilt).
+  const tabs = [
+    { key: 'company', label: 'Company', content: <SettingsForm company={company} /> },
+    {
+      key: 'estimating',
+      label: 'Estimating',
+      content: <EstimatingSettingsForm settings={estimatingSettings} />,
+    },
+    {
+      key: 'proposals',
+      label: 'Proposals & Email',
+      content: <ProposalSettingsForm settings={proposalSettings} />,
+    },
+    {
+      key: 'time',
+      label: 'Time Tracking',
+      content: <TimeTrackingSettingsForm settings={timeTrackingSettings} />,
+    },
+    {
+      key: 'accounting',
+      label: 'Accounting',
+      content: <GLMappingSettingsForm settings={glMappingSettings} />,
+    },
+    {
+      key: 'documents',
+      label: 'Documents',
+      content: (
+        <div style={{ display: 'grid', gap: '1.5rem' }}>
+          <FileCategoriesManager />
+          <LienReleaseSettingsForm
+            companyId={company.id}
+            templates={lienTemplatesWithBoxes}
+            signatoryName={company.signatory_name}
+            signatoryTitle={company.signatory_title}
+            hasSignature={Boolean(company.contractor_signature_path)}
+          />
+          {/* 7I §5.2 — the master client-contract toggle. Owner/Admin by
+              `companies_update_owner_admin`, the same set this page already
+              admits above. */}
+          <ContractSettingsForm
+            companyId={company.id}
+            enabled={Boolean(company.client_contracts_enabled)}
+            clientTemplates={clientContractTemplates}
+            subTemplates={subContractTemplates}
+          />
+        </div>
+      ),
+    },
+    {
+      key: 'notifications',
+      label: 'Notifications',
+      content: <NotificationSettingsForm settings={company} />,
+    },
+  ];
+
   return (
     <div>
-      <h1 style={{ fontSize: '1.5rem', fontWeight: 700, marginBottom: '0.5rem' }}>
-        Company Settings
-      </h1>
-      <p style={{ color: '#6b7280', marginBottom: '2rem' }}>
-        Update your company information. This will appear on estimates, invoices, and client-facing
-        documents.
+      <h1 style={{ ...h2Style, marginBottom: '0.375rem' }}>Company Settings</h1>
+      <p style={{ color: color.mutedAlt, marginBottom: '1.25rem', fontSize: '13.5px' }}>
+        What appears on estimates, invoices, and client-facing documents — and how the app behaves
+        for your team.
       </p>
-      <SettingsForm company={company} />
-      {estimatingSettings && <EstimatingSettingsForm settings={estimatingSettings} />}
-      {proposalSettings && <ProposalSettingsForm settings={proposalSettings} />}
-      {timeTrackingSettings && <TimeTrackingSettingsForm settings={timeTrackingSettings} />}
-      {glMappingSettings && <GLMappingSettingsForm settings={glMappingSettings} />}
-      <LienReleaseSettingsForm
-        companyId={company.id}
-        templates={lienTemplatesWithBoxes}
-        signatoryName={company.signatory_name}
-        signatoryTitle={company.signatory_title}
-        hasSignature={Boolean(company.contractor_signature_path)}
-      />
-      {/* 7I §5.2 — the master client-contract toggle. Owner/Admin by
-          `companies_update_owner_admin`, the same set this page already
-          admits at :34. */}
-      <ContractSettingsForm
-        companyId={company.id}
-        enabled={Boolean(company.client_contracts_enabled)}
-        clientTemplates={clientContractTemplates}
-        subTemplates={subContractTemplates}
-      />
+      <SettingsTabs tabs={tabs} initialTab={searchParams?.tab} />
     </div>
   );
 }

@@ -222,7 +222,7 @@ export function EstimatingSettingsForm({ settings }: EstimatingSettingsFormProps
   const inputStyle: React.CSSProperties = {
     width: '100%',
     padding: '0.5rem 0.75rem',
-    border: '1px solid #d1d5db',
+    border: '1px solid #d5dae4',
     borderRadius: '0.375rem',
     fontSize: '0.875rem',
   };
@@ -231,7 +231,7 @@ export function EstimatingSettingsForm({ settings }: EstimatingSettingsFormProps
     fontSize: '0.875rem',
     fontWeight: 500,
     marginBottom: '0.25rem',
-    color: '#374151',
+    color: '#3f4a60',
   };
   const sectionStyle: React.CSSProperties = { marginBottom: '2rem' };
   const sectionTitleStyle: React.CSSProperties = {
@@ -239,15 +239,15 @@ export function EstimatingSettingsForm({ settings }: EstimatingSettingsFormProps
     fontWeight: 600,
     marginBottom: '1rem',
     paddingBottom: '0.5rem',
-    borderBottom: '1px solid #e5e7eb',
+    borderBottom: '1px solid #e4e8ef',
   };
   const errorStyle: React.CSSProperties = {
-    color: '#991b1b',
+    color: '#c0362c',
     fontSize: '0.75rem',
     marginTop: '0.25rem',
   };
   const savedStyle: React.CSSProperties = {
-    color: '#166534',
+    color: '#1f8f4e',
     fontSize: '0.75rem',
     marginTop: '0.25rem',
   };
@@ -259,8 +259,8 @@ export function EstimatingSettingsForm({ settings }: EstimatingSettingsFormProps
   const iconButtonStyle: React.CSSProperties = {
     padding: '0.25rem 0.5rem',
     fontSize: '0.75rem',
-    backgroundColor: '#f3f4f6',
-    border: '1px solid #d1d5db',
+    backgroundColor: '#f4f6fa',
+    border: '1px solid #d5dae4',
     borderRadius: '0.25rem',
     cursor: 'pointer',
   };
@@ -284,9 +284,9 @@ export function EstimatingSettingsForm({ settings }: EstimatingSettingsFormProps
   }
 
   return (
-    <div style={{ maxWidth: '640px', marginTop: '3rem' }}>
+    <div style={{ maxWidth: '640px' }}>
       <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '0.5rem' }}>Estimating</h2>
-      <p style={{ color: '#6b7280', marginBottom: '2rem', fontSize: '0.875rem' }}>
+      <p style={{ color: '#7b8699', marginBottom: '2rem', fontSize: '0.875rem' }}>
         Defaults for new estimates. Changes save automatically.
       </p>
 
@@ -313,9 +313,9 @@ export function EstimatingSettingsForm({ settings }: EstimatingSettingsFormProps
             <div
               style={{
                 ...inputStyle,
-                backgroundColor: '#f9fafb',
-                color: '#6b7280',
-                border: '1px solid #e5e7eb',
+                backgroundColor: '#fbfcfe',
+                color: '#7b8699',
+                border: '1px solid #e4e8ef',
               }}
             >
               {nextNumber}
@@ -399,7 +399,7 @@ export function EstimatingSettingsForm({ settings }: EstimatingSettingsFormProps
       <div style={sectionStyle}>
         <div style={sectionTitleStyle}>Default Terms &amp; Conditions Sections</div>
         {terms.length === 0 && (
-          <p style={{ fontSize: '0.875rem', color: '#9ca3af', marginBottom: '1rem' }}>
+          <p style={{ fontSize: '0.875rem', color: '#9aa4b8', marginBottom: '1rem' }}>
             No default sections. New estimates will start with no terms.
           </p>
         )}
@@ -407,7 +407,7 @@ export function EstimatingSettingsForm({ settings }: EstimatingSettingsFormProps
           <div
             key={i}
             style={{
-              border: '1px solid #e5e7eb',
+              border: '1px solid #e4e8ef',
               borderRadius: '0.375rem',
               padding: '0.75rem',
               marginBottom: '0.75rem',
@@ -450,7 +450,7 @@ export function EstimatingSettingsForm({ settings }: EstimatingSettingsFormProps
               <button
                 type="button"
                 onClick={() => removeSection(i)}
-                style={{ ...iconButtonStyle, color: '#991b1b' }}
+                style={{ ...iconButtonStyle, color: '#c0362c' }}
                 aria-label="Remove section"
               >
                 ✕
@@ -472,8 +472,8 @@ export function EstimatingSettingsForm({ settings }: EstimatingSettingsFormProps
           style={{
             padding: '0.5rem 1rem',
             fontSize: '0.875rem',
-            backgroundColor: '#f3f4f6',
-            border: '1px solid #d1d5db',
+            backgroundColor: '#f4f6fa',
+            border: '1px solid #d5dae4',
             borderRadius: '0.375rem',
             cursor: 'pointer',
           }}
