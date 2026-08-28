@@ -1,8 +1,10 @@
 import { createClient } from '@/lib/supabase-server';
 import { redirect, notFound } from 'next/navigation';
 import { getProfitabilityReport } from '@/lib/services/profitability';
+import { getProject } from '@/lib/services/projects';
+import { getRevisedContract } from '@/lib/services/contract-value';
 import type { ProfitCategoryRow } from '@framefocus/shared/utils/profitability';
-import { cardStyle, color, font, microLabelStyle } from '@/lib/theme';
+import { attentionCardStyle, cardStyle, color, font, microLabelStyle } from '@/lib/theme';
 
 // Module 7H — the per-job profitability report (7h1-spec §7H.3).
 //
@@ -60,9 +62,46 @@ export default async function ProfitabilityPage({
     { budget: null as number | null, committed: 0, actual: 0, sell: null as number | null }
   );
 
+  // §8.8.5 "Projected at completion" — NEW, page-level, FIXED-PRICE ONLY
+  // (P11: a cost-plus/T&M contract figure is a projection already; projecting
+  // from it would stack forecast on forecast). The cost forecast is the
+  // budget FLOORED by money already incurred — a job over budget projects at
+  // its overrun, never back down to plan:
+  //     projected profit = revised − max(budget, committed + actual)
+  // Null (em-dash) when there is no budget total or no revised contract.
+  const [project, revisedContract] = await Promise.all([getProject(id), getRevisedContract(id)]);
+  const incurred = totals.committed + totals.actual + report.unattributed.actual;
+  const projectedAtCompletion =
+    project?.project_type === 'fixed_price' &&
+    revisedContract.revised !== null &&
+    totals.budget !== null
+      ? Math.round((Number(revisedContract.revised) - Math.max(totals.budget, incurred)) * 100) /
+        100
+      : null;
+
   return (
     <div>
       <p style={{ ...microLabelStyle, marginBottom: '10px' }}>Profitability</p>
+
+      {/* §8.8.5 — the no-cost-landed banner. `actualCost === 0` is a real and
+          misleading state: every figure below is billing and budget only, and
+          margin reads artificially clean. Not one of the six report caveats —
+          those describe derivation assumptions; this describes an absence. */}
+      {headline.actualCost === 0 && (
+        <div
+          style={{
+            ...cardStyle,
+            ...attentionCardStyle,
+            padding: '11px 16px',
+            marginBottom: '14px',
+            fontSize: '13px',
+            color: color.body,
+          }}
+        >
+          <strong>No cost has landed on this job yet.</strong> The figures below reflect billing
+          and budget only — profit and margin will move as soon as real cost arrives.
+        </div>
+      )}
 
       {/* ── Headline ────────────────────────────────────────────────────── */}
       <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '18px' }}>
@@ -84,6 +123,14 @@ export default async function ProfitabilityPage({
               : 'Earned − actual cost. Overstates until the job is done.'
           }
         />
+        {/* §8.8.5 — fixed-price only; em-dash renders nothing false. */}
+        {projectedAtCompletion !== null && (
+          <Tile
+            label="Projected at completion"
+            value={money(projectedAtCompletion)}
+            hint="Revised − max(budget, committed + actual). A forecast, not a promise."
+          />
+        )}
       </div>
 
       <div style={{ ...cardStyle, padding: '14px 18px', marginBottom: '18px', maxWidth: '560px' }}>

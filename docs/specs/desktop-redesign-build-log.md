@@ -438,3 +438,22 @@ inventories"). Spec: `docs/specs/desktop-redesign-spec.md` (1358 lines). CLI lin
   (lien-releases); slugs unchanged.
 - **Files:** `lib/services/invoices.ts` · `projects/[id]/invoices/page.tsx`.
 - **Verified:** type-check 5/5.
+
+### Entry 19 — 5.4 `13d` Payments · 5.5 `13e` Profitability
+- **5.4:** the reminders control relabelled as RULED — "Payment reminders — chasing rules for
+  this client · applies to all of this client's projects", never "for this job"
+  (`client_reminder_settings` spans the client). Four aging buckets stay as coded; "Expected in
+  30 days" stays deferred (P-1 — nothing writes `due_date`). Two grey hexes → tokens.
+- **5.5:** the **no-cost-landed banner** — `actualCost === 0` gets the attention treatment and
+  says the figures are billing/budget only (deliberately NOT one of the six report caveats:
+  those describe derivation assumptions, this describes an absence). **"Projected at
+  completion"** lands page-level, **fixed-price + Owner/Admin only** (the page is already o/a):
+  `revised − max(budget, committed + actual + unattributed)` — the budget as cost forecast,
+  FLOORED by money already incurred, so an over-budget job projects at its overrun and never
+  back down to plan; em-dash when budget or revised is missing. **Formula is a recorded
+  decision** — no ruling named one; it is page-level (not added to the 7H service) precisely so
+  re-ruling it touches one file. The by-category em-dashes stay em-dashes; the mockup's
+  "unlock when the budget carries a sell figure" caption is NOT shipped (it points at deferred
+  §6b.3 work).
+- **Files:** `payments/reminder-settings.tsx` · `profitability/page.tsx`.
+- **Verified:** type-check 5/5 each.
