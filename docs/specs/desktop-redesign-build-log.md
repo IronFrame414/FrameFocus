@@ -341,3 +341,37 @@ inventories"). Spec: `docs/specs/desktop-redesign-spec.md` (1358 lines). CLI lin
 - **Files:** `subcontractors/page.tsx` · `subcontractors-list.tsx` · `test/s159-subs-sheet.test.tsx`.
 - **Commit:** (this entry's commit).
 - **Verified:** type-check 5/5; s159 12/12 (exit 0 + tally).
+
+### Entry 13 — `14b` Estimates, and the step's live acceptance pass
+- **Step:** sixth screen, last on purpose — its Client Activity column depends on view tracking
+  that IS NOT BUILT (P3) **and is not built here**: the write path is the whole security
+  question (public, logged-out proposal link), so it stays its own item. The column renders
+  from what exists — "sent <date>" / "not sent" — and upgrades without a layout change;
+  `estimates.viewed_at` + status `'viewed'` keep waiting for their writer.
+- **Did:** server page computes the two metrics over one grouped read (caller-RLS-scoped):
+  **Win rate — the RULED 12-month window, not the mockup's 90 days** — cohort = sent-in-window,
+  won = `accepted` **or `converted`** (conversion flips accepted → converted, so counting
+  accepted alone would drop the rate every time a job converts); **Expiring soon** = sent
+  estimates whose stored `expires_at` falls in the next 7 days. Client restyled onto the
+  anatomy: metric strip (win-rate card renders an em-dash on an empty cohort, not a fake 0%),
+  expiring AlertStrip with a review shortcut, status select → chips, number folded under name,
+  Client activity column, Clone kept.
+- **Decisions recorded:** the 7-day expiring window (mockup names none — one constant);
+  win-rate numerator includes `converted`.
+- **Files:** `estimates/page.tsx` · `estimates-list.tsx`.
+- **Commit:** (this entry's commit).
+- **Verified:** type-check 5/5; no test renders EstimatesList (swept).
+
+### Entry 14 — §5b live acceptance, the whole step
+- **Did:** NEW `e2e/desktop-lists.spec.ts` (anonymous chromium project, per-role sign-ins, the
+  ffnav precedent) — every screen renders for **Owner with real Bishop data** (empty states
+  asserted ABSENT — no zero-row passes) with its new columns/metrics visible, including the
+  ruled details (the [S97] "Contract / projected" header; no "used on N estimates" wording
+  anywhere on the catalog). The gated pass runs as **PM**, the one gated role that reaches all
+  six: 14a loses Contract/Billed/Margin and the money cards while Progress/attention/counts
+  stay alive; 14d shows no compliance alert and **no false "Missing"** — the em-dash posture,
+  live.
+- **Run:** **8/8 passed** against a fresh dev server (exit 0 + tally). Full unit suite after
+  all six screens: **955/955 (63 files)**. Type-check 5/5 at every commit.
+- **Files:** `e2e/desktop-lists.spec.ts` (new).
+- **Commit:** (this entry's commit, with 14b).

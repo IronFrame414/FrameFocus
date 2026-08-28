@@ -9,6 +9,15 @@ import {
 } from '@/lib/services/estimates-client';
 import { STATUS_COLORS, STATUS_LABELS, fmtMoney } from './labels';
 import { CloneModal } from './clone-modal';
+import {
+  AlertStrip,
+  FilterChips,
+  ListPageHeader,
+  ListSearchInput,
+  MetricStrip,
+} from '@/components/list-screen/list-screen';
+import type { Metric } from '@/components/list-screen/list-screen';
+import { cardStyle, color, font, microLabelStyle, primaryButtonStyle } from '@/lib/theme';
 
 const STATUS_FILTERS: Array<EstimateStatus | 'all'> = [
   'all',
@@ -41,7 +50,24 @@ export function StatusBadge({ status }: { status: EstimateStatus }) {
   );
 }
 
-export function EstimatesList() {
+// §8.2 Client activity — UNTIL VIEW TRACKING LANDS (P3, not built, not built
+// here), this renders from what exists and upgrades without a layout change.
+function clientActivity(e: Estimate): string {
+  if (!e.sent_at) return 'not sent';
+  return `sent ${new Date(e.sent_at).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  })}`;
+}
+
+export function EstimatesList({
+  metrics,
+}: {
+  /** §8.2 — server-computed over the caller-visible set. winRate is the RULED
+   *  12-month window (null = nothing sent in the window; the card renders an
+   *  em-dash, not a fake 0%). */
+  metrics: { winRate: number | null; cohortSize: number; expiringSoon: number };
+}) {
   const [estimates, setEstimates] = useState<Estimate[]>([]);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<EstimateStatus | 'all'>('all');
@@ -59,127 +85,172 @@ export function EstimatesList() {
     });
   }, [status, search]);
 
-  const cellStyle: React.CSSProperties = {
-    padding: '0.625rem 0.75rem',
-    fontSize: '0.875rem',
-    borderBottom: '1px solid #f3f4f6',
-  };
-  const thStyle: React.CSSProperties = {
-    ...cellStyle,
-    fontWeight: 600,
-    color: '#6b7280',
-    textAlign: 'left',
-    borderBottom: '1px solid #e5e7eb',
+  const stripMetrics: Metric[] = [
+    {
+      label: 'Win rate',
+      value: metrics.winRate === null ? '—' : `${metrics.winRate}%`,
+      sub: `12 months · ${metrics.cohortSize} sent`,
+    },
+    { label: 'Expiring soon', value: metrics.expiringSoon, sub: 'next 7 days' },
+  ];
+
+  const th: React.CSSProperties = { ...microLabelStyle, padding: '10px 12px', textAlign: 'left' };
+  const td: React.CSSProperties = {
+    padding: '11px 12px',
+    fontSize: '13px',
+    color: color.bodyAlt,
+    borderBottom: `1px solid ${color.rowDivider}`,
   };
 
   return (
     <div>
-      <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search name or number…"
-          style={{
-            padding: '0.5rem 0.75rem',
-            border: '1px solid #d1d5db',
-            borderRadius: '0.375rem',
-            fontSize: '0.875rem',
-            minWidth: '240px',
-          }}
-        />
-        <select
-          value={status}
-          onChange={(e) => setStatus(e.target.value as EstimateStatus | 'all')}
-          style={{
-            padding: '0.5rem 0.75rem',
-            border: '1px solid #d1d5db',
-            borderRadius: '0.375rem',
-            fontSize: '0.875rem',
-          }}
-        >
-          {STATUS_FILTERS.map((s) => (
-            <option key={s} value={s}>
-              {s === 'all' ? 'All statuses' : STATUS_LABELS[s]}
-            </option>
-          ))}
-        </select>
-      </div>
+      <ListPageHeader title="Estimates" subtitle="Build, send, and track estimates">
+        <ListSearchInput value={search} onChange={setSearch} placeholder="Search name or number…" />
+        <Link href="/dashboard/estimates/new" style={primaryButtonStyle}>
+          + New Estimate
+        </Link>
+      </ListPageHeader>
+
+      <MetricStrip metrics={stripMetrics} />
+
+      {metrics.expiringSoon > 0 && (
+        <AlertStrip>
+          <strong>{metrics.expiringSoon}</strong> sent estimate
+          {metrics.expiringSoon === 1 ? '' : 's'} expire{metrics.expiringSoon === 1 ? 's' : ''}{' '}
+          within 7 days.{' '}
+          <button
+            onClick={() => setStatus('sent')}
+            style={{
+              border: 'none',
+              background: 'none',
+              padding: 0,
+              color: color.primary,
+              fontWeight: 600,
+              fontSize: '13px',
+              fontFamily: font.sans,
+              cursor: 'pointer',
+            }}
+          >
+            Review sent estimates
+          </button>
+        </AlertStrip>
+      )}
+
+      <FilterChips
+        options={STATUS_FILTERS.map((s) => ({
+          value: s,
+          label: s === 'all' ? 'All' : STATUS_LABELS[s],
+        }))}
+        selected={status}
+        onSelect={(value) => setStatus(value as EstimateStatus | 'all')}
+      />
 
       {loading ? (
-        <p style={{ color: '#9ca3af', fontSize: '0.875rem' }}>Loading…</p>
+        <p style={{ color: color.faint, fontSize: '13px' }}>Loading…</p>
       ) : estimates.length === 0 ? (
-        <div
-          style={{
-            padding: '3rem',
-            textAlign: 'center',
-            color: '#9ca3af',
-            border: '1px dashed #d1d5db',
-            borderRadius: '0.5rem',
-          }}
-        >
+        <div style={{ ...cardStyle, padding: '48px', textAlign: 'center', color: color.muted }}>
           No estimates yet.{' '}
-          <Link href="/dashboard/estimates/new" style={{ color: '#2563eb' }}>
+          <Link href="/dashboard/estimates/new" style={{ color: color.primary }}>
             Create your first estimate
           </Link>
         </div>
       ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff' }}>
-          <thead>
-            <tr>
-              <th style={thStyle}>Number</th>
-              <th style={thStyle}>Name</th>
-              <th style={thStyle}>Status</th>
-              <th style={{ ...thStyle, textAlign: 'right' }}>Total</th>
-              <th style={thStyle}>Created</th>
-              <th style={thStyle}></th>
-            </tr>
-          </thead>
-          <tbody>
-            {estimates.map((e) => (
-              <tr key={e.id}>
-                <td style={cellStyle}>
-                  <Link
-                    href={`/dashboard/estimates/${e.id}`}
-                    style={{ color: '#2563eb', textDecoration: 'none', fontWeight: 600 }}
-                  >
-                    {e.estimate_number}
-                  </Link>
-                </td>
-                <td style={cellStyle}>
-                  <Link
-                    href={`/dashboard/estimates/${e.id}`}
-                    style={{ color: 'inherit', textDecoration: 'none' }}
-                  >
-                    {e.name}
-                  </Link>
-                </td>
-                <td style={cellStyle}>
-                  <StatusBadge status={e.status} />
-                </td>
-                <td style={{ ...cellStyle, textAlign: 'right' }}>{fmtMoney(e.grand_total)}</td>
-                <td style={cellStyle}>
-                  {e.created_at ? new Date(e.created_at).toLocaleDateString() : '—'}
-                </td>
-                <td style={{ ...cellStyle, textAlign: 'right' }}>
-                  <button
-                    type="button"
-                    onClick={() => setCloneSource(e)}
-                    style={{
-                      padding: '0.25rem 0.75rem',
-                      fontSize: '0.75rem',
-                      backgroundColor: '#f3f4f6',
-                      border: '1px solid #d1d5db',
-                      borderRadius: '0.375rem',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    Clone
-                  </button>
-                </td>
+        <div style={{ ...cardStyle, overflow: 'hidden' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+            <thead>
+              <tr
+                style={{
+                  backgroundColor: color.tableHeadBg,
+                  borderBottom: `1px solid ${color.neutralBadgeBg}`,
+                }}
+              >
+                <th style={{ ...th, paddingLeft: '20px' }}>Estimate</th>
+                <th style={th}>Status</th>
+                <th style={{ ...th, textAlign: 'right' }}>Total</th>
+                <th style={th}>Client activity</th>
+                <th style={th}>Created</th>
+                <th style={{ ...th, paddingRight: '20px' }}></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {estimates.map((e, i) => {
+                const last = i === estimates.length - 1;
+                const cell = last ? { ...td, borderBottom: 'none' } : td;
+                return (
+                  <tr key={e.id}>
+                    {/* Number folds under the name — the 14a pattern. */}
+                    <td style={{ ...cell, paddingLeft: '20px' }}>
+                      <Link
+                        href={`/dashboard/estimates/${e.id}`}
+                        style={{ textDecoration: 'none' }}
+                      >
+                        <span
+                          style={{
+                            display: 'block',
+                            fontWeight: 700,
+                            color: color.navy,
+                            fontSize: '14px',
+                          }}
+                        >
+                          {e.name}
+                        </span>
+                        <span
+                          style={{
+                            fontFamily: font.mono,
+                            fontSize: '11.5px',
+                            fontWeight: 500,
+                            color: color.faint,
+                          }}
+                        >
+                          {e.estimate_number}
+                        </span>
+                      </Link>
+                    </td>
+                    <td style={cell}>
+                      <StatusBadge status={e.status} />
+                    </td>
+                    <td
+                      style={{
+                        ...cell,
+                        textAlign: 'right',
+                        fontFamily: font.mono,
+                        fontWeight: 600,
+                        color: color.navy,
+                      }}
+                    >
+                      {fmtMoney(e.grand_total)}
+                    </td>
+                    <td style={{ ...cell, fontFamily: font.mono, fontSize: '12.5px' }}>
+                      {clientActivity(e)}
+                    </td>
+                    <td style={{ ...cell, fontFamily: font.mono, fontSize: '12.5px' }}>
+                      {e.created_at ? new Date(e.created_at).toLocaleDateString() : '—'}
+                    </td>
+                    <td style={{ ...cell, textAlign: 'right', paddingRight: '20px' }}>
+                      <button
+                        type="button"
+                        onClick={() => setCloneSource(e)}
+                        style={{
+                          padding: '4px 12px',
+                          fontSize: '12px',
+                          fontFamily: font.sans,
+                          fontWeight: 600,
+                          color: color.bodyAlt,
+                          backgroundColor: color.neutralBadgeBg,
+                          border: `1px solid ${color.cardBorder}`,
+                          borderRadius: '7px',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        Clone
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {cloneSource && (
