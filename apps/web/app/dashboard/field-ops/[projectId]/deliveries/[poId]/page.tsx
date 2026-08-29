@@ -6,6 +6,7 @@ import { getPurchaseOrderDetail, poTitle } from '@/lib/services/deliveries';
 import { getMyMember } from '@/lib/services/members';
 import { FieldTabs } from '@/components/field/field-tabs';
 import { ClosePoButton, DeletePoButton, PoTotalControl } from './po-actions';
+import { PoLinesPanel, type PanelLine, type StaffOption } from './po-lines-panel';
 
 // 6D — handoff 4e: PO detail. Ordered-vs-usable bars (usable = received −
 // damaged, DB-derived quantities aggregated per line), split-delivery truck
@@ -53,6 +54,77 @@ export default async function PurchaseOrderDetailPage({
 
   const isAdminRole = profile.role === 'owner' || profile.role === 'admin';
   const canEditPo = isAdminRole || profile.role === 'project_manager';
+
+  // ── PO module 18b — the line panel's reads ────────────────────────────────
+  // Caller-RLS-scoped throughout. Budgeted figures ride the Owner/Admin-only
+  // project_budget_amounts table: a PM's read returns nothing and the
+  // against-the-estimate panel simply does not render (less, not nothing).
+  const [{ data: lineRows }, { data: staffRows }, { data: amountRows }] = await Promise.all([
+    supabase
+      .from('purchase_order_items')
+      .select(
+        `id, description, qty_ordered, unit, unit_cost, line_status, flag_note, sort_order,
+         budget_item:project_budget_items(cost_code),
+         assignments:purchase_order_item_assignments(id, member_id, is_deleted,
+           member:company_members(display_name))`
+      )
+      .eq('purchase_order_id', po.id)
+      .eq('is_deleted', false)
+      .order('sort_order', { ascending: true }),
+    supabase
+      .from('company_members')
+      .select('id, display_name, profile:profiles!inner(role, is_deleted)')
+      .eq('is_deleted', false)
+      .in('profile.role', ['owner', 'admin', 'project_manager', 'foreman', 'crew_member'])
+      .eq('profile.is_deleted', false)
+      .order('display_name'),
+    supabase
+      .from('project_budget_amounts')
+      .select('budgeted_amount, budget_item:project_budget_items!inner(project_id, cost_code)')
+      .eq('budget_item.project_id', params.projectId),
+  ]);
+
+  const panelLines: PanelLine[] = (lineRows ?? []).map((row) => {
+    const budget = Array.isArray(row.budget_item) ? row.budget_item[0] : row.budget_item;
+    return {
+      id: row.id,
+      description: row.description,
+      qty: Number(row.qty_ordered),
+      unit: row.unit,
+      unitCost: row.unit_cost != null ? Number(row.unit_cost) : null,
+      lineStatus: row.line_status as PanelLine['lineStatus'],
+      flagNote: row.flag_note,
+      costCode: budget?.cost_code ?? null,
+      assignments: (row.assignments ?? [])
+        .filter((a) => !a.is_deleted)
+        .map((a) => {
+          const member = Array.isArray(a.member) ? a.member[0] : a.member;
+          return { id: a.id, memberId: a.member_id, name: member?.display_name ?? 'Member' };
+        }),
+    };
+  });
+  const staff: StaffOption[] = (staffRows ?? []).map((m) => ({
+    memberId: m.id,
+    name: m.display_name,
+  }));
+  const budgetedByCode: Record<string, number> = {};
+  for (const row of amountRows ?? []) {
+    const item = Array.isArray(row.budget_item) ? row.budget_item[0] : row.budget_item;
+    const code = item?.cost_code;
+    if (!code) continue;
+    budgetedByCode[code] =
+      Math.round(((budgetedByCode[code] ?? 0) + Number(row.budgeted_amount)) * 100) / 100;
+  }
+
+  const { data: vendorRow } = po.vendor_id
+    ? await supabase.from('subcontractors').select('email').eq('id', po.vendor_id).maybeSingle()
+    : { data: null };
+  const vendorEmailState: 'ok' | 'no-vendor' | 'no-email' = !po.vendor_id
+    ? 'no-vendor'
+    : vendorRow?.email
+      ? 'ok'
+      : 'no-email';
+  const lineBearing = panelLines.some((l) => l.unitCost != null);
   const autoClosed = po.status === 'closed' && po.closed_by === null;
   const shortWithDamage =
     po.status === 'issued' && po.lines.some((l) => !l.filled && l.damagedTotal > 0);
@@ -82,7 +154,11 @@ export default async function PurchaseOrderDetailPage({
           <h2 className="text-[24px] font-extrabold tracking-[-0.01em] text-[#14213d]">
             {poTitle(po)}
           </h2>
-          {po.status === 'issued' ? (
+          {po.status === 'draft' ? (
+            <span className="rounded-full bg-[#eef1f6] px-[10px] py-[4px] text-[12px] font-semibold text-[#7b8699]">
+              Draft
+            </span>
+          ) : po.status === 'issued' ? (
             <span className="rounded-full bg-[#fdece0] px-[10px] py-[4px] text-[12px] font-semibold text-[#b45309]">
               Open
             </span>
@@ -116,13 +192,29 @@ export default async function PurchaseOrderDetailPage({
 
       <FieldTabs projectId={project.id} active="deliveries" />
 
-      {/* 7C §2.4 — the PO total IS the commitment (Owner/Admin/PM). */}
-      <PoTotalControl
+      {/* R-L1: the typed-total control serves LEGACY POs only. A line-bearing
+          PO's total derives from its lines (the RPC refuses hand-typing) and
+          renders as the panel's footing row instead. */}
+      {!lineBearing && (
+        <PoTotalControl
+          poId={po.id}
+          projectId={params.projectId}
+          totalAmount={po.total_amount}
+          canEdit={canEditPo}
+          hideAmounts={!isAdminRole}
+        />
+      )}
+
+      <PoLinesPanel
         poId={po.id}
-        projectId={params.projectId}
-        totalAmount={po.total_amount}
-        canEdit={canEditPo}
-        hideAmounts={!isAdminRole}
+        poStatus={po.status as 'draft' | 'issued' | 'closed'}
+        lines={panelLines}
+        staff={staff}
+        budgetedByCode={budgetedByCode}
+        canIssue={canEditPo}
+        canReview={isAdminRole}
+        canAssign={canEditPo}
+        vendorEmailState={vendorEmailState}
       />
 
       <div className="grid grid-cols-[1fr_320px] items-start gap-[18px]">
