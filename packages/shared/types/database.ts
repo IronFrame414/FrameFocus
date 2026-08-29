@@ -685,10 +685,57 @@ export type Database = {
           },
         ]
       }
+      client_contract_amounts: {
+        Row: {
+          client_contract_id: string
+          company_id: string
+          contract_value: number | null
+          created_at: string | null
+          created_by: string | null
+          id: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          client_contract_id: string
+          company_id?: string
+          contract_value?: number | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          client_contract_id?: string
+          company_id?: string
+          contract_value?: number | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_contract_amounts_client_contract_id_fkey"
+            columns: ["client_contract_id"]
+            isOneToOne: true
+            referencedRelation: "client_contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_contract_amounts_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_contracts: {
         Row: {
           company_id: string
-          contract_value: number | null
           created_at: string | null
           created_by: string | null
           deleted_at: string | null
@@ -704,7 +751,6 @@ export type Database = {
         }
         Insert: {
           company_id?: string
-          contract_value?: number | null
           created_at?: string | null
           created_by?: string | null
           deleted_at?: string | null
@@ -720,7 +766,6 @@ export type Database = {
         }
         Update: {
           company_id?: string
-          contract_value?: number | null
           created_at?: string | null
           created_by?: string | null
           deleted_at?: string | null
