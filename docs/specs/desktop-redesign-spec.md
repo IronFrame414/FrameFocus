@@ -1060,7 +1060,7 @@ as `disabled={!canEdit}`, and backed three ways: the service refuses non-draft w
 | Panel | Verdict |
 | --- | --- |
 | **Estimate History** ("Priced to $123,651", "Margin dropped 31% → 18.4%", "Created from Weller template") | ❌ **No audit, event or history table exists anywhere.** Confirmed across all migrations. And the mockup's `v1.1` is literally a **dead `DEFAULT 'v1.1'` with zero writers** — there is no version numbering and no history link. **Building this means building an event log.** |
-| **Coverage check** ("line-item categories with no scope section describing them") | ❌ **No link exists between scope and categories.** Scope is estimate-level JSONB `{title, bullets[]}`; categories are `estimate_categories` rows. **No FK, no shared key, no id reference.** The only possible match is **free-typed name strings** — and category names and scope titles are independently authored. **This is guesswork, not a feature.** Do not build it as designed. |
+| **Coverage check** ("line-item categories with no scope section describing them") | ❌ **No link exists between scope and categories.** Scope is estimate-level JSONB `{title, bullets[]}`; categories are `estimate_categories` rows. **No FK, no shared key, no id reference.** The only possible match is **free-typed name strings** — and category names and scope titles are independently authored. **This is guesswork, not a feature.** Do not build it as designed. **⛔ WILL NOT BUILD [register-backlog §1.3] — confident wrong answers are worse than no feature.** |
 | **Allowance "has no cap"** | ❌ **No cap concept exists.** `estimate_line_rows` has no cap column; an allowance is just `quantity × unit_cost`. The unpriced-row half of that warning **is** derivable (a row with zero total/cost/rate). Ship the unpriced half; drop the cap half. |
 
 #### §8.10.4 — What is real
@@ -1209,9 +1209,9 @@ The brief listed several of these as blocked. They are not:
 | **"Proposed timeline from your estimate"** *(the largest NEW item in the handoff)* | **Zero machinery.** `phases` carries only `name`, `sort_order`, `project_id` — **no `estimate_id`, no dates, no dollar weight, no link to `estimate_categories`.** Deriving phases from category dollar weight, previewing them, and an Accept action that writes real tasks is a build in its own right. |
 | **Portfolio money** — Coming in · Going out · Not yet billed | Only **per-project** services exist (`getProjectAging`, `getPayablesSummary`, `getProfitabilityReport`). **No company-wide rollup of any of the three.** ⚠️ Anything keyed on `due_date` also inherits the **P-1 caveat**: due dates are not yet written, so it falls back to issue date. |
 | **Recent activity** | **No audit or event table anywhere** — the same finding as the estimate and PO passes. It would have to be assembled per source. |
-| **Crew load bars** ("33/40h") | ⚠️ **`tasks` has no hours column**, so **scheduled** hours are not derivable. Only **actual** hours are (from `time_segments`). The bars can show what a person *worked*, never what they are *booked for*. |
-| **Company Gantt / Timeline / By-crew** | The Gantt is **project-level only**; the company schedule is **calendar-only**. The mockup's three-view company timeline is new. |
-| **"Resumes when permit clears"** | Needs a hold reason. **No `hold_reason` column exists.** ("Cannot be scheduled until dates are set" *is* derivable.) |
+| **Crew load bars** ("33/40h") | ⚠️ **`tasks` has no hours column**, so **scheduled** hours are not derivable. Only **actual** hours are (from `time_segments`). The bars can show what a person *worked*, never what they are *booked for*. **⛔ WILL NOT BUILD [register-backlog §1.3] — showing worked hours as "booked" would be the on-site-badge class of lie; dropped, not faked.** |
+| **Company Gantt / Timeline / By-crew** | The Gantt is **project-level only**; the company schedule is **calendar-only**. The mockup's three-view company timeline is new. **⛔ WILL NOT BUILD [register-backlog §1.3].** |
+| **"Resumes when permit clears"** | Needs a hold reason. **No `hold_reason` column exists.** ("Cannot be scheduled until dates are set" *is* derivable — and shipped.) **⛔ WILL NOT BUILD [register-backlog §1.3].** |
 
 #### §8.12.3 — ⚠️ The "on-site" badge does not mean what the mockup implies
 

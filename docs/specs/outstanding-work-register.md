@@ -396,3 +396,35 @@ _Belongs with **A18** — both are Photos-surface decisions left open._
 
 ⚠️ **A10 (event log) is worth deciding early even if built late** — A13 depends on it, and if it is
 never built, both panels come out of the design permanently rather than sitting as unbuilt promises.
+
+
+---
+
+## Addendum [register-backlog session, Josh Phase 2] — cuts made permanent, small items recorded
+
+### The four PERMANENT CUTS — ⛔ WILL NOT BUILD (§1.3)
+
+A permanent cut and a deferral look identical in a list; these four are cuts. Each is also marked
+at its verdict row in `desktop-redesign-spec.md`.
+
+| Cut | Why it cannot be built as designed |
+| --- | --- |
+| **Crew-load bars** | `tasks` has no hours column; worked-as-booked would be the on-site-badge class of lie. Dropped, not faked. |
+| **The Coverage check** | No link between scope sections and line-item categories — strings vs strings; confident wrong answers are worse than no feature. |
+| **Company By-crew / Gantt** | The Gantt is project-level only; the company schedule is calendar-only. |
+| **"Resumes when permit clears"** | No `hold_reason` column exists anywhere. The derivable sibling ("cannot be scheduled until dates are set") IS shipped. |
+
+### Three small owed items (§1.4)
+
+- **"Send me a test"** on the estimate send flow — not built; *"Mark as sent"* is.
+- **Deep-linkable estimate tabs** — tab state is a client `useState`; this is **a change, not a
+  restyle**.
+- **The `m-capture` fixture-backed e2e** — filed as owed in `po-module-spec.md` §9 rather than
+  shipped as a vacuous green.
+
+### `s146-C5` — ✅ FIXED, not filed (Q3)
+
+Root-caused in the audit-fixes pass: `s145-C5` and `s146-C5` were the only two writers of
+`client_contracts_enabled`, racing each other on company A under the parallel battery. `s145-C5`
+now drives company B; the following full battery ran **1497/1497 with zero parallel reds.** No debt
+entry — this note is the record.
