@@ -1,8 +1,11 @@
+import { headers } from 'next/headers';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { createClient } from '@/lib/supabase-server';
 import { getActiveSessionByToken } from '@/lib/services/signing-service';
 import { getProposalData } from '@/lib/proposal/proposal-data';
+import { recordProposalView } from '@/lib/proposal/record-view';
 import { SigningClient } from './signing-client';
 
 // Spec 2 (4F F1) — public signing page. No authentication: the
@@ -61,6 +64,40 @@ export default async function SigningPage({ params }: PageProps) {
         } if you believe this is an error.`}
       />
     );
+  }
+
+  // View tracking (proposal-view-tracking-spec §4): every open logs a row —
+  // UNLESS the viewer is signed in to the sending company (the contractor
+  // checking their own proposal must not render as client activity). Known
+  // accepted limitation: the contractor in a logged-out browser counts.
+  // Detection failure falls through to logging — the row is the safe default,
+  // since read-time filtering can always improve.
+  let isOwnView = false;
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (user) {
+      // Mirrors my_company_id_flat(): one profile per auth user is the seed
+      // invariant, so this .limit(1) is the flat lookup, not an ordering bug.
+      const { data: prof } = await admin
+        .from('profiles')
+        .select('company_id')
+        .eq('user_id', user.id)
+        .eq('is_deleted', false)
+        .limit(1);
+      isOwnView = prof?.[0]?.company_id === session.company_id;
+    }
+  } catch {
+    // No session cookie context (or auth hiccup) — treat as a client view.
+  }
+  if (!isOwnView) {
+    await recordProposalView(admin, {
+      companyId: session.company_id,
+      estimateId: session.estimate_id,
+      userAgent: headers().get('user-agent'),
+    });
   }
 
   return (

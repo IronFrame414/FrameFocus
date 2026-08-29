@@ -7,6 +7,10 @@ import {
   EstimateStatus,
   listEstimates,
 } from '@/lib/services/estimates-client';
+import {
+  getProposalViewStats,
+  type ProposalViewStats,
+} from '@/lib/services/proposal-views-client';
 import { STATUS_COLORS, STATUS_LABELS, fmtMoney } from './labels';
 import { CloneModal } from './clone-modal';
 import {
@@ -50,9 +54,18 @@ export function StatusBadge({ status }: { status: EstimateStatus }) {
   );
 }
 
-// §8.2 Client activity — UNTIL VIEW TRACKING LANDS (P3, not built, not built
-// here), this renders from what exists and upgrades without a layout change.
-function clientActivity(e: Estimate): string {
+// §8.2 Client activity — upgraded in place now that view tracking (P3) is
+// built: opens beat "sent", and both beat "not sent". Same cell, no layout
+// change — exactly the upgrade path the interim renderer promised. Stats are
+// human-filtered at read time (view-filter.ts) and RLS-scoped, so a viewer
+// without standing on the estimate simply falls back to the sent date.
+function clientActivity(e: Estimate, stats?: ProposalViewStats): string {
+  if (stats && stats.total > 0) {
+    return `opened ${stats.total}× · last ${new Date(stats.lastViewedAt!).toLocaleDateString(
+      'en-US',
+      { month: 'short', day: 'numeric' }
+    )}`;
+  }
   if (!e.sent_at) return 'not sent';
   return `sent ${new Date(e.sent_at).toLocaleDateString('en-US', {
     month: 'short',
@@ -74,6 +87,8 @@ export function EstimatesList({
   const [search, setSearch] = useState('');
   const [cloneSource, setCloneSource] = useState<Estimate | null>(null);
 
+  const [viewStats, setViewStats] = useState<Record<string, ProposalViewStats>>({});
+
   useEffect(() => {
     setLoading(true);
     listEstimates({
@@ -82,6 +97,9 @@ export function EstimatesList({
     }).then((rows) => {
       setEstimates(rows);
       setLoading(false);
+      // Second fetch, after the list renders — activity enriches rows, it
+      // never blocks them.
+      getProposalViewStats(rows.map((r) => r.id)).then(setViewStats);
     });
   }, [status, search]);
 
@@ -221,7 +239,7 @@ export function EstimatesList({
                       {fmtMoney(e.grand_total)}
                     </td>
                     <td style={{ ...cell, fontFamily: font.mono, fontSize: '12.5px' }}>
-                      {clientActivity(e)}
+                      {clientActivity(e, viewStats[e.id])}
                     </td>
                     <td style={{ ...cell, fontFamily: font.mono, fontSize: '12.5px' }}>
                       {e.created_at ? new Date(e.created_at).toLocaleDateString() : '—'}

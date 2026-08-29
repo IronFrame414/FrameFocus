@@ -5,12 +5,11 @@ import { EstimatesList } from './estimates-list';
 /**
  * 14b Estimates (desktop-redesign §8.2).
  *
- * ⚠️ Proposal VIEW TRACKING IS NOT BUILT (prerequisite P3) and is NOT built
- * here — it is its own item, and the write path is the whole security
- * question (public, logged-out link). Until it lands, the Client activity
- * column renders from what exists — "sent <date>" / "not sent" — and upgrades
- * to real open-tracking without a layout change. `estimates.viewed_at` and
- * status 'viewed' are waiting for their writer.
+ * Proposal view tracking (P3) is BUILT — proposal-view-tracking-spec. The
+ * Client activity column upgraded in place: "opened N× · last <date>" from
+ * proposal_views rows, falling back to "sent <date>" / "not sent". The write
+ * path lives on the signing page (service role); `estimates.viewed_at` is the
+ * first-counted-view stamp; status 'viewed' is retired unused.
  */
 export default async function EstimatesPage() {
   const supabase = await createClient();

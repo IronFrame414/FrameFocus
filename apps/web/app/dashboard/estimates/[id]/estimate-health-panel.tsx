@@ -11,14 +11,20 @@
 //     wrong answers. NOT BUILT AS DESIGNED (§8.10.3).
 //   · The target-margin bar — no target exists (§6b.2). Health renders margin
 //     as a number, never against a target.
-//   · View tracking — `viewed_at` and status 'viewed' have zero writers, and
-//     the write path is the whole security question (the proposal link is
-//     public). P3, its own item. "Opens" therefore say "not tracked yet".
+//   · View tracking — BUILT (P3, proposal-view-tracking-spec): proposal_views
+//     rows written by the signing page via service role; `viewed_at` stamped
+//     on the first counted view; status 'viewed' retired unused. "Opens"
+//     render from the rows below.
 //   · The expiration readiness check — `expiration_days` is NOT NULL with a
 //     default, so "expiration set" is always true. DROPPED as near-vacuous.
 
+import { useEffect, useState } from 'react';
 import type { TabProps } from './estimate-builder';
 import { computeEstimateHealth } from '@/lib/estimate-health';
+import {
+  getProposalViewStats,
+  type ProposalViewStats,
+} from '@/lib/services/proposal-views-client';
 import { fmtMoney } from '../labels';
 import { color, font } from '@/lib/theme';
 
@@ -256,12 +262,28 @@ export function ClientActivityCard({ data }: Pick<TabProps, 'data'>) {
   const fmtDate = (iso: string) =>
     new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
+  // View tracking (P3, proposal-view-tracking-spec §6) — derived from
+  // proposal_views rows at read time, human opens only. RLS scopes the rows
+  // to Owner/Admin + the authoring PM, matching who can open this page.
+  const [views, setViews] = useState<ProposalViewStats | null>(null);
+  useEffect(() => {
+    getProposalViewStats([estimate.id]).then((stats) => setViews(stats[estimate.id] ?? null));
+  }, [estimate.id]);
+
   return (
     <div style={cardStyle} data-testid="est-client-activity">
       <div style={cardTitleStyle}>Client activity</div>
       <div style={statRow}>
         <span style={{ color: color.body }}>Sent</span>
         <span style={monoValue}>{estimate.sent_at ? fmtDate(estimate.sent_at) : 'not sent'}</span>
+      </div>
+      <div style={statRow}>
+        <span style={{ color: color.body }}>Opened</span>
+        <span style={monoValue}>
+          {views && views.total > 0
+            ? `${views.total}× · last ${fmtDate(views.lastViewedAt!)}`
+            : 'not yet'}
+        </span>
       </div>
       <div style={statRow}>
         <span style={{ color: color.body }}>Reminders</span>
@@ -284,7 +306,7 @@ export function ClientActivityCard({ data }: Pick<TabProps, 'data'>) {
         </div>
       )}
       <p style={{ marginTop: '0.5rem', marginBottom: 0, fontSize: '0.6875rem', color: color.faint }}>
-        Opens aren&rsquo;t tracked yet.
+        Opens count the client&rsquo;s views only — your own and scanners&rsquo; are filtered out.
       </p>
     </div>
   );
