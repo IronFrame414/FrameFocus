@@ -252,3 +252,50 @@ export async function createDraftPos(
   }
   return { success: true, created };
 }
+
+// ── §S2 — the review popup's PO context ─────────────────────────────────────
+
+export interface ReviewPoLine {
+  id: string;
+  description: string;
+  qtyOrdered: number;
+  unitCost: number | null;
+  budgetItemId: string | null;
+  lineStatus: 'issued' | 'flagged';
+  flagNote: string | null;
+}
+
+export interface ReviewPo {
+  id: string;
+  poNumber: string | null;
+  vendorName: string | null;
+  lines: ReviewPoLine[];
+}
+
+/** The PO a pending run expense was bought against (source_po_id), with its
+ *  OPEN lines only — issued and flagged; purchased/draft lines are not up
+ *  for reconciliation. Reader is the reviewer (Owner/Admin); RLS scopes. */
+export async function getReviewPo(poId: string): Promise<ReviewPo | null> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('purchase_orders')
+    .select(
+      'id, po_number, vendor_name, items:purchase_order_items(id, description, qty_ordered, unit_cost, budget_item_id, line_status, flag_note, sort_order, is_deleted)'
+    )
+    .eq('id', poId)
+    .single();
+  if (error || !data) return null;
+  const lines = (data.items ?? [])
+    .filter((i) => !i.is_deleted && (i.line_status === 'issued' || i.line_status === 'flagged'))
+    .sort((a, b) => a.sort_order - b.sort_order)
+    .map((i) => ({
+      id: i.id,
+      description: i.description,
+      qtyOrdered: i.qty_ordered,
+      unitCost: i.unit_cost,
+      budgetItemId: i.budget_item_id,
+      lineStatus: i.line_status as 'issued' | 'flagged',
+      flagNote: i.flag_note,
+    }));
+  return { id: data.id, poNumber: data.po_number, vendorName: data.vendor_name, lines };
+}

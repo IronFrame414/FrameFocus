@@ -40,6 +40,11 @@ import {
   type ExpenseListItem,
 } from '@/lib/services/expenses-client';
 import {
+  getReviewPo,
+  markPoLinesPurchased,
+  type ReviewPo,
+} from '@/lib/services/po-lines-client';
+import {
   CAPTURE_CATEGORY_LABELS,
   EXPENSE_CATEGORY_LABELS,
   fmtMoney,
@@ -88,6 +93,39 @@ export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: Re
   // it through its reconcile.
   const [selectionByLine, setSelectionByLine] = useState<Record<string, string>>({});
   const [taggable, setTaggable] = useState<TaggableSelection[]>([]);
+
+  // PO module §S2 — the run's PO context. Loaded when the pending expense
+  // carries source_po_id (R-Q2 provenance, never the commitment link). The
+  // panel is a CALCULATOR into the allocation editor below — per-line
+  // amounts grouped by their (retargetable) budget line become the split;
+  // the editor stays the single mechanism approve_expense reads (the #129
+  // lesson: share the mechanism, not just the intent).
+  const [reviewPo, setReviewPo] = useState<ReviewPo | null>(null);
+  const [poAmounts, setPoAmounts] = useState<Record<string, string>>({});
+  const [poTargets, setPoTargets] = useState<Record<string, string>>({});
+  const [purchasedTicks, setPurchasedTicks] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!expense.source_po_id || isCommitted) return;
+    let active = true;
+    void getReviewPo(expense.source_po_id).then((po) => {
+      if (!active || !po) return;
+      setReviewPo(po);
+      const amounts: Record<string, string> = {};
+      const targets: Record<string, string> = {};
+      for (const l of po.lines) {
+        amounts[l.id] =
+          l.unitCost === null ? '' : (l.qtyOrdered * l.unitCost).toFixed(2);
+        targets[l.id] = l.budgetItemId ?? '';
+      }
+      setPoAmounts(amounts);
+      setPoTargets(targets);
+    });
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Inline add-line (Q4b).
   const [addingLine, setAddingLine] = useState(false);
@@ -162,6 +200,37 @@ export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: Re
     const remainder = (Number.isNaN(parsedAmount) ? 0 : parsedAmount) - others;
     if (remainder <= 0) return;
     setAllocations((prev) => ({ ...prev, [lineId]: remainder.toFixed(2) }));
+  }
+
+  /** §S2 item 3 — per-line amounts grouped by their FINAL budget target
+   *  (recategorization included) become the split. Overwrites the allocation
+   *  map: applying the breakdown is an explicit act. */
+  function applyPoBreakdownToSplit() {
+    const grouped: Record<string, number> = {};
+    for (const line of reviewPo?.lines ?? []) {
+      const n = Number(poAmounts[line.id]);
+      const target = poTargets[line.id];
+      if (Number.isNaN(n) || n <= 0 || !target) continue;
+      grouped[target] = (grouped[target] ?? 0) + n;
+    }
+    setAllocations(
+      Object.fromEntries(Object.entries(grouped).map(([id, n]) => [id, n.toFixed(2)]))
+    );
+  }
+
+  /** §S2 item 5 — capture auto-stamps with no opt-out (R-B1), so the
+   *  counterpart lives here: clear a mis-stamped link and review plain. */
+  async function handleClearPoLink() {
+    setBusy(true);
+    setError(null);
+    const res = await updateExpense(expense.id, { source_po_id: null });
+    setBusy(false);
+    if (!res.success) {
+      setError(res.error ?? 'Failed to clear the PO link.');
+      return;
+    }
+    setReviewPo(null);
+    setPurchasedTicks(new Set());
   }
 
   async function handleReassign(newProjectId: string) {
@@ -245,11 +314,27 @@ export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: Re
     }
 
     const res = await approveExpense(expense.id, allocationEntries);
-    setBusy(false);
     if (!res.success) {
+      setBusy(false);
       setError(res.error ?? 'Failed to approve the expense.');
       return;
     }
+    // §S2 item 4 — approval is the money act; purchase-marking is PO
+    // bookkeeping. A marking failure is surfaced, never swallowed, and
+    // never un-approves: the popup stays open with the recovery path named.
+    if (reviewPo && purchasedTicks.size > 0) {
+      const marked = await markPoLinesPurchased(reviewPo.id, [...purchasedTicks]);
+      if (!marked.success) {
+        setBusy(false);
+        setError(
+          `The expense was approved, but marking the lines purchased failed: ${
+            marked.error ?? 'unknown error'
+          }. Mark them from the PO record.`
+        );
+        return;
+      }
+    }
+    setBusy(false);
     onDone();
   }
 
@@ -379,6 +464,154 @@ export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: Re
             ))}
           </select>
         </div>
+
+        {/* §S2 — the PO panel: breakdown guide + purchase marking. Feeds the
+            allocation editor below; never a second write path. */}
+        {reviewPo && (
+          <div
+            data-testid="review-po-panel"
+            style={{
+              marginBottom: '16px',
+              padding: '12px 14px',
+              borderRadius: '9px',
+              border: '1px solid #dbe0fb',
+              backgroundColor: '#f5f7ff',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'baseline',
+                marginBottom: '6px',
+              }}
+            >
+              <span style={{ ...microLabelStyle }}>
+                Bought against {reviewPo.poNumber ?? 'a PO'}
+                {reviewPo.vendorName ? ` · ${reviewPo.vendorName}` : ''}
+              </span>
+              <button
+                style={{
+                  border: 'none',
+                  background: 'none',
+                  color: color.primary,
+                  fontWeight: 600,
+                  fontSize: '12px',
+                  cursor: 'pointer',
+                  padding: 0,
+                }}
+                disabled={busy}
+                onClick={() => void handleClearPoLink()}
+              >
+                Not against this PO
+              </button>
+            </div>
+            <p style={{ fontSize: '12px', color: color.muted, margin: '0 0 8px' }}>
+              Break the receipt down per line, retarget a line&rsquo;s cost to a different budget
+              line if it belongs elsewhere, and tick what was bought — ticked lines are marked
+              purchased on approval and leave the open PO.
+            </p>
+            {reviewPo.lines.length === 0 && (
+              <p style={{ fontSize: '12px', color: color.faint, margin: 0 }}>
+                No open lines on this PO — everything is already purchased.
+              </p>
+            )}
+            {reviewPo.lines.map((line) => (
+              <div
+                key={line.id}
+                style={{
+                  display: 'flex',
+                  gap: '8px',
+                  alignItems: 'center',
+                  padding: '5px 0',
+                  borderBottom: `1px solid ${color.rowDivider}`,
+                }}
+              >
+                <input
+                  type="checkbox"
+                  title="Bought — mark purchased on approval"
+                  checked={purchasedTicks.has(line.id)}
+                  onChange={() =>
+                    setPurchasedTicks((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(line.id)) next.delete(line.id);
+                      else next.add(line.id);
+                      return next;
+                    })
+                  }
+                />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ fontSize: '13px', color: color.body }}>{line.description}</span>
+                  <div style={{ fontSize: '11px', color: color.muted }}>
+                    ordered{' '}
+                    {line.unitCost === null
+                      ? '—'
+                      : fmtMoney(line.qtyOrdered * line.unitCost)}
+                    {line.lineStatus === 'flagged' && (
+                      <span style={{ color: color.warningDeep }}>
+                        {' '}
+                        · flagged{line.flagNote ? `: ${line.flagNote}` : ''}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <select
+                  title="Which budget line this cost lands on"
+                  value={poTargets[line.id] ?? ''}
+                  onChange={(e) =>
+                    setPoTargets((prev) => ({ ...prev, [line.id]: e.target.value }))
+                  }
+                  style={{ ...inputStyle, width: '170px' }}
+                >
+                  {(lines ?? []).map((l) => (
+                    <option key={l.id} value={l.id}>
+                      {l.description ?? 'Untitled line'}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={poAmounts[line.id] ?? ''}
+                  onChange={(e) =>
+                    setPoAmounts((prev) => ({ ...prev, [line.id]: e.target.value }))
+                  }
+                  style={{ ...inputStyle, width: '96px' }}
+                />
+              </div>
+            ))}
+            {reviewPo.lines.length > 0 && (
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginTop: '8px',
+                }}
+              >
+                <span style={{ fontSize: '12px', color: color.muted }}>
+                  Breakdown{' '}
+                  {fmtMoney(
+                    reviewPo.lines.reduce((sum, l) => {
+                      const n = Number(poAmounts[l.id]);
+                      return sum + (Number.isNaN(n) || n <= 0 ? 0 : n);
+                    }, 0)
+                  )}{' '}
+                  of {fmtMoney(Number.isNaN(parsedAmount) ? 0 : parsedAmount)} receipt
+                </span>
+                <button
+                  style={{ ...secondaryButtonStyle, padding: '6px 12px', fontSize: '12px' }}
+                  disabled={busy}
+                  onClick={applyPoBreakdownToSplit}
+                >
+                  Use as the split
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Allocation — ALWAYS shown (Q4; A-7 extends to committed rows,
             whose allocations feed the committed rollup). budgeted_amount is
