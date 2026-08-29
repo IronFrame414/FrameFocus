@@ -782,7 +782,7 @@ Source: `docs/specs/money-section-inventory.md`, gathered on `feature/s175-clien
 **The regrouping touches no page body here.** All five pages get the strip from `layout.tsx` +
 `project-header.tsx`. Two genuine sibling-URL couplings break only if a slug changes:
 `payments-view.tsx:142` hardcodes the invoices base (4 links), and
-`invoice-delivery-panel.tsx:175` hardcodes lien-releases. **Slugs are not changing**, so neither moves.
+`invoice-delivery-panel.tsx:177` hardcodes lien-releases. **Slugs are not changing**, so neither moves.
 
 **Audit result worth recording: no money reaches a client payload without a role check on any of the
 five pages, and there is no database N+1 in any of them.** Budget's ~13 loops are all pure in-memory
@@ -1299,7 +1299,7 @@ now-moot write-guard trigger, regen types. The `project_financials` precedent.
 
 **Wrong answer 1 — floor SELECT *and* INSERT/UPDATE.** Rejected because the write side **is already
 floored, deliberately**: `contract_value` by a trigger (`20260809000000_financial_rls_floor_part3.sql:155`)
-and voiding by another (`20260926000000_7i_contracts.sql:504`). The trigger-over-policy choice was ruled
+and voiding by another (`20260926000000_7i_contracts.sql:503-504`). The trigger-over-policy choice was ruled
 **twice**, specifically so **a PM can still edit contract notes**. Narrowing UPDATE would overturn that
 ruling as a side effect of fixing something else.
 

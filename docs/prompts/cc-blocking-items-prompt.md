@@ -53,7 +53,7 @@ portal.** This was caught late; do not lose it.
 
 **1 — Floor SELECT _and_ INSERT/UPDATE.** Rejected: the write side is **already floored** by two
 deliberate triggers — `contract_value` at `20260809000000_financial_rls_floor_part3.sql:155`, voiding at
-`20260926000000_7i_contracts.sql:504`. The trigger-over-policy choice was ruled **twice**, specifically
+`20260926000000_7i_contracts.sql:503-504`. The trigger-over-policy choice was ruled **twice**, specifically
 so **a PM can still edit contract notes.** Narrowing UPDATE would overturn that ruling as a side effect.
 
 **2 — Floor SELECT only.** Rejected on a **measured** finding: in Postgres an `UPDATE … WHERE` must
