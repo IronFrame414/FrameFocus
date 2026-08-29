@@ -235,14 +235,23 @@ describe('PO18 — committed lifecycle', () => {
   });
 
   it('a draft line cannot be issued without cost+budget; a second issue extends the sums', async () => {
-    // Strip A2's budget line, prove the guard, restore, then issue it.
-    await admin.from('purchase_order_items').update({ budget_item_id: null }).eq('id', lineIds[1]);
+    // [S157, 20261048] This test used to strip the BUDGET LINK to prove the
+    // issue guard — R-B2's CHECK now refuses a costed-unlinked row at write
+    // time, so that arm of the guard is unreachable by construction (and the
+    // CHECK has its own probe below). The COST arm remains reachable: a
+    // costless, budget-linked draft is legal (the legacy shape), and issuing
+    // it must still refuse.
+    const { error: stripErr } = await admin
+      .from('purchase_order_items')
+      .update({ unit_cost: null })
+      .eq('id', lineIds[1]);
+    expect(stripErr?.message).toBeUndefined(); // the strip itself must land
     const { error: refuse } = await owner.rpc('issue_po_lines', {
       p_po_id: poId,
       p_item_ids: [lineIds[1]],
     });
     expect(refuse?.message).toMatch(/cost and a budget line/);
-    await admin.from('purchase_order_items').update({ budget_item_id: budgetA }).eq('id', lineIds[1]);
+    await admin.from('purchase_order_items').update({ unit_cost: 25 }).eq('id', lineIds[1]);
 
     const { error } = await owner.rpc('issue_po_lines', { p_po_id: poId, p_item_ids: [lineIds[1]] });
     expect(error?.message).toBeUndefined();
@@ -369,6 +378,7 @@ describe('PO18 — committed lifecycle', () => {
     // the same row WITH the link lands — proving the probe hit the CHECK,
     // not some earlier failure.
     const { error: refused } = await admin.from('purchase_order_items').insert({
+      company_id: companyId, // service-role client: no default fills this
       purchase_order_id: poId,
       description: `${MARKER} costed-unlinked probe`,
       qty_ordered: 1,
@@ -380,6 +390,7 @@ describe('PO18 — committed lifecycle', () => {
     const { data: ok, error: allowed } = await admin
       .from('purchase_order_items')
       .insert({
+        company_id: companyId,
         purchase_order_id: poId,
         description: `${MARKER} costed-linked probe`,
         qty_ordered: 1,
