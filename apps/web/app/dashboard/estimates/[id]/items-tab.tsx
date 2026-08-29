@@ -41,6 +41,7 @@ import { UNIT_LABELS, fmtMoney, fmtPercent } from '../labels';
 import { CatalogPicker } from './catalog-picker';
 import { useConfirm } from '@/components/confirm/confirm-provider';
 import { EstimateHealthStrip } from './estimate-health-panel';
+import { AddItemsSheet } from './add-items-sheet';
 import type { TabProps } from './estimate-builder';
 
 type Result = { success: boolean; error?: string };
@@ -81,6 +82,8 @@ const ROW_TYPE_DEFAULT_NAME: Record<RowType, string> = {
 export function ItemsTab({ data, canEdit, reload }: TabProps) {
   const { estimate, categories, subcategories, lineItems, rows } = data;
   const [error, setError] = useState<string | null>(null);
+  // PO module 17 — the batch add sheet (R8). Draft-only, like every write here.
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [pickerForRow, setPickerForRow] = useState<EstimateLineRow | null>(null);
   const [defaultLaborRate, setDefaultLaborRate] = useState<number | null>(null);
   const confirm = useConfirm();
@@ -876,6 +879,28 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
       {/* Step 9 — the live cost/price/margin strip (same derivation as the
           Details Health card; one implementation, two surfaces). */}
       <EstimateHealthStrip data={data} />
+      {canEdit && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.75rem' }}>
+          <button
+            type="button"
+            data-testid="open-add-items"
+            onClick={() => setSheetOpen(true)}
+            style={{
+              padding: '9px 16px',
+              borderRadius: '9px',
+              backgroundColor: '#3b4ae0',
+              color: '#fff',
+              fontSize: '13px',
+              fontWeight: 700,
+              border: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            + Add items
+          </button>
+        </div>
+      )}
+      {sheetOpen && <AddItemsSheet data={data} reload={reload} onClose={() => setSheetOpen(false)} />}
       {error && (
         <div
           style={{
