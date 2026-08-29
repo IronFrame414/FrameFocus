@@ -90,6 +90,7 @@ export function ExpenseCaptureForm({
       description: string;
       poId: string;
       poNumber: string | null;
+      vendorName: string | null;
     }[]
   >([]);
   const [selectedPoId, setSelectedPoId] = useState<string | null>(null);
@@ -117,7 +118,7 @@ export function ExpenseCaptureForm({
       const { data } = await supabase
         .from('purchase_order_item_assignments')
         .select(
-          'po_item:purchase_order_items!inner(id, description, line_status, is_deleted, purchase_order:purchase_orders!inner(id, po_number, project_id, status, is_deleted))'
+          'po_item:purchase_order_items!inner(id, description, line_status, is_deleted, purchase_order:purchase_orders!inner(id, po_number, vendor_name, project_id, status, is_deleted))'
         )
         .eq('member_id', me.id)
         .eq('is_deleted', false);
@@ -140,6 +141,7 @@ export function ExpenseCaptureForm({
           description: item.description,
           poId: po!.id,
           poNumber: po!.po_number,
+          vendorName: po!.vendor_name,
         }));
       setMyPoLines(lines);
       const poIds = [...new Set(lines.map((l) => l.poId))];
@@ -149,6 +151,20 @@ export function ExpenseCaptureForm({
       active = false;
     };
   }, [projectId, existing]);
+
+  // Supplier pre-fills from the PO's vendor (§6 — the run knows its counter).
+  // Only a blank field or a previous auto-fill is overwritten; anything the
+  // member typed stands. 'TBD' is the drafting service's no-vendor fallback
+  // and is never offered as a supplier.
+  useEffect(() => {
+    const vendor = myPoLines.find((l) => l.poId === selectedPoId)?.vendorName;
+    if (!vendor || vendor === 'TBD') return;
+    setSupplier((prev) => {
+      const wasAutoFill =
+        prev.trim() === '' || myPoLines.some((l) => l.vendorName === prev && l.vendorName !== null);
+      return wasAutoFill ? vendor : prev;
+    });
+  }, [selectedPoId, myPoLines]);
   const [date, setDate] = useState(existing?.expense_date ?? todayYmd);
   const [amount, setAmount] = useState(existing ? String(existing.amount) : '');
   const [description, setDescription] = useState(existing?.description ?? '');
@@ -207,6 +223,13 @@ export function ExpenseCaptureForm({
     const parsedAmount = Number(amount);
     if (!amount.trim() || Number.isNaN(parsedAmount) || parsedAmount <= 0) {
       setError('Enter an amount greater than zero.');
+      return;
+    }
+    // RULED — no opt-out: a member with assigned lines on several POs must say
+    // which one the run was against (a fact they hold); whether the cost
+    // belongs there is the office's call, corrected at review.
+    if (!existing && myPoLines.length > 0 && selectedPoId === null) {
+      setError('Pick which PO this run was against.');
       return;
     }
     setBusy(true);
