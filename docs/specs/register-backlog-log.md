@@ -29,3 +29,34 @@ S157 sweep for §3: `s140-compliance-floor.live.ts:192` ("PM INSERT is refused")
 `license` — under the new CHECK it would pass **for the wrong reason** (CHECK, not RLS); the
 fixture gains a date at build time. `:130`'s dateless `w9` success survives and becomes §5's
 admit-proof.
+
+## Phase 3 — build, 2026-08-29
+
+Spec finalised (`0e92e9d`), then §1→§4 in order, one concern per commit, pushed after each:
+`4fa5e22` TECH_DEBT (4 provisional entries, discharged block removed) · `2e41ce3` cuts + owed items
++ s146-C5-fixed record · `80b2226` brand.description · `2de0448` §3 CHECK 20261049 + S157 fixture
+move · `3e1aba7` §2 the ruled six (proven twice back-to-back) · `30a940a` §4 cancellation retention
+(migration 20261050, staff-only ban, portal carve-out, shared unban; 5/5 acceptance proofs).
+
+### §5 battery
+
+| Run | Result | Baseline |
+| --- | --- | --- |
+| type-check --force | 5/5 at every commit | 5/5 |
+| Lint | clean, exit 0 | clean |
+| Cold build | compiled, exit 0 | clean |
+| Unit | **966/966** | 966 |
+| Live RLS | **1502/1503, 104 files** (two new files) | 1491–1493 / 102 |
+| Playwright | **54 + 117 + 255 + 125 = 551** passed, 0 failed, 2 flaky-passed, 9 conditional skips | 547 |
+
+**The one red, classified:** `s97ct-roles` 6b under the parallel run — **S167 contamination, third
+sighting, 36/36 in isolation** (as in both prior batteries). Not a regression and not this
+session's fixtures (the E2ECONFIRM invoice is owner-authored on an unassigned project — invisible
+to the suite's PM). Chunk 4's +6 = `desktop-confirms.spec.ts`, now in the chunk list.
+
+### Reported, not fixed (out of scope)
+
+- `softDeletePayment` (`payables-client.ts:508`) is an UPDATE without the `applied()` guard — the
+  audit's E7 class, found while building §2. Same for the pre-existing bespoke guards in
+  `file-categories-client.ts` (rename/delete use `!data?.length` with local messages). Filed here
+  for the next sweep rather than fixed mid-section.
