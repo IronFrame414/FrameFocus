@@ -99,6 +99,24 @@ step 2 confirms; N rows land in ONE insert with ONE recalc (the PO-lines batch p
   writer of `total_amount` runs inside an RPC that takes the same transaction-local
   `app.po_total` exemption. The test keeps passing **for the right reason** — the property, not a
   vacuous green.
+- **R-L3 — PO numbers allocate at ISSUE, not draft** (resolves §S3), on the project/CO numbering
+  scheme: a `next_po_number(project)` mirroring `next_co_number`
+  (`20260704215000_module5_5d_change_orders.sql:275-310` — row-locked per-project sequence,
+  `PO-{project digits}-{2-digit seq}`), backed by a new `projects.po_sequence integer DEFAULT 0`.
+  A draft has no number; `po_number` stays nullable and legacy hand-entered numbers stand (R-L1).
+- **R-L4 — issue offers BOTH vendor email and PDF download** (resolves §S4). Three facts
+  established rather than assumed:
+  1. **`subcontractors.email` exists** (verified, `database.ts` Row) — no new column is part of
+     this module.
+  2. **The PO email is a NEW template** (`lib/email/templates/po-email.tsx`). It leaves the
+     building, so per the ruled email/PDF boundary (`desktop-redesign-spec.md` §2, build-log Entry
+     5) it carries the **contractor's identity — `brandColor` and logo — not the platform's**; the
+     `invoice-email.tsx` prop shape is the reference (tenant identity as data, platform grey
+     chrome).
+  3. **A PO with a typed `vendor_name` and no `vendor_id` has no address: the email option is
+     UNAVAILABLE in that state** — disabled with the reason stated ("no vendor on file — assign a
+     vendor to email this PO"), never offered-then-failed at send. A `vendor_id` whose row has a
+     blank email gets the same treatment.
 
 ---
 
@@ -256,8 +274,10 @@ All `SECURITY DEFINER`-style in the `set_po_total_amount` family, each taking th
 exemption before writing `purchase_orders.total_amount` (R-L2):
 
 - **`issue_po_lines(p_po_id, p_item_ids uuid[])`** — Owner/Admin/PM. Lines `draft → issued`
-  (requires `unit_cost` and `budget_item_id` non-null on each); PO `draft → issued` on first issue;
-  `total_amount` := Σ non-draft line costs; then **`sync_po_commitment`**.
+  (requires `unit_cost` and `budget_item_id` non-null on each); PO `draft → issued` on first issue,
+  **allocating `po_number` via `next_po_number(project)` when null** (R-L3 — `projects` gains
+  `po_sequence integer NOT NULL DEFAULT 0` in migration 4.3); `total_amount` := Σ non-draft line
+  costs; then **`sync_po_commitment`**.
 - **`sync_po_commitment(p_po_id)`** (internal) — maintains the committed `expenses` row per R-Q1:
   amount = Σ cost of `issued`+`flagged` lines; allocations grouped by `budget_item_id` (the
   multi-allocation shape); row created on first issue (`state='committed'`, `purchase_order_id`,
@@ -380,8 +400,10 @@ allocations if three budget lines; one if one).
 - **18b — the PO record** (existing route, `field-ops/[projectId]/deliveries/[poId]`). Gains: the
   line table with category headers and per-category cost subtotals; per-line status chips
   (draft/issued/purchased/flagged + note); provenance strip when `source_estimate_id` is set; the
-  Issue action (O/A/PM) with "What happens on issue" copy; the assignment control (O/A/PM; staff
-  members only); Need-by / Deliver-to fields. **Legacy POs (R-L1): lines without `unit_cost` render
+  Issue action (O/A/PM) with "What happens on issue" copy — on success it offers **Email to
+  vendor** (R-L4: enabled only when `vendor_id` resolves to a row with an email; otherwise disabled
+  with the reason stated) and **Download PDF**; the assignment control (O/A/PM; staff members
+  only); Need-by / Deliver-to fields. **Legacy POs (R-L1): lines without `unit_cost` render
   em-dashes, the typed `total_amount` stays the headline figure, and no footing row renders** — a
   total that doesn't foot against costless lines is stated as-is, never a zero, never an error.
 - **"Against the estimate"** (18b right rail): per-category ordered-cost vs `budgeted_amount`.
@@ -420,14 +442,11 @@ breakdown+purchase-marking O/A · PO cost figures readable by any project-viewer
   assumes the popup can host a PO-lines panel; the popup component was not read in Phase 1. Its
   allocation editor exists (capture-split reconciliation is referenced in `approve_expense`'s
   header); the wiring is design-time work, not a schema risk.
-- **§S3 — `po_number` allocation.** Nullable today; the drafting step should number POs
-  (`PO-{project}-{seq}` per the design's `PO-1902-01`). Whether a `next_po_number()` allocator
-  (the `next_estimate_number()` pattern) is wanted, or hand-entry stays, is a build-time decision
-  flagged for Josh in the Phase 4 report.
-- **§S4 — vendor emailing on issue.** The design's "the PDF emails to the vendor" on issue: vendor
-  rows carry contact emails on `subcontractors`; a PO PDF + email path is **in scope as copy only
-  unless Josh rules it into v1** — nothing below assumes it exists. (The "what happens on issue"
-  card must not promise an email that doesn't send; if deferred, the copy says "download the PDF".)
+- ~~**§S3 — `po_number` allocation.**~~ **RESOLVED → R-L3** (allocate at issue,
+  `next_po_number` on the CO scheme, `projects.po_sequence`).
+- ~~**§S4 — vendor emailing on issue.**~~ **RESOLVED → R-L4** (both email and PDF at issue;
+  `subcontractors.email` verified present; new contractor-identity template; email unavailable —
+  never failing — without an addressable vendor).
 
 ---
 
