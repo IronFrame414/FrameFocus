@@ -169,7 +169,11 @@ export default async function PurchaseOrderDetailPage({
           )}
         </div>
         <div className="flex gap-[10px]">
-          {canEditPo ? (
+          {/* R-B2 corollary: line-bearing POs are managed by the lines panel +
+              the RPC family; the legacy editor predates the lifecycle and
+              would hard-delete issued lines without a re-sync. Hidden AND
+              route-guarded (edit/page.tsx redirects), per D-54. */}
+          {canEditPo && !lineBearing ? (
             <Link
               href={`/dashboard/field-ops/${project.id}/deliveries/${po.id}/edit`}
               className="rounded-[9px] border border-[#e0e4ea] bg-white px-[15px] py-[9px] text-[13px] font-semibold text-[#374151] transition-colors hover:border-[#c9d2e4]"

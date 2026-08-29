@@ -37,6 +37,12 @@ export default async function EditPurchaseOrderPage({
   ]);
   if (!project || project.is_deleted || !po || po.is_deleted) notFound();
   if (po.project_id !== params.projectId) notFound();
+  // R-B2 corollary: a line-bearing PO never reaches the legacy editor — its
+  // lines are lifecycle-managed (issue/flag/purchase) and this form's
+  // reconciler would hard-delete them without re-syncing the commitment.
+  if (po.lines.some((l) => !l.item.is_deleted && l.item.unit_cost !== null)) {
+    redirect(`/dashboard/field-ops/${params.projectId}/deliveries/${params.poId}`);
+  }
 
   return (
     <div>

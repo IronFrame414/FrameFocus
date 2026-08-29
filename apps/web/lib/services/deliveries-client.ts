@@ -105,10 +105,21 @@ export async function setPurchaseOrderItems(
   const supabase = createClient();
   const { data: current, error: readError } = await supabase
     .from('purchase_order_items')
-    .select('id')
+    .select('id, unit_cost')
     .eq('purchase_order_id', poId)
     .eq('is_deleted', false);
   if (readError) return { success: false, error: readError.message };
+
+  // R-B2 corollary: costed lines are lifecycle-managed (issue/flag/purchase,
+  // commitment re-sync). This legacy reconciler predates all of that and
+  // would hard-delete an issued line while its cost stays committed. Refuse
+  // the whole write rather than partially applying it.
+  if ((current ?? []).some((r) => r.unit_cost !== null)) {
+    return {
+      success: false,
+      error: "This PO's lines carry costs and are managed from the PO record, not this editor.",
+    };
+  }
 
   const keptIds = new Set(lines.filter((l) => l.id).map((l) => l.id as string));
   const removeIds = (current ?? []).map((r) => r.id).filter((id) => !keptIds.has(id));
