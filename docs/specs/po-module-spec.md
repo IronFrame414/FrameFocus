@@ -87,6 +87,26 @@ step 2 confirms; N rows land in ONE insert with ONE recalc (the PO-lines batch p
 - **R-Q7 — v1 sources are catalog + manual only.** "From a sub bid" and "A past estimate" are out.
 - **R-Q8 — assemblies are out for v1.**
 
+**Post-audit rulings [Josh, 2026-08-29, Phase B corrections]:**
+
+- **R-B1 — no opt-out at capture.** The field user does not decide what a cost belongs to; they
+  buy and hand over a receipt. A run on a job where the member holds issued assigned lines is
+  auto-stamped with `source_po_id`; with lines on several POs the member must name WHICH PO (a
+  fact they hold), never WHETHER (the office's call). Review reassigns or clears the link (§S2
+  item 5). _This reverses the audit report's suggested opt-out — deliberately._
+- **R-B2 — every costed PO line requires a budget link.** Manual lines same as drafted ones: a
+  line with `unit_cost` set must carry `budget_item_id` — a costed, unlinked line cannot count
+  against the estimate and has nowhere to land at review. Enforced in the DB
+  (`20261048000000`, CHECK `unit_cost IS NULL OR budget_item_id IS NOT NULL`); legacy costless
+  lines are untouched (R-L1). Corollary: the legacy line reconciler `setPurchaseOrderItems`
+  (`deliveries-client.ts`) must REFUSE to update or hard-delete a costed line — it predates the
+  lifecycle and would delete an issued line without re-syncing the commitment — and the legacy
+  Edit route is not offered for line-bearing POs; their lines are managed by the 18b panel and
+  the RPC family.
+- **R-B3 — capture keeps the split.** `BudgetSplitEditor` stays rendered and required on a
+  PO-linked capture; `source_po_id` never hides or bypasses the line-item selection (verified:
+  the split is unconditional for new captures and `resolveSplit` gates submit).
+
 **Late rulings [Josh, 2026-08-29, after Phase 2]:**
 
 - **R-L1 — old POs are not updated.** New (line-bearing) POs derive their total from lines; existing
@@ -285,7 +305,10 @@ exemption before writing `purchase_orders.total_amount` (R-L2):
   `financial_rls_floor_part3.sql:213`). **The row follows the normal pending → approved review**, as
   today — only the 7C retainage row is system-approved inline (`7c_accounts_payable.sql:705-719`),
   and this spec does not extend that exception. When the open sum reaches zero the row is
-  **closed out** (`closeout_reason 'All lines purchased'`) — `countsTowardCommitted` then removes it
+  **closed out** (`closeout_reason 'All PO lines purchased or cancelled'` — _amended post-build;
+  the spec's original `'All lines purchased'` was narrower than the close it describes, since a
+  cancelled remainder also zeroes the sum; the shipped string is the constant the reopen
+  exact-match logic keys on_) — `countsTowardCommitted` then removes it
   from every displayed committed figure (verified: `budget.ts` line-level derivation and the
   payables screens both gate on it).
 - **`flag_po_item_missing(p_item_id, p_note)`** — callable by a member **assigned to that line**
@@ -297,7 +320,9 @@ exemption before writing `purchase_orders.total_amount` (R-L2):
   (one guard added). `s97ct-floor3` §5 keeps passing on the real property: the trigger still blocks
   direct writes, and the RPC family is still the only path.
 
-**And one plain client service, not an RPC** — `draftPosFromEstimate(projectId, groupBy)`: reads the
+**And one plain client service, not an RPC** — shipped as three functions in
+`po-lines-client.ts` per the service architecture (`listDraftableLines` / `groupDraftableLines`
+/ `createDraftPos`), together doing what this paragraph specs as `draftPosFromEstimate`: reads the
 project's budget items (`source_line_row_id → estimate_line_rows.vendor_id` for the vendor key),
 groups material-born lines by vendor / category / one-PO, batch-inserts `purchase_orders` (status
 `draft`, `vendor_id`, `source_estimate_id`) + `purchase_order_items` (the `createPurchaseOrder`
@@ -438,10 +463,34 @@ breakdown+purchase-marking O/A · PO cost figures readable by any project-viewer
 - **§S1 — the 6D auto-close/reopen trigger body.** Only its header comments were read
   (`module6_6d:16-25, 287`). Before §4.5 reworks the close condition, the full body must be read —
   including the reopen-on-exact-string mechanic and its SECURITY DEFINER recompute path.
-- **§S2 — the expenses review popup's exact integration point.** The per-line breakdown UI (§6)
-  assumes the popup can host a PO-lines panel; the popup component was not read in Phase 1. Its
-  allocation editor exists (capture-split reconciliation is referenced in `approve_expense`'s
-  header); the wiring is design-time work, not a schema risk.
+- ~~**§S2 — the expenses review popup's exact integration point.**~~ **RESOLVED [Josh, 2026-08-29,
+  post-audit] — specced here before building, at Josh's direction, because it is bigger than
+  first scoped.** The panel is not only "split the receipt across these PO lines":
+
+  1. **When it renders:** the pending expense carries `source_po_id`. The popup loads that PO's
+     `issued` + `flagged` lines (flagged lines show their note — a flagged line CAN still be
+     purchased; `mark_po_lines_purchased`'s guard admits both states).
+  2. **Per-line amounts, footing to the receipt.** One amount input per line; Σ of entered
+     amounts must equal the expense amount exactly (the `approve_expense` exact-sum guard is the
+     backstop; the UI refuses earlier).
+  3. **RECATEGORIZATION — the part the first scope missed [Josh].** Each line's amount
+     defaults to the line's `budget_item_id` but the reviewer may retarget it to **any budget
+     line on the project — including one outside the PO**. Moving a cost to a different category
+     happens at review, by the reviewer; it is never re-captured. The allocations passed to
+     `approve_expense` are the per-line amounts **grouped by their final budget target**.
+  4. **Tick-to-mark-purchased** per line; on approve, the popup runs `approve_expense`
+     (unchanged, §3.3) then `mark_po_lines_purchased` with the ticked lines. A purchase-marking
+     failure after a successful approval is surfaced, never silently swallowed — the expense is
+     approved either way (approval is the money act; purchase-marking is PO bookkeeping).
+  5. **"Not against this PO."** Capture auto-stamps with no opt-out (ruled — the field user
+     does not decide what a cost belongs to), so the popup carries the counterpart: a control
+     that clears `source_po_id` on a mis-stamped expense and collapses the panel, leaving a
+     plain expense review.
+  6. **Reviewer set: Owner/Admin, unchanged — RULED [Josh, 2026-08-29].** The correction's
+     "Owner/Admin/PM reviewing" was loose phrasing, resolved on the direct question:
+     `approve_expense` (`20261035:129-130`), the review UI gate
+     (`expenses-page-client.tsx:82`) and `mark_po_lines_purchased` all stay Owner/Admin. No
+     RPC gate moves.
 - ~~**§S3 — `po_number` allocation.**~~ **RESOLVED → R-L3** (allocate at issue,
   `next_po_number` on the CO scheme, `projects.po_sequence`).
 - ~~**§S4 — vendor emailing on issue.**~~ **RESOLVED → R-L4** (both email and PDF at issue;
