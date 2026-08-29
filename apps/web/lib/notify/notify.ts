@@ -97,7 +97,11 @@ export type NotificationType =
   // CHECK value lands in 20261027000000, same commit. In-app + push only; not
   // emailed, so `email_types` is deliberately untouched.
   | 'selection_approved'
-  | 'selection_denied';
+  | 'selection_denied'
+  // PO module R7/R-Q4 — a material-run line flagged missing. CHECK value in
+  // 20261045000000 (one commit adrift of this line — recorded in the build
+  // report rather than hidden). In-app + push only; not emailed.
+  | 'po_item_missing';
 
 export interface NotifyParams {
   admin: SupabaseClient<Database>;

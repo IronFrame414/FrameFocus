@@ -59,9 +59,19 @@ export function ConvertToProject({
         >
           This estimate has been converted.{' '}
           {projectId && (
-            <Link href={`/dashboard/projects/${projectId}`} style={{ fontWeight: 600 }}>
-              View the project →
-            </Link>
+            <>
+              <Link href={`/dashboard/projects/${projectId}`} style={{ fontWeight: 600 }}>
+                View the project →
+              </Link>{' '}
+              {/* 18a — the convert success path offers PO drafting; the
+                  Deliveries tab hosts the modal (skipping = not going). */}
+              <Link
+                href={`/dashboard/field-ops/${projectId}/deliveries`}
+                style={{ fontWeight: 600 }}
+              >
+                · Draft POs from the estimate →
+              </Link>
+            </>
           )}
         </div>
       );

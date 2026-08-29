@@ -12,7 +12,9 @@ type PoItemRow = Database['public']['Tables']['purchase_order_items']['Row'];
 type DeliveryRow = Database['public']['Tables']['deliveries']['Row'];
 type DeliveryItemRow = Database['public']['Tables']['delivery_items']['Row'];
 
-export type PurchaseOrderStatus = 'open' | 'closed';
+// PO module R5: draft | issued | closed. 'open' became 'issued' (a relabel
+// — 20261042); a DRAFT is new and accepts no deliveries.
+export type PurchaseOrderStatus = 'draft' | 'issued' | 'closed';
 
 export type PurchaseOrder = Omit<PurchaseOrderRow, 'status'> & {
   status: PurchaseOrderStatus;

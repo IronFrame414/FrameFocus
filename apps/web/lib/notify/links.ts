@@ -119,6 +119,14 @@ const LINKS: Record<string, LinkDef> = {
         ? `/dashboard/field-ops/${p.projectId}/deliveries/d/${p.id}`
         : null,
   },
+  // PO module R7 — the flagged-missing notification lands on the PO record.
+  // Mobile mirrors `delivery`'s posture: a deliveries LIST exists, no
+  // per-PO detail on /m.
+  po: {
+    mobile: (p) => (p.projectId ? `/m/p/${p.projectId}/deliveries` : null),
+    desktop: (p) =>
+      p.projectId && p.id ? `/dashboard/field-ops/${p.projectId}/deliveries/${p.id}` : null,
+  },
   project: {
     mobile: (p) => (p.projectId ? `/m/p/${p.projectId}` : null),
     desktop: (p) => (p.projectId ? `/dashboard/projects/${p.projectId}` : null),

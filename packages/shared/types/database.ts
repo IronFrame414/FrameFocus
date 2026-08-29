@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.17"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -2027,12 +2027,15 @@ export type Database = {
         Row: {
           category: string
           company_id: string
+          cost_code: string | null
           created_at: string | null
           created_by: string | null
           default_vendor_id: string | null
           deleted_at: string | null
           id: string
           is_deleted: boolean | null
+          is_favorite: boolean
+          item_type: string
           last_verified_at: string | null
           name: string
           notes: string | null
@@ -2045,12 +2048,15 @@ export type Database = {
         Insert: {
           category: string
           company_id?: string
+          cost_code?: string | null
           created_at?: string | null
           created_by?: string | null
           default_vendor_id?: string | null
           deleted_at?: string | null
           id?: string
           is_deleted?: boolean | null
+          is_favorite?: boolean
+          item_type?: string
           last_verified_at?: string | null
           name: string
           notes?: string | null
@@ -2063,12 +2069,15 @@ export type Database = {
         Update: {
           category?: string
           company_id?: string
+          cost_code?: string | null
           created_at?: string | null
           created_by?: string | null
           default_vendor_id?: string | null
           deleted_at?: string | null
           id?: string
           is_deleted?: boolean | null
+          is_favorite?: boolean
+          item_type?: string
           last_verified_at?: string | null
           name?: string
           notes?: string | null
@@ -2917,6 +2926,7 @@ export type Database = {
           unit_of_measure: string | null
           updated_at: string | null
           updated_by: string | null
+          vendor_id: string | null
         }
         Insert: {
           amount?: number | null
@@ -2940,6 +2950,7 @@ export type Database = {
           unit_of_measure?: string | null
           updated_at?: string | null
           updated_by?: string | null
+          vendor_id?: string | null
         }
         Update: {
           amount?: number | null
@@ -2963,6 +2974,7 @@ export type Database = {
           unit_of_measure?: string | null
           updated_at?: string | null
           updated_by?: string | null
+          vendor_id?: string | null
         }
         Relationships: [
           {
@@ -2989,6 +3001,13 @@ export type Database = {
           {
             foreignKeyName: "estimate_line_rows_subcontractor_id_fkey"
             columns: ["subcontractor_id"]
+            isOneToOne: false
+            referencedRelation: "subcontractors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_line_rows_vendor_id_fkey"
+            columns: ["vendor_id"]
             isOneToOne: false
             referencedRelation: "subcontractors"
             referencedColumns: ["id"]
@@ -3593,6 +3612,7 @@ export type Database = {
           rejected_at: string | null
           rejected_by: string | null
           rejection_note: string | null
+          source_po_id: string | null
           source_segment_id: string | null
           stage_label: string | null
           state: string
@@ -3630,6 +3650,7 @@ export type Database = {
           rejected_at?: string | null
           rejected_by?: string | null
           rejection_note?: string | null
+          source_po_id?: string | null
           source_segment_id?: string | null
           stage_label?: string | null
           state?: string
@@ -3667,6 +3688,7 @@ export type Database = {
           rejected_at?: string | null
           rejected_by?: string | null
           rejection_note?: string | null
+          source_po_id?: string | null
           source_segment_id?: string | null
           stage_label?: string | null
           state?: string
@@ -3724,6 +3746,13 @@ export type Database = {
             columns: ["rejected_by"]
             isOneToOne: false
             referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_source_po_id_fkey"
+            columns: ["source_po_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_orders"
             referencedColumns: ["id"]
           },
           {
@@ -5679,6 +5708,7 @@ export type Database = {
           is_deleted: boolean | null
           legal_description: string | null
           name: string
+          po_sequence: number
           project_internal_seq: number
           project_number: string
           project_type: string
@@ -5711,6 +5741,7 @@ export type Database = {
           is_deleted?: boolean | null
           legal_description?: string | null
           name: string
+          po_sequence?: number
           project_internal_seq?: number
           project_number?: string
           project_type?: string
@@ -5743,6 +5774,7 @@ export type Database = {
           is_deleted?: boolean | null
           legal_description?: string | null
           name?: string
+          po_sequence?: number
           project_internal_seq?: number
           project_number?: string
           project_type?: string
@@ -5988,19 +6020,16 @@ export type Database = {
           },
         ]
       }
-      purchase_order_items: {
+      purchase_order_item_assignments: {
         Row: {
           company_id: string
           created_at: string | null
           created_by: string | null
           deleted_at: string | null
-          description: string
           id: string
-          is_deleted: boolean | null
-          purchase_order_id: string
-          qty_ordered: number
-          sort_order: number
-          unit: string | null
+          is_deleted: boolean
+          member_id: string
+          po_item_id: string
           updated_at: string | null
           updated_by: string | null
         }
@@ -6009,13 +6038,10 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           deleted_at?: string | null
-          description: string
           id?: string
-          is_deleted?: boolean | null
-          purchase_order_id: string
-          qty_ordered: number
-          sort_order?: number
-          unit?: string | null
+          is_deleted?: boolean
+          member_id: string
+          po_item_id: string
           updated_at?: string | null
           updated_by?: string | null
         }
@@ -6024,17 +6050,112 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           deleted_at?: string | null
-          description?: string
           id?: string
-          is_deleted?: boolean | null
-          purchase_order_id?: string
-          qty_ordered?: number
-          sort_order?: number
-          unit?: string | null
+          is_deleted?: boolean
+          member_id?: string
+          po_item_id?: string
           updated_at?: string | null
           updated_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "purchase_order_item_assignments_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_order_item_assignments_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_order_item_assignments_po_item_id_fkey"
+            columns: ["po_item_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_order_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      purchase_order_items: {
+        Row: {
+          budget_item_id: string | null
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          description: string
+          flag_note: string | null
+          flagged_at: string | null
+          flagged_by: string | null
+          id: string
+          is_deleted: boolean | null
+          line_status: string
+          purchase_order_id: string
+          qty_ordered: number
+          sort_order: number
+          source_line_row_id: string | null
+          unit: string | null
+          unit_cost: number | null
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          budget_item_id?: string | null
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          description: string
+          flag_note?: string | null
+          flagged_at?: string | null
+          flagged_by?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          line_status?: string
+          purchase_order_id: string
+          qty_ordered: number
+          sort_order?: number
+          source_line_row_id?: string | null
+          unit?: string | null
+          unit_cost?: number | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          budget_item_id?: string | null
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string
+          flag_note?: string | null
+          flagged_at?: string | null
+          flagged_by?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          line_status?: string
+          purchase_order_id?: string
+          qty_ordered?: number
+          sort_order?: number
+          source_line_row_id?: string | null
+          unit?: string | null
+          unit_cost?: number | null
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchase_order_items_budget_item_id_fkey"
+            columns: ["budget_item_id"]
+            isOneToOne: false
+            referencedRelation: "project_budget_items"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "purchase_order_items_company_id_fkey"
             columns: ["company_id"]
@@ -6043,10 +6164,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "purchase_order_items_flagged_by_fkey"
+            columns: ["flagged_by"]
+            isOneToOne: false
+            referencedRelation: "company_members"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "purchase_order_items_purchase_order_id_fkey"
             columns: ["purchase_order_id"]
             isOneToOne: false
             referencedRelation: "purchase_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_order_items_source_line_row_id_fkey"
+            columns: ["source_line_row_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_line_rows"
             referencedColumns: ["id"]
           },
         ]
@@ -6060,15 +6195,19 @@ export type Database = {
           created_at: string | null
           created_by: string | null
           deleted_at: string | null
+          deliver_to: string | null
           id: string
           is_deleted: boolean | null
+          need_by: string | null
           ordered_at: string | null
           po_number: string | null
           project_id: string
+          source_estimate_id: string | null
           status: string
           total_amount: number | null
           updated_at: string | null
           updated_by: string | null
+          vendor_id: string | null
           vendor_name: string
         }
         Insert: {
@@ -6079,15 +6218,19 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           deleted_at?: string | null
+          deliver_to?: string | null
           id?: string
           is_deleted?: boolean | null
+          need_by?: string | null
           ordered_at?: string | null
           po_number?: string | null
           project_id: string
+          source_estimate_id?: string | null
           status?: string
           total_amount?: number | null
           updated_at?: string | null
           updated_by?: string | null
+          vendor_id?: string | null
           vendor_name: string
         }
         Update: {
@@ -6098,15 +6241,19 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           deleted_at?: string | null
+          deliver_to?: string | null
           id?: string
           is_deleted?: boolean | null
+          need_by?: string | null
           ordered_at?: string | null
           po_number?: string | null
           project_id?: string
+          source_estimate_id?: string | null
           status?: string
           total_amount?: number | null
           updated_at?: string | null
           updated_by?: string | null
+          vendor_id?: string | null
           vendor_name?: string
         }
         Relationships: [
@@ -6136,6 +6283,20 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_orders_source_estimate_id_fkey"
+            columns: ["source_estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_orders_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "subcontractors"
             referencedColumns: ["id"]
           },
         ]
@@ -8833,6 +8994,10 @@ export type Database = {
             Returns: string
           }
       email_has_account: { Args: { p_email: string }; Returns: boolean }
+      flag_po_item_missing: {
+        Args: { p_item_id: string; p_note: string }
+        Returns: undefined
+      }
       generate_company_slug: {
         Args: { p_company_name: string; p_exclude_company_id?: string }
         Returns: string
@@ -8895,6 +9060,14 @@ export type Database = {
       is_my_recent_segment: { Args: { p_segment_id: string }; Returns: boolean }
       is_platform_admin: { Args: never; Returns: boolean }
       is_project_creator: { Args: { p_project_id: string }; Returns: boolean }
+      issue_po_lines: {
+        Args: { p_item_ids: string[]; p_po_id: string }
+        Returns: undefined
+      }
+      mark_po_lines_purchased: {
+        Args: { p_item_ids: string[]; p_po_id: string }
+        Returns: undefined
+      }
       may_enter_client_thread: { Args: never; Returns: boolean }
       member_profile_role: { Args: { p_member_id: string }; Returns: string }
       my_assigned_site_address_ids: { Args: never; Returns: string[] }
@@ -8904,6 +9077,7 @@ export type Database = {
       next_co_number: { Args: { p_project_id: string }; Returns: string }
       next_estimate_number: { Args: never; Returns: string }
       next_invoice_number: { Args: never; Returns: string }
+      next_po_number: { Args: { p_project_id: string }; Returns: string }
       next_project_internal_seq: { Args: never; Returns: number }
       next_project_number: { Args: never; Returns: string }
       owns_open_session: { Args: { p_session_id: string }; Returns: boolean }
@@ -9046,6 +9220,7 @@ export type Database = {
         Args: { p_estimate_id: string; p_new_mode: string }
         Returns: undefined
       }
+      sync_po_commitment: { Args: { p_po_id: string }; Returns: undefined }
       test_invite_lookup: {
         Args: { p_token: string }
         Returns: {

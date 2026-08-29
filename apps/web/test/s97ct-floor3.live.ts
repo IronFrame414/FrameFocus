@@ -172,7 +172,11 @@ beforeAll(async () => {
     .from('purchase_orders')
     .insert({
       company_id: companyId, project_id: projectId, author_member_id: ownerMemberId,
-      vendor_name: `${MARKER} vendor`, status: 'open', total_amount: 500,
+      // R5: was 'open' — relabelled to 'issued' by 20261042 (the status CHECK
+      // now rejects 'open'; an open PO with a committed total is semantically
+      // issued). §5's property is untouched: no costed lines, so the
+      // set_po_total_amount legacy arm still applies to this fixture.
+      vendor_name: `${MARKER} vendor`, status: 'issued', total_amount: 500,
     })
     .select('id').single();
   must('purchase order', poErr);

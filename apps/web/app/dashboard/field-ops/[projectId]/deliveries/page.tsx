@@ -5,6 +5,7 @@ import { getProject } from '@/lib/services/projects';
 import { getOrderlessDeliveries, getPurchaseOrders } from '@/lib/services/deliveries';
 import { FieldTabs } from '@/components/field/field-tabs';
 import { DeliveriesSections } from '@/components/field/deliveries-sections';
+import { DraftPosModal } from './draft-pos-modal';
 
 // 6D — Deliveries tab list (Phase 2 Q3, approved: minimal). The list body is
 // shared with the project-detail Deliveries tab (S90 dual-entry) via
@@ -62,6 +63,12 @@ export default async function DeliveriesListPage({
           <div className="mt-[2px] text-[13px] text-[#6b7280]">{project.name}</div>
         </div>
         <div className="flex gap-[10px]">
+          {/* 18a — drafting from the estimate, when the project came from one.
+              Its chosen home (spec §6): reachable any time post-conversion,
+              which subsumes the convert-flow entry. */}
+          {canCreatePo && project.source_estimate_id ? (
+            <DraftPosModal projectId={project.id} sourceEstimateId={project.source_estimate_id} />
+          ) : null}
           {canCreatePo ? (
             <Link
               href={`/dashboard/field-ops/${project.id}/deliveries/new`}

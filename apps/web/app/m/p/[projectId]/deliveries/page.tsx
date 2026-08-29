@@ -1,6 +1,7 @@
 import { getProjectDeliveries, getOrderlessDeliveries } from '@/lib/services/deliveries';
 import { SectionHeader } from '../section-header';
 import { EmptyState, ListRow, SectionLabel } from '../../../mobile-ui';
+import { MyPoLines } from '@/components/field/my-po-lines';
 
 // M6M §4.11.5 — M-15 · Deliveries.
 //
@@ -81,6 +82,9 @@ export default async function ProjectDeliveriesPage({
   return (
     <div className="px-[18px] pb-[18px]">
       <SectionHeader projectId={params.projectId} title="Deliveries" />
+      {/* R6 — the member's assigned lines. The shared component renders no
+          currency, honouring this screen's A-35/D-9 money cut. */}
+      <MyPoLines projectId={params.projectId} />
       <DeliveryGroup label="Against a PO" rows={withPo} testId="m-group-po" />
       <DeliveryGroup label="No PO" rows={orderless} testId="m-group-nopo" />
     </div>

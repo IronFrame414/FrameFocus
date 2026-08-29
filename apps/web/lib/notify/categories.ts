@@ -27,7 +27,9 @@ export const CHIP_LABELS: Record<NotificationChip, string> = {
 const CHIP_TYPES: Record<Exclude<NotificationChip, 'all'>, readonly NotificationType[]> = {
   signatures: ['signed', 'contract_signed', 'reminders_exhausted'],
   money: ['selection_approved', 'selection_denied', 'discrepancy', 'low_stock'],
-  field: ['incident', 'daily_log_missing', 'still_clocked_in', 'timesheet_ready', 'punch_assigned'],
+  // po_item_missing is FIELD by ruling (R-Q4): it names a specific run's gap,
+  // not a stock posture — the low_stock-is-Money tiebreak cuts the other way.
+  field: ['incident', 'daily_log_missing', 'still_clocked_in', 'timesheet_ready', 'punch_assigned', 'po_item_missing'],
   account: ['trial_warning'],
   // 'mention' and 'assignment' appear under Everything only — see above.
 };
@@ -58,6 +60,8 @@ export const DECISION_TYPES: readonly NotificationType[] = [
   'trial_warning',
   'low_stock',
   'incident',
+  // R-Q4: someone must reorder — the same reasoning that added low_stock.
+  'po_item_missing',
 ];
 
 export function needsDecision(type: NotificationType): boolean {

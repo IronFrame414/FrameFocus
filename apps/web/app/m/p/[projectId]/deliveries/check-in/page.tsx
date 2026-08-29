@@ -31,7 +31,7 @@ export default async function DeliveryCheckInPage({
   // handoff's header drew PO/vendor/truck and no project, and §4.12.4 flags
   // that as the gap M-22 must fill).
   const options: PoOption[] = pos
-    .filter((po) => po.status === 'open')
+    .filter((po) => po.status === 'issued')
     .map((po) => ({
       id: po.id,
       po_number: po.po_number,

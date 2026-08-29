@@ -142,6 +142,9 @@ export type EmailType =
   // S137 — the day −7 / day −3 trial warning. `email_types.trial_warning` row
   // lands in 20260918000000, same rule as above: both halves or neither.
   | 'trial_warning'
+  // PO module R-L4 — the vendor-facing purchase order. `email_types` row lands
+  // in 20261047000000, SAME commit as this line (both halves or neither).
+  | 'purchase_order'
   // ── P1/P2 [S160] — the emails SUPABASE AUTH composes ─────────────────────
   // Rows land in 20261009000000, in the SAME commit as these lines. The rule
   // this union has been bitten by twice (`mention`, then nearly `invite`) is
