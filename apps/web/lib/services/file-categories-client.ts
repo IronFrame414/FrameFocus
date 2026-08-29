@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase-browser';
+import { applied, DISCARDED } from '@/lib/services/mutation-result';
 import type { FileCategoryRow } from '@/lib/services/files';
 export type { FileCategoryRow };
 
@@ -84,12 +85,21 @@ export async function reorderFileCategories(
   orderedIds: string[]
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = createClient();
+  // Per-row with an honest partial report, NOT all-or-nothing: a client-side
+  // transaction does not exist and an RPC is out of proportion for ~15 rows.
+  // In practice a refusal refuses every row alike (same company/role scope),
+  // so the common failure is "row 1 refused, nothing moved" — but if a later
+  // row is refused, the report says so rather than pretending atomicity.
   for (let i = 0; i < orderedIds.length; i++) {
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('file_categories')
       .update({ sort_order: i })
-      .eq('id', orderedIds[i]);
-    if (error) return { success: false, error: error.message };
+      .eq('id', orderedIds[i])
+      .select('id');
+    const partial =
+      i > 0 ? ' The order was partially saved — refresh to see the current list.' : '';
+    if (error) return { success: false, error: error.message + partial };
+    if (!applied(data)) return { success: false, error: DISCARDED + partial };
   }
   return { success: true };
 }

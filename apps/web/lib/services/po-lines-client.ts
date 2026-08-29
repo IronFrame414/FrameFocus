@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase-browser';
+import { applied, DISCARDED } from '@/lib/services/mutation-result';
 
 // PO module — the browser half of the line lifecycle (spec §4.8). Thin RPC
 // wrappers: every gate lives in the database function, never re-derived here.
@@ -261,8 +262,13 @@ export async function updatePoLogistics(
   updates: { need_by?: string | null; deliver_to?: string | null }
 ): Promise<PoLifecycleResult> {
   const supabase = createClient();
-  const { error } = await supabase.from('purchase_orders').update(updates).eq('id', poId);
+  const { data, error } = await supabase
+    .from('purchase_orders')
+    .update(updates)
+    .eq('id', poId)
+    .select('id');
   if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 

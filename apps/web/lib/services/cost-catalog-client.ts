@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase-browser';
+import { applied, DISCARDED } from '@/lib/services/mutation-result';
 import type { Database } from '@framefocus/shared/types/database';
 
 // CHECK-constrained columns come back as loose `string` from the type
@@ -163,9 +164,14 @@ export async function updateCatalogItem(
 
   // BEFORE UPDATE trigger `cost_catalog_set_updated_by` handles updated_by.
   // updated_at is handled by the existing updated_at trigger.
-  const { error } = await supabase.from('cost_catalog').update(input).eq('id', id);
+  const { data, error } = await supabase
+    .from('cost_catalog')
+    .update(input)
+    .eq('id', id)
+    .select('id');
 
   if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 
@@ -175,14 +181,16 @@ export async function softDeleteCatalogItem(
   const supabase = createClient();
 
   // BEFORE UPDATE trigger handles updated_by.
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('cost_catalog')
     .update({
       is_deleted: true,
       deleted_at: new Date().toISOString(),
     })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
 
   if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
