@@ -146,6 +146,72 @@ describe('ARM 2 — client_contracts: sent and signed, never drafts', () => {
     const { data } = await linked.from('client_contracts').select('id').eq('id', draftId);
     expect(data ?? []).toHaveLength(0);
   });
+
+  // 2d/2e [blocking-items] — client_contract_amounts (20261051). The value
+  // moved off the row onto an Owner/Admin side table whose CLIENT arm restates
+  // this arm's predicate (is_client_of_project + client_document_visible)
+  // rather than containing the parent — containment would have admitted every
+  // staff role. Her counterparty view (portal.ts) rides on these.
+  it('2d — LINKED reads the amount of her non-draft contract', async () => {
+    const rows = await ids(linked, 'client_contracts', 'id, status');
+    expect(rows.length, 'no visible contract — 2d proves nothing').toBeGreaterThan(0);
+    const contractId = rows[0].id;
+
+    // Seed-if-missing via admin so the read below is never vacuous.
+    const { data: existing } = await admin
+      .from('client_contract_amounts').select('id')
+      .eq('client_contract_id', contractId);
+    let seededHere = false;
+    if (!(existing ?? []).length) {
+      const { error } = await admin
+        .from('client_contract_amounts')
+        .insert({ company_id: companyId, client_contract_id: contractId, contract_value: 48750 });
+      expect(error).toBeNull();
+      seededHere = true;
+    }
+
+    const { data: hers, error } = await linked
+      .from('client_contract_amounts')
+      .select('contract_value').eq('client_contract_id', contractId);
+    expect(error).toBeNull();
+    expect((hers ?? []).length, 'the client arm refused her own contract value').toBe(1);
+
+    const { data: strangers } = await control
+      .from('client_contract_amounts').select('id');
+    expect(strangers ?? [], 'CONTROL read a contract amount').toHaveLength(0);
+
+    if (seededHere) {
+      await admin.from('client_contract_amounts').delete().eq('client_contract_id', contractId);
+    }
+  });
+
+  it('2e — ⚠️ a DRAFT contract\'s amount is invisible to her, and one exists', async () => {
+    const { data: drafts } = await admin
+      .from('client_contracts').select('id')
+      .eq('company_id', companyId).eq('status', 'draft');
+    expect((drafts ?? []).length, 'no draft fixture — 2e proves nothing').toBeGreaterThan(0);
+    const draftId = ((drafts ?? []) as { id: string }[])[0].id;
+
+    const { data: existing } = await admin
+      .from('client_contract_amounts').select('id')
+      .eq('client_contract_id', draftId);
+    let seededHere = false;
+    if (!(existing ?? []).length) {
+      const { error } = await admin
+        .from('client_contract_amounts')
+        .insert({ company_id: companyId, client_contract_id: draftId, contract_value: 11111 });
+      expect(error).toBeNull();
+      seededHere = true;
+    }
+
+    const { data } = await linked
+      .from('client_contract_amounts').select('id').eq('client_contract_id', draftId);
+    expect(data ?? [], 'client_document_visible is not gating the amounts arm').toHaveLength(0);
+
+    if (seededHere) {
+      await admin.from('client_contract_amounts').delete().eq('client_contract_id', draftId);
+    }
+  });
 });
 
 // ───────────────────────────────────────────────────────────────────────────

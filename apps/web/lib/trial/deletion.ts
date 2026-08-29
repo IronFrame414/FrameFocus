@@ -108,6 +108,12 @@ export const SURVIVES: Record<string, string> = {
  * survive as required, and the unsigned ones survive too. That keeps more than
  * asked, which is the safe direction to be wrong in while TL-24 is open.
  * Raised in TECH_DEBT as part of the S137 entry.
+ *
+ * `client_contract_amounts` (20261051) is excluded WITH its parent, on
+ * purpose: it is 1:1 with `client_contracts` (ON DELETE CASCADE), so deleting
+ * it here would strip the value off exactly the surviving signed contracts
+ * TL-24 protects. Whatever TL-24 rules for the parent — detach or archive —
+ * must carry the amounts row along.
  */
 
 /**

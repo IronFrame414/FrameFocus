@@ -28,7 +28,6 @@ let unassigned: string;
 
 const MONEY_TABLES = [
   ['change_orders', 'id, net_delta'],
-  ['client_contracts', 'id, contract_value'],
   ['invoices', 'id, billed_total, amount_receivable'],
   ['subcontractor_contracts', 'id, contract_value'],
   ['project_budget_items', 'id, actual_amount, committed_amount'],
@@ -37,6 +36,10 @@ const MONEY_TABLES = [
 ] as const;
 
 const NON_MONEY_TABLES = [
+  // Moved from MONEY_TABLES [blocking-items]: contract_value was dropped from
+  // this row (20261051) — the money lives on client_contract_amounts, probed
+  // by its own test below because the side table carries no project_id.
+  ['client_contracts', 'id, status'],
   ['daily_logs', 'id'],
   ['tasks', 'id'],
   ['phases', 'id'],
@@ -84,6 +87,26 @@ describe('what an assignment grants a sub — MONEY tables', () => {
       expect(on.error?.code ?? null, `${table}: ${on.error?.message}`).toBeNull();
     });
   }
+
+  // client_contract_amounts carries no project_id — probe through the parent
+  // with an inner join. The floor is Owner/Admin + client-of-project, so a
+  // sub reads zero on assigned and unassigned alike (20261051).
+  it('client_contract_amounts', async () => {
+    const on = await sub
+      .from('client_contract_amounts')
+      .select('id, contract_value, client_contracts!inner(project_id)')
+      .eq('client_contracts.project_id', ASSIGNED);
+    const off = await sub
+      .from('client_contract_amounts')
+      .select('id, contract_value, client_contracts!inner(project_id)')
+      .eq('client_contracts.project_id', unassigned);
+    console.log(
+      `  [MONEY] ${'client_contract_amounts'.padEnd(26)} assigned=${(on.data ?? []).length}  unassigned=${(off.data ?? []).length}`
+    );
+    expect(on.error?.code ?? null, `client_contract_amounts: ${on.error?.message}`).toBeNull();
+    expect((on.data ?? []).length, 'a sub read a client contract amount on an assigned project').toBe(0);
+    expect((off.data ?? []).length).toBe(0);
+  });
 });
 
 describe('what an assignment grants a sub — non-money tables', () => {

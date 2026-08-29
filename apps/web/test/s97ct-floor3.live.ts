@@ -158,15 +158,22 @@ beforeAll(async () => {
   draftCoId = draftCo!.id;
 
   // ── client contract, purchase order, invoice ──────────────────────────────
+  // The value lives on client_contract_amounts since 20261051 (see
+  // docs/specs/client-contract-amounts-spec.md) — two inserts, service role
+  // (no auth context, so the Owner/Admin INSERT policy is not in the way).
   const { data: cc, error: ccErr } = await admin
     .from('client_contracts')
     .insert({
       company_id: companyId, project_id: projectId,
-      status: 'draft', contract_value: 25000, notes: `${MARKER}`,
+      status: 'draft', notes: `${MARKER}`,
     })
     .select('id').single();
   must('client contract', ccErr);
   clientContractId = cc!.id;
+
+  must('client contract amount', (await admin
+    .from('client_contract_amounts')
+    .insert({ company_id: companyId, client_contract_id: clientContractId, contract_value: 25000 })).error);
 
   const { data: po, error: poErr } = await admin
     .from('purchase_orders')
@@ -355,21 +362,63 @@ describe('FLOOR3 — 2/3. CO lines follow their parent', () => {
 });
 
 describe('FLOOR3 — 4. client_contracts', () => {
-  it('4a. a PM cannot change a client contract value', async () => {
-    const { data: before } = await admin
-      .from('client_contracts').select('contract_value').eq('id', clientContractId).single();
+  // 4a REWRITTEN [blocking-items] — the value moved to client_contract_amounts
+  // and the refusal changed AUTHORITY: it was the column-scope trigger (an
+  // error with a message), it is now RLS (zero rows matched, NO error). Both
+  // shapes are asserted, and every zero is anchored by an admin read of the
+  // same row so nothing here can pass on an empty table — that vacuous pass is
+  // exactly how the two rejected mechanisms failed (spec §2).
+  it('4a. a PM can neither read nor change a client contract value (side-table RLS)', async () => {
+    const { data: anchor } = await admin
+      .from('client_contract_amounts')
+      .select('id, contract_value').eq('client_contract_id', clientContractId).single();
+    expect(Number(anchor!.contract_value), 'fixture anchor').toBe(25000);
 
-    const { error } = await pm
-      .from('client_contracts').update({ contract_value: 777777 }).eq('id', clientContractId).select('id');
+    // Read floor — zero rows, not an error.
+    const { data: pmRead, error: pmReadErr } = await pm
+      .from('client_contract_amounts').select('id').eq('id', anchor!.id);
+    expect(pmReadErr).toBeNull();
+    expect(pmRead ?? [], 'a PM read a client contract value').toHaveLength(0);
 
-    await admin
-      .from('client_contracts').update({ contract_value: before!.contract_value }).eq('id', clientContractId);
-    const { data: restored } = await admin
-      .from('client_contracts').select('contract_value').eq('id', clientContractId).single();
-    expect(Number(restored!.contract_value), 'restore failed').toBe(Number(before!.contract_value));
+    // Write floor — RLS refuses SILENTLY: no error, zero rows matched, value
+    // intact on admin re-read. (WHICH refused: RLS — no policy admits a PM;
+    // the trigger no longer guards this column and must not fire.)
+    const { data: pmWrite, error: pmWriteErr } = await pm
+      .from('client_contract_amounts')
+      .update({ contract_value: 777777 }).eq('id', anchor!.id).select('id');
+    expect(pmWriteErr, 'RLS refusal is silent — an error here means a trigger over-reached').toBeNull();
+    expect(pmWrite ?? [], 'a PM matched the amounts row').toHaveLength(0);
 
-    expect(error, 'a PM rewrote a client contract value').not.toBeNull();
-    expect(error!.message).toContain('The financial terms of a client contract are Owner/Admin only.');
+    const { data: after } = await admin
+      .from('client_contract_amounts').select('contract_value').eq('id', anchor!.id).single();
+    expect(Number(after!.contract_value), 'the PM write landed').toBe(25000);
+  });
+
+  it('4a-ii. the Owner path works — the refusal above is the role, not a broken table', async () => {
+    const { data: rows, error } = await owner
+      .from('client_contract_amounts')
+      .select('id, contract_value').eq('client_contract_id', clientContractId);
+    expect(error).toBeNull();
+    expect(rows ?? []).toHaveLength(1);
+
+    const { data: upd, error: updErr } = await owner
+      .from('client_contract_amounts')
+      .update({ contract_value: 26000 }).eq('id', rows![0].id).select('id');
+    expect(updErr).toBeNull();
+    expect(upd ?? []).toHaveLength(1);
+
+    await admin.from('client_contract_amounts')
+      .update({ contract_value: 25000 }).eq('id', rows![0].id);
+  });
+
+  it('4a-iii. DELETE is denied to everyone — no DELETE policy exists', async () => {
+    // Anchored by 4a's admin read: the row exists, so zero deleted rows means
+    // refused, not absent.
+    const { data: del, error } = await owner
+      .from('client_contract_amounts')
+      .delete().eq('client_contract_id', clientContractId).select('id');
+    expect(error).toBeNull();
+    expect(del ?? [], 'an Owner deleted an amounts row').toHaveLength(0);
   });
 
   it('4b. a PM CAN still edit the ordinary fields', async () => {

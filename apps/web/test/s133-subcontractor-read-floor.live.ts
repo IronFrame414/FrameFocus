@@ -94,7 +94,10 @@ beforeAll(async () => {
   // ── The six money/ops tables, seeded ON THE SUB'S OWN PROJECT ──────────────
   // Every one of these would be read by a sub through `can_view_project()` if
   // the policy had no role test. Seeding here is what turns "0" into evidence.
-  await seed('client_contracts', { company_id: companyId, project_id: pid, status: 'draft', contract_value: 12345, notes: STAMP });
+  // contract_value moved to client_contract_amounts (20261051, blocking-items
+  // spec) — the parent seeds without it, the amount seeds beside it.
+  const ccSeedId = await seed('client_contracts', { company_id: companyId, project_id: pid, status: 'draft', notes: STAMP });
+  await seed('client_contract_amounts', { company_id: companyId, client_contract_id: ccSeedId, contract_value: 12345 });
   await seed('subcontractor_contracts', { company_id: companyId, project_id: pid, member_id: subMemberId, status: 'draft', contract_value: 6789, notes: STAMP });
   await seed('project_budget_items', { company_id: companyId, project_id: pid, description: STAMP, actual_amount: 10 });
   await seed('purchase_orders', { company_id: companyId, project_id: pid, vendor_name: STAMP, status: 'issued' /* R5: was 'open' — relabelled 20261042 */, author_member_id: subMemberId });
@@ -263,8 +266,25 @@ describe('the nine tables a subcontractor now reads NOTHING from', () => {
 
   it('⚠️ R7 specifically: the money columns are gone, not merely hidden', async () => {
     // The Financial Visibility Floor is the rule this ruling protects hardest.
-    const { data: cc } = await subC.from('client_contracts').select('contract_value');
-    expect(cc ?? [], 'a sub read a client contract value').toEqual([]);
+    // REWRITTEN [blocking-items]: client_contracts.contract_value is literally
+    // dropped (20261051) — a select of it ERRORS, it does not return an empty
+    // set, and the old `(cc ?? []).toEqual([])` would have gone false-green on
+    // exactly that error. The value now lives on client_contract_amounts,
+    // whose floor is probed with an admin anchor so the zero is evidence.
+    const { count: anchor } = await admin
+      .from('client_contract_amounts')
+      .select('*', { count: 'exact', head: true })
+      .eq('company_id', companyId);
+    expect(anchor ?? 0, 'no amounts rows exist — the zero below would be vacuous').toBeGreaterThan(0);
+
+    const { data: cca, error: ccaErr } = await subC
+      .from('client_contract_amounts').select('contract_value');
+    expect(ccaErr).toBeNull();
+    expect(cca ?? [], 'a sub read a client contract value').toEqual([]);
+
+    const { error: dropped } = await subC.from('client_contracts').select('contract_value');
+    expect(dropped, 'client_contracts.contract_value exists again — the column floor regressed').not.toBeNull();
+
     const { data: sc } = await subC.from('subcontractor_contracts').select('contract_value');
     expect(sc ?? [], 'a sub read a subcontractor contract value').toEqual([]);
   });

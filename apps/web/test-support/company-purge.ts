@@ -52,6 +52,11 @@ import type { SupabaseClient } from '@supabase/supabase-js';
  * may want its rows gone before the parent for its own assertions.
  */
 export const COMPANY_CHILDREN = [
+  // 20261051 — the client-contract money side table. Harnesses seed it (e.g.
+  // s97ct-floor3); its own contract-delete CASCADE covers the normal path, but
+  // a killed run can strand rows that pin the company. Entry lands WITH the
+  // migration, not after the red (the purchase_order_item_assignments lesson).
+  'client_contract_amounts',
   'lien_release_template_boxes',
   'lien_release_templates',
   // 20261039 — seeded 14-per-company by `companies_seed_file_categories`, the
