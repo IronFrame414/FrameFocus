@@ -181,50 +181,67 @@ export async function getPortfolioMoney(): Promise<PortfolioMoney> {
   const { getBillsAndCommitments } = await import('@/lib/services/payables');
   const { getProfitabilityReport } = await import('@/lib/services/profitability');
 
-  // Coming in.
-  const { data: openInvoices } = await supabase
-    .from('invoices')
-    .select('id, amount_receivable')
-    .eq('is_deleted', false)
-    .in('status', ['sent', 'partially_paid']);
-  const invoiceIds = (openInvoices ?? []).map((i) => i.id);
-  const appsByInvoice = new Map<string, { amount: number; is_deleted: boolean | null }[]>();
-  if (invoiceIds.length > 0) {
-    const { data: apps } = await supabase
-      .from('client_payment_applications')
-      .select('invoice_id, amount, is_deleted')
-      .in('invoice_id', invoiceIds)
-      .eq('is_deleted', false);
-    for (const a of apps ?? []) {
-      const list = appsByInvoice.get(a.invoice_id) ?? [];
-      list.push(a);
-      appsByInvoice.set(a.invoice_id, list);
-    }
-  }
-  const comingIn = (openInvoices ?? []).reduce(
-    (sum, inv) => sum + remainingOnInvoice(inv.amount_receivable, appsByInvoice.get(inv.id) ?? []),
-    0
-  );
-
-  // Going out.
-  const payables = await getBillsAndCommitments();
-  const goingOut = payables.reduce(
-    (sum, row) => (countsTowardCommitted(row) ? sum + committedRemaining(row, row.payments) : sum),
-    0
-  );
-
-  // Not yet billed.
-  const { data: activeProjects } = await supabase
-    .from('projects')
-    .select('id')
-    .eq('is_deleted', false)
-    .eq('status', 'active');
-  let notYetBilled = 0;
-  for (const p of activeProjects ?? []) {
-    const report = await getProfitabilityReport(p.id);
-    const backlog = report?.headline.backlog ?? null;
-    if (backlog !== null && backlog > 0) notYetBilled += backlog;
-  }
+  // ⚠️ CONCURRENT ON PURPOSE, and it was a caught regression, not polish. The
+  // first cut awaited each section — and each profitability report — in
+  // series, adding ~1s × N-active-projects to EVERY owner dashboard render.
+  // Caught live by the battery: desktop-chat-sub's two-identity test renders
+  // the owner dashboard twice inside one 30s budget and went red; two more
+  // chat specs went flaky the same way. Promise.all keeps §6's ruled shape
+  // (N per-project calls, no batch helper) — the calls are simply in flight
+  // together, and the wall cost is the slowest single report.
+  const [comingIn, goingOut, notYetBilled] = await Promise.all([
+    // Coming in.
+    (async () => {
+      const { data: openInvoices } = await supabase
+        .from('invoices')
+        .select('id, amount_receivable')
+        .eq('is_deleted', false)
+        .in('status', ['sent', 'partially_paid']);
+      const invoiceIds = (openInvoices ?? []).map((i) => i.id);
+      const appsByInvoice = new Map<string, { amount: number; is_deleted: boolean | null }[]>();
+      if (invoiceIds.length > 0) {
+        const { data: apps } = await supabase
+          .from('client_payment_applications')
+          .select('invoice_id, amount, is_deleted')
+          .in('invoice_id', invoiceIds)
+          .eq('is_deleted', false);
+        for (const a of apps ?? []) {
+          const list = appsByInvoice.get(a.invoice_id) ?? [];
+          list.push(a);
+          appsByInvoice.set(a.invoice_id, list);
+        }
+      }
+      return (openInvoices ?? []).reduce(
+        (sum, inv) =>
+          sum + remainingOnInvoice(inv.amount_receivable, appsByInvoice.get(inv.id) ?? []),
+        0
+      );
+    })(),
+    // Going out.
+    (async () => {
+      const payables = await getBillsAndCommitments();
+      return payables.reduce(
+        (sum, row) =>
+          countsTowardCommitted(row) ? sum + committedRemaining(row, row.payments) : sum,
+        0
+      );
+    })(),
+    // Not yet billed.
+    (async () => {
+      const { data: activeProjects } = await supabase
+        .from('projects')
+        .select('id')
+        .eq('is_deleted', false)
+        .eq('status', 'active');
+      const reports = await Promise.all(
+        (activeProjects ?? []).map((p) => getProfitabilityReport(p.id))
+      );
+      return reports.reduce((sum, report) => {
+        const backlog = report?.headline.backlog ?? null;
+        return backlog !== null && backlog > 0 ? sum + backlog : sum;
+      }, 0);
+    })(),
+  ]);
 
   return {
     comingIn: Math.round(comingIn * 100) / 100,

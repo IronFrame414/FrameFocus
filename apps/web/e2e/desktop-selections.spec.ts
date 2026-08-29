@@ -158,15 +158,28 @@ test.describe('§9.2 — the project Selections tab', () => {
   // and the 403 for a foreman — is driven end to end through the REAL ROUTE in
   // `s175-stage6-spec-sheet.live.ts`, on its own swept fixture.
 
-  test('the tab is in the project nav, between Budget and Change Orders', async ({ page }) => {
+  // INVERTED per S157 [steps 8-10 battery]. _Superseded assertion, quoted not
+  // deleted: "the tab is in the project nav, between Budget and Change
+  // Orders" — the FLAT 17-tab bar's ruled position._ The six-section regroup
+  // (redesign §1) shipped at entry 7 and moved Selections into WORK
+  // (Schedule · Selections · Punch List · Deliveries); Budget & Cost and
+  // Change Orders live in MONEY, so the old adjacency cannot exist on any
+  // page. This encodes the NEW ruled order, by sub-tab testid (label
+  // innerText may carry attention counts). Counter-vacuity: the index must
+  // resolve, on a page the owner reaches.
+  test('the tab lives in Work, between Schedule and Punch List (six-section nav)', async ({
+    page,
+  }) => {
     await signIn(page, OWNER);
-    await page.goto(`/dashboard/projects/${PROJECT_QA_A}`);
-    const labels = await page.locator('nav a, a[href*="/dashboard/projects/"]').allInnerTexts();
-    const flat = labels.map((l) => l.trim());
-    const i = flat.indexOf('Selections');
-    expect(i, 'Selections tab missing from the project nav').toBeGreaterThan(-1);
-    expect(flat[i - 1]).toBe('Budget & Cost');
-    expect(flat[i + 1]).toBe('Change Orders');
+    await page.goto(`/dashboard/projects/${PROJECT_QA_A}/selections`);
+    const subtabs = await page
+      .locator('[data-testid^="project-subtab-"]')
+      .evaluateAll((els) => els.map((el) => el.getAttribute('data-testid')));
+    const i = subtabs.indexOf('project-subtab-selections');
+    expect(i, 'Selections sub-tab missing from the Work section').toBeGreaterThan(-1);
+    expect(subtabs[i - 1]).toBe('project-subtab-schedule');
+    expect(subtabs[i + 1]).toBe('project-subtab-punch');
+    await expect(page.getByTestId('project-section-work')).toBeVisible();
   });
 });
 

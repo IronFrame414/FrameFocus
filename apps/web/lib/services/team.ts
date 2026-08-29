@@ -196,6 +196,15 @@ export async function getPendingInvitations(supabase: SupabaseClient) {
     .select('id, email, role, status, created_at, expires_at, token')
     .eq('status', 'pending')
     .eq('is_deleted', false)
+    // S175 #1-s168 — clients are off the Team side, and that includes their
+    // INVITATIONS. The invite form stopped offering Client, but a pending
+    // client invitation can still exist (legacy, or the portal flow), and once
+    // step-4's redesign rendered pending invites as rows of the one team
+    // table, such a row put a "Client" chip back on the surface the ruling
+    // cleared (caught live by desktop-team.spec.ts:48 against a real pending
+    // client invite). Client-portal invitation state renders on CONTACTS —
+    // its own column — not here. This function is Team's only reader.
+    .neq('role', 'client')
     .order('created_at', { ascending: false });
 
   if (error) throw error;
