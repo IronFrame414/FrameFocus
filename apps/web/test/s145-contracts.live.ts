@@ -435,11 +435,28 @@ describe('S145-C5 — the two-level toggle exists on both levels (§5.2)', () =>
   // describe block actually claims is that "the two-level toggle EXISTS on both
   // levels", so it now proves the toggle is real and company-controlled by
   // driving it, and restores whatever it found.
+  //
+  // ⚠️ DRIVEN ON COMPANY B, NOT THE CANONICAL COMPANY [full-audit fix 5].
+  // This test and s146-C5 were the ONLY two writers of
+  // `client_contracts_enabled`, both driving company A's row in write-restore
+  // loops — under the parallel battery they raced EACH OTHER (three sightings:
+  // s146-C5 read `false` mid-way through this test's [false,true,false]
+  // sweep). The claim here is "the master toggle exists and is writable both
+  // ways", which ANY company's row proves — so this drives company B, whose
+  // toggle nothing else in the suite touches, and s146-C5 now owns company
+  // A's toggle alone. Do not move either back onto the other's company.
   it('companies carries the master toggle, and it is writable both ways', async () => {
+    const { data: bProf } = await admin
+      .from('profiles')
+      .select('company_id')
+      .eq('email', 'josh+qa-b-owner@worthprop.com')
+      .eq('is_deleted', false)
+      .single();
+    const companyBId = (bProf as { company_id: string }).company_id;
     const { data: before } = await admin
       .from('companies')
       .select('client_contracts_enabled')
-      .eq('id', companyId)
+      .eq('id', companyBId)
       .single();
     const prior = (before as { client_contracts_enabled: boolean }).client_contracts_enabled;
 
@@ -448,13 +465,13 @@ describe('S145-C5 — the two-level toggle exists on both levels (§5.2)', () =>
         const { error } = await admin
           .from('companies')
           .update({ client_contracts_enabled: value })
-          .eq('id', companyId);
+          .eq('id', companyBId);
         expect(error).toBeNull();
 
         const { data: read } = await admin
           .from('companies')
           .select('client_contracts_enabled')
-          .eq('id', companyId)
+          .eq('id', companyBId)
           .single();
         expect((read as { client_contracts_enabled: boolean }).client_contracts_enabled).toBe(
           value
@@ -464,7 +481,7 @@ describe('S145-C5 — the two-level toggle exists on both levels (§5.2)', () =>
       await admin
         .from('companies')
         .update({ client_contracts_enabled: prior })
-        .eq('id', companyId);
+        .eq('id', companyBId);
     }
   });
 
