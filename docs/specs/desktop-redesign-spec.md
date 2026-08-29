@@ -978,6 +978,9 @@ restyle.**
 rationale was **struck at S98**, because the Floor's S97 carve-out already lets a PM see invoice totals
 and retainage, *which IS the release amount*. The actual reason is narrower and sufficient: **a release
 waives legal rights and voiding does not retrieve it.** Do not re-justify this gate on the Floor.
+**[A20 close-out]** The carve-out is since **OVERTURNED** (`7d1-spec.md` §12a banner). The gate's real
+reason (the legal waiver) is untouched by that; see 7f2-spec.md's A20 note for the flagged — not
+ruled — visibility follow-on.
 
 **The four release types are two columns, not a four-value enum:** `type ∈ conditional | unconditional`
 × `is_final` boolean. Render the four combinations; do not add an enum.

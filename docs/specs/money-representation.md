@@ -1057,6 +1057,14 @@ only** (same authority as S-3 settings). No mixing within one CO (P4).
 > applied a PM can no longer derive a **cost-plus or T&M** invoice (fixed-price
 > is unaffected), which cuts against 7D §12a. The follow-up is a SECURITY
 > DEFINER derivation RPC that prices server-side without returning rate rows.
+>
+> **[AMENDED, A20 close-out]** ⚠️ **7D §12a is OVERTURNED** by the invoice
+> floor (`2ff9966` + `20261038000000_invoice_payment_floor.sql`): a PM sees
+> only invoices they **authored** (`author_member_id`-keyed), and Payments
+> went Owner/Admin. The note above stands as history, but nothing may cite
+> §12a as a live grant — see `7d1-spec.md` §12a's superseding banner for the
+> ruling and the recorded why. The derivation-RPC follow-up remains a real
+> follow-up for the PM-authoring path; §12a is not its justification anymore.
 
 **S-6: Conversion prompt (edit of the convert flow)** — the convert screen
 (launched from estimate detail; `apps/web/lib/services/projects-client.ts`

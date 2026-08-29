@@ -392,6 +392,12 @@ the actor must be someone authorised to bind the company.
 > see the figures that feed a release. **Deleted, not narrowed** — a role gate resting on false
 > reasoning invites a future session to "fix" the gate.
 >
+> **[A20 close-out note]** ⚠️ The S97 carve-out this strike leaned on is itself **OVERTURNED**
+> (`7d1-spec.md` §12a banner): a PM now reads only invoices they authored, and client Payments are
+> Owner/Admin. The `expense_payments` PM read (`20260804000000`) is UNCHANGED and live. So this
+> strike's factual premise is **partially stale** — whether that re-opens the release-visibility
+> question is **flagged, not ruled here**; do not silently re-derive a gate from it either way.
+>
 > _money-rep P9 is not the conflict here: it widens PM on the **cost** axis and leaves sell figures
 > Owner/Admin-only. A release amount is a receivable._
 

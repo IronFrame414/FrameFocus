@@ -188,7 +188,8 @@ An invoice is created by one of:
     §5's per-line retainage split classifying by the line's own contract rather than by fallback.
   - **Owner/Admin only** — a sell figure *about the job*, so it sits with contract value and
     budgeted amount under the Financial Visibility Floor. §12a's carve-out (a PM may see amounts
-    **on an invoice they can reach**) does not extend to a job-level roll-up.
+    **on an invoice they can reach**) does not extend to a job-level roll-up — and §12a is since
+    **OVERTURNED outright** (see its banner), so this holds a fortiori.
   - Implementation `apps/web/lib/services/project-income.ts`; proof
     `apps/web/test/s97ct-standalone-income.live.ts`.
 - **[S96] Derived from incurred cost or worked hours** — on a cost-plus (§6) or T&M (§7) instrument.
@@ -939,7 +940,42 @@ The approval notice pings Owner/Admin for quick action — an unapproved invoice
 Phone-push depends on mobile infrastructure that may not be built (architecture §7.7 #8); the approval
 flow works in-app regardless.
 
-### §12a — PM financial visibility on invoices — **AMENDMENT [S97, 2026-08-01 — RULED by Josh]**
+### §12a — PM financial visibility on invoices — ⚠️ **OVERTURNED [Josh — the invoice floor, `2ff9966` + `20261038000000_invoice_payment_floor.sql`]**
+
+> ## THIS ENTIRE SECTION IS SUPERSEDED. THE CARVE-OUT IS DEAD.
+>
+> The body below is kept verbatim — quoted, not deleted, the
+> `20260830000000_change_order_read_floor.sql` [S121] posture — so a later
+> reader can meet the reasoning, not just find it gone. **Nothing below is in
+> force.**
+>
+> **What shipped instead:** a **PM sees only invoices they authored**, keyed on
+> **`author_member_id`** (not `created_by`, which was NULL on 10 of 18 live
+> rows). **Payments became Owner/Admin** — the Payments tab, `client_payments`
+> and `client_payment_applications` all carry `_owner_admin` policies. **The
+> aggregates went with it**: collected to date, AR aging, retainage held,
+> total outstanding — none can be authorship-scoped, and they *are* the
+> client's financial position.
+>
+> **Why it was overturned, recorded so the reasoning survives:** Josh signed in
+> as a PM and read the Payments tab — collected to date, the full AR aging
+> table, retainage held, total outstanding, every invoice with its remaining
+> balance. The premise this section shipped on was *"a PM who cannot see
+> whether their invoice was paid cannot do the job."* **That premise was
+> rejected on contact with what the screen actually showed.**
+>
+> **The closing "Open question, NOT ruled" below is thereby RULED**, in the
+> opposite direction from what the build had assumed: a PM sees **only their
+> own** invoices, not whole-project. The "incoherent job-position figures"
+> concern dissolved with the figures themselves — they are Owner/Admin now.
+>
+> Live policy of record: `invoices_select_visible` — O/A, or PM ∧
+> `can_view_project` ∧ `author_member_id = get_my_member_id()`. Verified
+> against `pg_policies` in `full-audit-2026-08-29.md` §C1.
+
+_The superseded text, verbatim:_
+
+### ~~§12a — PM financial visibility on invoices~~ — **AMENDMENT [S97, 2026-08-01 — RULED by Josh]** _(superseded)_
 
 **Resolves conflict C1** (raised in `docs/sessions/S97-7D-build.md` §3). The 7D build hit a direct
 contradiction between this spec and the platform-wide Financial Visibility Floor, and shipped

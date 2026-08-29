@@ -18,7 +18,7 @@
 |---|---|
 | `docs/specs/money-representation.md` | P4 (contract type lives on the instrument), P9/P11 (PM visibility; projections never feed billing), §7.1 S-1 (budget grouping by instrument) |
 | `docs/specs/7B-spec.md` §2 + `apps/web/lib/services/contract-value.ts` | revised contract = original + Σ signed CO `net_delta`, derived in one place through `CONTRACT_CONTRIBUTING_CO_FILTER` |
-| `docs/specs/7d1-spec.md` §2, §4, §4a, §4b, §11, §12a | instruments on invoice lines, the contract-billing ceiling, credit-line shape, under-allowance credit, presentation levels, PM carve-out |
+| `docs/specs/7d1-spec.md` §2, §4, §4a, §4b, §11, §12a | instruments on invoice lines, the contract-billing ceiling, credit-line shape, under-allowance credit, presentation levels, ~~PM carve-out~~ (§12a OVERTURNED — see its banner; the other sections stand) |
 | `docs/specs/7h1-spec.md` + `profitability.ts` | per-instrument earned/cost loop |
 | `docs/specs/4D-spec.md` §4.14 | the *existing* allowance-as-UoM representation being retired (§2 below) |
 | `docs/specs/9-spec.md` §1, §7, **§8 (superseded — see §1.2)**, `portal.ts`, `co-signing-service.ts` | portal identity, the dead Selections route, one write path / caller-context signature |

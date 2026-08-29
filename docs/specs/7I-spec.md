@@ -909,6 +909,8 @@ third now argues the opposite way.
   contract value… which remain Owner/Admin on **every surface**."_ A contract displays contract value.
   **7F had to strike this reasoning; 7I does not.** Do not "fix" this gate by analogy to 7F.
   _(Cited by section, not by line number — the line moved once already.)_
+  **[A20 close-out]** The carve-out is since **OVERTURNED** (`7d1-spec.md` §12a banner) — the floor got
+  narrower, so this argument holds **a fortiori**; nothing here changes.
 - **money-rep P9** widens PM to actual **and committed** and leaves sell/budget figures Owner/Admin —
   it does not reach contract value either.
 - **And the database already agrees.** `FINANCIAL-RLS-FLOOR` shipped at S97; `project_financials`

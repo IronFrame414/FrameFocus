@@ -133,8 +133,9 @@ export interface DeriveInvoiceInput {
  *
  * The math and the rate selection are unchanged and unduplicated — see
  * invoice-derivation-server.ts. Totals are recalculated here afterwards, on the
- * caller's own session: an invoice AMOUNT is not a rate, and §12a lets a PM see
- * the amounts on an invoice they can reach.
+ * caller's own session: an invoice AMOUNT is not a rate, and under the invoice
+ * floor (20261038000000 — §12a is overturned) a PM reaches only invoices they
+ * authored; the amounts on their own invoice are theirs to see.
  */
 export async function deriveAndSaveInvoice(input: DeriveInvoiceInput): Promise<Result> {
   const response = await fetch(`/api/invoices/${input.invoiceId}/derive`, {

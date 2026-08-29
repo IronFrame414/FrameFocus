@@ -22,11 +22,13 @@ import type { CostCategory } from '@framefocus/shared/utils/invoice-derivation';
 // derivation MATH is packages/shared/utils/invoice-derivation.ts and rate
 // SELECTION is instrument-rates-shared's rateInForce; neither is restated.
 //
-// Financial Visibility Floor: client billing is Owner/Admin/PM only, enforced
-// by the invoices RLS policies (20260802000000). Foreman/Crew read nothing
-// here. Conflict C1 is RULED — see 7d1-spec.md §12a (amendment, S97): a PM may
-// see the amounts ON an invoice they can reach, and nothing wider. Figures
-// ABOUT the job (contract value, budget/sell, CO deltas) stay Owner/Admin.
+// Financial Visibility Floor: client billing is Owner/Admin, plus a PM for
+// invoices they AUTHORED — the invoice floor (20261038000000) keys the PM
+// arm on author_member_id. §12a's wider carve-out ("amounts on an invoice
+// they can reach") is OVERTURNED — see 7d1-spec.md §12a's banner. Payments
+// and the AR aggregates are Owner/Admin. Foreman/Crew read nothing here.
+// Figures ABOUT the job (contract value, budget/sell, CO deltas) stay
+// Owner/Admin as ever.
 
 export type {
   AvailableCredit,
