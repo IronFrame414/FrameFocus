@@ -32,9 +32,16 @@ export type CatalogUnitOfMeasure =
 type CostCatalogRow = Database['public']['Tables']['cost_catalog']['Row'];
 type CostCatalogInsert = Database['public']['Tables']['cost_catalog']['Insert'];
 
-export type CostCatalogItem = Omit<CostCatalogRow, 'category' | 'unit_of_measure'> & {
+// PO module §4.1 — the sheet's left-rail source types. 'equipment' is a
+// CATALOG notion only: the estimate row_type enum is not extended, and an
+// equipment item lands as an 'other' row (the mapping lives in
+// catalogRowTypeFor below — one place).
+export type CatalogItemType = 'material' | 'labor' | 'subcontractor' | 'equipment' | 'other';
+
+export type CostCatalogItem = Omit<CostCatalogRow, 'category' | 'unit_of_measure' | 'item_type'> & {
   category: CatalogCategory;
   unit_of_measure: CatalogUnitOfMeasure;
+  item_type: CatalogItemType;
 };
 
 export type CreateCatalogItemInput = Omit<
@@ -48,12 +55,49 @@ export type CreateCatalogItemInput = Omit<
     | 'product_url'
     | 'last_verified_at'
     | 'notes'
+    | 'cost_code'
+    | 'is_favorite'
   >,
   'category' | 'unit_of_measure'
 > & {
   category: CatalogCategory;
   unit_of_measure: CatalogUnitOfMeasure;
+  item_type?: CatalogItemType; // defaults 'material' at the DB
 };
+
+/** The item_type → estimate row_type mapping (spec §4.1). ONE place. */
+export function catalogRowTypeFor(
+  itemType: CatalogItemType
+): 'material' | 'labor' | 'subcontractor' | 'other' {
+  switch (itemType) {
+    case 'material':
+      return 'material';
+    case 'labor':
+      return 'labor';
+    case 'subcontractor':
+      return 'subcontractor';
+    case 'equipment':
+    case 'other':
+      return 'other';
+  }
+}
+
+/** Company-wide favorite star (R-Q6). Writes ride the catalog UPDATE policy
+ *  (Owner/Admin/PM — the same set that reaches the sheet). */
+export async function setCatalogFavorite(
+  id: string,
+  isFavorite: boolean
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('cost_catalog')
+    .update({ is_favorite: isFavorite })
+    .eq('id', id)
+    .select('id');
+  if (error) return { success: false, error: error.message };
+  if (!data?.length) return { success: false, error: 'Favorite was not applied.' };
+  return { success: true };
+}
 
 export type UpdateCatalogItemInput = Partial<CreateCatalogItemInput>;
 

@@ -321,6 +321,9 @@ export type CreateLineRowInput = Pick<
   | 'unit_cost'
   | 'amount'
   | 'subcontractor_id'
+  // PO module §4.2 — the vendor SNAPSHOT, material rows only (the type-columns
+  // CHECK refuses it elsewhere; rowInsertPayload only emits it on 'material').
+  | 'vendor_id'
 > & {
   row_type: RowType;
   labor_unit?: LaborUnit | null;
@@ -362,6 +365,9 @@ function rowInsertPayload(input: CreateLineRowInput): LineRowInsert {
         unit_cost: input.unit_cost ?? null,
         quantity: input.quantity ?? null,
         catalog_item_id: input.catalog_item_id ?? null,
+        // R4: from the catalog when the line came from the catalog; NULL for a
+        // manual row — the honest blank, never a guessed string.
+        vendor_id: input.vendor_id ?? null,
       };
     case 'allowance':
       // [S170] the MATERIAL shape — quantity × unit_cost, taxed by default —
@@ -394,6 +400,33 @@ function rowInsertPayload(input: CreateLineRowInput): LineRowInsert {
       // `amount` — i.e. silently. An unknown type is a bug; say so.
       throw new Error(`rowInsertPayload: unknown row_type ${String(input.row_type)}`);
   }
+}
+
+/**
+ * PO module §4.9 / R8 — THE BATCH ADD. N rows land in ONE insert; the caller
+ * then recalcs ONCE and reloads ONCE. Twelve rows on the old path were 12
+ * inserts + 12 recalc passes + 12 reloads (items-tab.tsx's per-row mutate);
+ * this is the createPurchaseOrder batch pattern (deliveries-client.ts:71)
+ * applied to estimate rows. Each row still goes through rowInsertPayload —
+ * the estimate_line_rows_type_columns CHECK demands per-type shaping, and a
+ * mixed-type batch is the normal case.
+ *
+ * All-or-nothing: PostgREST runs a multi-row insert as one statement, so a
+ * CHECK/RLS refusal on any row lands none — the sheet never half-adds.
+ */
+export async function addEstimateLineRows(
+  inputs: CreateLineRowInput[]
+): Promise<{ success: boolean; count?: number; error?: string }> {
+  if (inputs.length === 0) return { success: false, error: 'Nothing to add.' };
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from('estimate_line_rows')
+    .insert(inputs.map(rowInsertPayload))
+    .select('id');
+
+  if (error) return { success: false, error: error.message };
+  return { success: true, count: data?.length ?? 0 };
 }
 
 export async function createEstimateLineRow(input: CreateLineRowInput): Promise<CreateResult> {
