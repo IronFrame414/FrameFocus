@@ -139,6 +139,9 @@ export const COMPANY_TABLES: string[] = [
   'task_dependencies', 'tasks', 'phases', 'inspections', 'schedule_entries',
   'time_session_rate_snapshots', 'time_edit_logs', 'time_segments', 'time_clock_sessions',
   'estimate_sub_bids', 'estimate_line_rows', 'estimate_line_items',
+  // proposal_views cascades with estimates (20261052); listed anyway so the
+  // walk stays explicit about every company-scoped table it owns.
+  'proposal_views',
   'estimate_subcategories', 'estimate_categories', 'estimate_files', 'estimates',
   'project_budget_amounts', 'project_budget_items', 'project_financials',
   'project_contacts', 'project_assignments',

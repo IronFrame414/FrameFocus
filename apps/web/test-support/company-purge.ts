@@ -57,6 +57,10 @@ export const COMPANY_CHILDREN = [
   // a killed run can strand rows that pin the company. Entry lands WITH the
   // migration, not after the red (the purchase_order_item_assignments lesson).
   'client_contract_amounts',
+  // 20261052 — proposal view rows (P3). Same reasoning: p3-proposal-views
+  // seeds them and cleans via the estimate CASCADE; the entry covers the
+  // killed-run case.
+  'proposal_views',
   'lien_release_template_boxes',
   'lien_release_templates',
   // 20261039 — seeded 14-per-company by `companies_seed_file_categories`, the

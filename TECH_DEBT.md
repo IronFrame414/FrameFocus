@@ -53,6 +53,21 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
 ## Open Tech Debt
 
+### Branch-scoped, awaiting real numbers — `feature/blocking-items` [blocking-items]
+
+> Provisional ids per the S136 rule. Tag `blk`.
+
+**#1-blk — `prune_proposal_views()` has no scheduler.** The proposal-view retention rule is ruled
+(G1 #4, joined by ruling 2026-08-29: six months, voided estimates only, converted history kept) and
+the function ships in `20261052000000_proposal_views.sql` — `SECURITY DEFINER`, `REVOKE`d from
+authenticated, service-role-callable, proven by `p3-proposal-views.live.ts`. **But the project has
+neither `pg_cron` nor `pg_net`** (verified live on rebuild-test, 2026-08-29), so nothing calls it.
+Until it has a clock the table grows monotonically — slowly (one row per proposal open), so this is
+debt, not a leak. Options when picked up: enable `pg_cron` on the project (one dashboard toggle +
+one `cron.schedule` migration), or fold it into whatever scheduler the notifications project
+introduces (`lib/notify/crons/` already exists and runs estimate reminders — the natural home).
+Decide once, for this AND the event log's identical prune (G1 #4 is the same rule twice).
+
 ### Branch-scoped, awaiting real numbers — `feature/register-backlog` [register-backlog §1.2]
 
 > Provisional ids per the S136 rule (never a bare `#N` on a branch). Tag `regbacklog`. Main's next
