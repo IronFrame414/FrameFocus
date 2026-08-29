@@ -19,6 +19,8 @@ import {
   type ExpenseListItem,
 } from '@/lib/services/expenses-client';
 import { listActiveProjects } from '@/lib/services/time-tracking-client';
+import { createClient } from '@/lib/supabase-browser';
+import { flagPoItemMissing } from '@/lib/services/po-lines-client';
 import {
   BudgetSplitEditor,
   emptySplit,
@@ -76,6 +78,77 @@ export function ExpenseCaptureForm({
   );
   const [projectId, setProjectId] = useState(existing?.project_id ?? initialProjectId ?? '');
   const [supplier, setSupplier] = useState(existing?.supplier ?? '');
+
+  // ── PO module R6.3 — the run's PO context ─────────────────────────────────
+  // When the signed-in member has ISSUED lines assigned on this job, the run
+  // logs its ONE clumped expense against that PO (source_po_id — R-Q2: never
+  // purchase_order_id) and asks what is missing. One shared component means
+  // both surfaces behave identically (the parity rule). New captures only.
+  const [myPoLines, setMyPoLines] = useState<
+    {
+      itemId: string;
+      description: string;
+      poId: string;
+      poNumber: string | null;
+    }[]
+  >([]);
+  const [selectedPoId, setSelectedPoId] = useState<string | null>(null);
+  const [missingTicks, setMissingTicks] = useState<Set<string>>(new Set());
+  const [missingNote, setMissingNote] = useState('');
+
+  useEffect(() => {
+    if (existing || !projectId) {
+      setMyPoLines([]);
+      setSelectedPoId(null);
+      return;
+    }
+    let active = true;
+    (async () => {
+      const supabase = createClient();
+      const { data: auth } = await supabase.auth.getUser();
+      if (!auth.user) return;
+      const { data: me } = await supabase
+        .from('company_members')
+        .select('id, profile:profiles!inner(user_id)')
+        .eq('profile.user_id', auth.user.id)
+        .eq('is_deleted', false)
+        .maybeSingle();
+      if (!me) return;
+      const { data } = await supabase
+        .from('purchase_order_item_assignments')
+        .select(
+          'po_item:purchase_order_items!inner(id, description, line_status, is_deleted, purchase_order:purchase_orders!inner(id, po_number, project_id, status, is_deleted))'
+        )
+        .eq('member_id', me.id)
+        .eq('is_deleted', false);
+      if (!active) return;
+      const lines = (data ?? [])
+        .map((a) => (Array.isArray(a.po_item) ? a.po_item[0] : a.po_item))
+        .filter((i): i is NonNullable<typeof i> => Boolean(i))
+        .map((i) => ({ item: i, po: Array.isArray(i.purchase_order) ? i.purchase_order[0] : i.purchase_order }))
+        .filter(
+          ({ item, po }) =>
+            po &&
+            !po.is_deleted &&
+            po.project_id === projectId &&
+            po.status === 'issued' &&
+            !item.is_deleted &&
+            item.line_status === 'issued'
+        )
+        .map(({ item, po }) => ({
+          itemId: item.id,
+          description: item.description,
+          poId: po!.id,
+          poNumber: po!.po_number,
+        }));
+      setMyPoLines(lines);
+      const poIds = [...new Set(lines.map((l) => l.poId))];
+      setSelectedPoId(poIds.length === 1 ? poIds[0] : null);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [projectId, existing]);
   const [date, setDate] = useState(existing?.expense_date ?? todayYmd);
   const [amount, setAmount] = useState(existing ? String(existing.amount) : '');
   const [description, setDescription] = useState(existing?.description ?? '');
@@ -169,6 +242,7 @@ export function ExpenseCaptureForm({
         description: description.trim() || null,
         cost_category: category,
         source_segment_id: sourceSegmentId ?? null,
+        source_po_id: selectedPoId,
         allocations: resolved.allocations,
       });
       if (!res.success || !res.id) {
@@ -177,6 +251,17 @@ export function ExpenseCaptureForm({
         return;
       }
       setPhotoWarning(await uploadPhotos(res.id, projectId));
+      // R6.3/R7 — anything not obtained is flagged; the line stays open on
+      // the PO and Owner/Admin/PM get the decision ping. A flag failure never
+      // takes the logged expense with it — surfaced as a warning instead.
+      for (const itemId of missingTicks) {
+        const flagged = await flagPoItemMissing(itemId, missingNote);
+        if (!flagged.success) {
+          setPhotoWarning((prev) =>
+            [prev, `Could not flag a missing line: ${flagged.error}`].filter(Boolean).join(' · ')
+          );
+        }
+      }
     }
 
     setBusy(false);
@@ -291,6 +376,77 @@ export function ExpenseCaptureForm({
           </select>
         )}
       </div>
+
+      {/* PO module R6.3 — the run's PO context. Renders ONLY when the member
+          has issued lines assigned on this job; one clumped amount stays the
+          contract (R6.6 — office breaks it down at review). */}
+      {!existing && myPoLines.length > 0 && (
+        <div
+          data-testid="capture-po-context"
+          style={{
+            marginBottom: '12px',
+            padding: '10px 12px',
+            borderRadius: '9px',
+            border: '1px solid #dbe0fb',
+            backgroundColor: '#f5f7ff',
+          }}
+        >
+          <div style={{ ...fieldLabelStyle, marginBottom: '4px' }}>Bought against a PO</div>
+          {[...new Set(myPoLines.map((l) => l.poId))].length > 1 && (
+            <div style={{ display: 'flex', gap: '10px', marginBottom: '6px', flexWrap: 'wrap' }}>
+              {[...new Map(myPoLines.map((l) => [l.poId, l.poNumber])).entries()].map(
+                ([poId, poNumber]) => (
+                  <label key={poId} style={{ fontSize: '13px', color: color.body }}>
+                    <input
+                      type="radio"
+                      checked={selectedPoId === poId}
+                      onChange={() => setSelectedPoId(poId)}
+                    />{' '}
+                    {poNumber ?? 'PO'}
+                  </label>
+                )
+              )}
+            </div>
+          )}
+          <p style={{ fontSize: '12px', color: color.muted, margin: '0 0 6px' }}>
+            Did you get everything? Tick anything you could NOT get — it stays on the PO and the
+            office is told.
+          </p>
+          {myPoLines
+            .filter((l) => selectedPoId === null || l.poId === selectedPoId)
+            .map((line) => (
+              <label
+                key={line.itemId}
+                style={{ display: 'flex', gap: '8px', alignItems: 'center', fontSize: '13px', color: color.body, padding: '2px 0' }}
+              >
+                <input
+                  type="checkbox"
+                  checked={missingTicks.has(line.itemId)}
+                  onChange={() =>
+                    setMissingTicks((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(line.itemId)) next.delete(line.itemId);
+                      else next.add(line.itemId);
+                      return next;
+                    })
+                  }
+                />
+                <span>
+                  {line.description}
+                  <span style={{ color: color.faint }}> — couldn&rsquo;t get it</span>
+                </span>
+              </label>
+            ))}
+          {missingTicks.size > 0 && (
+            <input
+              value={missingNote}
+              onChange={(e) => setMissingNote(e.target.value)}
+              placeholder="Why? (backordered, out of stock…)"
+              style={{ ...inputStyle, marginTop: '6px' }}
+            />
+          )}
+        </div>
+      )}
 
       {/* Split editor — new captures only; the review popup adjusts existing
           splits. Budgeted figures render for Owner/Admin only (§7.1). */}

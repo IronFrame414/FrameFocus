@@ -30,6 +30,10 @@ export interface ExpenseCaptureInput {
   description?: string | null;
   cost_category?: CaptureCategory; // default 'material'
   source_segment_id?: string | null; // set when born from a material-run prompt
+  /** PO module R-Q2 — the PO the run bought against. NEVER purchase_order_id:
+   *  that column marks the commitment row itself (the recompute origin
+   *  predicate reads it); this is provenance and posts to ACTUAL. */
+  source_po_id?: string | null;
   /**
    * SPLIT AT CAPTURE (money representation §4.4/P7): every new expense lands
    * on budget lines via ≥1 allocation with Σ exactly = amount (service/UI
@@ -107,6 +111,7 @@ export async function createExpense(input: ExpenseCaptureInput): Promise<CreateR
     description: input.description ?? null,
     cost_category: input.cost_category ?? 'material',
     source_segment_id: input.source_segment_id ?? null,
+    source_po_id: input.source_po_id ?? null,
   };
 
   const { data, error } = await supabase.from('expenses').insert(row).select('id').single();
