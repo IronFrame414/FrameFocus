@@ -62,6 +62,13 @@ export const brand = {
   shortName: 'EZ Binder',
 
   /**
+   * Manifest `description` — shown by the browser in install prompts and app
+   * info. User-facing product copy, which is why it lives here and not as a
+   * literal in the manifest [register-backlog §1.5, Josh Phase 2 Q4].
+   */
+  description: 'The all-in-one platform for residential and commercial contractors.',
+
+  /**
    * Manifest `theme_color` — status bar and task-switcher card tint.
    * Navy, matching the app bar (M6M §3.1) so the status bar reads as part of
    * the chrome rather than sitting on top of it.

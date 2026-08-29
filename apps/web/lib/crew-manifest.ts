@@ -63,7 +63,7 @@ export function crewManifest(): MetadataRoute.Manifest {
   return {
     name: brand.name,
     short_name: brand.shortName,
-    description: 'The all-in-one platform for residential and commercial contractors.',
+    description: brand.description,
 
     // The two fields M6M owns outright (§7.1).
     //
