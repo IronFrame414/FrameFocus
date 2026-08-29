@@ -363,4 +363,35 @@ describe('PO18 — committed lifecycle', () => {
     });
     expect(error?.message).toMatch(/derives from them/);
   });
+
+  it('R-B2 (20261048): a costed line without a budget link is refused by the CHECK', async () => {
+    // Non-vacuous both ways: the unlinked insert dies on the constraint, and
+    // the same row WITH the link lands — proving the probe hit the CHECK,
+    // not some earlier failure.
+    const { error: refused } = await admin.from('purchase_order_items').insert({
+      purchase_order_id: poId,
+      description: `${MARKER} costed-unlinked probe`,
+      qty_ordered: 1,
+      unit_cost: 5,
+      sort_order: 99,
+    });
+    expect(refused?.message).toMatch(/purchase_order_items_costed_budget_link/);
+
+    const { data: ok, error: allowed } = await admin
+      .from('purchase_order_items')
+      .insert({
+        purchase_order_id: poId,
+        description: `${MARKER} costed-linked probe`,
+        qty_ordered: 1,
+        unit_cost: 5,
+        budget_item_id: budgetA,
+        sort_order: 99,
+      })
+      .select('id')
+      .single();
+    expect(allowed?.message).toBeUndefined();
+    // Leave nothing behind: a live probe line would hold the closed PO's
+    // status hostage on the next recompute.
+    await admin.from('purchase_order_items').delete().eq('id', ok!.id);
+  });
 });

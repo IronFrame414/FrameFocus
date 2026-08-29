@@ -515,9 +515,15 @@ everything else in `desktop-redesign-spec.md` §6b.
   stays; `set_po_total_amount` stays callable (legacy arm). If the build changes its signature or
   guards, the test is re-pointed at the property (direct UPDATE blocked; RPC path works), never
   deleted.
-- **`m-capture.spec.ts`** material-run assertions (segment types, project-required) — extended by
-  the optional PO step, not inverted; the added step must be skippable so existing flows and
-  assertions hold.
+- **`m-capture.spec.ts`** material-run assertions (segment types, project-required) — ~~extended by
+  the optional PO step~~ **amended at build [2026-08-29]: `m-capture.spec.ts` drives the TIMECLOCK,
+  not the expense sheet — no e2e drives the capture form today, so there was nothing to extend and
+  existing assertions hold structurally.** The PO step's behaviour is covered where it is
+  decidable: the lifecycle and flag authority live in `po18-committed.live.ts`; the render
+  tolerance in `po-legacy-tolerance.test.tsx`. A static-markup "block absent" probe was
+  deliberately NOT written — effects don't run in static markup, so it would pass on any code at
+  all (the vacuous-green rule). **Still owed, honestly: a fixture-backed e2e (PO + assignment +
+  member JWT) driving the capture sheet's PO block end to end.** Filed rather than faked.
 - **Deliveries/PO suites** (`s121-assignment-grant`, `s133-subcontractor-read-floor`,
   `desktop-payload`) touch `purchase_orders` fixtures — swept per S157 at build time; none asserts
   the open/closed status pair by name in what was read, but the sweep greps for `'open'` on PO
