@@ -25,9 +25,13 @@ import { getManagerNotifyRecipients } from '@/lib/notify/recipients';
  * 30-day boundary can be driven exactly instead of waited for.
  */
 
-/** How long after the lock the data is kept. Trial path only — a PAID
- *  cancellation gets 30 days and is a different path that is not built here. */
+/** How long after the lock the data is kept, per path. The superseded text
+ *  here read: "a PAID cancellation gets 30 days and is a different path that
+ *  is not built here" — BOTH halves are dead [register-backlog §4]: the ruled
+ *  copy shipped 90 days, and the path is built below (runCancellationLock),
+ *  sharing this table, this unlock and this deletion sweep by ruling (Q9). */
 export const RETENTION_DAYS_TRIAL = 14;
+export const RETENTION_DAYS_CANCELLATION = 90;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -228,16 +232,25 @@ export async function runTrialLock(
   return outcome;
 }
 
-/** Ban every auth user of a company. Returns how many were banned. */
+/** Ban every auth user of a company. Returns how many were banned.
+ *
+ *  `excludeClients` is the Q12 portal carve-out's ban half [register-backlog
+ *  §4]: a paid cancellation locks the CONTRACTOR's people but the client
+ *  portal stays up for its normal per-project windows — a banned client
+ *  cannot even sign in, so the middleware carve-out alone would be theatre.
+ *  The trial path bans everyone, as ruled (a tenant who never paid). */
 export async function banCompanyUsers(
   admin: SupabaseClient<Database>,
-  companyId: string
+  companyId: string,
+  opts?: { excludeClients?: boolean }
 ): Promise<number> {
-  const { data: profiles } = await admin
+  let query = admin
     .from('profiles')
-    .select('user_id')
+    .select('user_id, role')
     .eq('company_id', companyId)
     .eq('is_deleted', false);
+  if (opts?.excludeClients) query = query.neq('role', 'client');
+  const { data: profiles } = await query;
 
   let banned = 0;
   for (const p of (profiles ?? []) as Array<{ user_id: string | null }>) {
@@ -251,6 +264,69 @@ export async function banCompanyUsers(
     if (!error) banned += 1;
   }
   return banned;
+}
+
+/**
+ * Paid cancellation took effect — lock the account, start the 90-day clock.
+ * [register-backlog §4; RULED Josh Phase 2 Q9-Q12]
+ *
+ * Event-driven, not a cron loop: the Stripe webhook calls this on
+ * `customer.subscription.deleted` — the actual end of the period the customer
+ * paid for (locking at cancel_at_period_end would take away time they paid
+ * for, Q10). The trial precedent's shape throughout: the ban is the lock, and
+ * `delete_after` is STORED as a fact on the row.
+ *
+ * ⚠️ CLIENTS ARE NOT BANNED (Q12). The client portal stays up for its own
+ * per-project windows (`client_window_open`) while the contractor's people
+ * are locked out. The middleware passes /portal when the lock reason is
+ * 'cancellation' — this function's excludeClients is the half that makes a
+ * client's sign-in possible at all.
+ *
+ * The way back is the SHARED unban (Q11): the webhook's existing
+ * active → releaseTrialLock() → unlock_trial_company() clears BOTH the ban
+ * and the clock for either reason — the invariant holds by construction.
+ *
+ * Upsert: every company that ever trialed has a lifecycle row; one created
+ * outside the trial flow may not. `trial_end` is stamped with `now` on that
+ * create-arm only — locked_at being set keeps every trial loop's hands off
+ * this row (warnings skip locked; runTrialLock skips locked).
+ */
+export async function runCancellationLock(
+  admin: SupabaseClient<Database>,
+  companyId: string,
+  now: Date
+): Promise<{ banned: number; alreadyLocked: boolean }> {
+  const { data: existing } = await admin
+    .from('trial_lifecycle')
+    .select('locked_at, deleted_at')
+    .eq('company_id', companyId)
+    .maybeSingle();
+  if (existing?.locked_at || existing?.deleted_at) {
+    return { banned: 0, alreadyLocked: true }; // idempotent: a webhook retry must not re-ban
+  }
+
+  const banned = await banCompanyUsers(admin, companyId, { excludeClients: true });
+
+  const deleteAfter = new Date(now.getTime() + RETENTION_DAYS_CANCELLATION * DAY_MS);
+  const stamp = {
+    locked_at: now.toISOString(),
+    delete_after: deleteAfter.toISOString(),
+    reason: 'cancellation' as const,
+  };
+  if (existing) {
+    const { error } = await admin
+      .from('trial_lifecycle')
+      .update(stamp)
+      .eq('company_id', companyId);
+    if (error) throw new Error(`cancellation lock ${companyId}: ${error.message}`);
+  } else {
+    const { error } = await admin
+      .from('trial_lifecycle')
+      .insert({ company_id: companyId, trial_end: now.toISOString(), ...stamp });
+    if (error) throw new Error(`cancellation lock (insert) ${companyId}: ${error.message}`);
+  }
+
+  return { banned, alreadyLocked: false };
 }
 
 /**

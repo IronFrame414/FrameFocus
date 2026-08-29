@@ -29,6 +29,31 @@ export async function isMyCompanyLocked(supabase: SupabaseClient): Promise<boole
 }
 
 /**
+ * Which KIND of lock — 'trial' | 'cancellation' | null (not locked).
+ * [register-backlog §4, Q12] The portal carve-out branches on this: a
+ * cancellation lock leaves /portal governed by the portal's own access model;
+ * a trial lock darkens it, as ruled.
+ *
+ * ⚠️ FAILS toward 'trial' (the STRICTER answer) on error — the inverse of
+ * isMyCompanyLocked's fail-open, and deliberately so. This is only consulted
+ * AFTER the boolean said "locked": failing open here would un-dark a
+ * trial-locked portal on a transient fault, which widens access on error.
+ * Returning 'trial' on error merely keeps the pre-carve-out behaviour.
+ */
+export async function myCompanyLockReason(
+  supabase: SupabaseClient
+): Promise<'trial' | 'cancellation' | null> {
+  try {
+    const { data, error } = await supabase.rpc('my_company_lock_reason');
+    if (error) return 'trial';
+    if (data === 'cancellation' || data === 'trial') return data;
+    return data === null || data === undefined ? null : 'trial';
+  } catch {
+    return 'trial';
+  }
+}
+
+/**
  * API paths that must keep working for a LOCKED company.
  *
  * ⚠️ THE PAYMENT PATH IS ON THIS LIST AND MUST STAY ON IT. Locking a company

@@ -8739,6 +8739,7 @@ export type Database = {
           postponed_by: string | null
           postponed_reason: string | null
           postponed_until: string | null
+          reason: string
           trial_end: string
           updated_at: string
           warned_3_at: string | null
@@ -8753,6 +8754,7 @@ export type Database = {
           postponed_by?: string | null
           postponed_reason?: string | null
           postponed_until?: string | null
+          reason?: string
           trial_end: string
           updated_at?: string
           warned_3_at?: string | null
@@ -8767,6 +8769,7 @@ export type Database = {
           postponed_by?: string | null
           postponed_reason?: string | null
           postponed_until?: string | null
+          reason?: string
           trial_end?: string
           updated_at?: string
           warned_3_at?: string | null
@@ -9074,6 +9077,7 @@ export type Database = {
       my_client_access_level: { Args: never; Returns: string }
       my_client_site_address_ids: { Args: never; Returns: string[] }
       my_company_id_flat: { Args: never; Returns: string }
+      my_company_lock_reason: { Args: never; Returns: string }
       next_co_number: { Args: { p_project_id: string }; Returns: string }
       next_estimate_number: { Args: never; Returns: string }
       next_invoice_number: { Args: never; Returns: string }

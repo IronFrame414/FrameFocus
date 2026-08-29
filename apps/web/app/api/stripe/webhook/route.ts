@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
 import { getStripe } from '@/lib/stripe';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
-import { unlockCompany } from '@/lib/trial/lifecycle';
+import { runCancellationLock, unlockCompany } from '@/lib/trial/lifecycle';
 
 /**
  * S138 — release a trial lock when payment lands.
@@ -178,6 +178,28 @@ export async function POST(request: NextRequest) {
             .from('subscriptions')
             .update({ status: 'canceled' })
             .eq('company_id', companyId);
+
+          // Register backlog §4 — the paid-cancellation lock lands HERE, at
+          // the actual end of the paid period (Q10: locking at
+          // cancel_at_period_end would take away time they paid for). Staff
+          // banned, clients NOT (Q12 — the portal stays up on its own
+          // windows); 90-day clock stored as a fact. Same never-throw posture
+          // as releaseTrialLock above: a lock failure must not 500 the
+          // webhook after the status write already applied.
+          try {
+            const { banned, alreadyLocked } = await runCancellationLock(
+              supabaseAdmin,
+              companyId,
+              new Date()
+            );
+            if (!alreadyLocked) {
+              console.log(
+                `[cancellation-lock] company=${companyId} banned=${banned} retention=90d`
+              );
+            }
+          } catch (err) {
+            console.error(`[cancellation-lock] FAILED for company=${companyId}:`, err);
+          }
         }
         break;
       }

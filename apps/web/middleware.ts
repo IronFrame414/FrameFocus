@@ -4,7 +4,12 @@ import { billingEnforcementEnabled } from '@/lib/billing-flag';
 import { safeNextPath } from '@/lib/safe-next';
 import { defaultSignedInPath } from '@/lib/device';
 import { dashboardDeniedRedirect } from '@/lib/dashboard-access';
-import { isMyCompanyLocked, isLockExemptApiPath, isLockExemptPagePath } from '@/lib/trial/lock-guard';
+import {
+  isMyCompanyLocked,
+  isLockExemptApiPath,
+  isLockExemptPagePath,
+  myCompanyLockReason,
+} from '@/lib/trial/lock-guard';
 
 type CookieEntry = { name: string; value: string; options?: Record<string, unknown> };
 
@@ -138,18 +143,32 @@ export async function middleware(request: NextRequest) {
   if (user && !isLockExemptPagePath(pathname) && !isLockExemptApiPath(pathname)) {
     const locked = await isMyCompanyLocked(supabase);
     if (locked) {
-      if (pathname.startsWith('/api')) {
-        // JSON, not a redirect: an API caller following a 307 to an HTML page
-        // gets a parse error that points nowhere near the cause.
-        return NextResponse.json(
-          { error: 'Account locked — trial expired', code: 'TRIAL_LOCKED' },
-          { status: 403 }
-        );
+      // Register backlog §4, Q12 — THE PORTAL CARVE-OUT. A paid-cancellation
+      // lock does NOT darken the client portal: those clients may owe money,
+      // hold a signed contract, or need a lien release, and the portal has
+      // its own per-project windows (client_window_open) that end it. The
+      // TRIAL ruling is unchanged — a trial-locked tenant's portal going dark
+      // stays correct (a tenant who never paid, over two weeks) — which is
+      // why this checks the REASON, not just the boolean. The ban half of
+      // the carve-out lives in runCancellationLock (clients are not banned).
+      const portalCarveOut =
+        pathname.startsWith('/portal') &&
+        (await myCompanyLockReason(supabase)) === 'cancellation';
+      if (!portalCarveOut) {
+        if (pathname.startsWith('/api')) {
+          // JSON, not a redirect: an API caller following a 307 to an HTML page
+          // gets a parse error that points nowhere near the cause.
+          return NextResponse.json(
+            { error: 'Account locked — trial expired', code: 'TRIAL_LOCKED' },
+            { status: 403 }
+          );
+        }
+        const url = request.nextUrl.clone();
+        url.pathname = '/locked';
+        url.search = '';
+        return NextResponse.redirect(url);
       }
-      const url = request.nextUrl.clone();
-      url.pathname = '/locked';
-      url.search = '';
-      return NextResponse.redirect(url);
+      // Carve-out taken: the portal's own access model governs from here.
     }
   }
 
