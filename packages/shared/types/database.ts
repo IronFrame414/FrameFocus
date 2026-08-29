@@ -5867,6 +5867,45 @@ export type Database = {
           },
         ]
       }
+      proposal_views: {
+        Row: {
+          company_id: string
+          created_at: string
+          estimate_id: string
+          id: string
+          user_agent: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          estimate_id: string
+          id?: string
+          user_agent?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          estimate_id?: string
+          id?: string
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "proposal_views_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "proposal_views_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       punch_list_items: {
         Row: {
           assignee_id: string | null
@@ -9134,6 +9173,7 @@ export type Database = {
         Args: { p_project_id: string }
         Returns: boolean
       }
+      prune_proposal_views: { Args: never; Returns: number }
       qb_vault_forget: { Args: { p_secret_id: string }; Returns: undefined }
       qb_vault_get: { Args: { p_secret_id: string }; Returns: string }
       qb_vault_put: {
