@@ -58,6 +58,10 @@ export const COMPANY_CHILDREN = [
   // same shape as the lien templates above; found exactly the way the design
   // note promises (the constraint name in the purge error).
   'file_categories',
+  // 20261043 — the PO-line assignment table; harness POs would pin companies
+  // through it exactly the way file_categories did. Same design: fail loudly,
+  // extend the list — this entry lands WITH the migration, not after the red.
+  'purchase_order_item_assignments',
   'deletion_jobs',
   'export_jobs',
   'trial_warning_acknowledgements',

@@ -125,7 +125,8 @@ export const COMPANY_TABLES: string[] = [
   'client_payment_applications', 'client_refunds', 'client_payments', 'retainage_releases',
   'invoice_cost_claims', 'invoice_hour_claims', 'invoice_lines', 'invoices',
   'expense_payments', 'expense_allocations', 'expenses',
-  'delivery_items', 'deliveries', 'purchase_order_items', 'purchase_orders',
+  // purchase_order_item_assignments references purchase_order_items (20261043).
+  'delivery_items', 'deliveries', 'purchase_order_item_assignments', 'purchase_order_items', 'purchase_orders',
   'daily_log_crew', 'daily_log_sub_entries', 'daily_logs',
   'safety_incident_injuries', 'safety_incident_witnesses', 'safety_incidents',
   'punch_list_items', 'punch_lists',

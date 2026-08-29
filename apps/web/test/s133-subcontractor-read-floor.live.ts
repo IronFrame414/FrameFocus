@@ -97,7 +97,7 @@ beforeAll(async () => {
   await seed('client_contracts', { company_id: companyId, project_id: pid, status: 'draft', contract_value: 12345, notes: STAMP });
   await seed('subcontractor_contracts', { company_id: companyId, project_id: pid, member_id: subMemberId, status: 'draft', contract_value: 6789, notes: STAMP });
   await seed('project_budget_items', { company_id: companyId, project_id: pid, description: STAMP, actual_amount: 10 });
-  await seed('purchase_orders', { company_id: companyId, project_id: pid, vendor_name: STAMP, status: 'open', author_member_id: subMemberId });
+  await seed('purchase_orders', { company_id: companyId, project_id: pid, vendor_name: STAMP, status: 'issued' /* R5: was 'open' — relabelled 20261042 */, author_member_id: subMemberId });
   await seed('inspections', { company_id: companyId, project_id: pid, inspection_type: STAMP, result: 'pending' });
   await seed('deliveries', { company_id: companyId, project_id: pid, vendor_name: STAMP, delivery_date: '2026-08-11', received_by: subMemberId });
 

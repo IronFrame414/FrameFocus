@@ -19,8 +19,17 @@ function fmtYmd(ymd: string | null): string {
   );
 }
 
-function StatusBadge({ status }: { status: 'open' | 'closed' }) {
-  return status === 'open' ? (
+// R5 (20261042): draft | issued | closed. 'issued' wears the old open badge;
+// a DRAFT is visibly not-yet-ordered.
+function StatusBadge({ status }: { status: 'draft' | 'issued' | 'closed' }) {
+  if (status === 'draft') {
+    return (
+      <span className="rounded-full bg-[#eef1f6] px-[10px] py-[3px] text-[11px] font-semibold text-[#7b8699]">
+        Draft
+      </span>
+    );
+  }
+  return status === 'issued' ? (
     <span className="rounded-full bg-[#fdece0] px-[10px] py-[3px] text-[11px] font-semibold text-[#b45309]">
       Open
     </span>
@@ -77,7 +86,9 @@ export function DeliveriesSections({
   orderless: DeliveryWithItems[];
   canCreatePo: boolean;
 }) {
-  const openPos = pos.filter((po) => po.status === 'open');
+  // Draft + issued both list under "open" here — the field surface's job is
+  // "what is not finished", and a draft is certainly that.
+  const openPos = pos.filter((po) => po.status !== 'closed');
   const closedPos = pos.filter((po) => po.status === 'closed');
 
   return (

@@ -55,7 +55,7 @@ export default async function PurchaseOrderDetailPage({
   const canEditPo = isAdminRole || profile.role === 'project_manager';
   const autoClosed = po.status === 'closed' && po.closed_by === null;
   const shortWithDamage =
-    po.status === 'open' && po.lines.some((l) => !l.filled && l.damagedTotal > 0);
+    po.status === 'issued' && po.lines.some((l) => !l.filled && l.damagedTotal > 0);
 
   return (
     <div>
@@ -82,7 +82,7 @@ export default async function PurchaseOrderDetailPage({
           <h2 className="text-[24px] font-extrabold tracking-[-0.01em] text-[#14213d]">
             {poTitle(po)}
           </h2>
-          {po.status === 'open' ? (
+          {po.status === 'issued' ? (
             <span className="rounded-full bg-[#fdece0] px-[10px] py-[4px] text-[12px] font-semibold text-[#b45309]">
               Open
             </span>
@@ -101,9 +101,9 @@ export default async function PurchaseOrderDetailPage({
               Edit
             </Link>
           ) : null}
-          {isAdminRole && po.status === 'open' ? <ClosePoButton poId={po.id} /> : null}
+          {isAdminRole && po.status === 'issued' ? <ClosePoButton poId={po.id} /> : null}
           {isAdminRole ? <DeletePoButton poId={po.id} projectId={project.id} /> : null}
-          {po.status === 'open' ? (
+          {po.status === 'issued' ? (
             <Link
               href={`/dashboard/field-ops/${project.id}/deliveries/check-in?po=${po.id}`}
               className="rounded-[9px] bg-[#2f49d1] px-[16px] py-[9px] text-[13px] font-semibold text-white transition-colors hover:bg-[#2438a8]"

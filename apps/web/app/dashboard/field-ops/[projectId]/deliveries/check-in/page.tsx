@@ -31,7 +31,8 @@ export default async function CheckInPage({
     getPurchaseOrders(project.id),
     getCompanyTimeSettings(),
   ]);
-  const openPos = pos.filter((po) => po.status === 'open');
+  // R5: only ISSUED POs accept deliveries — a draft is not ordered yet.
+  const openPos = pos.filter((po) => po.status === 'issued');
 
   const todayYmd = new Intl.DateTimeFormat('en-CA', {
     timeZone: timezone,
