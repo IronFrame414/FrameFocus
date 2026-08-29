@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.17"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -2027,12 +2027,15 @@ export type Database = {
         Row: {
           category: string
           company_id: string
+          cost_code: string | null
           created_at: string | null
           created_by: string | null
           default_vendor_id: string | null
           deleted_at: string | null
           id: string
           is_deleted: boolean | null
+          is_favorite: boolean
+          item_type: string
           last_verified_at: string | null
           name: string
           notes: string | null
@@ -2045,12 +2048,15 @@ export type Database = {
         Insert: {
           category: string
           company_id?: string
+          cost_code?: string | null
           created_at?: string | null
           created_by?: string | null
           default_vendor_id?: string | null
           deleted_at?: string | null
           id?: string
           is_deleted?: boolean | null
+          is_favorite?: boolean
+          item_type?: string
           last_verified_at?: string | null
           name: string
           notes?: string | null
@@ -2063,12 +2069,15 @@ export type Database = {
         Update: {
           category?: string
           company_id?: string
+          cost_code?: string | null
           created_at?: string | null
           created_by?: string | null
           default_vendor_id?: string | null
           deleted_at?: string | null
           id?: string
           is_deleted?: boolean | null
+          is_favorite?: boolean
+          item_type?: string
           last_verified_at?: string | null
           name?: string
           notes?: string | null
@@ -2917,6 +2926,7 @@ export type Database = {
           unit_of_measure: string | null
           updated_at: string | null
           updated_by: string | null
+          vendor_id: string | null
         }
         Insert: {
           amount?: number | null
@@ -2940,6 +2950,7 @@ export type Database = {
           unit_of_measure?: string | null
           updated_at?: string | null
           updated_by?: string | null
+          vendor_id?: string | null
         }
         Update: {
           amount?: number | null
@@ -2963,6 +2974,7 @@ export type Database = {
           unit_of_measure?: string | null
           updated_at?: string | null
           updated_by?: string | null
+          vendor_id?: string | null
         }
         Relationships: [
           {
@@ -2989,6 +3001,13 @@ export type Database = {
           {
             foreignKeyName: "estimate_line_rows_subcontractor_id_fkey"
             columns: ["subcontractor_id"]
+            isOneToOne: false
+            referencedRelation: "subcontractors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_line_rows_vendor_id_fkey"
+            columns: ["vendor_id"]
             isOneToOne: false
             referencedRelation: "subcontractors"
             referencedColumns: ["id"]
