@@ -735,3 +735,52 @@ inventories"). Spec: `docs/specs/desktop-redesign-spec.md` (1358 lines). CLI lin
   portal. NOT built, recorded in the page header: storage meter (never measured), QB
   "Included" (7G stub), **portal-branding $19 (RULED: NO CHARGE — the logo already renders
   ungated)**, extra-storage $15.
+
+### Entry 29 — the steps-8–10 FULL BATTERY — every red diagnosed by class, none left standing
+- **Type-check:** 5/5 `--force`, exit 0 (and at every commit throughout).
+- **Lint:** exit 0, corroborated by "✔ No ESLint warnings or errors".
+- **`turbo build --force`:** exit 0, cold, 2m59s.
+- **Unit:** first pass 958/959 — the one red (`s160-auth-email` "refuses with no signature
+  headers") was a **contention timeout**: it ran alongside the cold build, took 10.9s against a
+  5s cap, and passed 19/19 in isolation. Clean full re-run after the build: **959/959 (64
+  files), exit 0** — the prior 955 plus the four new estimate-health tests.
+- **Live RLS (full, 100 files): 1483/1483, exit 0, FIRST PASS** — no purge needed, no
+  contamination, the Settings-adjacent suites included. (Grew from entry 24's 1428 by other
+  sessions' additions.)
+- **Playwright:** m-shell **54/54** (2.5m) · m-sections+details+hubs **116 passed + 1 flaky
+  (m-details M-31 signing-token — passed on retry; untouched `/m` spec) + 4 skipped** (8.1m) ·
+  m-photos+capture+chat+hydration **107/107** (7.3m) · remaining m-specs **150 passed + 5
+  skipped** (12.6m) · desktop+portal+harness first pass **99 passed · 4 failed · 2 flaky · 15
+  did not run** (25.6m — vs 14.7m at entry 24: the slowdown was itself a finding, below).
+  **Every chunk-5 red diagnosed, all four reproduced in isolation (not load flakes):**
+  1. **REAL REGRESSION, the file_categories class, FOURTH purge path** (`267824c`):
+     `e2e/trial-fixture.ts` carried its own stale copy of `COMPANY_CHILDREN` — the exact
+     divergence `test-support/company-purge.ts`'s header warns about while citing this very
+     file. Entry 24's fix landed in the shared list only; the first purge of a marker company
+     carrying the 14 seeded category rows hit `file_categories_company_id_fkey` in beforeAll
+     and took 15 trial-screen tests down as "did not run". **The local list is deleted, not
+     patched** — the fixture now imports the shared `deleteCompanies`. Staleness in one place.
+  2. **REAL — a ruling violated by two changes composing** (`ca144ff`): step 4's
+     invite-rows-in-the-team-table + a legacy pending CLIENT invitation
+     (`josh+qa1-client`, M9 QA era) put a "Client" chip back on the surface S175 #1-s168
+     cleared. Fixed in the SERVICE (`getPendingInvitations` excludes `role='client'`), not the
+     renderer — client-portal invitation state renders on Contacts, its own column. Swept: no
+     test asserts client invites on Team (s135 uses crew).
+  3. **S157 stale test, INVERTED** (`ca144ff`): `desktop-selections:161` asserted the FLAT
+     bar's "Budget & Cost → Selections → Change Orders" adjacency, impossible under the
+     six-section header since entry 7. Rewritten to the §1 rule — Selections in WORK between
+     Schedule and Punch List, asserted by sub-tab testid (labels carry attention counts), with
+     the counter-vacuity index guard. Superseded assertion quoted in place.
+  4. **REAL PERF REGRESSION, mine, caught by the battery** (`ca144ff`): step 10.1's first cut
+     awaited each portfolio section and each profitability report IN SERIES — ~1s × 9 active
+     projects added to every owner dashboard render. `desktop-chat-sub`'s two-identity test
+     renders that dashboard twice inside one 30s budget and went red; `desktop-chat-mentions`
+     and `desktop-chat-send` went flaky the same way. `getPortfolioMoney` is now concurrent
+     (Promise.all — still §6's ruled shape, N per-project calls, no batch helper).
+  **Proof run, all four files on the fixed code: 35/35, exit 0, ZERO flakes, 4.5m** —
+  including the 15 previously-unrun trial tests and the chat file that was blowing its budget.
+- **Vacuity check:** the inverted selections test ran green against the live sectioned nav
+  with its index guard; the team fix was proven against a REAL pending client invite (the
+  fixture data exists — non-vacuous); the health suite asserts exact figures; s160's isolation
+  pass was 19/19, not a skip.
+- **Working tree:** clean; every commit pushed. Temp probe files deleted, never committed.
