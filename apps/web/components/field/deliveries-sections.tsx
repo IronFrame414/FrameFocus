@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { DeliveryWithItems, PurchaseOrderSummary } from '@/lib/services/deliveries';
 import { poTitle } from '@/lib/services/deliveries-client';
+import { MyPoLines } from '@/components/field/my-po-lines';
 
 // 6D — the deliveries list body, shared by BOTH entry points (S90 dual-entry:
 // Field Ops → Deliveries tab AND the project-detail Deliveries tab). Server
@@ -93,6 +94,8 @@ export function DeliveriesSections({
 
   return (
     <div>
+      {/* R6 — the signed-in member's assigned lines, when they have any. */}
+      <MyPoLines projectId={projectId} />
       <div className="mb-2 text-[13px] font-bold uppercase text-[#14213d]">Open purchase orders</div>
       <div className="flex flex-col gap-2">
         {openPos.length === 0 ? (

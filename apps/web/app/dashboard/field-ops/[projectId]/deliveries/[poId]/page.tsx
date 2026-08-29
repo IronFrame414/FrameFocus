@@ -7,6 +7,7 @@ import { getMyMember } from '@/lib/services/members';
 import { FieldTabs } from '@/components/field/field-tabs';
 import { ClosePoButton, DeletePoButton, PoTotalControl } from './po-actions';
 import { PoLinesPanel, type PanelLine, type StaffOption } from './po-lines-panel';
+import { PoLogistics } from './po-logistics';
 
 // 6D — handoff 4e: PO detail. Ordered-vs-usable bars (usable = received −
 // damaged, DB-derived quantities aggregated per line), split-delivery truck
@@ -195,6 +196,14 @@ export default async function PurchaseOrderDetailPage({
       </div>
 
       <FieldTabs projectId={project.id} active="deliveries" />
+
+      {/* §4.3 — the logistics pair, written here and printed on the PDF. */}
+      <PoLogistics
+        poId={po.id}
+        needBy={po.need_by}
+        deliverTo={po.deliver_to}
+        canEdit={canEditPo}
+      />
 
       {/* R-L1: the typed-total control serves LEGACY POs only. A line-bearing
           PO's total derives from its lines (the RPC refuses hand-typing) and

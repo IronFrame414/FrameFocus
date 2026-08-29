@@ -253,6 +253,76 @@ export async function createDraftPos(
   return { success: true, created };
 }
 
+/** §4.3 logistics pair — need_by / deliver_to. A plain column write: the
+ *  column-scope trigger guards total_amount only, and the UPDATE policy
+ *  (O/A/PM) gates. BEFORE UPDATE triggers handle updated_at/updated_by. */
+export async function updatePoLogistics(
+  poId: string,
+  updates: { need_by?: string | null; deliver_to?: string | null }
+): Promise<PoLifecycleResult> {
+  const supabase = createClient();
+  const { error } = await supabase.from('purchase_orders').update(updates).eq('id', poId);
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
+// ── R6 — the signed-in member's assigned lines ──────────────────────────────
+
+export interface MyAssignedLine {
+  itemId: string;
+  description: string;
+  poId: string;
+  poNumber: string | null;
+  vendorName: string | null;
+}
+
+/** The signed-in member's ISSUED assigned lines on a project's issued, live
+ *  POs — the run's context. ONE query for both surfaces (the capture form's
+ *  PO block and the deliveries "your assigned lines" list): the parity rule,
+ *  mechanism shared in lib/, not re-derived per surface. */
+export async function listMyAssignedLines(projectId: string): Promise<MyAssignedLine[]> {
+  const supabase = createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return [];
+  const { data: me } = await supabase
+    .from('company_members')
+    .select('id, profile:profiles!inner(user_id)')
+    .eq('profile.user_id', auth.user.id)
+    .eq('is_deleted', false)
+    .maybeSingle();
+  if (!me) return [];
+  const { data } = await supabase
+    .from('purchase_order_item_assignments')
+    .select(
+      'po_item:purchase_order_items!inner(id, description, line_status, is_deleted, purchase_order:purchase_orders!inner(id, po_number, vendor_name, project_id, status, is_deleted))'
+    )
+    .eq('member_id', me.id)
+    .eq('is_deleted', false);
+  return (data ?? [])
+    .map((a) => (Array.isArray(a.po_item) ? a.po_item[0] : a.po_item))
+    .filter((i): i is NonNullable<typeof i> => Boolean(i))
+    .map((i) => ({
+      item: i,
+      po: Array.isArray(i.purchase_order) ? i.purchase_order[0] : i.purchase_order,
+    }))
+    .filter(
+      ({ item, po }) =>
+        po &&
+        !po.is_deleted &&
+        po.project_id === projectId &&
+        po.status === 'issued' &&
+        !item.is_deleted &&
+        item.line_status === 'issued'
+    )
+    .map(({ item, po }) => ({
+      itemId: item.id,
+      description: item.description,
+      poId: po!.id,
+      poNumber: po!.po_number,
+      vendorName: po!.vendor_name,
+    }));
+}
+
 // ── §S2 — the review popup's PO context ─────────────────────────────────────
 
 export interface ReviewPoLine {
