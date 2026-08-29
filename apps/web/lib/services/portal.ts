@@ -545,18 +545,38 @@ export async function getPortalBilling(
     retainage_withheld: number | string | null;
   }[];
 
+  // [full-audit fix 4] The lines arrive in ONE query for every head — grouped
+  // by invoice_id client-side — instead of one query per head. RLS still
+  // branches per ROW (each line's client arm checks its own parent invoice's
+  // presentation_level), so a batched read returns exactly the rows the
+  // per-head reads did: the branch stays in RLS, where it cannot be
+  // forgotten. Ordering: the global sort_order ordering, grouped by FK,
+  // preserves each invoice's relative line order (the 04b67f4 reasoning).
+  // The sections RPC stays per head — it is a single-invoice SQL function,
+  // and batching it would mean a new definer function for a list a client
+  // reads a handful of times.
+  const { data: allLines } = await supabase
+    .from('invoice_lines')
+    .select('invoice_id, id, description, category, quantity, unit_rate, cost_basis, billed_amount')
+    .in(
+      'invoice_id',
+      heads.map((h) => h.id)
+    )
+    .order('sort_order');
+  const linesByInvoice = new Map<string, Record<string, unknown>[]>();
+  for (const l of (allLines ?? []) as Record<string, unknown>[]) {
+    const key = String(l.invoice_id);
+    const list = linesByInvoice.get(key) ?? [];
+    list.push(l);
+    linesByInvoice.set(key, list);
+  }
+
   const invoices: PortalInvoice[] = await Promise.all(
     heads.map(async (h) => {
-      // Both asked for unconditionally. The database answers with what this
-      // bill permits — the branch lives in RLS, where it cannot be forgotten.
-      const [linesRes, sectionsRes] = await Promise.all([
-        supabase
-          .from('invoice_lines')
-          .select('id, description, category, quantity, unit_rate, cost_basis, billed_amount')
-          .eq('invoice_id', h.id)
-          .order('sort_order'),
-        supabase.rpc('client_invoice_sections', { p_invoice_id: h.id }),
-      ]);
+      // Sections asked for unconditionally. The database answers with what
+      // this bill permits — the branch lives in RLS.
+      const sectionsRes = await supabase.rpc('client_invoice_sections', { p_invoice_id: h.id });
+      const linesRes = { data: linesByInvoice.get(h.id) ?? [] };
 
       return {
         id: h.id,

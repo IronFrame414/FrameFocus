@@ -308,17 +308,28 @@ export async function signSelectionOptionImages(
   if (error || !data?.length) return {};
   const admin = getSupabaseAdmin() as SupabaseClient<Database>;
   const out: Record<string, { image?: string; link_thumbnail?: string }> = {};
-  await Promise.all(
-    (data as { option_id: string; kind: string; file_path: string }[]).map(async (row) => {
-      const { data: signed } = await admin.storage
-        .from('project-files')
-        .createSignedUrl(row.file_path, SIGNED_URL_TTL_SECONDS);
-      if (!signed?.signedUrl) return;
-      const slot = (out[row.option_id] ??= {});
-      if (row.kind === 'image') slot.image = signed.signedUrl;
-      else slot.link_thumbnail = signed.signedUrl;
-    })
-  );
+  // [full-audit fix 4] ONE storage call for every path instead of one per row.
+  // createSignedUrls signs per path server-side: a path that cannot be signed
+  // gets a per-row error and is simply skipped — the same behaviour the
+  // per-path loop had (`if (!signed?.signedUrl) return`).
+  const rows = data as { option_id: string; kind: string; file_path: string }[];
+  const { data: signedRows } = await admin.storage
+    .from('project-files')
+    .createSignedUrls(
+      rows.map((r) => r.file_path),
+      SIGNED_URL_TTL_SECONDS
+    );
+  const byPath = new Map<string, string>();
+  for (const s of signedRows ?? []) {
+    if (s.path && s.signedUrl && !s.error) byPath.set(s.path, s.signedUrl);
+  }
+  for (const row of rows) {
+    const url = byPath.get(row.file_path);
+    if (!url) continue;
+    const slot = (out[row.option_id] ??= {});
+    if (row.kind === 'image') slot.image = url;
+    else slot.link_thumbnail = url;
+  }
   return out;
 }
 

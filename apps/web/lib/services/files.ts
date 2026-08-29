@@ -237,3 +237,27 @@ export async function getSignedUrl(
 ): Promise<string | null> {
   return (await signedUrlFor(filePath, expiresIn)).url;
 }
+
+/**
+ * The batch form — ONE storage call for N paths [full-audit fix 4].
+ * `createSignedUrls` signs per path server-side: a path that cannot be signed
+ * (e.g. a legitimately-absent `.markup.jpg` derivative) gets a per-row error
+ * and is simply ABSENT from the map — the same "no url" answer per path that
+ * `getSignedUrl` gives, so callers keep the null semantics unchanged.
+ */
+export async function getSignedUrls(
+  filePaths: string[],
+  expiresIn: number = SIGNED_URL_TTL_SECONDS
+): Promise<Map<string, string>> {
+  if (filePaths.length === 0) return new Map();
+  const supabase = await createClient();
+  const { data, error } = await supabase.storage
+    .from('project-files')
+    .createSignedUrls(filePaths, expiresIn);
+  const out = new Map<string, string>();
+  if (error || !data) return out;
+  for (const row of data) {
+    if (row.path && row.signedUrl && !row.error) out.set(row.path, row.signedUrl);
+  }
+  return out;
+}

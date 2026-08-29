@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase-server';
 import { hasMarkup, derivativePathFor } from '@framefocus/shared/utils/markup';
 import type { MarkupData } from '@framefocus/shared/types/markup';
-import { getFiles, getSignedUrl, type FileRecord } from './files';
+import { getFiles, getSignedUrls, type FileRecord } from './files';
 
 // M6M §4.8 / §4.9 — server reads for M-8 (gallery), M-9 (viewer) and M-10.
 //
@@ -109,7 +109,7 @@ function readMarkup(raw: unknown): MarkupData | null {
 }
 
 /**
- * Resolve the two URLs a photo needs.
+ * Resolve the two URLs a photo needs, from the batch-signed map.
  *
  * A-23t / §4.7a.5 — **a missing derivative degrades to the original.** Under
  * D-31 that is not merely a share concern: if the signed URL for the derivative
@@ -117,23 +117,37 @@ function readMarkup(raw: unknown): MarkupData | null {
  * the original is showing a broken image. It degrades, and `hasMarkup` stays
  * true so the indicator still renders — the user is told the photo is annotated
  * even in the frame where the annotated bytes are unavailable.
+ *
+ * [full-audit fix 4] Signing moved from 1–2 calls PER FILE to one
+ * `getSignedUrls` batch for the whole list; an absent map entry is the same
+ * "no url" answer the per-path call gave, so the degrade semantics are
+ * unchanged. A-23l holds: the derivative rides the SAME signed flow, from the
+ * same {company_id}/{project_id}/ prefix.
  */
-async function resolveUrls(
+function resolveUrls(
   file: FileRecord,
-  annotated: boolean
-): Promise<{ displayUrl: string | null; originalUrl: string | null; derivativeMissing: boolean }> {
-  const originalUrl = await getSignedUrl(file.file_path);
+  annotated: boolean,
+  urls: Map<string, string>
+): { displayUrl: string | null; originalUrl: string | null; derivativeMissing: boolean } {
+  const originalUrl = urls.get(file.file_path) ?? null;
   if (!annotated) return { displayUrl: originalUrl, originalUrl, derivativeMissing: false };
-
-  // A-23l — the derivative is reached through the SAME signed-URL flow, from
-  // the same {company_id}/{project_id}/ prefix. A path that skipped signing
-  // would work in testing and leak in production.
-  const derivative = await getSignedUrl(derivativePathFor(file.file_path));
+  const derivative = urls.get(derivativePathFor(file.file_path)) ?? null;
   return {
     displayUrl: derivative ?? originalUrl,
     originalUrl,
     derivativeMissing: derivative === null,
   };
+}
+
+/** The single-photo form — one batch call for the 1–2 paths, same semantics. */
+async function resolveUrlsSingle(
+  file: FileRecord,
+  annotated: boolean
+): Promise<ReturnType<typeof resolveUrls>> {
+  const paths = annotated
+    ? [file.file_path, derivativePathFor(file.file_path)]
+    : [file.file_path];
+  return resolveUrls(file, annotated, await getSignedUrls(paths));
 }
 
 /** M-8's list. Newest first — §4.8 groups by day, newest day first. */
@@ -143,12 +157,20 @@ export async function getProjectPhotos(projectId: string): Promise<PhotoRecord[]
     getPunchPhotoIds(projectId),
   ]);
 
-  return Promise.all(
-    files.map(async (file) => {
+  // [full-audit fix 4] ONE signing call for every original + every candidate
+  // derivative, instead of 1–2 per file.
+  const signPaths: string[] = [];
+  for (const file of files) {
+    signPaths.push(file.file_path);
+    if (readMarkup(file.markup_data) !== null) signPaths.push(derivativePathFor(file.file_path));
+  }
+  const urls = await getSignedUrls(signPaths);
+
+  return files.map((file) => {
       const markup = readMarkup(file.markup_data);
       const annotated = markup !== null;
       const { source, sourceId } = sourceOf(file, punchIds);
-      const { displayUrl, originalUrl, derivativeMissing } = await resolveUrls(file, annotated);
+      const { displayUrl, originalUrl, derivativeMissing } = resolveUrls(file, annotated, urls);
 
       return {
         id: file.id,
@@ -167,8 +189,7 @@ export async function getProjectPhotos(projectId: string): Promise<PhotoRecord[]
         originalUrl,
         derivativeMissing,
       } satisfies PhotoRecord;
-    })
-  );
+  });
 }
 
 /** One photo, with the same URL resolution the gallery uses. */
@@ -218,7 +239,7 @@ export async function getPhoto(fileId: string, projectId: string): Promise<Photo
   const markup = readMarkup(file.markup_data);
   const annotated = markup !== null;
   const { source, sourceId } = sourceOf(file, punchIds);
-  const { displayUrl, originalUrl, derivativeMissing } = await resolveUrls(file, annotated);
+  const { displayUrl, originalUrl, derivativeMissing } = await resolveUrlsSingle(file, annotated);
 
   return {
     id: file.id,
@@ -292,7 +313,7 @@ export async function getReceiptFile(
   const file = data as FileRecord;
 
   // annotated: false, UNCONDITIONALLY — see point 2 above.
-  const { displayUrl, originalUrl } = await resolveUrls(file, false);
+  const { displayUrl, originalUrl } = await resolveUrlsSingle(file, false);
 
   return {
     id: file.id,
