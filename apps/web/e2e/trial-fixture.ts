@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { adminClient, COMPANY_A } from './hub-fixture';
+import { deleteCompanies } from '../test-support/company-purge';
 
 /**
  * S139 — fixtures for the four trial screens.
@@ -84,48 +85,15 @@ export const LIMIT_EMAIL = 'josh+s139limit@worthprop.com';
  */
 export const MARKER = 'S139';
 
-/**
- * Children of `companies` that must go first, IN THIS ORDER.
- *
- * `lien_release_template_boxes` and `lien_release_templates` are the S147
- * additions and the ones that actually blocked the delete. The rest were
- * already here and already worked. `profiles`, `tag_options` and `ai_tag_logs`
- * cascade and need no entry; `trial_emails` is SET NULL.
- */
-const COMPANY_CHILDREN = [
-  'lien_release_template_boxes',
-  'lien_release_templates',
-  'deletion_jobs',
-  'export_jobs',
-  'trial_warning_acknowledgements',
-  'trial_lifecycle',
-  'email_logs',
-  'tag_options',
-  'subscriptions',
-  'company_members',
-  'profiles',
-] as const;
-
-/**
- * Delete these companies and everything pinning them — and FAIL LOUDLY if the
- * parent survives.
- *
- * ⚠️ THE ERROR CHECK ON THE PARENT DELETE IS THE WHOLE POINT. Without it a
- * blocked delete is silent, and the next thing to fail is something else
- * entirely, several sessions later.
- */
-async function deleteCompanies(admin: SupabaseClient, ids: string[]): Promise<void> {
-  if (ids.length === 0) return;
-
-  for (const table of COMPANY_CHILDREN) {
-    const { error } = await admin.from(table).delete().in('company_id', ids);
-    if (error) throw new Error(`purge ${table}: ${error.message}`);
-  }
-  await admin.from('trial_emails').update({ company_id: null }).in('company_id', ids);
-
-  const { error } = await admin.from('companies').delete().in('id', ids);
-  if (error) throw new Error(`purge companies: ${error.message}`);
-}
+// ⚠️ [Steps 8-10 battery] THE LOCAL CHILD LIST IS GONE, AND IT MUST NOT COME
+// BACK. This file carried its own copy of COMPANY_CHILDREN + deleteCompanies —
+// the exact divergence `test-support/company-purge.ts`'s header warns about,
+// while citing THIS FILE as a caller it fixed. The copy proved the warning:
+// entry 24's file_categories fix landed in the shared list only, this copy
+// went stale, and the first purge of a marker company carrying the 14 seeded
+// category rows failed on `file_categories_company_id_fkey`, taking 15
+// trial-screen tests down with it. One list, one module, staleness in one
+// place. (`deleteCompanies` now comes from that module — see the top import.)
 
 /**
  * Self-healing on the way in, complete on the way out. Called from BOTH ends of
