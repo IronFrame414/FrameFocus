@@ -2,43 +2,13 @@
 
 <!-- ========================================================================= -->
 
-## ⚠️ NUMBERING RECONCILIATION OWED AT MERGE — `#147`–`#149` [S136]
+## ~~NUMBERING RECONCILIATION `#147`–`#149` [S136]~~ — DISCHARGED AND REMOVED
 
-**This file is the assignment authority. Two unmerged branches allocated numbers independently
-and they collide — with main and with each other.** Read this before merging either.
+Removed [register-backlog §1.2, Josh Phase 2 Q2] — both branches merged, all four reassignment rows
+applied and struck, and the block's own closing line said it *"is fully discharged and can be
+removed."* The full table survives in git history and in the S136 context file. The rule that
+prevents recurrence lives in CLAUDE.md → "Tech-debt numbering", which is unchanged.
 
-The divergence starts at **`#147`, not `#148`.** All three refs are identical through `#146`.
-
-| number | **main** (authority) | `feat/notifications` | `feature/m6m-mobile` |
-| --- | --- | --- | --- |
-| `#147` | contact holds only ONE address | *same as main* | **residue of #145** (S123) |
-| `#148` | estimate cannot create a contact | *same as main* | **LEAN-REPO SWEEP** (S123) |
-| `#149` | e2e fixtures not reproducible | **push enrolment not tappable** (S123) | **`updateProject()` zero callers** (S123) |
-| `#150` | four shards, one database | — | — |
-
-Verified these are genuinely different items, not one entry renumbered: main contains no
-"actionable residue" entry, and `feature/m6m-mobile` contains no "ONE address" entry.
-
-**Reassignment to apply AT MERGE TIME [Josh, S136 Q6]. Renumbering happens when the branch lands,
-NOT now — a debt number cited elsewhere becomes ambiguous the moment it moves, and neither branch
-is touched by S136.**
-
-| branch | its number | becomes |
-| --- | --- | --- |
-| ~~`feat/notifications`~~ | ~~`#149` push enrolment not tappable~~ | ~~**`#151`**~~ — ✅ **APPLIED** when `feat/notifications` merged |
-| ~~`feature/m6m-mobile`~~ | ~~`#147` residue of #145~~ | ~~**`#152`**~~ — ✅ **APPLIED** when `feature/m6m-mobile` merged |
-| ~~`feature/m6m-mobile`~~ | ~~`#148` LEAN-REPO SWEEP~~ | ~~**`#153`**~~ — ✅ **APPLIED** |
-| ~~`feature/m6m-mobile`~~ | ~~`#149` `updateProject()` zero callers~~ | ~~**`#154`**~~ — ✅ **APPLIED** |
-
-Whichever branch merges second must re-check this table against the file as it then stands, not
-against this snapshot. **✅ BOTH branches have now merged and all four rows are struck — this
-reconciliation block is fully discharged and can be removed.**
-
-**The rule that stops it recurring is in CLAUDE.md → "Tech-debt numbering", not here.** A note in
-this header is a statement, and a statement is exactly what failed: the S134 header already said
-"main's file is the assignment authority" and two branches still collided.
-
-<!-- ========================================================================= -->
 
 > **Last updated:** August 11, 2026 — S134 (**#149 AND #150 RAISED**, filing the fallout of reverting the S133 Playwright sharding (Option D, Josh's ruling). **#150** records the concurrency hazard precisely — four shards shared one rebuild-test DB, so any test asserting the absence/count of something another shard writes to a shared fixture was exposed; CI #201 (`desktop-payload.spec.ts:175`) is the instance, NOT a payload leak — the #117 read floor holds at the query. **#149** is the constraint that blocked every safe fix: the pinned e2e fixtures are hand-curated on rebuild-test and reproducible from no script — `seed-test-identities.mjs` only *warns* if `eaf0e25b` is missing — which is what blocks a database-per-shard, the fix that is safe by construction. The sharding work is kept on branch `ci/shard-playwright`, not deleted. **⚠️ #149 is also speculatively used on two unmerged branches (`feat/notifications`, `feature/m6m-mobile`) for different items — a merge-time reconciliation is owed there regardless; main's file is the assignment authority.**)
 > **Previously:** August 10, 2026 — S123 (**#151 RAISED** from a real-device test — the push enrolment control does not read as tappable. **A UI pass, not a defect:** the component carries **zero `className` attributes**, and with `@tailwind base` Preflight in force an unstyled `<button>` has no background, no border and no radius, so it renders as a line of body text that happens to click. It is also the ONE control between a user and ever receiving a push, and on iOS the prompt is one-shot and sticky, so a bad first encounter is permanent. Constraints recorded, including that the **iOS install-gate branch must NOT become pressable** — and that **no test references this component at all**, so that constraint has no safety net today)
@@ -82,6 +52,37 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 ---
 
 ## Open Tech Debt
+
+### Branch-scoped, awaiting real numbers — `feature/register-backlog` [register-backlog §1.2]
+
+> Provisional ids per the S136 rule (never a bare `#N` on a branch). Tag `regbacklog`. Main's next
+> free was **#155** when filed. Four entries, not five: `s146-C5` was NOT filed — the audit-fixes
+> pass root-caused and fixed it (s145-C5 and s146-C5 were the only two writers of
+> `client_contracts_enabled`, racing each other on company A; s145-C5 now drives company B), and the
+> following battery ran 1497/1497 with zero parallel reds. Recorded as fixed in the register.
+
+- **#1-regbacklog — custom composable roles (register A14).** Josh raised **per-person** visibility;
+  **ruled toward custom ROLES instead.** Every gate keys on `get_my_role()`; RLS cannot restrict
+  columns, so a per-person permission on a *field* multiplies side tables rather than replacing
+  them; and testing loses its fixed set — the S121 audit caught a crew member reading 13 change
+  orders precisely because "crew" is a knowable state. ⚠️ **The underlying need is real:** a
+  bookkeeper who needs invoices but not the schedule fits none of the five roles.
+
+- **#2-regbacklog — "unbilled to client" on Expenses (register A15).** No expense→invoice link
+  exists; this needs schema. ⚠️ **Not the same as `13c`'s "Cost you've fronted"** — that is cost
+  fronted on a *project*, derivable via `invoice_cost_claims`. Two different questions; do not build
+  one and label it the other.
+
+- **#3-regbacklog — package scope rename `@framefocus/shared` (register A16).** ~150 import lines,
+  breaks the build on any miss, **zero user-facing change** — the npm scope is a build-time
+  identifier that never reaches a browser, a PDF or an email. Do it in one sweep or not at all.
+
+- **#4-regbacklog — duplicate token values after the README ramp (K8).** `warning` == `warningDeep`
+  and `danger` == `dangerAlt` since the ramp landed — the design carries one of each. **Both names
+  were kept deliberately: a repaint is not a rename.** ⚠️ But two names pointing at one hex will
+  read as a mistake to the next person; either re-diverge them when the design does, or fold the
+  aliases with a sweep of their consumers. Until ruled, neither — this entry is the explanation.
+
 
 ### Branch-scoped, awaiting real numbers — `feature/s175-dialog-sweep` [S175 item 9]
 
