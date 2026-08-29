@@ -219,7 +219,11 @@ export function ContractsPanel({
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                 {statusBadge(c.status)}
-                <span style={{ fontWeight: 600 }}>{money(c.contract_value)}</span>
+                {/* Floored (client_contract_amounts RLS): null for a PM/foreman
+                    means "not yours to see" — render nothing, not an em-dash. */}
+                {c.contract_value !== null && (
+                  <span style={{ fontWeight: 600 }}>{money(c.contract_value)}</span>
+                )}
                 {c.executed_date && (
                   <span style={{ color: '#7b8699' }}>
                     executed{' '}

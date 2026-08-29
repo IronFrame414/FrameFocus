@@ -82,7 +82,6 @@ async function myRole(supabase: ReturnType<typeof createClient>): Promise<string
 export async function createClientContract(contract: {
   project_id: string;
   status?: ContractStatus;
-  contract_value?: number | null;
   executed_date?: string | null;
   notes?: string | null;
   signed_proposal_file_id?: string | null;

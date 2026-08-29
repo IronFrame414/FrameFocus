@@ -16,6 +16,10 @@ export type ContractStatus = 'draft' | 'sent' | 'signed' | 'void';
 type ClientContractRow = Database['public']['Tables']['client_contracts']['Row'];
 export type ClientContract = Omit<ClientContractRow, 'status'> & {
   status: ContractStatus;
+  /** From `client_contract_amounts` (Owner/Admin + client-of-project RLS).
+   *  `null` means floored for this caller OR the contract has no value —
+   *  render nothing, never a zero. */
+  contract_value: number | null;
 };
 
 type SubContractRow = Database['public']['Tables']['subcontractor_contracts']['Row'];
@@ -39,16 +43,28 @@ export const CONTRACT_STATUS_LABELS: Record<ContractStatus, string> = {
 export async function getClientContracts(projectId: string): Promise<ClientContract[]> {
   const supabase = await createClient();
 
+  // The money lives on client_contract_amounts (Owner/Admin + client arms).
+  // For a PM/foreman the embed comes back null — the row renders, the figure
+  // doesn't. The UNIQUE FK makes this a to-one embed (object, not array).
   const { data, error } = await supabase
     .from('client_contracts')
-    .select('*')
+    .select('*, amounts:client_contract_amounts(contract_value)')
     .eq('project_id', projectId)
     .eq('is_deleted', false)
     .order('executed_date', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false });
 
   if (error) return [];
-  return (data ?? []) as ClientContract[];
+  return (data ?? []).map((row) => {
+    const { amounts, ...contract } = row as typeof row & {
+      amounts: { contract_value: number | string | null } | { contract_value: number | string | null }[] | null;
+    };
+    const amount = Array.isArray(amounts) ? (amounts[0] ?? null) : amounts;
+    return {
+      ...contract,
+      contract_value: amount?.contract_value == null ? null : Number(amount.contract_value),
+    } as ClientContract;
+  });
 }
 
 export async function getSubcontractorContracts(

@@ -310,13 +310,15 @@ export async function getPortalDocuments(
   projectId: string
 ): Promise<PortalDocument[]> {
   const [contracts, docs, cos] = await Promise.all([
-    // ⚠️ `contract_value` IS on this row and she may read it — it is HER
-    // contract, and the Floor governs staff, not the counterparty. Selected
-    // deliberately rather than left to leak: RLS cannot hide a column, so the
-    // choice is between showing it and pretending it is not there.
+    // ⚠️ The value lives on `client_contract_amounts` and she may read it — it
+    // is HER contract, and the Floor governs staff, not the counterparty. The
+    // side table's client SELECT arm restates this portal's own predicate
+    // (is_client_of_project + client_document_visible), so the embed returns
+    // exactly what the old column did for her and null for no one who matters
+    // here. Deliberate, not a leak.
     supabase
       .from('client_contracts')
-      .select('id, status, created_at, executed_date, contract_value')
+      .select('id, status, created_at, executed_date, amounts:client_contract_amounts(contract_value)')
       .eq('project_id', projectId),
     supabase
       .from('contract_documents')
@@ -335,8 +337,12 @@ export async function getPortalDocuments(
     status: string;
     created_at: string | null;
     executed_date: string | null;
-    contract_value: number | string | null;
+    amounts:
+      | { contract_value: number | string | null }
+      | { contract_value: number | string | null }[]
+      | null;
   }[]) {
+    const amount = Array.isArray(c.amounts) ? (c.amounts[0] ?? null) : c.amounts;
     out.push({
       id: c.id,
       kind: 'contract',
@@ -344,7 +350,7 @@ export async function getPortalDocuments(
       status: c.status,
       created_at: c.created_at,
       signable: false,
-      amount: c.contract_value === null ? null : Number(c.contract_value),
+      amount: amount?.contract_value == null ? null : Number(amount.contract_value),
     });
   }
 
