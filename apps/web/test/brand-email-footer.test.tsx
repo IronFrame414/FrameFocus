@@ -9,6 +9,7 @@ import { ProposalEmail } from '@/lib/email/templates/proposal-email';
 import { InvoiceEmail } from '@/lib/email/templates/invoice-email';
 import { ChangeOrderEmail } from '@/lib/email/templates/change-order-email';
 import { ReminderEmail } from '@/lib/email/templates/reminder-email';
+import { PoEmail } from '@/lib/email/templates/po-email';
 import { NotificationEmail } from '@/lib/email/templates/notification-email';
 import { AuthEmail, AUTH_EMAIL_COPY, type AuthEmailKind } from '@/lib/email/templates/auth-email';
 import { SelectionReleasedEmail } from '@/lib/email/templates/selection-released-email';
@@ -97,6 +98,24 @@ const CLIENT_FACING = [
       />
     ),
   ],
+  // PO module R-L4 — the purchase-order email. It goes to a VENDOR, but the
+  // brand contract is the client-facing one and for the same reason: it
+  // leaves the building under the CONTRACTOR'S identity, so no product mark
+  // may survive in it.
+  [
+    'purchase order',
+    () => (
+      <PoEmail
+        companyName={COMPANY}
+        logoUrl={LOGO}
+        brandColor="#2f49d1"
+        poNumber="PO-1902-01"
+        projectName="Maple St Remodel"
+        needBy="2026-09-05"
+        totalLabel="$510.00"
+      />
+    ),
+  ],
   // S174 #1 — the mail a selections RELEASE sends. Client-facing and therefore
   // white-label on exactly the same terms as the four above.
   [
@@ -160,6 +179,9 @@ const COVERED = new Set([
   // contract is the same as the invite's and for the same reason: the reader is
   // being asked about an ACCOUNT on this product, so the product must be named.
   'auth-email.tsx',
+  // PO module R-L4 — the vendor PO email. Contractor identity, white-label,
+  // rendered in CLIENT_FACING above.
+  'po-email.tsx',
   // S174 #1 — the selections release. White-label client-facing, rendered in
   // CLIENT_FACING above.
   'selection-released-email.tsx',

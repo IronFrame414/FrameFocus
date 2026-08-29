@@ -1,4 +1,5 @@
 import { Body, Container, Head, Hr, Html, Img, Preview, Text } from '@react-email/components';
+import { brand } from '@/lib/brand';
 
 // PO module R-L4 — the purchase-order email. It leaves the building, so per
 // the ruled email/PDF boundary (desktop-redesign spec §2, Entry 5) it carries
@@ -58,6 +59,9 @@ export function PoEmail({
           <Hr style={{ borderColor: '#e5e7eb', margin: '16px 0' }} />
           <Text style={{ fontSize: '12px', color: '#7b8699' }}>
             Purchase order {poNumber} is attached as a PDF.
+          </Text>
+          <Text style={{ fontSize: '11px', color: '#9ca3af' }}>
+            Sent by {companyName} via {brand.name}
           </Text>
         </Container>
       </Body>
