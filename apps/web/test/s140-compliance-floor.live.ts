@@ -126,6 +126,8 @@ describe('S140-2 — Owner and Admin retain full access', () => {
   });
 
   it('Owner INSERTs a document', async () => {
+    // A DATELESS w9 — deliberately. Since 20261049 this doubles as the expiry
+    // CHECK's admit-proof: w9/other stay optional (a W-9 has no expiry).
     const { data, error } = await ownerC
       .from('subcontractor_compliance_documents')
       .insert({ member_id: memberId, doc_type: 'w9' })
@@ -134,6 +136,25 @@ describe('S140-2 — Owner and Admin retain full access', () => {
     expect(error).toBeNull();
     expect(data).toBeTruthy();
     createdDocIds.push((data as { id: string }).id);
+  });
+
+  it('20261049 — a dateless COI is refused by the CHECK; the SAME row with a date lands', async () => {
+    // Non-vacuous both ways (§5's own warning: a refusal-only probe passes
+    // vacuously if the insert was going to fail anyway): the dated twin
+    // proves the only difference is the date.
+    const { error: refused } = await ownerC
+      .from('subcontractor_compliance_documents')
+      .insert({ member_id: memberId, doc_type: 'coi' })
+      .select('id');
+    expect(refused?.message).toMatch(/compliance_docs_expiring_types_require_date/);
+
+    const { data: landed, error: ok } = await ownerC
+      .from('subcontractor_compliance_documents')
+      .insert({ member_id: memberId, doc_type: 'coi', expiration_date: '2027-06-30' })
+      .select('id')
+      .single();
+    expect(ok).toBeNull();
+    createdDocIds.push((landed as { id: string }).id);
   });
 
   it('Admin UPDATEs a document', async () => {
@@ -188,9 +209,12 @@ describe('S140-3 — PM, foreman and crew are floored on SELECT', () => {
 
 describe('S140-4 — PM cannot write, which is what changed at S140', () => {
   it('PM INSERT is refused', async () => {
+    // [S157, 20261049] expiration_date is set so the refusal can ONLY come
+    // from RLS — a dateless licence is now refused by the expiry CHECK for
+    // every role, which would let this assertion pass for the wrong reason.
     const { data, error } = await pmC
       .from('subcontractor_compliance_documents')
-      .insert({ member_id: memberId, doc_type: 'license' })
+      .insert({ member_id: memberId, doc_type: 'license', expiration_date: '2027-06-30' })
       .select('id');
     expect(error).toBeTruthy();
     expect(data).toBeNull();
