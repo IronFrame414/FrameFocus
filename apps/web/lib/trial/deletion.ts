@@ -615,6 +615,49 @@ export async function alertDeletionStopped(
 }
 
 /**
+ * The DRY RUN [Q8]: exactly the sweep's due-selection, zero writes. The ruled
+ * chain requires the first real run's scope to be reviewed BY HAND before the
+ * cron entry lands — this is what gets reviewed. Sharing the selection with
+ * `runTrialDeletion()` (same filters, same postpone rule) is the point: a
+ * separate query would be a second copy of "who is due", divergent exactly
+ * when it matters.
+ */
+export async function listDueForDeletion(
+  admin: SupabaseClient<Database>,
+  now: Date
+): Promise<Array<{ companyId: string; companyName: string | null; reason: string; deleteAfter: string; postponed: boolean }>> {
+  const { data, error } = await admin
+    .from('trial_lifecycle')
+    .select('company_id, delete_after, postponed_until, reason')
+    .is('deleted_at', null)
+    .not('delete_after', 'is', null)
+    .lte('delete_after', now.toISOString());
+  if (error) throw new Error(`dry run read: ${error.message}`);
+
+  const out: Array<{ companyId: string; companyName: string | null; reason: string; deleteAfter: string; postponed: boolean }> = [];
+  for (const row of (data ?? []) as Array<{
+    company_id: string;
+    delete_after: string;
+    postponed_until: string | null;
+    reason: string;
+  }>) {
+    const { data: co } = await admin
+      .from('companies')
+      .select('name')
+      .eq('id', row.company_id)
+      .maybeSingle();
+    out.push({
+      companyId: row.company_id,
+      companyName: (co as { name: string } | null)?.name ?? null,
+      reason: row.reason,
+      deleteAfter: row.delete_after,
+      postponed: isPostponed(row, now),
+    });
+  }
+  return out;
+}
+
+/**
  * The job. Selects companies past `delete_after` and works them to completion.
  *
  * ⚠️ NOTHING CALLS THIS ON A SCHEDULE. See the header.
