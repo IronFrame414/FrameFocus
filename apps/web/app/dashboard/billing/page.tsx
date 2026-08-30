@@ -7,6 +7,7 @@ import { getAddOns } from '@/lib/services/add-ons';
 import { getSeatUsage } from '@/lib/services/seats';
 import { AddOnsSection } from './add-ons-section';
 import { brand } from '@/lib/brand';
+import { storageStatus, formatBytes } from '@/lib/billing/storage-cap';
 
 // Step 10 (desktop redesign §8.12.4) — Billing, Owner-only (NOT Owner/Admin;
 // the redirect below stands). The mockup's rows that are NOT built, and why:
@@ -51,6 +52,11 @@ export default async function BillingPage() {
   }
 
   const trialDays = getTrialDaysRemaining(subscription);
+
+  // Storage: the caller-scoped RPC (§1 sum, trashed rows included) against
+  // the plan's ruled cap. Runs as the signed-in owner, not the admin client.
+  const { data: usedBytes } = await supabase.rpc('company_storage_used_bytes');
+  const storage = storageStatus(Number(usedBytes ?? 0), subscription.plan_tier);
   const planLabels: Record<string, string> = {
     starter: 'Starter — $79/mo',
     professional: 'Professional — $149/mo',
@@ -110,6 +116,32 @@ export default async function BillingPage() {
               : `${subscription.seat_limit} included`}
           </span>
         </div>
+
+        {/* Storage — the §1 sum against the ruled cap [storage-archive-ai-spec].
+            The measured number this page once faked and then removed (see the
+            header comment) — now real: trashed files count, uploads pause at
+            100%, nothing else stops. */}
+        {storage.capBytes !== null && (
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-500">File Storage</span>
+            <span
+              className={`text-sm font-medium ${
+                storage.level === 'blocked'
+                  ? 'text-red-700'
+                  : storage.level === 'warn95'
+                    ? 'text-red-600'
+                    : storage.level === 'warn80'
+                      ? 'text-amber-600'
+                      : 'text-gray-900'
+              }`}
+            >
+              {formatBytes(storage.usedBytes)} of {formatBytes(storage.capBytes)} used
+              {storage.level === 'blocked' && ' — uploads paused'}
+              {storage.level === 'warn95' && ' (95%+)'}
+              {storage.level === 'warn80' && ' (80%+)'}
+            </span>
+          </div>
+        )}
 
         {/* Trial info */}
         {subscription.status === 'trialing' && (

@@ -8,6 +8,8 @@ import {
   listFileCategories,
   type FileCategoryRow,
 } from '@/lib/services/file-categories-client';
+import { getStorageStatus, type StorageStatus } from '@/lib/services/storage-status-client';
+import { StorageLimitNotice } from '@/components/storage/storage-limit-notice';
 
 // Redesign 6.1 — the picker now reads per-company `file_categories` (labels
 // renameable, keys stable). MANUAL_KEYS is unchanged from the old hardcoded
@@ -27,7 +29,13 @@ const MANUAL_KEYS = new Set([
   'other',
 ]);
 
-export default function UploadForm({ projectId }: { projectId: string }) {
+export default function UploadForm({
+  projectId,
+  canEmptyTrash = false,
+}: {
+  projectId: string;
+  canEmptyTrash?: boolean;
+}) {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [category, setCategory] = useState<string>('other');
@@ -36,6 +44,9 @@ export default function UploadForm({ projectId }: { projectId: string }) {
   const [newLabel, setNewLabel] = useState('');
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Set when the CAP refuses — renders the limit notice, never an error
+  // [spec §2: a limit with four ways out].
+  const [limited, setLimited] = useState<StorageStatus | null>(null);
 
   useEffect(() => {
     listFileCategories(projectId).then(setCategories);
@@ -74,6 +85,12 @@ export default function UploadForm({ projectId }: { projectId: string }) {
     setUploading(false);
 
     if (!result.success) {
+      if (result.storageLimited) {
+        setLimited(await getStorageStatus());
+        setError(null);
+        setUploading(false);
+        return;
+      }
       setError(result.error ?? 'Upload failed.');
       return;
     }
@@ -165,6 +182,14 @@ export default function UploadForm({ projectId }: { projectId: string }) {
         )}
       </div>
 
+      {limited && (
+        <StorageLimitNotice
+          status={limited}
+          canEmptyTrash={canEmptyTrash}
+          projectId={projectId}
+          onFreedSpace={() => setLimited(null)}
+        />
+      )}
       {error && (
         <p style={{ color: 'red', fontSize: '0.875rem', margin: 0 }}>{error}</p>
       )}

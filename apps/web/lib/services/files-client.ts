@@ -2,11 +2,19 @@ import { createClient } from '@/lib/supabase-browser';
 import type { AnyFileCategory, FileCategory } from './files';
 import { applied, DISCARDED } from './mutation-result';
 import { SIGNED_URL_TTL_SECONDS } from './signed-url-ttl';
+import { uploadBlockedByCap, STORAGE_LIMIT_ERROR } from './storage-status-client';
 
 const BUCKET = 'project-files';
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024; // 50 MB
 
-type UploadResult = { success: boolean; id?: string; error?: string };
+type UploadResult = {
+  success: boolean;
+  id?: string;
+  error?: string;
+  /** Set when the storage cap refused the upload — UIs show the limit
+   *  notice, not an error [spec §2: "a limit with four ways out"]. */
+  storageLimited?: boolean;
+};
 type MutationResult = { success: boolean; error?: string };
 
 // Browsers leave file.type EMPTY for formats they don't recognize — notably
@@ -133,6 +141,14 @@ export async function uploadFile(
     .single();
   if (!profile) return { success: false, error: 'Profile not found' };
 
+  // THE CAP [spec §2, RULED]: block NEW user uploads at 100%. This is a
+  // capped path (a tenant user picked a file); generated artifacts and
+  // portal-client uploads never come through here and never check.
+  {
+    const { blocked } = await uploadBlockedByCap();
+    if (blocked) return { success: false, storageLimited: true, error: STORAGE_LIMIT_ERROR };
+  }
+
   // Storage path: {company_id}/{project_id}/{uuid}-{safe_filename}, or
   // {company_id}/{path_segment}/{uuid}-{safe_filename} for a company-scoped
   // file with no project [S140].
@@ -244,6 +260,12 @@ export async function uploadEstimateBidDocument(
     .eq('is_deleted', false)
     .single();
   if (!profile) return { success: false, error: 'Profile not found' };
+
+  // Capped path — same rule and same shape as uploadFile above.
+  {
+    const { blocked } = await uploadBlockedByCap();
+    if (blocked) return { success: false, storageLimited: true, error: STORAGE_LIMIT_ERROR };
+  }
 
   const uniqueId = crypto.randomUUID();
   const safeFilename = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');

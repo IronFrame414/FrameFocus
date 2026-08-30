@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase-browser';
+import { uploadBlockedByCap, STORAGE_LIMIT_ERROR } from '@/lib/services/storage-status-client';
 import type {
   CompanyData,
   EstimatingSettings,
@@ -192,6 +193,14 @@ export async function uploadCompanyLogo(
   const mime = file.type === 'image/jpeg' ? 'image/jpeg' : 'image/png';
   if (file.type !== 'image/png' && file.type !== 'image/jpeg') {
     return { success: false, error: 'A logo must be a PNG or a JPEG.' };
+  }
+
+  // Capped path [spec §S3]: a tenant user picked a file. Same check as
+  // uploadFile; the contractor SIGNATURE image (below) is system-generated
+  // and deliberately unchecked.
+  {
+    const { blocked } = await uploadBlockedByCap();
+    if (blocked) return { success: false, error: STORAGE_LIMIT_ERROR };
   }
   const ext = mime === 'image/jpeg' ? 'jpg' : 'png';
   const filePath = `${companyId}/logo.${ext}`;
