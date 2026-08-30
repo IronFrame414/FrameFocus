@@ -63,6 +63,32 @@
    ordered). The `from` is `notices@ezcontractorbinder.com` — ⚠️ **whether that mailbox/inbound
    route exists is an ops question for Josh**; the copy promises a readable reply address.
 
+## The battery — run end-of-session, counts per suite
+
+| Suite | Result | vs baseline |
+| --- | --- | --- |
+| Type-check (`--force` via db:push chain + standalone) | 🟢 exit 0 | — |
+| Lint (`next lint`) | 🟢 0 warnings/errors | — |
+| Cold build (`rm -rf .next && next build`) | 🟢 exit 0; `/resubscribe`, `/resubscribe/success`, `/api/resubscribe/checkout` in the route table | — |
+| Unit (vitest) | 🟢 **993/993, 68 files** | baseline 966 — growth is this session's guards |
+| Live RLS (vitest, rebuild-test) | 🟢 **1531/1531, 106 files, 0 `×` markers** | baseline ~1503/104 |
+| Playwright shard 1/4 | 🔴→🟢 139 passed, **1 failed, 2 flaky** — see below | |
+| Playwright shard 2/4 | 🟢 151 passed, 3 skipped | |
+| Playwright shard 3/4 | 🟢 157 passed, 4 skipped | |
+| Playwright shard 4/4 | 🟢 104 passed, 2 skipped | |
+| Playwright total | **551 passed, 9 skipped, 1 failed(→isolated green), 2 flaky(passed on retry)** | baseline ~551/547 |
+
+**The shard-1 red, classified rather than footnoted:** `desktop-payload.spec.ts:129` — "#117 ·
+a PM receives figures for their OWN change orders and no others" — failed both attempts inside
+the shard with an unexpected `net_delta` occurrence of `"0"`, then ran **8/8 green in isolation
+immediately afterwards on the same data**. Nothing in this session touches the CO read path,
+its RLS (S121 floor unchanged) or its rendering; the only CO change is a DELETE-time boundary.
+This is the known cross-suite data-contamination class (the audit's "green in isolation" reds;
+K11's parallel-load classification), surfaced here because `--shard=k/4` slices by test count
+where prior batteries chunked by directory — the shard put `desktop-payload` behind different
+neighbours. The two flaky tests (`desktop-trial-screens` acknowledgement write,
+`portal-pages` tab state) passed on retry, matching their prior-battery shapes.
+
 ## ⚠️ What is deliberately NOT done (the Q8 chain)
 
 - **The deletion cron is NOT in `vercel.json`.** `s137` test 20 still asserts its absence,
