@@ -17,7 +17,7 @@ import { brand } from '@/lib/brand';
 // as written; wording changes need a ruling, not a judgement call. These are
 // the notice standing behind the published policy's deletion promise.
 //
-// PLATFORM emails: EZ Contractor Binder writing to its customer, so the
+// PLATFORM emails: the product writing to its own customer, so the
 // platform identity and palette — never the tenant's logo or brand colour
 // (the ruled email/PDF boundary). `brand.themeColor` is deliberately the
 // product chrome colour, not a tenant brand_color.

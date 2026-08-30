@@ -13,7 +13,7 @@ import { ResubscribePlans } from './resubscribe-plans';
 // it exists. The token in the URL is the credential; lib/trial/resubscribe.ts
 // is the one validator, shared with the checkout route.
 //
-// Platform surface: EZ Contractor Binder's identity, not the tenant's — the
+// Platform surface: the product's own identity, not the tenant's — the
 // same ruled boundary as the warning emails that link here.
 
 export const dynamic = 'force-dynamic';
