@@ -314,13 +314,26 @@ describe('⚠️ the deletion job — what it must NOT touch', () => {
     }
   });
 
-  it('⚠️ signed-document tables are excluded WHOLESALE while the mechanism is unruled', async () => {
-    // Erring toward retention deliberately: keeping too much is recoverable,
-    // deleting too much is not, and TL-24 has not returned.
-    for (const t of ['client_contracts', 'change_orders', 'subcontractor_contracts']) {
-      expect(SURVIVES[t]).toBeTruthy();
-      expect(COMPANY_TABLES).not.toContain(t);
+  it('⚠️ signed-document tables are IN the walk, and the ARCHIVE survives [Q3 — INVERTED, not deleted]', async () => {
+    // The superseded assertion, quoted rather than erased: these three tables
+    // were "excluded WHOLESALE while the mechanism is unruled". Q3 ruled the
+    // mechanism (archive, not detach — deletion-sweep-analysis.md), so the
+    // originals now DELETE and the copies live in archived_documents. A test
+    // asserting the old exclusion would be a green test encoding a dead rule.
+    for (const t of [
+      'client_contracts',
+      'change_orders',
+      'subcontractor_contracts',
+      'contract_documents',
+      'lien_releases',
+    ]) {
+      expect(COMPANY_TABLES, `${t} left the walk — signed originals would survive raw`).toContain(t);
+      expect(SURVIVES[t]).toBeUndefined();
     }
+    expect(
+      SURVIVES['archived_documents'],
+      'the archive itself must survive, or the mechanism deletes its own output'
+    ).toBeTruthy();
   });
 
   it('ai_tag_logs.company_id is NULLABLE, or the ruling is unbuildable', async () => {

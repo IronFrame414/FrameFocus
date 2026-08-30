@@ -68,6 +68,45 @@ export type Database = {
           },
         ]
       }
+      archived_documents: {
+        Row: {
+          amounts: Json | null
+          archived_at: string
+          company_id: string
+          company_name: string
+          document: Json
+          id: string
+          pdf_paths: Json
+          project_name: string | null
+          source_id: string
+          source_table: string
+        }
+        Insert: {
+          amounts?: Json | null
+          archived_at?: string
+          company_id: string
+          company_name: string
+          document: Json
+          id?: string
+          pdf_paths?: Json
+          project_name?: string | null
+          source_id: string
+          source_table: string
+        }
+        Update: {
+          amounts?: Json | null
+          archived_at?: string
+          company_id?: string
+          company_name?: string
+          document?: Json
+          id?: string
+          pdf_paths?: Json
+          project_name?: string | null
+          source_id?: string
+          source_table?: string
+        }
+        Relationships: []
+      }
       change_order_line_items: {
         Row: {
           change_order_id: string

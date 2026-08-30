@@ -81,55 +81,238 @@ export const SURVIVES: Record<string, string> = {
   trial_lifecycle: 'holds deleted_at — written last',
   trial_warning_acknowledgements: 'evidence the warning was acknowledged',
   export_jobs: 'the export audit — who took what, and when',
-  // ⚠️ SIGNED DOCUMENTS — SEE THE BLOCK BELOW. Excluded WHOLESALE while the
-  // Q3 archive mechanism is BUILT (ruled: archive, not detach — Josh, Phase 3
-  // on deletion-sweep-analysis.md). Until archiveSignedDocuments() lands,
-  // keeping more than asked stays the safe direction to be wrong in.
-  client_contracts: 'Q3 ruled: archive signed copies, then delete — mechanism pending',
-  change_orders: 'Q3 ruled: archive signed copies, then delete — mechanism pending',
-  subcontractor_contracts: 'Q3 ruled: archive signed copies, then delete — mechanism pending',
-  client_contract_amounts: 'rides its client_contracts parent (1:1 CASCADE) — archives with it',
-  contract_documents: 'Q3 ruled: executed instruments archive, then delete — mechanism pending',
-  contract_templates: 'blank templates — walk with contract_documents when Q3 lands (docs FK templates)',
-  contract_template_boxes: 'cascades with contract_templates; listed so the census names it',
-  contract_signing_sessions: 'cascades with contract_documents; listed so the census names it',
-  contract_document_attachments: 'cascades with contract_documents; listed so the census names it',
-  lien_releases: 'Q3 ruled: executed instruments archive, then delete — mechanism pending',
-  lien_release_templates: 'seeded 8/company; walk with lien_releases when Q3 lands (releases FK templates)',
-  lien_release_template_boxes: 'cascades with lien_release_templates; listed so the census names it',
+  // The Q3 archive itself — the reason deleting the originals below is
+  // permitted at all. Platform table, no company FK; see 20261055.
+  archived_documents: 'the archive of executed instruments — outlives the tenant by design',
 };
 
 /**
- * ⚠️ UNRESOLVED, AND EXCLUDED WHOLESALE UNTIL IT IS — the signed-document
- * problem.
+ * THE SIGNED-DOCUMENT MECHANISM — RULED [Josh, Phase 3 on
+ * deletion-sweep-analysis.md Q3]: **archive, not detach.**
  *
- * The ruling is that **signed** client contracts, change orders and
- * subcontractor contracts survive deletion. The unsigned ones do not. That
- * cannot be expressed as a row filter alone, because every one of those tables
- * carries `project_id` REFERENCES `projects`, and the project IS deleted. A
- * surviving signed contract would hold a foreign key to a row that no longer
- * exists, so the delete of `projects` fails — or, if the FK were relaxed, the
- * surviving document would point at nothing and lose the context that makes it
- * a record of anything.
+ * Executed instruments — signed client contracts, change orders and
+ * subcontractor contracts (with `client_contract_amounts` riding its 1:1
+ * parent), executed 7I contract documents, and signed/notarized lien
+ * releases — are COPIED into `archived_documents` (20261055: platform table,
+ * no company FK, denormalized company name, PDFs re-homed into the
+ * `archives` bucket outside every company prefix) BEFORE the walk. Then the
+ * originals are deleted with everything else. Unsigned drafts and blank
+ * templates get no copy and go with everything else.
  *
- * Two reasonable answers, and nothing in the ruling picks one:
- *   (a) detach — null the project/company linkage on signed rows and keep them
- *       in place, accepting that a surviving contract is thereafter an orphan;
- *   (b) archive — copy signed documents (and enough context to identify them)
- *       into a table outside the company-scoped set before the walk, then
- *       delete the originals with everything else.
- *
- * Until that is ruled, all three tables are excluded ENTIRELY: the signed rows
- * survive as required, and the unsigned ones survive too. That keeps more than
- * asked, which is the safe direction to be wrong in while TL-24 is open.
- * Raised in TECH_DEBT as part of the S137 entry.
- *
- * `client_contract_amounts` (20261051) is excluded WITH its parent, on
- * purpose: it is 1:1 with `client_contracts` (ON DELETE CASCADE), so deleting
- * it here would strip the value off exactly the surviving signed contracts
- * TL-24 protects. Whatever TL-24 rules for the parent — detach or archive —
- * must carry the amounts row along.
+ * "Signed" per table is the status enum's executed states, OR'd with the
+ * signed-evidence column so an instrument VOIDED AFTER SIGNING still
+ * archives — a voided executed contract is a record of something that
+ * happened, which is the entire species this archive preserves.
  */
+export const ARCHIVE_SOURCES: Array<{
+  table: 'client_contracts' | 'change_orders' | 'subcontractor_contracts' | 'contract_documents' | 'lien_releases';
+  isSigned: (row: Record<string, unknown>) => boolean;
+  /** Columns holding `files.id` references whose PDFs are re-homed. */
+  fileColumns: string[];
+}> = [
+  {
+    table: 'client_contracts',
+    isSigned: (r) => r.status === 'signed' || r.signed_proposal_file_id != null,
+    fileColumns: ['signed_proposal_file_id'],
+  },
+  {
+    table: 'change_orders',
+    // COs carry no file column — the signed record is the row plus its line
+    // items, which are embedded into the archived document.
+    isSigned: (r) => r.status === 'signed' || r.signed_at != null,
+    fileColumns: [],
+  },
+  {
+    table: 'subcontractor_contracts',
+    isSigned: (r) => r.status === 'signed' || r.signed_doc_file_id != null,
+    fileColumns: ['signed_doc_file_id'],
+  },
+  {
+    table: 'contract_documents',
+    isSigned: (r) =>
+      r.status === 'signed' || r.status === 'notarized' || r.executed_pdf_file_id != null,
+    fileColumns: ['generated_pdf_file_id', 'executed_pdf_file_id'],
+  },
+  {
+    table: 'lien_releases',
+    isSigned: (r) =>
+      r.status === 'signed' || r.status === 'notarized' || r.notarized_pdf_file_id != null,
+    fileColumns: ['generated_pdf_file_id', 'notarized_pdf_file_id'],
+  },
+];
+
+/**
+ * Copy every executed instrument out of the company-scoped set. Runs BEFORE
+ * the walk; any failure holds the whole company's job open, because deleting
+ * an original whose copy did not land is the one unrecoverable ordering.
+ *
+ * Idempotent by construction: rows already in `archived_documents` are
+ * skipped (so a resume after a partial archive re-copies only the remainder),
+ * and the insert is ON CONFLICT DO NOTHING on (source_table, source_id).
+ */
+export async function archiveSignedDocuments(
+  admin: SupabaseClient<Database>,
+  companyId: string
+): Promise<{ archived: number; failures: string[] }> {
+  const failures: string[] = [];
+  let archived = 0;
+
+  // Untyped for the dynamic loop — same reasoning as deleteTableChunked.
+  const db = admin as unknown as {
+    from: (t: string) => {
+      select: (c: string) => {
+        eq: (c: string, v: string) => Promise<{
+          data: Array<Record<string, unknown>> | null;
+          error: { message: string } | null;
+        }>;
+      };
+    };
+  };
+
+  const { data: company, error: coErr } = await admin
+    .from('companies')
+    .select('name')
+    .eq('id', companyId)
+    .maybeSingle();
+  if (coErr || !company) {
+    return { archived, failures: [`company name: ${coErr?.message ?? 'row missing'}`] };
+  }
+  const companyName = (company as { name: string }).name;
+
+  const { data: already } = await admin
+    .from('archived_documents')
+    .select('source_table, source_id')
+    .eq('company_id', companyId);
+  const done = new Set(
+    ((already ?? []) as Array<{ source_table: string; source_id: string }>).map(
+      (a) => `${a.source_table}:${a.source_id}`
+    )
+  );
+
+  // Project names, resolved lazily and cached — the archive copy must stay
+  // identifiable after `projects` is deleted.
+  const projectNames = new Map<string, string | null>();
+  async function projectName(projectId: unknown): Promise<string | null> {
+    if (typeof projectId !== 'string') return null;
+    if (projectNames.has(projectId)) return projectNames.get(projectId) ?? null;
+    const { data } = await admin
+      .from('projects')
+      .select('name')
+      .eq('id', projectId)
+      .maybeSingle();
+    const name = (data as { name: string } | null)?.name ?? null;
+    projectNames.set(projectId, name);
+    return name;
+  }
+
+  for (const source of ARCHIVE_SOURCES) {
+    const { data: rows, error } = await db
+      .from(source.table)
+      .select('*')
+      .eq('company_id', companyId);
+    if (error) {
+      failures.push(`${source.table}: read failed: ${error.message}`);
+      continue;
+    }
+
+    for (const row of (rows ?? []).filter(source.isSigned)) {
+      const sourceId = row.id as string;
+      if (done.has(`${source.table}:${sourceId}`)) continue;
+
+      // Re-home the PDFs first: if a copy fails, no archive row is written,
+      // so the retry re-attempts the whole instrument.
+      const pdfPaths: Array<{ column: string; from: string; to: string }> = [];
+      let pdfFailed = false;
+      for (const col of source.fileColumns) {
+        const fileId = row[col];
+        if (typeof fileId !== 'string') continue;
+        const { data: file } = await admin
+          .from('files')
+          .select('file_path')
+          .eq('id', fileId)
+          .maybeSingle();
+        const filePath = (file as { file_path: string } | null)?.file_path;
+        if (!filePath) {
+          failures.push(`${source.table} ${sourceId}: ${col} names a missing files row`);
+          pdfFailed = true;
+          continue;
+        }
+        const { data: blob, error: dlErr } = await admin.storage
+          .from('project-files')
+          .download(filePath);
+        if (dlErr || !blob) {
+          failures.push(`${source.table} ${sourceId}: download ${filePath}: ${dlErr?.message ?? 'no body'}`);
+          pdfFailed = true;
+          continue;
+        }
+        const dest = `${companyId}/${source.table}/${sourceId}/${col}-${fileId}`;
+        const { error: upErr } = await admin.storage
+          .from('archives')
+          .upload(dest, blob, { upsert: true });
+        if (upErr) {
+          failures.push(`${source.table} ${sourceId}: upload ${dest}: ${upErr.message}`);
+          pdfFailed = true;
+          continue;
+        }
+        pdfPaths.push({ column: col, from: filePath, to: dest });
+      }
+      if (pdfFailed) continue;
+
+      // The context riders: amounts for a client contract, line items for a CO.
+      let amounts: Record<string, unknown> | null = null;
+      let document: Record<string, unknown> = row;
+      if (source.table === 'client_contracts') {
+        const { data: amt } = await admin
+          .from('client_contract_amounts')
+          .select('*')
+          .eq('client_contract_id', sourceId)
+          .maybeSingle();
+        amounts = (amt as Record<string, unknown> | null) ?? null;
+      }
+      if (source.table === 'change_orders') {
+        const [items, lineRows] = await Promise.all([
+          db.from('change_order_line_items').select('*').eq('change_order_id', sourceId),
+          db.from('change_order_line_rows').select('*').eq('change_order_id', sourceId),
+        ]);
+        document = {
+          ...row,
+          _archived_line_items: items.data ?? [],
+          _archived_line_rows: lineRows.data ?? [],
+        };
+      }
+
+      const { error: insErr } = await (admin as unknown as {
+        from: (t: string) => {
+          upsert: (
+            v: Record<string, unknown>,
+            o: { onConflict: string; ignoreDuplicates: boolean }
+          ) => Promise<{ error: { message: string } | null }>;
+        };
+      })
+        .from('archived_documents')
+        .upsert(
+          {
+            source_table: source.table,
+            source_id: sourceId,
+            company_id: companyId,
+            company_name: companyName,
+            project_name: await projectName(row.project_id),
+            document,
+            amounts,
+            pdf_paths: pdfPaths,
+          },
+          { onConflict: 'source_table,source_id', ignoreDuplicates: true }
+        );
+      if (insErr) {
+        failures.push(`${source.table} ${sourceId}: archive insert: ${insErr.message}`);
+        continue;
+      }
+      archived += 1;
+    }
+  }
+
+  return { archived, failures };
+}
 
 /**
  * Every company-scoped table the walk deletes, leaf-ish first.
@@ -141,8 +324,16 @@ export const SURVIVES: Record<string, string> = {
  */
 export const COMPANY_TABLES: string[] = [
   'chat_message_mentions', 'chat_message_photos', 'chat_reads', 'chat_messages', 'chat_threads',
+  // Lien releases FK invoices/expenses/subcontractor_contracts (NO ACTION),
+  // so they go FIRST. Executed ones were archived before this walk began
+  // [Q3]; templates carry SET NULL from releases, and every company has 8
+  // seeded ones pinning the shell.
+  'lien_releases', 'lien_release_template_boxes', 'lien_release_templates',
   'change_order_line_rows', 'change_order_line_items',
   'co_signing_sessions', 'signing_sessions',
+  // Signed change orders were archived (with their line items embedded)
+  // before the walk [Q3]; the originals now go with everything else.
+  'change_orders',
   'client_payment_applications', 'client_refunds', 'client_payments', 'retainage_releases',
   'invoice_cost_claims', 'invoice_hour_claims', 'invoice_lines', 'invoices',
   'expense_payments', 'expense_allocations', 'expenses',
@@ -170,6 +361,13 @@ export const COMPANY_TABLES: string[] = [
   'selections', 'selection_areas',
   'project_budget_amounts', 'project_budget_items', 'project_financials',
   'project_contacts', 'project_assignments',
+  // Client + sub contracts: archived first [Q3], amounts ride the client
+  // parent. contract_documents FK estimates/projects/sub_contracts, its
+  // children cascade but are listed; templates go after documents.
+  'client_contract_amounts', 'client_contracts',
+  'contract_document_attachments', 'contract_signing_sessions', 'contract_documents',
+  'contract_template_boxes', 'contract_templates',
+  'subcontractor_contracts',
   'subcontractor_financials', 'subcontractor_compliance_documents',
   // file_categories sits between files and projects: files reference it
   // (files_category_fkey) and its per-job rows reference projects (20261039).
@@ -503,6 +701,33 @@ export async function runTrialDeletion(
       .filter((v): v is string => Boolean(v));
 
     await detachSurvivors(admin, row.company_id);
+
+    // ⚠️ THE ARCHIVE GATES THE WALK [Q3]. An original whose copy did not land
+    // must not be deleted — a failure here holds the WHOLE company open for
+    // the next run (or stops with an alarm at MAX_ATTEMPTS), before a single
+    // row goes.
+    const archive = await archiveSignedDocuments(admin, row.company_id);
+    if (archive.failures.length > 0) {
+      const stop = attempts >= MAX_ATTEMPTS;
+      await admin
+        .from('deletion_jobs')
+        .update({
+          state: stop ? 'stopped' : 'pending',
+          tables_done: tablesDone,
+          last_error: JSON.stringify({ archive: archive.failures }).slice(0, 2000),
+        })
+        .eq('id', jobId);
+      if (stop) {
+        outcome.stopped += 1;
+        await alertDeletionStopped(
+          admin,
+          row.company_id,
+          `Signed-document archive failed after ${attempts} attempts: ` +
+            `${archive.failures.length} failures. Nothing was deleted for this company.`
+        );
+      }
+      continue;
+    }
 
     const { done, failed } = await deleteRows(admin, row.company_id, tablesDone);
 
