@@ -1,9 +1,20 @@
 # Storage, trash, the project archive, and the AI cap — spec
 
-> **Status: PHASE 1 COMPLETE [2026-08-30] — all eleven `§S` blocks filled from the tree; awaiting
-> Josh's Phase-2 rulings on the question batch (Q1–Q7, delivered in-session).** Then the spec is
-> finalised and built. §S3/§S4/§S6/§S10 carry the deletion-sweep session's verified findings as
-> recorded by Josh; the rest were read or measured this session.
+> **Status: FINALISED [2026-08-30] — Phase 1 filled all eleven `§S` blocks from the tree; Phase 2's
+> seven questions are RULED [Josh, in-session] and folded in below.** Build proceeds in order:
+> measurement → trash → cap and limit screen → archive → AI cap.
+>
+> The Phase-2 rulings, in one place: **Q1** both catalog rewrites in scope — storage to 50/120/500
+> with the ruled number shown ("a customer who hits it should have seen it advertised"), AI
+> estimates removed entirely. **Q2** the $20 is display-only copy; counter/cap/message ship, Stripe
+> wiring waits (no paying customers; the counter is the half that protects us) — making §S11's
+> calendar month the durable rule. **Q3** Empty Trash per-project on the trash screen AND
+> company-wide on the limit screen. **Q4** reuse `export_jobs` with a `kind` discriminator — no new
+> company-scoped table, no new registry entries. **Q5** calendar month in `companies.timezone`.
+> **Q6** 24-hour archive links, said in the UI; the hour-23 case regenerates. **Q7** service-layer
+> cap enforcement — a billing limit, not a security boundary. **Portal chat photos are UNCAPPED**
+> (§S3): a client uploading to their contractor's portal is a stranger to the cap — no visibility,
+> no ability to fix it, no billing relationship.
 >
 > Register entries: `outstanding-work-register.md` **M4 · M5 · M6 · M7 · M8**.
 
@@ -55,13 +66,13 @@ deleted.** This is the fact that makes §3 necessary.
 > anywhere"* and the add-on *"does not exist."* So there is no wrong number to correct, only an
 > absent one to build.
 >
-> ⚠️ **Found while verifying, and it needs a ruling (batch Q1): the plan catalog's feature text
+> ⚠️ **Found while verifying — RULED [Q1]: BOTH catalog rewrites are in this build. The catalogs feature text
 > disagrees with this spec's ruled caps.** `lib/billing/plan-catalog.ts` advertises **10 GB / 50 GB /
 > 200 GB** while §2 rules **50 / 120 / 500 GB**. The catalog renders on `/dashboard/billing/plans`
 > AND the locked-account `/resubscribe` page, so customers are being shown numbers this spec
 > contradicts.
 
-> ### §S2 — FILLED [Phase 1] — proposal: PER REQUEST, via one SQL function
+> ### §S2 — FILLED — RULED [Q7]: PER REQUEST, via one SQL function
 >
 > **Nothing computes it today, anywhere** (confirmed by sweep — no `storage_used` column, nothing
 > reads `SUM(file_size)`). Proposal: a `SECURITY DEFINER` SQL function
@@ -76,7 +87,7 @@ deleted.** This is the fact that makes §3 necessary.
 > Empty Trash and the 6-month purge** — the "second implementation of the same fact" shape the parity
 > ruling exists to prevent. Revisit ONLY if the aggregate ever measures slow.
 >
-> **Enforcement point, stated as an assumption (batch Q7):** the check lives in the service layer at
+> **Enforcement point — RULED [Q7]:** the check lives in the service layer at
 > the four user-upload paths (server-verified where a route exists, client-checked where the browser
 > uploads direct to storage). That is bypassable by a determined API caller — accepted, because the
 > ruling classifies storage as a **billing limit, not a security boundary**, and a DB-level gate
@@ -104,9 +115,14 @@ still invoice, schedule, run their jobs, log time and get paid. **Only uploads s
 > **18 storage writers exist. FOUR are user uploads and subject to the cap; the other FOURTEEN are
 > system artifacts and ⚠️ must never fail at the cap.**
 >
-> **Capped (user picks a file):** the project file picker (`files-client.ts:156`), estimate bid
-> documents (`files-client.ts:252`), company logos (`company-client.ts:199`), portal chat photos
-> (`app/api/portal/messages/route.ts:82`).
+> **Capped (a TENANT user picks a file):** the project file picker (`files-client.ts:156`),
+> estimate bid documents (`files-client.ts:252`), company logos (`company-client.ts:199`).
+>
+> **⚠️ Portal chat photos are UNCAPPED — RULED [Josh, Phase 2]** despite being a human picking a
+> file (`app/api/portal/messages/route.ts:82`): the uploader is the contractor's CLIENT, who has
+> no visibility into the cap, no ability to fix it, and no billing relationship — a stranger
+> hitting a wall they cannot see. Client uploads land regardless; they count toward the sum like
+> everything else.
 >
 > **Never capped (system-generated):** markup rasterisation (`photos-client.ts:131`), contractor
 > signature images (`company-client.ts:250`), the seven PDF services (incident, daily log, delivery,
@@ -164,7 +180,7 @@ A bulk action on the trash screen, **Owner/Admin**, purging every trashed file i
 > deleted one at a time (`trash-row.tsx:41`). §3's Empty Trash is new code that must loop the same
 > verified object-first deletion.
 
-> ### §S5 — FILLED [Phase 1] — facts, plus a proposal for each half (batch Q3)
+> ### §S5 — FILLED — RULED [Q3]: per-project on the trash screen, company-wide on the limit screen; own daily purge cron
 >
 > **The existing trash surface is PER-PROJECT**: `/dashboard/projects/[id]/files/trash`, reading
 > `getFiles({ only_deleted: true, project_id })`. No company-wide trash view exists. **Proposal:**
@@ -221,7 +237,7 @@ to avoid it; a reason not to make it one click from everywhere.
 > we'll show the link here"* — **never a spinner** implying request-scale progress. The archive
 > adopts the export-worker pattern (job row + the same or a sibling cron; §S7).
 
-> ### §S7 — FILLED [Phase 1] — proposal: REUSE `export_jobs`, with a discriminator (batch Q4)
+> ### §S7 — FILLED — RULED [Q4]: REUSE `export_jobs`, with a `kind` discriminator
 >
 > **The table already has the archive's exact shape** (`20260918000000`): `state`
 > pending/running/complete/failed/expired, `cursor jsonb` for 300s-window resumption,
@@ -238,7 +254,7 @@ to avoid it; a reason not to make it one click from everywhere.
 > branch in the worker. A separate table buys cleaner naming and pays for it with a third job
 > table, a second worker, and three registry entries.
 
-> ### §S8 — FILLED [Phase 1] — the at-cap problem dissolves under the §1 ruling
+> ### §S8 — FILLED — RULED [Q6]: exports bucket, 24 hours (the UI says so; hour-23 regenerates), does not count
 >
 > **Where:** the `exports` bucket, under `{company_id}/{job_id}…` — exactly where trial-export zips
 > live. **How long: 24 hours.** The export worker's sweep already expires completed exports past 24h
@@ -322,13 +338,13 @@ read like one.
 > `WHERE company_id = ? AND success AND created_at >= <period start>` (period per §S11).
 > `company_id` is nullable only because tenant deletion nulls it — live rows always carry it.
 >
-> ⚠️ **Found while verifying (batch Q2, and Josh has pre-ruled the direction):** the plan catalog
+> ⚠️ **Found while verifying — RULED [Q1/Q2]:** the plan catalog
 > advertises *"5 / 25 / Unlimited AI ESTIMATES per month"* — **display text with zero enforcement
 > anywhere, describing a feature that is not built at all** (AI estimates ≠ photo tagging). The new
 > pricing removes AI estimates entirely and prices photo tagging as the $20 add-on; that catalog
 > text is part of what changes in this build.
 
-> ### §S11 — FILLED [Phase 1] — proposal: CALENDAR MONTH in the company's timezone (batch Q5)
+> ### §S11 — FILLED — RULED [Q5]: CALENDAR MONTH in the company timezone, the durable rule
 >
 > **The billing period the add-on would anchor to does not exist.** `ai_tagging_enabled` is a bare
 > boolean — there is no Stripe object for the $20 add-on, so it has no period of its own; and
