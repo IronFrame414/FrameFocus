@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
 import { runExportChunk, initialCursor, EXPORT_TTL_HOURS, type ExportJobRow } from './export';
+import { runArchiveChunk } from '@/lib/files/archive';
 
 /**
  * S138 — the export worker (spec §4c).
@@ -68,35 +69,48 @@ export async function runExportSweep(
   // ---- 2. advance the oldest unfinished job ---------------------------------
   const { data: queued } = await admin
     .from('export_jobs')
-    .select('id, company_id, categories, format, state, cursor, bytes_written')
+    .select('id, company_id, categories, format, state, cursor, bytes_written, kind, project_id')
     .in('state', ['pending', 'running'])
     .order('created_at', { ascending: true })
     .limit(1);
 
-  const job = ((queued ?? [])[0] ?? null) as ExportJobRow | null;
+  const job = ((queued ?? [])[0] ?? null) as
+    | (ExportJobRow & { kind: string; project_id: string | null })
+    | null;
   if (!job) return outcome;
 
   // ⚠️ A LOCKED COMPANY GETS NO EXPORT, even one queued before the lock. The
   // ruling is that the export window is the PRE-EXPIRY period; finishing a job
-  // after expiry would hand over data the lock exists to withhold.
-  const { data: lifecycle } = await admin
-    .from('trial_lifecycle')
-    .select('locked_at')
-    .eq('company_id', job.company_id)
-    .maybeSingle();
-  if (lifecycle && (lifecycle as { locked_at: string | null }).locked_at !== null) {
-    await admin
-      .from('export_jobs')
-      .update({ state: 'failed', last_error: 'Trial expired before the export finished' })
-      .eq('id', job.id);
-    outcome.failed += 1;
-    return outcome;
+  // after expiry would hand over data the lock exists to withhold. Applies to
+  // trial exports only: a project_archive can only be REQUESTED by an active
+  // tenant (its route needs a session, and a locked one has none), and the
+  // archive of an active tenant is theirs regardless.
+  if (job.kind !== 'project_archive') {
+    const { data: lifecycle } = await admin
+      .from('trial_lifecycle')
+      .select('locked_at')
+      .eq('company_id', job.company_id)
+      .maybeSingle();
+    if (lifecycle && (lifecycle as { locked_at: string | null }).locked_at !== null) {
+      await admin
+        .from('export_jobs')
+        .update({ state: 'failed', last_error: 'Trial expired before the export finished' })
+        .eq('id', job.id);
+      outcome.failed += 1;
+      return outcome;
+    }
   }
 
   await admin.from('export_jobs').update({ state: 'running' }).eq('id', job.id);
 
   try {
-    const result = await runExportChunk(admin, job, now);
+    // Q4: one worker, two kinds — the archive builder mirrors the export's
+    // cursor/part discipline, so everything downstream (completion, expiry,
+    // retries) is shared.
+    const result =
+      job.kind === 'project_archive'
+        ? await runArchiveChunk(admin, job, now)
+        : await runExportChunk(admin, job, now);
     const total = (job.bytes_written ?? 0) + result.bytes;
 
     if (result.done) {

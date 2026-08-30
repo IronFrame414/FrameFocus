@@ -1,10 +1,29 @@
 import Link from 'next/link';
+import { createClient } from '@/lib/supabase-server';
 import { getFileCategories, getFiles } from '@/lib/services/files';
 import { getActiveTags } from '@/lib/services/tag-options';
 import FileRow from './file-row';
+import { ArchivePanel } from './archive-panel';
 
 export default async function ProjectFilesPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: projectId } = await params;
+
+  // The archive panel is Owner/Admin (spec §4 flow step 1); the role decides
+  // whether it renders, the API route enforces the same rule underneath.
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  let role: string | null = null;
+  if (user) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('user_id', user.id)
+      .single();
+    role = profile?.role ?? null;
+  }
+  const canArchive = role === 'owner' || role === 'admin';
   // M3-05 [S157] — these two reads are INDEPENDENT and were awaited in series,
   // so the page paid two round trips end to end for work that takes one. Same
   // shape as M1-03 (five sequential reads for one row), smaller.
@@ -89,6 +108,8 @@ export default async function ProjectFilesPage({ params }: { params: Promise<{ i
           </tbody>
         </table>
       )}
+
+      <ArchivePanel projectId={projectId} canArchive={canArchive} role={role ?? ''} />
     </div>
   );
 }

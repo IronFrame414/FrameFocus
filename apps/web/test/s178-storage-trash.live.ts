@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { unzipSync, strFromU8 } from 'fflate';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { admin, assertRebuildTest, purgeCompaniesNamed, sessionFor } from './live-session';
 import { runTrashPurge, TRASH_RETENTION_MONTHS } from '@/lib/files/trash-purge';
+import { runArchiveChunk } from '@/lib/files/archive';
 
 // ============================================================================
 // S178 — storage measurement + the 6-month trash purge, driven live.
@@ -207,4 +209,120 @@ describe(`the ${TRASH_RETENTION_MONTHS}-month purge`, () => {
     const again = await runTrashPurge(admin as never, new Date());
     expect(again.due, 'rows reappeared for a second purge').toBe(0);
   });
+});
+
+// ============================================================================
+describe('the project archive — built for real, downloaded, OPENED', () => {
+  let projectId = '';
+  let jobId = '';
+
+  afterAll(async () => {
+    if (jobId) {
+      const { data: objs } = await admin.storage
+        .from('exports')
+        .list(`${probeCompanyId}/${jobId}`);
+      const paths = (objs ?? []).map((o) => `${probeCompanyId}/${jobId}/${o.name}`);
+      if (paths.length) await admin.storage.from('exports').remove(paths);
+      await admin.from('export_jobs').delete().eq('id', jobId);
+    }
+    if (projectId) {
+      await admin.from('files').delete().eq('project_id', projectId);
+      await admin.from('projects').delete().eq('id', projectId);
+      await admin.from('contacts').delete().eq('company_id', probeCompanyId);
+    }
+  });
+
+  it('⚠️ every file including TRASH, in category folders, with an honest manifest — and it opens', async () => {
+    // A project with one live photo and one trashed document.
+    const { data: contact } = await admin
+      .from('contacts')
+      .insert({
+        company_id: probeCompanyId,
+        first_name: 'Archive',
+        last_name: 'Client',
+        contact_type: 'lead',
+      })
+      .select('id')
+      .single();
+    const { data: project, error: projErr } = await admin
+      .from('projects')
+      .insert({
+        company_id: probeCompanyId,
+        name: 'S178 Archive Project',
+        project_number: 'PRJ-S178-1',
+        project_internal_seq: 1,
+        contact_id: (contact as { id: string }).id,
+      })
+      .select('id')
+      .single();
+    if (projErr) throw new Error(`seed project: ${projErr.message}`);
+    projectId = (project as { id: string }).id;
+
+    const seedInProject = async (name: string, category: string, trashed: boolean) => {
+      const path = `${probeCompanyId}/${projectId}/${name}`;
+      await admin.storage
+        .from('project-files')
+        .upload(path, new Blob([`content of ${name}`]), { upsert: true });
+      seededPaths.push(path);
+      const { data, error } = await admin
+        .from('files')
+        .insert({
+          company_id: probeCompanyId,
+          project_id: projectId,
+          category,
+          file_name: name,
+          file_path: path,
+          file_size: 100,
+          mime_type: 'text/plain',
+          is_deleted: trashed,
+          deleted_at: trashed ? new Date().toISOString() : null,
+        })
+        .select('id')
+        .single();
+      if (error) throw new Error(`seed ${name}: ${error.message}`);
+      seededFileIds.push((data as { id: string }).id);
+    };
+    await seedInProject('site-photo.jpg', 'photos', false);
+    await seedInProject('old-contract.txt', 'contracts', true);
+
+    const { data: job, error: jobErr } = await admin
+      .from('export_jobs')
+      .insert({
+        company_id: probeCompanyId,
+        requested_by: null,
+        categories: [],
+        kind: 'project_archive',
+        project_id: projectId,
+        state: 'pending',
+      })
+      .select('id, company_id, project_id, cursor, bytes_written')
+      .single();
+    if (jobErr) throw new Error(`seed job: ${jobErr.message}`);
+    jobId = (job as { id: string }).id;
+
+    const result = await runArchiveChunk(admin as never, job as never, new Date());
+    expect(result.done, 'the archive did not finish in one chunk on a 2-file project').toBe(true);
+    expect(result.notes, `unreadable files: ${result.notes.join('; ')}`).toEqual([]);
+
+    // Download the part and OPEN it — the acceptance is "and opens".
+    const { data: blob, error: dlErr } = await admin.storage
+      .from('exports')
+      .download(`${probeCompanyId}/${jobId}/part-001.zip`);
+    expect(dlErr?.message ?? null).toBeNull();
+    const entries = unzipSync(new Uint8Array(await blob!.arrayBuffer()));
+    const names = Object.keys(entries).sort();
+
+    expect(names).toContain('photos/site-photo.jpg');
+    // ⚠️ The trashed file is IN, in its own folder — ruled.
+    expect(names).toContain('trash/old-contract.txt');
+    expect(names).toContain('MANIFEST.txt');
+
+    const manifest = strFromU8(entries['MANIFEST.txt']);
+    expect(manifest).toContain('S178 Archive Project');
+    expect(manifest).toContain('photos/: 1');
+    expect(manifest).toContain('trash/: 1');
+    expect(manifest).toContain('Files unreadable and NOT included: 0');
+    // The bytes round-tripped, not just the names.
+    expect(strFromU8(entries['photos/site-photo.jpg'])).toBe('content of site-photo.jpg');
+  }, 120_000);
 });
