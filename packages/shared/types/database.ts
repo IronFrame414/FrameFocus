@@ -3865,8 +3865,10 @@ export type Database = {
           expires_at: string | null
           format: string
           id: string
+          kind: string
           last_error: string | null
           object_path: string | null
+          project_id: string | null
           requested_by: string | null
           state: string
           updated_at: string
@@ -3880,8 +3882,10 @@ export type Database = {
           expires_at?: string | null
           format?: string
           id?: string
+          kind?: string
           last_error?: string | null
           object_path?: string | null
+          project_id?: string | null
           requested_by?: string | null
           state?: string
           updated_at?: string
@@ -3895,8 +3899,10 @@ export type Database = {
           expires_at?: string | null
           format?: string
           id?: string
+          kind?: string
           last_error?: string | null
           object_path?: string | null
+          project_id?: string | null
           requested_by?: string | null
           state?: string
           updated_at?: string
@@ -3907,6 +3913,13 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "export_jobs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
           {
