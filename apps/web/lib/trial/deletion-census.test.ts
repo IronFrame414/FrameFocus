@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { COMPANY_TABLES, SURVIVES } from './deletion';
+import { EXPORT_CATEGORIES } from './export-categories';
 
 /**
  * ⚠️ THE CENSUS-DIFF GUARD [Q4 ruling — "not optional"]. Every table carrying
@@ -83,5 +84,19 @@ describe('the deletion walk covers the schema — every company_id table, exactl
   it('no duplicates inside the walk', () => {
     const dupes = COMPANY_TABLES.filter((t, i) => COMPANY_TABLES.indexOf(t) !== i);
     expect(dupes).toEqual([]);
+  });
+
+  it('⚠️ the EXPORT registry names no phantoms either [Q7]', () => {
+    // The detonation this locks down: `estimate_items`, `time_entries` and
+    // `timesheets` shipped in EXPORT_CATEGORIES without existing — selecting
+    // those categories failed the export at runtime, and only `contacts` was
+    // ever live-tested. The export map stays curated by DESIGN (it need not
+    // cover the schema) — but a name it does carry must be real.
+    const known = new Set(allTables);
+    const phantoms = EXPORT_CATEGORIES.flatMap((c) => c.tables).filter((t) => !known.has(t));
+    expect(
+      phantoms,
+      `Export categories name tables that do not exist: ${phantoms.join(', ')}`
+    ).toEqual([]);
   });
 });

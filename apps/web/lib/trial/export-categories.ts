@@ -39,7 +39,19 @@ export const EXPORT_CATEGORIES: ExportCategory[] = [
   {
     key: 'estimates',
     label: 'Estimates & proposals',
-    tables: ['estimates', 'estimate_items'],
+    // ⚠️ [Q7] This category shipped naming `estimate_items`, WHICH DOES NOT
+    // EXIST — readTable() throws, so selecting it failed the whole export at
+    // runtime. Only the `contacts` category was ever live-tested. The census
+    // guard in deletion-census.test.ts now checks every name here.
+    tables: [
+      'estimates',
+      'estimate_categories',
+      'estimate_subcategories',
+      'estimate_line_items',
+      'estimate_line_rows',
+      'estimate_sub_bids',
+      'estimate_files',
+    ],
   },
   {
     key: 'projects',
@@ -70,14 +82,86 @@ export const EXPORT_CATEGORIES: ExportCategory[] = [
   },
   {
     key: 'field',
-    label: 'Daily logs, punch lists & deliveries',
-    tables: ['daily_logs', 'punch_lists', 'punch_list_items', 'deliveries', 'delivery_items'],
+    label: 'Daily logs, punch lists, deliveries & safety',
+    tables: [
+      'daily_logs',
+      'daily_log_crew',
+      'daily_log_sub_entries',
+      'punch_lists',
+      'punch_list_items',
+      'deliveries',
+      'delivery_items',
+      'safety_incidents',
+      'safety_incident_injuries',
+      'safety_incident_witnesses',
+    ],
     referencesFiles: true,
   },
   {
     key: 'time',
     label: 'Time & timesheets',
-    tables: ['time_entries', 'timesheets'],
+    // ⚠️ [Q7] Shipped as `time_entries` + `timesheets` — neither exists.
+    tables: [
+      'time_clock_sessions',
+      'time_segments',
+      'time_edit_logs',
+      'time_session_rate_snapshots',
+    ],
+  },
+  {
+    key: 'invoicing',
+    label: 'Invoices & payments',
+    // [Q7] The financial record was absent from the export entirely — "the
+    // emails say you cannot export while locked, which only holds if the
+    // export was real beforehand."
+    tables: [
+      'invoices',
+      'invoice_lines',
+      'invoice_cost_claims',
+      'invoice_hour_claims',
+      'client_payments',
+      'client_payment_applications',
+      'client_refunds',
+      'retainage_releases',
+    ],
+    referencesFiles: true,
+  },
+  {
+    key: 'expenses_pos',
+    label: 'Expenses & purchase orders',
+    tables: [
+      'expenses',
+      'expense_allocations',
+      'expense_payments',
+      'purchase_orders',
+      'purchase_order_items',
+      'purchase_order_item_assignments',
+    ],
+    referencesFiles: true,
+  },
+  {
+    key: 'contracts',
+    label: 'Contracts & lien releases',
+    tables: [
+      'client_contracts',
+      'client_contract_amounts',
+      'subcontractor_contracts',
+      'contract_documents',
+      'lien_releases',
+    ],
+    referencesFiles: true,
+  },
+  {
+    key: 'selections',
+    label: 'Selections & allowances',
+    tables: [
+      'selections',
+      'selection_areas',
+      'selection_options',
+      'selection_option_amounts',
+      'selection_amounts',
+    ],
+    referencesFiles: true,
   },
   {
     key: 'chat',
