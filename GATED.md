@@ -89,6 +89,17 @@ exceptions to be argued around each time.
 
 ### TRIAL LIFECYCLE — **RULED [Josh, S135]. Not built. Needs its own spec and interview.**
 
+> **⚠️ UPDATE [deletion-sweep session, 2026-08-30]: the header above is historical — the four
+> systems ARE built, and TL-24's hold is RELEASED.** The scheduler (warnings cron live; deletion
+> cron code-complete and proven 13/13 on rebuild-test), the notification path (the three ruled
+> retention warnings + the Q1a tokenized `/resubscribe` door), the retention/erasure policy
+> (Q2: the companies row deletes, name included; Q3: executed instruments archive first) and the
+> export pipeline (Q7 made its registry real) all shipped — see
+> `docs/specs/deletion-sweep-analysis.md`, `deletion-sweep-build-log.md`, and Josh's Q1–Q9
+> rulings. **What still gates the deletion cron's `vercel.json` entry is the Q8 chain:** #126
+> deliverability verified → warning coverage elapses → hand-reviewed dry run → Josh adds the
+> line. The section below is kept as the record of the original ruling.
+
 Raised by D3.2 of the invitation-flow work: `trial_emails` is append-only, so an address that
 has ever started a trial gets `subscriptions.status = 'incomplete'` on any later signup, and
 `middleware.ts:168` treats `incomplete` as `needsPayment` and redirects **every dashboard route**
