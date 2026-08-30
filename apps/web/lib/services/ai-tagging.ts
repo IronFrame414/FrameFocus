@@ -4,6 +4,7 @@ import { getOpenAI } from '@/lib/openai';
 import { getActiveTags } from '@/lib/services/tag-options';
 import { getSignedUrl } from '@/lib/services/files';
 import { brand } from '@/lib/brand';
+import { AI_MONTHLY_PHOTO_CAP } from '@/lib/billing/ai-cap';
 
 // ----------------------------------------------------------------------------
 // Constants
@@ -34,6 +35,8 @@ export type AutoTagResult = { success: true; tags: string[] } | { success: false
 //   2. File fetch (RLS scopes to user's company)
 //   3. MIME check (images only)
 //   4. Add-on flag check (companies.ai_tagging_enabled)
+//   4.5 Monthly cap check (1,500/calendar month — spec §5; the RPC is
+//       SECURITY DEFINER because ai_tag_logs SELECT is Owner/Admin-only)
 //   5. Active tags check (at least one tag in the company's allowed list)
 //
 // After a successful GPT-4o call, the response is parsed, validated against
@@ -80,6 +83,19 @@ export async function autoTagFile(fileId: string): Promise<AutoTagResult> {
 
   if (!company?.ai_tagging_enabled) {
     return { success: false, reason: 'add_on_disabled' };
+  }
+
+  // 4.5 The monthly cap [spec §5, RULED: 1,500 / calendar month in the
+  // company's timezone, HARD]. Before every remaining pre-flight cost and
+  // before OpenAI above all. A quota-CHECK failure fails open (a hiccup must
+  // not silently disable a paid add-on); the cap itself fails closed with
+  // its own reason — and ⚠️ the UPLOAD is untouched either way: the photo
+  // lands untagged, which is the entire ruled behaviour.
+  const { data: taggedThisMonth, error: quotaError } = await supabase.rpc(
+    'company_ai_tags_this_month'
+  );
+  if (!quotaError && Number(taggedThisMonth ?? 0) >= AI_MONTHLY_PHOTO_CAP) {
+    return { success: false, reason: 'monthly_cap' };
   }
 
   // 5. Active tags check

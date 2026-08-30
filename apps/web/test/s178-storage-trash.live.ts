@@ -212,6 +212,47 @@ describe(`the ${TRASH_RETENTION_MONTHS}-month purge`, () => {
 });
 
 // ============================================================================
+describe('company_ai_tags_this_month() — the §5 counter', () => {
+  const logIds: string[] = [];
+
+  afterAll(async () => {
+    if (logIds.length) await admin.from('ai_tag_logs').delete().in('id', logIds);
+  });
+
+  it('⚠️ counts SUCCESS-this-month only: failures and last month are excluded, and the caller need not be an admin', async () => {
+    const { data: before } = await ownerC.rpc('company_ai_tags_this_month');
+
+    const seed = async (success: boolean, daysAgo: number) => {
+      const { data, error } = await admin
+        .from('ai_tag_logs')
+        .insert({
+          company_id: fixtureCompanyId,
+          model: 'gpt-4o-2024-08-06',
+          success,
+          created_at: new Date(Date.now() - daysAgo * DAY).toISOString(),
+        })
+        .select('id')
+        .single();
+      if (error) throw new Error(`seed ai_tag_log: ${error.message}`);
+      logIds.push((data as { id: string }).id);
+    };
+    // Two successes now, one failure now, one success ~7 weeks back (always a
+    // previous month regardless of today's date).
+    await seed(true, 0);
+    await seed(true, 0);
+    await seed(false, 0);
+    await seed(true, 49);
+
+    const { data: after, error } = await ownerC.rpc('company_ai_tags_this_month');
+    expect(error?.message ?? null).toBeNull();
+    expect(
+      Number(after) - Number(before),
+      'the counter must rise by exactly the two in-month successes'
+    ).toBe(2);
+  });
+});
+
+// ============================================================================
 describe('the project archive — built for real, downloaded, OPENED', () => {
   let projectId = '';
   let jobId = '';

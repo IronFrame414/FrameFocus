@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { setAiTaggingEnabled } from '@/lib/services/add-ons-client';
+import { AI_MONTHLY_PHOTO_CAP, AI_ADDON_PRICE_USD } from '@/lib/billing/ai-cap';
 
 interface AddOnsSectionProps {
   initialEnabled: boolean;
@@ -28,8 +29,14 @@ export function AddOnsSection({ initialEnabled }: AddOnsSectionProps) {
       <div className="flex items-center justify-between">
         <div className="pr-4">
           <p className="text-sm font-medium text-gray-900">AI Photo Auto-Tagging</p>
+          {/* Spec §5 [RULED]: $20/mo, 1,500 photos, hard cap, calendar-month
+              reset. Price is display copy (Q2 — Stripe wiring waits); the cap
+              and counter are enforced in autoTagFile. At the cap, uploads
+              still work and photos arrive untagged. */}
           <p className="text-sm text-gray-500">
-            Automatically tag uploaded photos using AI. Billed as an add-on.
+            Automatically tag uploaded photos using AI — ${AI_ADDON_PRICE_USD}/month, up to{' '}
+            {AI_MONTHLY_PHOTO_CAP.toLocaleString('en-US')} photos a month. At the limit, uploads
+            keep working and photos simply arrive untagged until the month resets.
           </p>
         </div>
 

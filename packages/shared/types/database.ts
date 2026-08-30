@@ -9097,6 +9097,7 @@ export type Database = {
         }
         Returns: string
       }
+      company_ai_tags_this_month: { Args: never; Returns: number }
       company_storage_used_bytes: { Args: never; Returns: number }
       convert_estimate_to_project: {
         Args: { p_estimate_id: string }
