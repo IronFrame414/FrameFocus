@@ -2382,7 +2382,7 @@ export type Database = {
         Row: {
           attempts: number
           auth_done: boolean
-          company_id: string
+          company_id: string | null
           created_at: string
           finished_at: string | null
           id: string
@@ -2396,7 +2396,7 @@ export type Database = {
         Insert: {
           attempts?: number
           auth_done?: boolean
-          company_id: string
+          company_id?: string | null
           created_at?: string
           finished_at?: string | null
           id?: string
@@ -2410,7 +2410,7 @@ export type Database = {
         Update: {
           attempts?: number
           auth_done?: boolean
-          company_id?: string
+          company_id?: string | null
           created_at?: string
           finished_at?: string | null
           id?: string
@@ -2615,7 +2615,7 @@ export type Database = {
           bounced_at: string | null
           change_order_id: string | null
           co_signing_session_id: string | null
-          company_id: string
+          company_id: string | null
           created_at: string
           delivered_at: string | null
           email_type: string
@@ -2637,7 +2637,7 @@ export type Database = {
           bounced_at?: string | null
           change_order_id?: string | null
           co_signing_session_id?: string | null
-          company_id: string
+          company_id?: string | null
           created_at?: string
           delivered_at?: string | null
           email_type: string
@@ -2659,7 +2659,7 @@ export type Database = {
           bounced_at?: string | null
           change_order_id?: string | null
           co_signing_session_id?: string | null
-          company_id?: string
+          company_id?: string | null
           created_at?: string
           delivered_at?: string | null
           email_type?: string
@@ -3820,7 +3820,7 @@ export type Database = {
         Row: {
           bytes_written: number
           categories: string[]
-          company_id: string
+          company_id: string | null
           created_at: string
           cursor: Json
           expires_at: string | null
@@ -3828,14 +3828,14 @@ export type Database = {
           id: string
           last_error: string | null
           object_path: string | null
-          requested_by: string
+          requested_by: string | null
           state: string
           updated_at: string
         }
         Insert: {
           bytes_written?: number
           categories?: string[]
-          company_id: string
+          company_id?: string | null
           created_at?: string
           cursor?: Json
           expires_at?: string | null
@@ -3843,14 +3843,14 @@ export type Database = {
           id?: string
           last_error?: string | null
           object_path?: string | null
-          requested_by: string
+          requested_by?: string | null
           state?: string
           updated_at?: string
         }
         Update: {
           bytes_written?: number
           categories?: string[]
-          company_id?: string
+          company_id?: string | null
           created_at?: string
           cursor?: Json
           expires_at?: string | null
@@ -3858,7 +3858,7 @@ export type Database = {
           id?: string
           last_error?: string | null
           object_path?: string | null
-          requested_by?: string
+          requested_by?: string | null
           state?: string
           updated_at?: string
         }
@@ -8868,36 +8868,28 @@ export type Database = {
           warned_3_at?: string | null
           warned_7_at?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "trial_lifecycle_company_id_fkey"
-            columns: ["company_id"]
-            isOneToOne: true
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       trial_warning_acknowledgements: {
         Row: {
-          company_id: string
+          company_id: string | null
           created_at: string
           id: string
-          profile_id: string
+          profile_id: string | null
           warning_kind: string
         }
         Insert: {
-          company_id: string
+          company_id?: string | null
           created_at?: string
           id?: string
-          profile_id: string
+          profile_id?: string | null
           warning_kind: string
         }
         Update: {
-          company_id?: string
+          company_id?: string | null
           created_at?: string
           id?: string
-          profile_id?: string
+          profile_id?: string | null
           warning_kind?: string
         }
         Relationships: [
