@@ -35,6 +35,10 @@
     {
       "path": "/api/cron/export-worker",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/retention-warnings",
+      "schedule": "30 14 * * *"
     }
   ]
 }

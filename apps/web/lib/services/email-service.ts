@@ -180,7 +180,13 @@ export type EmailType =
   // regeneration (Q4.1), so `email_logs` is the only record of which version
   // went out when — and one type covering both messages would make that
   // question unanswerable.
-  | 'selection_specifications';
+  | 'selection_specifications'
+  // Deletion sweep §3 — the three retention warnings preceding permanent
+  // deletion (copy: docs/specs/retention-warning-emails.md). The
+  // `email_types.retention_warning` row lands in 20261053000000, same rule as
+  // every member above: both halves or neither. One type for all three
+  // emails; email_logs.metadata.kind tells them apart.
+  | 'retention_warning';
 
 export interface LogEmailInput {
   company_id: string;
