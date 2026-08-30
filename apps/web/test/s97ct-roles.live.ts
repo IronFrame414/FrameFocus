@@ -97,15 +97,8 @@ beforeAll(async () => {
     .eq('company_id', companyId).eq('is_deleted', false).limit(1).single();
   subContractId = sub!.id;
 
-  const { data: invoice } = await admin
-    .from('invoices').select('id').eq('project_id', richProjectId).limit(1).single();
-  invoiceId = invoice!.id;
-
-  // [Fix 4] A PM-AUTHORED invoice on the writable QA project (the PM is assigned
-  // to it, so can_view_project passes). This is the positive half of the
-  // authorship read floor: a PM reads invoices where
-  // author_member_id = get_my_member_id(), and NOT `invoiceId` above, which is
-  // authored by someone else and must now be invisible to the PM.
+  // [Fix 4] The PM's member id, looked up BEFORE the invoice pick below,
+  // because that pick must be scoped against it.
   const { data: pmProfile } = await admin
     .from('profiles').select('id').eq('email', EMAILS.project_manager).eq('is_deleted', false).single();
   const { data: pmMember } = await admin
@@ -113,6 +106,28 @@ beforeAll(async () => {
     .eq('profile_id', (pmProfile as { id: string }).id)
     .eq('company_id', companyId).eq('is_deleted', false).single();
   pmMemberId = (pmMember as { id: string }).id;
+
+  // SCOPED, not just ordered — the S165 `.limit(1)` rule, category 2. Test 6b
+  // depends on this invoice being authored by someone OTHER than the PM (its
+  // negative half asserts the PM cannot read it), and the previous
+  // `.eq('project_id', …).limit(1)` never filtered for that: a heap-order
+  // shift handed back the PM's own 'test invoice time' row and the
+  // authorship-floor negative went red while the floor itself stood
+  // [2026-08-30 battery]. The `.order` makes the pick stable; the `.neq`
+  // makes it CORRECT.
+  const { data: invoice } = await admin
+    .from('invoices').select('id')
+    .eq('project_id', richProjectId)
+    .neq('author_member_id', pmMemberId)
+    .order('created_at', { ascending: true })
+    .limit(1).single();
+  invoiceId = invoice!.id;
+
+  // [Fix 4] A PM-AUTHORED invoice on the writable QA project (the PM is assigned
+  // to it, so can_view_project passes). This is the positive half of the
+  // authorship read floor: a PM reads invoices where
+  // author_member_id = get_my_member_id(), and NOT `invoiceId` above, which is
+  // authored by someone else and must now be invisible to the PM.
   const { data: pmInv } = await admin
     .from('invoices')
     .insert({
