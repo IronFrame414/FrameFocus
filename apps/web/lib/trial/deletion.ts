@@ -625,24 +625,45 @@ export async function alertDeletionStopped(
  * separate query would be a second copy of "who is due", divergent exactly
  * when it matters.
  */
+export interface DueForDeletion {
+  companyId: string;
+  companyName: string | null;
+  reason: string;
+  lockedAt: string | null;
+  deleteAfter: string;
+  /** Whole days PAST delete_after — how long this has been due. */
+  daysPastDue: number;
+  /** The retention-warning stamps [Q8 review]: a due company with BOTH null
+   *  lapsed before the warnings existed and would be deleted having received
+   *  no notice — the exact outcome the chain exists to prevent. */
+  warned1At: string | null;
+  warned2At: string | null;
+  postponed: boolean;
+}
+
 export async function listDueForDeletion(
   admin: SupabaseClient<Database>,
   now: Date
-): Promise<Array<{ companyId: string; companyName: string | null; reason: string; deleteAfter: string; postponed: boolean }>> {
+): Promise<DueForDeletion[]> {
   const { data, error } = await admin
     .from('trial_lifecycle')
-    .select('company_id, delete_after, postponed_until, reason')
+    .select(
+      'company_id, locked_at, delete_after, postponed_until, reason, retention_warned_1_at, retention_warned_2_at'
+    )
     .is('deleted_at', null)
     .not('delete_after', 'is', null)
     .lte('delete_after', now.toISOString());
   if (error) throw new Error(`dry run read: ${error.message}`);
 
-  const out: Array<{ companyId: string; companyName: string | null; reason: string; deleteAfter: string; postponed: boolean }> = [];
+  const out: DueForDeletion[] = [];
   for (const row of (data ?? []) as Array<{
     company_id: string;
+    locked_at: string | null;
     delete_after: string;
     postponed_until: string | null;
     reason: string;
+    retention_warned_1_at: string | null;
+    retention_warned_2_at: string | null;
   }>) {
     const { data: co } = await admin
       .from('companies')
@@ -653,7 +674,13 @@ export async function listDueForDeletion(
       companyId: row.company_id,
       companyName: (co as { name: string } | null)?.name ?? null,
       reason: row.reason,
+      lockedAt: row.locked_at,
       deleteAfter: row.delete_after,
+      daysPastDue: Math.floor(
+        (now.getTime() - new Date(row.delete_after).getTime()) / 86_400_000
+      ),
+      warned1At: row.retention_warned_1_at,
+      warned2At: row.retention_warned_2_at,
       postponed: isPostponed(row, now),
     });
   }
