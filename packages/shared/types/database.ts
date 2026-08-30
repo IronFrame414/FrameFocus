@@ -9084,6 +9084,7 @@ export type Database = {
         }
         Returns: string
       }
+      company_storage_used_bytes: { Args: never; Returns: number }
       convert_estimate_to_project: {
         Args: { p_estimate_id: string }
         Returns: string
