@@ -95,11 +95,17 @@ neighbours. The two flaky tests (`desktop-trial-screens` acknowledgement write,
 ## ⚠️ What is deliberately NOT done (the Q8 chain)
 
 - **The deletion cron is NOT in `vercel.json`.** `s137` test 20 still asserts its absence,
-  un-inverted, on purpose. The ruled chain: **#126 deliverability verified → warnings ship →
-  warning coverage elapses → first-run scope hand-reviewed (dry run) → sweep scheduled.**
-- **#126 (Resend/Gmail deliverability) is unverified** — it gates the chain and needs a real
-  send inspected. Attended.
-- **A dry-run mode** (list what WOULD be deleted, no writes) is not yet built — small, and owed
-  before the cron entry lands.
+  un-inverted, on purpose. The ruled chain, with live status:
+  1. ~~#126 deliverability verified~~ — **✅ CLOSED [Josh, 2026-08-30], verified not assumed:**
+     a real send from `notices@ezcontractorbinder.com`, inspected in Gmail via Show Original —
+     **SPF PASS** (54.240.14.58), **DKIM PASS** signed by the domain, **DMARC PASS** (`p=none`),
+     **inbox delivery**. All three records present and verified. TECH_DEBT #126 closed; the rua
+     cosmetic remainder is #1-delsweep.
+  2. ~~Warnings ship~~ — **✅ built and scheduled** (`/api/cron/retention-warnings`, 14:30 daily;
+     live on the next production deploy).
+  3. **Warning coverage elapses** for already-locked companies — starts counting when the
+     warnings cron first runs on production.
+  4. **First-run scope hand-reviewed** — `?dry_run=1` on the trial-deletion route, built.
+  5. **Josh adds the `vercel.json` entry.**
 - **Playwright battery** and STATE/TECH_DEBT bookkeeping — see the session close-out.
 - `SEND_EMAIL_HOOK_SECRET`/auth-hook enablement (S160) remains off; unrelated but adjacent.

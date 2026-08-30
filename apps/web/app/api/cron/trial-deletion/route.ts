@@ -16,7 +16,8 @@ import { runTrialDeletion, listDueForDeletion } from '@/lib/trial/deletion';
 // review"; the terms are now written and reviewed, and Josh ruled: schedule
 // it. What gates the entry NOW is the Q8 chain (deletion-sweep-analysis.md):
 //
-//   #126 email deliverability verified → the retention warnings ship (done,
+//   #126 email deliverability verified (DONE 2026-08-30 — inspected send,
+//   SPF/DKIM/DMARC all PASS) → the retention warnings ship (done,
 //   /api/cron/retention-warnings) → warning coverage elapses for
 //   already-locked companies → the first run's scope is reviewed BY HAND
 //   (`?dry_run=1` below) → the vercel.json entry lands.
