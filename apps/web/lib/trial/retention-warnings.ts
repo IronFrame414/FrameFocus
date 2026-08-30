@@ -1,4 +1,5 @@
 import 'server-only';
+import { createElement } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
 import { isPostponed } from '@/lib/trial/lifecycle';
@@ -235,7 +236,10 @@ export async function runRetentionWarnings(
         from,
         to: r.email,
         subject,
-        react: RetentionWarningEmail({
+        // createElement, not a direct call: the element keeps the INPUT props
+        // (kind, billingUrl…) inspectable by the capture tests, and defers
+        // rendering to Resend's react pipeline.
+        react: createElement(RetentionWarningEmail, {
           kind,
           firstName: r.firstName,
           deletionDate,

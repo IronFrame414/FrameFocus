@@ -216,6 +216,14 @@ describe('the warning loop', () => {
     const out = await runTrialWarnings(admin as never, new Date());
     expect(out.warned3).toBeGreaterThan(0);
     expect(out.warned7).toBe(0);
+
+    // The urgent warning SUBSUMES the −7 stamp [deletion-sweep session]: the
+    // NEXT run must not send "Trial ends in 7 days" at 2 days left. This was
+    // a live stale-send until the fix — warned_7_at stayed NULL after day_3
+    // fired, and the following day's run matched the −7 branch.
+    const second = await runTrialWarnings(admin as never, new Date());
+    expect(second.warned7, 'stale −7 warning sent after the −3 one').toBe(0);
+    expect(second.warned3).toBe(0);
   });
 
   it('a postponed company is not warned', async () => {
