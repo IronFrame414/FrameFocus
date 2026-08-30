@@ -14,6 +14,10 @@ describe('the payment path survives a lock — the one that must never regress',
     expect(isLockExemptApiPath('/api/stripe/checkout')).toBe(true);
   });
 
+  it('⚠️ /api/resubscribe is exempt [Q1a] — the warning emails\' one action, inside the token window', () => {
+    expect(isLockExemptApiPath('/api/resubscribe/checkout')).toBe(true);
+  });
+
   it('the billing pages are reachable while locked', () => {
     expect(isLockExemptPagePath('/dashboard/billing')).toBe(true);
     expect(isLockExemptPagePath('/dashboard/billing/plans')).toBe(true);

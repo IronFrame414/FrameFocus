@@ -75,6 +75,12 @@ export const LOCK_EXEMPT_API_PREFIXES = [
   '/api/cron', // CRON_SECRET, no user session
   '/api/admin', // platform staff override
   '/api/auth', // sign-out must always work
+  // [Q1a] The tokenized resubscribe checkout. Usually reached with NO session
+  // (its audience is banned), so the guard never sees it — but a recipient
+  // clicking the warning inside the lock's one-hour token window still holds
+  // a session, and 403ing THE way out for exactly that user would be the §S2
+  // failure rebuilt one layer down. The route validates its own token.
+  '/api/resubscribe',
 ] as const;
 
 export function isLockExemptApiPath(pathname: string): boolean {
