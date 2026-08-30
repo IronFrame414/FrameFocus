@@ -366,18 +366,42 @@ describe('⚠️ the deletion job — what it must NOT touch', () => {
     await admin.from('companies').delete().eq('id', cid);
   });
 
-  it('⚠️ THE DELETION CRON IS NOT SCHEDULED — asserted, not trusted', async () => {
-    // The single most consequential fact in this build. If someone adds the
-    // schedule entry without legal returning on TL-24, this goes red.
+  it('✅ THE DELETION CRON IS SCHEDULED, AFTER THE WARNINGS — asserted, not trusted', async () => {
+    // ⚠️ INVERTED [2026-08-30] per the S157 rule — until this date, this test
+    // asserted the OPPOSITE, and that absence was verified load-bearing while
+    // TL-24 was with legal. Superseded assertion, quoted not deleted:
+    //
+    //   expect(
+    //     vercel.includes('/api/cron/trial-deletion'),
+    //     'THE DELETION CRON HAS BEEN SCHEDULED. TL-24 is with legal; this is
+    //      Josh\'s line to add, not a build\'s.'
+    //   ).toBe(false);
+    //
+    // TL-24's hold was RELEASED (terms written and legally reviewed) and the
+    // ruled Q8 chain then closed link by link: #126 deliverability VERIFIED
+    // (real send inspected in Gmail — SPF/DKIM/DMARC all PASS, inbox
+    // delivery) → retention warnings shipped and live (14:30 daily) → the
+    // production dry run hand-reviewed CLEAN ({"dryRun":true,"due":[]} — no
+    // past-due-and-unwarned company exists) → Josh ruled: add the line.
+    // The line is now load-bearing in the other direction: removing it
+    // silently stops a published retention behaviour.
     const { readFileSync } = await import('node:fs');
     const { join } = await import('node:path');
     const vercel = readFileSync(join(__dirname, '..', 'vercel.json'), 'utf8');
 
     expect(vercel).toContain('/api/cron/trial-warnings');
     expect(vercel).toContain('/api/cron/trial-lock');
+    expect(vercel).toContain('/api/cron/retention-warnings');
     expect(
       vercel.includes('/api/cron/trial-deletion'),
-      'THE DELETION CRON HAS BEEN SCHEDULED. TL-24 is with legal; this is Josh\'s line to add, not a build\'s.'
-    ).toBe(false);
+      'THE DELETION CRON HAS BEEN UNSCHEDULED. The Q8 chain closed and Josh ruled the entry in [2026-08-30]; removing it silently stops a published retention behaviour.'
+    ).toBe(true);
+    // The warnings that precede deletion stay ordered before the sweep's
+    // entry (deletion-sweep-analysis.md, acceptance step 8) — and the day's
+    // sequencing holds too: warnings 14:30, sweep 15:00.
+    expect(
+      vercel.indexOf('/api/cron/retention-warnings'),
+      'the retention-warnings entry must come before the sweep\'s'
+    ).toBeLessThan(vercel.indexOf('/api/cron/trial-deletion'));
   });
 });

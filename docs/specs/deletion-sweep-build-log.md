@@ -92,20 +92,39 @@ where prior batteries chunked by directory — the shard put `desktop-payload` b
 neighbours. The two flaky tests (`desktop-trial-screens` acknowledgement write,
 `portal-pages` tab state) passed on retry, matching their prior-battery shapes.
 
-## ⚠️ What is deliberately NOT done (the Q8 chain)
+## ✅ The Q8 chain — CLOSED [Josh, 2026-08-30]. The deletion cron is SCHEDULED.
 
-- **The deletion cron is NOT in `vercel.json`.** `s137` test 20 still asserts its absence,
-  un-inverted, on purpose. The ruled chain, with live status:
+> _Superseded heading, quoted not rewritten:_ "⚠️ What is deliberately NOT done (the Q8 chain)
+> — The deletion cron is NOT in `vercel.json`. `s137` test 20 still asserts its absence,
+> un-inverted, on purpose." All five links are now done and the entry is in.
+
+- The ruled chain, as closed:
   1. ~~#126 deliverability verified~~ — **✅ CLOSED [Josh, 2026-08-30], verified not assumed:**
      a real send from `notices@ezcontractorbinder.com`, inspected in Gmail via Show Original —
      **SPF PASS** (54.240.14.58), **DKIM PASS** signed by the domain, **DMARC PASS** (`p=none`),
      **inbox delivery**. All three records present and verified. TECH_DEBT #126 closed; the rua
      cosmetic remainder is #1-delsweep.
-  2. ~~Warnings ship~~ — **✅ built and scheduled** (`/api/cron/retention-warnings`, 14:30 daily;
-     live on the next production deploy).
-  3. **Warning coverage elapses** for already-locked companies — starts counting when the
-     warnings cron first runs on production.
-  4. **First-run scope hand-reviewed** — `?dry_run=1` on the trial-deletion route, built.
-  5. **Josh adds the `vercel.json` entry.**
-- **Playwright battery** and STATE/TECH_DEBT bookkeeping — see the session close-out.
+  2. ~~Warnings ship~~ — **✅ shipped and LIVE** (`/api/cron/retention-warnings`, 14:30 daily on
+     production).
+  3. ~~Warning coverage elapses~~ — **✅ moot on the current data**, proven by link 4: nothing is
+     past `delete_after`, so no already-locked company can be swept before its warnings land.
+     Every future row enters through the warning boundaries, which count back from
+     `delete_after` (Q9).
+  4. ~~First-run scope hand-reviewed~~ — **✅ reviewed CLEAN [Josh, 2026-08-30]:** production
+     `?dry_run=1` returns `{"dryRun":true,"due":[]}` — no past-due-and-unwarned company; the
+     first scheduled run will process nothing.
+  5. ~~Josh adds the `vercel.json` entry~~ — **✅ RULED and landed:** `/api/cron/trial-deletion`
+     at **15:00 daily**, after the day's warnings (14:30) and lock (14:15). `s137` test 20 and
+     the `s152` CI duplicate are both **INVERTED per S157** in the same commit (superseded
+     assertions quoted in place) — the guard now cuts the other way: removing the entry
+     silently stops a published retention behaviour.
+
+## ⚠️ For the record: CRON_SECRET was ROTATED [2026-08-30]
+
+The old value could not be read back from Vercel, so it was rotated and production redeployed
+with the new one. It was not in `.env.local`, so nothing local depended on it. **Noted here
+because a rotated shared secret is exactly the kind of thing that confuses the next debugging
+session:** any saved curl, script, or Codespace env carrying the pre-2026-08-30 value will get
+`401 Unauthorized` from every cron route, and the cause is this rotation, not the routes.
+
 - `SEND_EMAIL_HOOK_SECRET`/auth-hook enablement (S160) remains off; unrelated but adjacent.

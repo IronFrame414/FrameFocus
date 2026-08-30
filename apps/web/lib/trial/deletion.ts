@@ -11,13 +11,16 @@ import { brand } from '@/lib/brand';
  * S137 — the deletion job.
  *
  * ==========================================================================
- * ⚠️ THIS IS BUILT AND DELIBERATELY NOT SCHEDULED.
+ * ✅ THIS IS SCHEDULED — the Q8 chain closed [Josh, 2026-08-30].
  * ==========================================================================
- * TL-24 — whether these records may be deleted on this timetable AT ALL — is
- * UNANSWERED and with legal review. It can invalidate the expiry ruling
- * entirely. Josh ruled: build everything, leave the cron entry out of
- * `apps/web/vercel.json`. **The absence of that entry is not an oversight.**
- * See `app/api/cron/trial-deletion/route.ts` and the spec.
+ * 15:00 daily via `apps/web/vercel.json`, after the retention warnings
+ * (14:30). _Superseded banner, quoted not rewritten:_ "THIS IS BUILT AND
+ * DELIBERATELY NOT SCHEDULED. TL-24 … is UNANSWERED and with legal review.
+ * … The absence of that entry is not an oversight." TL-24's hold was
+ * released (terms written and reviewed), the ruled Q8 chain closed
+ * (deliverability verified → warnings live → dry run reviewed clean), and
+ * Josh added the line. See `app/api/cron/trial-deletion/route.ts` for the
+ * full record.
  *
  * ==========================================================================
  * WHY RESUMABLE, AND WHY IT STOPS RATHER THAN RETRIES
@@ -660,7 +663,8 @@ export async function listDueForDeletion(
 /**
  * The job. Selects companies past `delete_after` and works them to completion.
  *
- * ⚠️ NOTHING CALLS THIS ON A SCHEDULE. See the header.
+ * Called daily at 15:00 by `/api/cron/trial-deletion` since 2026-08-30
+ * (superseded: "⚠️ NOTHING CALLS THIS ON A SCHEDULE"). See the header.
  */
 export async function runTrialDeletion(
   admin: SupabaseClient<Database>,

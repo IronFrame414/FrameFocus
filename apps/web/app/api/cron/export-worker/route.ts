@@ -9,12 +9,12 @@ import { runExportSweep } from '@/lib/trial/export-sweep';
 // Advances ONE unfinished export by one invocation's worth of work, and sweeps
 // completed exports past their 24-hour life.
 //
-// ⚠️ THIS ONE IS SCHEDULED, AND THAT IS NOT A CONTRADICTION OF THE DELETION
-// RULE. `/api/cron/trial-deletion` is unscheduled because TL-24 — whether we
-// may destroy customer data on that timetable — is with legal. This route
-// CREATES a copy of the customer's data for the customer and removes only the
-// export artefacts it made itself. Nothing here destroys tenant data, so
-// nothing here is blocked on that ruling.
+// This route CREATES a copy of the customer's data for the customer and
+// removes only the export artefacts it made itself. Nothing here destroys
+// tenant data. (Historical: while `/api/cron/trial-deletion` was deliberately
+// unscheduled under the TL-24 gate, this header explained why scheduling THIS
+// route was not a loosening of that gate. The gate closed 2026-08-30 and the
+// deletion cron is now scheduled too — see ../trial-deletion/route.ts.)
 //
 // Every 5 minutes: a large export is ~58 invocations, so a slower cadence would
 // stretch a 4.8-hour export into days.

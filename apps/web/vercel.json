@@ -43,6 +43,10 @@
     {
       "path": "/api/cron/file-trash-purge",
       "schedule": "45 3 * * *"
+    },
+    {
+      "path": "/api/cron/trial-deletion",
+      "schedule": "0 15 * * *"
     }
   ]
 }

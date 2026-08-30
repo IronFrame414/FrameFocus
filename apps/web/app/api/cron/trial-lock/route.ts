@@ -9,7 +9,8 @@ import { runTrialLock, runTrialUnlockReconcile } from '@/lib/trial/lifecycle';
 //
 // ⚠️ THIS LOCKS, IT DOES NOT DELETE. The lock BANS the company's auth users
 // and is reversible in one call (unlockCompany). Deleting is a different route
-// that is deliberately not scheduled — see ../trial-deletion/route.ts.
+// (../trial-deletion/route.ts — scheduled 15:00 daily since 2026-08-30, after
+// the Q8 chain closed; it was deliberately unscheduled before that).
 //
 // CRON_SECRET is not optional: an unauthenticated caller here locks paying
 // customers out of their own product.

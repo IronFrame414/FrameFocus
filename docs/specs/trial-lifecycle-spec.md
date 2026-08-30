@@ -4,16 +4,28 @@
 > [`trial-lifecycle-interview.md`](trial-lifecycle-interview.md), which **stays** and is not
 > superseded — it is the record of what was asked and why.
 >
-> ## ⚠️ THE DELETION JOB IS BUILT AND DELIBERATELY NOT SCHEDULED.
+> ## ✅ THE DELETION JOB IS SCHEDULED — the Q8 chain closed [Josh, 2026-08-30].
 >
-> **TL-24 — whether these records may be deleted on this timetable at all — is UNANSWERED and with
-> legal review. It can invalidate the expiry ruling entirely.** Josh ruled: build everything, and
-> leave the deletion job **out of `apps/web/vercel.json`**. It exists, it is tested, and it does not
-> run. **If you found this file because you noticed the missing cron entry: it is not an oversight.
-> Adding that line destroys customer data. It is Josh's line to add, after legal returns.**
+> `/api/cron/trial-deletion` runs at **15:00 daily**, after the retention warnings (14:30) and
+> the lock (14:15). The gate below is HISTORICAL: TL-24's hold was released (the terms/privacy
+> documents were written and legally reviewed), the deletion-sweep session built the warnings,
+> the archive mechanism and the dry run, and the ruled chain closed — deliverability verified by
+> an inspected send, warnings live, production dry run hand-reviewed CLEAN
+> (`{"dryRun":true,"due":[]}`), and Josh added the line. `s137` test 20 and its `s152` CI
+> duplicate now assert the entry's PRESENCE (inverted per S157, superseded assertions quoted).
 >
-> The same warning appears in `20260918000000_trial_lifecycle.sql`'s header and in
-> `app/api/cron/trial-deletion/route.ts` itself.
+> _Superseded banner, quoted not rewritten:_ _"⚠️ THE DELETION JOB IS BUILT AND DELIBERATELY NOT
+> SCHEDULED. **TL-24 — whether these records may be deleted on this timetable at all — is
+> UNANSWERED and with legal review. It can invalidate the expiry ruling entirely.** Josh ruled:
+> build everything, and leave the deletion job **out of `apps/web/vercel.json`**. It exists, it
+> is tested, and it does not run. **If you found this file because you noticed the missing cron
+> entry: it is not an oversight. Adding that line destroys customer data. It is Josh's line to
+> add, after legal returns.**"_
+>
+> The superseded warning also appears in `20260918000000_trial_lifecycle.sql`'s header (a
+> migration file — historical by nature, not amended) and stood in
+> `app/api/cron/trial-deletion/route.ts` until this ruling; the route header now carries the
+> closed chain. See `deletion-sweep-analysis.md`, `deletion-sweep-build-log.md`.
 
 ---
 
@@ -50,7 +62,7 @@ already exists and means the paid path.
 | Export link | **under 24 hours**, must not outlive the data | S137 |
 | Export after expiry | **none** — the account is locked | S137 |
 | Broken references | keep the filename, omit the file | S137 |
-| Deletion runner | Vercel cron, **unscheduled** | S137 + the gate |
+| Deletion runner | Vercel cron, ~~**unscheduled**~~ **scheduled 15:00 daily [2026-08-30]** | S137 + the gate, closed by the Q8 chain |
 | Deletion failure model | resumable, per-table state, **stop and alarm** | S137 |
 | Deletion ordering | **rows first, then storage** | S137 |
 | `auth.users` | deleted | S137 |
@@ -179,7 +191,7 @@ The house rule this spec exists to satisfy.
 ## 5. `input → store → output` — THE DELETION JOB
 
 **INPUT**
-- A cron tick (**unscheduled — see the gate**), or a manual invocation carrying `CRON_SECRET`.
+- A cron tick (~~unscheduled — see the gate~~ **15:00 daily since 2026-08-30 — the gate closed**), or a manual invocation carrying `CRON_SECRET`.
 - Selects `trial_lifecycle` rows where `delete_after <= now()`, `deleted_at IS NULL`, and
   `postponed_until` is NULL or past.
 

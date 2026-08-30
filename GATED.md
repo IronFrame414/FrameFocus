@@ -96,11 +96,15 @@ exceptions to be argued around each time.
 > (Q2: the companies row deletes, name included; Q3: executed instruments archive first) and the
 > export pipeline (Q7 made its registry real) all shipped — see
 > `docs/specs/deletion-sweep-analysis.md`, `deletion-sweep-build-log.md`, and Josh's Q1–Q9
-> rulings. **What still gates the deletion cron's `vercel.json` entry is the Q8 chain:** ~~#126
-> deliverability verified~~ (✅ CLOSED 2026-08-30 — inspected real send from the domain:
+> rulings. ~~**What still gates the deletion cron's `vercel.json` entry is the Q8 chain:** #126
+> deliverability verified (✅ CLOSED 2026-08-30 — inspected real send from the domain:
 > SPF/DKIM/DMARC all PASS, inbox delivery; TECH_DEBT #126) → warning coverage elapses →
-> hand-reviewed dry run → Josh adds the line. The section below is kept as the record of the
-> original ruling.
+> hand-reviewed dry run → Josh adds the line.~~ **THE CHAIN CLOSED [Josh, 2026-08-30] and
+> NOTHING in this section gates anything any more:** the production dry run was hand-reviewed
+> CLEAN (`{"dryRun":true,"due":[]}`), Josh ruled the line in, and `/api/cron/trial-deletion`
+> is scheduled at 15:00 daily — with `s137` test 20 and its `s152` CI duplicate inverted per
+> S157 to assert PRESENCE. TECH_DEBT #1-trial is CLOSED. The section below is kept as the
+> record of the original ruling.
 
 Raised by D3.2 of the invitation-flow work: `trial_emails` is append-only, so an address that
 has ever started a trial gets `subscriptions.status = 'incomplete'` on any later signup, and

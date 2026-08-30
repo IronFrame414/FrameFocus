@@ -76,18 +76,40 @@ describe('S152 M1-07 — cron schedules are deliberate', () => {
       '/api/cron/trial-warnings',
       '/api/cron/trial-lock',
       '/api/cron/export-worker',
+      // retention-warnings pinned with the deletion sweep [2026-08-30]: the
+      // ordering assertion below leans on it, and indexOf(-1) would pass the
+      // less-than check with the entry silently gone.
+      '/api/cron/retention-warnings',
     ]) {
       expect(vercelJson, `${path} is no longer scheduled`).toContain(path);
     }
   });
 
-  it('the trial-deletion cron is STILL unscheduled — TL-24 is with legal', () => {
+  it('the trial-deletion cron IS scheduled — the Q8 chain closed [2026-08-30]', () => {
     // Duplicated from s137 on purpose. That copy only runs in the live suite;
-    // this one runs in CI. The most consequential absence in the repo should not
-    // depend on someone choosing to run a database harness.
+    // this one runs in CI. The most consequential line in the schedule file
+    // should not depend on someone choosing to run a database harness.
+    //
+    // ⚠️ INVERTED [2026-08-30] per the S157 rule, in the same commit as the
+    // vercel.json entry. Superseded assertion, quoted not deleted:
+    //
+    //   expect(
+    //     vercelJson.includes('/api/cron/trial-deletion'),
+    //     'THE DELETION CRON HAS BEEN SCHEDULED. TL-24 is with legal.'
+    //   ).toBe(false);
+    //
+    // TL-24's hold was released and the Q8 chain closed (#126 deliverability
+    // verified by an inspected send; warnings live at 14:30; production dry
+    // run reviewed CLEAN; Josh ruled the entry in). The guard now cuts the
+    // other way: removing the entry silently stops a published retention
+    // behaviour. See s137-trial-lifecycle.live.ts for the full record.
     expect(
       vercelJson.includes('/api/cron/trial-deletion'),
-      'THE DELETION CRON HAS BEEN SCHEDULED. TL-24 is with legal.'
-    ).toBe(false);
+      'THE DELETION CRON HAS BEEN UNSCHEDULED. Josh ruled it in at the end of the Q8 chain [2026-08-30]; its absence now silently breaks a published retention behaviour.'
+    ).toBe(true);
+    expect(
+      vercelJson.indexOf('/api/cron/retention-warnings'),
+      'the retention-warnings entry must come before the sweep\'s'
+    ).toBeLessThan(vercelJson.indexOf('/api/cron/trial-deletion'));
   });
 });
