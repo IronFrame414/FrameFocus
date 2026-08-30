@@ -59,9 +59,12 @@
    and `trial_warning_acknowledgements.profile_id` (NOT NULL plain FKs to `profiles`).
 5. **`runTrialWarnings` had a live stale-send bug** (day-7 warning firing after day-3); fixed
    with the same subsumption doctrine, regression-guarded in `s137`.
-6. **Reply-To on the warnings** resolves to the first platform admin (`platform_admins`,
-   ordered). The `from` is `notices@ezcontractorbinder.com` — ⚠️ **whether that mailbox/inbound
-   route exists is an ops question for Josh**; the copy promises a readable reply address.
+6. **Reply-To on the warnings** — ✅ **RESOLVED [Josh, post-battery]**. The superseded shape
+   (first platform admin, and the open mailbox question) is replaced: `from` stays
+   `notices@ezcontractorbinder.com` (the verified Resend domain — **send-only, no inbox**), and
+   Reply-To is the monitored **`ezcontractorbinder@gmail.com`** (`SUPPORT_REPLY_TO` in
+   `email-service.ts`), which is also the contact address the published terms/privacy now name.
+   Guarded in `s176` — every captured send must carry it.
 
 ## The battery — run end-of-session, counts per suite
 

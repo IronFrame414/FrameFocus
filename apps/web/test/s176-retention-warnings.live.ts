@@ -5,7 +5,7 @@ import {
   type RetentionWarningDeps,
 } from '@/lib/trial/retention-warnings';
 import { getResubscribeContext } from '@/lib/trial/resubscribe';
-import type { SendEmailParams } from '@/lib/services/email-service';
+import { SUPPORT_REPLY_TO, type SendEmailParams } from '@/lib/services/email-service';
 
 // ============================================================================
 // S176 — the retention warnings, driven against the real loop with an
@@ -236,6 +236,13 @@ describe('the send path (fixture tenant, captured sender)', () => {
       .eq('company_id', fixtureCompanyId)
       .single();
     const row = lc as { resubscribe_token: string; delete_after: string };
+
+    // ⚠️ Reply-To is the MONITORED box [Josh]: the sending domain has no
+    // inbox, and the ruled copy promises "reply to this email" is read. A
+    // reply eaten by a send-only domain would be worse than no promise.
+    for (const s of sent) {
+      expect(s.replyTo, 'a warning shipped without the monitored Reply-To').toBe(SUPPORT_REPLY_TO);
+    }
 
     const props = (sent[0].react as { props: Record<string, unknown> }).props;
     expect(props.kind).toBe('cancellation_60');

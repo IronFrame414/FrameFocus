@@ -13,6 +13,7 @@ import {
   sendEmail,
   logEmail,
   SENDING_DOMAIN,
+  SUPPORT_REPLY_TO,
   type SendEmailParams,
 } from '@/lib/services/email-service';
 import { getManagerNotifyRecipients } from '@/lib/notify/recipients';
@@ -133,21 +134,6 @@ async function defaultStripeCustomerEmail(stripeCustomerId: string): Promise<str
   return null;
 }
 
-/**
- * Reply-To: the first platform admin [§S1 — "a real reply address"]. These
- * are PLATFORM emails; a reply is a support request to us, not mail to the
- * tenant (the tenant IS the recipient). Ordered — the S165 .limit(1) rule.
- */
-async function platformReplyTo(admin: SupabaseClient<Database>): Promise<string | null> {
-  const { data } = await admin
-    .from('platform_admins')
-    .select('email')
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  return (data as { email: string } | null)?.email ?? null;
-}
-
 export async function runRetentionWarnings(
   admin: SupabaseClient<Database>,
   now: Date,
@@ -175,7 +161,9 @@ export async function runRetentionWarnings(
   const rows = (data ?? []) as unknown as RetentionRow[];
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://frame-focus-eight.vercel.app';
   const from = `${brand.name} <notices@${SENDING_DOMAIN}>`;
-  const replyTo = await platformReplyTo(admin);
+  // [Josh]: the domain sends only; the monitored box is where "reply to this
+  // email" actually lands. Never the tenant — the tenant IS the recipient.
+  const replyTo = SUPPORT_REPLY_TO;
 
   for (const row of rows) {
     outcome.checked += 1;
