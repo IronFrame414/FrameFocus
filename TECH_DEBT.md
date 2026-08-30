@@ -10,7 +10,8 @@ removed."* The full table survives in git history and in the S136 context file. 
 prevents recurrence lives in CLAUDE.md → "Tech-debt numbering", which is unchanged.
 
 
-> **Last updated:** August 11, 2026 — S134 (**#149 AND #150 RAISED**, filing the fallout of reverting the S133 Playwright sharding (Option D, Josh's ruling). **#150** records the concurrency hazard precisely — four shards shared one rebuild-test DB, so any test asserting the absence/count of something another shard writes to a shared fixture was exposed; CI #201 (`desktop-payload.spec.ts:175`) is the instance, NOT a payload leak — the #117 read floor holds at the query. **#149** is the constraint that blocked every safe fix: the pinned e2e fixtures are hand-curated on rebuild-test and reproducible from no script — `seed-test-identities.mjs` only *warns* if `eaf0e25b` is missing — which is what blocks a database-per-shard, the fix that is safe by construction. The sharding work is kept on branch `ci/shard-playwright`, not deleted. **⚠️ #149 is also speculatively used on two unmerged branches (`feat/notifications`, `feature/m6m-mobile`) for different items — a merge-time reconciliation is owed there regardless; main's file is the assignment authority.**)
+> **Last updated:** August 30, 2026 — deletion-sweep §3 (**#1-delsweep RAISED** — DMARC `rua` still points at `josh@worthprop.com`, the last WorthProp reference in the mail configuration. Cosmetic — reports arrive — one TXT edit at Spaceship. Filed alongside the brand-string debt: #119, #123, #126)
+> **Previously:** August 11, 2026 — S134 (**#149 AND #150 RAISED**, filing the fallout of reverting the S133 Playwright sharding (Option D, Josh's ruling). **#150** records the concurrency hazard precisely — four shards shared one rebuild-test DB, so any test asserting the absence/count of something another shard writes to a shared fixture was exposed; CI #201 (`desktop-payload.spec.ts:175`) is the instance, NOT a payload leak — the #117 read floor holds at the query. **#149** is the constraint that blocked every safe fix: the pinned e2e fixtures are hand-curated on rebuild-test and reproducible from no script — `seed-test-identities.mjs` only *warns* if `eaf0e25b` is missing — which is what blocks a database-per-shard, the fix that is safe by construction. The sharding work is kept on branch `ci/shard-playwright`, not deleted. **⚠️ #149 is also speculatively used on two unmerged branches (`feat/notifications`, `feature/m6m-mobile`) for different items — a merge-time reconciliation is owed there regardless; main's file is the assignment authority.**)
 > **Previously:** August 10, 2026 — S123 (**#151 RAISED** from a real-device test — the push enrolment control does not read as tappable. **A UI pass, not a defect:** the component carries **zero `className` attributes**, and with `@tailwind base` Preflight in force an unstyled `<button>` has no background, no border and no radius, so it renders as a line of body text that happens to click. It is also the ONE control between a user and ever receiving a push, and on iOS the prompt is one-shot and sticky, so a bad first encounter is permanent. Constraints recorded, including that the **iOS install-gate branch must NOT become pressable** — and that **no test references this component at all**, so that constraint has no safety net today)
 > **Previously:** August 9, 2026 — S123 (**#147 AND #148 RAISED**, both from Josh, both investigated before filing rather than described from the request. **#147 multi-address is a UI GAP, not a schema gap** — `contact_addresses` has no unique constraint on `contact_id`, only a PARTIAL one-primary index, and `listAddressesForContact()` plus the 4D estimate address picker already handle N; exactly one form, `contact-form.tsx`, only ever writes the primary. No migration needed. **#148 inline contact-create is a SHARED COMPONENT's change** — `ContactAddressPicker` has three consumers, and `contacts_insert_authorized` matches `estimates_insert_manager` exactly, so there is no permission gap. The two meet at `contact-form.tsx` and should be sequenced together)
 > **Previously:** August 9, 2026 — S123 (**#153 RAISED — the lean-repo sweep, one entry for one pass.** Whole return is **~9,060 lines (4.0%)** and **8,068 of it is a single finding**: five byte-identical `support.js` and three `ios-frame.jsx` in `docs/`. Everything else is small or needs a ruling; **dead code recommended SKIPPED** — 38 sites, ~990 lines, in service files where complete-CRUD-ahead-of-UI is deliberate. ⛔ **`/workspaces/rafterworks-s89` and `feat/module-8-architecture` are NOT deletable** — they hold the only copies of `notifications-architecture.md` (212 lines; notifications is the next project) and two context files; they need MERGING. **#154 RAISED** — `updateProject()` has zero callers, and that is the DOCUMENTED INTENT of S63/S64, not drift: a latent write path neutralised before it has a caller. Not a defect; **must not be deleted**, or the guard goes with it)
@@ -52,6 +53,32 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 ---
 
 ## Open Tech Debt
+
+### Branch-scoped, awaiting real numbers — `feature/deletion-sweep-analysis` [deletion-sweep §3]
+
+> Provisional id per the S136 rule. Tag `delsweep`. (The `#N-trial` ids amended on this branch
+> belong to the S137/S138 trial work and are not this branch's allocations.)
+
+- **#1-delsweep — DMARC `rua` still points at `josh@worthprop.com` — the last WorthProp reference
+  in the mail configuration.** The live record on the sending domain reads
+  `v=DMARC1; p=none; rua=mailto:josh@worthprop.com` (`_dmarc.ezcontractorbinder.com`, resolved
+  2026-08-30), so DMARC aggregate reports go to a WorthProp address while every other contact for
+  this product is now `ezcontractorbinder@gmail.com` (`SUPPORT_REPLY_TO`, `b1b970e` — the monitored
+  box; the sending domain is send-only). **Cosmetic** — reports still arrive, and nothing about
+  authentication or delivery changes — but it is the last WorthProp string in the mail
+  configuration. Fix: one TXT record edit at Spaceship,
+  `rua=mailto:ezcontractorbinder@gmail.com`. ⚠️ **One verification owed after the edit**, recorded
+  so the switch is not assumed safe by its size: RFC 7489 §7.1 has reporters confirm an external
+  `rua` destination via a `<domain>._report._dmarc.<dest>` TXT record, and **neither destination
+  publishes one** (`ezcontractorbinder.com._report._dmarc.worthprop.com` → ENODATA, same name under
+  `gmail.com` → ENOTFOUND, both checked 2026-08-30). Reports reach the WorthProp address today
+  despite that, so the major reporters are evidently tolerant and the gmail box should inherit the
+  same treatment — but confirm by seeing one aggregate report actually land there before closing
+  this. Filed alongside the other brand-string debt: cross-ref **#119** (the sender-address scheme
+  on this same domain), **#123** (the last product-name string in `apps/web` — the same
+  "last remaining reference" shape), **#126** (the record set published at the registrar; its
+  closing test reads `Authentication-Results` for the same domain). Raised 2026-08-30
+  (deletion-sweep §3).
 
 ### Branch-scoped, awaiting real numbers — `feature/blocking-items` [blocking-items]
 
