@@ -8824,6 +8824,9 @@ export type Database = {
           postponed_reason: string | null
           postponed_until: string | null
           reason: string
+          resubscribe_token: string
+          retention_warned_1_at: string | null
+          retention_warned_2_at: string | null
           trial_end: string
           updated_at: string
           warned_3_at: string | null
@@ -8839,6 +8842,9 @@ export type Database = {
           postponed_reason?: string | null
           postponed_until?: string | null
           reason?: string
+          resubscribe_token?: string
+          retention_warned_1_at?: string | null
+          retention_warned_2_at?: string | null
           trial_end: string
           updated_at?: string
           warned_3_at?: string | null
@@ -8854,6 +8860,9 @@ export type Database = {
           postponed_reason?: string | null
           postponed_until?: string | null
           reason?: string
+          resubscribe_token?: string
+          retention_warned_1_at?: string | null
+          retention_warned_2_at?: string | null
           trial_end?: string
           updated_at?: string
           warned_3_at?: string | null
