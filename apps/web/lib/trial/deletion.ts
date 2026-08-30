@@ -1,7 +1,11 @@
 import 'server-only';
+import { createElement } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
 import { isPostponed } from '@/lib/trial/lifecycle';
+import { sendEmail, SENDING_DOMAIN } from '@/lib/services/email-service';
+import { NotificationEmail } from '@/lib/email/templates/notification-email';
+import { brand } from '@/lib/brand';
 
 /**
  * S137 — the deletion job.
@@ -77,11 +81,22 @@ export const SURVIVES: Record<string, string> = {
   trial_lifecycle: 'holds deleted_at — written last',
   trial_warning_acknowledgements: 'evidence the warning was acknowledged',
   export_jobs: 'the export audit — who took what, and when',
-  // ⚠️ SIGNED DOCUMENTS — SEE THE BLOCK BELOW. Excluded WHOLESALE for now,
-  // which keeps more than the ruling asks rather than less.
-  client_contracts: 'signed copies must survive — mechanism unruled, see below',
-  change_orders: 'signed copies must survive — mechanism unruled, see below',
-  subcontractor_contracts: 'signed copies must survive — mechanism unruled, see below',
+  // ⚠️ SIGNED DOCUMENTS — SEE THE BLOCK BELOW. Excluded WHOLESALE while the
+  // Q3 archive mechanism is BUILT (ruled: archive, not detach — Josh, Phase 3
+  // on deletion-sweep-analysis.md). Until archiveSignedDocuments() lands,
+  // keeping more than asked stays the safe direction to be wrong in.
+  client_contracts: 'Q3 ruled: archive signed copies, then delete — mechanism pending',
+  change_orders: 'Q3 ruled: archive signed copies, then delete — mechanism pending',
+  subcontractor_contracts: 'Q3 ruled: archive signed copies, then delete — mechanism pending',
+  client_contract_amounts: 'rides its client_contracts parent (1:1 CASCADE) — archives with it',
+  contract_documents: 'Q3 ruled: executed instruments archive, then delete — mechanism pending',
+  contract_templates: 'blank templates — walk with contract_documents when Q3 lands (docs FK templates)',
+  contract_template_boxes: 'cascades with contract_templates; listed so the census names it',
+  contract_signing_sessions: 'cascades with contract_documents; listed so the census names it',
+  contract_document_attachments: 'cascades with contract_documents; listed so the census names it',
+  lien_releases: 'Q3 ruled: executed instruments archive, then delete — mechanism pending',
+  lien_release_templates: 'seeded 8/company; walk with lien_releases when Q3 lands (releases FK templates)',
+  lien_release_template_boxes: 'cascades with lien_release_templates; listed so the census names it',
 };
 
 /**
@@ -143,6 +158,16 @@ export const COMPANY_TABLES: string[] = [
   // walk stays explicit about every company-scoped table it owns.
   'proposal_views',
   'estimate_subcategories', 'estimate_categories', 'estimate_files', 'estimates',
+  // Selections (20261026+) — added by the Q4 ruling; their absence was §3a of
+  // deletion-sweep-analysis.md (selections FK projects/cost_catalog/
+  // project_budget_items with NO ACTION, so a company that used them could
+  // never finish deleting). Leaf-first: message photos → messages → threads;
+  // option amounts → options; amounts/notes/signing sessions → selections;
+  // selections → areas (selections.area_id) → projects.
+  'selection_message_photos', 'selection_messages', 'selection_threads',
+  'selection_option_amounts', 'selection_options',
+  'selection_amounts', 'selection_notes', 'selection_signing_sessions',
+  'selections', 'selection_areas',
   'project_budget_amounts', 'project_budget_items', 'project_financials',
   'project_contacts', 'project_assignments',
   'subcontractor_financials', 'subcontractor_compliance_documents',
@@ -152,6 +177,15 @@ export const COMPANY_TABLES: string[] = [
   'contact_addresses', 'contacts', 'subcontractors',
   'member_pay_rates', 'member_burden_settings', 'instrument_rates', 'cost_catalog',
   'tag_options', 'client_reminder_settings', 'sync_conflicts',
+  // QuickBooks scaffolding (20260929/20260930) — operational state, not a
+  // record anyone must retain [Q4]. Queue rows self-reference with SET NULL;
+  // all three otherwise hang off companies only.
+  'qb_sync_queue', 'qb_read_budget', 'qb_webhook_events',
+  // client_access_events cascades with profiles (profile_id NOT NULL,
+  // ON DELETE CASCADE) — listed anyway, before profiles, because the walk is
+  // explicit about every company-scoped table it owns (the proposal_views
+  // precedent) [Q4].
+  'client_access_events',
   'push_subscriptions', 'notifications', 'invitations',
   'company_members', 'profiles', 'subscriptions',
 ];
@@ -168,18 +202,6 @@ export async function deleteRows(
   companyId: string,
   alreadyDone: string[]
 ): Promise<{ done: string[]; failed: Record<string, string> }> {
-  // ⚠️ UNTYPED CLIENT FOR THE DYNAMIC LOOP, deliberately. A table name that
-  // varies at runtime makes the generated `Database` generic resolve every
-  // table's row type at once — TS2589 / "not assignable to never" — and the
-  // cast that silences it would be a lie about which tables exist. What this
-  // function asserts is a deletion outcome, not a column shape. Same reasoning
-  // and same shape as `s131-roster-floor.live.ts`'s `count()` helper.
-  const db = admin as unknown as {
-    from: (t: string) => {
-      delete: () => { eq: (c: string, v: string) => Promise<{ error: { message: string } | null }> };
-    };
-  };
-
   const done = [...alreadyDone];
   let remaining = COMPANY_TABLES.filter((t) => !done.includes(t) && !SURVIVES[t]);
   let failed: Record<string, string> = {};
@@ -191,9 +213,9 @@ export async function deleteRows(
     const stillRemaining: string[] = [];
 
     for (const table of remaining) {
-      const { error } = await db.from(table).delete().eq('company_id', companyId);
+      const error = await deleteTableChunked(admin, table, companyId);
       if (error) {
-        failed[table] = error.message;
+        failed[table] = error;
         stillRemaining.push(table);
       } else {
         done.push(table);
@@ -204,6 +226,74 @@ export async function deleteRows(
   }
 
   return { done, failed };
+}
+
+/** Rows deleted per statement. Small enough that no single DELETE can hit the
+ *  statement timeout on a big tenant; the ceiling is per-chunk, so total
+ *  table size stops mattering. */
+export const DELETE_CHUNK = 2000;
+
+/**
+ * Delete one table's rows in bounded chunks — id-batch selects, then
+ * `DELETE … IN (ids)` — instead of one `DELETE WHERE company_id` statement.
+ *
+ * ⚠️ THE s138 TIMEOUT CLASS IS THE REASON [analysis §5]. "canceling statement
+ * due to statement timeout" was observed in the shared purge and never
+ * root-caused; a 90-day cancellation tenant is bigger than anything this job
+ * has run against. A table that is always too big for one statement would
+ * fail all three attempts and stop the sweep permanently — chunking removes
+ * the ceiling rather than betting on it.
+ *
+ * FK semantics are unchanged: a chunk holding a still-referenced row fails
+ * whole, the table reports the error, and the pass loop retries it after its
+ * children go — same as the one-statement shape, at chunk granularity.
+ * Returns null on success, the error message otherwise.
+ */
+async function deleteTableChunked(
+  admin: SupabaseClient<Database>,
+  table: string,
+  companyId: string
+): Promise<string | null> {
+  // ⚠️ UNTYPED CLIENT FOR THE DYNAMIC LOOP, deliberately. A table name that
+  // varies at runtime makes the generated `Database` generic resolve every
+  // table's row type at once — TS2589 / "not assignable to never" — and the
+  // cast that silences it would be a lie about which tables exist. What this
+  // function asserts is a deletion outcome, not a column shape. Same reasoning
+  // and same shape as `s131-roster-floor.live.ts`'s `count()` helper.
+  const db = admin as unknown as {
+    from: (t: string) => {
+      delete: () => {
+        in: (c: string, v: string[]) => Promise<{ error: { message: string } | null }>;
+      };
+      select: (c: string) => {
+        eq: (
+          c: string,
+          v: string
+        ) => {
+          limit: (n: number) => Promise<{
+            data: Array<{ id: string }> | null;
+            error: { message: string } | null;
+          }>;
+        };
+      };
+    };
+  };
+
+  for (;;) {
+    const { data, error: selErr } = await db
+      .from(table)
+      .select('id')
+      .eq('company_id', companyId)
+      .limit(DELETE_CHUNK);
+    if (selErr) return `select ids: ${selErr.message}`;
+    const ids = (data ?? []).map((r) => r.id);
+    // The loop ends on a CONFIRMED-empty select, not on a short chunk — rows
+    // can appear between statements.
+    if (ids.length === 0) return null;
+
+    const { error: delErr } = await db.from(table).delete().in('id', ids);
+    if (delErr) return delErr.message;
+  }
 }
 
 /** Null the tenant linkage on rows that survive but must not stay attached. */
@@ -220,19 +310,34 @@ export async function detachSurvivors(
     .eq('company_id', companyId);
 }
 
-/** Remove every storage object under the company prefix, in all three buckets. */
+/**
+ * Remove every storage object under the company prefix, in all three buckets.
+ *
+ * ⚠️ FAILURES ARE RETURNED, NEVER SWALLOWED [§4 of the analysis, ruled]. The
+ * previous shape ignored a failed remove() and read a failed list() as an
+ * empty folder — then the caller stamped `storage_done: true` over surviving
+ * customer photos, making the policy sentence false in a way nothing
+ * surfaced. A failure here now holds the job open for a retry, exactly like
+ * a failed table delete.
+ */
 export async function deleteStorage(
   admin: SupabaseClient<Database>,
   companyId: string
-): Promise<number> {
+): Promise<{ removed: number; failures: string[] }> {
   let removed = 0;
+  const failures: string[] = [];
   for (const bucket of ['project-files', 'company-logos', 'exports']) {
     // Recursive walk: list() is one level at a time.
     const stack = [companyId];
     const paths: string[] = [];
     while (stack.length) {
       const prefix = stack.pop()!;
-      const { data } = await admin.storage.from(bucket).list(prefix, { limit: 1000 });
+      const { data, error } = await admin.storage.from(bucket).list(prefix, { limit: 1000 });
+      if (error) {
+        // An unlistable folder is NOT an empty folder.
+        failures.push(`${bucket}/${prefix}: list failed: ${error.message}`);
+        continue;
+      }
       for (const entry of data ?? []) {
         const full = `${prefix}/${entry.name}`;
         // A folder has no id in Supabase's listing; a file does.
@@ -243,23 +348,72 @@ export async function deleteStorage(
     for (let i = 0; i < paths.length; i += 100) {
       const slice = paths.slice(i, i + 100);
       const { error } = await admin.storage.from(bucket).remove(slice);
-      if (!error) removed += slice.length;
+      if (error) failures.push(`${bucket}: remove ${slice.length} failed: ${error.message}`);
+      else removed += slice.length;
     }
   }
-  return removed;
+  return { removed, failures };
 }
 
-/** Delete the auth users of a company. Ruled: they go [Josh, S137]. */
+/** Delete the auth users of a company. Ruled: they go [Josh, S137].
+ *  Failures returned, same reasoning as deleteStorage. */
 export async function deleteAuthUsers(
   admin: SupabaseClient<Database>,
   userIds: string[]
-): Promise<number> {
+): Promise<{ deleted: number; failures: string[] }> {
   let deleted = 0;
+  const failures: string[] = [];
   for (const id of userIds) {
     const { error } = await admin.auth.admin.deleteUser(id);
     if (!error) deleted += 1;
+    else failures.push(`auth ${id}: ${error.message}`);
   }
-  return deleted;
+  return { deleted, failures };
+}
+
+/**
+ * ⚠️ A `stopped` JOB ALARMS [Q6 ruling]. "A terminal state nobody reads is
+ * not a terminal state" — every transition to `stopped` emails the platform
+ * admins. Internal ops mail: no email_logs row (that table is the CUSTOMER
+ * audit), no tenant branding, and a failure to alert must never fail the
+ * sweep — it is recorded and swallowed, because the job row still holds the
+ * truth and the alert is the messenger, not the record.
+ */
+export async function alertDeletionStopped(
+  admin: SupabaseClient<Database>,
+  companyId: string,
+  detail: string
+): Promise<void> {
+  try {
+    const { data } = await admin
+      .from('platform_admins')
+      .select('email')
+      .order('created_at', { ascending: true });
+    const emails = ((data ?? []) as Array<{ email: string }>).map((a) => a.email);
+    for (const to of emails) {
+      const { error } = await sendEmail({
+        from: `${brand.name} <notices@${SENDING_DOMAIN}>`,
+        to,
+        subject: `⚠️ Deletion job STOPPED — company ${companyId}`,
+        react: createElement(NotificationEmail, {
+          brandColor: brand.themeColor,
+          heading: 'A deletion job stopped and needs a human',
+          message:
+            `Company: ${companyId}\n` +
+            `${detail}\n\n` +
+            `The job is in deletion_jobs with state 'stopped' and will not be retried ` +
+            `automatically. A half-deleted company needs a human, not another attempt.`,
+          estimateUrl:
+            (process.env.NEXT_PUBLIC_APP_URL || 'https://frame-focus-eight.vercel.app') +
+            '/admin',
+          ctaLabel: 'Open admin',
+        }),
+      });
+      if (error) console.error(`deletion alert to ${to} failed: ${error}`);
+    }
+  } catch (err) {
+    console.error('deletion alert failed entirely:', err);
+  }
 }
 
 /**
@@ -362,14 +516,49 @@ export async function runTrialDeletion(
           last_error: JSON.stringify(failed).slice(0, 2000),
         })
         .eq('id', jobId);
-      if (stop) outcome.stopped += 1;
+      if (stop) {
+        outcome.stopped += 1;
+        await alertDeletionStopped(
+          admin,
+          row.company_id,
+          `Tables failed after ${attempts} attempts: ${JSON.stringify(failed).slice(0, 800)}`
+        );
+      }
       continue;
     }
 
-    const storageRemoved = await deleteStorage(admin, row.company_id);
-    void storageRemoved;
-    const authDeleted = await deleteAuthUsers(admin, userIds);
-    void authDeleted;
+    // Storage and auth failures hold the job open EXACTLY like table
+    // failures [§4 fix, ruled]: recorded, retried next run, stopped-with-
+    // alarm at MAX_ATTEMPTS. The *_done stamps are written only over clean
+    // phases — never over survivors.
+    const storage = await deleteStorage(admin, row.company_id);
+    const auth = await deleteAuthUsers(admin, userIds);
+    if (storage.failures.length > 0 || auth.failures.length > 0) {
+      const stop = attempts >= MAX_ATTEMPTS;
+      await admin
+        .from('deletion_jobs')
+        .update({
+          state: stop ? 'stopped' : 'pending',
+          tables_done: done,
+          storage_done: storage.failures.length === 0,
+          auth_done: auth.failures.length === 0,
+          last_error: JSON.stringify({ storage: storage.failures, auth: auth.failures }).slice(
+            0,
+            2000
+          ),
+        })
+        .eq('id', jobId);
+      if (stop) {
+        outcome.stopped += 1;
+        await alertDeletionStopped(
+          admin,
+          row.company_id,
+          `Storage/auth cleanup failed after ${attempts} attempts. ` +
+            `Storage: ${storage.failures.length} failures; auth: ${auth.failures.length}.`
+        );
+      }
+      continue;
+    }
 
     // ========================================================================
     // ⚠️ THE COMPANY ROW USUALLY SURVIVES, AND THIS USED TO REPORT SUCCESS
@@ -425,6 +614,11 @@ export async function runTrialDeletion(
         .eq('id', jobId);
       outcome.stopped += 1;
       outcome.companyRowsRemaining += 1;
+      await alertDeletionStopped(
+        admin,
+        row.company_id,
+        `Tenant data deleted, but the companies row remains: ${companyError.message}`
+      );
       continue;
     }
 
