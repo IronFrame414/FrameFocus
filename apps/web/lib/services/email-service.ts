@@ -62,6 +62,54 @@ export const SENDING_DOMAIN = 'ezcontractorbinder.com';
  */
 export const SUPPORT_REPLY_TO = 'ezcontractorbinder@gmail.com';
 
+// ===========================================================================
+// THE SEND GATE — RULED [Josh, email-loop sessions, 2026-08-30]
+// ===========================================================================
+// Every real send this platform has ever made from the test environment went
+// through a LIVE key that happened to be present (423 sends, 86% into one
+// mailbox, 51 guaranteed bounces — docs/specs/email-loop-diagnosis.md). S126's
+// rule — "the transport is stubbed" — was convention, and convention did not
+// survive a Playwright suite driving the real dev server, where nothing can be
+// stubbed. This gate is that rule made structural, at the ONE call site
+// (sendEmail below) every product sender goes through.
+//
+// WHO MAY SEND:
+//   EMAIL_SEND_ENABLED=false  → nobody, anywhere. The kill switch outranks
+//                               everything, production included.
+//   EMAIL_SEND_ENABLED=true   → this process, explicitly. The deliberate
+//                               override for a supervised non-prod send.
+//   neither set               → only a Vercel PRODUCTION deployment
+//                               (VERCEL_ENV === 'production').
+//
+// WHY VERCEL_ENV AND NOT A HUMAN-SET FLAG AS THE PRODUCTION PATH: default-deny
+// is safe in test and catastrophic in production if the flag goes missing —
+// the retention warnings are the only channel that reaches a locked customer.
+// The tension resolves by keying production-allow on a variable THE PLATFORM
+// sets on every production deployment, so it cannot be forgotten by a human;
+// the human-set flag exists only as an explicit override in either direction.
+// Preview deploys (VERCEL_ENV='preview'), CI, Codespaces and dev servers all
+// land in default-deny.
+//
+// A REFUSAL IS LOUD, NEVER SILENT: sendEmail returns it as `error`, so every
+// existing caller writes an email_logs row with status 'failed' and the reason
+// in metadata — the same audit surface a missing key already uses, which the
+// incident retry banner reads — and console.error names it server-side.
+export type SendGateDecision = { allowed: true } | { allowed: false; reason: string };
+
+export function emailSendAllowed(env: NodeJS.ProcessEnv = process.env): SendGateDecision {
+  if (env.EMAIL_SEND_ENABLED === 'false') {
+    return { allowed: false, reason: 'EMAIL_SEND_ENABLED=false — kill switch' };
+  }
+  if (env.EMAIL_SEND_ENABLED === 'true') return { allowed: true };
+  if (env.VERCEL_ENV === 'production') return { allowed: true };
+  return {
+    allowed: false,
+    reason: `send not authorized here: EMAIL_SEND_ENABLED is unset and VERCEL_ENV=${
+      env.VERCEL_ENV ?? '(unset)'
+    } is not 'production'`,
+  };
+}
+
 let _resend: Resend | null = null;
 
 /** Lazy init — never instantiate at module load (Module 3H rule). */
@@ -332,6 +380,17 @@ export async function resolveCompanyReplyTo(companyId: string): Promise<string |
 export async function sendEmail(
   params: SendEmailParams
 ): Promise<{ messageId: string | null; error: string | null }> {
+  // The send gate runs BEFORE getResend(): a refused send must refuse the same
+  // way whether or not a key is present, and must never depend on one.
+  const gate = emailSendAllowed();
+  if (!gate.allowed) {
+    const message = `send gate refused: ${gate.reason}`;
+    console.error(
+      `[email-service] ${message} — to=${params.to} subject="${params.subject}"`
+    );
+    return { messageId: null, error: message };
+  }
+
   const resend = getResend();
 
   // Resolved HERE rather than at each call site, so a sender added later
