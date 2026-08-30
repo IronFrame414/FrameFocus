@@ -39,6 +39,10 @@
     {
       "path": "/api/cron/retention-warnings",
       "schedule": "30 14 * * *"
+    },
+    {
+      "path": "/api/cron/file-trash-purge",
+      "schedule": "45 3 * * *"
     }
   ]
 }

@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase-server';
 import { getFiles } from '@/lib/services/files';
 import TrashRow from './trash-row';
+import { EmptyTrashButton } from './empty-trash-button';
 
 export default async function ProjectFilesTrashPage({
   params,
@@ -44,8 +45,12 @@ export default async function ProjectFilesTrashPage({
         }}
       >
         <h1 style={{ fontSize: '1.5rem', fontWeight: 600, margin: 0 }}>Trash</h1>
-        <Link
-          href={`/dashboard/projects/${projectId}/files`}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          {canPermanentDelete && (
+            <EmptyTrashButton projectId={projectId} count={deletedFiles.length} />
+          )}
+          <Link
+            href={`/dashboard/projects/${projectId}/files`}
           style={{
             padding: '0.5rem 1rem',
             background: '#fff',
@@ -56,9 +61,15 @@ export default async function ProjectFilesTrashPage({
             fontSize: '0.875rem',
           }}
         >
-          ← Back to Files
-        </Link>
+            ← Back to Files
+          </Link>
+        </div>
       </div>
+
+      <p style={{ color: '#666', fontSize: '0.85rem', marginBottom: '1rem' }}>
+        Trashed files still count toward your storage. Files in trash for 6 months are permanently
+        deleted automatically.
+      </p>
 
       {deletedFiles.length === 0 ? (
         <p style={{ color: '#666' }}>Trash is empty.</p>

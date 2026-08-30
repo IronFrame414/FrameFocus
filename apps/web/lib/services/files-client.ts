@@ -418,6 +418,48 @@ export async function permanentDeleteFile(id: string): Promise<MutationResult> {
 
   return { success: true };
 }
+export interface EmptyTrashResult {
+  /** Trashed files found in scope. */
+  found: number;
+  /** Files whose OBJECT AND ROW are verified gone. */
+  deleted: number;
+  /** Per-file failures, named — a partial empty is reported, never rounded up. */
+  errors: string[];
+}
+
+/**
+ * Empty Trash [storage-archive-ai-spec §3, RULED Q3] — permanently delete
+ * every trashed file in scope: one project's, or the whole company's when
+ * `projectId` is omitted (the limit screen's variant; the cap is
+ * company-wide).
+ *
+ * A LOOP OVER `permanentDeleteFile()`, deliberately — that function is the
+ * one place the object-first, verified-removal ordering lives (M3-02), and a
+ * bulk reimplementation of it here would be the parity divergence. Per-file
+ * cost is two round trips; trash is small and the operation is rare.
+ *
+ * RLS enforces Owner/Admin exactly as it does for the single delete: a
+ * non-admin's loop fails every file with the RLS-refusal error rather than
+ * silently "succeeding" over nothing.
+ */
+export async function emptyTrash(opts?: { projectId?: string }): Promise<EmptyTrashResult> {
+  const supabase = createClient();
+
+  let query = supabase.from('files').select('id, file_name').eq('is_deleted', true);
+  if (opts?.projectId) query = query.eq('project_id', opts.projectId);
+  const { data, error } = await query;
+  if (error) return { found: 0, deleted: 0, errors: [error.message] };
+
+  const rows = (data ?? []) as Array<{ id: string; file_name: string }>;
+  const result: EmptyTrashResult = { found: rows.length, deleted: 0, errors: [] };
+  for (const row of rows) {
+    const outcome = await permanentDeleteFile(row.id);
+    if (outcome.success) result.deleted += 1;
+    else result.errors.push(`${row.file_name}: ${outcome.error}`);
+  }
+  return result;
+}
+
 export async function toggleFavorite(id: string, isFavorite: boolean): Promise<MutationResult> {
   const supabase = createClient();
 
