@@ -157,7 +157,17 @@ export async function runTrialWarnings(
       });
     }
 
-    const stamp = kind === 'day_3' ? { warned_3_at: now.toISOString() } : { warned_7_at: now.toISOString() };
+    // The urgent warning SUBSUMES the earlier one [found building the
+    // retention warnings, same doctrine there]: a company first seen at ≤3
+    // days left fires day_3 with warned_7_at still NULL, and without stamping
+    // BOTH, tomorrow's run would send "Trial ends in 7 days" at 2 days left —
+    // a stale warning after the urgent one.
+    const stamp =
+      kind === 'day_3'
+        ? row.warned_7_at
+          ? { warned_3_at: now.toISOString() }
+          : { warned_3_at: now.toISOString(), warned_7_at: now.toISOString() }
+        : { warned_7_at: now.toISOString() };
     const { error } = await admin
       .from('trial_lifecycle')
       .update(stamp)

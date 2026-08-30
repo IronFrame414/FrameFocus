@@ -1,18 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 import { getStripe } from '@/lib/stripe';
-
-const PRICE_IDS: Record<string, string> = {
-  starter: process.env.STRIPE_PRICE_STARTER!,
-  professional: process.env.STRIPE_PRICE_PROFESSIONAL!,
-  business: process.env.STRIPE_PRICE_BUSINESS!,
-};
-
-const SEAT_LIMITS: Record<string, number> = {
-  starter: 2,
-  professional: 5,
-  business: 15,
-};
+import { seatLimitFor } from '@/lib/billing/plan-catalog';
+import { getPriceId } from '@/lib/billing/price-ids';
 
 export async function POST(request: NextRequest) {
   const stripe = getStripe();
@@ -37,10 +27,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Only the Owner can manage billing' }, { status: 403 });
     }
 
-    // Get requested plan
+    // Get requested plan — catalog shared with the resubscribe path.
     const { plan } = await request.json();
-    const priceId = PRICE_IDS[plan];
-    if (!priceId) {
+    const priceId = getPriceId(plan);
+    const seatLimit = seatLimitFor(plan);
+    if (!priceId || seatLimit === null) {
       return NextResponse.json({ error: 'Invalid plan' }, { status: 400 });
     }
 
@@ -100,7 +91,7 @@ export async function POST(request: NextRequest) {
       metadata: {
         company_id: profile.company_id,
         plan_tier: plan,
-        seat_limit: SEAT_LIMITS[plan].toString(),
+        seat_limit: String(seatLimit),
       },
     };
 
@@ -111,7 +102,7 @@ export async function POST(request: NextRequest) {
         metadata: {
           company_id: profile.company_id,
           plan_tier: plan,
-          seat_limit: SEAT_LIMITS[plan].toString(),
+          seat_limit: String(seatLimit),
         },
       };
     }

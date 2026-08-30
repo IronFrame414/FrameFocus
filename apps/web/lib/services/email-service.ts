@@ -48,6 +48,20 @@ import type { Database } from '@framefocus/shared/types/database';
  */
 export const SENDING_DOMAIN = 'ezcontractorbinder.com';
 
+/**
+ * Where PLATFORM mail tells the reader to reply [Josh, deletion-sweep
+ * session]. The sending domain is verified in Resend for SENDING only — it
+ * has no inbox — so a Reply-To on the domain would silently eat replies the
+ * ruled copy promises are read ("Questions? Reply to this email"). This is
+ * the monitored box, and it is also the contact address the published terms
+ * and privacy policy name.
+ *
+ * PLATFORM mail only. Tenant-facing mail (proposals, invoices, COs) resolves
+ * Reply-To to the COMPANY via resolveCompanyReplyTo() — a client's reply must
+ * reach the contractor, never this box.
+ */
+export const SUPPORT_REPLY_TO = 'ezcontractorbinder@gmail.com';
+
 let _resend: Resend | null = null;
 
 /** Lazy init — never instantiate at module load (Module 3H rule). */
@@ -180,7 +194,13 @@ export type EmailType =
   // regeneration (Q4.1), so `email_logs` is the only record of which version
   // went out when — and one type covering both messages would make that
   // question unanswerable.
-  | 'selection_specifications';
+  | 'selection_specifications'
+  // Deletion sweep §3 — the three retention warnings preceding permanent
+  // deletion (copy: docs/specs/retention-warning-emails.md). The
+  // `email_types.retention_warning` row lands in 20261053000000, same rule as
+  // every member above: both halves or neither. One type for all three
+  // emails; email_logs.metadata.kind tells them apart.
+  | 'retention_warning';
 
 export interface LogEmailInput {
   company_id: string;

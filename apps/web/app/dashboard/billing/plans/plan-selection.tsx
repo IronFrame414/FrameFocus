@@ -1,51 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-
-interface Plan {
-  id: string;
-  name: string;
-  price: number;
-  features: string[];
-  seats: number;
-  highlight?: boolean;
-}
-
-const PLANS: Plan[] = [
-  {
-    id: 'starter',
-    name: 'Starter',
-    price: 79,
-    seats: 2,
-    features: ['Up to 2 team members', '10 GB storage', '5 AI estimates per month'],
-  },
-  {
-    id: 'professional',
-    name: 'Professional',
-    price: 149,
-    seats: 5,
-    highlight: true,
-    features: [
-      'Up to 5 team members',
-      '50 GB storage',
-      '25 AI estimates per month',
-      'Core workflow automations',
-    ],
-  },
-  {
-    id: 'business',
-    name: 'Business',
-    price: 249,
-    seats: 15,
-    features: [
-      'Up to 15 team members',
-      '200 GB storage',
-      'Unlimited AI estimates',
-      'All workflow automations',
-      'Client experience portal',
-    ],
-  },
-];
+// One catalog for every plan surface — see lib/billing/plan-catalog.ts. The
+// locked-account resubscribe page renders the same list.
+import { PLANS } from '@/lib/billing/plan-catalog';
 
 interface PlanSelectionProps {
   currentPlan: string;

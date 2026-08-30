@@ -12,6 +12,7 @@ import { ReminderEmail } from '@/lib/email/templates/reminder-email';
 import { PoEmail } from '@/lib/email/templates/po-email';
 import { NotificationEmail } from '@/lib/email/templates/notification-email';
 import { AuthEmail, AUTH_EMAIL_COPY, type AuthEmailKind } from '@/lib/email/templates/auth-email';
+import { RetentionWarningEmail } from '@/lib/email/templates/retention-warning-email';
 import { SelectionReleasedEmail } from '@/lib/email/templates/selection-released-email';
 import { SelectionSpecificationsEmail } from '@/lib/email/templates/selection-specifications-email';
 import { subjectFor } from '@/lib/services/auth-email';
@@ -188,6 +189,10 @@ const COVERED = new Set([
   // [S175 stage 6] The specifications sheet's delivery. White-label
   // client-facing, rendered in CLIENT_FACING above.
   'selection-specifications-email.tsx',
+  // [Deletion sweep §3] The three retention warnings. Platform identity by
+  // ruling (retention-warning-emails.md) — the product writing to its own
+  // customer about deletion; a tenant brand here would be nonsense.
+  'retention-warning-email.tsx',
 ]);
 
 describe('every email template is covered by this file', () => {
@@ -328,6 +333,36 @@ describe('transactional emails carry the rebranded footer', () => {
       const text = await render(make(), { plainText: true });
       expect(text).toContain(brand.name);
       expect(text).not.toContain('FrameFocus');
+    });
+  });
+
+  // [Deletion sweep §3] — the retention warnings. Platform mail by ruling;
+  // ALL THREE kinds rendered (a `kind` discriminator makes three messages of
+  // one file — the auth-email lesson).
+  describe('retention warnings (locked account, deletion ahead)', () => {
+    const kinds = ['cancellation_60', 'cancellation_30', 'trial_4'] as const;
+    const make = (kind: (typeof kinds)[number]) => (
+      <RetentionWarningEmail
+        kind={kind}
+        firstName="Josh"
+        deletionDate="January 3, 2027"
+        lockDate="October 5, 2026"
+        billingUrl="https://example.com/resubscribe?token=tok"
+      />
+    );
+
+    it.each(kinds.map((k) => [k]))('%s names the product, never a stale name', async (kind) => {
+      const html = readable(await render(make(kind)));
+      expect(html).toContain(brand.name);
+      expect(html).not.toContain('FrameFocus');
+      // The ruled copy's spine: the exact stored date, and the one action.
+      expect(html).toContain('January 3, 2027');
+      expect(html).toContain('https://example.com/resubscribe?token=tok');
+    });
+
+    it('carries no tenant logo — platform identity by ruling', async () => {
+      const html = await render(make('cancellation_60'));
+      expect(html).not.toContain(LOGO);
     });
   });
 

@@ -216,6 +216,14 @@ describe('the warning loop', () => {
     const out = await runTrialWarnings(admin as never, new Date());
     expect(out.warned3).toBeGreaterThan(0);
     expect(out.warned7).toBe(0);
+
+    // The urgent warning SUBSUMES the −7 stamp [deletion-sweep session]: the
+    // NEXT run must not send "Trial ends in 7 days" at 2 days left. This was
+    // a live stale-send until the fix — warned_7_at stayed NULL after day_3
+    // fired, and the following day's run matched the −7 branch.
+    const second = await runTrialWarnings(admin as never, new Date());
+    expect(second.warned7, 'stale −7 warning sent after the −3 one').toBe(0);
+    expect(second.warned3).toBe(0);
   });
 
   it('a postponed company is not warned', async () => {
@@ -306,13 +314,26 @@ describe('⚠️ the deletion job — what it must NOT touch', () => {
     }
   });
 
-  it('⚠️ signed-document tables are excluded WHOLESALE while the mechanism is unruled', async () => {
-    // Erring toward retention deliberately: keeping too much is recoverable,
-    // deleting too much is not, and TL-24 has not returned.
-    for (const t of ['client_contracts', 'change_orders', 'subcontractor_contracts']) {
-      expect(SURVIVES[t]).toBeTruthy();
-      expect(COMPANY_TABLES).not.toContain(t);
+  it('⚠️ signed-document tables are IN the walk, and the ARCHIVE survives [Q3 — INVERTED, not deleted]', async () => {
+    // The superseded assertion, quoted rather than erased: these three tables
+    // were "excluded WHOLESALE while the mechanism is unruled". Q3 ruled the
+    // mechanism (archive, not detach — deletion-sweep-analysis.md), so the
+    // originals now DELETE and the copies live in archived_documents. A test
+    // asserting the old exclusion would be a green test encoding a dead rule.
+    for (const t of [
+      'client_contracts',
+      'change_orders',
+      'subcontractor_contracts',
+      'contract_documents',
+      'lien_releases',
+    ]) {
+      expect(COMPANY_TABLES, `${t} left the walk — signed originals would survive raw`).toContain(t);
+      expect(SURVIVES[t]).toBeUndefined();
     }
+    expect(
+      SURVIVES['archived_documents'],
+      'the archive itself must survive, or the mechanism deletes its own output'
+    ).toBeTruthy();
   });
 
   it('ai_tag_logs.company_id is NULLABLE, or the ruling is unbuildable', async () => {
