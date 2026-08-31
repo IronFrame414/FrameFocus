@@ -9,8 +9,16 @@ export function SiteHeader() {
   return (
     <header className="border-b border-gray-200 bg-white">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-        <Link href="/" aria-label={brand.name}>
-          <img src="/logo-full-light.svg" alt={brand.name} className="block h-9 w-auto" />
+        {/* The logo IS the way home. It already linked to `/`; the fault was
+            affordance — too small to read as a target and no hover cue. Larger
+            (h-12, so the "EZ Contractor" line is legible) + a hover/focus state
+            so it reads as clickable. */}
+        <Link
+          href="/"
+          aria-label={`${brand.name} — home`}
+          className="inline-block rounded transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
+        >
+          <img src="/logo-full-light.svg" alt={brand.name} className="block h-12 w-auto" />
         </Link>
         <nav className="flex items-center gap-3">
           <Link

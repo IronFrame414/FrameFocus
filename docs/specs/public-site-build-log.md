@@ -115,3 +115,35 @@ than banking partial code:
 
 **Nothing for Step 4 was committed to code** — it is spec-complete for a dedicated session that can
 verify against Stripe test mode. Offered to Josh to start building immediately on his word.
+
+## Step 2 (continued) — /terms + /privacy now render the reviewed docs VERBATIM ✅
+
+Josh committed the reviewed documents (`docs/specs/terms-of-service.md` 216 lines,
+`privacy-policy.md` 285 lines) on `main` at `1544723`; cherry-picked onto this branch (`519a858`).
+
+**Mechanism (reported before building):** the two pages are statically prerendered, so
+`lib/legal-docs.ts` reads the `.md` at **build time** (`fs.readFileSync`, no runtime file access) and
+the text is baked into the static HTML. **Single source** — editing the `.md` + rebuilding updates
+the page; no component change, no transcription. Rendered with **`react-markdown` + `remark-gfm`**
+(new deps; `remark-gfm` is what renders the GFM **tables** — the privacy policy's service-provider
+list and retention windows). One shared `<MarkdownDoc>` maps every element to Tailwind classes (no
+typography plugin); wide tables scroll in their own container. No raw HTML in the docs, so nothing is
+dropped — the content is verbatim.
+
+**Verified:** type-check 0; build **exit 0**, `/terms` and `/privacy` are `○` static (load with no
+session); built HTML contains the headings/content and a rendered `<table>` with the service-provider
+rows (Supabase / Stripe / Resend) and retention windows. Lint clean (the one `<img>` logo warning).
+
+⚠️ **Do NOT submit these to Intuit yet:** two claims in the documents describe the finished state and
+are not yet true — the Terms assert card-required at signup (Step 4, not built) and the pricing shows
+amounts the Stripe Prices do not yet charge (§S1-STRIPE). The documents are correct-as-written and
+must not be softened; they publish once both land.
+
+## Header + homepage polish (same pass)
+
+- **Logo** enlarged `h-9 → h-12` (the "EZ Contractor" line was barely legible) and given a real
+  clickable affordance — it already linked to `/`; the fault was size + no hover cue. Added
+  hover-opacity + focus-visible ring; `aria-label` now "…— home".
+- **Homepage qualifier** ("For contractors running jobs with subs, client selections, and progress
+  billing") promoted from muted `text-base text-gray-500` to `text-xl font-semibold text-brand-900`
+  — it does the filtering work (names the reader) and should outweigh the two pitch lines above it.
