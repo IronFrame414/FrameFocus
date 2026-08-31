@@ -65,11 +65,26 @@ never fired because **no webhook is configured on the Resend side**. Answering t
    mapped, with a status-precedence rank so a regressive event never downgrades.
 3. **Authentication:** svix signature verified against `RESEND_SIGNING_SECRET`; a bad signature is
    401 and writes nothing. Proven in `webhook-resend.live.ts` case 5.
-4. **What a bounce should DO beyond stamping (PROPOSED, not decided):** a bounced `retention_warning`
-   means a customer is on a 14-day deletion timer having been told nothing. Proposal for Josh: on a
-   bounced `retention_warning`, (a) do **not** advance the deletion clock silently, and (b) surface
-   it — an owner-visible flag or a halt on that tenant's deletion until a human looks. This ties into
-   `#1-email` and the Q8 chain; **decide, don't infer.**
+4. **What a bounce should DO beyond stamping — ⚠️ RULED [Josh]: KEEP THE DEFAULT. Bounces are
+   RECORDED, not acted on.** The webhook stamps the bounce and it is visible; **deletion proceeds on
+   the published schedule regardless of delivery outcome.** The proposal below — halt or defer
+   deletion on a bounced `retention_warning` — is **withdrawn.**
+
+   _Superseded proposal, quoted not deleted:_ _"on a bounced `retention_warning`, (a) do not advance
+   the deletion clock silently, and (b) surface it — an owner-visible flag or a halt on that tenant's
+   deletion until a human looks."_
+
+   **The reasoning, recorded so it is not re-litigated:** ⚠️ **we cannot distinguish a dead mailbox
+   from a blocked sender.** A bounce does not tell us whether the customer's address is gone or
+   whether they blocked us. A policy that retains data indefinitely because someone blocked us is
+   **worse** than one that deletes on schedule after a reasonable attempt — and **three warnings to
+   the address on file IS that attempt.** It also keeps the published retention honest: **14 and 90
+   days means 14 and 90 days**, not "14/90 days unless a bounce quietly pauses the clock."
+
+   ⚠️ **The webhook still matters — not to gate deletion, but so a bounced warning is VISIBLE before
+   the data goes.** That is the difference between finding out in the log and finding out from an
+   angry customer. So Josh's webhook action (point 1) stands; only the "act on the bounce" half is
+   dropped. Ties into `#1-email` and the Q8 chain, now resolved for this arm.
 
 ---
 
