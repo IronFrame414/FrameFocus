@@ -28,18 +28,18 @@ import { admin, assertRebuildTest, sessionFor } from './live-session';
 // ---------------------------------------------------------------------------
 // ⚠️ THIS HARNESS DELIVERS NO REAL EMAIL, AND THAT IS A DECISION, NOT A GAP.
 // ---------------------------------------------------------------------------
-// The QA fixture project's contact is `qa-client-a@example.invalid` — a domain
-// that by RFC 2606 can never resolve. The send is therefore ATTEMPTED for real
-// (`getResend()`, the composed React element, the network call) and lands in
-// `email_logs` either as `sent` with a message id or as `failed` with the
-// error. Both are proof the path RAN; neither mails a person.
+// The QA fixture project's contact is `qa-client-a@example.invalid`. The send
+// PATH is exercised end to end (`sendEmail()` → `getResend()` →
+// `resend.emails.send()`, the composed React element) but against the MOCKED
+// transport above: the id comes from the fake, the row lands in `email_logs` as
+// `sent`, and no packet leaves the process. Proof the path RAN, with no network.
 //
-// What is deliberately NOT re-proven here: that the Resend hop and the domain
-// verification work end to end. `s160-invite-send.live.ts` delivers one real
-// email per run for exactly that, and says so in its own header. A second real
-// send would buy a second copy of the same assertion and a second unsolicited
-// message. The template's RENDER is covered without a network at all, by
-// `brand-email-footer.test.tsx`.
+// ⚠️ IT USED TO ATTEMPT A REAL NETWORK CALL, and that was the defect: with the
+// gate opened to run the path, an unmocked call to the `.invalid` domain could
+// stall and hang the live suite ~60s. What is deliberately NOT re-proven here is
+// that the Resend hop and domain verification work end to end —
+// `s160-invite-send.live.ts` delivers one real email per run for exactly that.
+// The template's RENDER is covered without a network by `brand-email-footer.test.tsx`.
 //
 // ⚠️ THE ASSERTION THAT WOULD HAVE BEEN RED BEFORE THIS FIX is C1/D1: an
 // `email_logs` row of type `selection_released` exists at all. Before S174
@@ -48,6 +48,21 @@ import { admin, assertRebuildTest, sessionFor } from './live-session';
 
 const state = vi.hoisted(() => ({ client: null as unknown as SupabaseClient }));
 vi.mock('@/lib/supabase-server', () => ({ createClient: async () => state.client }));
+
+// ⚠️ MOCK THE TRANSPORT AT THE MODULE BOUNDARY [S177]. This harness drives the
+// REAL release/offer routes, which call sendEmail() → getResend() →
+// resend.emails.send(). With the gate OPENED below to exercise that path, an
+// UNMOCKED transport makes a real network call to Resend — to a `.invalid`
+// domain that never resolves — and when that call stalls it hangs the whole live
+// suite for ~60s (the incident the send gate exists to prevent, reached here by
+// a harness that opens the gate on purpose). The fake returns a message id, so
+// the send path runs end to end and logs `sent`, with no packet leaving the
+// process. vi.mock is per-file; the gate env is not, so it is saved/restored.
+vi.mock('resend', () => ({
+  Resend: class {
+    emails = { send: async () => ({ data: { id: 'S174MAIL-mock-resend-id' }, error: null }) };
+  },
+}));
 
 import { NextRequest } from 'next/server';
 // THE REAL SHIPPED ROUTES.
@@ -134,8 +149,17 @@ async function makeSelection(name: string): Promise<string> {
   return s!.id;
 }
 
+// Captured at load. The gate is OPENED in beforeAll so the send PATH actually
+// runs (otherwise sendEmail refuses before getResend and the mocked transport is
+// never reached); restored in afterAll so the 'true' cannot leak to a later file.
+const savedGate = {
+  EMAIL_SEND_ENABLED: process.env.EMAIL_SEND_ENABLED,
+  VERCEL_ENV: process.env.VERCEL_ENV,
+};
+
 beforeAll(async () => {
   assertRebuildTest();
+  process.env.EMAIL_SEND_ENABLED = 'true';
   await sweep();
   const { data: co } = await admin.from('companies').select('id, name, slug').eq('name', 'Sabal Point Construction').single();
   companyId = co!.id;
@@ -148,6 +172,10 @@ beforeAll(async () => {
 }, 240_000);
 
 afterAll(async () => {
+  if (savedGate.EMAIL_SEND_ENABLED === undefined) delete process.env.EMAIL_SEND_ENABLED;
+  else process.env.EMAIL_SEND_ENABLED = savedGate.EMAIL_SEND_ENABLED;
+  if (savedGate.VERCEL_ENV === undefined) delete process.env.VERCEL_ENV;
+  else process.env.VERCEL_ENV = savedGate.VERCEL_ENV;
   await sweep();
   const { count } = await admin.from('selections').select('id', { count: 'exact', head: true }).like('name', `${MARKER}%`);
   expect(count, 'selections left behind').toBe(0);
