@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { getCalendarEvents } from '@/lib/services/schedule';
 import { getMyMember } from '@/lib/services/members';
 import { getDashboardData, getPortfolioMoney } from '@/lib/services/dashboard';
+import { perfTime } from '@/lib/perf';
 import { ScheduleCard } from './schedule-card';
 import { cardStyle, color, font, h2Style, microLabelStyle, primaryButtonStyle } from '@/lib/theme';
 
@@ -26,13 +27,11 @@ export default async function DashboardPage() {
   const supabase = await createClient();
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await perfTime('page.getUser', () => supabase.auth.getUser());
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('first_name, role')
-    .eq('user_id', user?.id ?? '')
-    .single();
+  const { data: profile } = await perfTime('page.profiles', () =>
+    supabase.from('profiles').select('first_name, role').eq('user_id', user?.id ?? '').single()
+  );
 
   const role = profile?.role ?? '';
   const canSeeFinancials = role === 'owner' || role === 'admin';
@@ -43,9 +42,11 @@ export default async function DashboardPage() {
   // Money-moving rollup is Owner/Admin only ($ floor) — a gated role triggers
   // ZERO of its queries, the established posture (14a's margin loop).
   const [{ kpis, attention }, events, money] = await Promise.all([
-    getDashboardData(),
-    getCalendarEvents({ ownMemberId: myMember?.id }),
-    canSeeFinancials ? getPortfolioMoney() : Promise.resolve(null),
+    perfTime('page.getDashboardData', () => getDashboardData()),
+    perfTime('page.getCalendarEvents', () => getCalendarEvents({ ownMemberId: myMember?.id })),
+    canSeeFinancials
+      ? perfTime('page.getPortfolioMoney', () => getPortfolioMoney())
+      : Promise.resolve(null),
   ]);
 
   const today = new Date();

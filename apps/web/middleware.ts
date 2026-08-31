@@ -10,6 +10,7 @@ import {
   isLockExemptPagePath,
   myCompanyLockReason,
 } from '@/lib/trial/lock-guard';
+import { perfTime } from '@/lib/perf';
 
 type CookieEntry = { name: string; value: string; options?: Record<string, unknown> };
 
@@ -41,7 +42,7 @@ export async function middleware(request: NextRequest) {
 
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await perfTime('mw.getUser', () => supabase.auth.getUser());
 
   const pathname = request.nextUrl.pathname;
 
@@ -141,7 +142,7 @@ export async function middleware(request: NextRequest) {
   // ⚠️ THE EXEMPTIONS ARE THE LOAD-BEARING PART, not the guard. A locked
   // company must still be able to PAY — see LOCK_EXEMPT_API_PREFIXES.
   if (user && !isLockExemptPagePath(pathname) && !isLockExemptApiPath(pathname)) {
-    const locked = await isMyCompanyLocked(supabase);
+    const locked = await perfTime('mw.isMyCompanyLocked', () => isMyCompanyLocked(supabase));
     if (locked) {
       // Register backlog §4, Q12 — THE PORTAL CARVE-OUT. A paid-cancellation
       // lock does NOT darken the client portal: those clients may owe money,
@@ -173,11 +174,9 @@ export async function middleware(request: NextRequest) {
   }
 
   if (user && pathname.startsWith('/dashboard')) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role, company_id')
-      .eq('user_id', user.id)
-      .single();
+    const { data: profile } = await perfTime('mw.profiles', () =>
+      supabase.from('profiles').select('role, company_id').eq('user_id', user.id).single()
+    );
 
     // ⚠️ RULING A [Josh, S131] — `DASHBOARD_ROLES`, enforced at the route.
     //
@@ -201,11 +200,13 @@ export async function middleware(request: NextRequest) {
 
     // Subscription enforcement — only for dashboard pages that are NOT billing
     if (enforceBilling && profile && !pathname.startsWith('/dashboard/billing')) {
-      const { data: subscription } = await supabase
-        .from('subscriptions')
-        .select('status, trial_end, trial_start, stripe_subscription_id')
-        .eq('company_id', profile.company_id)
-        .single();
+      const { data: subscription } = await perfTime('mw.subscriptions', () =>
+        supabase
+          .from('subscriptions')
+          .select('status, trial_end, trial_start, stripe_subscription_id')
+          .eq('company_id', profile.company_id)
+          .single()
+      );
 
       if (subscription) {
         const isExpiredTrial =

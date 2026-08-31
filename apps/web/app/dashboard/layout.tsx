@@ -5,6 +5,7 @@ import { getMyMember } from '@/lib/services/members';
 import { getCompanyTimeSettings } from '@/lib/services/company';
 import { getUnreadCount } from '@/lib/services/notifications';
 import { dashboardDeniedRedirect } from '@/lib/dashboard-access';
+import { perfTime } from '@/lib/perf';
 import { DashboardShell } from './dashboard-shell';
 import { RegisterPushSw } from './register-push-sw';
 import { ConfirmProvider } from '@/components/confirm/confirm-provider';
@@ -14,21 +15,23 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   const {
     data: { user },
-  } = await supabase.auth.getUser();
+  } = await perfTime('layout.getUser', () => supabase.auth.getUser());
 
   if (!user) {
     redirect('/sign-in');
   }
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    // `id` [S126 slice 3] — the chat panel needs the caller's PROFILE id to
-    // decide which bubbles are theirs. A mention recipient is a profile (ND-2)
-    // and `chat_messages.author_profile_id` is a profile id, so `user.id` is
-    // the wrong key here and would silently align every bubble left.
-    .select('id, first_name, last_name, role, company_id')
-    .eq('user_id', user.id)
-    .single();
+  const { data: profile } = await perfTime('layout.profiles', () =>
+    supabase
+      .from('profiles')
+      // `id` [S126 slice 3] — the chat panel needs the caller's PROFILE id to
+      // decide which bubbles are theirs. A mention recipient is a profile (ND-2)
+      // and `chat_messages.author_profile_id` is a profile id, so `user.id` is
+      // the wrong key here and would silently align every bubble left.
+      .select('id, first_name, last_name, role, company_id')
+      .eq('user_id', user.id)
+      .single()
+  );
 
   if (!profile) {
     redirect('/sign-in');
@@ -60,15 +63,19 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // every dashboard page. App Router layouts don't refetch on client-side
   // navigation — freshness comes from router.refresh(), which every clock
   // mutation already triggers.
-  const [company, openSession, myMember, timeSettings, unreadCount] = await Promise.all([
-    supabase.from('companies').select('name').eq('id', profile.company_id).single(),
-    getOpenSession(),
-    getMyMember(),
-    getCompanyTimeSettings(),
-    // ND-12 — the sidebar badge. Swallows its own errors and returns 0, so a
-    // failed count hides the badge rather than breaking the shell.
-    getUnreadCount(),
-  ]);
+  const [company, openSession, myMember, timeSettings, unreadCount] = await perfTime(
+    'layout.parallel5',
+    () =>
+      Promise.all([
+        supabase.from('companies').select('name').eq('id', profile.company_id).single(),
+        getOpenSession(),
+        getMyMember(),
+        getCompanyTimeSettings(),
+        // ND-12 — the sidebar badge. Swallows its own errors and returns 0, so a
+        // failed count hides the badge rather than breaking the shell.
+        getUnreadCount(),
+      ])
+  );
 
   return (
     <DashboardShell
