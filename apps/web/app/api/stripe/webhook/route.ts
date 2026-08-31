@@ -60,6 +60,28 @@ export async function POST(request: NextRequest) {
       case 'checkout.session.completed': {
         const session = event.data.object;
         const companyId = session.metadata?.company_id;
+
+        // Card-at-signup [§S3/§S8] — a `mode:'setup'` session stores a card and
+        // creates NO subscription (`session.subscription` is null;
+        // `session.setup_intent` is set). Mark the company's card on file and
+        // capture the customer. This is the AUTHORITATIVE, signature-verified
+        // path; `/onboarding/complete` sets the SAME flag optimistically to beat
+        // the webhook race, and both writes are idempotent (Stripe retries).
+        if (session.mode === 'setup' && companyId) {
+          await supabaseAdmin
+            .from('companies')
+            .update({ payment_method_on_file: true })
+            .eq('id', companyId);
+          if (session.customer) {
+            await supabaseAdmin
+              .from('companies')
+              .update({ stripe_customer_id: session.customer as string })
+              .eq('id', companyId)
+              .is('stripe_customer_id', null);
+          }
+          break;
+        }
+
         const planTier = session.metadata?.plan_tier || 'starter';
         const seatLimit = parseInt(session.metadata?.seat_limit || '2', 10);
 

@@ -199,6 +199,35 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
+    // ⚠️ CARD-AT-SIGNUP GATE [Josh, S176/S177 — spec §S3/§S8]. A NEW owner with
+    // no card on file is held at /onboarding until they add one.
+    //
+    //  · OWNER-ONLY — other roles never add a card, and a brand-new company has
+    //    only the owner during onboarding anyway.
+    //  · BEFORE the billing block below, so a card-less owner cannot click past
+    //    the pricing page into the dashboard [ruled Q3]. AFTER the lock guard
+    //    above, so a locked tenant still sees /locked (lock wins).
+    //  · GRANDFATHERED companies (`payment_method_on_file = true`, backfilled by
+    //    20261090000000) are never caught — that is what keeps the Sabal Point
+    //    fixture and every live-suite owner out of the gate.
+    //  · The exemptions are automatic: this block only runs under `/dashboard`,
+    //    so /onboarding, /api/stripe/setup-checkout, /onboarding/complete and
+    //    /auth/callback are all naturally exempt. `enforceBilling` gates it, so
+    //    DISABLE_BILLING_ENFORCEMENT turns it off with the rest of billing.
+    if (enforceBilling && profile?.role === 'owner') {
+      const { data: company } = await supabase
+        .from('companies')
+        .select('payment_method_on_file')
+        .eq('id', profile.company_id)
+        .single();
+      if (company && company.payment_method_on_file === false) {
+        const url = request.nextUrl.clone();
+        url.pathname = '/onboarding';
+        url.search = '';
+        return NextResponse.redirect(url);
+      }
+    }
+
     // Subscription enforcement — only for dashboard pages that are NOT billing
     if (enforceBilling && profile && !pathname.startsWith('/dashboard/billing')) {
       const { data: subscription } = await supabase
@@ -302,6 +331,13 @@ export const config = {
     '/m/:path*',
     '/portal',
     '/portal/:path*',
+    // /onboarding [S177, card-at-signup] — ADDED for the SAME reason /m and
+    // /portal were: its page calls getUser(), a Server Component cannot persist
+    // a refreshed token, so without this a stale session would ping-pong
+    // /onboarding → /sign-in → /dashboard → (card gate) → /onboarding. The card
+    // gate is scoped to `/dashboard`, so it does NOT re-fire here — no loop.
+    '/onboarding',
+    '/onboarding/:path*',
     '/sign-in',
     '/sign-up',
     '/locked',
