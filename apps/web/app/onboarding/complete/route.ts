@@ -5,6 +5,10 @@ import { createClient } from '@/lib/supabase-server';
 import { getStripe } from '@/lib/stripe';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 
+// Reads request.url and redirects — never static. Explicit so the build does not
+// probe it for prerendering (which logs a benign "Dynamic server usage" line).
+export const dynamic = 'force-dynamic';
+
 // Card-at-signup success handler [ruled Q2a]. Stripe redirects the browser here
 // after the setup checkout. The webhook is the authoritative writer, but it can
 // lag the redirect — and bouncing an owner back to "add card" seconds after they
