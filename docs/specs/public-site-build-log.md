@@ -163,4 +163,52 @@ Whitfield"** on rebuild-test. Coupled code:
   shared checkout, restarting the dev server mid-run; `desktop-chat-mentions` failed on
   `waitForURL`/`ERR_ABORTED` navigation timeouts, and an UNMODIFIED test in the same file failed the
   same way, so it is infra, not the edit. The change is a name-independent swap (self-exclusion is by
-  profile id). **Re-run `desktop-chat-mentions` when the environment is quiet.**
+  profile id). **Re-run `desktop-chat-mentions` when the environment is quiet.** (⚠️ the background
+  wrapper reported "exit 0" — that was the trailing `echo`; the real `E2E_EXIT=1`, trap #137.)
+
+## Self-service name edit — investigated, RULED, not built [Josh]
+
+**Finding:** no self-service name edit exists (no `/profile` or `/account`; `m/settings` documents its
+own nonexistence). Names ARE correctable, but only under **Team → member → Edit** (`/dashboard/team/[id]/edit`,
+mobile `/m/team/[memberId]/edit`) — Owner edits any other member, Admin edits non-owner/admin members.
+⚠️ The desktop edit **blocks editing your own profile** for everyone, and an Admin can't edit an Owner,
+so **the Owner's own name has no in-app path** (why S176 fixed it in the DB). RLS `profiles_update_owner`
+would permit owner-self-update; the block is UI-layer.
+
+**Ruled [Josh]: it lives on a personal profile/account page** (self-service, every role). **Do not
+build yet** — policy shape reported below first.
+
+⚠️ **Constraint 1 — NAME ONLY, for now [Josh].** Only first/last name. NOT password, email, avatar, or
+notification preferences. Reasons: notification preferences don't exist (no `notification_preferences`
+table; per-type routing was deferred); email is an **auth** surface (changing it is a Supabase Auth
+re-confirmation flow, not a profile write). **A page with one working field beats one with four
+disabled ones.** The page grows later when there's something real to add.
+
+⚠️ **Constraint 2 — the RLS needs a NEW self arm, column-scoped to the NAME columns [Josh].** The two
+existing UPDATE policies are `_owner` and `_admin`; **a foreman correcting their own name has no policy
+that admits it.** `profiles_update_owner` letting an owner update their own row is why the current
+block is UI-layer only — it is not the arm this needs.
+
+**Reported policy shape (mirrors `enforce_client_contracts_column_scope` + the payments trigger, which
+column-scope via `NEW.<col> IS DISTINCT FROM OLD.<col>` in a BEFORE-UPDATE trigger — RLS `WITH CHECK`
+cannot see `OLD`, so column scope is a trigger concern):**
+1. **New RLS policy `profiles_update_self`** (UPDATE): `USING (user_id = auth.uid())`,
+   `WITH CHECK (user_id = auth.uid())`. Admits a user editing their OWN row — the missing arm. ⚠️ This
+   alone is a *blanket* self-update (it would admit a role change), which is why (2) is mandatory.
+2. **New BEFORE-UPDATE trigger `enforce_profiles_self_column_scope()`** (SECURITY DEFINER plpgsql):
+   on a self update (`auth.uid() = OLD.user_id`), `RAISE EXCEPTION` if ANY column other than
+   `first_name`/`last_name` is `DISTINCT FROM OLD` — `role`, `company_id`, `user_id`, `email`,
+   `contact_id`, `member_id`, `is_deleted`, … must be unchanged. This is the column scope that stops
+   self role/company escalation, the whole authority model.
+   - Keyed on `auth.uid() = OLD.user_id`, so it does **not** constrain Owner/Admin edits of *other*
+     members (their management policies are untouched). Service-role (no auth context, `get_my_role()`
+     NULL) bypasses, like `enforce_client_contracts_column_scope` does.
+3. **Parity:** one shared self-update path for desktop and mobile (S122).
+
+**Team → Edit self-block — reported recommendation:** the desktop server action throws *"Cannot edit
+your own profile from this page"* for everyone. Once the personal page exists, **keep the block but
+make it a signpost that points at the new page**, rather than removing it. Removing it would create a
+second place to edit your own name (two save paths — the exact parity/divergence risk S122 names);
+pointing keeps Team about *others* and self on the one canonical page. Josh's "editing your own name
+from the roster you're standing on is not unreasonable" is satisfied by the signpost without the
+second write path.
