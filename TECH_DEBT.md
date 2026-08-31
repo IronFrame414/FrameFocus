@@ -64,21 +64,73 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   `v=DMARC1; p=none; rua=mailto:josh@worthprop.com` (`_dmarc.ezcontractorbinder.com`, resolved
   2026-08-30), so DMARC aggregate reports go to a WorthProp address while every other contact for
   this product is now `ezcontractorbinder@gmail.com` (`SUPPORT_REPLY_TO`, `b1b970e` — the monitored
-  box; the sending domain is send-only). **Cosmetic** — reports still arrive, and nothing about
-  authentication or delivery changes — but it is the last WorthProp string in the mail
-  configuration. Fix: one TXT record edit at Spaceship,
-  `rua=mailto:ezcontractorbinder@gmail.com`. ⚠️ **One verification owed after the edit**, recorded
-  so the switch is not assumed safe by its size: RFC 7489 §7.1 has reporters confirm an external
-  `rua` destination via a `<domain>._report._dmarc.<dest>` TXT record, and **neither destination
-  publishes one** (`ezcontractorbinder.com._report._dmarc.worthprop.com` → ENODATA, same name under
-  `gmail.com` → ENOTFOUND, both checked 2026-08-30). Reports reach the WorthProp address today
-  despite that, so the major reporters are evidently tolerant and the gmail box should inherit the
-  same treatment — but confirm by seeing one aggregate report actually land there before closing
-  this. Filed alongside the other brand-string debt: cross-ref **#119** (the sender-address scheme
-  on this same domain), **#123** (the last product-name string in `apps/web` — the same
-  "last remaining reference" shape), **#126** (the record set published at the registrar; its
-  closing test reads `Authentication-Results` for the same domain). Raised 2026-08-30
+  box; the sending domain is send-only).
+
+  **⚠️ AMENDED [Email §4, 2026-08-30] — the "cosmetic" judgment did not survive the deliverability
+  diagnosis.** _Superseded text, quoted not rewritten: "**Cosmetic** — reports still arrive, and
+  nothing about authentication or delivery changes … Reports reach the WorthProp address today
+  despite that, so the major reporters are evidently tolerant."_ **"Reports arrive" was never
+  verified — no aggregate report has been produced from the inbox — and the DNS says they should
+  not:** RFC 7489 §7.1 requires a reporter to confirm a cross-domain `rua` via a
+  `<domain>._report._dmarc.<dest>` TXT record before sending, and
+  `ezcontractorbinder.com._report._dmarc.worthprop.com` is **ENODATA** (re-confirmed 2026-08-30,
+  twice, in both email diagnosis sessions). Gmail documents honoring this check, so the working
+  assumption must be that **Gmail sends nothing today**, and the platform is flying without the one
+  free signal of how the largest receiver judges a domain it is currently spam-foldering
+  (`docs/specs/email-deliverability-diagnosis.md` §1e).
+
+  **The two options, reported for Josh's ruling — DNS is his to change, in both:**
+
+  1. **Publish the authorization record at `worthprop.com`:** one TXT,
+     `ezcontractorbinder.com._report._dmarc.worthprop.com` = `v=DMARC1`. Keeps `rua` where it is;
+     makes cross-domain delivery spec-compliant for every conforming reporter. Trade-off: the last
+     WorthProp string in the mail configuration stays (the original complaint of this entry), and
+     it couples the product's reporting to a second domain's DNS.
+  2. _Superseded fix, quoted not rewritten: "one TXT record edit at Spaceship,
+     `rua=mailto:ezcontractorbinder@gmail.com`."_ **Does not work:** the same RFC 7489 check would
+     then need `ezcontractorbinder.com._report._dmarc.gmail.com`, **which cannot be published**
+     (ENOTFOUND, checked 2026-08-30 — nobody edits gmail.com's zone). A gmail-box `rua` is only
+     viable as a **same-domain** address that forwards, e.g. `rua=mailto:dmarc@ezcontractorbinder.com`
+     — same-domain needs no authorization record at all — **but the sending domain deliberately has
+     no inbox** (`SUPPORT_REPLY_TO` doc, `email-service.ts`), so this option carries the real cost
+     of standing up a mailbox or forwarding alias on `ezcontractorbinder.com` first.
+
+  Option 1 is one record Josh already controls; option 2's same-domain form is cleaner long-term
+  and costs infrastructure. **Awaiting Josh's DNS edit; verify by an aggregate report actually
+  landing before closing.** Filed alongside the other brand-string debt: cross-ref **#119** (the
+  sender-address scheme on this same domain), **#123** (the last product-name string in `apps/web`
+  — the same "last remaining reference" shape), **#126** (the record set published at the
+  registrar; its closing test reads `Authentication-Results` for the same domain). Raised
+  2026-08-30, amended 2026-08-30 (Email §4)
   (deletion-sweep §3).
+
+### Branch-scoped, awaiting real numbers — `feature/deletion-cron-live` [Email §5]
+
+> Provisional id per the S136 rule. Tag `email`. Raised while shipping the send gate (§1), the
+> webhook proof (§2) and class-scoped unsubscribe (§3) on this branch.
+
+- **#1-email — THE SAFETY-INCIDENT NOTIFICATION FANS OUT TO EVERY SUPERVISOR ABOVE THE SUBMITTER,
+  AND NOBODY HAS RULED THAT IT SHOULD.** `app/api/safety-incidents/route.ts:141`
+  (`sendIncidentNotifications`) mails one message per recipient returned by
+  `computeIncidentRecipients` (`lib/services/incident-notify.ts:93`), which is **every profile in
+  `owner`/`admin`/`project_manager`/`foreman` ranked ABOVE the submitter** (floor: an Owner-submitter
+  still notifies Admin, so nothing is silent). In the four-person fixture tenant that is **three
+  emails per incident**; on a real twenty-person company it is far larger, and it scales with the
+  org chart, not with the incident.
+
+  **This is a PRODUCT finding, not a test artefact, and it is filed rather than fixed on purpose.**
+  It is the single largest contributor to the branch's 442 real fixture sends **precisely because
+  the fan-out is wide** — `safety_incident` dominated the loop diagnosis
+  (`docs/specs/email-loop-diagnosis.md`). ⚠️ **The §1 send gate HIDES this rather than resolves it:**
+  once test mail is redirected to a Resend test address, the volume stops reaching an inbox but the
+  fan-out is unchanged, so the count looks solved while the design question is still open. In
+  production the gate does nothing to it at all.
+
+  **Explicitly NOT changed here.** Who is told about an injury is a **safety** decision, not an
+  email one — narrowing it (e.g. to direct-supervisor + owner, or a digest) could mean a real
+  injury reaches fewer people, which is the opposite failure. Needs Josh's ruling on the intended
+  audience before any change. Cross-ref the send gate (`email-service.ts`, `a0596db`) which bounds
+  the blast radius without deciding the policy. Raised 2026-08-31 (Email §5).
 
 ### Branch-scoped, awaiting real numbers — `feature/blocking-items` [blocking-items]
 
