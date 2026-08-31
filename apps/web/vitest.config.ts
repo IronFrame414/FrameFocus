@@ -18,6 +18,17 @@ export default defineConfig({
     },
   },
   test: {
+    // pool: 'forks' isolates process.env PER FILE (each test file runs in its
+    // own child process), so one file's env mutation cannot race another's.
+    // Required since [Email §1]: the send gate made sendEmail() read
+    // process.env.{EMAIL_SEND_ENABLED,VERCEL_ENV} at call time, and
+    // email-send-gate.test.ts deliberately DELETES those across an await to
+    // prove the closed-gate path. Under the thread-sharing default that racily
+    // clobbered reply-to.test.ts's beforeEach (which needs the gate OPEN),
+    // giving flaky "send gate refused" failures — green in isolation, red at
+    // full-suite scale, the exact flaky-neighbour class the battery must not
+    // ship. Forks makes it deterministic; full suite is 1011/1011 either way.
+    pool: 'forks',
     include: ['**/*.{test,spec}.{ts,tsx}'],
     // e2e/** is Playwright's (playwright.config.ts testDir). The include glob
     // above and Playwright's default testMatch overlap completely, so without
