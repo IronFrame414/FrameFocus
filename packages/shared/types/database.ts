@@ -1297,6 +1297,7 @@ export type Database = {
           qb_income_item_id: string | null
           qb_income_item_name: string | null
           qb_last_refresh_at: string | null
+          payment_method_on_file: boolean
           qb_payments_enabled: boolean
           qb_realm_id: string | null
           qb_reauth_required_after: string | null
@@ -1371,6 +1372,7 @@ export type Database = {
           qb_income_item_id?: string | null
           qb_income_item_name?: string | null
           qb_last_refresh_at?: string | null
+          payment_method_on_file?: boolean
           qb_payments_enabled?: boolean
           qb_realm_id?: string | null
           qb_reauth_required_after?: string | null
@@ -1445,6 +1447,7 @@ export type Database = {
           qb_income_item_id?: string | null
           qb_income_item_name?: string | null
           qb_last_refresh_at?: string | null
+          payment_method_on_file?: boolean
           qb_payments_enabled?: boolean
           qb_realm_id?: string | null
           qb_reauth_required_after?: string | null
