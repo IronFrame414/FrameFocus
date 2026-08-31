@@ -47,7 +47,10 @@ function assertIsTeamMember<T>(target: T | null): T {
 
 function assertCanEdit(callerRole: string, callerProfileId: string, targetProfileId: string, targetRole: string) {
   if (callerProfileId === targetProfileId) {
-    throw new Error('Cannot edit your own profile from this page');
+    // Backstop for the UI pointer in page.tsx: your own name is edited on the
+    // Account page (/dashboard/account), never here. Blocking self-edit in Team
+    // keeps a single save path for your name (parity ruling S122).
+    throw new Error('Edit your own name from your Account page, not from Team.');
   }
   if (callerRole === 'owner') return;
   if (callerRole === 'admin') {

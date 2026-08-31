@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { createClient } from '@/lib/supabase-server';
 import { redirect } from 'next/navigation';
 import { getTeamMember, getCompanyAdmins } from '@/lib/services/team';
@@ -96,14 +97,22 @@ export default async function TeamMemberEditPage({ params }: { params: { id: str
     <div className="p-6 max-w-4xl mx-auto">
       <h1 className="text-2xl font-bold mb-4">Edit Team Member</h1>
       {isSelf ? (
-        caller.role === 'owner' ? (
-          <TransferForm admins={admins} />
-        ) : (
+        // Team → Edit is for editing OTHERS; your own name lives on the Account
+        // page — the ONE self-edit path (S177). Keeping the block (rather than
+        // adding an editor here) is deliberate: two save paths for your own name
+        // is the exact divergence the parity ruling (S122) exists to prevent.
+        // The Owner still gets the ownership-transfer control they had; everyone,
+        // Owner included, gets a pointer to where the name is actually edited.
+        <div className="space-y-4">
+          {caller.role === 'owner' ? <TransferForm admins={admins} /> : null}
           <p style={{ color: '#b45309', background: '#fef3c7', padding: 12, borderRadius: 4 }}>
-            You can&apos;t edit your own profile from this page. Contact your account owner to make
-            changes.
+            To change your own name, go to your{' '}
+            <Link href="/dashboard/account" style={{ textDecoration: 'underline', fontWeight: 600 }}>
+              Account page
+            </Link>
+            . This page is for editing other team members.
           </p>
-        )
+        </div>
       ) : (
         <EditForm
           target={{
