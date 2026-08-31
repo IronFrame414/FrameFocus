@@ -418,6 +418,35 @@ spec without an approved trace.
 
 ---
 
+## Gate 5 — Card-at-signup blocks Terms publish, which blocks Intuit — **[Josh, S176, 2026-08-31]**
+
+**What is blocked:** publishing the Terms of Service (and therefore the Intuit / QuickBooks review,
+which requires published Terms + Privacy).
+
+**Behind what:** the reviewed Terms now state **a credit card is required at signup**. The product
+does **not** collect a card at signup yet (verified S176: signup creates a DB-only trial, no Stripe
+customer). Publishing Terms that assert card-required while the code takes no card would put a claim
+on a legally-binding page the code does not honour.
+
+**What unblocks it:** ship **card-at-signup** — the ruled design in
+`public-site-and-trial-conversion-spec.md` §S3 / §S8 (onboarding gate after email confirmation,
+Stripe Checkout `mode:'setup'`, the existing signature-verified webhook extended for `mode:'setup'`,
+grandfather existing accounts via `companies.payment_method_on_file`, owner-only gate).
+
+**Dependencies to rule at the START of that session:**
+- ⚠️ **The abandonment fork [RESERVED, Josh]:** what happens to a confirmed owner who never adds a
+  card — a company row + running trial clock + no payment method, which existing `delete_after`
+  arithmetic would treat as a lapsed trial. Rule it deliberately; do not inherit it by accident.
+- **Grandfathering:** the gate must not redirect existing owners (the Sabal Point fixture has no
+  subscription row; the 1552-test live suite signs in as owner). Backfill existing companies to
+  `payment_method_on_file = true`; only `e2e/trial-fixture.ts` creates fresh owners.
+
+**Consequence:** card-at-signup is on the **QuickBooks critical path**, not optional polish. Until it
+ships, `/terms` and `/privacy` render placeholders that assert no policy
+(`public-site-and-trial-conversion-spec.md` §S-LEGAL).
+
+---
+
 ## Deferred by decision (not blocked — chosen)
 
 - **Conversion-stamp (contract-start date) — CONFLICT, resolve before build.**

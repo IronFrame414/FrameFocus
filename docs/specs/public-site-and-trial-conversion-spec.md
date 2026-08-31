@@ -140,24 +140,66 @@ confirm → `handle_new_user()` OWNER path creates company + `trialing` subscrip
 **It is not, and it does not.** A trial is a DB-only row — no Stripe customer, no
 `stripe_subscription_id`. Nothing auto-charges at trial end (§S3-lifecycle below).
 
-**Ruled [Josh, S176]: BUILD card-at-signup.** A credit card is collected at signup and stored, and
-the page states plainly that **nothing is charged without approval**. Design, chosen to honour the
-"no automatic charge" ruling in §5:
+**Ruled [Josh, S176]: BUILD card-at-signup**, and the flow below is the **ruled design** — this
+feature runs as **its own session** and starts from here.
 
-- Collect the card via **Stripe Checkout `mode: 'setup'`** (or SetupIntent + Elements) → creates a
-  Stripe **customer** and attaches a payment method. ⚠️ **Do NOT use subscription-mode-with-trial**
-  (`trial_period_days`): that hands Stripe the authority to auto-charge at trial end, which is exactly
-  what §5 forbids. Setup mode stores the card and charges nothing.
-- **A trial can start on any plan** — the plan choice is made at signup and written to
-  `subscriptions.plan_tier`; the trial "runs on whichever plan they chose."
-- Persist the Stripe customer id / payment-method reference on the company (or subscription) so the
-  §5 conversion flow can reuse the stored card instead of re-collecting it.
-- **After signup: company details, then straight to Company Settings.**
-- **The trial → lock → 14-day-clock lifecycle is UNCHANGED** (§5). The stored card is a convenience
-  for conversion, not an auto-charge trigger. Conversion remains an active plan choice.
+### The ruled design (onboarding gate after confirmation)
 
-**Publish `ezcontractorbinder@gmail.com`** as the contact (currently published nowhere but the legal
-docs). This is also the existing `SUPPORT_REPLY_TO` in `email-service.ts:68`.
+Email confirmation means "card at signup" is really "card at first sign-in after confirming" — the
+card cannot be collected on the signup form itself. Ruled flow (Q2 = onboarding gate; the other two
+options were rejected — a setup checkout before confirmation links a card to a company that does not
+exist yet, and a soft gate abandons "card required"):
+
+1. **Signup** stays name/company/email/password → `supabase.auth.signUp` → confirm email.
+2. **First sign-in** (`/auth/callback`) routes a NEW owner to **`/onboarding`**, not `/dashboard`.
+3. **`/onboarding`** (owner): **plan choice** + company details + **Add payment method** →
+   **Stripe Checkout `mode: 'setup'`** (creates the Stripe customer, stores the card, charges
+   nothing). ⚠️ **NOT subscription-mode-with-trial** (`trial_period_days`) — that hands Stripe the
+   authority to auto-charge at trial end, which §5 forbids. On completion → **Company Settings**.
+4. **Hard gate:** an owner whose company has **no card on file** is redirected to `/onboarding`
+   until the card is added. Owner-only (other roles are never asked to add a card; a brand-new
+   company has only the owner during onboarding anyway).
+5. **Plan choice lives in `/onboarding`, not the signup form** [ruled here] — it sits next to the
+   card and avoids a third edit to the `handle_new_user()` trigger. `subscriptions.plan_tier` +
+   `seat_limit` are set when the plan is chosen.
+6. **The setup webhook is NEW.** ⚠️ **Extend the EXISTING signature-verified webhook**
+   (`/api/stripe/webhook`, which already verifies the Stripe signature) to handle
+   `checkout.session.completed` with `mode:'setup'`. Do **not** stand up a second endpoint — an
+   unverified webhook is a public write surface.
+7. **Lifecycle UNCHANGED** (§5): trial → lock → 14-day clock. The stored card is a convenience for
+   the §5 conversion flow (reuse it instead of re-collecting), never an auto-charge trigger.
+
+**Publish `ezcontractorbinder@gmail.com`** as the contact — also the existing `SUPPORT_REPLY_TO`
+(`email-service.ts:68`).
+
+### ⚠️ §S8 — why this is its own session, and what it depends on [S176 findings]
+
+**1. The hard gate is entangled with existing accounts — grandfather them.** A gate keyed on
+"owner without a card" would redirect **every existing owner**, including the Sabal Point screenshot
+fixture (which has **no subscription row at all** — it predates the trial system) and every owner
+sign-in in the 1552-test live suite. The session must add a `companies.payment_method_on_file`
+(default false) and **backfill all existing companies to true** (grandfather), so only signups AFTER
+the migration are gated. Only `e2e/trial-fixture.ts` creates fresh owners (used by
+`desktop-trial-screens.spec.ts`) — those fixtures must set the flag or expect the gate. **Prove the
+full live + e2e suites after.**
+
+**2. The abandonment fork is RESERVED [Josh] — rule it at the START of the session, do not inherit
+it by accident.** A confirmed owner who never adds a card leaves a company row, a running trial
+clock, and no payment method — and `delete_after` arithmetic already exists that would treat them as
+a lapsed trial. The gate itself does not need this resolved (it just keeps redirecting them, lifecycle
+unchanged), but whether such an account should be treated specially is a **deliberate ruling owed**,
+not a default to inherit silently.
+
+**3. ⚠️ CRITICAL PATH — card-at-signup gates the Terms, which gate Intuit [Josh, S176].** The
+reviewed Terms of Service now state that a card is required at signup. So **the Terms cannot publish
+until this ships**, and **the Terms are the Intuit/QuickBooks review gate.** Card-at-signup is on the
+QuickBooks critical path — **not optional polish.** Recorded in `GATED.md`.
+
+**4. The Stripe setup + email round-trip is not end-to-end verifiable in the Codespace** (no live
+card entry, no real webhook delivery, no email confirmation loop). The session builds it, unit/
+integration-tests the webhook (signature) and the setup-session route with a mocked Stripe, proves
+the gate causes no regression via the suites, and **reports plainly which paths Josh must test in
+Stripe test mode himself.**
 
 ### §S3-lifecycle — what happens at trial end today (fact)
 
@@ -291,10 +333,14 @@ are updated (§S1).
 
 ---
 
-## Build order (per prompt)
+## Build order — status [S176]
 
-1. **Fixture rename + sanitation** (§6) — gates screenshots; battery proof.
-2. **`/terms` + `/privacy`** — **blocked on Josh's text**; wire routes + placeholder now, render
-   verbatim when it arrives.
-3. **Plan catalog to ruled numbers** (§S1) → then **`/pricing`** and **`/`** from `PLANS`.
-4. **Card-at-signup build** (§S3) + confirm §5 conversion reuses the stored card.
+1. ✅ **Fixture rename + sanitation** (§6) — DONE, live suite 1552/1552.
+2. ⏸ **`/terms` + `/privacy`** — routes + placeholders SHIPPED; verbatim render blocked on Josh's
+   text (the source files are still empty). ⚠️ **Also gated by card-at-signup** — the Terms assert
+   card-required, so they cannot publish until §S3/§S8 ships (Gate 5, `GATED.md`).
+3. ✅ **Plan catalog to ruled numbers** (§S1) → **`/pricing`** and **`/`** from `PLANS` — DONE.
+4. ⏭ **Card-at-signup** (§S3 / §S8) — **runs as its own session** from the ruled design above.
+   Reason: the hard gate is entangled with existing accounts (grandfathering), the abandonment fork
+   is RESERVED for a deliberate ruling, and the Stripe + email round-trip is not e2e-verifiable in
+   the Codespace. On the **QuickBooks critical path** (Gate 5). Not built this session.

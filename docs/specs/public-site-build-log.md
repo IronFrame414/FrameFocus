@@ -89,3 +89,29 @@ Josh created `docs/specs/terms-of-service.md` and `privacy-policy.md` but both a
 at time of writing. `/terms` and `/privacy` routes are built and load, rendering an honest
 placeholder that **asserts no policy** (no invented terms/retention/collection claims). The reviewed
 text is rendered verbatim once it lands. CC does not author legal text.
+⚠️ Also gated by Step 4 — the Terms assert card-required (Gate 5, below).
+
+## Step 4 — card-at-signup — RULED and specced; runs as its own session
+
+Josh chose "build it now" but his elaboration ruled the design, reserved the abandonment fork for
+its own session, and named the critical path. Investigation then showed the coherent feature is a
+large funnel/Stripe build whose **core (Stripe setup + email round-trip) is not e2e-verifiable in
+the Codespace**, and whose **hard gate is entangled with existing accounts** (the Sabal Point
+fixture has **no subscription row**; the 1552-test suite signs in as owner). Committing an
+unverifiable funnel — or an unreachable column+webhook slice — would violate S173 (no half-built /
+no banking dead code). So this session **fully specs it as the ruled, session-ready design** rather
+than banking partial code:
+
+- **Ruled design** written to `public-site-and-trial-conversion-spec.md` §S3 (onboarding gate after
+  confirmation; plan choice in onboarding; Stripe Checkout `mode:'setup'`; extend the EXISTING
+  signature-verified webhook for `mode:'setup'` — no new endpoint; lifecycle unchanged).
+- **§S8** records the three dependencies: grandfather existing accounts via
+  `companies.payment_method_on_file` (backfill true); the **abandonment fork** (RESERVED — rule it
+  deliberately, don't inherit `delete_after`); and the un-verifiable Stripe/email paths Josh must
+  test in Stripe test mode.
+- ⚠️ **Critical path recorded in `GATED.md` Gate 5:** the reviewed Terms assert card-required, so
+  **Terms cannot publish until card-at-signup ships**, and Terms are the **Intuit/QuickBooks** gate.
+  Card-at-signup is not optional polish.
+
+**Nothing for Step 4 was committed to code** — it is spec-complete for a dedicated session that can
+verify against Stripe test mode. Offered to Josh to start building immediately on his word.
