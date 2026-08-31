@@ -40,7 +40,7 @@ async function send(overrides: Record<string, unknown> = {}) {
   vi.resetModules();
   const mod = await import('@/lib/services/email-service');
   return mod.sendEmail({
-    from: 'Bishop Contracting <bishop-contracting@ezcontractorbinder.com>',
+    from: 'Sabal Point Construction <bishop-contracting@ezcontractorbinder.com>',
     to: RECIPIENT,
     subject: 'test',
     react: null as never,
@@ -127,7 +127,7 @@ describe('+REPLY-TO — it is the COMPANY, never the recipient', () => {
 
     await send({ replyToCompanyId: COMPANY_ID });
     expect(sendMock.mock.calls[0][0].from).toBe(
-      'Bishop Contracting <bishop-contracting@ezcontractorbinder.com>'
+      'Sabal Point Construction <bishop-contracting@ezcontractorbinder.com>'
     );
   });
 });

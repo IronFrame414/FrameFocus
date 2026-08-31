@@ -7,8 +7,8 @@ describe('buildSenderAddress', () => {
   // nothing. A domain change is meant to fail here and be re-confirmed by hand
   // against what is actually verified in Resend.
   it('formats as display-name with slug at sending domain', () => {
-    expect(buildSenderAddress({ name: 'Bishop Contracting', slug: 'bishop' }))
-      .toBe('Bishop Contracting <bishop@ezcontractorbinder.com>');
+    expect(buildSenderAddress({ name: 'Sabal Point Construction', slug: 'bishop' }))
+      .toBe('Sabal Point Construction <bishop@ezcontractorbinder.com>');
   });
 
   // The local part is the tenant slug, so it is the only part that varies

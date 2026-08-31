@@ -22,7 +22,7 @@ function makeSupabase(rows: Record<string, any[]>) {
 
 const baseRows = {
   change_orders: [{ id: 'co1', company_id: 'c1', project_id: 'p1', is_deleted: false }],
-  companies: [{ name: 'Bishop', brand_color: null, timezone: 'America/New_York' }],
+  companies: [{ name: 'Sabal Point Construction', brand_color: null, timezone: 'America/New_York' }],
   projects: [{ name: 'Job', contact_id: null }],
   change_order_line_items: [],
   change_order_line_rows: [],

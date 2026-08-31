@@ -150,7 +150,7 @@ describe('§3.1 text overflow — shrink to fit, with a floor', () => {
     // The contract is that this returns a SIZE, never a shortened string. A
     // truncated name or amount on a legal instrument reads as complete and
     // says something else; that is why truncation was rejected.
-    const r = fitTextToBox('Bishop Contracting LLC', 10, 12, 0.5);
+    const r = fitTextToBox('Sabal Point Construction LLC', 10, 12, 0.5);
     expect(typeof r.fontSize).toBe('number');
     expect(Object.keys(r).sort()).toEqual(['fontSize', 'overflows', 'shrunk']);
   });
