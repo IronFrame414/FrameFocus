@@ -46,7 +46,10 @@ export default function Home() {
             The big platforms are built for companies with an office staff. The cheap ones are
             invoice apps with a calendar. This is the one in between.
           </p>
-          <p className="mx-auto mt-3 max-w-2xl text-base text-gray-500">
+          {/* The qualifier does the filtering work — it names the reader (a
+              remodeler leans in, a handyman self-selects out). Given more weight
+              than the pitch above it: larger, heavier, darker. */}
+          <p className="mx-auto mt-5 max-w-2xl text-xl font-semibold text-brand-900">
             For contractors running jobs with subs, client selections, and progress billing.
           </p>
           <div className="mt-8 flex flex-col items-center gap-3">
