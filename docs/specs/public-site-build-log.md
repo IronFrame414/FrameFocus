@@ -147,3 +147,20 @@ must not be softened; they publish once both land.
 - **Homepage qualifier** ("For contractors running jobs with subs, client selections, and progress
   billing") promoted from muted `text-base text-gray-500` to `text-xl font-semibold text-brand-900`
   — it does the filtering work (names the reader) and should outweigh the two pitch lines above it.
+
+## Owner profile rename (post-merge, branch `fix/fixture-owner-name`)
+
+The sidebar showed the Owner as **"Josh Bishop"** (a real name, in every screenshot) — the S176
+fixture rename covered company/addresses/contacts/subs/projects but not the signed-in user's own
+profile. Renamed the owner profile (`josh+test50@worthprop.com`, id `4cc43826…`) to **"Dave
+Whitfield"** on rebuild-test. Coupled code:
+- `desktop-chat-mentions.spec.ts` — the self-exclusion assertion reads the LIVE owner name; updated
+  `not.toContain('Josh Bishop')` → `'Dave Whitfield'` + the roster comment, or it would pass
+  vacuously (S157). The three other `'Josh Bishop'` refs (`s123`, `brand-*-footer`) are literal test
+  inputs, not the fixture — left as-is.
+- `seed-test-identities.mjs` owner identity synced to Dave/Whitfield.
+- ⚠️ **e2e verification blocked by environment instability** — a concurrent session was bouncing the
+  shared checkout, restarting the dev server mid-run; `desktop-chat-mentions` failed on
+  `waitForURL`/`ERR_ABORTED` navigation timeouts, and an UNMODIFIED test in the same file failed the
+  same way, so it is infra, not the edit. The change is a name-independent swap (self-exclusion is by
+  profile id). **Re-run `desktop-chat-mentions` when the environment is quiet.**

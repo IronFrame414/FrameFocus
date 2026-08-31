@@ -6,7 +6,7 @@ import { OWNER, PROJECT_QA_A, signIn, teardownChat } from './chat-fixture';
 // The postable set for QA A's CREW thread, derived from the live roster and
 // project_assignments rather than assumed:
 //
-//   Josh Bishop   owner            by role      <- the viewer, so self-excluded
+//   Dave Whitfield  owner          by role      <- the viewer, so self-excluded
 //   QA Admin A    admin            by role
 //   Casey Crew    crew_member      assigned
 //   QA Foreman A  foreman          assigned
@@ -80,7 +80,10 @@ test.describe('§5.1 — the `@` affordance', () => {
     expect(text).not.toContain('QA Sub A');
     expect(text).not.toContain('QA Client A');
     // §5.1 — self-mention notifies nobody, so the viewer is not offered.
-    expect(text).not.toContain('Josh Bishop');
+    // The viewer is the owner (josh+test50), whose profile name is 'Dave Whitfield'
+    // [S176 fixture rename]. Assert the CURRENT name, or self-exclusion passes
+    // vacuously against a name the fixture no longer has (S157).
+    expect(text).not.toContain('Dave Whitfield');
   });
 
   test('typing `@` opens the picker and filters as you type', async ({ page }) => {

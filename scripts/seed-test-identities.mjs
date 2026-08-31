@@ -50,7 +50,7 @@ const COMPANY_B_SLUG = 'ridgeline-test-co-2';
 
 /** Company A — every role FrameFocus gates on. */
 const COMPANY_A_IDENTITIES = [
-  { email: 'josh+test50@worthprop.com', role: 'owner', first: 'QA', last: 'Owner A' },
+  { email: 'josh+test50@worthprop.com', role: 'owner', first: 'Dave', last: 'Whitfield' },
   { email: 'josh+qa-admin@worthprop.com', role: 'admin', first: 'QA', last: 'Admin A' },
   { email: 'josh+pm@worthprop.com', role: 'project_manager', first: 'QA', last: 'PM A' },
   { email: 'josh+qa-foreman@worthprop.com', role: 'foreman', first: 'QA', last: 'Foreman A' },
