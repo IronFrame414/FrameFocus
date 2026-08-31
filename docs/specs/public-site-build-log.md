@@ -59,7 +59,33 @@ left untouched). So a live DB rename is durable; the seed constant is updated in
 
 ---
 
-## Step 2 — /terms + /privacy — BLOCKED
+## Step 3a — plan catalog to ruled numbers ✅ (`8656600`)
+
+`PLANS` → $50/$100/$200, 3/7/20 (storage 50/120/500 unchanged); portal on Professional + Business;
+"workflow automations" strings removed. `billing/page.tsx` derives its labels from `PLANS` instead
+of a second hardcoded copy. Obsolete unimported `SUBSCRIPTION_TIERS` deleted. New migration
+`20261070000000` bumps the signup trigger's Starter `seat_limit` 2→3 (reproduced verbatim from
+`pg_get_functiondef`, only the two literals changed; applied to rebuild-test). type-check 5/5,
+billing units 21/21. ⚠️ **Stripe Price objects are Josh's to repoint** (§S1-STRIPE).
+
+## Step 3b — /pricing + homepage ✅ (commit below)
+
+Built from the ONE catalog: `components/public/pricing-table.tsx` (shared by `/` and `/pricing`),
+`site-header.tsx`, `site-footer.tsx`. Homepage rewritten — ruled pitch, the four things (§2 order,
+ruled copy), Josh's paragraph (his voice, leads with running his own jobs), pricing, footer. No fake
+social proof, no analytics/pixels/scripts, no AI-estimates or QuickBooks claims.
+⚠️ **Card copy deferred:** the homepage says "Start your 30-day free trial · Nothing is charged
+without your approval" — both true TODAY. It does NOT yet claim "credit card required" because
+card-at-signup (Step 4) is not built; adding that line before the build would put a claim on the
+page the code does not do.
+
+**Battery (Step 3b):** type-check 0; production build **exit 0, 117 static pages** (+3); `/`,
+`/pricing`, `/terms`, `/privacy` all prerendered `○` (render with no session). One lint warning
+(`<img>` for the logo) — matches the existing homepage/sign-up convention.
+
+## Step 2 — /terms + /privacy — placeholder wired, verbatim BLOCKED
 
 Josh created `docs/specs/terms-of-service.md` and `privacy-policy.md` but both are **empty (0 lines)**
-at time of writing. Will render verbatim once the text lands. CC does not author legal text.
+at time of writing. `/terms` and `/privacy` routes are built and load, rendering an honest
+placeholder that **asserts no policy** (no invented terms/retention/collection claims). The reviewed
+text is rendered verbatim once it lands. CC does not author legal text.
