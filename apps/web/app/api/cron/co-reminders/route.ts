@@ -11,6 +11,7 @@ import {
   sendEmail,
 } from '@/lib/services/email-service';
 import { ChangeOrderEmail } from '@/lib/email/templates/change-order-email';
+import { isEmailUnsubscribed } from '@/lib/services/email-unsubscribe';
 
 // Signed-artifact spec §7.3 — daily Vercel Cron, the change-order equivalent of
 // api/cron/estimate-reminders. One pass (reminders only): a CO has no
@@ -101,6 +102,13 @@ export async function GET(request: NextRequest) {
       .maybeSingle();
     if (!session || !session.recipient_email) continue;
 
+    // Email §3 — class-scoped opt-out. Checked here (skip, like the estimate
+    // cron's client_unsubscribed_at) so the row is not logged as a failure and
+    // retried forever; sendEmail's own check is the backstop, not the path.
+    if (await isEmailUnsubscribed(admin, co.company_id, session.recipient_email, 'reminders')) {
+      continue;
+    }
+
     const signingUrl = `${appUrl}/sign-co/${session.token}`;
     const variables: Record<string, string> = {
       company_name: company.name,
@@ -129,6 +137,9 @@ export async function GET(request: NextRequest) {
         // +REPLY-TO [S97]: a client's reply reaches the COMPANY, not the
         // platform domain. Resolved in sendEmail so senders inherit it.
         replyToCompanyId: company.id,
+        // Email §3 — recurring class: List-Unsubscribe headers + suppression
+        // backstop. co_reminder is one of exactly three types that carry this.
+        unsubscribe: { companyId: company.id, scope: 'reminders' },
         to: session.recipient_email,
         subject,
         react: ChangeOrderEmail({

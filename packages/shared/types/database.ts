@@ -2780,6 +2780,41 @@ export type Database = {
         }
         Relationships: []
       }
+      email_unsubscribes: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          email: string
+          id: string
+          scope: string
+          source: string | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string | null
+          email: string
+          id?: string
+          scope?: string
+          source?: string | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          email?: string
+          id?: string
+          scope?: string
+          source?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_unsubscribes_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       estimate_categories: {
         Row: {
           company_id: string

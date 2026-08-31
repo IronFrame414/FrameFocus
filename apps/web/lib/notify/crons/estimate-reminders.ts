@@ -12,6 +12,7 @@ import {
 } from '@/lib/services/email-service';
 import { notifyManagers } from '@/lib/services/signing-service';
 import { ReminderEmail } from '@/lib/email/templates/reminder-email';
+import { isEmailUnsubscribed } from '@/lib/services/email-unsubscribe';
 import { notify } from '@/lib/notify/notify';
 import { getManagerNotifyRecipients } from '@/lib/notify/recipients';
 import { isFinalReminderStep } from '@framefocus/shared/utils/reminders';
@@ -175,6 +176,17 @@ export async function runEstimateReminders(
       .maybeSingle();
     if (!session) continue;
 
+    // Email §3 — the CLASS opt-out, alongside the per-estimate one above
+    // (client_unsubscribed_at, J5). One-click on ANY of this company's
+    // reminder mail records the class, and the class must stop THIS cron too,
+    // or Gmail's one-click "worked" while the mail kept coming.
+    if (
+      session.recipient_email &&
+      (await isEmailUnsubscribed(admin, estimate.company_id, session.recipient_email, 'reminders'))
+    ) {
+      continue;
+    }
+
     const signingUrl = `${appUrl}/sign/${session.token}`;
     const variables: TemplateVariables = {
       company_name: company.name,
@@ -211,6 +223,9 @@ export async function runEstimateReminders(
       // +REPLY-TO [S97]: a client's reply reaches the COMPANY, not the
       // platform domain. Resolved in sendEmail so senders inherit it.
       replyToCompanyId: company.id,
+      // Email §3 — recurring class: List-Unsubscribe headers + backstop. The
+      // per-estimate body link below stays; header one-click is class-wide.
+      unsubscribe: { companyId: company.id, scope: 'reminders' },
       to: session.recipient_email,
       subject,
       react: ReminderEmail({

@@ -9,6 +9,7 @@ import {
   sendEmail,
 } from '@/lib/services/email-service';
 import { InvoiceEmail } from '@/lib/email/templates/invoice-email';
+import { isEmailUnsubscribed } from '@/lib/services/email-unsubscribe';
 import { paymentTermsLabel } from '@/lib/services/invoices-shared';
 // [S106] was a seventh local copy of the company-tz calendar-date rule.
 import { companyToday } from '@framefocus/shared/utils/dates';
@@ -153,6 +154,14 @@ export async function GET(request: NextRequest) {
       const contact = contactById.get(contactId);
       if (!contact?.email) continue;
 
+      // Email §3 — class-scoped opt-out, checked per client before any step
+      // fires. A skip here, like the estimate cron's client_unsubscribed_at:
+      // NOT a failure row, NOT retried tomorrow as an error. sendEmail's own
+      // check is the backstop for callers that forget this.
+      if (await isEmailUnsubscribed(admin, company.id, contact.email, 'reminders')) {
+        continue;
+      }
+
       const settings = resolveReminderSettings(
         overrideByContact.get(contactId) ?? null,
         {
@@ -195,6 +204,8 @@ export async function GET(request: NextRequest) {
             // +REPLY-TO [S97]: a client's reply reaches the COMPANY, not the
             // platform domain. Resolved in sendEmail so senders inherit it.
             replyToCompanyId: company.id,
+            // Email §3 — recurring class: List-Unsubscribe headers + backstop.
+            unsubscribe: { companyId: company.id, scope: 'reminders' },
             to: contact.email,
             subject,
             react: InvoiceEmail({

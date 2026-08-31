@@ -81,6 +81,11 @@ export const LOCK_EXEMPT_API_PREFIXES = [
   // a session, and 403ing THE way out for exactly that user would be the §S2
   // failure rebuilt one layer down. The route validates its own token.
   '/api/resubscribe',
+  // [Email §3] The class-scoped unsubscribe — same Q1a reasoning: its audience
+  // is session-free counterparties, but a session-holding user of a LOCKED
+  // tenant clicking it must not be 403'd out of a consent action. The route
+  // validates its own HMAC token.
+  '/api/email/unsubscribe',
 ] as const;
 
 export function isLockExemptApiPath(pathname: string): boolean {

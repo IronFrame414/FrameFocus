@@ -1,6 +1,11 @@
 import 'server-only';
 import { Resend } from 'resend';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import {
+  buildUnsubscribeHeaders,
+  isEmailUnsubscribed,
+  type UnsubscribeScope,
+} from '@/lib/services/email-unsubscribe';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
 
@@ -320,6 +325,14 @@ export interface SendEmailParams {
    *
    *  Omit for INTERNAL mail (manager notifications) — see the resolver. */
   replyToCompanyId?: string | null;
+  /** Email §3 [Josh ruling] — set ONLY on the recurring class (reminder,
+   *  co_reminder, invoice_reminder). Doing so (a) refuses the send if the
+   *  recipient has opted out (the backstop behind the crons' own pre-checks —
+   *  a future recurring sender that forgets its pre-check still cannot mail an
+   *  unsubscribed address), and (b) attaches the RFC 8058 List-Unsubscribe +
+   *  List-Unsubscribe-Post headers. NEVER set it on transactional mail, and
+   *  never on retention_warning — both ruled. */
+  unsubscribe?: { companyId: string; scope: UnsubscribeScope };
 }
 
 /**
@@ -391,6 +404,29 @@ export async function sendEmail(
     return { messageId: null, error: message };
   }
 
+  // Consent, before the key: an unsubscribed recipient is refused identically
+  // whether or not this environment could send at all.
+  let unsubscribeHeaders: Record<string, string> | null = null;
+  if (params.unsubscribe) {
+    const claim = {
+      companyId: params.unsubscribe.companyId,
+      email: params.to,
+      scope: params.unsubscribe.scope,
+    };
+    const suppressed = await isEmailUnsubscribed(
+      getSupabaseAdmin() as SupabaseClient<Database>,
+      claim.companyId,
+      claim.email,
+      claim.scope
+    );
+    if (suppressed) {
+      const message = `recipient has unsubscribed (${claim.scope})`;
+      console.error(`[email-service] ${message} — to=${params.to} subject="${params.subject}"`);
+      return { messageId: null, error: message };
+    }
+    unsubscribeHeaders = buildUnsubscribeHeaders(claim);
+  }
+
   const resend = getResend();
 
   // Resolved HERE rather than at each call site, so a sender added later
@@ -413,6 +449,10 @@ export async function sendEmail(
     attachments: params.attachments,
     // Omitted entirely when null — never an empty header, never the recipient.
     ...(replyTo ? { replyTo } : {}),
+    // The RFC 8058 pair, only when the caller opted into the recurring class
+    // AND the token/appUrl plumbing is configured (missing config degrades to
+    // header-less mail, loudly — see email-unsubscribe.ts).
+    ...(unsubscribeHeaders ? { headers: unsubscribeHeaders } : {}),
   });
 
   if (error) return { messageId: null, error: error.message };
