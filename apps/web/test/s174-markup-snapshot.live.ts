@@ -94,7 +94,7 @@ async function makeAllowance(label: string, budgeted: number): Promise<string> {
 beforeAll(async () => {
   assertRebuildTest();
   await sweep();
-  const { data: co } = await admin.from('companies').select('id, default_material_markup_percent').eq('name', 'Bishop Contracting').single();
+  const { data: co } = await admin.from('companies').select('id, default_material_markup_percent').eq('name', 'Sabal Point Construction').single();
   companyId = co!.id;
   companyDefaultMarkup = Number(co!.default_material_markup_percent ?? 0);
   for (const [k, e] of [['owner', OWNER], ['pm', PM], ['foreman', FOREMAN], ['sub', SUB], ['linked', LINKED]] as const) {

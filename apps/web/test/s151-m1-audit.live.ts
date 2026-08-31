@@ -40,7 +40,7 @@ beforeAll(async () => {
   [owner, pm, crew] = await Promise.all([sessionFor(OWNER), sessionFor(PM), sessionFor(CREW)]);
 
   const { data: company } = await admin
-    .from('companies').select('id').eq('name', 'Bishop Contracting').single();
+    .from('companies').select('id').eq('name', 'Sabal Point Construction').single();
   companyId = company!.id;
 
   // ⚠️ Use the repo's purge helper, NOT a bare `companies` delete. A company

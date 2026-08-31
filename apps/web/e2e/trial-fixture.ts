@@ -9,13 +9,13 @@ import { deleteCompanies } from '../test-support/company-purge';
  * WHY TWO KINDS OF FIXTURE, AND WHY THE LOCKED ONE IS DISPOSABLE
  * ============================================================================
  * The warning screen needs a `trial_lifecycle` row and nothing else, so it can
- * borrow **Bishop Contracting** — the shared QA company that already has an
+ * borrow **Sabal Point Construction** — the shared QA company that already has an
  * Owner, an Admin and a PM. Adding a row with `locked_at IS NULL` changes
  * nothing any other spec observes: `/dashboard/trial` is a new route nobody
  * else visits, and the lock guard only fires on `locked_at IS NOT NULL`.
  *
  * ⚠️ THE LOCKED AND 4TH-ATTEMPT CASES MUST NOT BORROW IT. Setting `locked_at`
- * on Bishop Contracting would make `middleware.ts` redirect **every** route for
+ * on Sabal Point Construction would make `middleware.ts` redirect **every** route for
  * **every** QA identity to `/locked`, and setting its subscription to
  * `incomplete` would bounce them all to `/trial-limit`. Playwright runs spec
  * files in parallel, so that would not merely fail this file — it would fail
@@ -127,7 +127,7 @@ function inDays(n: number): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Give Bishop Contracting a trial that ends in 5 days.
+ * Give Sabal Point Construction a trial that ends in 5 days.
  *
  * Five is chosen so `daysUntil()` returns 5 → the screen renders the **day_7**
  * warning. Three or fewer would render day_3; the acknowledgement test asserts

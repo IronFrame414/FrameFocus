@@ -450,8 +450,8 @@ describe('S146-G2 — sub-inbound COMPLETION → conditional against sub_contrac
     expect(Object.keys(r.filled_values ?? {}).length).toBeGreaterThan(0);
     // THE INVERSION — the claimant is the SUB, never the company.
     expect(r.filled_values?.claimant_name).toBeTruthy();
-    expect(r.filled_values?.claimant_name).not.toBe('Bishop Contracting');
-    expect(r.filled_values?.contractor_furnished_to).toBe('Bishop Contracting');
+    expect(r.filled_values?.claimant_name).not.toBe('Sabal Point Construction');
+    expect(r.filled_values?.contractor_furnished_to).toBe('Sabal Point Construction');
   }, 120_000);
 
   it('renderRelease PRODUCED a document, and it carries NO signature of ours', async () => {

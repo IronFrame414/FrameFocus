@@ -127,7 +127,7 @@ async function sweep(): Promise<void> {
     await admin.from('files').delete().in('project_id', pids);
 
     // ⚠️ AND THE EMAIL LOGS, KEYED ON metadata->>project_id — NOT on MARKER.
-    // The subject is the COMPANY's ("Bishop Contracting: your specifications
+    // The subject is the COMPANY's ("Sabal Point Construction: your specifications
     // sheet") and carries no marker at all, so a sweep and a residue check
     // written against MARKER would BOTH pass while leaving a row per run
     // behind. That is exactly the leak a harness which cannot collide with
@@ -323,7 +323,7 @@ beforeAll(async () => {
   assertRebuildTest();
   await sweep();
 
-  const { data: co } = await admin.from('companies').select('id').eq('name', 'Bishop Contracting').single();
+  const { data: co } = await admin.from('companies').select('id').eq('name', 'Sabal Point Construction').single();
   companyId = co!.id;
   ownerC = (await sessionFor(OWNER)) as Client;
   pmC = (await sessionFor(PM)) as Client;

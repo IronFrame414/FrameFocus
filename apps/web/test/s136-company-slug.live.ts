@@ -85,6 +85,12 @@ describe('collisions resolve numerically, and only on collision', () => {
       .maybeSingle();
     expect(existing, 'fixture slug absent — this test proves nothing').not.toBeNull();
 
+    // ⚠️ The literal 'Bishop Contracting' is DELIBERATE and was left untouched by
+    // the S176 fixture rename (company renamed to 'Sabal Point Construction', but
+    // its SLUG kept as 'bishop-contracting'). This is a slug-FUNCTION input, not a
+    // name lookup: it normalises to 'bishop-contracting', collides with the kept
+    // slug asserted above, and yields -2. Do not "fix" it to the new company name
+    // — that would break the collision and the test would prove nothing.
     expect(await slugFor('Bishop Contracting')).toBe('bishop-contracting-2');
   });
 

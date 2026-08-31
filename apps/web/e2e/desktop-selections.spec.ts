@@ -89,7 +89,7 @@ test.beforeAll(async () => {
   const errors = await sweep();
   expect(errors, 'the pre-run sweep met refusals — fixture residue would make every test below vacuous or wrong').toEqual([]);
   const admin = adminClient();
-  const { data: company } = await admin.from('companies').select('id').eq('name', 'Bishop Contracting').single();
+  const { data: company } = await admin.from('companies').select('id').eq('name', 'Sabal Point Construction').single();
   const { data: area } = await admin.from('selection_areas').insert({ company_id: company!.id, project_id: PROJECT_QA_A, name: `${MARKER} Kitchen` }).select('id').single();
   const { data: sel } = await admin
     .from('selections')
@@ -305,7 +305,7 @@ test.describe('S172 — DENIED is a resting state the company reopens', () => {
 test.describe('S173 Job 3 — Release Selections: the batch is delivery, one signature per selection', () => {
   test('owner ticks two draft selections on the tab and releases them together — both go awaiting', async ({ page }) => {
     const admin = adminClient();
-    const { data: company } = await admin.from('companies').select('id').eq('name', 'Bishop Contracting').single();
+    const { data: company } = await admin.from('companies').select('id').eq('name', 'Sabal Point Construction').single();
     const { data: sel2 } = await admin
       .from('selections')
       .insert({ company_id: company!.id, project_id: PROJECT_QA_A, name: `${MARKER} Backsplash`, status: 'draft' })

@@ -42,7 +42,7 @@ beforeAll(async () => {
   [owner, crew] = await Promise.all([sessionFor(OWNER), sessionFor(CREW)]);
 
   const { data: company } = await admin
-    .from('companies').select('id').eq('name', 'Bishop Contracting').single();
+    .from('companies').select('id').eq('name', 'Sabal Point Construction').single();
   companyId = company!.id;
 
   // An `invoices` file whose project the crew member is assigned to. Chosen from

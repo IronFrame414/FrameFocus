@@ -250,7 +250,7 @@ beforeAll(async () => {
   assertRebuildTest();
   await sweep();
 
-  const { data: co } = await admin.from('companies').select('id').eq('name', 'Bishop Contracting').single();
+  const { data: co } = await admin.from('companies').select('id').eq('name', 'Sabal Point Construction').single();
   companyId = co!.id;
   for (const [k, e] of [
     ['owner', OWNER], ['pm', PM], ['foreman', FOREMAN], ['crew', CREW],

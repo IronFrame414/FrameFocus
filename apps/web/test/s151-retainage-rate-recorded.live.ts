@@ -117,7 +117,7 @@ beforeAll(async () => {
   await sweep('before');
 
   const { data: company } = await admin
-    .from('companies').select('id').eq('name', 'Bishop Contracting').single();
+    .from('companies').select('id').eq('name', 'Sabal Point Construction').single();
   companyId = company!.id;
 
   // A subcontractor member to hang the contract on. `.limit(1)` is ORDERED —

@@ -55,7 +55,7 @@ beforeAll(async () => {
   [owner, pm, crew] = await Promise.all([sessionFor(OWNER), sessionFor(PM), sessionFor(CREW)]);
 
   const { data: company } = await admin
-    .from('companies').select('id').eq('name', 'Bishop Contracting').single();
+    .from('companies').select('id').eq('name', 'Sabal Point Construction').single();
   companyId = company!.id;
 
   // Pre-clean via the repo's purge helper, which walks COMPANY_CHILDREN and
@@ -98,7 +98,7 @@ describe('S152-B — companies INSERT is restricted to unaffiliated callers', ()
   });
 
   it('B1b — an OWNER is refused too: the gate is affiliation, not privilege', async () => {
-    // One login, one company. The Owner of Bishop Contracting has the highest
+    // One login, one company. The Owner of Sabal Point Construction has the highest
     // role in the tenant and still cannot mint a second company, because
     // get_my_company_id() resolves. Without this, B1 could pass on a policy that
     // merely floors by role — which is NOT what was ruled.

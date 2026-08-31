@@ -29,7 +29,7 @@ const A_ADMIN = 'josh+qa-admin@worthprop.com';
 const A_FOREMAN = 'josh+qa-foreman@worthprop.com';
 const B_OWNER = 'josh+qa-b-owner@worthprop.com';
 
-const COMPANY_A_NAME = 'Bishop Contracting';
+const COMPANY_A_NAME = 'Sabal Point Construction';
 // ⚠️ RESOLVED BY NAME, NOT SLUG [S136]. This pinned `slug = 'ridgeline-test-co-2'`
 // until S136's backfill rewrote company slugs to drop their hex suffix
 // (20260917000000), at which point this file failed with "Company B not found —

@@ -110,7 +110,7 @@ const sessions = async (id = selId) => (await admin.from('selection_signing_sess
 beforeAll(async () => {
   assertRebuildTest();
   await sweep();
-  const { data: co } = await admin.from('companies').select('id, default_material_markup_percent').eq('name', 'Bishop Contracting').single();
+  const { data: co } = await admin.from('companies').select('id, default_material_markup_percent').eq('name', 'Sabal Point Construction').single();
   companyId = co!.id;
   materialMarkup = Number(co!.default_material_markup_percent ?? 0);
   for (const [k, e] of [['owner', OWNER], ['pm', PM], ['sub', SUB], ['linked', LINKED], ['control', CONTROL]] as const) {

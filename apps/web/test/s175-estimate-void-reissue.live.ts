@@ -81,7 +81,7 @@ beforeAll(async () => {
   assertRebuildTest();
   await sweep();
   [ownerC, pmC, adminC] = (await Promise.all([sessionFor(OWNER), sessionFor(PM), sessionFor(ADMIN_U)])) as Client[];
-  const { data: co } = await admin.from('companies').select('id').eq('name', 'Bishop Contracting').single();
+  const { data: co } = await admin.from('companies').select('id').eq('name', 'Sabal Point Construction').single();
   companyId = co!.id;
   const { data: c } = await admin.from('contacts').select('id').eq('company_id', companyId).limit(1).single();
   contactId = c!.id;

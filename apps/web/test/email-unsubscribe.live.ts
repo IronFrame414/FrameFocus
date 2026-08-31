@@ -48,7 +48,7 @@ beforeAll(async () => {
   const { data: company } = await admin
     .from('companies')
     .select('id')
-    .eq('name', 'Bishop Contracting')
+    .eq('name', 'Sabal Point Construction')
     .single();
   companyId = (company as { id: string }).id;
 });
@@ -182,7 +182,7 @@ describe('3 · the check the crons and sendEmail share', () => {
     delete process.env.RESEND_API_KEY;
 
     const result = await sendEmail({
-      from: 'Bishop Contracting <bishop-contracting@ezcontractorbinder.com>',
+      from: 'Sabal Point Construction <bishop-contracting@ezcontractorbinder.com>',
       to: PROBE_EMAIL,
       subject: 'suppressed probe',
       react: null as never,

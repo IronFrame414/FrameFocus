@@ -69,7 +69,7 @@ beforeAll(async () => {
   const { data: company } = await admin
     .from('companies')
     .select('id')
-    .eq('name', 'Bishop Contracting')
+    .eq('name', 'Sabal Point Construction')
     .single();
   companyId = (company as { id: string }).id;
 
@@ -82,7 +82,7 @@ beforeAll(async () => {
       resend_message_id: MESSAGE_ID,
       email_type: 'invoice',
       recipient_email: 'qa-webhook-probe@example.invalid',
-      sender_email: 'Bishop Contracting <bishop-contracting@ezcontractorbinder.com>',
+      sender_email: 'Sabal Point Construction <bishop-contracting@ezcontractorbinder.com>',
       subject: 'webhook-resend.live probe',
       status: 'sent',
       metadata: { probe: 'webhook-resend.live' },

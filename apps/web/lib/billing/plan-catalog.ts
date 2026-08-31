@@ -32,36 +32,37 @@ export interface Plan {
 // the "N AI estimates per month" lines are REMOVED ENTIRELY: they described a
 // feature that was never built and was never enforced; the new pricing has no
 // AI estimates, and photo tagging is a separate $20 add-on.
+// Prices, seats and the portal gate are the S176 public-site ruling
+// (public-site-and-trial-conversion-spec.md §3): $50/$100/$200, 3/7/20 seats,
+// portal on Professional + Business. "Workflow automations" feature strings are
+// REMOVED — ruled off the page (nobody can say what they were). ⚠️ The Stripe
+// PRICE objects (price-ids.ts env vars) are the charge-time source and must be
+// repointed by Josh to actually charge these amounts — see §S1-STRIPE.
 export const PLANS: Plan[] = [
   {
     id: 'starter',
     name: 'Starter',
-    price: 79,
-    seats: 2,
+    price: 50,
+    seats: 3,
     storageGb: 50,
-    features: ['Up to 2 team members', '50 GB storage'],
+    features: ['Up to 3 team members', '50 GB storage'],
   },
   {
     id: 'professional',
     name: 'Professional',
-    price: 149,
-    seats: 5,
+    price: 100,
+    seats: 7,
     storageGb: 120,
     highlight: true,
-    features: ['Up to 5 team members', '120 GB storage', 'Core workflow automations'],
+    features: ['Up to 7 team members', '120 GB storage', 'Client experience portal'],
   },
   {
     id: 'business',
     name: 'Business',
-    price: 249,
-    seats: 15,
+    price: 200,
+    seats: 20,
     storageGb: 500,
-    features: [
-      'Up to 15 team members',
-      '500 GB storage',
-      'All workflow automations',
-      'Client experience portal',
-    ],
+    features: ['Up to 20 team members', '500 GB storage', 'Client experience portal'],
   },
 ];
 
