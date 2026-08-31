@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // +REPLY-TO [Josh, S97 — platform-wide]: every client-facing email carries a
 // Reply-To of the sending COMPANY's address, so a client's reply reaches the
@@ -48,11 +48,28 @@ async function send(overrides: Record<string, unknown> = {}) {
   });
 }
 
+const savedGateEnv = {
+  EMAIL_SEND_ENABLED: process.env.EMAIL_SEND_ENABLED,
+  VERCEL_ENV: process.env.VERCEL_ENV,
+};
+
 beforeEach(() => {
   sendMock.mockReset();
   sendMock.mockResolvedValue({ data: { id: 'msg_1' }, error: null });
   resolveMock.mockReset();
   process.env.RESEND_API_KEY = 'test-key';
+  // The send gate (email-service.ts, [Email §1]) refuses BEFORE getResend(),
+  // so these traces never reach the mocked transport unless the gate is
+  // explicitly opened for the process.
+  process.env.EMAIL_SEND_ENABLED = 'true';
+  delete process.env.VERCEL_ENV;
+});
+
+afterAll(() => {
+  for (const [key, value] of Object.entries(savedGateEnv)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
 });
 
 describe('+REPLY-TO — the header is set from the company', () => {
