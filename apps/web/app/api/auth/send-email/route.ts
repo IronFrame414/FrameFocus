@@ -29,8 +29,29 @@ import { handleAuthEmail, type AuthEmailPayload } from '@/lib/services/auth-emai
 // This route is inert until the hook is enabled in the Supabase dashboard.
 // Exact steps, both projects, in `docs/specs/S160-auth-email-hook.md` §3.
 
-/** Standard Webhooks, the same scheme the Resend webhook already verifies. */
-const SIGNATURE_HEADERS = ['svix-id', 'svix-timestamp', 'svix-signature'] as const;
+// Standard Webhooks, the same scheme the Resend webhook already verifies — but
+// GoTrue and Resend spell its headers DIFFERENTLY, and both spellings are the
+// same signed request:
+//
+//   · GoTrue posts `webhook-id` / `webhook-timestamp` / `webhook-signature`
+//     (supabase/auth `internal/hooks/hookshttp/hookshttp.go:153-155`).
+//   · The Resend webhook this route was modelled on posts the `svix-*` spelling.
+//
+// ⚠️ HARD-REQUIRING `svix-*` HERE WAS THE PRODUCTION AUTH-EMAIL OUTAGE. Every
+// real GoTrue call arrives with `webhook-*`, so the old pre-check returned 400
+// BEFORE verifying anything — and GoTrue renders a 400 from this endpoint as
+// the user-visible "Invalid payload sent to hook" (`hookshttp.go:242-244`),
+// failing the whole sign-up / recovery / invite. It shipped because the live
+// test drove `handleAuthEmail()` directly and never crossed this check.
+//
+// svix's own verify() already reads either spelling, so accepting both is the
+// honest fix: it costs nothing and survives Supabase changing the spelling.
+// Each entry is [svix spelling, webhook spelling] of ONE header.
+const SIGNATURE_HEADERS = [
+  ['svix-id', 'webhook-id'],
+  ['svix-timestamp', 'webhook-timestamp'],
+  ['svix-signature', 'webhook-signature'],
+] as const;
 
 export async function POST(request: NextRequest) {
   const secret = process.env.SEND_EMAIL_HOOK_SECRET;
@@ -47,12 +68,18 @@ export async function POST(request: NextRequest) {
 
   const body = await request.text();
   const headers: Record<string, string> = {};
-  for (const h of SIGNATURE_HEADERS) {
-    const v = request.headers.get(h);
+  for (const [svixName, webhookName] of SIGNATURE_HEADERS) {
+    const v = request.headers.get(svixName) ?? request.headers.get(webhookName);
     if (!v) {
-      return NextResponse.json({ error: `Missing ${h}` }, { status: 400 });
+      // A genuinely unsigned request is still refused. The message names the
+      // `webhook-*` spelling because that is the one a real GoTrue request would
+      // be missing — naming only `svix-*` would misdescribe the production case.
+      return NextResponse.json({ error: `Missing ${webhookName}` }, { status: 400 });
     }
-    headers[h] = v;
+    // Hand svix both keys set to the one value it found. verify() reads either,
+    // so this is spelling-agnostic regardless of which the caller sent.
+    headers[svixName] = v;
+    headers[webhookName] = v;
   }
 
   let payload: AuthEmailPayload;

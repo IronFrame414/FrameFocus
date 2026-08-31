@@ -299,9 +299,15 @@ const HOOK_BODY = JSON.stringify({
 
 describe('S160 — POST /api/auth/send-email', () => {
   it('refuses a request with no signature headers', async () => {
+    // A genuinely unsigned request is still refused with 400. The message now
+    // names the `webhook-*` spelling — GoTrue posts `webhook-id/-timestamp/
+    // -signature`, so that is the header a real (if unsigned) GoTrue request
+    // would be missing. The route accepts EITHER spelling now; that both are
+    // verified is proven in `auth-email-hook-signature-headers.test.ts`.
+    // _Superseded, quoted not rewritten:_ `expect(body.error).toContain('svix-id')`.
     const { status, body } = await callRoute({}, HOOK_BODY);
     expect(status).toBe(400);
-    expect(body.error).toContain('svix-id');
+    expect(body.error).toContain('webhook-id');
   });
 
   it('refuses a WRONG signature, and says nothing about why', async () => {
