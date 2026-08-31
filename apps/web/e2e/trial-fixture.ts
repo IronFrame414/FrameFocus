@@ -193,8 +193,21 @@ export async function createThrowawayCompany(
     .eq('user_id', userId)
     .single();
   if (pErr || !profile) throw new Error(`no profile for ${email}: ${pErr?.message}`);
+  const companyId = (profile as { company_id: string }).company_id;
 
-  return { email, userId, companyId: (profile as { company_id: string }).company_id };
+  // ⚠️ CARD-AT-SIGNUP [S177] — a real signup lands `payment_method_on_file=false`
+  // (the column default), which the middleware card gate redirects to
+  // /onboarding BEFORE the trial-limit / lock behaviour these fixtures exist to
+  // test. Grandfather the throwaway to true — exactly what 20261090000000 did
+  // for every existing company — so it exercises the trial screens, not the
+  // onboarding gate. Service role, so the column-scope trigger permits it.
+  const { error: flagErr } = await admin
+    .from('companies')
+    .update({ payment_method_on_file: true })
+    .eq('id', companyId);
+  if (flagErr) throw new Error(`grandfather ${email}: ${flagErr.message}`);
+
+  return { email, userId, companyId };
 }
 
 /** Lock a throwaway tenant WITHOUT banning it — see the note in the spec. */
