@@ -383,9 +383,17 @@ export function DashboardShell({
               </p>
             </div>
           </div>
+          {/* Personal account — ungated, every role. The one place to fix your
+              own name (S177); Team → Edit is for editing OTHERS. */}
+          <Link
+            href="/dashboard/account"
+            className="mt-3 block w-full rounded-[9px] px-3 py-2 text-left text-[12px] text-brand-300 transition-colors duration-150 hover:bg-white/5 hover:text-white"
+          >
+            Account
+          </Link>
           <button
             onClick={handleSignOut}
-            className="mt-3 w-full rounded-[9px] px-3 py-2 text-left text-[12px] text-brand-300 transition-colors duration-150 hover:bg-white/5 hover:text-white"
+            className="mt-1 w-full rounded-[9px] px-3 py-2 text-left text-[12px] text-brand-300 transition-colors duration-150 hover:bg-white/5 hover:text-white"
           >
             Sign out
           </button>

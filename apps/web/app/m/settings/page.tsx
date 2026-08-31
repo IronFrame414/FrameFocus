@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { getMyMember } from '@/lib/services/members';
 import { getMyProfile } from '@/lib/services/profiles';
 import { getCompany, getCompanyTimeSettings } from '@/lib/services/company';
@@ -77,6 +78,17 @@ export default async function MobileSettingsPage() {
           </span>
         </p>
       </section>
+
+      {/* The one editable thing reachable from Settings — a LINK, not a control,
+          so Settings stays read-only (A-48 counts controls, not navigation).
+          Self-service name edit [S177]; the page it opens holds the only field. */}
+      <Link
+        href="/m/account"
+        data-testid="m-settings-edit-name"
+        className="mt-[12px] block rounded-[15px] border border-m6m-border bg-m6m-card p-[16px] text-[13px] font-semibold text-brand-500"
+      >
+        Edit your name →
+      </Link>
 
       {/* ── Your company ───────────────────────────────────────────────────
           The timezone earns its place: it is the rule M-5's clock and every
