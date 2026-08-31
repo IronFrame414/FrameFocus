@@ -121,8 +121,24 @@ async function sweep(): Promise<void> {
     .from('email_logs').delete().eq('recipient_email', INVITEE).like('email_type', 'auth_%')).error);
 }
 
+// ⚠️ [Email §1, S157] OPEN THE GATE for this file — and ONLY this file's
+// process. The send gate refuses BEFORE getResend(), so without this every
+// assertion below dies at the gate instead of reaching the code it tests. This
+// is SAFE precisely because the Resend transport is vi.mock'd (top of file): no
+// network hop happens whether the gate is open or shut. This is the gate-open
+// idiom (reply-to.test.ts), NOT an inversion — the file's subject is the
+// auth-email handler's logic and its failure logging, not the send policy.
+// Restored in afterAll so the 'true' cannot leak to the next live file (the
+// runner reuses a process); s160-invite-send additionally forces itself closed.
+const savedGate = {
+  EMAIL_SEND_ENABLED: process.env.EMAIL_SEND_ENABLED,
+  VERCEL_ENV: process.env.VERCEL_ENV,
+};
+
 beforeAll(async () => {
   assertRebuildTest();
+  process.env.EMAIL_SEND_ENABLED = 'true';
+  delete process.env.VERCEL_ENV;
   if (!process.env.RESEND_API_KEY) {
     throw new Error('RESEND_API_KEY must be set — getResend() throws before the mock is reached');
   }
@@ -182,6 +198,10 @@ afterAll(async () => {
     must('teardown logs', (await admin.from('email_logs').delete().in('id', madeLogIds)).error);
   }
   await sweep();
+  for (const [k, v] of Object.entries(savedGate)) {
+    if (v === undefined) delete process.env[k];
+    else process.env[k] = v;
+  }
 }, 240_000);
 
 // ============================================================================

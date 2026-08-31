@@ -28,6 +28,21 @@
  * If that one email ever becomes unwelcome, change `RECIPIENT` to an address
  * on a domain that refuses mail and drop C1's `emailed === true` assertion —
  * but read what is lost above before doing it.
+ *
+ * ---------------------------------------------------------------------------
+ * ⚠️ AMENDED [Email §1, S157] — IT NO LONGER DELIVERS. The send gate
+ * (`email-service.ts`, [Email §1]) refuses every send in a test environment
+ * (EMAIL_SEND_ENABLED unset, not a Vercel production deploy) BEFORE getResend().
+ * "Delivers one real email per run" was exactly the behaviour the gate exists
+ * to stop — this file was a contributor to the 442 fixture sends. Group C is
+ * therefore INVERTED below: by default the send is REFUSED and logged `failed`.
+ *
+ * The real Resend hop — and the domain-verification canary it was ("no UI
+ * anywhere that would show" a lapsed verification) — is now OPT-IN, not lost by
+ * accident but retired from the default battery by ruling: run with
+ * EMAIL_SEND_ENABLED='true' AND a live key present to prove the hop end to end.
+ * That the canary leaves the default run is a real, ruled consequence of
+ * default-deny-in-test [Josh], recorded rather than hidden.
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { randomUUID } from 'node:crypto';
@@ -56,6 +71,18 @@ let ownerUserId: string;
 let invitationId: string;
 let invitationToken: string;
 
+// ⚠️ This file's Group C asserts a REFUSED send. The gate MUST be closed here,
+// and we force it rather than assume it: the live runner is fileParallelism:false
+// and a process can be reused across files, so a prior file that opened the gate
+// (s160-auth-email does, for its MOCKED transport) could otherwise leak
+// EMAIL_SEND_ENABLED='true' into this process and turn C1 into a REAL send to a
+// real inbox — the exact incident [Email §1] exists to prevent. Captured at load,
+// forced closed in beforeAll, restored in afterAll.
+const savedGate = {
+  EMAIL_SEND_ENABLED: process.env.EMAIL_SEND_ENABLED,
+  VERCEL_ENV: process.env.VERCEL_ENV,
+};
+
 const must = (label: string, error: { message: string } | null) => {
   if (error) throw new Error(`${label}: ${error.message}`);
 };
@@ -79,6 +106,9 @@ async function sweep(): Promise<void> {
 
 beforeAll(async () => {
   assertRebuildTest();
+  // Force the gate CLOSED — see savedGate above. No real mail can leave this file.
+  delete process.env.EMAIL_SEND_ENABLED;
+  delete process.env.VERCEL_ENV;
   [owner, crew] = await Promise.all([sessionFor(OWNER), sessionFor(CREW)]);
 
   const { data: company } = await admin
@@ -113,6 +143,10 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await sweep();
+  for (const [k, v] of Object.entries(savedGate)) {
+    if (v === undefined) delete process.env[k];
+    else process.env[k] = v;
+  }
 }, 240_000);
 
 // ============================================================================
@@ -183,10 +217,16 @@ describe('S160-P5-B — the send is gated by the caller’s own RLS', () => {
 // GROUP C — the send itself. The hop nothing else in the suite exercises.
 // ============================================================================
 
-describe('S160-P5-C — an Owner’s send reaches Resend and is logged', () => {
-  it('C1 — the send SUCCEEDS and comes back with a real Resend message id', async () => {
-    // ⚠️ THE ONE ASSERTION S135 WOULD HAVE FAILED. Before that session there
-    // was no send call at all: this would have found no `sendEmail` to reach.
+describe('S160-P5-C — an Owner’s send is REFUSED BY THE GATE and logged as failed', () => {
+  it('C1 — the send is refused by the gate (default-deny in test), not delivered', async () => {
+    // ⚠️ INVERTED [Email §1, S157]. Superseded assertions, quoted not rewritten:
+    //   "C1 — the send SUCCEEDS and comes back with a real Resend message id"
+    //   expect(result.emailed, …).toBe(true); expect(result.error).toBeNull();
+    // The send gate refuses in test BEFORE getResend(), so the Owner — who
+    // passes the RLS gate of Group B and reaches sendEmail() — is refused at the
+    // transport, not the read. This is the ONE real delivery the suite used to
+    // perform, and stopping it is the whole point of [Email §1]. The link is
+    // still built and returned; only the delivery is refused.
     state.client = owner;
     const result = await sendInviteEmail(
       owner as unknown as SupabaseClient<Database>,
@@ -194,32 +234,35 @@ describe('S160-P5-C — an Owner’s send reaches Resend and is logged', () => {
       ORIGIN
     );
 
-    expect(result.emailed, `the invite send failed: ${result.error}`).toBe(true);
-    expect(result.error).toBeNull();
+    expect(result.emailed, 'the gate let a real invite send through in test').toBe(false);
+    expect(result.error, 'the refusal did not name the send gate').toMatch(/send gate refused/);
     expect(result.link).toBe(`${ORIGIN}/invite/accept?token=${invitationToken}`);
   }, 60_000);
 
-  it('C2 — and it wrote exactly ONE email_logs row, with the right shape', async () => {
+  it('C2 — and it wrote exactly ONE email_logs row, logged FAILED with no Resend id', async () => {
+    // ⚠️ INVERTED [Email §1, S157]. Superseded: status was 'sent' and
+    // resend_message_id was asserted truthy ("A REAL id from Resend"). The
+    // failure-logging discipline (invite-email.ts:167, status: error?'failed':'sent')
+    // still writes the row on a refused send — "no email arrived" is exactly the
+    // question this table answers — so the shape is unchanged EXCEPT the status
+    // and the now-null message id (no Resend hop happened).
     const rows = await inviteLogs();
-    expect(rows, 'the send was not logged').toHaveLength(1);
+    expect(rows, 'the refused send was not logged').toHaveLength(1);
 
     const row = rows[0];
-    expect(row.status).toBe('sent');
+    expect(row.status).toBe('failed');
     expect(row.company_id).toBe(companyId);
     expect(row.recipient_email).toBe(RECIPIENT);
     expect(row.subject).toBe(buildInviteSubject(companyName));
 
-    // ⚠️ A REAL id from Resend, not a placeholder. This is what separates
-    // "the code called sendEmail" from "Resend accepted the message".
-    expect(row.resend_message_id, 'no Resend message id — was the send mocked?').toBeTruthy();
-    expect(typeof row.resend_message_id).toBe('string');
+    // ⚠️ No Resend id — the gate refused before getResend(), so nothing was
+    // ever handed to Resend. This is the inversion of the old truthy assertion.
+    expect(row.resend_message_id, 'a gate-refused send carried a Resend id').toBeNull();
 
-    // The From line is the tenant's slug on the verified domain — the address
-    // the whole S159 investigation was about.
+    // The From line and metadata are written regardless of send outcome — the
+    // tenant's slug on the verified domain, and the answerable-later fields.
     expect(row.sender_email).toBe(buildSenderAddress({ name: companyName, slug: companySlug }));
     expect(row.sender_email).toContain('@ezcontractorbinder.com');
-
-    // Metadata is what makes the row answerable six months later.
     const meta = row.metadata as Record<string, unknown>;
     expect(meta.invitation_id).toBe(invitationId);
     expect(meta.role).toBe('project_manager');
