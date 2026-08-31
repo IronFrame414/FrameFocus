@@ -35,12 +35,12 @@ import { buildSelectionSpecificationsSubject, buildSelectionsReleasedSubject } f
 // prop at all, and a differently shaped string ("<product> notification").
 
 const LOGO = 'https://cdn.example.com/tenant-logo.png';
-const COMPANY = 'Bishop Contracting';
+const COMPANY = 'Sabal Point Construction';
 
 /**
  * React SSR emits an EMPTY HTML COMMENT between adjacent JSX children, so
  * `Sent by {companyName} via {brand.name}` serialises as
- *   Sent by <!-- -->Bishop Contracting<!-- --> via <!-- -->EZ Contractor Binder
+ *   Sent by <!-- -->Sabal Point Construction<!-- --> via <!-- -->EZ Contractor Binder
  * The comment is invisible to every mail client and the plain-text alternative
  * has none of it — but a naive toContain() on the raw HTML fails and looks like
  * the rebrand didn't apply. Strip only the empty separators; real comments

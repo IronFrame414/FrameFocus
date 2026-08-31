@@ -55,7 +55,7 @@ const SUB = 'josh+qa-sub@worthprop.com';
 const OWNER = 'josh+test50@worthprop.com';
 const CREW = 'josh+crew@worthprop.com';
 
-/** Company A — Bishop Contracting. */
+/** Company A — Sabal Point Construction. */
 const COMPANY = '03bb903f-1084-4ab4-afb8-03192cb58d30';
 /** QA A — isolation fixture, the project the sub is assigned to. */
 const PROJECT = '4a4f8567-67f8-4394-baae-181229974bd9';

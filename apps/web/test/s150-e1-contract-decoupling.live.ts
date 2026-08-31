@@ -28,7 +28,7 @@ describe('S150-E1 — R16 decoupling', () => {
     //
     // The first version of this fixture took `companies.select('id').limit(1)`
     // and then demanded that company have an estimate. rebuild-test holds two:
-    // Bishop Contracting (7 estimates) and Ridgeline Builders (0). With no
+    // Sabal Point Construction (7 estimates) and Ridgeline Builders (0). With no
     // ORDER BY, heap order decides which comes back — it returned Ridgeline,
     // `est` was null, and `beforeAll` died on `.id` with a TypeError that named
     // nothing useful.

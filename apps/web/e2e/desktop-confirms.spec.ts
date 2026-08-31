@@ -80,7 +80,7 @@ test.beforeAll(async () => {
   const { data: company } = await admin
     .from('companies')
     .select('id')
-    .eq('name', 'Bishop Contracting')
+    .eq('name', 'Sabal Point Construction')
     .single();
   companyId = company!.id;
 

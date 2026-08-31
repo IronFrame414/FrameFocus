@@ -94,7 +94,7 @@ export default function SignUpPage() {
                 value={firstName}
                 onChange={(e) => setFirstName(e.target.value)}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                placeholder="Josh"
+                placeholder="Alex"
               />
             </div>
             <div>
@@ -108,7 +108,7 @@ export default function SignUpPage() {
                 value={lastName}
                 onChange={(e) => setLastName(e.target.value)}
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-                placeholder="Bishop"
+                placeholder="Rivera"
               />
             </div>
           </div>
@@ -124,7 +124,7 @@ export default function SignUpPage() {
               value={companyName}
               onChange={(e) => setCompanyName(e.target.value)}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-brand-500 focus:outline-none focus:ring-1 focus:ring-brand-500"
-              placeholder="Bishop Contracting"
+              placeholder="Rivera Builders"
             />
           </div>
 

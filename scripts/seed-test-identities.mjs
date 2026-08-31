@@ -44,7 +44,7 @@ const db = createClient(URL_, SERVICE, { auth: { autoRefreshToken: false, persis
 // identities can be signed into in a browser; rebuild-test holds no real data.
 const TEST_PASSWORD = 'FrameFocusTest!2026';
 
-const COMPANY_A_NAME = 'Bishop Contracting';
+const COMPANY_A_NAME = 'Sabal Point Construction';
 const COMPANY_B_NAME = 'Ridgeline Builders (TEST CO 2)';
 const COMPANY_B_SLUG = 'ridgeline-test-co-2';
 

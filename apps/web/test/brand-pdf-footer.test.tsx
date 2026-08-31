@@ -27,7 +27,7 @@ import { IncidentDocument, type IncidentPdfData } from '@/lib/safety/incident-te
 //      string survives @react-pdf's own layout and font pipeline.
 
 const daily: DailyLogPdfData = {
-  companyName: 'Bishop Contracting',
+  companyName: 'Sabal Point Construction',
   projectName: 'Maple St Remodel',
   logDate: '2026-08-04',
   authorName: 'Josh Bishop',
@@ -50,7 +50,7 @@ const daily: DailyLogPdfData = {
 };
 
 const delivery: DeliveryPdfData = {
-  companyName: 'Bishop Contracting',
+  companyName: 'Sabal Point Construction',
   projectName: 'Maple St Remodel',
   vendorName: 'Mountain Supply',
   deliveryDate: '2026-08-04',
@@ -68,7 +68,7 @@ const delivery: DeliveryPdfData = {
 };
 
 const incident: IncidentPdfData = {
-  companyName: 'Bishop Contracting',
+  companyName: 'Sabal Point Construction',
   projectName: 'Maple St Remodel',
   incidentDate: '2026-08-04',
   incidentType: 'near_miss',
@@ -104,7 +104,7 @@ describe('internal field PDFs carry the rebranded footer', () => {
       expect(html).toContain(brand.name);
       expect(html).not.toContain('FrameFocus');
       // the footer is "{companyName} · {brand.name}"
-      expect(html).toContain('Bishop Contracting');
+      expect(html).toContain('Sabal Point Construction');
     });
 
     it('the real PDF contains the product name, not FrameFocus', async () => {

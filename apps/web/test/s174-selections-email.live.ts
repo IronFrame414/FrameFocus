@@ -137,7 +137,7 @@ async function makeSelection(name: string): Promise<string> {
 beforeAll(async () => {
   assertRebuildTest();
   await sweep();
-  const { data: co } = await admin.from('companies').select('id, name, slug').eq('name', 'Bishop Contracting').single();
+  const { data: co } = await admin.from('companies').select('id, name, slug').eq('name', 'Sabal Point Construction').single();
   companyId = co!.id;
   companyName = co!.name;
   companySlug = co!.slug;

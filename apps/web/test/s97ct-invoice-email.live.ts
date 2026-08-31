@@ -31,7 +31,7 @@ beforeAll(async () => {
   assertRebuildTest();
 
   const { data: company } = await admin
-    .from('companies').select('id').eq('name', 'Bishop Contracting').single();
+    .from('companies').select('id').eq('name', 'Sabal Point Construction').single();
   companyId = company!.id;
 
   // Any sent invoice in the company — read only, never mutated.

@@ -72,7 +72,7 @@ beforeAll(async () => {
   assertRebuildTest();
 
   const { data: company } = await admin
-    .from('companies').select('id').eq('name', 'Bishop Contracting').single();
+    .from('companies').select('id').eq('name', 'Sabal Point Construction').single();
   companyId = company!.id;
 
   for (const role of ALL_ROLES) session[role] = await sessionFor(EMAILS[role]);

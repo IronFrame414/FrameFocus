@@ -36,7 +36,7 @@ const IMG =
 function makeData(overrides: Partial<SelectionSpecSheetData> = {}): SelectionSpecSheetData {
   return {
     company: {
-      name: 'Bishop Contracting',
+      name: 'Sabal Point Construction',
       logoUrl: null,
       brandColor: '#1a56db',
       addressLine1: '14 Maple St',
@@ -168,7 +168,7 @@ describe('specifications sheet — the real PDF', () => {
   it('white-label — the CONTRACTOR is named and the product is not', async () => {
     const buf = await renderToBuffer(<SelectionSpecSheetDocument data={makeData()} />);
     const text = pdfText(buf);
-    expect(text).toContain('Bishop Contracting');
+    expect(text).toContain('Sabal Point Construction');
     expect(text).not.toContain(brand.name);
     expect(text).not.toContain('FrameFocus');
   });

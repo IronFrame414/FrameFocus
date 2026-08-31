@@ -7,7 +7,7 @@
  *
  *   companies.email  ->  the OWNER's profile email  ->  null
  *
- * and that it works for EVERY company, not just Bishop Contracting — the
+ * and that it works for EVERY company, not just Sabal Point Construction — the
  * ruling is platform-wide.
  *
  * NOTHING IS EMAILED. Only the resolver is called.
@@ -86,7 +86,7 @@ beforeAll(async () => {
   await purgeMarkerCompanies();
 
   const { data: bishop } = await admin
-    .from('companies').select('id, email').eq('name', 'Bishop Contracting').single();
+    .from('companies').select('id, email').eq('name', 'Sabal Point Construction').single();
   bishopId = bishop!.id;
   bishopEmailBefore = bishop!.email;
 

@@ -112,7 +112,7 @@ beforeAll(async () => {
   [owner, crew] = await Promise.all([sessionFor(OWNER), sessionFor(CREW)]);
 
   const { data: company } = await admin
-    .from('companies').select('id, name, slug').eq('name', 'Bishop Contracting').single();
+    .from('companies').select('id, name, slug').eq('name', 'Sabal Point Construction').single();
   const co = company as { id: string; name: string; slug: string };
   companyId = co.id;
   companyName = co.name;

@@ -80,7 +80,7 @@ async function sweep(): Promise<void> {
 beforeAll(async () => {
   assertRebuildTest();
   await sweep();
-  const { data: company } = await admin.from('companies').select('id').eq('name', 'Bishop Contracting').single();
+  const { data: company } = await admin.from('companies').select('id').eq('name', 'Sabal Point Construction').single();
   companyId = company!.id;
   for (const [k, email] of [
     ['owner', OWNER], ['pm', PM], ['foreman', FOREMAN], ['crew', CREW], ['sub', SUB], ['linked', LINKED], ['control', CONTROL],

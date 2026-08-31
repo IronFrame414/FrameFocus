@@ -61,7 +61,7 @@ beforeAll(async () => {
   [owner, crew] = await Promise.all([sessionFor(OWNER), sessionFor(CREW)]);
 
   const { data: company } = await admin
-    .from('companies').select('id').eq('name', 'Bishop Contracting').single();
+    .from('companies').select('id').eq('name', 'Sabal Point Construction').single();
   companyId = company!.id;
 
   // ORDERED — heap order is the class this repo has hit five times.

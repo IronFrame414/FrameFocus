@@ -112,7 +112,7 @@ beforeAll(async () => {
   await sweepChangeOrders(MARKER);
 
   const { data: company } = await admin
-    .from('companies').select('id').eq('name', 'Bishop Contracting').single();
+    .from('companies').select('id').eq('name', 'Sabal Point Construction').single();
   companyId = company!.id;
 
   const { data: ownerProfile } = await admin

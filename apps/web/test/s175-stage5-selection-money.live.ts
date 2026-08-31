@@ -361,7 +361,7 @@ beforeAll(async () => {
   assertRebuildTest();
   await sweep();
 
-  const { data: co } = await admin.from('companies').select('id').eq('name', 'Bishop Contracting').single();
+  const { data: co } = await admin.from('companies').select('id').eq('name', 'Sabal Point Construction').single();
   companyId = co!.id;
   ownerC = (await sessionFor(OWNER)) as Client;
   linkedC = (await sessionFor(LINKED)) as Client;

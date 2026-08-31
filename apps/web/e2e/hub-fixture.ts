@@ -64,7 +64,7 @@ export function adminClient(): SupabaseClient {
   return createClient(url, service, { auth: { persistSession: false } });
 }
 
-/** Company A (Bishop Contracting) and the crew test identity's member row. */
+/** Company A (Sabal Point Construction) and the crew test identity's member row. */
 export const COMPANY_A = '03bb903f-1084-4ab4-afb8-03192cb58d30';
 export const CREW_MEMBER = '18a105e7-2ff9-4546-a17b-87524a45e978'; // Casey Crew
 export const OTHER_MEMBER = '9b0380c5-18f9-4c93-88b0-229fd18390c4'; // Pat Manager
