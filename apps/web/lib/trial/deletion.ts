@@ -377,7 +377,11 @@ export const COMPANY_TABLES: string[] = [
   'files', 'file_categories', 'projects',
   'contact_addresses', 'contacts', 'subcontractors',
   'member_pay_rates', 'member_burden_settings', 'instrument_rates', 'cost_catalog',
-  'tag_options', 'client_reminder_settings', 'sync_conflicts',
+  // email_unsubscribes (20261060, Email §3) — a company-scoped consent leaf,
+  // company_id FK NO ACTION and nothing references it, so it must be walked or
+  // the company could never finish deleting. The consent is meaningless once
+  // the company (and its whole reminder audience) is gone.
+  'tag_options', 'client_reminder_settings', 'sync_conflicts', 'email_unsubscribes',
   // QuickBooks scaffolding (20260929/20260930) — operational state, not a
   // record anyone must retain [Q4]. Queue rows self-reference with SET NULL;
   // all three otherwise hang off companies only.
