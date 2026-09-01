@@ -107,6 +107,35 @@
 ### ⏳ 2.4 desktop-payload #117 — deferred to the Phase-3 battery
 - The #117 CO-money floor spec is `apps/web/e2e/desktop-payload.spec.ts`. Register O6: 3rd sighting but no recurrence recently. Identifying the contaminating neighbour ONCE needs shard-combination runs, and the dev server won't survive a full Playwright run. **Plan: observe it in the Phase-3 battery; if it flakes, re-run in isolation to confirm flake-not-regression; only then hunt the neighbour. Not chasing a heisenbug that may be resolved.**
 
+## Phase 3 — verification battery (§7)
+
+| Suite | Result | Notes |
+| --- | --- | --- |
+| type-check `--force` | ✅ exit 0, 5/5 packages | monorepo, no cache |
+| lint `--force` | ✅ exit 0 | |
+| unit (`vitest run`) | ✅ **1021 passed / 1021**, exit 0 | baseline ~1050 approx; 0 skips, 0 fails — gap is baseline drift, no dropped tests |
+| cold build `--force` | ✅ exit 0, 121/121 static pages | validates the K8 render-file rename |
+| V1 live file (in-suite) | ✅ **15/15**, exit 0 | confirms 2.2 in the real live config |
+| env-bleed isolation | ✅ 45 assertions across 6 files | each passes alone under forks |
+| full live RLS battery | ⏳ running (background) | counts to follow |
+| Playwright ×4 | ⏳ pending (after live — shared rebuild-test DB) | |
+
+### ⚠️ Regression I introduced and caught (honest record)
+- The first unit run went **1 failed / 1020** — `m6m-pwa.test.ts` A-26b4 asserts `theme.ts` must NOT
+  contain the substring `'brand'` (proving the color tokens never reach into the brand module). My K8
+  comment wrote "…the **brand** amber #EDA122", tripping it. **Caught by the battery, fixed** by
+  rewording to "the marketing amber" (no hex/token change), re-ran → 7/7 then full unit 1021/1021.
+  Committed as a K8 follow-up. Lesson: even a prose comment is load-bearing when a test greps source.
+
+### S157 sweep for the display_name change — CLEAN
+- Grepped `test/` + `e2e/` for the old stale value "Josh Bishop" and owner-name assertions.
+  `s123-assignment-routes.live.ts` asserts a title `'Josh Bishop assigned you to Alvarez'`, but
+  `notifyProjectAssigned` (`lib/notify/assignment-notify.ts:143`) builds it from the caller's
+  `assignerName` LITERAL, not the DB — the `display_name` reads in that file are the recipient's
+  reachability. `brand-*-footer.test.tsx` pass 'Josh Bishop' as literal props (unit, green). The
+  chat e2e already expect 'Dave Whitfield'. **No test derived the owner's name from the reconciled
+  row — my change breaks nothing.**
+
 ## ⚠️ Hazard log
 
 - **[Phase 1, 2026-09-01]** `git status` before my log commit showed THREE modified files I never
