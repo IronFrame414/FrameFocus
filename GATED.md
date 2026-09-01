@@ -408,6 +408,43 @@ build the batch helper.** If the trigger ever does fire, that is its own ruled p
 
 ---
 
+## ⚠️ Fixture-rename fallout — the S176 owner rename has an EIGHTH casualty, and a stale twin — **[S179, 2026-09-01]**
+
+**Not a gate. Recorded because the S176 rename sweep's blind spot is wider than it was thought to
+be, and because a stale name is sitting in a column waiting to mislead the next reader.**
+
+The S176 rename of the fixture owner profile — **`Josh Bishop` → `Dave Whitfield`** — swept the
+codebase and fixed **seven** references. It found them by looking for the name in
+`.eq('name', …)` / column-lookup shape.
+
+- **⚠️ The eighth it missed: `@Josh` hardcoded in a TEST BODY.**
+  `apps/web/e2e/m-chat-send-route.spec.ts:128` and `apps/web/test/s126-chat-core.live.ts:259` both
+  posted a chat message containing the literal `@Josh` and asserted the Owner was mentioned. Mention
+  resolution reads `profiles.first_name` (`lib/chat/threads.ts` `postableSet`), so after the rename
+  `@Josh` matched nobody, `mentioned` came back `0`, and both tests went red — **on the
+  `mentioned === 1` assertion, NOT on the notify path the Playwright test is named for.** Same root
+  cause as the sweep's seven; invisible to it because a name **literal inside a string** is not a
+  column lookup. **The blind spot was not "only searched `apps/web/`" — it was "only searched for
+  name-column lookups, not name literals in message/test strings."** A future rename must grep for
+  the bare name too — in `@`-mentions, seed strings and test assertions.
+  - The Playwright case is FIXED on `fix/chat-mention-fixture-rename`: it now DERIVES the owner's
+    first name from the fixture instead of hardcoding one (a hardcoded first name is what let the
+    rename break it; the next rename would break it again), and its notification read became a
+    tightly-bounded retry that fails LOUDLY ("the notification never arrived") rather than as
+    "expected 1, got 0". Committed **unverified locally** — Playwright does not run in this
+    Codespace — so the end-to-end proof is a green CI Playwright run. The live-suite case
+    (`s126-chat-core.live.ts`) is a separate cascade corpse and is left alone per ruling.
+
+- **⚠️ The stale twin: `company_members.display_name` still reads `"Josh Bishop"` for the owner.**
+  The rename touched `profiles.first_name`/`last_name` (now Dave/Whitfield) but NOT the owner's
+  `company_members.display_name` row, which still says `Josh Bishop` on rebuild-test. **It is not a
+  live bug today** — the mention resolver reads `profiles`, not this column, so nothing acts on the
+  stale value — **but it is a trap for whoever reads that column tomorrow**, and it is exactly the
+  kind of name-in-an-unread-column the sweep would also not have caught. Reconcile it with the
+  profile, or delete it, before something starts reading it.
+
+---
+
 ## ~~Gate 3 — 7D–7H specs~~ — **CLOSED [Josh, S150, 2026-08-18]**
 
 > **✅ CLOSED. Every unblocking condition below is met, and the gate blocks work that has
