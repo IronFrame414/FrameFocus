@@ -449,6 +449,17 @@ TECH_DEBT line was ever written, so the next reader will assume they differ.**
 > and `dangerAlt`; rewrote all 41 call sites. Rename only — no hex change (semantic-status colours, not
 > brand amber). Tailwind config unaffected (raw hex). `tsc --noEmit` clean. Grep confirmed no
 > string-literal/config references existed. See `register-closeout-log.md`.
+>
+> ⚠️ **[S180, Josh] THIS ENTRY'S OWN RATIONALE ABOVE WAS WRONG — recorded, not deleted.** The line
+> *"CC kept both names deliberately, which was right: a repaint is not a rename"* is **superseded**:
+> the two names never held **distinct values** — `warningDeep` was equal to `warning` (and `dangerAlt`
+> to `danger`) from the ramp onward, so there was no distinction to "keep deliberately"; it was a
+> duplicate identifier for one hex, not a preserved design decision. ⚠️ **Precision, since the tree
+> disagrees with a looser telling:** the duplicate *names* were NOT unused — `color.warningDeep` had
+> ~80 call sites across 38 files and `color.dangerAlt` ~17; what was "dead" was the *distinct colour*
+> the second name implied, never the identifier. Deletion is safe because all call sites collapse onto
+> one hex. **If a design later wants a genuinely deeper warning/danger shade, adding a new token back
+> is trivial** — this removed a duplicate, not a capability.
 
 ### K9 — `crew-manifest.ts:66` still says "platform"
 The literal `description` — *"The all-in-one platform for residential and commercial contractors"* —
@@ -1248,6 +1259,24 @@ tree; a docs-only pass cannot reproduce it without running the suite. **Owed:** 
 the 279 down by *reason* (env-gated vs `it.skip` vs `describe.skip`), and rule which are legitimate.
 Pairs with §Q1 (the env-bleed sweep) and §O6 (the `desktop-payload #117` flake) — the same family:
 a suite you cannot fully trust is not a signal.
+
+> ⚠️ **[S180] BROKEN DOWN AGAINST THE TREE — and "279 in the live battery" does not survive it.** Full
+> working: `register-closeout-log.md` → "Phase 3 continuation → 2.3". Summary:
+> - **vitest `.live.ts` has 0 conditional skips**, and the S180 live run actually skipped **7**, not
+>   279 — so 279/285 is a **Playwright** runtime number, not a live-battery one.
+> - Verified census, whole tree: **0** hardcoded `describe.skip`/`it.skip`, **0** `skipIf`, **42**
+>   Playwright `test.skip(true, 'no X on fixture')` **fixture-data guards** in the mobile specs
+>   (`m-destinations`, `m-sections`, `m-details`, `m-photos`, …).
+> - ⚠️ **The finding IS the fixture guards:** they green-out when rebuild-test lacks a row — phases,
+>   change orders, punch, deliveries, documents, incidents, photos, subs, contacts, crew-visible
+>   expenses. Exactly this section's "green when the fixture is empty" fear, and `m-details.spec.ts:322`
+>   already warns of it in-file.
+> - ⚠️ **Two mis-tellings corrected:** there is **no** `s136-email-and-debt.live.ts` (it is a git
+>   branch; real s136 is `s136-company-slug.live.ts`); no `.live.ts` file has 264 tests (max 42); the
+>   email `.live.ts` files **mock** Resend rather than self-skip on `RESEND_API_KEY`.
+> - **Ruled [Josh, S180]: do NOT make them run — that is his call.** Whether to seed the fixtures (so
+>   the guards cannot stand down) or to fail-instead-of-skip on absent data is owed to him. The exact
+>   Playwright runtime tally is still owed on a quiet DB (not run: flaky, shared with a live session).
 
 ### S2 — `V1`'s 7I-toggle guard encodes a search-set judgement, and it is NOT the file list some notes claimed
 **V1** (`apps/web/test/s156-m4-audit.live.ts:360-397`) pins 7I criterion 1 — *"toggle off ⇒ behaviour
