@@ -56,6 +56,57 @@
   empty again. The exclude filters only the definition file, not real readers. Probe deleted, not
   committed.
 
+### ✅ 2.1 env-bleed sweep — VERIFIED (no code change; docs only)
+- `vitest.config.ts:31` `pool: 'forks'` present. 12 files touch `process.env`; 9 save/restore, 3
+  mutate constants only (fork-safe). No static vacuity.
+- ⚠️ **Isolation proof (the part the register 2.1 actually asked for):** ran each of the 6 env-touching
+  UNIT files in its OWN `vitest run` under forks. All exit 0 with real tallies —
+  `reply-to.test.ts` 8, `email-send-gate.test.ts` 9, `supabase-server.identity.test.ts` 2,
+  `card-signup-webhook.test.ts` 4, `s160-auth-email.test.tsx` 19, `auth-email-hook-signature-headers.test.ts`
+  3 (45 total, none 0/vacuous). Passing ALONE proves none relied on a neighbour's leaked env value.
+- The 6 env-touching `.live.ts` files are env-gated and save/restore properly (they run in the live
+  battery, not here). **No finding — the forks fix holds; nothing was proving nothing via env bleed.**
+
+### ⏸️ 3.1 A15 unbilled-to-client — DEFERRED to attended; full design below (no build in Phase 3)
+
+**The register says "needs schema." That is probably OVER-stated — read this first.**
+
+- **The link already exists.** `expenses → expense_allocations(expense_id) → invoice_cost_claims(expense_allocation_id) → invoice_lines → invoices`. Every claim already traces to an expense through its allocation. So **"which approved expenses are unbilled to the client" is answerable TODAY with a service-layer query and NO migration:**
+  ```sql
+  -- approved expenses on a project with no live cost-claim against any of their allocations
+  select e.*
+  from expenses e
+  where e.project_id = :project and e.status = 'approved' and e.is_deleted = false
+    and not exists (
+      select 1 from expense_allocations ea
+      join invoice_cost_claims icc on icc.expense_allocation_id = ea.id
+      where ea.expense_id = e.id and ea.is_deleted = false
+    );
+  ```
+  **Recommendation for the attended pass: build A15 as a service function first; add schema only if the join proves too slow or the UI needs per-expense invoice attribution at scale.**
+
+- **IF denormalization is wanted** (direct expense→invoice attribution without the two-hop join): add `source_expense_id uuid REFERENCES expenses(id) ON DELETE SET NULL` to `invoice_cost_claims` (+ `idx_invoice_cost_claims_source_expense_id`).
+  - **NULL-handling decision (Josh's question, answered):** use **`ON DELETE SET NULL`, NOT NOT-NULL/CASCADE** — matching the repo convention for audit-log FKs to deletable rows (`ai_tag_logs.file_id`, CLAUDE.md "Audit-log FKs … use ON DELETE SET NULL"). A claim is a billing record; if the source expense is later purged, the claim must survive with the FK nulled, not vanish. **So `source_expense_id` is NULLABLE.** A claim with `source_expense_id IS NULL` means "billed against a since-deleted expense" — the unbilled report shows it as an **aggregate "billed (source expense removed)" line, not attributed to any current expense.** It never appears in the "unbilled" set (it WAS billed); it simply isn't attributable to a live expense row.
+  - **Backfill query** (every existing claim has a source expense via its allocation, so this fully populates before you'd consider a NOT-NULL — but keep it nullable per above):
+    ```sql
+    update invoice_cost_claims icc
+    set source_expense_id = ea.expense_id
+    from expense_allocations ea
+    where ea.id = icc.expense_allocation_id
+      and icc.source_expense_id is null;
+    ```
+  - **Registries:** no new table ⇒ no COMPANY_CHILDREN / COMPANY_TABLES / purge change. Floor: `invoice_cost_claims` already inherits invoice visibility; no new RLS.
+- **Why deferred and not built unattended:** it's a migration (or at least a new service + tests) with a product decision inside it, and 1.3 shows applied migrations are immutable — a wrong one becomes a permanent corrective. Attended.
+
+### ✅ 1.4 crew-manifest.ts — CLOSED (already done); one copy residual flagged
+- `apps/web/lib/crew-manifest.ts` imports `brand.description`; `apps/web/lib/brand.ts:69` has the field. The K9 "literal, not imported" gap is closed — nothing to build. ⚠️ Residual (NOT closed): `brand.description`'s VALUE still reads "The all-in-one **platform** for residential and commercial contractors." — pre-rebrand copy, no ruled replacement. Flagged for the EZ Contractor Binder rebrand pass (same family as the A16 scope + RafterWorks wordmark). Not guessing new copy unattended.
+
+### ⏸️ 1.3 trial-length duplication — REPORT-ONLY (applied migrations immutable)
+- Confirmed identical `v_trial_end := now() + INTERVAL '30 days';` at `20260918000000_trial_lifecycle.sql:468` and `20261017000000_m9_client_lifecycle.sql:564`. ⚠️ **Both are APPLIED — not edited.** There is no third writer today, so the live duplication risk is latent. **Proposed (for whoever adds a THIRD trial-creation path, or changes the length):** introduce a `trial_end_default()` SQL function in a NEW migration and have future writers call it; retrofitting the two frozen migrations is neither possible nor worth a corrective migration now. Reporting per the prompt's "report before doing it" — recommend NO code change this pass.
+
+### ⏳ 2.4 desktop-payload #117 — deferred to the Phase-3 battery
+- The #117 CO-money floor spec is `apps/web/e2e/desktop-payload.spec.ts`. Register O6: 3rd sighting but no recurrence recently. Identifying the contaminating neighbour ONCE needs shard-combination runs, and the dev server won't survive a full Playwright run. **Plan: observe it in the Phase-3 battery; if it flakes, re-run in isolation to confirm flake-not-regression; only then hunt the neighbour. Not chasing a heisenbug that may be resolved.**
+
 ## ⚠️ Hazard log
 
 - **[Phase 1, 2026-09-01]** `git status` before my log commit showed THREE modified files I never

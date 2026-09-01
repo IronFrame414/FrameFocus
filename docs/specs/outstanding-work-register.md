@@ -250,8 +250,8 @@ No event table (see C8). Assembled per source, or built on A10's log.
 | # | Item | Note |
 | --- | --- | --- |
 | **A14** | **Custom composable roles** | Ruled toward roles, **not** per-person grants: every gate keys on `get_my_role()`, RLS cannot restrict columns, and testing loses its fixed set. The real need is legitimate — a bookkeeper who needs invoices but not the schedule. **✅ Genuine debt — filed `TECH_DEBT.md` #155 [S179]** (deferred decision, the one that stays in the debt file). |
-| **A15** | **Unbilled to client** (Expenses) | No expense→invoice link; needs schema. ⚠️ **Do not confuse with `13c`'s "Cost you've fronted"** — that is cost fronted on a *project*, derivable via `invoice_cost_claims`. Different questions. **[S179] Owed work — reclassified OUT of `TECH_DEBT.md` (was `#2-regbacklog`); it lives HERE, not there.** |
-| **A16** | **Package scope rename** (`@framefocus/shared`) | Breaks the build on a miss, **zero user-facing change.** ⚠️ **[S179] the "~150 import lines" is low — measured 340 `from '@framefocus/shared…'` statements across 271 files.** Owed work — reclassified OUT of `TECH_DEBT.md` (was `#3-regbacklog`); it lives HERE. |
+| **A15** | **Unbilled to client** (Expenses) | No expense→invoice link; needs schema. ⚠️ **Do not confuse with `13c`'s "Cost you've fronted"** — that is cost fronted on a *project*, derivable via `invoice_cost_claims`. Different questions. **[S179] Owed work — reclassified OUT of `TECH_DEBT.md` (was `#2-regbacklog`); it lives HERE, not there.** ⚠️ **[S180] DEFERRED to attended; full design in `register-closeout-log.md` §3.1.** Finding: it's answerable TODAY without schema via `expenses→expense_allocations→invoice_cost_claims` (query in the log); the `source_expense_id` denormalization (ON DELETE SET NULL, nullable, backfill query in the log) is an optional optimization. Build attended. |
+| **A16** | **Package scope rename** (`@framefocus/shared`) | Breaks the build on a miss, **zero user-facing change.** ⚠️ **[S179] the "~150 import lines" is low — measured 340 `from '@framefocus/shared…'` statements across 271 files.** Owed work — reclassified OUT of `TECH_DEBT.md` (was `#3-regbacklog`); it lives HERE. ⚠️ **[S180] DEFERRED to the consolidated EZ-Contractor-Binder rebrand pass — NOT blocked-on-name** [Josh]. Exact scope re-measured: **343 import lines / 274 files + 6 config refs** (package.json ×3, tsconfig paths ×2, next.config transpilePackages). Pure literal replace. Do it in ONE attended pass with the RafterWorks sidebar wordmark + remaining brand strings; scope string TBD (`@ezbinder/shared` / `@ez-contractor-binder/shared` / `@binder/shared`). Not done in the S180 close-out (collision surface + shouldn't be renamed in isolation). |
 | **A17** | **Row tints** | `rowTintAttention` / `rowTintProblem` shipped as tokens; **no screen applies them.** The mockups use them for row *state* (a lapsed-insurance sub, an over-budget line); Josh suggested category/subcategory nesting. **Two different meanings — rule before applying**, or a tint means "problem" on one screen and "subcategory" on another. |
 | **A18** | **`/m` photo chips** | Desktop now has six, mobile four, over the same data. CC correctly declined to widen a ruled `/m` surface as a rider on a desktop step. |
 | **A19** | **The five `prompt()` sites** (`#1-dialogsweep`) | All five collect a *value*, which is why the sweep left them. Sites: `contract-settings-form` · `lien-release-settings-form` · `items-tab` · `releases-panel` · `markup-editor`. **Build a value-collecting overlay, or ship native dialogs through the restyle?** |
@@ -455,6 +455,12 @@ The literal `description` — *"The all-in-one platform for residential and comm
 predates the rebrand and sits under a banner reading **"EVERY BRAND VALUE IS IMPORTED. NONE IS A
 LITERAL."** Not a missed import: **`brand.ts` has no `description` field**, so there is nowhere to import
 it from.
+
+> ✅ **[S180] The IMPORT gap is CLOSED (already done before this pass).** `crew-manifest.ts` now reads
+> `brand.description`, and `apps/web/lib/brand.ts:69` carries the field — so it is imported, not a
+> literal. ⚠️ **Residual, NOT closed:** the VALUE still says "…**platform**…" — pre-rebrand copy with
+> no ruled replacement. Folded into the EZ-Contractor-Binder rebrand pass (with A16 + the RafterWorks
+> wordmark). Not guessing new copy unattended.
 
 ### K10 — `brand.ts` `backgroundColor` is still an unverified assumption
 Its own comment flags it as needing a **real-handset check**: a navy splash means a dark-to-light flash
@@ -1100,6 +1106,12 @@ assertion that appears green while asserting nothing.
 
 **Owed: a sweep of every test touching `process.env`, re-run under `forks`, checking each still passes
 for the reason it claims to.**
+
+> ✅ **DONE [S180].** Swept: 12 files touch `process.env` (9 save/restore, 3 mutate constants only —
+> all fork-safe). The 6 env-touching UNIT files were each re-run in isolation under forks and each
+> passes on its own with a real, non-zero tally (45 assertions total) — so none was passing on a
+> neighbour's leaked value. The 6 env-touching `.live.ts` files save/restore and run env-gated in the
+> live battery. No vacuity found; the forks fix holds. See `register-closeout-log.md`.
 
 ### Q2 — The Resend webhook is built but NOT REGISTERED
 ⚠️ **It was never configured in Resend at all** — no endpoint, no secret — which is why
