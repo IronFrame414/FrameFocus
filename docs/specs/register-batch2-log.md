@@ -173,3 +173,26 @@ I cannot re-verify (MCP is rebuild-test-only). Flagging, not blocking — it's a
   type-check is the project's real gate and is green.)
 - ⚠️ **Register contradiction recorded:** K7's "no screen uses them" is wrong — `rowTintAttention` was
   already referenced in `changes-panel.tsx:327` (as a banner). Now it also tints `14a` rows.
+
+### ✅ K11 (2.4) — DONE — `apps/web/test-support/company-purge.ts`
+- **Ruling [Josh, Phase 2 Q3 + follow-up]:** retry the timed-out purge delete ONCE, then FAIL LOUDLY
+  with a message that names it a LOCK timeout (not a generic delete failure); and because a silently-
+  successful retry hides GROWING contention, a successful retry still warns.
+- **Built:** `deleteWithTimeoutRetry(label, run)` wraps each child-table delete and the parent
+  `companies` delete. On `57014` (`canceling statement due to statement timeout`) it `console.warn`s,
+  waits ~1s, retries once; a second `57014` throws an explicit "LOCK/STATEMENT TIMEOUT on retry …
+  BLOCKED under parallel load … do not raise the statement_timeout to mask this" error. Any non-timeout
+  error throws immediately, unchanged. Happy path is byte-identical to before.
+- ⚠️ **The backoff is load-bearing and was added after observing a real failure.** First isolation run:
+  the `companies` delete hit `57014` on BOTH back-to-back attempts and the guard threw loudly — the
+  feature working, but proving that an *immediate* retry just races the same held lock. Root cause
+  confirmed live: only **8 companies total, 1 leaked `S138 Throwaway`** (from a prior aborted run) — so
+  NOT accumulation/seq-scan; a genuine **lock wait** (the leaked row was pinned). Added a ~1s pause
+  before the single retry so a transient lock can clear — Josh's "quietly succeeds" case.
+- **Verified:** with the backoff, `s138-trial-unlock` runs **14 passed / 14, exit 0** (the retry cleared
+  the lock and purged the leaked row). Type-check `--force` exit 0. Before my change the same timeout
+  would have failed s138 too, with a generic message — so no regression; the assertions always passed.
+- ⚠️ **Honest note:** this is a shared-DB contention guard, not a guarantee. Under severe parallel load
+  the retry can still fail — by design, loudly. If the warn fires often in CI, that is the signal Josh
+  asked to preserve: contention is growing, and the answer is fewer concurrent company-deleting suites,
+  not a bigger timeout.
