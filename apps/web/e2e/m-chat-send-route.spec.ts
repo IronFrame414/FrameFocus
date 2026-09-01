@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { adminClient } from './hub-fixture';
+import { adminClient, COMPANY_A } from './hub-fixture';
 
 // ============================================================================
 // /api/chat/messages — the HTTP layer. Slice 2's last unverified piece.
@@ -126,31 +126,85 @@ test.describe('a valid send', () => {
   });
 
   test('a mention writes the join row AND fires notify() — through HTTP', async ({ request }) => {
+    const admin = adminClient();
+
+    // ⚠️ THE MENTION TARGET IS DERIVED FROM THE FIXTURE, NOT HARDCODED.
+    // This test used to address `@Josh`, and the S176 owner rename (Josh Bishop
+    // -> Dave Whitfield) silently broke it: `postableSet` resolves mentions from
+    // `profiles.first_name` (chat/threads.ts), so the stale first name matched
+    // nobody, `mentioned` came back 0, and the test failed on the `mentioned`
+    // assertion below — NOT on the notify path it is named for. A hardcoded
+    // first name is exactly what let a data rename break this; the next rename
+    // would break it again. So we read the current owner and address them.
+    // (The eighth casualty of that rename sweep — see GATED.md.)
+    const { data: owner } = await admin
+      .from('profiles')
+      .select('first_name')
+      .eq('company_id', COMPANY_A)
+      .eq('role', 'owner')
+      .eq('is_deleted', false)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    expect(owner?.first_name, 'the fixture owner must exist to be mentionable').toBeTruthy();
+    const messageBody = `@${owner!.first_name} route probe, please look`;
+
     const res = await request.post('/api/chat/messages', {
-      data: { project_id: PROJECT, kind: 'crew', body: '@Josh route probe, please look' },
+      data: { project_id: PROJECT, kind: 'crew', body: messageBody },
     });
     expect(res.status()).toBe(200);
 
-    const body = await res.json();
-    expect(body.mentioned, 'the Owner is mentionable in the crew thread').toBe(1);
+    const payload = await res.json();
+    expect(
+      payload.mentioned,
+      `the Owner (@${owner!.first_name}) is mentionable in the crew thread`
+    ).toBe(1);
 
-    const admin = adminClient();
     const { data: mentions } = await admin
       .from('chat_message_mentions')
       .select('mentioned_profile_id')
-      .eq('message_id', body.id);
+      .eq('message_id', payload.id);
     expect(mentions).toHaveLength(1);
 
-    // notify() actually fired — the thing no unit test can show.
-    const { data: notifs } = await admin
-      .from('notifications')
-      .select('type, title, link_key, link_params')
-      .eq('source_id', body.id);
-    expect(notifs).toHaveLength(1);
-    expect(notifs![0].type).toBe('mention');
-    expect(notifs![0].title).toContain('@Josh route probe, please look');
-    expect(notifs![0].link_key).toBe('chat');
-    expect(notifs![0].link_params).toMatchObject({ threadId: body.threadId });
+    // ⚠️ notify() writes the notification row server-side DURING the request,
+    // but this admin client reads it back over a separate connection that can
+    // lag the write by up to ~1s (observed). A single immediate read asserts on
+    // the SCHEDULE, not the outcome — the source of this test's flake. Poll on a
+    // TIGHT ceiling instead, and when it exhausts, say plainly that the
+    // notification never arrived. Widening the ceiling would only hide a real
+    // regression; it is not needed to catch one, because a broken notify writes
+    // NOTHING and never arrives at any ceiling — the bound tolerates read lag,
+    // it does not wait out a failure.
+    type NotifRow = {
+      type: string;
+      title: string;
+      link_key: string;
+      link_params: Record<string, unknown> | null;
+    };
+    const DEADLINE_MS = 3000;
+    const POLL_MS = 100;
+    const started = Date.now();
+    let notifs: NotifRow[] = [];
+    for (;;) {
+      const { data } = await admin
+        .from('notifications')
+        .select('type, title, link_key, link_params')
+        .eq('source_id', payload.id);
+      notifs = (data ?? []) as NotifRow[];
+      if (notifs.length >= 1 || Date.now() - started >= DEADLINE_MS) break;
+      await new Promise((r) => setTimeout(r, POLL_MS));
+    }
+
+    expect(
+      notifs,
+      `notify() never wrote a notification for message ${payload.id} within ${DEADLINE_MS}ms — ` +
+        `the mention notification did not arrive. This is NOT read-timing noise: a working ` +
+        `notify lands within ~1s, a broken one never lands at any ceiling.`
+    ).toHaveLength(1);
+    expect(notifs[0].type).toBe('mention');
+    expect(notifs[0].title).toContain(messageBody);
+    expect(notifs[0].link_key).toBe('chat');
+    expect(notifs[0].link_params).toMatchObject({ threadId: payload.threadId });
   });
 
   test('an unresolvable @token is reported back rather than silently dropped', async ({
