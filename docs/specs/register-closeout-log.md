@@ -307,3 +307,32 @@ shares it.**
 **Ruling respected:** Josh — *"Do not make it run — that is a ruling for me."* No code change. Whether
 to seed the fixtures so these guards can't stand down (or to fail instead of skip on absent data) is
 Josh's call; recorded as owed, not done. **Report-only.**
+
+### 1.3 — trial-length duplication: Josh RULED "a shared constant." Recipe captured; migration deferred.
+
+**Ruling [Josh, Phase 2]:** *"a shared constant. Do not edit applied migrations."* Confirmed still
+duplicated: `v_trial_end := now() + INTERVAL '30 days';` at
+`20260918000000_trial_lifecycle.sql:468` and `20261017000000_m9_client_lifecycle.sql:564`.
+
+⚠️ **Why the "shared constant" cannot be a TS constant.** Both duplications live in **SQL functions in
+applied migrations** — the trial length lives in the DATABASE, not the app layer. A
+`packages/shared` TS constant would not dedupe them; it would be a third place. The only single
+authority the SQL side can reference is a **SQL function**.
+
+**The recipe (for the attended apply, or the next trial-writer):** a NEW migration —
+```sql
+CREATE OR REPLACE FUNCTION trial_end_default() RETURNS timestamptz
+  LANGUAGE sql STABLE AS $$ SELECT now() + INTERVAL '30 days' $$;
+```
+Future trial-creation paths call `trial_end_default()` instead of inlining the interval. Retrofitting
+the two frozen functions (via `CREATE OR REPLACE` of their full bodies in the same migration) is
+possible but reproduces two sensitive trial-creation functions verbatim to change one line each.
+
+**⚠️ NOT built this pass — deliberately, per §7 (sensitive/bigger-than-a-line, done unattended).**
+Reasons, recorded: (a) it is a **migration on the trial-creation critical path**, applied unattended;
+(b) the Supabase **CLI does not connect here — MCP is the only apply path**, on a rebuild-test DB a
+**concurrent billing session shares** (apply-collision + the #150 contamination hazard); (c) a function
+with **no current caller** is itself dead-code (K8's own lesson), and there is **no third trial-writer
+today**, so the live risk is latent, not active. A guessed schema change on trial creation, with nobody
+to ask, is exactly what §7 says not to improvise. **Ruling captured so it is not lost; apply is owed to
+an attended pass or bundled with the next trial-writer.**
