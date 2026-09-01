@@ -196,3 +196,11 @@ I cannot re-verify (MCP is rebuild-test-only). Flagging, not blocking — it's a
   the retry can still fail — by design, loudly. If the warn fires often in CI, that is the signal Josh
   asked to preserve: contention is growing, and the answer is fewer concurrent company-deleting suites,
   not a bigger timeout.
+
+### ✅ L4 (1.4) — the four cuts marked ⛔ WILL NOT BUILD — `outstanding-work-register.md`
+- Premises re-verified (Phase 1): no `tasks.hours` column, no scope↔category link, Gantt project-level
+  only, no `hold_reason` column anywhere.
+- ⚠️ **The redesign spec ALREADY carried the ⛔ markers** (`desktop-redesign-spec.md:1063,1212,1213,
+  1214`, tagged `[register-backlog §1.3]`) — the prompt's "mark in the redesign spec AND the register"
+  was already half-done. Only the register lacked them. Added the ⛔ block to the register L4 entry,
+  citing the spec lines. Docs-only.

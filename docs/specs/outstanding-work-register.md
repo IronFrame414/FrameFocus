@@ -543,6 +543,14 @@ cut one.
 
 ⚠️ **These need a "will not build" marker, not a queue position.**
 
+> ⛔ **WILL NOT BUILD — MARKED [register-batch2, 2026-09-01].** All four are permanent cuts, not
+> deferrals. Premises re-verified against the tree: `tasks` has no hours column
+> (`20260704213000_module5_5b_tasks_scheduling.sql:63-101`); no scope↔category link exists; the Gantt
+> is project-level only; `hold_reason` appears in no migration. **The redesign spec already carries the
+> ⛔ markers** — `desktop-redesign-spec.md:1063` (Coverage check), `:1212` (Crew-load bars), `:1213`
+> (Company Gantt/By-crew), `:1214` ("Resumes when permit clears"), each tagged `[register-backlog
+> §1.3]`. This register entry now matches. A cut is not a queue position; do not build any of these.
+
 ### L5 — Two step-9 deferrals never reached the register
 - **"Send me a test"** on the estimate send flow — **not built.** ("Mark as sent" is.)
 - **Deep-linkable estimate tabs** — tab state is a client `useState`, not a URL param. Making them
