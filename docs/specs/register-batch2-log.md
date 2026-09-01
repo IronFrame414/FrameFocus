@@ -221,3 +221,26 @@ Register `:167` already carries this specced; the shape, restated for the record
 - **Behaviour:** nullable; **when unset, NO "against target" comparison renders** — not a defaulted
   number. Unblocks `14a` "Margin under target", `15a` margin-by-job, `13e` "under your 30% target",
   and (later) the K7 `14a` over-budget row tint. **Not built — report-only.**
+
+---
+
+## Phase 3 — final battery (§8) — counts per suite
+
+| Suite | Result | Exit |
+| --- | --- | --- |
+| type-check `--force` (turbo) | 5/5 packages | **0** |
+| lint (`turbo run lint` → `next lint`) | 1/1 | **0** |
+| unit (`vitest run`) | **1021 passed / 1021**, 73 files | **0** |
+| cold build (`next build`) | Compiled + generated | **0** |
+| live RLS (`npm run test:live`) | _running — recorded below_ | _tbd_ |
+| Playwright ×chunks | _after live — recorded below_ | _tbd_ |
+
+⚠️ **Trap caught during the battery (CLAUDE.md's own rule):** my first lint invocation `npx eslint .`
+printed `lint exit: 1` while the background wrapper reported "exit 0" — the wrapper masks the real code.
+The real code was 1, from a **rule-resolution artifact** (`test/po17-batch-add.live.ts:161` — a file I did
+NOT touch — carries an inline `@typescript-eslint/no-explicit-any` disable that a bare `eslint .` cannot
+resolve). The project's actual lint is `turbo run lint` → `next lint`, which resolves the plugin and is
+**exit 0**. Recorded because reading the wrapper's echo instead of the printed code is exactly the
+eleven-times trap.
+
+Exit codes above are read from the PRINTED line, not the wrapper summary.
