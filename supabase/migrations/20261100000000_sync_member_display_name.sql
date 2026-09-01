@@ -47,6 +47,11 @@ $$;
 
 -- AFTER UPDATE: the mirror follows the write, it does not gate it. No loop risk —
 -- this writes company_members, whose triggers do not write back to profiles.
+-- DROP-then-CREATE so the migration is idempotent (re-runnable on a fresh
+-- rebuild without erroring) — the repo idiom, since Postgres CREATE TRIGGER has
+-- no IF NOT EXISTS and this repo does not use CREATE OR REPLACE TRIGGER.
+DROP TRIGGER IF EXISTS profiles_sync_member_display_name ON public.profiles;
+
 CREATE TRIGGER profiles_sync_member_display_name
   AFTER UPDATE ON public.profiles
   FOR EACH ROW EXECUTE FUNCTION public.sync_member_display_name();
