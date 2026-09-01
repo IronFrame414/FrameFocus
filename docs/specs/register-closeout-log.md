@@ -502,3 +502,56 @@ path-scoped; branch entanglement across all three sessions is Josh's to sort at 
 apply deferred · 1.4 ✅ already done (copy residual → rebrand) · 2.1 ✅ verified · 2.2 ✅ done ·
 2.3 ✅ finding surfaced + **runtime tally now measured (~11, not 279)** · 2.4 ✅ **observed: flakes,
 self-recovers** · 3.1 A15 ⏸️ deferred (full design captured) · 3.2 A16 ⏸️ deferred to rebrand.
+
+---
+
+## Phase 3 continuation #3 — Josh's THREE build rulings (2026-09-01, latest)
+
+> Josh returned with three rulings on the 2.3 skipped-guards family + display_name. This instance did
+> #3 fully; #1+#2 are recorded with a plan (blocked at "verify", see below). Append-only.
+
+### ✅ Ruling 3 — display_name MIRRORS the profile name — DONE (migration `20261100000000`, commit `59cc192`)
+Covered in the "Phase 3 continuation #2" entry above: `AFTER UPDATE` trigger on `profiles` syncing
+STAFF `display_name` (subs exempt), + backfill; applied to rebuild-test via MCP; functionally verified
+(probe renamed a staff profile → `display_name` mirrored → reverted; 0 staff drift). Overturns F-6's
+"no sync trigger" for staff, per the ruling. Register §S6 marked RESOLVED. **Production apply is Josh's.**
+
+### ⏸️ Rulings 1 (flip guards to FAIL) + 2 (seed the thin areas) — RECORDED, blocked at Josh's own "verify" step
+**A live census (entry above, commit `73f059a`) reversed the premise: the fixture is well-populated.**
+Only **deliveries (0)** and **incidents (0)** on `eaf0e25b` are genuinely thin; the other Playwright
+instance's run corroborates this (~11 runtime skips, not 279). So "seed phases/COs/punch/expenses" is
+mostly moot — they already have data.
+
+**Why not seeded+flipped this pass:** the two thin areas are multi-table FK chains, not rows —
+a damaged delivery is `purchase_orders → po_items → deliveries → delivery_items.qty_damaged>0` **+ a
+photo** (`deliveries/check-in/check-in-form.tsx:123`, `lib/services/deliveries.ts:75-88`); an incident
+needs `safety_incidents` (+ likely injury/witness children to render a row). A wrong seed renders
+nothing and the guard still fires. Josh's sequence is **SEED → VERIFY the guards no longer trip →
+FLIP**, and "verify" is a Playwright render check, not a DB-row check (the guard counts rendered
+elements). ⚠️ **And the shared rebuild-test DB is now carrying 3+ concurrent sessions** (two close-out
+instances + the live billing session); the other instance's Playwright run already collided with the
+billing specs (3 fails). Adding complex live seeding + another Playwright run into that is the exact
+shared-DB contamination hazard. Flipping FIRST is explicitly forbidden ("wall of red").
+
+**So seed→verify→flip is blocked at VERIFY under these conditions, and I did not seed half-blind.**
+
+**Plan to finish (attended, or a quiet DB with no other session sharing it):**
+1. Seed on `eaf0e25b`, screenshot-safe (no "Test Co"/"123 Main St"; avoid QA-marker & S97 rows):
+   one PO ("Coastal Building Supply") → line items → a delivery with one `delivery_items.qty_damaged=1`
+   + a photo; one `safety_incidents` row with a plausible narrative + one injury/witness child. Durable
+   copy in `scripts/seed-test-identities.mjs`; live via MCP.
+2. Confirm the RLS/condition-scoped guards by **impersonation** (`set request.jwt.claims`) before
+   deciding whether they need seeding: "subs with EXPIRED insurance" (m-destinations:225 — likely a
+   one-field `insurance_expiry` UPDATE to a past date), "expenses/receipts visible to the CREW identity"
+   (m-destinations:490/675/788), "SYNCED logs visible to crew" (m-logs:162/220).
+3. Flip all 42 guards to a shared helper —
+   `requireFixtureData(count, project, what)` →
+   `expect(count, `${project} has no ${what} — the fixture is thin, not the code`).toBeGreaterThan(0)` —
+   the data-vs-code message ruling 1 mandates, replacing each `if (n===0) test.skip(...)`.
+4. Verify by running the mobile Playwright chunk against the seeded fixture (the quiet-browser step),
+   THEN commit seed and flip separately. The m-* specs are NOT collision files (mobile, not
+   sidebar/settings), so the flip itself is safe to author once the seed is verified.
+
+**Owed to Josh (a real question, not a dodge):** the seed+flip needs a window where the billing
+session is NOT on the shared rebuild-test DB — otherwise the verify run and the seed both collide with
+it. When that window exists, this is ~1–2 hours of careful work following the plan above.
