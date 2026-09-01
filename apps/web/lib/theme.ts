@@ -35,18 +35,19 @@ export const color = {
   faint: '#9aa4b8', // placeholder / disabled / em-dash
   faintAlt: '#c3cad8',
 
-  // Semantic — same amendment. The design carries ONE warning text (#b45309)
-  // and ONE danger red (#c0362c), so `warning` now equals `warningDeep` and
-  // `danger` equals `dangerAlt` — a deliberate collapse, not a paste error.
-  // Consolidating the duplicate names is a later cleanup, not a repaint.
+  // Semantic — the design carries ONE warning text (#b45309) and ONE danger
+  // red (#c0362c). The duplicate token names `warningDeep` (== `warning`) and
+  // `dangerAlt` (== `danger`) were consolidated away [register K8, S180]: the
+  // base names `warning`/`danger` are what new code reaches for, so they stay
+  // and the aliases were deleted with their call sites rewritten. This is a
+  // rename only — the hex values are unchanged (these are semantic-status
+  // colours, deliberately NOT the brand amber #EDA122).
   success: '#1f8f4e',
   successBg: '#e6f0e9',
   successOnBg: '#3d7a4b',
   warning: '#b45309',
-  warningDeep: '#b45309',
   warningBg: '#fdece0',
   danger: '#c0362c',
-  dangerAlt: '#c0362c',
   neutralBadgeBg: '#eef1f6',
   neutralBadgeText: '#7b8699',
 

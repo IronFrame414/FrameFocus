@@ -46,7 +46,7 @@ const STATUS_CHIP: Record<string, { bg: string; fg: string }> = {
   signed: { bg: color.blueTintAlt, fg: color.primary },
   notarized: { bg: color.successBg, fg: color.successOnBg },
   sent: { bg: color.successBg, fg: color.successOnBg },
-  voided: { bg: '#fdecea', fg: color.dangerAlt },
+  voided: { bg: '#fdecea', fg: color.danger },
 };
 
 const money = (n: number | null) =>
@@ -412,7 +412,7 @@ export function GenerateDialog({
               borderRadius: '8px',
               background: '#fdecea',
               border: '1px solid #f5c2bd',
-              color: color.dangerAlt,
+              color: color.danger,
               fontSize: '12.5px',
               marginBottom: '12px',
             }}
@@ -452,13 +452,13 @@ export function GenerateDialog({
         </label>
 
         {selection.ambiguous && (
-          <p style={{ fontSize: '11.5px', color: color.warningDeep, margin: '0 0 10px' }}>
+          <p style={{ fontSize: '11.5px', color: color.warning, margin: '0 0 10px' }}>
             More than one form matches this slot. Check you have the right one.
           </p>
         )}
 
         {chosen && !chosen.hasPdf && (
-          <p style={{ fontSize: '11.5px', color: color.warningDeep, margin: '0 0 10px' }}>
+          <p style={{ fontSize: '11.5px', color: color.warning, margin: '0 0 10px' }}>
             This form has no PDF attached. Upload your company&rsquo;s release form in Company
             Settings first — {brand.shortName} never supplies the wording.
           </p>

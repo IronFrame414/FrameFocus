@@ -374,7 +374,7 @@ export function BudgetSplitEditor({
           <span
             style={{
               fontSize: '12px',
-              color: remainder === 0 ? color.muted : color.warningDeep,
+              color: remainder === 0 ? color.muted : color.warning,
             }}
           >
             {remainder === 0

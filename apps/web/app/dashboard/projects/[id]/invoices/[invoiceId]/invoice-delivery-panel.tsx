@@ -146,7 +146,7 @@ export function InvoiceDeliveryPanel({
           <span style={{ fontSize: '0.75rem', color: color.faint }}>to {recipientEmail}</span>
         )}
         {blockedReason && (
-          <span style={{ fontSize: '0.75rem', color: color.warningDeep }}>{blockedReason}</span>
+          <span style={{ fontSize: '0.75rem', color: color.warning }}>{blockedReason}</span>
         )}
       </div>
 

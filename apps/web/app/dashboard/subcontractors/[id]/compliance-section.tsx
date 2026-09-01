@@ -33,8 +33,8 @@ const DOC_TYPE_LABELS: Record<ComplianceDocType, string> = {
 
 const STATUS_CHIP: Record<ComplianceStatus, { label: string; bg: string; fg: string }> = {
   current: { label: 'Current', bg: color.successBg, fg: color.successOnBg },
-  expiring_soon: { label: 'Expiring soon', bg: color.warningBg, fg: color.warningDeep },
-  expired: { label: 'Expired', bg: '#fdecea', fg: color.dangerAlt },
+  expiring_soon: { label: 'Expiring soon', bg: color.warningBg, fg: color.warning },
+  expired: { label: 'Expired', bg: '#fdecea', fg: color.danger },
   // A W-9 has no expiry and is never alerted on (5I §5). Neutral, not green:
   // "current" would claim a freshness the row cannot have.
   no_expiry: { label: 'No expiry', bg: color.neutralBadgeBg, fg: color.neutralBadgeText },

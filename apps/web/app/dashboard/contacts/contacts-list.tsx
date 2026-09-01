@@ -48,8 +48,8 @@ const PORTAL_LABELS: Record<string, { label: string; bg: string; fg: string }> =
   active: { label: 'Active', bg: color.successBg, fg: color.successOnBg },
   deactivated: { label: 'Deactivated', bg: color.neutralBadgeBg, fg: color.neutralBadgeText },
   signed_documents_only: { label: 'Signed docs only', bg: color.blueTintAlt, fg: color.primary },
-  documents_for_signature: { label: 'Docs for signature', bg: color.warningBg, fg: color.warningDeep },
-  invited: { label: 'Invited', bg: color.warningBg, fg: color.warningDeep },
+  documents_for_signature: { label: 'Docs for signature', bg: color.warningBg, fg: color.warning },
+  invited: { label: 'Invited', bg: color.warningBg, fg: color.warning },
 };
 
 export function ContactsList({ contacts, canEdit, jobs, portal }: ContactsListProps) {
@@ -81,7 +81,7 @@ export function ContactsList({ contacts, canEdit, jobs, portal }: ContactsListPr
   const typeBadge = (type: string) => ({
     ...badgeStyle,
     backgroundColor: type === 'client' ? color.blueTintAlt : color.warningBg,
-    color: type === 'client' ? color.primary : color.warningDeep,
+    color: type === 'client' ? color.primary : color.warning,
   });
 
   const statusBadge = (status: string) => ({

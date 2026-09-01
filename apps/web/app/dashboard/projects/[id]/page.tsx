@@ -228,7 +228,7 @@ export default async function ProjectOverviewPage({ params }: { params: { id: st
             alignItems: 'baseline',
           }}
         >
-          <span style={{ fontSize: '13px', fontWeight: 700, color: color.warningDeep }}>
+          <span style={{ fontSize: '13px', fontWeight: 700, color: color.warning }}>
             Contract not signed
           </span>
           <span style={{ fontSize: '12.5px', color: color.bodyAlt }}>

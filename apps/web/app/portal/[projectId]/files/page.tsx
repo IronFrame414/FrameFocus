@@ -84,7 +84,7 @@ export default async function PortalFilesPage({
                     pending state now is not a placeholder: a client who is told
                     nothing is waiting on her is being told the wrong thing. */}
                 {d.signable && (
-                  <span style={{ fontSize: '12px', fontWeight: 700, color: color.warningDeep }}>
+                  <span style={{ fontSize: '12px', fontWeight: 700, color: color.warning }}>
                     Awaiting your signature
                   </span>
                 )}

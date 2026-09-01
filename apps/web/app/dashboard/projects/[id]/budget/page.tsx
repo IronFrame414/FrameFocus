@@ -269,7 +269,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                   label: 'Remaining on original contract',
                   value: money(contractBilling.remainingToBill),
                   valueColor:
-                    contractBilling.remainingToBill < 0 ? color.warningDeep : color.navy,
+                    contractBilling.remainingToBill < 0 ? color.warning : color.navy,
                   caption:
                     contractBilling.depositRefunded > 0
                       ? `original less ${money(contractBilling.issuedAgainstContract)} billed, plus ${money(contractBilling.depositRefunded)} refunded`
@@ -293,7 +293,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                     coBilling.fixedCount === 0
                       ? color.faint
                       : coBilling.fixedRemaining < 0
-                        ? color.warningDeep
+                        ? color.warning
                         : color.navy,
                   caption: [
                     coBilling.fixedCount > 0
@@ -325,7 +325,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                     selBilling.fixedCount === 0
                       ? color.faint
                       : selBilling.fixedRemaining < 0
-                        ? color.warningDeep
+                        ? color.warning
                         : color.navy,
                   caption: [
                     selBilling.fixedCount > 0
@@ -368,7 +368,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                 {
                   label: 'Cost to complete',
                   value: money(budgetRemaining),
-                  valueColor: budgetRemaining >= 0 ? color.navy : color.warningDeep,
+                  valueColor: budgetRemaining >= 0 ? color.navy : color.warning,
                   caption: 'budget − actual − committed',
                 },
               ]
@@ -556,7 +556,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
               <p style={{ ...microLabelStyle, marginBottom: '8px' }}>Watch list</p>
               {rows.map((r) => (
                 <p key={r.text} style={{ margin: '0 0 6px', fontSize: '13px', color: color.body }}>
-                  <span style={{ fontWeight: 600, color: color.warningDeep }}>{r.text}</span>{' '}
+                  <span style={{ fontWeight: 600, color: color.warning }}>{r.text}</span>{' '}
                   <span style={{ color: color.faint, fontSize: '12px' }}>· {r.detail}</span>
                 </p>
               ))}
@@ -668,7 +668,7 @@ export default async function BudgetAndCostPage({ params }: { params: { id: stri
                         fontWeight: 700,
                         letterSpacing: '0.06em',
                         textTransform: 'uppercase',
-                        color: color.warningDeep,
+                        color: color.warning,
                         backgroundColor: color.cardBg,
                         border: `1px solid ${color.warning}`,
                         borderRadius: '999px',

@@ -141,7 +141,7 @@ export function BillsTab({
         </label>
       </div>
 
-      {notice && <p style={{ color: color.warningDeep, fontSize: '13px', margin: '0 0 12px' }}>{notice}</p>}
+      {notice && <p style={{ color: color.warning, fontSize: '13px', margin: '0 0 12px' }}>{notice}</p>}
 
       <div style={{ ...cardStyle, overflow: 'hidden' }}>
         {filtered.length === 0 ? (
@@ -204,10 +204,10 @@ export function BillsTab({
                       </td>
                       <td style={{ ...cellStyle, whiteSpace: 'nowrap' }}>
                         {r.status === 'pending' && (
-                          <Badge bg={color.warningBg} fg={color.warningDeep}>Pending</Badge>
+                          <Badge bg={color.warningBg} fg={color.warning}>Pending</Badge>
                         )}
                         {r.status === 'rejected' && (
-                          <Badge bg={color.neutralBadgeBg} fg={color.dangerAlt}>Rejected</Badge>
+                          <Badge bg={color.neutralBadgeBg} fg={color.danger}>Rejected</Badge>
                         )}
                         {closedOut ? (
                           <Badge bg={color.neutralBadgeBg} fg={color.neutralBadgeText}>Closed out</Badge>
@@ -220,13 +220,13 @@ export function BillsTab({
                           </Badge>
                         )}
                         {r.awaiting_paper && !closedOut && (
-                          <Badge bg={color.warningBg} fg={color.warningDeep}>Bill expected</Badge>
+                          <Badge bg={color.warningBg} fg={color.warning}>Bill expected</Badge>
                         )}
                         {r.is_retainage && (
                           <Badge bg={color.blueTint} fg={color.primary}>Retainage</Badge>
                         )}
                         {overStage && (
-                          <Badge bg={color.warningBg} fg={color.warningDeep}>Over-stage</Badge>
+                          <Badge bg={color.warningBg} fg={color.warning}>Over-stage</Badge>
                         )}
                       </td>
                       <td style={{ ...cellStyle, whiteSpace: 'nowrap', textAlign: 'right' }}>
@@ -260,7 +260,7 @@ export function BillsTab({
                         )}
                         {isOwnerAdmin && !closedOut && remaining > 0 && r.status === 'approved' && !r.is_retainage && (
                           <button
-                            style={{ ...secondaryButtonStyle, padding: '5px 10px', fontSize: '12px', marginLeft: '4px', color: color.dangerAlt }}
+                            style={{ ...secondaryButtonStyle, padding: '5px 10px', fontSize: '12px', marginLeft: '4px', color: color.danger }}
                             onClick={() => setClosingOut(r)}
                           >
                             Close out

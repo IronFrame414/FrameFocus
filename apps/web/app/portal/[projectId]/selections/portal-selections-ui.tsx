@@ -446,7 +446,7 @@ export function PortalSelectionCard({
       )}
 
       {selection.status === 'denied' && (
-        <p data-testid="portal-selection-denied" style={{ fontSize: '13px', color: color.warningDeep, margin: '6px 0 0' }}>
+        <p data-testid="portal-selection-denied" style={{ fontSize: '13px', color: color.warning, margin: '6px 0 0' }}>
           You told your contractor this one is not right. They will come back to you with a revision.
         </p>
       )}
@@ -528,7 +528,7 @@ export function PortalSelectionCard({
                   onClick={() => void decline()}
                   disabled={busy}
                   data-testid="portal-selection-decline-confirm"
-                  style={{ ...buttonStyle(!busy), backgroundColor: busy ? color.faintAlt : color.dangerAlt }}
+                  style={{ ...buttonStyle(!busy), backgroundColor: busy ? color.faintAlt : color.danger }}
                 >
                   {busy ? 'Sending…' : 'Send this back'}
                 </button>

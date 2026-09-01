@@ -93,7 +93,7 @@ const STATUS_TONE: Record<string, { bg: string; fg: string }> = {
   sent: { bg: color.blueTintAlt, fg: color.primary },
   active: { bg: color.blueTintAlt, fg: color.primary },
   complete: { bg: color.successBg, fg: color.successOnBg },
-  on_hold: { bg: color.warningBg, fg: color.warningDeep },
+  on_hold: { bg: color.warningBg, fg: color.warning },
   cancelled: { bg: color.neutralBadgeBg, fg: color.neutralBadgeText },
 };
 

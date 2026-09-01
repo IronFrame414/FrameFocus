@@ -350,7 +350,7 @@ export function ProjectsList({
                     fontFamily: font.sans,
                     fontSize: '12.5px',
                     fontWeight: attention.length > 0 ? 600 : 400,
-                    color: attention.length > 0 ? color.warningDeep : color.faint,
+                    color: attention.length > 0 ? color.warning : color.faint,
                   }}
                 >
                   {attention.length > 0 ? attention.join(' · ') : '—'}

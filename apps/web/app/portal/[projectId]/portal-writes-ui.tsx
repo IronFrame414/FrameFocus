@@ -419,7 +419,7 @@ export function ClientComposer({ projectId }: { projectId: string }) {
       )}
       {error && <p style={{ fontSize: '12.5px', color: color.danger, margin: '8px 0 0' }}>{error}</p>}
       {warning && (
-        <p style={{ fontSize: '12.5px', color: color.warningDeep, margin: '8px 0 0' }}>{warning}</p>
+        <p style={{ fontSize: '12.5px', color: color.warning, margin: '8px 0 0' }}>{warning}</p>
       )}
     </Panel>
   );

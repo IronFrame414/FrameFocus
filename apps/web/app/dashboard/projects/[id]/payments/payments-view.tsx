@@ -187,7 +187,7 @@ export function PaymentsView(props: Props) {
           warn={pairing.difference < 0}
         />
         {!pairing.spentComplete && (
-          <span style={{ fontSize: '11px', color: color.warningDeep, maxWidth: '260px' }}>
+          <span style={{ fontSize: '11px', color: color.warning, maxWidth: '260px' }}>
             Labor cost is hidden from your role, so &ldquo;spent&rdquo; covers expenses only.
           </span>
         )}
@@ -250,7 +250,7 @@ export function PaymentsView(props: Props) {
                       {inv.supersedesInvoiceId && (
                         <Link
                           href={`${invoiceBase}/${inv.supersedesInvoiceId}`}
-                          style={{ fontSize: '11px', color: color.warningDeep, marginLeft: '6px', textDecoration: 'none' }}
+                          style={{ fontSize: '11px', color: color.warning, marginLeft: '6px', textDecoration: 'none' }}
                         >
                           · replaces a voided invoice
                         </Link>
@@ -370,7 +370,7 @@ export function PaymentsView(props: Props) {
                     )}
                   </td>
                   <td style={{ ...tdStyle, textAlign: 'right', fontFamily: font.mono, fontWeight: 700 }}>{money(p.amount)}</td>
-                  <td style={{ ...tdStyle, textAlign: 'right', fontFamily: font.mono, color: p.creditAvailable > 0 ? color.warningDeep : color.faint }}>
+                  <td style={{ ...tdStyle, textAlign: 'right', fontFamily: font.mono, color: p.creditAvailable > 0 ? color.warning : color.faint }}>
                     {p.creditAvailable > 0 ? money(p.creditAvailable) : '—'}
                   </td>
                   {canRecord && (
@@ -457,7 +457,7 @@ function Figure({
           fontFamily: font.mono,
           fontSize: bold ? '18px' : '15px',
           fontWeight: bold ? 700 : 600,
-          color: muted ? color.faint : warn ? color.warningDeep : color.navy,
+          color: muted ? color.faint : warn ? color.warning : color.navy,
           marginTop: '2px',
         }}
       >
@@ -572,7 +572,7 @@ function RecordPaymentPanel({
             <>
               {' · '}
               {surplus > 0 ? (
-                <span style={{ color: color.warningDeep }}>
+                <span style={{ color: color.warning }}>
                   {money(surplus)} will sit as a credit on account
                 </span>
               ) : surplus < 0 ? (
@@ -738,7 +738,7 @@ function RetainageReleasePanel({
         before sending.
       </p>
       {projectStatus !== 'complete' && (
-        <p style={{ fontSize: '11px', color: color.warningDeep, margin: '0 0 8px' }}>
+        <p style={{ fontSize: '11px', color: color.warning, margin: '0 0 8px' }}>
           This project is not marked complete. Releasing anyway is allowed — this warns, it does not block.
         </p>
       )}

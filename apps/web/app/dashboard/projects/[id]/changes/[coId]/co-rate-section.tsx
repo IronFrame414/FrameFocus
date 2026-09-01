@@ -135,7 +135,7 @@ export function CoRateSection({
       </div>
 
       {missing.length > 0 && (
-        <p style={{ fontSize: '0.8125rem', color: color.warningDeep, margin: '0 0 0.375rem' }}>
+        <p style={{ fontSize: '0.8125rem', color: color.warning, margin: '0 0 0.375rem' }}>
           No rate in force ({missing.map((f) => f.label).join(', ')}) — set{' '}
           {missing.length === 1 ? 'it' : 'them'} here; missing markup rates block this change
           order from pricing.

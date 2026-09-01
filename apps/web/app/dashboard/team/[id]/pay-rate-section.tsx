@@ -189,7 +189,7 @@ export default function PayRateSection({
                 style={{
                   border: 'none',
                   background: 'none',
-                  color: color.dangerAlt,
+                  color: color.danger,
                   cursor: 'pointer',
                   fontWeight: 700,
                   padding: '2px 6px',
@@ -274,7 +274,7 @@ export default function PayRateSection({
             Burdened cost:{' '}
             <span style={{ ...monoValue, fontWeight: 600, color: color.navy }}>{preview}</span>
             {burdenSource === 'company_fixed' && companyFixedBurden === null && (
-              <span style={{ fontSize: '12px', color: color.warningDeep }}>
+              <span style={{ fontSize: '12px', color: color.warning }}>
                 {' '}
                 — no company fixed burden set (Settings); treated as $0.00
               </span>

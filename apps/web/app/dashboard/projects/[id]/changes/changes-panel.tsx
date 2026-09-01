@@ -196,7 +196,7 @@ export function ChangesPanel({
             borderRadius: '9px',
             marginBottom: '14px',
             backgroundColor: '#fef2f2',
-            color: color.dangerAlt,
+            color: color.danger,
             fontSize: '13px',
           }}
         >
@@ -323,7 +323,7 @@ export function ChangesPanel({
               style={{
                 padding: '7px 20px',
                 fontSize: '12px',
-                color: color.warningDeep,
+                color: color.warning,
                 backgroundColor: color.rowTintAttention,
                 borderBottom: `1px solid ${color.neutralBadgeBg}`,
               }}
@@ -434,7 +434,7 @@ export function ChangesPanel({
                           padding: '4px 10px',
                           fontSize: '12px',
                           fontWeight: 600,
-                          color: color.dangerAlt,
+                          color: color.danger,
                           backgroundColor: '#fff',
                           border: '1px solid #fecaca',
                           borderRadius: '8px',

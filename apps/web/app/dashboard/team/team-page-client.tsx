@@ -252,7 +252,7 @@ export default function TeamPageClient({
                         ...badgeStyle,
                         marginLeft: '8px',
                         backgroundColor: color.warningBg,
-                        color: color.warningDeep,
+                        color: color.warning,
                       }}
                     >
                       Invited
@@ -263,7 +263,7 @@ export default function TeamPageClient({
                       style={{
                         ...badgeStyle,
                         backgroundColor: color.warningBg,
-                        color: color.warningDeep,
+                        color: color.warning,
                       }}
                     >
                       {ROLE_LABELS[inv.role as CompanyRole] || inv.role}
@@ -335,7 +335,7 @@ export default function TeamPageClient({
                         style={{
                           margin: '4px 0 0',
                           fontSize: '11.5px',
-                          color: resendNote[inv.id].ok ? color.successOnBg : color.warningDeep,
+                          color: resendNote[inv.id].ok ? color.successOnBg : color.warning,
                         }}
                       >
                         {resendNote[inv.id].text}

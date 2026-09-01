@@ -195,7 +195,7 @@ export function CatalogList({ canManage, usage }: CatalogListProps) {
                               padding: '11px 12px',
                               fontFamily: font.mono,
                               fontSize: '12.5px',
-                              color: stale ? color.warningDeep : color.bodyAlt,
+                              color: stale ? color.warning : color.bodyAlt,
                               fontWeight: stale ? 600 : 400,
                             }}
                           >

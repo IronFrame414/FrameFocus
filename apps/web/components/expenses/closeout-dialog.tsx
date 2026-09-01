@@ -57,7 +57,7 @@ export function CloseoutDialog({ expense, onClose, onDone }: CloseoutDialogProps
           {expense.supplier}
           {expense.stage_label && ` · ${expense.stage_label}`}
         </p>
-        <p style={{ fontSize: '13px', color: color.warningDeep, margin: '0 0 14px' }}>
+        <p style={{ fontSize: '13px', color: color.warning, margin: '0 0 14px' }}>
           This drops {fmtMoney(expense.remaining)} committed from the job. Dollars already paid
           stay in actual.
           {expense.isSubCommitment && ' The sub will be flagged "did not finish" on their record.'}

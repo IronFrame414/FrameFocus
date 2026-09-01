@@ -133,7 +133,7 @@ export function PortalPanel({
               <span style={{ fontWeight: 600, color: color.navy, display: 'block' }}>
                 {row.contactName}
               </span>
-              <span style={{ fontSize: '12.5px', color: row.email ? color.muted : color.warningDeep }}>
+              <span style={{ fontSize: '12.5px', color: row.email ? color.muted : color.warning }}>
                 {/* R1 makes the email the username, so a contact without one
                     cannot have an account. Saying so HERE, before the click,
                     rather than only in the refusal. */}
@@ -150,7 +150,7 @@ export function PortalPanel({
                     fontWeight: 600,
                     textTransform: 'uppercase',
                     letterSpacing: '0.03em',
-                    color: row.state === 'active' ? color.successOnBg : color.warningDeep,
+                    color: row.state === 'active' ? color.successOnBg : color.warning,
                   }}
                 >
                   {row.state ? CLIENT_ACCESS_STATE_LABELS[row.state] : 'Account'}

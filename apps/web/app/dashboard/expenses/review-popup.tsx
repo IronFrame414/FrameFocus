@@ -548,7 +548,7 @@ export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: Re
                       ? '—'
                       : fmtMoney(line.qtyOrdered * line.unitCost)}
                     {line.lineStatus === 'flagged' && (
-                      <span style={{ color: color.warningDeep }}>
+                      <span style={{ color: color.warning }}>
                         {' '}
                         · flagged{line.flagNote ? `: ${line.flagNote}` : ''}
                       </span>
@@ -798,7 +798,7 @@ export function ReviewPopup({ expense, receipts, projects, onClose, onDone }: Re
               Close
             </button>
             <button
-              style={{ ...secondaryButtonStyle, color: color.dangerAlt }}
+              style={{ ...secondaryButtonStyle, color: color.danger }}
               disabled={busy}
               onClick={() => setRejecting(true)}
             >

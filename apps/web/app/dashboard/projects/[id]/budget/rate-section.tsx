@@ -186,7 +186,7 @@ export async function RateSection({ project, canSupersede }: RateSectionProps) {
             </div>
 
             {missing.length > 0 && (
-              <p style={{ fontSize: '12px', color: color.warningDeep, margin: '4px 20px 6px' }}>
+              <p style={{ fontSize: '12px', color: color.warning, margin: '4px 20px 6px' }}>
                 No rate in force: {missing.map((t) => RATE_TYPE_META[t].label).join(', ')} — this
                 instrument cannot price until set.
               </p>

@@ -436,7 +436,7 @@ function TemplateSet({
               </button>
             </>
           ) : (
-            <span style={{ color: color.warningDeep, fontSize: '11.5px' }}>No form uploaded</span>
+            <span style={{ color: color.warning, fontSize: '11.5px' }}>No form uploaded</span>
           )}
 
           <label

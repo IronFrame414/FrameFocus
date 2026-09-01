@@ -249,7 +249,7 @@ export function SubcontractorDetailSheet({
                 padding: '0.5rem 0.75rem',
                 borderRadius: '9px',
                 backgroundColor: color.warningBg,
-                color: color.warningDeep,
+                color: color.warning,
                 fontSize: '0.8125rem',
               }}
               data-testid="sub-detail-error"

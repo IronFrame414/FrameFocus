@@ -19,9 +19,9 @@ export const EXPENSE_STATUS_LABELS: Record<ExpenseStatus, string> = {
 
 // ui-03 §4 badge system palette (project badges precedent).
 const STATUS_BADGES: Record<ExpenseStatus, { bg: string; fg: string }> = {
-  pending: { bg: color.warningBg, fg: color.warningDeep },
+  pending: { bg: color.warningBg, fg: color.warning },
   approved: { bg: color.successBg, fg: color.successOnBg },
-  rejected: { bg: color.neutralBadgeBg, fg: color.dangerAlt },
+  rejected: { bg: color.neutralBadgeBg, fg: color.danger },
 };
 
 export function ExpenseStatusChip({ status }: { status: ExpenseStatus }) {

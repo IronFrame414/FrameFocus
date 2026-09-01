@@ -538,7 +538,7 @@ export function ChatComposer({ projectId, kind, disabled, onSend }: ChatComposer
       {notice && (
         <p
           data-testid="chat-composer-notice"
-          style={{ ...hintStyle, marginTop: '6px', color: color.warningDeep }}
+          style={{ ...hintStyle, marginTop: '6px', color: color.warning }}
         >
           {notice}
         </p>

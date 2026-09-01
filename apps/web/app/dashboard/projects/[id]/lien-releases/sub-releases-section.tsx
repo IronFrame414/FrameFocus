@@ -117,7 +117,7 @@ export function SubReleasesSection({
       </p>
 
       {error && (
-        <p style={{ fontSize: '12.5px', color: color.dangerAlt, margin: '0 0 10px', fontWeight: 600 }}>
+        <p style={{ fontSize: '12.5px', color: color.danger, margin: '0 0 10px', fontWeight: 600 }}>
           {error}
         </p>
       )}

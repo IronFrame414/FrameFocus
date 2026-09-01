@@ -368,7 +368,7 @@ export function ExpensesPageClient({
                           <div style={{ fontSize: '12px', color: color.muted }}>{e.description}</div>
                         )}
                         {e.status === 'rejected' && e.rejection_note && (
-                          <div style={{ fontSize: '12px', color: color.dangerAlt }}>
+                          <div style={{ fontSize: '12px', color: color.danger }}>
                             Rejected: {e.rejection_note}
                           </div>
                         )}
@@ -411,7 +411,7 @@ export function ExpensesPageClient({
                               style={{
                                 border: 'none',
                                 background: 'none',
-                                color: color.dangerAlt,
+                                color: color.danger,
                                 fontWeight: 600,
                                 fontSize: '13px',
                                 cursor: busyId === e.id ? 'default' : 'pointer',

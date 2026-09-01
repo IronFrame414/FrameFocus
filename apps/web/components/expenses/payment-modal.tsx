@@ -141,7 +141,7 @@ export function PaymentModal({ expense, subContractId, onClose, onDone }: Paymen
               marginBottom: '12px',
               backgroundColor: '#fffbeb',
               border: '1px solid #fde68a',
-              color: color.warningDeep,
+              color: color.warning,
               fontSize: '12px',
             }}
           >
@@ -158,7 +158,7 @@ export function PaymentModal({ expense, subContractId, onClose, onDone }: Paymen
               marginBottom: '12px',
               backgroundColor: '#fffbeb',
               border: '1px solid #fde68a',
-              color: color.warningDeep,
+              color: color.warning,
               fontSize: '12px',
             }}
           >
@@ -218,7 +218,7 @@ export function PaymentModal({ expense, subContractId, onClose, onDone }: Paymen
 
         {formalConfirm ? (
           <div>
-            <p style={{ fontSize: '13px', color: color.warningDeep, margin: '0 0 12px' }}>
+            <p style={{ fontSize: '13px', color: color.warning, margin: '0 0 12px' }}>
               The formal contract with {formalWarn?.subName} is not signed — you are about to
               send money out before the contract is in place. Record the payment anyway?
             </p>
@@ -237,7 +237,7 @@ export function PaymentModal({ expense, subContractId, onClose, onDone }: Paymen
           </div>
         ) : overStageConfirm ? (
           <div>
-            <p style={{ fontSize: '13px', color: color.warningDeep, margin: '0 0 12px' }}>
+            <p style={{ fontSize: '13px', color: color.warning, margin: '0 0 12px' }}>
               This payment exceeds the remaining balance on this{' '}
               {expense.stage_label ? 'stage' : 'bill'}. Record it anyway? It will be flagged
               over-stage.

@@ -473,7 +473,7 @@ export function BoxMapEditor({
               marginBottom: '14px',
             }}
           >
-            <p style={{ fontSize: '12.5px', color: color.warningDeep, margin: 0 }}>
+            <p style={{ fontSize: '12.5px', color: color.warning, margin: 0 }}>
               The form cannot be shown here{rasterMessage ? ` — ${rasterMessage}` : '.'}
             </p>
             <p style={{ fontSize: '11.5px', color: color.muted, margin: '6px 0 0' }}>
@@ -573,7 +573,7 @@ export function BoxMapEditor({
                       width: `${box.width * 100}%`,
                       height: `${box.height * 100}%`,
                       border: `1.5px solid ${
-                        small ? color.warningDeep : isSelected ? color.primary : color.primaryHover
+                        small ? color.warning : isSelected ? color.primary : color.primaryHover
                       }`,
                       background: small
                         ? 'rgba(217,119,6,0.16)'
@@ -593,7 +593,7 @@ export function BoxMapEditor({
                         left: 0,
                         fontSize: '9.5px',
                         fontFamily: font.mono,
-                        color: small ? color.warningDeep : color.primaryHover,
+                        color: small ? color.warning : color.primaryHover,
                         whiteSpace: 'nowrap',
                         pointerEvents: 'none',
                       }}
@@ -729,7 +729,7 @@ export function BoxMapEditor({
                             width: '68px',
                             marginTop: 0,
                             borderColor:
-                              small && k === 'width' ? color.warningDeep : color.inputBorder,
+                              small && k === 'width' ? color.warning : color.inputBorder,
                           }}
                         />
                       </td>
@@ -768,7 +768,7 @@ export function BoxMapEditor({
         {/* §2.2 — named, not counted. "Three boxes are small" tells the user
             nothing about which blank to go and fix. */}
         {tooSmall.length > 0 && (
-          <p style={{ fontSize: '12px', color: color.warningDeep, margin: '12px 0 0' }}>
+          <p style={{ fontSize: '12px', color: color.warning, margin: '12px 0 0' }}>
             Likely too small for what they will hold:{' '}
             {tooSmall
               .map(({ box }) => catalog.find((v) => v.key === box.value_key)?.label ?? box.value_key)

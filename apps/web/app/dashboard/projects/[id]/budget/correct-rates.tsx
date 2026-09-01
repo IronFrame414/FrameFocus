@@ -236,7 +236,7 @@ export function CorrectRates({ rows, canSupersede, recomputeDraftCoId }: Correct
               </span>
               {row.inForce && badge('In force', color.success, '#e4f0e6')}
               {row.pending &&
-                badge(`pending (effective ${fmtDate(row.effectiveFrom)})`, color.warningDeep, '#fdece0')}
+                badge(`pending (effective ${fmtDate(row.effectiveFrom)})`, color.warning, '#fdece0')}
               {row.superseded && (
                 <span style={{ fontSize: '12px', color: color.danger }}>
                   superseded{row.supersededReason ? `: ${row.supersededReason}` : ''}
@@ -312,7 +312,7 @@ export function CorrectRates({ rows, canSupersede, recomputeDraftCoId }: Correct
                 {d.saving ? 'Saving…' : 'Save correction'}
               </button>
               {row.inForce && badge('In force', color.success, '#e4f0e6')}
-              {row.pending && badge('pending', color.warningDeep, '#fdece0')}
+              {row.pending && badge('pending', color.warning, '#fdece0')}
             </div>
             {d.error && (
               <p style={{ color: color.danger, fontSize: '11px', margin: '2px 0 0' }}>{d.error}</p>

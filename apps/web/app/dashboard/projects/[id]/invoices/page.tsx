@@ -64,7 +64,7 @@ function Figure({
           fontFamily: font.mono,
           fontSize: bold ? '18px' : '15px',
           fontWeight: bold ? 700 : 600,
-          color: muted ? color.faint : warn ? color.warningDeep : color.navy,
+          color: muted ? color.faint : warn ? color.warning : color.navy,
           marginTop: '2px',
         }}
       >
@@ -162,7 +162,7 @@ export default async function InvoicesPage({ params }: { params: { id: string } 
             border: '1px solid #fde68a',
           }}
         >
-          <div style={{ fontSize: '13px', fontWeight: 700, color: color.warningDeep }}>
+          <div style={{ fontSize: '13px', fontWeight: 700, color: color.warning }}>
             {flagged.length === 1 ? '1 sent invoice was' : `${flagged.length} sent invoices were`}{' '}
             priced under a rate that has since been superseded
           </div>
@@ -265,11 +265,11 @@ export default async function InvoicesPage({ params }: { params: { id: string } 
                         <span style={{ color: color.faint }}> — {invoice.title}</span>
                       ) : null}
                       {invoice.invoice_type === 'deposit' && (
-                        <span style={{ fontSize: '11px', color: color.warningDeep }}> deposit</span>
+                        <span style={{ fontSize: '11px', color: color.warning }}> deposit</span>
                       )}
                       {flaggedIds.has(invoice.id) && (
                         <span
-                          style={{ fontSize: '11px', color: color.warningDeep, fontWeight: 700 }}
+                          style={{ fontSize: '11px', color: color.warning, fontWeight: 700 }}
                         >
                           {' '}
                           · rate superseded
@@ -299,7 +299,7 @@ export default async function InvoicesPage({ params }: { params: { id: string } 
                         ...tdStyle,
                         textAlign: 'right',
                         fontFamily: font.mono,
-                        color: Number(invoice.retainage_withheld) > 0 ? color.warningDeep : color.faint,
+                        color: Number(invoice.retainage_withheld) > 0 ? color.warning : color.faint,
                       }}
                     >
                       {Number(invoice.retainage_withheld) > 0

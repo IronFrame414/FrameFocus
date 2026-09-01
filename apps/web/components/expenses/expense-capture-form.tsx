@@ -262,7 +262,7 @@ export function ExpenseCaptureForm({
           Nothing counts against the job until it is reviewed and approved.
         </p>
         {photoWarning && (
-          <p style={{ fontSize: '12px', color: color.warningDeep, margin: '0 0 12px' }}>
+          <p style={{ fontSize: '12px', color: color.warning, margin: '0 0 12px' }}>
             {photoWarning}
           </p>
         )}
@@ -289,7 +289,7 @@ export function ExpenseCaptureForm({
           style={{ fontSize: '13px', color: color.body }}
         />
         {photoMissing && (
-          <p style={{ fontSize: '12px', color: color.warningDeep, margin: '6px 0 0' }}>
+          <p style={{ fontSize: '12px', color: color.warning, margin: '6px 0 0' }}>
             Receipt photo required.
           </p>
         )}

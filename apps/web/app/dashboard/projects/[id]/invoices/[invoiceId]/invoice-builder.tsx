@@ -642,14 +642,14 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
                     <td style={tdStyle}>
                       {cost.description}
                       {cost.blockedReason && (
-                        <div style={{ fontSize: '11px', color: color.warningDeep }}>
+                        <div style={{ fontSize: '11px', color: color.warning }}>
                           {cost.blockedReason}
                         </div>
                       )}
                     </td>
                     <td style={{ ...tdStyle, color: color.mutedAlt }}>{cost.category}</td>
                     <td style={{ ...tdStyle, color: color.mutedAlt }}>{cost.expenseDate}</td>
-                    <td style={{ ...tdStyle, textAlign: 'right', color: cost.ageDays > 30 ? color.warningDeep : color.faint }}>
+                    <td style={{ ...tdStyle, textAlign: 'right', color: cost.ageDays > 30 ? color.warning : color.faint }}>
                       {cost.ageDays}d
                     </td>
                     <td style={{ ...tdStyle, textAlign: 'right', fontFamily: font.mono }}>
@@ -762,7 +762,7 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
                               ))}
                             </select>
                             {!assignedOk && selectedHours.has(hour.segmentId) && (
-                              <div style={{ fontSize: '11px', color: color.warningDeep }}>
+                              <div style={{ fontSize: '11px', color: color.warning }}>
                                 Fixed-price instruments have no labor rate — reassign this day.
                               </div>
                             )}
@@ -791,7 +791,7 @@ export function InvoiceBuilder(props: InvoiceBuilderProps) {
                 </div>
               )}
               {splitDays.length > 0 && (
-                <div style={{ padding: '10px 16px', backgroundColor: '#fffbeb', color: color.warningDeep, fontSize: '12px' }}>
+                <div style={{ padding: '10px 16px', backgroundColor: '#fffbeb', color: color.warning, fontSize: '12px' }}>
                   You are splitting {splitDays.length === 1 ? 'a person-day' : 'person-days'} across
                   invoices. Rounding applies per person per day, so billing the parts separately can
                   total more than the whole day would. Bill a day in one piece unless you mean to.
@@ -1060,7 +1060,7 @@ function EstimateLinePanel({
       </div>
 
       {billing.undiscounted > 0 && discount === 0 && (
-        <div style={{ padding: '10px 16px', backgroundColor: '#fffbeb', color: color.warningDeep, fontSize: '12px' }}>
+        <div style={{ padding: '10px 16px', backgroundColor: '#fffbeb', color: color.warning, fontSize: '12px' }}>
           This estimate carries a {money(billing.undiscounted)} whole-contract discount. The line
           prices above are the pre-discount subtotal, so billing all of them at 100% is what brings
           the discount across and lands exactly on the contract value. Billing a subset now leaves
@@ -1192,7 +1192,7 @@ function DrawPanel({
         </button>
       </div>
       {originalContractValue === null && (
-        <p style={{ fontSize: '12px', color: color.warningDeep, margin: '6px 0 0' }}>
+        <p style={{ fontSize: '12px', color: color.warning, margin: '6px 0 0' }}>
           The contract value is not available here, so a percentage draw cannot be priced — either
           this project has none set, or it is an Owner/Admin figure on this job. Enter a fixed
           amount as a manual line instead.
@@ -1269,7 +1269,7 @@ function LinesPanel({
                 <td style={tdStyle}>
                   {line.description}
                   {line.line_type.startsWith('credit') || line.line_type === 'discount' ? (
-                    <span style={{ fontSize: '11px', color: color.warningDeep }}> credit</span>
+                    <span style={{ fontSize: '11px', color: color.warning }}> credit</span>
                   ) : null}
                 </td>
                 <td style={{ ...tdStyle, color: color.mutedAlt }}>{line.category ?? '—'}</td>
@@ -1354,7 +1354,7 @@ function LinesPanel({
               </div>
             ))}
             {presented.adjustmentLines.map((l, i) => (
-              <div key={`adj-${i}`} style={{ display: 'flex', justifyContent: 'space-between', color: color.warningDeep }}>
+              <div key={`adj-${i}`} style={{ display: 'flex', justifyContent: 'space-between', color: color.warning }}>
                 <span>{l.description}</span>
                 <span>{money(l.amount)}</span>
               </div>
@@ -1471,10 +1471,10 @@ function LinesPanel({
 function TotalRow({ label, value, bold, muted, warn }: { label: string; value: number; bold?: boolean; muted?: boolean; warn?: boolean }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: bold ? '14px' : '13px', padding: '2px 0' }}>
-      <span style={{ color: muted ? color.faint : warn ? color.warningDeep : color.body, fontWeight: bold ? 700 : 400 }}>
+      <span style={{ color: muted ? color.faint : warn ? color.warning : color.body, fontWeight: bold ? 700 : 400 }}>
         {label}
       </span>
-      <span style={{ fontFamily: font.mono, fontWeight: bold ? 700 : 400, color: muted ? color.faint : warn ? color.warningDeep : color.navy }}>
+      <span style={{ fontFamily: font.mono, fontWeight: bold ? 700 : 400, color: muted ? color.faint : warn ? color.warning : color.navy }}>
         {money(value)}
       </span>
     </div>
@@ -1827,7 +1827,7 @@ function SettingsPanel({
       </label>
 
       {mixedRetainage && (
-        <span style={{ fontSize: '11px', color: color.warningDeep }}>
+        <span style={{ fontSize: '11px', color: color.warning }}>
           §5: retainage applies only to the non-T&amp;M lines on this invoice — T&amp;M money is
           never withheld against, even here.
         </span>

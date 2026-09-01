@@ -275,7 +275,7 @@ export function SubcontractorsList({
                         ) : w9[s.id] ? (
                           <span style={{ color: color.successOnBg, fontWeight: 600 }}>On file</span>
                         ) : (
-                          <span style={{ color: color.warningDeep, fontWeight: 600 }}>Missing</span>
+                          <span style={{ color: color.warning, fontWeight: 600 }}>Missing</span>
                         )}
                       </td>
                       {/* Money columns — SUBS ONLY. A vendor figure would be a

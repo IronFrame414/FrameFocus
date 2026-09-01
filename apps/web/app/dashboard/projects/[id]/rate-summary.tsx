@@ -97,7 +97,7 @@ export async function RateSummary({ project, changeOrders }: RateSummaryProps) {
               <span key={line.label} style={{ fontSize: '12px', color: color.body }}>
                 {line.label}:{' '}
                 {line.value === null ? (
-                  <span style={{ color: color.warningDeep, fontWeight: 600 }}>
+                  <span style={{ color: color.warning, fontWeight: 600 }}>
                     no rate in force
                   </span>
                 ) : (

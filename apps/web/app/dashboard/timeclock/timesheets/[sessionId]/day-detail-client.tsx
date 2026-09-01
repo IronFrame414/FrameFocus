@@ -335,7 +335,7 @@ export function DayDetailClient({
             ...cardStyle,
             borderColor: '#f3c4c4',
             backgroundColor: '#fdf0f0',
-            color: color.dangerAlt,
+            color: color.danger,
             padding: '12px 16px',
             marginBottom: '14px',
             fontSize: '13px',
