@@ -16,4 +16,140 @@
 
 ## Phase 1 — analysis (append-only, per item)
 
-_(findings appended below as each item is analysed)_
+### Headline: the register is STALE on several items — most of the "work" is already done.
+
+Verified against the tree + live rebuild-test schema (`nmyphyhmfttxkdoposvf`).
+
+#### 2.1 — K2 compliance expiry gap — ✅ ALREADY BUILT (register wrong: "apparently never built")
+- Migration `supabase/migrations/20261049000000_compliance_expiry_required.sql` EXISTS and adds exactly
+  the ruled CHECK: `CHECK (doc_type NOT IN ('coi','license') OR expiration_date IS NOT NULL)`.
+- **Object-level verified on rebuild-test:** constraint `compliance_docs_expiring_types_require_date`
+  is live (`pg_constraint`, def matches). It is in the ledger (prior session's `list_migrations`).
+- **Tested, not false-green:** `test/s140-compliance-floor.live.ts:141` inserts a dateless `coi`,
+  asserts the error matches `compliance_docs_expiring_types_require_date`, then inserts WITH a date and
+  asserts success. The w9/other-optional path is covered at `:130`.
+- The migration comment records: production had 0 violating `coi`/`license` rows when it shipped, so a
+  plain CHECK (no NOT VALID). ⚠️ **I cannot re-verify production** (MCP is rebuild-test-only), but the
+  migration is an OLD one (Aug 29) so it is almost certainly deployed. **Nothing to build.**
+
+#### 2.2 — L3 dialog coverage (the ruled six) — ✅ ALREADY BUILT (register stale: "never chased")
+- `apps/web/e2e/desktop-confirms.spec.ts` exists, header: *"Register backlog §2 — the RULED SIX
+  [Josh, Phase 2 Q5]."* Has exactly the six, each with a pre-state DB guard, a click of
+  `confirm-accept`, and a post-state DB poll (not vacuous):
+  1 send invoice · 2 project complete→reopen→cancel round-trip · 3 delete payment · 4 void contract ·
+  5 delete change order · 6 delete estimate. **Needs a pass-verification run in Phase 3, not building.**
+
+#### 1.2 — K9 crew-manifest "platform" — ✅ DONE + ALREADY RECORDED CLOSED
+- `crew-manifest.ts:66` reads `brand.description`; `brand.ts:69` carries the field. Import gap closed.
+- The register K9 entry (`:470-474`) already records this closed, with the residual noted: the VALUE
+  still says "…platform…", folded into the EZ-Contractor-Binder rebrand pass (out of scope §3). **Nothing to do.**
+
+#### 2.3 — K10 brand.ts backgroundColor — report-only (owed, route to Josh)
+- `brand.ts:96` `backgroundColor: '#0f1729'` (navy), comment `:84-96` flags it as an untested-on-a-real-
+  handset assumption; §S2 moved it to the redesign navy. **Cannot test (needs a phone).** Owed; will
+  route to Josh with the exact check. Register `:476-481` describes it but doesn't mark it owed/routed.
+
+#### 1.3 — L5 two step-9 deferrals — ✅ ALREADY RECORDED in the register (`:546-549`)
+- "Send me a test" — confirmed NOT built (`markAsSent` exists at `estimate-builder.tsx:201` /
+  `proposal-preview-client.tsx:99`; no test-send path in the send flow). Deep-link tabs — confirmed
+  client `useState` (`estimate-builder.tsx:78`), so linkable = a change not a restyle. **Both already in
+  the register as deferrals.** Minor tidy at most; build neither (no ruling).
+
+#### 1.4 — L4 four permanent cuts — premises verified; need ⛔ markers (register + redesign spec)
+- **Crew-load bars:** `tasks` CREATE TABLE (`20260704213000:63-101`) has NO hours/estimated_hours/
+  duration column. ✓ **Coverage check:** no scope↔category link. **Company By-crew/Gantt:** Gantt is
+  project-level only. **"Resumes when permit clears":** `hold_reason` absent from every migration. ✓
+- Register `:533-544` lists them but says *"These need a 'will not build' marker."* Not yet marked ⛔ in
+  the register or the redesign spec. **Docs-only task.**
+
+#### 2.4 — K11 s138-trial-unlock purge timeout — root-caused (report, do NOT fix)
+- The purge (`test-support/company-purge.ts` `deleteCompanies`) loops `DELETE ... WHERE company_id IN
+  (ids)` over 16 `COMPANY_CHILDREN` (mostly small config/seed tables + the FK-heavy `profiles` /
+  `company_members`), then `trial_emails` UPDATE, then the parent delete. Each file's `ids` are ITS OWN
+  marker companies (unique per file) — so parallel suites delete DIFFERENT rows, not the same ones.
+- **DB statement_timeout is 2 min** (cluster default 120000ms); `service_role` has NO role-level
+  override (`rolconfig` null), `authenticated` is 8s. For a scoped delete of a handful of companies'
+  rows to hit a **2-minute** ceiling, the statement must be **BLOCKED on a lock**, not slow-scanning —
+  which is exactly why it is green in isolation and red only under parallel load.
+- **Root cause (established): cross-suite LOCK / FK-check contention on the shared rebuild-test DB**, not
+  a logic bug and not a missing index. `profiles`/`company_members` are referenced by dozens of FKs;
+  deleting them takes FK-validation locks, and a concurrent suite creating/deleting companies (or
+  `auth.admin.deleteUser` cascading) can hold a blocking lock long enough to exhaust the window.
+  Same family as `s146-C5` / `s97ct-roles 6b` (all shared-DB parallel-load flakes).
+- ⚠️ **"report before fixing" [prompt] — I did not fix it.** A bigger `statement_timeout` masks it; the
+  real reducers (retry-once on `57014` in the purge, or serialize company-deleting teardowns) are a
+  ruling for Josh. See Phase 2.
+
+#### 1.1 — K7 row tints — ⚠️ NOT mechanical; BLOCKED on rulings (see Phase 2)
+- ⚠️ **Register premise "no screen uses them" is PARTLY WRONG.** `rowTintAttention` IS referenced —
+  `changes-panel.tsx:327` — but as a **section banner** background ("N COs have no schedule impact"),
+  NOT a table-row tint. `rowTintProblem` is genuinely unused anywhere.
+- **`14a` projects (`projects-list.tsx`):** already computes the four-condition "needs attention" set
+  (`attentionByProject`, via `attentionFor()`), rendered as per-row TEXT. The natural tint = tint rows
+  where `attention.length > 0` with `rowTintAttention` (the token literally means "row needing
+  attention"). ⚠️ **BUT** the rows carry a hover handler (`:237-238` mouseenter→`tableHeadBg`,
+  mouseleave→`transparent`) — mouseleave would wipe any tint. Resolvable (reset mouseleave to the tint
+  for attention rows) but it is the "collides with an existing row treatment" case the prompt says to
+  report. **AND** the register's example trigger "over-budget line" / margin-under-target is EXPLICITLY
+  DEFERRED for `14a` (§8.1: excluded from the set, needs the margin target = C4/A6, unbuilt).
+- **`14d` subs (`subcontractors-list.tsx`):** has only a company-wide compliance COUNT banner
+  (`:148-160`), NO per-row insurance/compliance state. The "lapsed-insurance sub" tint (`rowTintProblem`)
+  is BLOCKED: (a) insurance lives in TWO stores, RULED **LEAVE AS IS** (§8.4), and desktop "displays
+  `insurance_expiry` nowhere" — tinting on it "silently picks a store" the spec forbids; (b) the
+  desktop store `subcontractor_compliance_documents` holds **ZERO rows** on rebuild-test, so a
+  doc-based tint never shows.
+- **Conclusion:** K7's two ruled example triggers are each blocked by a *different* existing ruling/
+  deferral. Applying tints requires new rulings on the trigger for each screen. **Do not guess.**
+
+#### 3.1 — C4/A6 margin target — report shape (register `:167`)
+- Shape: one nullable column `companies.margin_target_percent` (numeric, nullable) + a Company Settings
+  field. Company-wide, nullable; **no "against target" comparison renders when unset** (rather than
+  defaulting to a number nobody chose). Unblocks `14a` "Margin under target", `15a` margin-by-job,
+  `13e` "under your 30% target". **Report only; do not build.**
+
+#### 3.2 — K3 live app never clicked — Josh's task; recorded, no action.
+
+### Register contradictions found (a result, per §2)
+1. **K2 "apparently never built" → it IS built** (migration `20261049000000`, constraint live, tested).
+2. **L3 "never chased" → the six e2e exist** (`desktop-confirms.spec.ts`).
+3. **K7 "no screen uses them" → `rowTintAttention` is used** (as a banner in `changes-panel.tsx:327`);
+   only `rowTintProblem` is unused.
+4. **L5 "never reached the register" → both items ARE in the register** (`:546-549`).
+
+---
+
+## Phase 2 — question batch (asked once; then STOP)
+
+**Q1 — K7 `14a` projects tint.** Both the register's example trigger for projects ("over-budget line" /
+margin-under-target) is DEFERRED (needs the unbuilt C4/A6 target). The only row-state `14a` computes
+today is the four-condition "needs attention" set. **Ruling needed:** tint rows with `attention.length
+> 0` using `rowTintAttention`? (My recommendation — it matches the token's meaning and the screen's
+existing logic.) The row hover handler would need its mouseleave to reset to the tint on attention rows
+(not a collision I can't handle, but flagged per the prompt). **If yes, this half is buildable now.**
+
+**Q2 — K7 `14d` subs tint.** "Lapsed-insurance sub" (`rowTintProblem`) is blocked: insurance is two
+stores RULED LEAVE AS IS, desktop shows `insurance_expiry` nowhere, and `subcontractor_compliance_
+documents` is empty. **Ruling needed:** either (a) SKIP the `14d` tint until the insurance-store ruling
+is revisited (my recommendation — applying it now forces the store choice §8.4 forbids), or (b) tint on
+a named store anyway. Without a ruling I will SKIP `14d`.
+
+**Q3 — K11 purge timeout.** Root cause is cross-suite lock/FK-check contention under parallel load (2-min
+DB timeout, blocked-not-slow). **Ruling needed on approach** (I will not fix unattended): (a) make the
+purge retry once on `57014` statement_timeout — my recommendation, smallest and targets the symptom
+where it occurs; (b) serialize company-deleting teardowns; (c) leave it as a documented known flake.
+
+**Q4 — scope confirmation for the "already done" items.** K2, L3, K9 are built; L5 is already recorded.
+I plan to (i) run `desktop-confirms.spec.ts` to confirm L3's six pass, then (ii) record all four closed/
+updated in the register, and (iii) mark L4's four cuts ⛔ WILL NOT BUILD in both the register and the
+redesign spec, and (iv) record K10 + C4/A6 shape + K3 as owed/report. **All docs + one verification
+run. Any objection, or anything you want built rather than just recorded?**
+
+**Q5 — production check I cannot do.** K2's migration says production had 0 violating rows at ship time;
+I cannot re-verify (MCP is rebuild-test-only). Flagging, not blocking — it's an old deployed migration.
+
+### If Phase 3 runs UNATTENDED (no answers), the safe default I will take:
+- **K7 `14a`:** build the `rowTintAttention` tint on needs-attention rows (Q1 recommendation), handling
+  the hover reset. It is reversible, spec-aligned, and low-risk. **K7 `14d`:** SKIP (record why).
+- **K11:** do NOT fix; record the root cause + the three options for Josh.
+- **Docs:** record all closures/contradictions, mark L4 ⛔, record K10/C4/A6/K3 as owed/report.
+- Everything docs-only or a single reversible UI tint — nothing that needs a ruling I don't have.
