@@ -10,7 +10,7 @@ removed."* The full table survives in git history and in the S136 context file. 
 prevents recurrence lives in CLAUDE.md → "Tech-debt numbering", which is unchanged.
 
 
-> **Last updated:** September 1, 2026 — S179 (**THE DEBT/OWED-WORK SPLIT, RULED [Josh].** `TECH_DEBT.md` is for decided-to-live-with or deliberately-deferred **decisions**, not a backlog. **#155 RAISED** — custom composable roles, converted from `#1-regbacklog`; **#156 RAISED** — the safety-incident fan-out, converted from `#1-email` (the prompt called it `#3-email`; the real ledger id was `#1-email`). Both are deferred decisions and stay debt. **Reclassified OUT to the register as owed work:** `#2-regbacklog` (A15 unbilled-to-client), `#3-regbacklog` (A16 package rename — the "~150" imports is really **340**), `#4-regbacklog` (K8 duplicate tokens, verified at `theme.ts:45-49`), and `#1-delsweep` (the DMARC `rua` — ⚠️ its "gmail repoint does not work" finding **contradicts** register §Q3's ruling; flagged for Josh, not resolved). Provisional entries superseded-in-place, never deleted.)
+> **Last updated:** September 1, 2026 — S179 (**THE DEBT/OWED-WORK SPLIT, RULED [Josh].** `TECH_DEBT.md` is for decided-to-live-with or deliberately-deferred **decisions**, not a backlog. **#155 RAISED** — custom composable roles, converted from `#1-regbacklog`; **#156 RAISED** — the safety-incident fan-out, converted from `#1-email` (the prompt called it `#3-email`; the real ledger id was `#1-email`). Both are deferred decisions and stay debt. **Reclassified OUT to the register as owed work:** `#2-regbacklog` (A15 unbilled-to-client), `#3-regbacklog` (A16 package rename — the "~150" imports is really **340**), `#4-regbacklog` (K8 duplicate tokens, verified at `theme.ts:45-49`), and `#1-delsweep` (the DMARC `rua` — ✅ its "gmail repoint does not work" finding was **ruled correct [Josh]**; register §Q3's repoint-to-Gmail ruling **overturned**, and §O8 now carries the RFC 7489-verified TXT record to publish). Provisional entries superseded-in-place, never deleted.)
 > **Previously:** August 30, 2026 — deletion-sweep §3 (**#1-delsweep RAISED** — DMARC `rua` still points at `josh@worthprop.com`, the last WorthProp reference in the mail configuration. Cosmetic — reports arrive — one TXT edit at Spaceship. Filed alongside the brand-string debt: #119, #123, #126)
 > **Previously:** August 11, 2026 — S134 (**#149 AND #150 RAISED**, filing the fallout of reverting the S133 Playwright sharding (Option D, Josh's ruling). **#150** records the concurrency hazard precisely — four shards shared one rebuild-test DB, so any test asserting the absence/count of something another shard writes to a shared fixture was exposed; CI #201 (`desktop-payload.spec.ts:175`) is the instance, NOT a payload leak — the #117 read floor holds at the query. **#149** is the constraint that blocked every safe fix: the pinned e2e fixtures are hand-curated on rebuild-test and reproducible from no script — `seed-test-identities.mjs` only *warns* if `eaf0e25b` is missing — which is what blocks a database-per-shard, the fix that is safe by construction. The sharding work is kept on branch `ci/shard-playwright`, not deleted. **⚠️ #149 is also speculatively used on two unmerged branches (`feat/notifications`, `feature/m6m-mobile`) for different items — a merge-time reconciliation is owed there regardless; main's file is the assignment authority.**)
 > **Previously:** August 10, 2026 — S123 (**#151 RAISED** from a real-device test — the push enrolment control does not read as tappable. **A UI pass, not a defect:** the component carries **zero `className` attributes**, and with `@tailwind base` Preflight in force an unstyled `<button>` has no background, no border and no radius, so it renders as a line of body text that happens to click. It is also the ONE control between a user and ever receiving a push, and on iOS the prompt is one-shot and sticky, so a bad first encounter is permanent. Constraints recorded, including that the **iOS install-gate branch must NOT become pressable** — and that **no test references this component at all**, so that constraint has no safety net today)
@@ -127,15 +127,16 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 > Provisional id per the S136 rule. Tag `delsweep`. (The `#N-trial` ids amended on this branch
 > belong to the S137/S138 trial work and are not this branch's allocations.)
 
-> ⚠️ **RECLASSIFIED OUT OF DEBT → register [S179].** Josh's S179 split rules this **owed work, not
-> debt**: the fix is one TXT DNS edit Josh already controls. It now lives on the register
-> (`outstanding-work-register.md` §O8 and §Q3), and its closing evidence is **an aggregate report
-> actually landing, not the DNS edit.** The full argument is kept below (never deleted). ⚠️ **One
-> contradiction to surface for Josh, not resolve here:** this entry concludes a `gmail.com` `rua`
-> repoint **"does not work"** (RFC 7489 needs `ezcontractorbinder.com._report._dmarc.gmail.com`,
-> which cannot be published), while register §Q3 records a ruling to **repoint to
-> `ezcontractorbinder@gmail.com`** as "the pragmatic choice that doesn't technically fix the gap."
-> Those two need reconciling before the DNS edit.
+> ⚠️ **RECLASSIFIED OUT OF DEBT → register [S179]. The actionable fix and the exact record live on the
+> register, NOT here.** Josh's S179 split rules this **owed work, not debt**: one TXT DNS record. It is
+> tracked on `outstanding-work-register.md` **§O8 + §Q3**, where §O8 now carries the **RFC 7489-verified
+> record to publish** (`ezcontractorbinder.com._report._dmarc.worthprop.com` = `v=DMARC1`, edited in
+> `worthprop.com`'s zone — served by Vercel/NS1 per a live check, not Spaceship). **Closing evidence is
+> an aggregate report actually LANDING, not the DNS edit.** ✅ **The Q3 contradiction is RESOLVED
+> [Josh, S179] in favour of the analysis below:** a `gmail.com` `rua` repoint **does not work** (RFC
+> 7489 would need `ezcontractorbinder.com._report._dmarc.gmail.com`, unpublishable) — so §Q3's
+> repoint-to-Gmail ruling was **overturned** and quoted-superseded on the register. The full argument is
+> kept below, never deleted; treat it as history — the register is the live record.
 
 - **#1-delsweep — DMARC `rua` still points at `josh@worthprop.com` — the last WorthProp reference
   in the mail configuration.** The live record on the sending domain reads
