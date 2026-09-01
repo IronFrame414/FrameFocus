@@ -244,3 +244,84 @@ resolve). The project's actual lint is `turbo run lint` → `next lint`, which r
 eleven-times trap.
 
 Exit codes above are read from the PRINTED line, not the wrapper summary.
+
+---
+
+## Session continuation — 2026-09-01 (fresh session, new prompt: screenshot blockers + owed suites)
+
+New prompt scope on top of the batch-two work above:
+- **ITEM 1 (K7):** `14a` already DONE + committed (`d64f375`); `14d` SKIPPED by ruling. Nothing to build.
+- **ITEM 2 (§4) — the screenshot blockers — NEW WORK this session.** Fixture-data only, on the shared
+  rebuild-test DB. 4a Expenses (junk supplier names + $0.00 spend-this-month), 4b empty dashboard crew
+  schedule. On the critical path (gates /terms + /privacy → Intuit sandbox → QuickBooks module).
+- **Battery:** live RLS + Playwright are OWED from the prior session (never ran). Run them.
+
+Fixture company: **Sabal Point Construction** `03bb903f-1084-4ab4-afb8-03192cb58d30` (rebuild-test
+`nmyphyhmfttxkdoposvf`). Constraints (§4): plausible contractor data only; do NOT disturb QA/S97 rows
+(`S97PARTIAL lumber` stays); nothing traceable to a real person.
+
+⚠️ **These are LIVE fixture-DATA changes on rebuild-test, applied via the Supabase MCP (service role).
+They are NOT version-controlled** — a full rebuild-test rebuild would wipe them (and the member/project
+UUIDs below would change). The record here is the reproduction spec. K7's `14a` above is code (committed);
+§4 is data only. Verify-before-acting (§5) done: schema, constraints, triggers and test-assertion greps
+all checked before any write.
+
+### ✅ ITEM 2 · 4a — Expenses page: junk supplier names + $0.00 "Spend this month" — DONE (data)
+- **Verified the data source first.** Receipts tab = `expenses` rows with **no** `sub_contract_id`/
+  `purchase_order_id` (`expenses-page-client.tsx:112,127`); "Spend this month" =
+  `sum(amount) where status='approved' and expense_date startsWith current-month prefix, non-payable`
+  (`:125-130`). It read **$0.00 because today is 2026-09-01 and every expense was dated May–Aug 2026** —
+  no September rows. `supplier` is free-text (`expenses.supplier`), no vendor-table lookup.
+- **Renamed 7 ad-hoc RECEIPT rows (text-only: `supplier` + `description`, amounts UNCHANGED).** Text-only
+  is deliberate — it has **zero** cost-rollup impact, so it is immune to the constructed-identifier trap
+  (a job-cost test that fetches a project without a literal id could not be broken by a label change; an
+  amount change could). `hd`/`HD`→Home Depot, `asdf`→United Rentals, `p`→Rivera Site Cleanup / Waste
+  Management, `test`→Ferguson / City of Orlando. Junk descriptions (`test`,`tset`,`agdf`,`412`,`p`)
+  cleaned too.
+- **Seeded 7 approved receipts dated 2026-09-01** on the two plausible, **expense-free** projects
+  (Maple Street Addition `ecfced59`, Cypress Deck Addition `12de1e2e` — chosen precisely because they had
+  0 expenses and no cost assertions, so nothing existing shifts). Home Depot / Ferguson / 84 Lumber /
+  Sherwin-Williams / Sunbelt & United Rentals / City of Orlando. **"Spend this month" now = $5,641.18**
+  (verified by re-running the client's exact filter in SQL: 7 rows, $5641.18).
+- **Left untouched, by ruling/scope:**
+  - **QA/S97 marker rows** (`QA A Supply Co`, `S97MULTI …`, `S97PARTIAL lumber`) — §4 constraint #2.
+    They remain visible on the Receipts tab but are older-dated, so they sort **below** the new September
+    rows; a screenshot of recent activity leads with the clean rows.
+  - **The Bills & Commitments tab** (`btb`, `DVDF`, `xfgn`, `j`, `Retainage held — …`) — these carry
+    `sub_contract_id`/`purchase_order_id`, i.e. they derive from the sub roster (506 subcontractor
+    members) and POs, which is **not** the "ad-hoc expense rows" §4a scoped. One (`Retainage held — DVDF`)
+    is referenced by `e2e/m-destinations.spec.ts:604` as an A-45d fixture. **Owed observation, out of
+    this item's scope** — cleaning the Bills tab means cleaning the sub roster, a separate/larger job the
+    prompt did not authorise (subs work is flagged blocked in §3/§6).
+- ⚠️ **Contradiction-with-reality note (not the register, the fixture):** project `6c395b31` is named
+  **"kitchen test"** and is **test-asserted** — `s123-incident-notify.live.ts:241,270` assert
+  `name: 'kitchen test'` and incident titles embedding it; `s126`/`s162` also key on its id. So the
+  junk-looking project name **cannot be renamed** (would go red). Its one receipt (`Home Depot`, $1.24,
+  ex-`HD`) stays on it, amount unchanged, for that reason. Flagged for Josh: "kitchen test" would show as
+  a project label if that $1.24 row is in shot — but it is a July row, far down the list.
+
+### ✅ ITEM 2 · 4b — Dashboard crew schedule empty — DONE (data)
+- **Verified the source first.** Dashboard `ScheduleCard` renders a Sunday-start 7-day grid for the
+  current week; an event shows on a day when `start_date <= day <= end_date`
+  (`schedule-card.tsx:41-52`). For Owner/Admin/PM the dashboard passes **no** `ownMemberId`, so the full
+  company view renders (`page.tsx:25-49`) — Josh screenshots as Owner, so every member's entries show.
+  `schedule_entries` maps `start_date=entry_date`, `end_date = end_date ?? entry_date`
+  (`schedule.ts:172-173`) — single-day (null end) entries DO render.
+- **Today is Tue 2026-09-01 → display week is Sun Aug 30 – Sat Sep 5.** The 3 pre-existing entries are all
+  dated July / Aug 1 (outside the week) and had junk notes (`sef`,`test`) — **left as-is; they do not
+  render** in the current week.
+- **Seeded 7 entries across Aug 31–Sep 5** for the three usable crew members (`Casey Crew`,
+  `Dave Whitfield`, `Pat Manager`) on real active projects (Maple, Cypress, Harbor Bath, Oakmont), a mix
+  of multi-day `project` runs plus one `pto` and one `shop` day for realism. Grid now populates Mon–Sat
+  (Sunday intentionally empty — no weekend start). `general_kind` ∈ {project,pto,shop,other} and the
+  `end_date >= entry_date` CHECK both respected.
+- **Could NOT add new crew members** to get cleaner names: only 5 `crew` members exist and two
+  (`QA Admin A`, `QA Foreman A`) are QA markers left unscheduled; `Casey`/`Pat Manager` are test-asserted
+  identities (`s123` asserts "Casey"). Adding members would risk the roster-count assertions
+  (CLAUDE.md S131 floor tests count rows), so I used the existing usable three. Chips show
+  `Casey Crew` / `Dave Whitfield` / `Pat Manager` — acceptable, not `asdf`-class junk.
+
+### ⚠️ ITEM 1 · K7 — nothing to build this session
+- `14a` needs-attention row tint is DONE + committed (`d64f375`, verified in Phase 3 above); `14d` subs
+  tint remains SKIPPED by ruling (insurance two-store question, §8.4 LEAVE AS IS). No new K7 work.
+
