@@ -84,6 +84,22 @@ async function ensureIdentity({ email, role, first, last }, companyId) {
       password: TEST_PASSWORD,
     });
     must(`password(${email})`, error);
+    // Reconcile the crew member's display_name to the seeded name. display_name
+    // is set ONCE by create_member_for_new_profile and has NO sync trigger (F-6),
+    // so a profile renamed AFTER its member row was created — e.g. the S176
+    // fixture rename that left josh+test50 showing "Josh Bishop" while the profile
+    // read "Dave Whitfield" — leaves display_name stale, and display_name is the
+    // field 30+ readers show (register 1.2). Subcontractor members intentionally
+    // carry company_name, so this is crew/staff only. Idempotent: only writes on
+    // an actual mismatch.
+    if (role !== 'client' && role !== 'subcontractor') {
+      const { error: rErr } = await db
+        .from('company_members')
+        .update({ display_name: `${first} ${last}` })
+        .eq('profile_id', existing.id)
+        .neq('display_name', `${first} ${last}`);
+      must(`reconcile display_name(${email})`, rErr);
+    }
     note(`identity ${email}`, 'exists', `role=${existing.role}, password set`);
     return existing;
   }
@@ -162,7 +178,16 @@ async function ensureIdentity({ email, role, first, last }, companyId) {
     must(`drop spurious member row(${email})`, dErr);
     if (spurious.length) note(`spurious member row ${email}`, 'DELETED', spurious[0].id);
   } else {
-    await db.from('company_members').update({ company_id: companyId }).eq('profile_id', auto.id);
+    // Set company_id AND reconcile display_name to the seeded name. The
+    // create_member_for_new_profile trigger set display_name from the profile
+    // name at member-creation, which for a tokenless createUser runs BEFORE
+    // first/last are populated (the OWNER path) — so it can land as the email.
+    // F-6: no sync trigger, so fix it here. Crew/staff only (subs keep
+    // company_name; clients have no member row — handled above).
+    await db
+      .from('company_members')
+      .update({ company_id: companyId, display_name: `${first} ${last}` })
+      .eq('profile_id', auto.id);
   }
 
   if (spuriousCompanyId && spuriousCompanyId !== companyId) {

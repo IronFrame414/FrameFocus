@@ -1299,6 +1299,32 @@ checklist rather than in someone's memory.
 staging** — do not `git add -A`, and do not assume you made the change. This box has destroyed and
 mangled work repeatedly; a clean `git status` at the end is a load-bearing check, not a formality.
 
+### ⚠️ S6 — OPEN [S180], needs an ATTENDED ruling: `display_name` goes stale in PRODUCTION on any name edit
+**Surfaced closing register item 1.2 (the stale-`display_name` twin). The fixture symptom was
+reconciled; the product cause was NOT — and must not be read as resolved.**
+
+- **What's fixed:** the stale rebuild-test row (`josh+test50@` showed "Josh Bishop" vs profile "Dave
+  Whitfield") was reconciled, and `scripts/seed-test-identities.mjs` now self-heals crew/staff
+  `display_name` on every run (commit in the S180 close-out). ⚠️ **This fixes the FIXTURE, not the
+  product.**
+- **The product bug.** `company_members.display_name` is the field **30+ readers** show (expenses
+  author, schedule, PDFs, lien releases, payables, deliveries, change-orders, safety, punch). It is
+  seeded ONCE by `create_member_for_new_profile` and has **no sync trigger — by design, spec F-6**
+  (`20260704210000_company_members_foundation.sql:212-213`). The ONLY self-service name edit,
+  `updateMyName` (`apps/web/lib/services/profile-self.ts:43`), writes `profiles.first_name/last_name`
+  and **does not touch `display_name`.** ⚠️ **So in production, any member who changes their name gets
+  a stale `display_name` across all 30+ readers** — and cleaning the test DB hides it exactly where QA
+  would catch it.
+- **Why F-6 doesn't hold up.** F-6's implicit rationale is snapshot-for-historical-accuracy, but
+  `display_name` is **one mutable row per member, not a per-document snapshot** — so it gives
+  **neither** live accuracy **nor** historical accuracy. A March lien release does not keep March's
+  name; it shows whatever the row said at seed/creation time. Real historical names would be snapshotted
+  **at document creation**, not on the membership row.
+- **The decision owed (ATTENDED — not for an unattended run, on a field 30+ features read):** either
+  (a) propagate `updateMyName` → `display_name` (a runtime sync; overturns F-6), or (b) snapshot names
+  onto documents at creation and let `display_name` stay a company-assigned label. **Recorded here as
+  OPEN; do NOT close as resolved.**
+
 ---
 
 ## J — Suggested order, and why

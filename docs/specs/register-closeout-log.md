@@ -31,6 +31,21 @@
 - **No hex changed** (Josh's constraint). Tailwind config untouched (it uses raw hex, not these names).
 - Files: 42 (`theme.ts` + 41 call sites). Register §K8 marked ✅.
 
+### ✅ 1.2 display_name — DONE (Option 1) — seed commit below; production drift logged OPEN as §S6
+- **Live fix:** one scoped UPDATE on rebuild-test set the only stale row (`josh+test50@`) to "Dave
+  Whitfield" (`company_members` crew, non-client/sub, only-if-different — touched exactly 1 row; the
+  QA-sub's company_name is by-design F-6 and was correctly left).
+- **Seed hardening:** `scripts/seed-test-identities.mjs` `ensureIdentity` now reconciles crew/staff
+  `display_name` to `${first} ${last}` idempotently — in the existing-identity branch (the re-run path
+  that would otherwise leave a renamed fixture stale) and the created branch. `node --check` clean.
+- **Production drift logged OPEN, NOT resolved** (Josh's explicit instruction): register **§S6** — the
+  `updateMyName` path leaves `display_name` stale across 30+ readers on any name edit; F-6 gives
+  neither live nor historical accuracy; the real fix (runtime sync or snapshot-at-document) is an
+  ATTENDED decision.
+- ⚠️ **Register correction recorded:** the register's "nothing reads the column today" was FALSE.
+- **DB note:** the live UPDATE is a rebuild-test data change (no git artifact); the durable guard is
+  the committed seed change. A fresh rebuild would seed correctly via the trigger + this reconcile.
+
 ## ⚠️ Hazard log
 
 - **[Phase 1, 2026-09-01]** `git status` before my log commit showed THREE modified files I never
