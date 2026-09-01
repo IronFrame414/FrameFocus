@@ -56,7 +56,9 @@
 - Grep set is `apps/web/app apps/web/components apps/web/middleware.ts`. Reader `clientContractAppliesToEstimate` is DEFINED at `apps/web/lib/services/contracts.ts:211` and has ZERO callers anywhere. Blind spots: `apps/web/lib/**` (needs the definition-file exclude) and `packages/**`.
 - **Plan:** widen the grep to include `apps/web/lib` and `packages`, excluding `contracts.ts`; prove-red by temporarily adding a caller under `lib/`, confirm red, remove.
 
-### 2.3 — 279 skipped tests — agent still running (breakdown pending).
+### 2.3 — 279 skipped tests — EXPLAINED, normal, nothing suspicious
+- Static breakdown of 279 skips: **(a) hardcoded `.skip` = 0; (b) env-gated file-level = ~238** (e2e specs that throw at `beforeAll` when Supabase creds absent, via `hub-fixture`/`trial-fixture`/`chat-fixture` → `adminClient()` → `requireTestEnv`; intentional — these hit a real DB); **(c) fixture-data guards = 41** (`if (count===0) test.skip('no X on fixture')` across `m-sections`, `m-destinations`, `m-writes`, `m-logs`, `m-details`, `m-photos`, `desktop-payload`); **(d) unknown/quietly-disabled = 0.**
+- **Verdict: 279 is normal.** ⚠️ The only mild note: the 41 fixture-data guards silently no-op when the fixture lacks that row — not a defect (they carry messages), but they'd pass vacuously if the fixture ever lost that data. Same family as L3's dialog-coverage gap. Not fixing (needs fixture seeding + a ruling). Report-only.
 
 ### 2.4 — desktop-payload #117 — flake, did not recur recently
 - `apps/web/e2e/desktop-payload.spec.ts` tests the #117 CO-money floor. Register O6: 3rd sighting, but "did NOT recur in the most recent Playwright run." Identifying the contaminating neighbour ONCE requires running shard combinations — expensive, and the dev server won't survive a full run. **Plan:** verify during the Phase-3 battery; deep-dive only if it recurs. Do not chase a heisenbug that may be resolved.
