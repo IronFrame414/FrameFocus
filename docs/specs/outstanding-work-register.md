@@ -1137,6 +1137,79 @@ polished hero shot in the same screenshot.
 same `'starter', 'trialing', 2` defaults. ⚠️ **Change the trial length one day and it changes in one
 place and not the other.**
 
+> ✅ **[S179] Verified on the tree** — `20260918000000_trial_lifecycle.sql:468` and
+> `20261017000000_m9_client_lifecycle.sql:564` both read `v_trial_end := now() + INTERVAL '30 days';`.
+> Owed work: fold the literal into one shared default. Confirmed, not just remembered.
+
+---
+
+## S — SEVENTH-PASS [S179]: test-suite integrity, and two known states
+
+> ⚠️ **Disambiguation:** K10's reference to "§S2" points at the **desktop-redesign spec's** §S2 (the
+> navy background), NOT this section. The items below are S1–S4 of the register.
+>
+> **Why this pass exists.** The S179 debt/owed-work split (`TECH_DEBT.md` header) surfaced test-suite
+> findings that are **owed work, not debt** — and two facts about the live environment that are
+> **neither debt nor a task**, but must be written down so nobody rediscovers them the hard way.
+
+### S1 — 279 skipped tests in the last full live battery
+**Reported figure: 279 skipped in the last full live battery.** ⚠️ **Skipped tests are the quiet form
+of a green suite that proves nothing** — a skip reads as a pass in every summary line. **Nobody has
+established whether 279 is normal** (env-gated `.live.ts` harnesses that correctly no-op off
+rebuild-test) or a pile of quietly-disabled coverage.
+
+⚠️ **VERIFICATION UNKNOWN — recorded honestly.** This number comes from a battery run, not from the
+tree; a docs-only pass cannot reproduce it without running the suite. **Owed:** run the battery, break
+the 279 down by *reason* (env-gated vs `it.skip` vs `describe.skip`), and rule which are legitimate.
+Pairs with §Q1 (the env-bleed sweep) and §O6 (the `desktop-payload #117` flake) — the same family:
+a suite you cannot fully trust is not a signal.
+
+### S2 — `V1`'s 7I-toggle guard encodes a search-set judgement, and it is NOT the file list some notes claimed
+**V1** (`apps/web/test/s156-m4-audit.live.ts:360-397`) pins 7I criterion 1 — *"toggle off ⇒ behaviour
+byte-identical"* — by asserting that **nothing in the request-serving code reads the toggle.** It does
+this by grepping for the only reader function, `clientContractAppliesToEstimate`, across a **fixed
+search set**:
+
+```
+apps/web/app   apps/web/components   apps/web/middleware.ts
+```
+
+⚠️ **The judgement is the SEARCH SET, not a file allowlist.** Earlier notes described V1 as exempting
+`co-data.ts`, `contract-documents.ts` and "two 7I components" as legitimate readers — **that is not
+what the test does** (verified against the file [S179]). The reality:
+
+- **Deliberately EXCLUDED blind spots, named in-comment for Josh to rule on:** `apps/web/lib/**` (a
+  grep there also matches the *definition* in `contracts.ts`, so it needs an exclude before it can be
+  searched) and `packages/**` (shared utils, Supabase edge functions).
+- ⚠️ **The risk is real and precise:** if someone adds a real toggle reader **under `lib/**` or
+  `packages/**`, V1 stays green** — criterion 1 would be silently broken. `middleware.ts` was added to
+  the set at S178 (commit `6a35be8`) precisely because it was the same class of blind spot.
+
+**Owed:** either extend the search set to `lib/**` (with the definition-file exclude) and `packages/**`,
+or rule those out of scope explicitly. A judgement encoded in a grep is invisible until it fails.
+
+### S3 — Production holds FOUR test tenants alongside the real one, and the deletion sweep now runs on prod daily
+**Known state, not a task — recorded so it is not discovered mid-incident.** Production carries four
+test tenants — **`Bishop Contracting`, `Bis Contracting`, `test const`, `H&H Signature Renovations`** —
+alongside the real company, **Worth Properties.**
+
+⚠️ **The deletion sweep now runs on production daily** (`vercel.json` cron, 15:00 UTC — see §P3). **Any
+of these test tenants on a lapsed trial will lock and delete like a real customer**, on the timer, with
+no special-casing. This is the intended behaviour of the sweep; the note exists so that a test tenant
+vanishing is understood, not investigated as data loss. (Cross-ref §R3 — the rebuild-test fixture
+rename to `Sabal Point Construction` — a *different* environment; do not conflate.)
+
+### S4 — Stripe is TEST MODE ONLY; production cannot accept a real payment
+**Known state, on the QuickBooks/Intuit critical path.** Stripe is in **test mode only.** **Live mode
+requires a connected bank account**, which has not been done — so **production cannot accept a real
+payment today.**
+
+⚠️ **This sits on the Intuit review path (§N):** Intuit's review will click the pricing page, and the
+card-at-signup build (§R2) puts a real Stripe SetupIntent in front of every trial. **A test-mode Stripe
+cannot take a live card.** Not debt, not a code task — a business/onboarding step (open the bank
+account, flip Stripe to live) that gates going live, recorded here so it is on the critical-path
+checklist rather than in someone's memory.
+
 ---
 
 ## J — Suggested order, and why
