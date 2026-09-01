@@ -253,3 +253,57 @@
 ### 3.2 — A16 package scope rename — measured, BLOCKED on a target name
 - Exact: 343 import lines across 274 files (271 in apps/web, 3 in docs), plus 6 build-critical config refs (3 package.json `name`/deps, 2 tsconfig `paths`, 1 next.config `transpilePackages`). Pure literal `@framefocus/shared` replace, no dynamic refs. Register's "340/271" was accurate for apps/web.
 - ⚠️ **BLOCKER: nowhere in the register or prompt is the NEW name stated.** Cannot rename to an unknown target. **Recommendation: DO NOT attempt unattended** — enormous, zero user-facing value, build-breaks on any miss, and no ruled target name. Needs Josh's explicit go + the name.
+
+---
+
+## Phase 3 continuation — Josh's Phase-2 answers applied (2026-09-01, later session)
+
+> A restart landed a fresh instance here after Josh answered Phase 2. His answers mostly CONFIRM the
+> committed work above; the entries below are the deltas he added, each verified against the tree first.
+> Append-only: these correct earlier entries, they do not rewrite them.
+
+### ⚠️ 2.3 — SKIPPED-TESTS FINDING, CORRECTED AND MADE PROMINENT (Josh: "the finding of the analysis")
+
+**⚠️ TWO earlier descriptions of this were WRONG — including one in THIS log. The register is a claim,
+not ground truth, and so is a half-remembered file name. Verified state below.**
+
+**What was claimed vs. what the tree says:**
+
+| Claim | Source | Verdict against the tree |
+| --- | --- | --- |
+| "279 skipped in the last full live battery" | register 2.3 | ⚠️ **Not reproduced.** The prior instance's ACTUAL live run skipped **7**, not 279 (battery table above). vitest `.live.ts` has **0** conditional skips (`grep '\b(it\|test)\.skip(' test/*.live.ts` → none non-string). 279/285 is a **Playwright** runtime number, not a live-battery one. |
+| "285 skipped, 264 of them ONE file `s136-email-and-debt.live.ts` self-skipping when `RESEND_API_KEY` absent" | Josh, Phase 2 | ⚠️ **False against the tree.** There is **no file** by that name — `s136-email-and-debt` is a git BRANCH; the real s136 test is `s136-company-slug.live.ts`. **No `.live.ts` file has 264 tests** — the largest is `s164-m9-client-lifecycle.live.ts` at **42** (total 1414 across all live files). The six email `.live.ts` files (`s126-chat-email`, `s160-auth-email`, `s97ct-invoice-email`, `email-unsubscribe`, …) **MOCK Resend (`vi.mock`) or DELETE the key to exercise the refusal path — they do not self-skip.** |
+| "env-gated file-level = ~238 (e2e beforeAll throws)" | THIS log's own Phase-1 2.3 | ⚠️ **Also wrong.** A `beforeAll` that throws produces an **errored/`(0 test)`** file, which the battery reports as a FAILURE, not a skipped test. A census finds no such 238. |
+
+**The VERIFIED skip census (static, whole tree, `test/` + `e2e/`):**
+- **Hardcoded `describe.skip`/`it.skip`/`test.skip('…')`: 0.**
+- **`skipIf`: 0.**
+- **vitest `.live.ts` conditional skips: 0.**
+- **Playwright conditional `test.skip(true, '…')`: 42** — ALL of the form *"skip this test because the
+  rebuild-test fixture has zero of X"*, concentrated in the mobile specs: `m-destinations` (11),
+  `m-sections` (8), `m-details` (3), `m-photos` (2), plus `m-writes`/`m-logs`/`desktop-payload`.
+
+**So the real finding — and it IS the register's warned shape ("a green suite that proves nothing"):**
+the skips are **fixture-data guards**. When rebuild-test lacks a row, the test skips itself green. What
+they go blind to when they fire, verbatim from the guard messages: *phases, timeline events, change
+orders, punch items, damaged deliveries, documents, project-contact phone/email, incidents, photos,
+subs, contacts, expenses visible to the crew identity, receipts* — the entire mobile read surface can
+report green purely because the fixture was thin. `m-details.spec.ts:322` already carries an in-file
+warning that one such guard "would have gone on reporting green" — the pattern is known and unfixed.
+
+**What we are blind to, plainly:** every `/m` view whose fixture row count can be 0 is unverified on any
+run where the seed didn't create that row. This is not 264 tests in one email file; it is ~42 mobile
+assertions that quietly stand down when the data isn't there.
+
+**Exact runtime count — UNKNOWN, and here is what I tried.** The 279/285 numbers are Playwright
+runtime counts, env- and fixture-dependent, and not statically reproducible (the mechanism is; the
+tally isn't). Reproducing it needs a full 4-chunk Playwright run on a warm rebuild-test. I did **not**
+run it: §4 says the dev server does not survive a full Playwright run, rebuild-test is spun down, and a
+concurrent billing session is on the same rebuild-test DB (contamination — the #150 hazard the prior
+battery already hit). A flaky number bought at that cost would be worth less than the verified mechanism
+above. **Owed: a clean Playwright run to tally the runtime skips, when the DB is quiet and no session
+shares it.**
+
+**Ruling respected:** Josh — *"Do not make it run — that is a ruling for me."* No code change. Whether
+to seed the fixtures so these guards can't stand down (or to fail instead of skip on absent data) is
+Josh's call; recorded as owed, not done. **Report-only.**
