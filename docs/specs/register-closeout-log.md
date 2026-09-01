@@ -27,6 +27,14 @@
   files (another session, in flight, apparently sharing this worktree). Per §5/S5 I treated the diff
   as suspicious and NOT mine. My commits are path-scoped; I never staged them and will not touch
   them. Every commit this session is explicitly path-scoped — never `git add -A`.
+- **[Phase 1→2, 2026-09-01] ESCALATION:** the billing session's commit `1d18b65 [Billing→Settings]
+  Retire the old entry points` landed on `feature/register-closeout` BETWEEN my `d2f9a98` and
+  `0adee04`. Confirmed: this worktree has one shared HEAD, so the concurrent billing session's
+  path-scoped commits interleave onto whatever branch I'm on. **I did NOT rebase/reset** (would
+  disrupt their in-flight work — hard to reverse). My work stays recoverable because each item is
+  its own path-scoped commit. ⚠️ **For Josh:** `feature/register-closeout` history is entangled with
+  billing commits; sort at merge. The register-closeout commits are the ones tagged `[Docs] Register
+  close-out` plus the item commits listed at the end of this log.
 
 ## Phase 1 — Analysis (complete except §2.3 skipped-tests count)
 
