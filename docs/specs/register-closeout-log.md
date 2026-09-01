@@ -363,7 +363,39 @@ an attended pass or bundled with the next trial-writer.**
 
 ---
 
-## CLOSE-OUT (§7) — what closed, what is owed, what I am unsure of
+### ⚠️ Items 1+2 (rulings 1+2) — LIVE CENSUS REVERSES THE PREMISE: the fixture is NOT thin
+
+**Before seeding anything, I censused the live rebuild-test fixture (Sabal Point Construction, company
+`03bb903f`, mobile project `eaf0e25b` = "Lakeview Kitchen Remodel"). Most of the categories the ruling
+named as "thin" ALREADY HAVE DATA — so the guards for them do NOT currently fire.**
+
+| Guard category | Live count | Thin? |
+| --- | --- | --- |
+| phases (`eaf0e25b`) | 2 | no |
+| schedule events (project 1 / company 3) | 1 / 3 | no |
+| change orders (`eaf0e25b`) | 2 | no (RLS does NOT floor them — `#117` is UI-only; crew renders rows sans money) |
+| punch items | 1 | no |
+| non-photo files (`eaf0e25b` 5 / files-proj `545edc73` 17) | 5 / 17 | no |
+| project contacts w/ phone-or-email | 2 | no |
+| company contacts (32, of which 31 w/ phone/email) | 31 | no |
+| subcontractors | 4 | no |
+| daily logs | 12 | no |
+| expenses (company total) | 31 | no* |
+| **deliveries (`eaf0e25b`)** | **0** | **YES — the damaged-delivery guard (m-sections:363) fires** |
+| **safety incidents (`eaf0e25b`)** | **0** | **YES — the incident guard (m-sections:429) fires** |
+
+`*` RLS/condition-scoped guards ("expenses visible to the CREW identity", "subs with EXPIRED insurance",
+"SYNCED logs visible to crew") depend on a subset the parent count doesn't prove; they need per-identity
+impersonation to confirm and are not yet resolved.
+
+**So the register's "279/285 skipped" was never about a thin fixture — the fixture is well-populated.**
+The two genuinely thin project areas are **deliveries** and **incidents**, and no test asserts their
+absence on `eaf0e25b` (checked: `s163:148` is an RLS "unreadable incident" test, not a fixture-count
+negative), so seeding them is cross-suite-safe. Josh's list (phases/COs/punch/photos/expenses) mostly
+described areas that already have data — likely read from my own close-out's *hypothetical* "what
+they'd be blind to IF empty," not a live measurement.
+
+
 
 **Type-check:** current combined HEAD (`b7ef776`, my docs commits + the prior instance's item commits)
 is **`tsc --noEmit` exit 0**. All my Phase-3-continuation commits are docs-only, path-scoped to
