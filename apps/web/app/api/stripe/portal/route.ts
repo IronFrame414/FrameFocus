@@ -40,8 +40,10 @@ export async function POST(request: NextRequest) {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://frame-focus-eight.vercel.app';
 
     const portalSession = await stripe.billingPortal.sessions.create({
-      customer: company.stripe_customer_id,
-      return_url: `${baseUrl}/dashboard/billing`,
+      // Billing now lives in Settings [Josh]; return there directly rather than
+      // through the /dashboard/billing permanent redirect (one hop instead of
+      // two). The old path still redirects here, for bookmarks and history.
+      return_url: `${baseUrl}/dashboard/settings?tab=billing`,
     });
 
     return NextResponse.json({ url: portalSession.url });

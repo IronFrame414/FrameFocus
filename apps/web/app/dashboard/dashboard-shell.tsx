@@ -6,7 +6,6 @@ import {
   Calendar,
   Clock,
   Bell,
-  CreditCard,
   FileText,
   HardHat,
   LayoutGrid,
@@ -152,13 +151,10 @@ const NAV_ITEMS: {
     roles: ['owner', 'admin'],
     section: 'admin',
   },
-  {
-    href: '/dashboard/billing',
-    label: 'Billing',
-    icon: CreditCard,
-    roles: ['owner'],
-    section: 'admin',
-  },
+  // Billing was here (owner-only) until it moved into Settings as a tab [Josh,
+  // "move Billing into Settings"] — see app/dashboard/settings/billing-settings-tab.tsx.
+  // The Admin section is now Settings alone. ⚠️ Removing it takes the OWNER from
+  // 14 nav items to 13 (admins already saw 13 — Billing was owner-only here too).
 ];
 
 /** §4b — the section labels. Order here IS render order. */
