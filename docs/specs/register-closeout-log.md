@@ -46,6 +46,16 @@
 - **DB note:** the live UPDATE is a rebuild-test data change (no git artifact); the durable guard is
   the committed seed change. A fresh rebuild would seed correctly via the trigger + this reconcile.
 
+### ✅ 2.2 V1 blind spot — DONE — commit below
+- Widened the grep in `apps/web/test/s156-m4-audit.live.ts:360-397` from `app + components +
+  middleware.ts` to also include `apps/web/lib` and `packages`, with `grep -v
+  'apps/web/lib/services/contracts.ts'` to drop the definition self-match. Comment updated to record
+  the widening (the two blind spots are now covered, not "left for Josh to rule").
+- **Proven red-capable:** ran the exact command — baseline empty (green); planted
+  `apps/web/lib/__v1_probe.ts` referencing the function → non-empty (red, detected); removed →
+  empty again. The exclude filters only the definition file, not real readers. Probe deleted, not
+  committed.
+
 ## ⚠️ Hazard log
 
 - **[Phase 1, 2026-09-01]** `git status` before my log commit showed THREE modified files I never

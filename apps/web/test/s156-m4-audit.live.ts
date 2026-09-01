@@ -379,15 +379,22 @@ describe('S156-V — M4 properties checked and found correct', () => {
     // ⚠️ THE SEARCH SET INCLUDES middleware.ts — OUTSIDE app/ and components/, and
     // run on EVERY request, so a gate added there is the exact blind spot the old
     // path set would have hidden. `app/api/**` needs no separate entry: it is
-    // already inside `app/`. Known remaining blind spots, deliberately left for
-    // Josh to rule on rather than widened silently: `apps/web/lib/**` (a service
-    // caller — a grep there also matches the definition in `contracts.ts`, so it
-    // needs an exclude) and `packages/**` (shared utils, Supabase edge functions).
+    // already inside `app/`.
+    //
+    // ⚠️ THE SET NOW ALSO COVERS `apps/web/lib` AND `packages` [register 2.2, S180].
+    // Those were the two documented blind spots — a service caller under `lib/**`,
+    // or a shared util / Supabase edge function under `packages/**`, would read the
+    // toggle undetected. They are searched with ONE exclude: the DEFINITION lives at
+    // `apps/web/lib/services/contracts.ts:211`, so a raw grep there always self-
+    // matches; `grep -v` drops exactly that file. Verified [S180]: the function has
+    // ZERO callers anywhere, and planting a reader under `lib/` turns this red (the
+    // exclude does not swallow it — only the definition file is filtered), then
+    // removing it turns it green again.
     const { execSync } = await import('node:child_process');
     const { fileURLToPath } = await import('node:url');
     const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
     const hits = execSync(
-      "grep -rl 'clientContractAppliesToEstimate' apps/web/app apps/web/components apps/web/middleware.ts 2>/dev/null || true",
+      "grep -rl 'clientContractAppliesToEstimate' apps/web/app apps/web/components apps/web/middleware.ts apps/web/lib packages 2>/dev/null | grep -v 'apps/web/lib/services/contracts.ts' || true",
       { cwd: repoRoot, encoding: 'utf8' }
     ).trim();
     expect(

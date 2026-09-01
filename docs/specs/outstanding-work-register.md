@@ -1261,6 +1261,12 @@ what the test does** (verified against the file [S179]). The reality:
 **Owed:** either extend the search set to `lib/**` (with the definition-file exclude) and `packages/**`,
 or rule those out of scope explicitly. A judgement encoded in a grep is invisible until it fails.
 
+> ✅ **DONE [S180].** Widened the search set to include `apps/web/lib` and `packages`, with a single
+> `grep -v 'apps/web/lib/services/contracts.ts'` to drop the definition's self-match. **Proven it
+> still goes red:** planting a reader under `lib/` made the grep non-empty (detected), removing it
+> returned it to empty — the exclude filters only the definition file, not real callers. The function
+> still has zero callers anywhere. `s156-m4-audit.live.ts:360-397`, commit in the S180 close-out.
+
 ### S3 — Production holds FOUR test tenants alongside the real one, and the deletion sweep now runs on prod daily
 **Known state, not a task — recorded so it is not discovered mid-incident.** Production carries four
 test tenants — **`Bishop Contracting`, `Bis Contracting`, `test const`, `H&H Signature Renovations`** —
