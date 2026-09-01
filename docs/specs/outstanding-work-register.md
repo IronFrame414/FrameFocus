@@ -31,9 +31,9 @@
 | A11 | Proposed timeline from estimate | 🟡 | Deferred in step 10. Zero machinery. |
 | A12 | Portfolio money rollups | ✅ | **SHIPPED** in step 10.1 — `getPortfolioMoney`, concurrent after a caught perf regression |
 | A13 | Recent activity feed | 🟢 | Ruled *with* A10 — it is the same event log |
-| A14 | Custom composable roles | ⚪ | Filed in `TECH_DEBT.md` ✅ |
-| A15 | Unbilled to client | ⚪ | Filed in `TECH_DEBT.md` ✅ |
-| A16 | Package scope rename | ⚪ | Filed in `TECH_DEBT.md` ✅ |
+| A14 | Custom composable roles | ⚪ | **Genuine debt** (deferred decision) — filed `TECH_DEBT.md` **#155** ✅ [S179] |
+| A15 | Unbilled to client | ⚪ | **Owed work, on THIS register** — needs schema. Reclassified out of `TECH_DEBT.md` [S179] |
+| A16 | Package scope rename | ⚪ | **Owed work, on THIS register** — ~340 import lines. Reclassified out of `TECH_DEBT.md` [S179] |
 | A17 | Row tints | 🟡 | ⚠️ **RULED: they mean row STATE, not category nesting.** Nothing applies them yet. |
 | A18 | `/m` photo chips (Safety, Marked up) | ⚪ | Desktop has six, mobile four |
 | A19 | The five `prompt()` sites | ⚪ | Two remain in Settings forms; sequencing still open |
@@ -249,9 +249,9 @@ No event table (see C8). Assembled per source, or built on A10's log.
 
 | # | Item | Note |
 | --- | --- | --- |
-| **A14** | **Custom composable roles** | Ruled toward roles, **not** per-person grants: every gate keys on `get_my_role()`, RLS cannot restrict columns, and testing loses its fixed set. The real need is legitimate — a bookkeeper who needs invoices but not the schedule. → `TECH_DEBT.md` |
-| **A15** | **Unbilled to client** (Expenses) | No expense→invoice link; needs schema. ⚠️ **Do not confuse with `13c`'s "Cost you've fronted"** — that is cost fronted on a *project*, derivable via `invoice_cost_claims`. Different questions. |
-| **A16** | **Package scope rename** (`@framefocus/shared`) | ~150 import lines, breaks the build on a miss, **zero user-facing change.** → `TECH_DEBT.md` |
+| **A14** | **Custom composable roles** | Ruled toward roles, **not** per-person grants: every gate keys on `get_my_role()`, RLS cannot restrict columns, and testing loses its fixed set. The real need is legitimate — a bookkeeper who needs invoices but not the schedule. **✅ Genuine debt — filed `TECH_DEBT.md` #155 [S179]** (deferred decision, the one that stays in the debt file). |
+| **A15** | **Unbilled to client** (Expenses) | No expense→invoice link; needs schema. ⚠️ **Do not confuse with `13c`'s "Cost you've fronted"** — that is cost fronted on a *project*, derivable via `invoice_cost_claims`. Different questions. **[S179] Owed work — reclassified OUT of `TECH_DEBT.md` (was `#2-regbacklog`); it lives HERE, not there.** |
+| **A16** | **Package scope rename** (`@framefocus/shared`) | Breaks the build on a miss, **zero user-facing change.** ⚠️ **[S179] the "~150 import lines" is low — measured 340 `from '@framefocus/shared…'` statements across 271 files.** Owed work — reclassified OUT of `TECH_DEBT.md` (was `#3-regbacklog`); it lives HERE. |
 | **A17** | **Row tints** | `rowTintAttention` / `rowTintProblem` shipped as tokens; **no screen applies them.** The mockups use them for row *state* (a lapsed-insurance sub, an over-budget line); Josh suggested category/subcategory nesting. **Two different meanings — rule before applying**, or a tint means "problem" on one screen and "subcategory" on another. |
 | **A18** | **`/m` photo chips** | Desktop now has six, mobile four, over the same data. CC correctly declined to widen a ruled `/m` surface as a rider on a desktop step. |
 | **A19** | **The five `prompt()` sites** (`#1-dialogsweep`) | All five collect a *value*, which is why the sweep left them. Sites: `contract-settings-form` · `lien-release-settings-form` · `items-tab` · `releases-panel` · `markup-editor`. **Build a value-collecting overlay, or ship native dialogs through the restyle?** |
@@ -439,6 +439,12 @@ tint. *(Register A17.)*
 one of each. **CC kept both names deliberately, which was right: a repaint is not a rename.** ⚠️ **But no
 TECH_DEBT line was ever written, so the next reader will assume they differ.**
 
+> ✅ **[S179] Verified and reclassified.** Confirmed still true on the tree: `apps/web/lib/theme.ts:45-49`
+> — `warning`/`warningDeep` both `#b45309`, `danger`/`dangerAlt` both `#c0362c`, the collapse
+> documented in-comment at `:38-40`. It *was* briefly filed in `TECH_DEBT.md` as `#4-regbacklog`, then
+> Josh's S179 split ruled it **owed work, not debt** — so it lives HERE, on the register, as the
+> record. **The fix (owed, small, mechanical):** pick one name, sweep its consumers, delete the other.
+
 ### K9 — `crew-manifest.ts:66` still says "platform"
 The literal `description` — *"The all-in-one platform for residential and commercial contractors"* —
 predates the rebrand and sits under a banner reading **"EVERY BRAND VALUE IS IMPORTED. NONE IS A
@@ -480,6 +486,14 @@ say *"→ `TECH_DEBT.md`"*. **Nobody wrote them there.** Same for **K8**'s dupli
 ⚠️ **The register points at a file that does not contain them.** A reader who checks `TECH_DEBT.md`
 finds nothing, and a reader who checks the register thinks it was filed. **Filing is a step, not a
 sentence.**
+
+> ✅ **RESOLVED [S179] — and the resolution went the other way for three of the four.** They *were*
+> subsequently filed (as `#1`–`#4-regbacklog`), so the "nobody wrote them there" state above is
+> stale. But Josh then ruled the debt/owed-work split: **only A14 (custom roles) is genuine debt** —
+> now `TECH_DEBT.md` **#155**. **A15, A16 and K8 were reclassified back OUT of `TECH_DEBT.md` as owed
+> work and live on THIS register** (§D and §K8). The pointers were verified against the ledger this
+> time — *"filing is a step, not a sentence"* applied to itself. (`s146-C5`'s flake was root-caused
+> and fixed, per the register-backlog note in `TECH_DEBT.md`'s header — not filed.)
 
 ### L2 — `feature/full-audit` is local-only and unmerged
 CC's closing line: *"The branch is local-only; merging or pushing is yours."* **The full audit report
@@ -910,9 +924,19 @@ is how a genuine regression gets waved through as "probably the flake."
   policy would have broken the build.**
 
 ### O8 — The DMARC `rua` still points at `josh@worthprop.com`
-Filed as `#1-delsweep`. ⚠️ **Its own fine print matters: neither destination publishes the RFC 7489
+Was filed as `#1-delsweep`. ⚠️ **Its own fine print matters: neither destination publishes the RFC 7489
 authorization record**, so **the closing evidence after the TXT edit is seeing an aggregate report
 actually land** — not the DNS change itself.
+
+> **[S179] Reclassified as owed work — it lives on THIS register (here + §Q3), not `TECH_DEBT.md`.**
+> The fix is one TXT DNS edit Josh controls. ⚠️ **A contradiction to reconcile before that edit,
+> surfaced not resolved:** the `#1-delsweep` analysis (still in `TECH_DEBT.md`, superseded-in-place)
+> concludes a **`gmail.com` `rua` repoint "does not work"** — RFC 7489 would then require
+> `ezcontractorbinder.com._report._dmarc.gmail.com`, which cannot be published — and recommends
+> instead **Option 1: publish the authorization record at `worthprop.com`** (one TXT Josh already
+> controls). §Q3 below records a ruling to **repoint to `ezcontractorbinder@gmail.com`** as "the
+> pragmatic choice that doesn't technically fix the gap." **These disagree on whether the gmail
+> repoint yields any reports at all. Josh's call.**
 
 ---
 
@@ -1037,14 +1061,19 @@ technically fix the authorization gap.** It is the pragmatic choice; the alterna
 ⚠️ **The closing evidence is seeing an aggregate report actually LAND in the Gmail box — not the TXT
 edit.** A Spaceship DNS change, Josh's. *(`#1-delsweep`.)*
 
-### ⚠️ Q4 — The safety-incident fan-out: filed as `#3-email`, deliberately NOT fixed
-`app/api/safety-incidents/route.ts` notifies **every supervisor above the submitter** — **three emails
-per incident in a four-person fixture**, and it is **the single largest contributor** to the 442 harness
-sends.
+### ⚠️ Q4 — The safety-incident fan-out: genuine debt, `TECH_DEBT.md` #156, deliberately NOT fixed
+`app/api/safety-incidents/route.ts:141` notifies **every supervisor above the submitter**
+(`computeIncidentRecipients`, `lib/services/incident-notify.ts:93`) — **three emails per incident in a
+four-person fixture**, and it is **the single largest contributor** to the 442 harness sends.
 
 ⚠️ **It was left alone on purpose: who gets told about an injury is a SAFETY decision, not an email
 one.** The send gate now hides the symptom, which is exactly why this must not be forgotten — **on a
 real twenty-person company the fan-out is far larger, and nobody has ruled that it should be.**
+
+> **[S179] This is genuine debt (a deferred decision), so it STAYS in `TECH_DEBT.md` — now #156.**
+> ⚠️ **Id correction:** it was filed under the provisional id `#1-email`, *not* `#3-email` as some
+> notes said; converted to real number **#156** at S179. This register entry is the cross-reference,
+> not a second filing.
 
 ---
 
