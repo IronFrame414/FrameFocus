@@ -217,6 +217,42 @@ note(`company ${companyA.name}`, 'exists', companyA.id);
 console.log('\nCompany A identities:');
 for (const identity of COMPANY_A_IDENTITIES) await ensureIdentity(identity, companyA.id);
 
+// ── Company A billing subscription — what the Billing settings tab reads ──────
+//
+// Sabal Point has an Owner but no `subscriptions` row: the row `handle_new_user`
+// creates during a tokenless owner `createUser` belongs to the SPURIOUS auto-company
+// and is deleted with it (`ensureIdentity`, above, line ~195). So the settings
+// Billing tab — gated on `if (subscription)` in settings/page.tsx, with
+// getSubscription() returning NULL (not throwing) — never rendered, and
+// desktop-settings-billing.spec.ts's three OWNER tests failed while the three ADMIN
+// tests passed (an admin never gets the tab regardless).
+//
+// One active Professional subscription fixes it AND matches the fixture's resting
+// state. trial-fixture.ts KEEPS Sabal Point unlocked and non-`incomplete` on purpose
+// (its header: a locked or incomplete shared company bounces EVERY QA identity to
+// /locked or /trial-limit), so `active` is the only status consistent with that —
+// and it renders a clean, screenshot-plausible tab (Active · Professional — $100/mo ·
+// 7-seat plan). No stripe_subscription_id: there is no real Stripe customer behind
+// the fixture, and a dead "Manage Subscription" button is worse than its absence.
+// Idempotent via ensureRow (matches on the UNIQUE company_id).
+await ensureRow(
+  'company A subscription (billing tab)',
+  'subscriptions',
+  { company_id: companyA.id },
+  {
+    company_id: companyA.id,
+    plan_tier: 'professional',
+    status: 'active',
+    seat_limit: 7,
+    stripe_subscription_id: null,
+    trial_start: null,
+    trial_end: null,
+    current_period_start: new Date(Date.now() - 15 * 86_400_000).toISOString(),
+    current_period_end: new Date(Date.now() + 15 * 86_400_000).toISOString(),
+    cancel_at_period_end: false,
+  }
+);
+
 // ── Company B (#104) ────────────────────────────────────────────────────────
 console.log('\nCompany B (cross-company isolation):');
 // ⚠️ MATCH ON SLUG **OR** NAME [S164]. Matching on slug alone silently created a
