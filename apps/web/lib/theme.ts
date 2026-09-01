@@ -40,8 +40,8 @@ export const color = {
   // `dangerAlt` (== `danger`) were consolidated away [register K8, S180]: the
   // base names `warning`/`danger` are what new code reaches for, so they stay
   // and the aliases were deleted with their call sites rewritten. This is a
-  // rename only — the hex values are unchanged (these are semantic-status
-  // colours, deliberately NOT the brand amber #EDA122).
+  // rename only — the hex values are UNCHANGED (these stay the semantic-status
+  // colours; do not repaint them to the marketing amber).
   success: '#1f8f4e',
   successBg: '#e6f0e9',
   successOnBg: '#3d7a4b',
