@@ -153,3 +153,23 @@ I cannot re-verify (MCP is rebuild-test-only). Flagging, not blocking — it's a
 - **K11:** do NOT fix; record the root cause + the three options for Josh.
 - **Docs:** record all closures/contradictions, mark L4 ⛔, record K10/C4/A6/K3 as owed/report.
 - Everything docs-only or a single reversible UI tint — nothing that needs a ruling I don't have.
+
+---
+
+## Phase 3 — build (append-only, per item)
+
+### ✅ K7 (1.1) `14a` — DONE — `apps/web/app/dashboard/projects/projects-list.tsx`
+- **Ruling [Josh, Phase 2 Q1]:** tint needs-attention rows with `rowTintAttention`; the over-budget
+  tint arrives later with the deferred margin target. Handle the hover so mouseleave doesn't wipe it.
+- **Built:** in the row map, `restBg = attention.length > 0 ? color.rowTintAttention : 'transparent'`;
+  set `backgroundColor: restBg` on the row and changed `onMouseLeave` to reset to `restBg` (was
+  `'transparent'`, which Josh flagged would wipe the tint). Hover still darkens to `tableHeadBg`. Clean
+  rows are unchanged (transparent). The tinted set is exactly the four-condition attention set the row
+  already renders as text — no new query, no new state.
+- **`14d` SKIPPED [Josh, Phase 2 Q2]** — recorded as owed pending the insurance-store ruling (see §14d
+  owed below). `rowTintProblem` remains unused by design this pass.
+- **Verified:** `turbo run type-check --force` exit 0 (5/5). (Bare `tsc` reported a stale
+  `.next/types/app/trial-limit/page.ts` from a prior build — an artifact, not my code; the turbo
+  type-check is the project's real gate and is green.)
+- ⚠️ **Register contradiction recorded:** K7's "no screen uses them" is wrong — `rowTintAttention` was
+  already referenced in `changes-panel.tsx:327` (as a banner). Now it also tints `14a` rows.

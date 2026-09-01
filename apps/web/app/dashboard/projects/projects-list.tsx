@@ -230,14 +230,28 @@ export function ProjectsList({
           {visible.map((p, i) => {
             const attention = attentionByProject[p.id] ?? [];
             const progress = progressFor(p.start_date, p.target_end_date, today);
+            // K7 [RULED Josh, register-batch2]: `rowTintAttention` marks a row in a
+            // needs-attention STATE — here the four-condition set (`attention`) the
+            // row already renders as text. The token literally means "row needing
+            // attention", so it tints exactly this. Not the deferred over-budget/
+            // margin-under-target trigger — that waits on the C4/A6 target (§8.1
+            // excludes it). `rowTintProblem` (compliance failure) is 14d's, and 14d
+            // is SKIPPED this pass (the insurance store is RULED LEAVE AS IS).
+            //
+            // ⚠️ Hover still darkens to `tableHeadBg`; mouseleave returns the row to
+            // `restBg`, NOT white — otherwise the leave handler would wipe the tint
+            // (the collision flagged in Phase 2). A clean row's rest state is
+            // transparent, exactly as before.
+            const restBg = attention.length > 0 ? color.rowTintAttention : 'transparent';
             return (
               <div
                 key={p.id}
                 onClick={() => router.push(`/dashboard/projects/${p.id}`)}
                 onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = color.tableHeadBg)}
-                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = restBg)}
                 style={{
                   ...rowBase,
+                  backgroundColor: restBg,
                   borderBottom: i === visible.length - 1 ? 'none' : rowBase.borderBottom,
                 }}
               >
