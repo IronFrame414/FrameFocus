@@ -275,13 +275,27 @@ Decide once, for this AND the event log's identical prune (G1 #4 is the same rul
 > ⚠️ **RECLASSIFIED OUT OF DEBT → register §K8 [S179].** Owed work, not debt — pick one name, sweep
 > the consumers, delete the other. Tracked on the register (K8), where it already lived.
 
-- **#4-regbacklog — duplicate token values after the README ramp (K8).** `warning` == `warningDeep`
-  and `danger` == `dangerAlt` since the ramp landed — the design carries one of each. **Both names
-  were kept deliberately: a repaint is not a rename.** ⚠️ But two names pointing at one hex will
-  read as a mistake to the next person; either re-diverge them when the design does, or fold the
-  aliases with a sweep of their consumers. Until ruled, neither — this entry is the explanation.
-  ⚠️ **[S179] verified still true:** `apps/web/lib/theme.ts:45-49` — `warning`/`warningDeep` both
-  `#b45309`, `danger`/`dangerAlt` both `#c0362c`, with the collapse documented in-comment.
+- **#4-regbacklog — ✅ CLOSED [register close-out, S180] — duplicate token values folded (K8).**
+  `warningDeep`/`dangerAlt` deleted; `warning`/`danger` kept; all 41 call sites rewritten
+  (`00690df`), and the follow-up `6faa383` reworded a comment so `theme.ts` no longer contains the
+  substring `brand` (the m6m-pwa A-26b4 guard). The register close-out audit confirmed: **no hex
+  changed, no dangling `color.warningDeep`/`color.dangerAlt` reference remains in any code**
+  (Tailwind config uses raw hex; `/m`, email and PDF templates carry none), and A-26b4 still holds.
+
+  > ### ✅ CLOSED [S180] — `00690df` + `6faa383`
+  >
+  > _Superseded rationale, quoted rather than deleted — and it was WRONG._ The entry read:
+  > _"**Both names were kept deliberately: a repaint is not a rename.**"_ and _"⚠️ **[S179] verified
+  > still true:** … `warning`/`warningDeep` both `#b45309`, `danger`/`dangerAlt` both `#c0362c`."_
+  >
+  > ⚠️ **The "kept deliberately during a repaint" framing was a misread.** The two names **never
+  > held distinct values** — there was no repaint in which one diverged and was later re-collapsed.
+  > `warning` and `warningDeep` were identical (`#b45309`) from the moment the README ramp landed, as
+  > were `danger`/`dangerAlt` (`#c0362c`); the "duplicate" was a paste of one value under two names,
+  > not a design decision preserved through a re-colour. So the correct action was always the simple
+  > one — pick one name, delete the other, sweep the consumers — and that is what K8 did. There was
+  > never a divergence to protect. Recorded because the wrong framing is exactly what kept the fold
+  > filed-but-unbuilt across multiple sessions.
 
 
 ### Branch-scoped, awaiting real numbers — `feature/s175-dialog-sweep` [S175 item 9]
