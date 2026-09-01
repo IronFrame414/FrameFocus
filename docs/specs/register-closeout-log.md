@@ -36,6 +36,38 @@
   billing commits; sort at merge. The register-closeout commits are the ones tagged `[Docs] Register
   close-out` plus the item commits listed at the end of this log.
 
+## Phase 2 — Josh's rulings (2026-09-01), verbatim intent
+
+- **1.2 display_name:** Phase 3 does **Option 1** (UPDATE the stale owner row + harden the seed so a
+  rebuild/in-place rename can't re-drift; F-6 left intact). ⚠️ **AND log the production drift as a
+  SEPARATE OPEN item — do NOT close it resolved.** Josh's analysis: `updateMyName` renames the
+  profile only, so in production ANY member who changes their name gets a stale `display_name` across
+  30+ readers — a **live bug**, and cleaning the test DB hides it exactly where you'd catch it. F-6
+  (one mutable row, no snapshot) gives **neither** live accuracy **nor** historical accuracy (a March
+  lien release shows the seed-time name, not March's). The real fix (runtime sync, or snapshot-at-
+  document-creation) is **Option 3 territory and must be ATTENDED** — not on a field 30+ features read.
+- **1.1 K8:** **Keep base names** (`warning`/`danger`; delete `warningDeep`/`dangerAlt`). Additions:
+  (a) grep the names as **string literals** too, not just `color.` property access — config maps,
+  Storybook, class-name strings, JSON fixtures; type-check won't catch those. (b) **No hex changes** —
+  rename only; do NOT align `#b45309` to brand amber `#EDA122` (semantic-status vs brand palette are
+  different systems). (c) ⚠️ **Collision:** the shared theme file is the largest diff and path-scoping
+  does NOT protect a file the billing session might also edit — **confirm billing isn't touching my
+  target files before the sweep.**
+- **3.1 A15:** **Defer to attended.** Phase 3 deliverable = the fuller design in this log, and it MUST
+  include (i) the **null-handling decision** — what the unbilled-to-client report shows for
+  `invoice_cost_claims` rows with no matching expense (a product decision, settle before final shape),
+  and (ii) the **actual backfill query**, not just the column shape.
+- **3.2 A16:** **SKIP in Phase 3, and record as DEFERRED PENDING THE CONSOLIDATED REBRAND RENAME —
+  NOT blocked-on-target-name** [Josh, corrected]. The target name is not unknown: the product was
+  renamed **EZ Contractor Binder** (July, icon finalised August); `@framefocus/shared` is a stale
+  scope from the prior name, the same class as the RafterWorks sidebar wordmark still showing. When
+  it's done it must be **one attended pass** covering the package scope + the sidebar wordmark + the
+  remaining brand strings — doing the scope in isolation touches 343 imports across 274 files once
+  now and possibly again when the rest lands, and does it against a branch another session is
+  committing to (the worst collision surface). ⚠️ **One decision owed before that pass:** the scope
+  string — `@ezbinder/shared` vs `@ez-contractor-binder/shared` vs `@binder/shared` (shorter is
+  better across 343 import lines; "the Binder" is the field shorthand). Not chosen now.
+
 ## Phase 1 — Analysis (complete except §2.3 skipped-tests count)
 
 ### 1.1 — K8 duplicate tokens (theme.ts) — CONFIRMED, plan set
