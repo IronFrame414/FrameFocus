@@ -19,6 +19,15 @@
 
 ---
 
+## ⚠️ Hazard log
+
+- **[Phase 1, 2026-09-01]** `git status` before my log commit showed THREE modified files I never
+  touched: `apps/web/app/api/stripe/portal/route.ts`, `apps/web/app/dashboard/billing/page.tsx`,
+  `apps/web/app/dashboard/dashboard-shell.tsx`. These are the §2 OUT-OF-SCOPE "Billing → Settings"
+  files (another session, in flight, apparently sharing this worktree). Per §5/S5 I treated the diff
+  as suspicious and NOT mine. My commits are path-scoped; I never staged them and will not touch
+  them. Every commit this session is explicitly path-scoped — never `git add -A`.
+
 ## Phase 1 — Analysis (complete except §2.3 skipped-tests count)
 
 ### 1.1 — K8 duplicate tokens (theme.ts) — CONFIRMED, plan set
