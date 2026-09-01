@@ -929,14 +929,69 @@ authorization record**, so **the closing evidence after the TXT edit is seeing a
 actually land** — not the DNS change itself.
 
 > **[S179] Reclassified as owed work — it lives on THIS register (here + §Q3), not `TECH_DEBT.md`.**
-> The fix is one TXT DNS edit Josh controls. ⚠️ **A contradiction to reconcile before that edit,
-> surfaced not resolved:** the `#1-delsweep` analysis (still in `TECH_DEBT.md`, superseded-in-place)
-> concludes a **`gmail.com` `rua` repoint "does not work"** — RFC 7489 would then require
-> `ezcontractorbinder.com._report._dmarc.gmail.com`, which cannot be published — and recommends
-> instead **Option 1: publish the authorization record at `worthprop.com`** (one TXT Josh already
-> controls). §Q3 below records a ruling to **repoint to `ezcontractorbinder@gmail.com`** as "the
-> pragmatic choice that doesn't technically fix the gap." **These disagree on whether the gmail
-> repoint yields any reports at all. Josh's call.**
+> The fix is one TXT DNS edit Josh controls. ✅ **The contradiction with §Q3 is RESOLVED [Josh, S179]:
+> the `#1-delsweep` analysis wins.** A `gmail.com` `rua` **does not work** — RFC 7489 needs
+> `ezcontractorbinder.com._report._dmarc.gmail.com`, which cannot be published, so **no reports arrive
+> either way.** §Q3's "repoint to Gmail" ruling was made without that fact and is **overturned** (see
+> §Q3, quoted-and-superseded). **The ruling that stands:** publish the authorization record at
+> `worthprop.com` (Option 1, one TXT Josh controls). ⚠️ **Closing evidence is a report LANDING, not
+> the DNS edit.**
+
+#### ⚠️ THE EXACT RECORD TO PUBLISH — verified against RFC 7489 §7.1, not reconstructed from memory
+
+**Live state, confirmed [S179, 2026-09-01] by DoH lookup:** `_dmarc.ezcontractorbinder.com` reads
+`v=DMARC1; p=none; rua=mailto:josh@worthprop.com` (the cross-domain `rua` is still there), and
+`ezcontractorbinder.com._report._dmarc.worthprop.com` returns **NOERROR with no answer — i.e. the
+authorization record is NOT published.** So the fix is still owed and nothing has changed under it.
+
+**Why this record.** The `rua` on `_dmarc.ezcontractorbinder.com` points at `josh@worthprop.com`.
+Because the destination host (`worthprop.com`) differs from the policy domain (`ezcontractorbinder.com`),
+RFC 7489 §7.1 makes a receiver verify an **External Destination** authorization record before it will
+send any aggregate report. Construction (§7.1, verbatim): _"Prepend the string `_report._dmarc`. Prepend
+the domain name from which the policy was retrieved…"_ → `[policy-domain]._report._dmarc.[destination]`.
+RFC worked example: a policy at `blue.example.com` with `rua=mailto:reports@red.example.net` is verified
+by a TXT query for **`blue.example.com._report._dmarc.red.example.net`** carrying **`v=DMARC1`**.
+
+**Applied to us — publish ONE TXT record in the `worthprop.com` zone:**
+
+| Field | Value |
+| --- | --- |
+| **Zone (where it is published)** | `worthprop.com` — the **destination** domain, NOT `ezcontractorbinder.com` |
+| **Full record name (FQDN)** | `ezcontractorbinder.com._report._dmarc.worthprop.com` |
+| **"Host" / "Name" field** | `ezcontractorbinder.com._report._dmarc` (most editors append the `.worthprop.com` zone automatically — do **not** type the zone twice; if your editor wants the FQDN, use the full name above) |
+| **Type** | `TXT` |
+| **Value / Content** | `v=DMARC1` |
+| **TTL** | default is fine (e.g. 3600) |
+
+> ⚠️ **WHERE this is edited — verified live [S179, 2026-09-01], and it is probably NOT Spaceship.** A
+> DoH lookup shows `worthprop.com`'s SOA nameserver is **`ns1.vercel-dns.com`** (`hostmaster.nsone.net`),
+> i.e. **`worthprop.com`'s DNS is delegated to Vercel/NS1.** Spaceship may be the *registrar*, but the
+> live zone is served by Vercel — so this record is added **wherever `worthprop.com`'s zone is actually
+> edited (the Vercel dashboard, if the nameservers are `*.vercel-dns.com`), not necessarily Spaceship.**
+> _Superseded assumption, quoted not deleted: the `#1-delsweep` entry and the S179 brief both described
+> this as "a Spaceship DNS change."_ **The record name and value are RFC-verified and correct on any
+> provider; only the paste location changes.** (`ezcontractorbinder.com` — where the `rua` lives — is
+> the Spaceship domain; that is a different zone and is not touched by this fix.)
+
+⚠️ **Two things that silently break it:**
+1. **The name is literal — the `.com` in `ezcontractorbinder.com` stays.** The label is
+   `ezcontractorbinder.com._report._dmarc`, NOT `ezcontractorbinder._report._dmarc`. RFC 7489 prepends
+   the whole policy domain, dots included.
+2. **The value is exactly `v=DMARC1` and nothing else** — no `p=`, no `rua=`. It is an authorization
+   flag, not a policy. If Spaceship's editor requires quoting, `"v=DMARC1"` is equivalent; enter it
+   however Spaceship formats other TXT records in that zone.
+
+**This authorizes the `rua` where it already is; it does NOT move it.** `josh@worthprop.com` keeps
+receiving. If Josh later wants the WorthProp string gone entirely, that is the separate same-domain
+option (`rua=mailto:dmarc@ezcontractorbinder.com` + an inbox/forwarder on the send-only domain) — more
+work, out of scope for closing this.
+
+⚠️ **CLOSING EVIDENCE — the record is not the finish line.** Publishing the TXT record only makes
+delivery *permitted*. **Close this ONLY when an aggregate report has actually LANDED in the
+`josh@worthprop.com` inbox** (Gmail/large receivers send these ~daily as gzipped XML attachments).
+**A published record that still delivers nothing is the same problem wearing a tick** — verify the
+report, not the DNS edit. If none arrives within ~72h, re-check the record name for trap #1 above and
+confirm `_dmarc.ezcontractorbinder.com` still carries a `rua=`.
 
 ---
 
@@ -1052,14 +1107,27 @@ been told nothing.**
 
 **A dashboard action, not a deploy. Josh's.** *(Also tracked at §P4.)*
 
-### Q3 — The DMARC `rua` repoint: ruled, and the closing evidence is not the edit
-**Ruled: repoint `rua` to `ezcontractorbinder@gmail.com`.** ⚠️ **The RFC 7489 authorization record
-cannot be published at `gmail.com`** — so this does not make it same-domain and **it does not
-technically fix the authorization gap.** It is the pragmatic choice; the alternative needs a record at
-`worthprop.com`.
+### Q3 — The DMARC `rua` repoint — ⚠️ OVERTURNED [Josh, S179]: a Gmail `rua` does not work
+> ⚠️ **SUPERSEDED — quoted, not deleted.** _Original ruling: **"Ruled: repoint `rua` to
+> `ezcontractorbinder@gmail.com`.** ⚠️ **The RFC 7489 authorization record cannot be published at
+> `gmail.com`** — so this does not make it same-domain and **it does not technically fix the
+> authorization gap.** It is the pragmatic choice; the alternative needs a record at `worthprop.com`."_
 
-⚠️ **The closing evidence is seeing an aggregate report actually LAND in the Gmail box — not the TXT
-edit.** A Spaceship DNS change, Josh's. *(`#1-delsweep`.)*
+**⚠️ OVERTURNED [Josh, S179] — the `#1-delsweep` analysis wins.** The original ruling was made without
+one fact: **repointing `rua` to a Gmail address does not merely "not technically fix the gap" — it
+means NO REPORTS ARRIVE AT ALL.** RFC 7489 §7.1 requires a cross-domain `rua` to be authorized by a
+`ezcontractorbinder.com._report._dmarc.gmail.com` TXT record, and **nobody can publish under
+`gmail.com`** — so every conforming reporter (Gmail included) sends nothing. The "pragmatic choice"
+delivers zero aggregate reports, which is the same blind state the entry exists to end.
+
+**The ruling that stands (`#1-delsweep` Option 1):** publish the authorization record at `worthprop.com`
+— one TXT, `ezcontractorbinder.com._report._dmarc.worthprop.com = v=DMARC1`, a domain Josh already
+controls — keeping the `rua` where it is and making cross-domain delivery spec-compliant. (The cleaner
+long-term form is a same-domain `rua` on `ezcontractorbinder.com` that forwards, but that costs standing
+up an inbox on the send-only domain first.)
+
+⚠️ **The closing evidence is an aggregate report actually LANDING — not the TXT edit.** A Spaceship DNS
+change, Josh's. *(`#1-delsweep`; see §O8.)*
 
 ### ⚠️ Q4 — The safety-incident fan-out: genuine debt, `TECH_DEBT.md` #156, deliberately NOT fixed
 `app/api/safety-incidents/route.ts:141` notifies **every supervisor above the submitter**
@@ -1209,6 +1277,22 @@ card-at-signup build (§R2) puts a real Stripe SetupIntent in front of every tri
 cannot take a live card.** Not debt, not a code task — a business/onboarding step (open the bank
 account, flip Stripe to live) that gates going live, recorded here so it is on the critical-path
 checklist rather than in someone's memory.
+
+### ⚠️ S5 — Environment hazard: files change under you, mid-session, from outside your control
+**This is a recurrence, not a one-off — that is why it is recorded as a hazard.**
+
+- **Earlier this project:** four downloads landed in the **wrong worktree** (§L7 — including the
+  redesign spec itself, under a renamed filename), and `FrameFocus-work` had to be removed.
+- **S179:** while a docs session was editing `TECH_DEBT.md` and `outstanding-work-register.md`,
+  `docs/specs/register-backlog-spec.md` — **a file that session never touched** — was **overwritten
+  mid-run** with a stale copy of the register's content, by something outside the session's control
+  (an editor sync, a hook, or a stray drop). It was caught only because `git status` showed a
+  modification the session could not account for, and restored to HEAD.
+
+⚠️ **The rule for the next session:** **an unexpected diff is SUSPICIOUS, not your own doing.** Run
+`git status` before committing, and if a file you did not touch is modified, **look at it before
+staging** — do not `git add -A`, and do not assume you made the change. This box has destroyed and
+mangled work repeatedly; a clean `git status` at the end is a load-bearing check, not a formality.
 
 ---
 
