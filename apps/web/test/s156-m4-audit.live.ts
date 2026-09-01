@@ -367,17 +367,32 @@ describe('S156-V — M4 properties checked and found correct', () => {
     //
     // 7I criterion 1 is a CODE fact: "toggle off ⇒ behaviour byte-identical",
     // which holds because `clientContractAppliesToEstimate()` — the only reader —
-    // has ZERO callers under `app/`. That is what this now pins.
-    const { readFileSync } = await import('node:fs');
+    // has ZERO callers in the request-serving code. That is what this pins.
+    //
+    // ⚠️ cwd RESOLVES FROM THE REPO ROOT, not a named worktree [S178]. The prior
+    // version hardcoded `/workspaces/FrameFocus-work` — a worktree that existed
+    // only in one session's directory layout — so `execSync` threw
+    // `spawnSync ENOENT` BEFORE the assertion ran, and the red carried no signal
+    // either way. A structural-absence test that cannot reach its assertion, and
+    // that only runs in one person's layout, is not a test.
+    //
+    // ⚠️ THE SEARCH SET INCLUDES middleware.ts — OUTSIDE app/ and components/, and
+    // run on EVERY request, so a gate added there is the exact blind spot the old
+    // path set would have hidden. `app/api/**` needs no separate entry: it is
+    // already inside `app/`. Known remaining blind spots, deliberately left for
+    // Josh to rule on rather than widened silently: `apps/web/lib/**` (a service
+    // caller — a grep there also matches the definition in `contracts.ts`, so it
+    // needs an exclude) and `packages/**` (shared utils, Supabase edge functions).
     const { execSync } = await import('node:child_process');
-    void readFileSync;
+    const { fileURLToPath } = await import('node:url');
+    const repoRoot = fileURLToPath(new URL('../../../', import.meta.url));
     const hits = execSync(
-      "grep -rl 'clientContractAppliesToEstimate' apps/web/app apps/web/components 2>/dev/null || true",
-      { cwd: '/workspaces/FrameFocus-work', encoding: 'utf8' }
+      "grep -rl 'clientContractAppliesToEstimate' apps/web/app apps/web/components apps/web/middleware.ts 2>/dev/null || true",
+      { cwd: repoRoot, encoding: 'utf8' }
     ).trim();
     expect(
       hits,
-      'something under app/ now reads the 7I toggle — criterion 1 needs re-checking'
+      'the request-serving code now reads the 7I toggle — criterion 1 needs re-checking'
     ).toBe('');
   });
 
