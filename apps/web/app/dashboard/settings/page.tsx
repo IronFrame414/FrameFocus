@@ -13,6 +13,10 @@ import { ContractSettingsForm, type ContractTemplateRow } from './contract-setti
 import { NotificationSettingsForm } from './notification-settings-form';
 import { FileCategoriesManager } from './file-categories-manager';
 import { SettingsTabs } from './settings-tabs';
+import { getSubscription } from '@/lib/services/billing';
+import { getAddOns } from '@/lib/services/add-ons';
+import { getSeatUsage } from '@/lib/services/seats';
+import { BillingSettingsTab } from './billing-settings-tab';
 import { color, h2Style } from '@/lib/theme';
 
 // ⚠️ SLICE A [S150] — WITHOUT THIS, A SAVED BOX MAP READS BACK STALE.
@@ -241,6 +245,47 @@ export default async function SettingsPage({
       content: <NotificationSettingsForm settings={company} />,
     },
   ];
+
+  // §8.11.1 — the EIGHTH tab: Billing, moved here from its own sidebar item
+  // [Josh, "move Billing into Settings"]. Billing is company configuration, so
+  // it belongs with the other company-level settings.
+  //
+  // ⚠️ OWNER-ONLY, AND THIS IS THE GATE — not the tab strip. Settings admits
+  // owner AND admin (the redirect at the top of this file), but Billing is
+  // Owner-only. `settings-tabs.tsx` keeps every panel mounted (hidden with
+  // display:none, so autosave debounces survive a switch), which means a tab
+  // rendered for an admin ships in the admin's DOM even when hidden — hiding is
+  // NOT a gate. So the billing tab is only ADDED to the array for an owner, and
+  // its data is only fetched for an owner. An admin's payload never contains it.
+  // A direct URL (`?tab=billing`) is harmless: settings-tabs falls back to the
+  // first tab when the key is absent, and every Stripe API and the /plans and
+  // /success pages enforce owner-only themselves (403 / redirect).
+  if (profile.role === 'owner') {
+    const [subscription, addOns, seatUsage] = await Promise.all([
+      getSubscription(),
+      getAddOns(),
+      getSeatUsage(),
+    ]);
+    // No subscription row (shouldn't happen — one is created at signup) → no
+    // tab, rather than redirecting the whole Settings page off the screen.
+    if (subscription) {
+      // Caller-scoped RPC (§1 sum, trashed rows included), run as the signed-in
+      // owner, exactly as the old /dashboard/billing page did.
+      const { data: usedBytes } = await supabase.rpc('company_storage_used_bytes');
+      tabs.push({
+        key: 'billing',
+        label: 'Billing',
+        content: (
+          <BillingSettingsTab
+            subscription={subscription}
+            addOns={addOns}
+            seatUsage={seatUsage}
+            usedBytes={Number(usedBytes ?? 0)}
+          />
+        ),
+      });
+    }
+  }
 
   return (
     <div>
