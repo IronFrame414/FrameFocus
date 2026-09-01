@@ -336,3 +336,56 @@ with **no current caller** is itself dead-code (K8's own lesson), and there is *
 today**, so the live risk is latent, not active. A guessed schema change on trial creation, with nobody
 to ask, is exactly what §7 says not to improvise. **Ruling captured so it is not lost; apply is owed to
 an attended pass or bundled with the next trial-writer.**
+
+---
+
+## CLOSE-OUT (§7) — what closed, what is owed, what I am unsure of
+
+**Type-check:** current combined HEAD (`b7ef776`, my docs commits + the prior instance's item commits)
+is **`tsc --noEmit` exit 0**. All my Phase-3-continuation commits are docs-only, path-scoped to
+`docs/specs/*.md`, so they cannot break the build and are separable from the billing session's work.
+
+**CLOSED — Josh's Phase-2 answers, all applied:**
+- **2.3** skipped-tests — corrected + made prominent, both the register's and this log's own earlier
+  mis-tellings fixed (`b9b5bcf`, register `14f17a0`).
+- **Q1 / 1.1 K8** — the delete was already shipped (`00690df`/`6faa383`); the register's wrong "kept
+  deliberately during a repaint" rationale is now corrected in the register (`14f17a0`).
+- **Q2 / 1.2** — divergence cause was already established and recorded by the prior instance (no sync
+  trigger by design F-6; `updateMyName` renames the profile only). Satisfies Josh's "the real answer is
+  the divergence cause." Production drift stands OPEN as register §S6. Nothing to add.
+- **Q3 / 1.3** — shared-constant ruling captured with the exact `trial_end_default()` recipe; apply
+  deferred (`b7ef776`).
+- **Q4** — A15 and A16 both left unbuilt, as ruled. A15 full design (incl. null-handling + backfill) in
+  this log; A16 deferred to the consolidated rebrand rename.
+
+**Already closed by the prior instance (earlier commits this session):** 1.1 K8, 1.2 display_name (+ seed
+hardening), 2.2 V1 grep widened & proven red-capable, 2.1 env-bleed (45 assertions isolated under forks),
+1.4 crew-manifest (was already done).
+
+**OWED — not done, with reasons (for Josh):**
+- ⚠️ **2.4 desktop-payload #117 — NOT observed.** It is a Playwright test, and **Playwright never ran**
+  (left pending by the prior instance). So whether #117 still flakes is unknown this pass.
+- ⚠️ **§7 Playwright ×4 battery — NOT run, deliberately.** Unit / type-check / lint / cold build / live
+  RLS all ran green (prior instance; live had 7 reds, every one classified non-regression). Playwright
+  was **not** run because: the dev server does not survive a full run (§4); rebuild-test is spun down;
+  and a **concurrent billing session shares the rebuild-test DB and is actively editing the sidebar /
+  settings Playwright specs** — running now would execute their half-finished specs and contaminate the
+  shared DB. **Owed on a quiet DB with no session sharing it.**
+- **1.3** trial migration apply; **3.1 A15** build; **3.2 A16** rename — all deferred as above.
+
+**QUESTIONS owed to Josh (Phase 3 had nobody to ask):**
+1. **§S6 / 1.2:** is F-6 (no sync of `display_name`) still right, given it is the app's primary
+   member-name field read by 30+ features? The real fix (runtime sync, or snapshot-at-document) is
+   attended and would overturn F-6.
+2. **2.3:** seed the mobile fixtures so the 42 `test.skip(true,'no X')` guards can't stand down, OR make
+   them fail-instead-of-skip on absent data?
+3. **1.3:** apply `trial_end_default()` now (attended), or bundle it with the next trial-writer?
+4. **A15:** approve the `source_expense_id` shape? **A16:** the scope string (`@ezbinder/…` vs
+   `@ez-contractor-binder/…` vs `@binder/…`) and confirm it is one attended pass with the rebrand.
+
+**NOT CONFIDENT / honest gaps:**
+- The exact **279/285 skip tally** is a Playwright runtime number, env-dependent — **UNKNOWN**; only the
+  mechanism (42 fixture guards) is verified. Say-what-I-tried is in the 2.3 entry.
+- **Branch entanglement:** `feature/register-closeout` HEAD is shared with the billing session, so its
+  history interleaves both sessions' commits (hazard log above). My work is separable **by path** (every
+  commit is `docs/specs/*.md` only); Josh sorts the branch at merge.
