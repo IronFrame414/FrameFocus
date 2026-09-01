@@ -10,7 +10,8 @@ removed."* The full table survives in git history and in the S136 context file. 
 prevents recurrence lives in CLAUDE.md → "Tech-debt numbering", which is unchanged.
 
 
-> **Last updated:** August 30, 2026 — deletion-sweep §3 (**#1-delsweep RAISED** — DMARC `rua` still points at `josh@worthprop.com`, the last WorthProp reference in the mail configuration. Cosmetic — reports arrive — one TXT edit at Spaceship. Filed alongside the brand-string debt: #119, #123, #126)
+> **Last updated:** September 1, 2026 — S179 (**THE DEBT/OWED-WORK SPLIT, RULED [Josh].** `TECH_DEBT.md` is for decided-to-live-with or deliberately-deferred **decisions**, not a backlog. **#155 RAISED** — custom composable roles, converted from `#1-regbacklog`; **#156 RAISED** — the safety-incident fan-out, converted from `#1-email` (the prompt called it `#3-email`; the real ledger id was `#1-email`). Both are deferred decisions and stay debt. **Reclassified OUT to the register as owed work:** `#2-regbacklog` (A15 unbilled-to-client), `#3-regbacklog` (A16 package rename — the "~150" imports is really **340**), `#4-regbacklog` (K8 duplicate tokens, verified at `theme.ts:45-49`), and `#1-delsweep` (the DMARC `rua` — ⚠️ its "gmail repoint does not work" finding **contradicts** register §Q3's ruling; flagged for Josh, not resolved). Provisional entries superseded-in-place, never deleted.)
+> **Previously:** August 30, 2026 — deletion-sweep §3 (**#1-delsweep RAISED** — DMARC `rua` still points at `josh@worthprop.com`, the last WorthProp reference in the mail configuration. Cosmetic — reports arrive — one TXT edit at Spaceship. Filed alongside the brand-string debt: #119, #123, #126)
 > **Previously:** August 11, 2026 — S134 (**#149 AND #150 RAISED**, filing the fallout of reverting the S133 Playwright sharding (Option D, Josh's ruling). **#150** records the concurrency hazard precisely — four shards shared one rebuild-test DB, so any test asserting the absence/count of something another shard writes to a shared fixture was exposed; CI #201 (`desktop-payload.spec.ts:175`) is the instance, NOT a payload leak — the #117 read floor holds at the query. **#149** is the constraint that blocked every safe fix: the pinned e2e fixtures are hand-curated on rebuild-test and reproducible from no script — `seed-test-identities.mjs` only *warns* if `eaf0e25b` is missing — which is what blocks a database-per-shard, the fix that is safe by construction. The sharding work is kept on branch `ci/shard-playwright`, not deleted. **⚠️ #149 is also speculatively used on two unmerged branches (`feat/notifications`, `feature/m6m-mobile`) for different items — a merge-time reconciliation is owed there regardless; main's file is the assignment authority.**)
 > **Previously:** August 10, 2026 — S123 (**#151 RAISED** from a real-device test — the push enrolment control does not read as tappable. **A UI pass, not a defect:** the component carries **zero `className` attributes**, and with `@tailwind base` Preflight in force an unstyled `<button>` has no background, no border and no radius, so it renders as a line of body text that happens to click. It is also the ONE control between a user and ever receiving a push, and on iOS the prompt is one-shot and sticky, so a bad first encounter is permanent. Constraints recorded, including that the **iOS install-gate branch must NOT become pressable** — and that **no test references this component at all**, so that constraint has no safety net today)
 > **Previously:** August 9, 2026 — S123 (**#147 AND #148 RAISED**, both from Josh, both investigated before filing rather than described from the request. **#147 multi-address is a UI GAP, not a schema gap** — `contact_addresses` has no unique constraint on `contact_id`, only a PARTIAL one-primary index, and `listAddressesForContact()` plus the 4D estimate address picker already handle N; exactly one form, `contact-form.tsx`, only ever writes the primary. No migration needed. **#148 inline contact-create is a SHARED COMPONENT's change** — `ContactAddressPicker` has three consumers, and `contacts_insert_authorized` matches `estimates_insert_manager` exactly, so there is no permission gap. The two meet at `contact-form.tsx` and should be sequenced together)
@@ -54,10 +55,87 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 
 ## Open Tech Debt
 
+### Ruled genuine debt — the only two [S179]
+
+> **Why these two, and only these two.** `TECH_DEBT.md` is for things Josh has DECIDED to live with,
+> or decisions deliberately deferred — **not a backlog.** A debt file that lists in-flight or
+> schedulable work stops being a debt file. Josh ruled the split at S179: of everything that had
+> accumulated under the branch-scoped provisional ids below, exactly two are genuine debt (each a
+> **deferred decision**, not deferred work). Everything else — owed work with an obvious fix — moved
+> to the register (`docs/specs/outstanding-work-register.md`). The reclassified provisional entries
+> are superseded-in-place further down, with pointers, rather than deleted.
+>
+> **Numbering:** real numbers taken per the header's authority — #154 was the highest allocated and
+> #155 was already earmarked "next free" when `feature/register-backlog` filed. #155 and #156 are
+> the conversion of the two items that landed on `main` as `#1-regbacklog` and `#1-email`; per the
+> S136 rule this is the "convert to a real number when the branch lands" step. ⚠️ Neither number is
+> reused. (Provisional ids on *other* unmerged branches remain their own reconciliation at merge.)
+
+- **#155 — CUSTOM COMPOSABLE ROLES. Ruled toward custom ROLES, not per-person grants; parked to
+  evaluate later.** Josh raised **per-person** visibility — an owner ticking, per employee, which
+  items they can see. Ruled **toward custom ROLES instead**, and parked. It is debt because the
+  **decision is deferred**, not the work. Was `#1-regbacklog` (register A14); converted S179.
+
+  **The reasoning, recorded so a future reader can meet it rather than re-derive it:**
+
+  - **Every gate in the platform keys on `get_my_role()`** — the 7H.6 margin rule, S121's
+    authored-by CO floor, the roster visibility floor, `budgetColumnsFor(role)`
+    (`apps/web/lib/services/invoices-shared.ts`). **Per-person overrides turn each of these from a
+    role lookup into a per-user, per-item lookup.**
+  - ⚠️ **RLS cannot restrict columns.** So a per-person permission on a *field* **multiplies the 1:1
+    side tables** (the pattern already used for `project_financials`, `project_budget_amounts`)
+    **rather than replacing them** — the mechanism does not generalise to arbitrary per-person field
+    grants.
+  - ⚠️ **Testing loses its fixed set.** The S121 audit caught a crew member reading 13 change orders
+    *with cost and markup* precisely because "crew" is a **knowable state** you can assert against.
+    Arbitrary per-person grants have no equivalent — there is no fixture that says "this is what
+    person X sees" to write a regression against.
+  - **Support answers stop being *"that is what a foreman sees"*** and become *"check that person's
+    checkboxes."*
+
+  ⚠️ **The underlying need is real and is why this is parked, not rejected:** a **bookkeeper who
+  needs invoices but not the schedule** fits none of the five roles cleanly. Custom roles serve that
+  need without abandoning the role model — which per-person grants would. Evaluate when a real
+  customer hits the bookkeeper case.
+
+- **#156 — THE SAFETY-INCIDENT NOTIFICATION FANS OUT TO EVERY SUPERVISOR ABOVE THE SUBMITTER, AND
+  WHO SHOULD BE TOLD HAS NOT BEEN RULED.** `app/api/safety-incidents/route.ts:141`
+  (`sendIncidentNotifications`) mails one message per recipient returned by
+  `computeIncidentRecipients` (`lib/services/incident-notify.ts:93`) — **every profile in
+  `owner`/`admin`/`project_manager`/`foreman` ranked above the submitter** (floor: an Owner-submitter
+  still notifies Admin, so nothing is silent). That is **three emails per incident in the four-person
+  fixture**, and far more on a real twenty-person company — it scales with the org chart, not with the
+  incident. Was `#1-email`; converted S179. **⚠️ The prompt that filed it referred to it as
+  `#3-email`; the ledger id it actually carried was `#1-email` — reconciled here to #156.**
+
+  **⚠️ RULED [Josh]: deliberately NOT fixed.** Who gets told about a jobsite injury is a **SAFETY
+  decision, not an email one.** Two things this entry must carry, because both are the reason it is
+  debt rather than a task:
+
+  1. ⚠️ **The send gate now HIDES the symptom** (`email-service.ts`, `a0596db`) — once test mail is
+     redirected, the volume stops reaching an inbox but the fan-out is unchanged, so the count looks
+     solved while the design question is still open; in production the gate does nothing to it at all.
+     This is exactly why it must not be forgotten: it was the single largest contributor to the ~430
+     harness sends that damaged sender reputation (`docs/specs/email-loop-diagnosis.md`).
+  2. ⚠️ **It is debt because the DECISION is deferred, not the work.** Narrowing it (direct-supervisor
+     + owner, or a digest) could mean a real injury reaches fewer people — the opposite failure. **Too
+     few people told is a safety problem; too many and everyone ignores them.** That judgement needs
+     Josh's knowledge of how a real crew operates, and it is **wrong in a way tests cannot catch.**
+
 ### Branch-scoped, awaiting real numbers — `feature/deletion-sweep-analysis` [deletion-sweep §3]
 
 > Provisional id per the S136 rule. Tag `delsweep`. (The `#N-trial` ids amended on this branch
 > belong to the S137/S138 trial work and are not this branch's allocations.)
+
+> ⚠️ **RECLASSIFIED OUT OF DEBT → register [S179].** Josh's S179 split rules this **owed work, not
+> debt**: the fix is one TXT DNS edit Josh already controls. It now lives on the register
+> (`outstanding-work-register.md` §O8 and §Q3), and its closing evidence is **an aggregate report
+> actually landing, not the DNS edit.** The full argument is kept below (never deleted). ⚠️ **One
+> contradiction to surface for Josh, not resolve here:** this entry concludes a `gmail.com` `rua`
+> repoint **"does not work"** (RFC 7489 needs `ezcontractorbinder.com._report._dmarc.gmail.com`,
+> which cannot be published), while register §Q3 records a ruling to **repoint to
+> `ezcontractorbinder@gmail.com`** as "the pragmatic choice that doesn't technically fix the gap."
+> Those two need reconciling before the DNS edit.
 
 - **#1-delsweep — DMARC `rua` still points at `josh@worthprop.com` — the last WorthProp reference
   in the mail configuration.** The live record on the sending domain reads
@@ -109,6 +187,11 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
 > Provisional id per the S136 rule. Tag `email`. Raised while shipping the send gate (§1), the
 > webhook proof (§2) and class-scoped unsubscribe (§3) on this branch.
 
+> ⚠️ **CONVERTED TO A REAL NUMBER → #156 [S179].** This landed on `main` as `#1-email`; per the S136
+> "convert on landing" rule it is now **#156** in the "Ruled genuine debt" section at the top of this
+> file, where its ruling and full reasoning are restated. It STAYS debt (a deferred safety decision).
+> The original provisional text is kept below, never deleted.
+
 - **#1-email — THE SAFETY-INCIDENT NOTIFICATION FANS OUT TO EVERY SUPERVISOR ABOVE THE SUBMITTER,
   AND NOBODY HAS RULED THAT IT SHOULD.** `app/api/safety-incidents/route.ts:141`
   (`sendIncidentNotifications`) mails one message per recipient returned by
@@ -155,6 +238,14 @@ Decide once, for this AND the event log's identical prune (G1 #4 is the same rul
 > `client_contracts_enabled`, racing each other on company A; s145-C5 now drives company B), and the
 > following battery ran 1497/1497 with zero parallel reds. Recorded as fixed in the register.
 
+> ⚠️ **RECONCILED [S179].** Of the four items filed here, **one is genuine debt** (custom roles — a
+> deferred decision) and **three are owed work** (schedulable, obvious fix). Per Josh's S179 split:
+> #1 converted to a real ledger number; #2/#3/#4 moved to the register. Original text kept below,
+> never deleted.
+
+> ⚠️ **CONVERTED TO A REAL NUMBER → #155 [S179].** Stays debt (a deferred decision). Its ruling and
+> fuller reasoning are restated in the "Ruled genuine debt" section at the top of this file.
+
 - **#1-regbacklog — custom composable roles (register A14).** Josh raised **per-person** visibility;
   **ruled toward custom ROLES instead.** Every gate keys on `get_my_role()`; RLS cannot restrict
   columns, so a per-person permission on a *field* multiplies side tables rather than replacing
@@ -162,20 +253,34 @@ Decide once, for this AND the event log's identical prune (G1 #4 is the same rul
   orders precisely because "crew" is a knowable state. ⚠️ **The underlying need is real:** a
   bookkeeper who needs invoices but not the schedule fits none of the five roles.
 
+> ⚠️ **RECLASSIFIED OUT OF DEBT → register §D (A15) [S179].** Owed work, not debt — it needs schema,
+> but the shape is understood. Tracked on the register.
+
 - **#2-regbacklog — "unbilled to client" on Expenses (register A15).** No expense→invoice link
   exists; this needs schema. ⚠️ **Not the same as `13c`'s "Cost you've fronted"** — that is cost
   fronted on a *project*, derivable via `invoice_cost_claims`. Two different questions; do not build
   one and label it the other.
 
+> ⚠️ **RECLASSIFIED OUT OF DEBT → register §D (A16) [S179].** Owed work, not debt — a mechanical
+> ~340-reference sweep (see the correction below). Tracked on the register.
+
 - **#3-regbacklog — package scope rename `@framefocus/shared` (register A16).** ~150 import lines,
   breaks the build on any miss, **zero user-facing change** — the npm scope is a build-time
   identifier that never reaches a browser, a PDF or an email. Do it in one sweep or not at all.
+  ⚠️ **[S179 correction] the "~150" is low:** measured on the tree there are **340
+  `from '@framefocus/shared…'` import statements across 271 files** (`grep -rn`). The classification
+  is unchanged; the number is not.
+
+> ⚠️ **RECLASSIFIED OUT OF DEBT → register §K8 [S179].** Owed work, not debt — pick one name, sweep
+> the consumers, delete the other. Tracked on the register (K8), where it already lived.
 
 - **#4-regbacklog — duplicate token values after the README ramp (K8).** `warning` == `warningDeep`
   and `danger` == `dangerAlt` since the ramp landed — the design carries one of each. **Both names
   were kept deliberately: a repaint is not a rename.** ⚠️ But two names pointing at one hex will
   read as a mistake to the next person; either re-diverge them when the design does, or fold the
   aliases with a sweep of their consumers. Until ruled, neither — this entry is the explanation.
+  ⚠️ **[S179] verified still true:** `apps/web/lib/theme.ts:45-49` — `warning`/`warningDeep` both
+  `#b45309`, `danger`/`dangerAlt` both `#c0362c`, with the collapse documented in-comment.
 
 
 ### Branch-scoped, awaiting real numbers — `feature/s175-dialog-sweep` [S175 item 9]
