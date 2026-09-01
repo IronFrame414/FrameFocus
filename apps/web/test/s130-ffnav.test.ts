@@ -33,7 +33,12 @@ function entries(): Array<{ href: string; label: string; section: string; roles:
 }
 
 describe('A-N4 / §1 — the ruled order', () => {
-  it('is 14 items in the ruled sequence', () => {
+  // ⚠️ WAS 14 [inverted, "move Billing into Settings"]. Billing left the sidebar
+  // to become an owner-only Settings TAB (app/dashboard/settings/page.tsx +
+  // billing-settings-tab.tsx). This is an S157 inversion, not a failure: the
+  // sequence is unchanged, Billing is simply removed. The Admin section is now
+  // Settings alone.
+  it('is 13 items in the ruled sequence (Billing moved to Settings)', () => {
     expect(entries().map((e) => e.label)).toEqual([
       // Top layer — the daily set, no header.
       'Dashboard',
@@ -49,10 +54,15 @@ describe('A-N4 / §1 — the ruled order', () => {
       'Subs & Vendors',
       'Team',
       'Cost Catalog',
-      // Admin.
+      // Admin — Settings only, now that Billing is a tab within it.
       'Settings',
-      'Billing',
     ]);
+  });
+
+  it('Billing is NO LONGER a sidebar item — it is a Settings tab', () => {
+    // The move's core assertion, kept as its own line so a re-added nav entry
+    // fails loudly here rather than silently reappearing in the list above.
+    expect(entries().map((e) => e.label)).not.toContain('Billing');
   });
 
   it('A-N4 — Notifications is EIGHTH and last in the top layer', () => {
@@ -64,11 +74,13 @@ describe('A-N4 / §1 — the ruled order', () => {
     expect(list[8].section).toBe('reference');
   });
 
-  it('the three sections hold 8 / 4 / 2', () => {
+  it('the three sections hold 8 / 4 / 1', () => {
+    // ⚠️ WAS 8 / 4 / 2 — Admin lost Billing to Settings, so it holds Settings
+    // alone. The section still renders (Settings is owner/admin); it is not empty.
     const list = entries();
     expect(list.filter((e) => e.section === 'top')).toHaveLength(8);
     expect(list.filter((e) => e.section === 'reference')).toHaveLength(4);
-    expect(list.filter((e) => e.section === 'admin')).toHaveLength(2);
+    expect(list.filter((e) => e.section === 'admin')).toHaveLength(1);
   });
 
   it('§2 — Contacts and Subs & Vendors are ADJACENT', () => {
@@ -91,14 +103,26 @@ describe('A-N6 — this work changed NO gate', () => {
     }
   });
 
-  it('Settings stays owner/admin; Billing stays owner-only', () => {
+  it('Settings stays owner/admin; Billing owner-only gate MOVED to the Settings tab', () => {
     expect(gateFor('Settings')).toBe("'owner', 'admin'");
-    expect(gateFor('Billing')).toBe("'owner'");
+    // ⚠️ Billing is no longer a nav item, so it has no nav gate to read. Its
+    // owner-only protection did not disappear — it moved to settings/page.tsx,
+    // which adds the billing tab and fetches its data ONLY for an owner. Asserted
+    // at the source so an admin-visible billing tab fails HERE, not in prod.
+    expect(gateFor('Billing')).toBeNull();
+    const settingsPage = readFileSync(
+      fileURLToPath(new URL('../app/dashboard/settings/page.tsx', import.meta.url)),
+      'utf8'
+    );
+    expect(settingsPage).toContain("if (profile.role === 'owner')");
+    expect(settingsPage).toContain("key: 'billing'");
   });
 
   it('everything else is ungated — including Team, which is why it is not in Admin', () => {
     const gated = entries().filter((e) => e.roles !== null).map((e) => e.label);
-    expect(gated.sort()).toEqual(['Billing', 'Cost Catalog', 'Estimates', 'Settings']);
+    // ⚠️ WAS ['Billing', 'Cost Catalog', 'Estimates', 'Settings'] — Billing left
+    // the nav for a Settings tab, so it is no longer a gated nav item.
+    expect(gated.sort()).toEqual(['Cost Catalog', 'Estimates', 'Settings']);
     // §2b: Team being ungated is precisely what kept it out of Admin — an
     // ungated item there would give crew an Admin header with Team under it.
     expect(gateFor('Team')).toBeNull();

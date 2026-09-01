@@ -55,7 +55,10 @@ const TOP = [
 ];
 
 test.describe('A-N1 — three sections, in the ruled order', () => {
-  test('Owner sees all 14 across three sections', async ({ page }) => {
+  // ⚠️ WAS 14 [inverted, "move Billing into Settings"]. Billing became an
+  // owner-only Settings TAB, so it is gone from the sidebar for everyone —
+  // including the owner. The Admin section is now Settings alone. S157 inversion.
+  test('Owner sees 13 across three sections (Billing moved to Settings)', async ({ page }) => {
     await signIn(page, ROLES.owner);
     expect(await navRows(page)).toEqual([
       ...TOP,
@@ -66,7 +69,6 @@ test.describe('A-N1 — three sections, in the ruled order', () => {
       'Cost Catalog',
       '— Admin —',
       'Settings',
-      'Billing',
     ]);
   });
 
@@ -88,18 +90,20 @@ test.describe('A-N1 — three sections, in the ruled order', () => {
 });
 
 test.describe('A-N3 — same order, items removed', () => {
-  test('Admin loses Billing only', async ({ page }) => {
+  // ⚠️ WAS "Admin loses Billing only" — the delta between owner and admin. Now
+  // Billing is a Settings tab, gone from the sidebar for BOTH, so admin and owner
+  // see the identical 13-item nav. Asserted as an equality so a change to one
+  // role's nav that misses the other fails here. Admin's LACK of the billing tab
+  // is proven separately in desktop-settings-billing.spec.ts.
+  test('Admin sees the SAME nav as the owner now — Billing is gone for both', async ({ page }) => {
+    await signIn(page, ROLES.owner);
+    const owner = await navRows(page);
     await signIn(page, ROLES.admin);
-    expect(await navRows(page)).toEqual([
-      ...TOP,
-      '— Reference —',
-      'Contacts',
-      'Subs & Vendors',
-      'Team',
-      'Cost Catalog',
-      '— Admin —',
-      'Settings',
-    ]);
+    const admin = await navRows(page);
+    expect(admin).toEqual(owner);
+    expect(admin).not.toContain('Billing');
+    // Admin still reaches the Admin section — Settings is owner/admin.
+    expect(admin).toContain('Settings');
   });
 
   test('PM keeps Estimates and Cost Catalog, and loses the whole Admin section', async ({
