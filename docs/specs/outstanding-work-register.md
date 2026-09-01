@@ -1346,9 +1346,21 @@ checklist rather than in someone's memory.
 staging** — do not `git add -A`, and do not assume you made the change. This box has destroyed and
 mangled work repeatedly; a clean `git status` at the end is a load-bearing check, not a formality.
 
-### ⚠️ S6 — OPEN [S180], needs an ATTENDED ruling: `display_name` goes stale in PRODUCTION on any name edit
+### S6 — ✅ RESOLVED [Josh, S180]: `display_name` now MIRRORS the profile name (was: stale in production)
+> ✅✅ **RULED & FIXED [Josh, S180].** Josh chose option (a): *"display_name should MIRROR the profile
+> name."* Shipped as `20261100000000_sync_member_display_name.sql` — an `AFTER UPDATE` trigger on
+> `profiles` that recomputes the linked STAFF member's `display_name` (same formula as the creation
+> trigger) whenever `first_name`/`last_name` changes, plus a backfill for existing drift. **Subs stay
+> exempt** (`member_type <> 'subcontractor'`): their `display_name` is the company name (F-6's other
+> half, which stands). Applied to rebuild-test via MCP and **functionally verified** (a probe renamed a
+> staff profile, confirmed `display_name` mirrored, and reverted; 0 staff drift remains). ⚠️ **Production
+> apply is Josh's** (normal migration deploy) — the trigger only closes the drift once it is on prod.
+> This overturns F-6's "no sync trigger" **for staff only**, by ruling. The OPEN analysis below is kept
+> as the record of why.
+
 **Surfaced closing register item 1.2 (the stale-`display_name` twin). The fixture symptom was
-reconciled; the product cause was NOT — and must not be read as resolved.**
+reconciled; the product cause was NOT — and must not be read as resolved.** _(Superseded by the ruling
+above — retained as the reasoning of record.)_
 
 - **What's fixed:** the stale rebuild-test row (`josh+test50@` showed "Josh Bishop" vs profile "Dave
   Whitfield") was reconciled, and `scripts/seed-test-identities.mjs` now self-heals crew/staff

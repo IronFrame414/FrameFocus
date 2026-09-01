@@ -339,6 +339,30 @@ an attended pass or bundled with the next trial-writer.**
 
 ---
 
+## Phase 3 continuation #2 — Josh's build rulings (2026-09-01, later still)
+
+### ✅ Item 3 (ruling 3) — display_name now MIRRORS the profile name — migration `20261100000000`
+- **Ruling [Josh]:** *"display_name should MIRROR the profile name… make something keep it in step,
+  otherwise it drifts again."* Determined the write path first, as asked: `display_name` is set ONCE by
+  `create_member_for_new_profile` at INSERT and has **no sync trigger (spec F-6,
+  `20260704210000:212-213`)**; `updateMyName` renames `profiles` only. So it is stored+read (30+
+  readers), NOT "only seeded" — answer is **add a sync**, not "stop storing it twice."
+- **Built:** `supabase/migrations/20261100000000_sync_member_display_name.sql` — `AFTER UPDATE` trigger
+  on `profiles` (SECURITY DEFINER, same formula as the creation trigger) syncing the linked STAFF
+  member's `display_name` on any name change, + a backfill for existing drift. **Subs exempt**
+  (`member_type <> 'subcontractor'`) — their `display_name` is the company name (F-6's other half
+  stands). Overturns F-6's "no sync trigger" for STAFF only, per the ruling.
+- **Applied** to rebuild-test via MCP `apply_migration`. **Verified:** (a) an atomic DO-block probe
+  renamed a staff profile, confirmed `display_name` mirrored the change, then reverted (raises loudly
+  if the trigger didn't fire — it did not raise); (b) `staff_drift_remaining = 0` after backfill; (c)
+  the pre-existing state already had 0 staff drift (prior instance's row fix), so backfill touched 0 on
+  rebuild-test — production will have real drift to fix on deploy.
+- ⚠️ **Production apply is Josh's** (normal migration deploy); the drift only closes on prod once the
+  trigger is there. No `db:types` regen needed (function+trigger only, no schema-shape change).
+  Register §S6 marked RESOLVED. Commit below.
+
+---
+
 ## CLOSE-OUT (§7) — what closed, what is owed, what I am unsure of
 
 **Type-check:** current combined HEAD (`b7ef776`, my docs commits + the prior instance's item commits)
