@@ -360,6 +360,54 @@ moment. **Whoever deploys next: enumerate the delta first.**
 
 ---
 
+## ⚠️ CLOSED — `/dashboard/projects` "11s" was dev-mode compilation, not latency — **RULED [Josh, S179, 2026-09-01]**
+
+**Not a gate. Nothing is blocked. This is recorded so a FIFTH session does not chase a latency
+bug that does not exist.** Four sessions have now investigated `/dashboard/projects` "slowness."
+It is closed.
+
+**The number that started it was an artefact of `next dev`.** `next dev` compiles each route on
+its first request, and `/dashboard/projects` compiles **3,111 modules** on that first hit. The
+"11.05s" in every prior session's table was the **compiler**, measured once, on a cold route.
+
+**Production, measured:** **337ms cold, 231ms warm.** There is no latency problem on this page.
+
+### ⚠️ THE STANDING RULE — dev-mode first-hit timings are NOT a latency signal
+
+**Any future latency claim in this project must be measured against production or a production
+build (`next build && next start`) — never against a `next dev` first-hit.** A dev first-load
+folds compilation into wall-clock and will read as seconds on any module-heavy route. This rule
+also lives in `CLAUDE.md` → "Known Codespaces Gotchas" (read every session).
+
+> **⚠️ And a warning to whoever measures next, from this very session.** A round-trip
+> reconstruction — counting the page's sequential Supabase calls (~285) and multiplying by a
+> measured warm PostgREST round-trip (~38ms) — **also reproduced ~11s**, by coincidence, and read
+> as confirmation. It was not. A "measurement" that reconstructs the wrong number is the §2 trap
+> wearing a lab coat. **Measure the thing itself (production), not a model of it.**
+
+### The four ruled-out causes, recorded together
+
+| # | Suspected cause | Verdict |
+| --- | --- | --- |
+| 1 | `getDashboardData`'s 28 sequential awaits | **~50ms combined. Not the cost.** Looked structurally suspicious; measured and refuted. |
+| 2 | `getMyMember`'s nine-table `!inner` join | **1.5ms at the SQL level. Not the cost.** The apparent 4.5s was HTTP round-trip, not Postgres; a join rewrite would have saved nothing. |
+| 3 | `createClient()` building a fresh client per call (~28/render, each its own GoTrue lock) | **FIXED (`9692038`) — a real win (~1s), but never the 11s.** The one item of the four that was a genuine cost. |
+| 4 | **Dev-mode on-demand compilation (3,111 modules)** | **THE explanation of the "11s".** Environmental, not a code-structure defect — which is exactly why three prior sessions looked past it at the code. |
+
+**⚠️ Three of the four (1, 2, 4) looked structurally suspicious and were not the cost.** The
+recurring lesson of this whole investigation: the suspicious-looking structure is not the cost —
+measure before theorising.
+
+### The ruled per-project profitability loop is NOT the problem, and its trigger has not fired
+
+`projects/page.tsx` runs `getProfitabilityReport` in a per-project loop behind the
+`canSeeFinancials` gate. Ruled at build time as acceptable until "~40 jobs." **In production it is
+5.8% of the page, and the fixture is at 16 projects — the 40-job trigger has NOT fired.** **Do not
+build the batch helper.** If the trigger ever does fire, that is its own ruled piece of work
+(a `getRevisedContractMap`-shaped grouped query), not this one.
+
+---
+
 ## ~~Gate 3 — 7D–7H specs~~ — **CLOSED [Josh, S150, 2026-08-18]**
 
 > **✅ CLOSED. Every unblocking condition below is met, and the gate blocks work that has
