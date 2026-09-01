@@ -444,6 +444,11 @@ TECH_DEBT line was ever written, so the next reader will assume they differ.**
 > documented in-comment at `:38-40`. It *was* briefly filed in `TECH_DEBT.md` as `#4-regbacklog`, then
 > Josh's S179 split ruled it **owed work, not debt** — so it lives HERE, on the register, as the
 > record. **The fix (owed, small, mechanical):** pick one name, sweep its consumers, delete the other.
+>
+> ✅✅ **DONE [S180, commit `00690df`].** Kept the base names `warning`/`danger`; deleted `warningDeep`
+> and `dangerAlt`; rewrote all 41 call sites. Rename only — no hex change (semantic-status colours, not
+> brand amber). Tailwind config unaffected (raw hex). `tsc --noEmit` clean. Grep confirmed no
+> string-literal/config references existed. See `register-closeout-log.md`.
 
 ### K9 — `crew-manifest.ts:66` still says "platform"
 The literal `description` — *"The all-in-one platform for residential and commercial contractors"* —

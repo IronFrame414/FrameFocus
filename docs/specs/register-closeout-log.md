@@ -19,6 +19,18 @@
 
 ---
 
+## Phase 3 — item outcomes (append-only)
+
+### ✅ 1.1 K8 — DONE — commit `00690df`
+- Deleted `warningDeep` and `dangerAlt` from `apps/web/lib/theme.ts`; rewrote all 41 call sites
+  (`color.warningDeep`→`color.warning`, `color.dangerAlt`→`color.danger`). Updated the theme comment.
+- **Verified:** comprehensive grep (property + quoted string-literal forms, incl. `.json`/`.mdx`,
+  excl. build dirs) found ZERO references outside `color.` property access — no config maps, stories
+  or fixtures used the token names. `npx tsc --noEmit` in apps/web = **exit 0**. Working tree after
+  edit held exactly the 42 K8 files, no billing overlap (checked per Josh's collision warning).
+- **No hex changed** (Josh's constraint). Tailwind config untouched (it uses raw hex, not these names).
+- Files: 42 (`theme.ts` + 41 call sites). Register §K8 marked ✅.
+
 ## ⚠️ Hazard log
 
 - **[Phase 1, 2026-09-01]** `git status` before my log commit showed THREE modified files I never
