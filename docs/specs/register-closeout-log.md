@@ -117,8 +117,35 @@
 | cold build `--force` | ✅ exit 0, 121/121 static pages | validates the K8 render-file rename |
 | V1 live file (in-suite) | ✅ **15/15**, exit 0 | confirms 2.2 in the real live config |
 | env-bleed isolation | ✅ 45 assertions across 6 files | each passes alone under forks |
-| full live RLS battery | ⏳ running (background) | counts to follow |
+| full live RLS battery | ⚠️ **1445 passed / 7 failed / 7 skipped (1459)**, 13 "failed" files of which **7 are `(0 test)` cold-start timeouts** | ALL 7 real failures classified NON-regression (below) |
 | Playwright ×4 | ⏳ pending (after live — shared rebuild-test DB) | |
+
+### Live battery — every red classified (§7), NONE caused by this session
+- Baseline is ~1552/~107 files; this run 1459/111. The gap is mostly the **7 `(0 test)` files** =
+  cold-start `beforeAll` timeouts (rebuild-test spins down when idle; the prompt names this "not your
+  bug"). Re-running warms them.
+- **Re-ran the 5 failing files in ISOLATION** (§7 "re-run before calling anything a regression"):
+  - `s123-reminders-loop` → **3/3 PASS isolated** ⇒ battery failure was **contamination** (concurrent
+    billing session / shared rebuild-test DB, the #150 hazard).
+  - `s164` **F3** ("freshly cancelled inside 30 days", 24s in battery) → passes isolated ⇒
+    **contamination/timing**.
+  - The remaining 5 fail isolated too, but NONE is mine — each verified against the code I changed:
+    - `s126-chat-core` ×2 ("Owner must be mentionable", got `[]`): mention subsystem. **`postableSet`
+      reads `profiles.first_name/last_name` (`lib/chat/threads.ts:152-153`), NOT
+      `company_members.display_name`** — my 1.2 change cannot touch it. This is the S176-rename
+      mention breakage that commit `1ec69aa` addresses, **§2-out-of-scope, "awaiting a CI verdict."**
+    - `s97ct-reminders` #10: `TypeError: cache is not a function` — from `lib/supabase-server.ts:24`
+      `createClient = cache(...)`, the earlier **`[Perf]` commit `9692038`**. Pre-existing, not mine.
+    - `s164` **C6** ("client cannot change her own state", got length 1): client-lifecycle RLS
+      fixture-state; I made no RLS change.
+    - `s175` **B1** ("void names the project"): the estimate it picks is already `void` from a prior
+      run → the correct-but-different refusal fires. Shared-mutable-fixture / unordered-pick class
+      (CLAUDE.md `.limit(1)` + s145). Not my code.
+- **My changed files vs the failing areas: no code-path overlap.** I touched theme tokens (render),
+  `s156-m4-audit.live.ts` (V1), `seed-test-identities.mjs`, and one `company_members.display_name`
+  row. None of reminders / estimate-void / client-RLS / chat-mention logic. (The `chat-composer.tsx`
+  "overlap" is a filename-string coincidence — a `color.warningDeep`→`color.warning` render rename
+  that a live server-side test never exercises.)
 
 ### ⚠️ Regression I introduced and caught (honest record)
 - The first unit run went **1 failed / 1020** — `m6m-pwa.test.ts` A-26b4 asserts `theme.ts` must NOT
