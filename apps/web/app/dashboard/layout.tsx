@@ -20,6 +20,19 @@ export default async function DashboardLayout({ children }: { children: React.Re
     redirect('/sign-in');
   }
 
+  // Option 2 [perf/order] — these four self-scope via RLS (get_my_company_id /
+  // get_my_member_id), so NONE of them depends on the JS `profile` object below.
+  // Start them here, concurrently with the profiles fetch, rather than after it,
+  // so the profiles round-trip overlaps them instead of blocking them. The order
+  // in which they START changes; what any of them RETURNS does not — so §2's
+  // equivalence condition is untouched. Safe to launch before the guard: each of
+  // the four swallows its own errors (null / 0 / defaults), so none can reject
+  // and dangle if the guard below redirects.
+  const openSessionP = getOpenSession();
+  const myMemberP = getMyMember();
+  const timeSettingsP = getCompanyTimeSettings();
+  const unreadCountP = getUnreadCount();
+
   const { data: profile } = await supabase
     .from('profiles')
     // `id` [S126 slice 3] — the chat panel needs the caller's PROFILE id to
@@ -60,14 +73,16 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // every dashboard page. App Router layouts don't refetch on client-side
   // navigation — freshness comes from router.refresh(), which every clock
   // mutation already triggers.
+  // ND-12 — the sidebar badge swallows its own errors and returns 0, so a failed
+  // count hides the badge rather than breaking the shell. companies.name is the
+  // only member that needed profile.company_id, so it is the only one still
+  // started here; the other four were launched above and are awaited here.
   const [company, openSession, myMember, timeSettings, unreadCount] = await Promise.all([
     supabase.from('companies').select('name').eq('id', profile.company_id).single(),
-    getOpenSession(),
-    getMyMember(),
-    getCompanyTimeSettings(),
-    // ND-12 — the sidebar badge. Swallows its own errors and returns 0, so a
-    // failed count hides the badge rather than breaking the shell.
-    getUnreadCount(),
+    openSessionP,
+    myMemberP,
+    timeSettingsP,
+    unreadCountP,
   ]);
 
   return (
