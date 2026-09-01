@@ -19,6 +19,42 @@
 
 ---
 
-## Phase 1 — Analysis (in progress)
+## Phase 1 — Analysis (complete except §2.3 skipped-tests count)
 
-_(entries appended as analysis completes)_
+### 1.1 — K8 duplicate tokens (theme.ts) — CONFIRMED, plan set
+- Verified `apps/web/lib/theme.ts:45-49`: `warning`==`warningDeep`==`#b45309`; `danger`==`dangerAlt`==`#c0362c`. Collapse documented in-comment at `:38-41`.
+- Call-site counts (source, excluding `.next/`): `color.warningDeep` ~80 hits / 38 files; `color.warning` 23 hits. `color.dangerAlt` ~17 hits / 13 files; `color.danger` 77 hits.
+- ⚠️ **Register/prompt said "grep the Tailwind config too" — checked: `apps/web/tailwind.config.ts` uses RAW HEX (`#b45309`, `#c0362c`), NOT the theme.ts token names. So the tailwind config is INDEPENDENT and needs no change.** The K8 dupes are theme.ts-only.
+- **Plan:** keep the base semantic names `warning` and `danger`; delete `warningDeep`/`dangerAlt`; rewrite ~97 call sites (`color.warningDeep`→`color.warning`, `color.dangerAlt`→`color.danger`). Must also sweep test files. Type-check gates correctness. (Phase-2 confirm: base-name survival vs low-churn.)
+
+### 1.2 — company_members.display_name stale — REGISTER IS WRONG on a key premise
+- ⚠️ **Register claim "Nothing reads the column today" is FALSE.** `display_name` is read by 30+ features (expenses author, schedule assignees, lien releases, PDFs, payables, deliveries, change-orders, safety, punch, tasks). It is the app's PRIMARY member-name field.
+- Live rebuild-test query: the ONLY genuine divergence is the owner member `josh+test50@` — `display_name="Josh Bishop"` vs profile `Dave Whitfield`. The QA-sub row's apparent divergence is **BY DESIGN** (sub `display_name` = company_name, not the linked profile person-name).
+- **Root cause established:** `display_name` is seeded ONCE from the profile name by the `create_member_for_new_profile` / `create_member_for_new_subcontractor` triggers at INSERT (migration `20260704210000_company_members_foundation.sql:139,180,202,214`), and there is **NO sync trigger — deliberately, spec F-6** (comment at `:212-213`: "set once at creation, editable afterwards, no sync trigger"). `updateMyName` (`lib/services/profile-self.ts:43`) and the seed both rename `profiles.first_name/last_name` WITHOUT touching `display_name`.
+- ⚠️ **The real finding (as the prompt predicted): they WILL drift again on any name edit, because no-sync is the design.** A fresh rebuild would NOT drift (the profile is born "Dave Whitfield" so the creation trigger sets display_name right); the drift exists only because THIS long-lived rebuild-test DB had the member row created under the old name and the profile was renamed in-place afterwards.
+- **Sanctioned action (prompt: "reconcile, one statement, do not drop"):** one UPDATE on rebuild-test for the owner row. Durable re-drift guard: make the seed reconcile `display_name` for renamed identities. Phase-2 question: whether no-sync (F-6) is still right given display_name is the app's primary name field — that's a ruling, would overturn F-6, so NOT done unattended.
+
+### 1.3 — Trial length duplicated — CONFIRMED, applied/immutable
+- Both `20260918000000_trial_lifecycle.sql:468` and `20261017000000_m9_client_lifecycle.sql:564` carry `v_trial_end := now() + INTERVAL '30 days';` with `'starter','trialing',2` defaults. ⚠️ **APPLIED migrations — will NOT edit.** Report-before-acting per prompt. Options for a single authority (for FUTURE writers): a shared SQL function `trial_end_default()` in a new migration, or a documented note. Low value — no third writer today.
+
+### 1.4 — crew-manifest.ts description — ALREADY DONE
+- `apps/web/lib/crew-manifest.ts` uses `brand.description`; `apps/web/lib/brand.ts:69` HAS the `description` field. The K9 literal-"platform" import gap is CLOSED. ⚠️ Residual: `brand.description`'s VALUE still reads "The all-in-one platform…" — a copy/branding question with no ruled replacement. Flag in Phase 2, do not guess new copy.
+
+### 2.1 — Vitest env-bleed sweep — 12 files, all fork-safe, none vacuous (static)
+- `vitest.config.ts:31` `pool: 'forks'` confirmed. 12 files touch `process.env`; 9 save/restore, 3 mutate-without-restore but only set constants (safe under forks). No vacuity found statically. ⚠️ Prompt wants each RE-RUN under forks to prove it passes for its claimed reason — will run the ~6 unit files (`reply-to.test.ts`, `email-send-gate.test.ts`, `supabase-server.identity.test.ts`, `card-signup-webhook.test.ts`, `s160-auth-email.test.tsx`, `auth-email-hook-signature-headers.test.ts`) in Phase 3.
+
+### 2.2 — V1 blind spots (s156-m4-audit.live.ts:360-397) — CONFIRMED, plan set
+- Grep set is `apps/web/app apps/web/components apps/web/middleware.ts`. Reader `clientContractAppliesToEstimate` is DEFINED at `apps/web/lib/services/contracts.ts:211` and has ZERO callers anywhere. Blind spots: `apps/web/lib/**` (needs the definition-file exclude) and `packages/**`.
+- **Plan:** widen the grep to include `apps/web/lib` and `packages`, excluding `contracts.ts`; prove-red by temporarily adding a caller under `lib/`, confirm red, remove.
+
+### 2.3 — 279 skipped tests — agent still running (breakdown pending).
+
+### 2.4 — desktop-payload #117 — flake, did not recur recently
+- `apps/web/e2e/desktop-payload.spec.ts` tests the #117 CO-money floor. Register O6: 3rd sighting, but "did NOT recur in the most recent Playwright run." Identifying the contaminating neighbour ONCE requires running shard combinations — expensive, and the dev server won't survive a full run. **Plan:** verify during the Phase-3 battery; deep-dive only if it recurs. Do not chase a heisenbug that may be resolved.
+
+### 3.1 — A15 unbilled-to-client — genuinely missing schema (Phase-2 approval)
+- No direct expense→invoice link exists. Path today is expense→expense_allocation→invoice_cost_claims→invoice_line→invoice. Recommended minimal shape: add `source_expense_id uuid` FK to `invoice_cost_claims` (+ index), backfillable from the allocation. No new table ⇒ no COMPANY_CHILDREN/COMPANY_TABLES change; Floor-compliant (claim inherits invoice visibility). ⚠️ It is a real migration + type regen + tests, not a mechanical fix. Present shape in Phase 2; build only if approved.
+
+### 3.2 — A16 package scope rename — measured, BLOCKED on a target name
+- Exact: 343 import lines across 274 files (271 in apps/web, 3 in docs), plus 6 build-critical config refs (3 package.json `name`/deps, 2 tsconfig `paths`, 1 next.config `transpilePackages`). Pure literal `@framefocus/shared` replace, no dynamic refs. Register's "340/271" was accurate for apps/web.
+- ⚠️ **BLOCKER: nowhere in the register or prompt is the NEW name stated.** Cannot rename to an unknown target. **Recommendation: DO NOT attempt unattended** — enormous, zero user-facing value, build-breaks on any miss, and no ruled target name. Needs Josh's explicit go + the name.
