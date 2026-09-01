@@ -204,3 +204,20 @@ I cannot re-verify (MCP is rebuild-test-only). Flagging, not blocking — it's a
   1214`, tagged `[register-backlog §1.3]`) — the prompt's "mark in the redesign spec AND the register"
   was already half-done. Only the register lacked them. Added the ⛔ block to the register L4 entry,
   citing the spec lines. Docs-only.
+
+### ✅ Register reconciliation — `outstanding-work-register.md` (docs-only)
+Recorded the verified Phase-1 outcomes on each entry, since the register was stale:
+- **K2** → ✅ ALREADY BUILT (migration `20261049000000`, constraint live + `s140:141` test). Entry was stale.
+- **L3** → ✅ THE RULED SIX ARE BUILT (`desktop-confirms.spec.ts`). Entry was stale.
+- **K7** → `14a` DONE (commit `d64f375`), `14d` OWED (store ruling), premise "no screen uses them" corrected.
+- **K10** → 📌 OWED, routed to Josh with the exact real-handset check.
+- **K3** → 📌 Josh's task (out of scope §3.2); recorded, not actioned; the one-PO CHECK check noted.
+- **K9** → already recorded closed in a prior pass; left as-is.
+
+### 📋 3.1 (C4/A6) margin target — SHAPE REPORTED (report only; do not build)
+Register `:167` already carries this specced; the shape, restated for the record:
+- **Column:** `companies.margin_target_percent numeric NULL` (company-wide; one column).
+- **UI:** one Company Settings field (Owner/Admin, like the other company settings).
+- **Behaviour:** nullable; **when unset, NO "against target" comparison renders** — not a defaulted
+  number. Unblocks `14a` "Margin under target", `15a` margin-by-job, `13e` "under your 30% target",
+  and (later) the K7 `14a` over-budget row tint. **Not built — report-only.**
