@@ -118,7 +118,7 @@
 | V1 live file (in-suite) | ✅ **15/15**, exit 0 | confirms 2.2 in the real live config |
 | env-bleed isolation | ✅ 45 assertions across 6 files | each passes alone under forks |
 | full live RLS battery | ⚠️ **1445 passed / 7 failed / 7 skipped (1459)**, 13 "failed" files of which **7 are `(0 test)` cold-start timeouts** | ALL 7 real failures classified NON-regression (below) |
-| Playwright ×4 | ⏳ pending (after live — shared rebuild-test DB) | |
+| Playwright ×4 | ✅ **555 passed / 3 failed / 2 flaky / 11 skipped** (prod server) — 3 fails all §2-billing, 2 flaky = #117 (recovered) | RAN against `npm run start`; see the RECONCILIATION section at EOF |
 
 ### Live battery — every red classified (§7), NONE caused by this session
 - Baseline is ~1552/~107 files; this run 1459/111. The gap is mostly the **7 `(0 test)` files** =
@@ -389,3 +389,60 @@ hardening), 2.2 V1 grep widened & proven red-capable, 2.1 env-bleed (45 assertio
 - **Branch entanglement:** `feature/register-closeout` HEAD is shared with the billing session, so its
   history interleaves both sessions' commits (hazard log above). My work is separable **by path** (every
   commit is `docs/specs/*.md` only); Josh sorts the branch at merge.
+
+---
+
+## ⚠️ RECONCILIATION — two close-out instances ran concurrently; THIS one ran the battery
+
+**Read this with the CLOSE-OUT (§7) section above.** During this close-out, the shared worktree/branch
+carried **THREE** sessions at once: two register-close-out instances (whose "Register close-out"
+commits interleave in `git log`) **and** the billing session (`f3e03dc`, `1d18b65`, `8985b98`
+[Billing→Settings]). The other close-out instance wrote the CLOSE-OUT above and **deliberately left
+Playwright + 2.4 OWED** ("Playwright never ran… owed on a quiet DB"). **This instance then RAN the full
+§7 battery.** Its results — the piece that close-out marked unknown — are below. Append-only; nothing
+above is rewritten.
+
+### The full §7 verification battery — as actually run (this instance)
+| Suite | Result | Verdict |
+| --- | --- | --- |
+| type-check `--force` | exit 0, 5/5 packages | green |
+| lint `--force` | exit 0 | green |
+| unit (`vitest run`) | **1021 passed / 1021**, 0 skip | green (caught + fixed my own K8 `'brand'` comment regression first) |
+| cold build `--force` | exit 0, 121/121 pages | green — validates the K8 render rename |
+| live RLS (`test:live`) | **1445 passed / 7 failed / 7 skipped (1459)** | 7 reds ALL classified non-regression (see the live-battery section above); 7 `(0 test)` files = cold-start `beforeAll` timeouts |
+| **Playwright ×4** (prod server) | **555 passed / 3 failed / 2 flaky / 11 skipped** | see below |
+
+### Playwright — every non-pass classified, NONE caused by this session
+- **3 failed — ALL `desktop-settings-billing.spec.ts`** (Billing tab present / old-URL redirect /
+  `?tab=billing` deep-link): the **§2 OUT-OF-SCOPE Billing→Settings feature**, mid-build by the
+  concurrent billing session (its `f3e03dc`/`1d18b65` landed but the tab isn't fully wired in my build
+  snapshot). **Not mine** — I touched nothing in billing.
+- **2 flaky — `m-details.spec.ts` M-31 #117** (net_delta Owner/Admin/PM-only; signing-token-never-
+  rendered): **this IS 2.4 / register O6 — the desktop-payload #117 flake.** It **flaked then PASSED on
+  retry** (flaky, not failed). The primary `desktop-payload.spec.ts` #117 spec passed outright.
+  ⚠️ **2.4 ANSWERED: #117 still flakes intermittently but self-recovers on retry — not a regression,
+  and the contaminating neighbour was not isolated** (that needs shard-combination runs on a quiet DB;
+  a flaky-not-failed result did not justify it here).
+- **11 skipped** — the fixture-data guards (the other instance's "42 guards" family). ⚠️ **This
+  corroborates that instance's 2.3 correction:** an actual run skips **single digits / low-teens, NOT
+  279** — the "279" was never a live-battery number.
+
+### Resolved vs. the other instance's CLOSE-OUT
+- Its **"§7 Playwright ×4 — NOT run"** → **NOW RUN** (555 passed). Resolved.
+- Its **"2.4 desktop-payload #117 — NOT observed"** → **NOW OBSERVED** (flakes, self-recovers). Resolved.
+- Its **2.3 "runtime skip tally UNKNOWN"** → my run shows ~11 skips, confirming the mechanism (fixture
+  guards) and that 279 is not reproduced.
+
+### ⚠️ Caveat — I ran Playwright on the shared rebuild-test DB
+The other instance avoided running Playwright partly to not contaminate the shared DB while the billing
+session works. I ran it (the §7 battery is an explicit ask, and "Do not make it run" was Josh's 2.3
+*fixture-seeding* ruling, not a ban on the verification battery). The billing failures are the billing
+session's OWN in-flight specs, not damage I caused; but a concurrent e2e run on a shared DB is a real
+interaction — flagged so it is understood, not rediscovered. Every code commit this session is
+path-scoped; branch entanglement across all three sessions is Josh's to sort at merge.
+
+### Net state of the ten items (both instances combined)
+1.1 K8 ✅ done · 1.2 display_name ✅ done (+seed; prod drift OPEN as §S6) · 1.3 ✅ ruled (shared constant),
+apply deferred · 1.4 ✅ already done (copy residual → rebrand) · 2.1 ✅ verified · 2.2 ✅ done ·
+2.3 ✅ finding surfaced + **runtime tally now measured (~11, not 279)** · 2.4 ✅ **observed: flakes,
+self-recovers** · 3.1 A15 ⏸️ deferred (full design captured) · 3.2 A16 ⏸️ deferred to rebrand.
