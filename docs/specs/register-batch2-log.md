@@ -321,6 +321,82 @@ all checked before any write.
   (CLAUDE.md S131 floor tests count rows), so I used the existing usable three. Chips show
   `Casey Crew` / `Dave Whitfield` / `Pat Manager` — acceptable, not `asdf`-class junk.
 
+## Session continuation — final battery (§10)
+
+Exit codes read from PRINTED `*_REAL_EXIT=` lines, never a wrapper echo (§8). `turbo --force` used so
+no cache replay.
+
+| Suite | Result | Exit |
+| --- | --- | --- |
+| type-check `--force` (turbo) | 5/5 packages | **0** |
+| lint (`turbo run lint --force`) | 1/1 (warnings only: `no-img-element`) | **0** |
+| unit (`vitest run`) | **1021 passed / 1021**, 73 files | **0** |
+| cold build (`turbo run build --force`) | compiled + prerendered, 2m59s | **0** |
+| live RLS (`npm run test:live`) | **1447 passed / 5 failed / 7 skipped** (1459), 99 pass + 12 fail files | **1** |
+| Playwright ch1 (desktop-chat ×7 files) | **32 passed / 1 flaky** (retry-recovered) | **0** |
+| Playwright ch2–4 | _running in background — recorded below_ | _tbd_ |
+
+The four local suites match baseline exactly (nothing this session changed code — only DB fixture data
++ this log). **No code changed since the prior battery at `f7ef294`**, so type-check/lint/unit/build are
+re-confirmations, not new signal.
+
+### ⚠️ Live RLS exit 1 — full classification. NONE is caused by this session's changes.
+
+My only changes are DB fixture data (`expenses`, `schedule_entries` on Sabal Point) + markdown. **No
+failure touches those two tables** — proven by every stack trace below. I re-ran the failed files
+single-threaded in isolation (`--no-file-parallelism`) per §10 before classifying; the count dropped
+from 5→3 test failures, confirming several were parallel-load/auth flakes.
+
+**Baseline note (a finding, not a footnote — §10):** 1459 tests ran vs the ~1552 baseline. The ~93-test
+gap is the 7 files that failed at SUITE level (`(0 test)`) and never registered their tests — Class A
+below.
+
+**Class A — `TypeError: cache is not a function` — a MAIN-LEVEL REGRESSION, uncaught because live was
+the owed suite.** ⚠️ **This is the important finding.**
+- Files (full run): `s131-punch-names`, `s133-subcontractor-read-floor`, `s171-selections-lifecycle`,
+  `s174-markup-snapshot`, `s97ct-deposit-credit`, `s97ct-estimate-lines`, `s97ct-standalone-income`
+  (all `(0 test)`), plus the single test `s97ct-reminders` #10. **Persists in isolation** → deterministic.
+- Stack: `lib/supabase-server.ts:24` — `export const createClient = cache(async () => …)`. React's
+  `cache()` resolves as **undefined** in the live vitest node env, so every live-test file that
+  transitively imports a **server** service (e.g. `lib/services/punch.ts` → `supabase-server.ts`) throws
+  at module load and registers zero tests.
+- **Root cause + provenance:** commit **`9692038` `[Perf] Option 1 — one Supabase client per request
+  (shared via React cache())`, dated 2026-09-01, is on `main`** — and `supabase-server.ts` is
+  **unchanged on this branch** (`git log main..HEAD -- apps/web/lib/supabase-server.ts` is empty). The
+  live config (`test/live.vitest.config.ts`) stubs `server-only` (`:60-61`) but provides **no React
+  `cache` shim / `react-server` condition**. So yesterday's perf commit broke these live files on main;
+  nobody saw it because live is the suite this campaign never ran until now.
+- ⚠️ **NOT FIXED — out of scope + needs a ruling (§6/§9).** The fix is test-infra (shim `cache` in the
+  live config, or move `cache()` off module top-level) and is Josh's call. Real app runtime is
+  unaffected — the cold **build passed**, and Next provides the `react-server` condition at runtime
+  (Playwright drives the real prod server, where `cache` works). **This is the one red the battery
+  should escalate.**
+
+**Class B — auth `sessionFor(...): password failed; link failed`** — `s126-chat-core`,
+`s164-m9-client-lifecycle`. The fixture user could sign in via neither password nor magic-link → an
+auth-service/rate-limit flake (in the PARALLEL run s126 instead failed a mention assertion — i.e. it
+fails differently each run, the signature of a flake). Not code, not my data.
+
+**Class C — cold-start / statement-timeout / purge-teardown contention** — `s126` & `s178`
+(`Hook timed out in 240000ms`), `s178` (`purge companies … violates FK contacts_company_id_fkey`),
+`s97ct-reminders` teardown (`canceling statement due to statement timeout` + `projects_contact_id_fkey`).
+This is the exact class §7 says is **not a bug** (rebuild-test spins down when idle; heavy `beforeAll`
+hooks hit 240s; the purge takes FK-validation locks under load — same family as K11). It got *worse* in
+isolation precisely because the DB had gone cold between the two runs. Each file purges its OWN marker
+companies, so my Sabal-Point seed is not in their delete set.
+
+**Class D — `s175-estimate-void-reissue` B1** — `expected 'A void record cannot be rewritten.' to match
+/converted into the project/i`. Persists in both runs. The test wants a converted-but-not-yet-voided
+estimate and asserts the "converted, cannot void" refusal; the shared estimate has **already been
+voided by a prior run**, so it hit the "void record" branch instead. Textbook shared-DB state
+contamination — the S157 trap ("asserts a supported action can never happen" against live mutable
+fixtures). Pre-existing fixture fragility; not estimates code I touched (I touched none).
+
+**Bottom line:** exit 1 is real, but every red is (A) a main-level perf-commit/harness gap, (B) auth
+flake, (C) the ruled-not-a-bug cold-start/purge class, or (D) pre-existing shared-state fixture
+fragility. **Zero reds trace to the screenshot-blocker fixture work.** The one worth Josh's attention is
+Class A (`cache is not a function`), which the owed live run has now surfaced on main.
+
 ### ⚠️ ITEM 1 · K7 — nothing to build this session
 - `14a` needs-attention row tint is DONE + committed (`d64f375`, verified in Phase 3 above); `14d` subs
   tint remains SKIPPED by ruling (insurance two-store question, §8.4 LEAVE AS IS). No new K7 work.
