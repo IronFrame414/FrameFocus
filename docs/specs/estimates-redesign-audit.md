@@ -23,6 +23,12 @@ Tags used per line: **[verified: <how>]** = read from live schema, an RPC body, 
 
 ## 1 — Headline: the shape of the job
 
+> **⚠️ Phase 1.5 update [Josh, S103].** Josh has ruled on all twelve §7 questions and the decisions
+> around them. **The rulings are in §8** (with the format set at §8·A, deferrals at §8·B, and the
+> migration count at §8·C). Sections 1–7 below are the original Phase-1 audit; where a ruling
+> overtakes them the original text is kept and marked `SUPERSEDED [Josh, S103]` at the point it
+> occurs. Read §8 for what was decided.
+
 **This is not a greenfield build. It is a reconciliation.** The base `main` this branch was cut
 from already contains a large, in-flight "PO module / desktop redesign" that implements a majority
 of the 15 handoff screens — including the three screens the §8.10 inventory (taken on an older
@@ -86,6 +92,11 @@ Handoff ids. For each: **exists today / required / ties into / class (a–d) / o
 - **Open:** "Pricing basis — NEW" card overlaps the existing `ContractSection`/pricing-mode block —
   is it a re-layout of those, or a new concept? "Estimator" and "lead source" have no obvious
   estimate column **[verified: not in `estimates` column list]**.
+  > **⚠️ SUPERSEDED [Josh, S103] (R10).** The Class "(c) for … lead source / estimator" no longer
+  > holds: **estimator** renders the existing creator reference read-only (no column); **lead source
+  > is removed from the estimate** entirely (lives on the contact, per-client). **"Also send to"** is
+  > in scope and still needs a store (shape = spec-run concern); the **portal-status pill** is
+  > contact data, not a new estimate column. The "Pricing basis" overlap question stays open.
 
 ### 19a · Review & Send — a **sheet**, not a page
 - **Exists today** **[verified]**: send lives in the **Details right-rail** (`SendProposalModal`,
@@ -106,6 +117,9 @@ Handoff ids. For each: **exists today / required / ties into / class (a–d) / o
 - **Open:** biggest re-architecture on the branch — does the `/proposal` route survive as the PDF
   pane's source, or does its content move into the sheet? The footer promises a version bump the
   code cannot make today.
+  > **⚠️ RESOLVED [Josh, S103] (R1, R2).** Build the sheet; `/proposal` **stays a route** and feeds
+  > the PDF pane (render logic does not move). The version bump is a **send counter** (R2), so the
+  > footer's promise is now buildable.
 
 ### 19c · Sub bid — sending the request
 - **Exists today** **[verified]**: `bidding-tab.tsx` (282 lines) lists bids and records them;
@@ -155,6 +169,8 @@ Handoff ids. For each: **exists today / required / ties into / class (a–d) / o
   new wizard = **(a) large**.
 - **Open:** honour the shipped home (Deliveries) or relocate into a convert wizard that must first
   be built? (Q for Josh.)
+  > **⚠️ SUPERSEDED [Josh, S103] (R5).** Stays on Deliveries; no Convert wizard is built. The
+  > "(a) large" wizard branch is closed.
 
 ### 18b · The purchase order — **ALREADY BUILT**
 - **Exists today** **[verified]**: `[poId]/page.tsx` + `po-lines-panel.tsx` + `po-actions.tsx` +
@@ -183,6 +199,8 @@ Handoff ids. For each: **exists today / required / ties into / class (a–d) / o
 - **Ties into:** `estimate-items-client.ts` batch insert, `cost_catalog`.
 - **Class:** **(a)** restyle of the built sheet; **(b/d)** assemblies + extra sources are net-new.
 - **Open:** are Assemblies in scope for THIS branch, or deferred (they were deferred once already)?
+  > **⚠️ SUPERSEDED [Josh, S103] (R11).** Deferred a second time — Assemblies AND the "from a sub
+  > bid" / "past estimate" sources. Staged for `TECH_DEBT` as `#1-estred` (§8·B).
 
 ### 16b · Scope of Work
 - **Exists today** **[verified: `text-tabs.tsx:198-404`]**: reorderable sections stored as
@@ -223,6 +241,11 @@ Handoff ids. For each: **exists today / required / ties into / class (a–d) / o
   foreman cannot reach estimates at all — still applies; keep foreman off the role list.
 - **Open:** replace the single blob with rows (migration + carry logic change), or keep the blob and
   fake threading? The handoff clearly wants rows.
+  > **⚠️ SUPERSEDED [Josh, S103] (R4).** Keep the blob; the per-note carry-to-project ticks are
+  > dropped, so no `estimate_notes` rows table. The "(c) threaded notes = a new rows table" class and
+  > "the handoff clearly wants rows" above no longer hold — the handoff's threaded notes are declined
+  > on purpose. The **history rail survives**, fed by R3's `estimate_events` log, not by note rows.
+  > The §8.10.5 foreman correction still stands.
 
 ### 9b · Line Items
 - **Exists today** **[verified: `items-tab.tsx` (980 lines)]**: catalog search, category subtotals,
@@ -246,6 +269,10 @@ Handoff ids. For each: **exists today / required / ties into / class (a–d) / o
 - **Open:** the handoff's format picker groups **6** names (4 lump-sum + 2 open-book); the stored
   `proposal_pricing_level` has **5** values and no open-book/T&M-itemized member — mapping needs a
   decision (Qs).
+  > **⚠️ SUPERSEDED [Josh, S103] (R8 / §8·A).** The grouping is replaced: six formats on two tiers
+  > (lump sum / detailed), grouped by *which prices print*. The stored value moves from five to these
+  > six (DDL + row mapping). Open-book (Cost Plus / T&M) printing is an **open item** for the spec
+  > run — not decided.
 
 ---
 
@@ -280,6 +307,13 @@ exists" cases are not re-proposed.**
 | `bid_holds_until date NULL` | `estimate_sub_bids` | 19c, 19d | — | [verified absent] |
 | `included boolean` / section `kind` | `scope_sections` JSONB | 16b | — | JSONB shape change, no migration |
 
+> **⚠️ RULINGS ON THE COLUMN LIST [Josh, S103].** `scope_coverage_percent` — **from the sub via the
+> reply link, never computed** (R6). `default_deposit_percent` / `default_retainage_percent` —
+> **agreed, add both** (R9). Estimator / lead source — **no estimate column**: estimator is the
+> existing creator reference; lead source is removed from the estimate entirely (R10). **Add one not
+> listed above:** the stored **proposal-format value** must change from five values to the new six
+> (§8·A) — DDL + row mapping (R8). `invoice_due_days` remains **unruled** (spec-run concern, §8·C).
+
 **Proposed new tables:**
 | Table | Purpose | Screen(s) | Note |
 | --- | --- | --- | --- |
@@ -288,6 +322,12 @@ exists" cases are not re-proposed.**
 | sub-bid **request** + tokenised **reply** (like `signing_sessions`) | link-reply external surface | 19c | external surface — its own build (Qs) |
 | `scope_library` (or company JSONB) | saved scope sections | 16b | store shape TBD (Qs) |
 
+> **⚠️ RULINGS ON THE TABLE LIST [Josh, S103].** `estimate_events` — **YES**, one append-only log for
+> both surfaces, capturing **reprice / send / award / convert** (clone excluded) (R3). `estimate_notes`
+> — **DROPPED**: the blob is kept and per-note ticks are dropped, so this table is not built (R4). The
+> sub-bid tokenised **request + reply** surface — **YES**, modelled on signing (R6). `scope_library`
+> stays a spec-run shape question.
+
 **Proposed new/changed services & RPCs:**
 - **PO drafting from estimate already exists** in the service layer (`createDraftPos`,
   `listDraftableLines`, `groupDraftableLines` — `po-lines-client.ts`). `convert_estimate_to_project()`
@@ -295,7 +335,8 @@ exists" cases are not re-proposed.**
 - `set_winning_bid` would need to also persist the split/coverage if 19d captures them.
 - Event-emitting writers (on reprice via `recalculateEstimateTotals`, on send, on sub-bid award) to
   populate `estimate_events` — **(d)**.
-- Version-bump-on-send logic — **(d)** (collision #2).
+- Version-bump-on-send logic — **(d)** (collision #2). **→ RULED [Josh, S103] (R2): a send counter
+  on the existing `version_number`; no new table.**
 
 ---
 
@@ -304,9 +345,9 @@ exists" cases are not re-proposed.**
 | # | Verdict | Evidence |
 | --- | --- | --- |
 | **1 — no event log** | **CONFIRMED (with nuance).** No generic estimate audit/event/history table exists. **[verified: table-name sweep for event/audit/history/activity/log]** BUT partial event sources exist and already power Client Activity: `proposal_views` (opens), `email_logs` (sends, keyed `estimate_id`), `signing_sessions` (sign/decline), `client_access_events` (portal). **What has no source anywhere is the value-change history** — "Repriced to $123,651", "Margin dropped 31% → 18.4%", "Created from template". **Smallest model:** an append-only `estimate_events {id, company_id, estimate_id, kind, actor_id, created_at, payload jsonb}` written at three points — reprice (`recalculateEstimateTotals`), send, and sub-bid award. It serves 16d's rail and 19b's activity from one table. |
-| **2 — no version numbering** | **CONFIRMED.** `estimates.version_number text DEFAULT 'v1.1' NOT NULL` **[verified: live column default]**, and **zero writers** — only two readers, `proposal-data.ts:256` and `estimate-builder.tsx:361`, plus the dead-code comment at `estimate-health-panel.tsx:7`. **[verified: grep]** The design's footer promises "Edits after this create v1.2". **The choice (a send-counter on the column vs. immutable snapshots) is Josh's** — I do not make it. A counter is one writer on send; snapshots are a new table. |
+| **2 — no version numbering** | **CONFIRMED.** `estimates.version_number text DEFAULT 'v1.1' NOT NULL` **[verified: live column default]**, and **zero writers** — only two readers, `proposal-data.ts:256` and `estimate-builder.tsx:361`, plus the dead-code comment at `estimate-health-panel.tsx:7`. **[verified: grep]** The design's footer promises "Edits after this create v1.2". **The choice (a send-counter on the column vs. immutable snapshots) is Josh's** — I do not make it. A counter is one writer on send; snapshots are a new table. **→ RULED [Josh, S103] (R2): a SEND COUNTER — one writer on the existing column, no new table.** |
 | **3 — margin target not built** | **CONFIRMED.** `companies.margin_target_percent` does **not** exist; no `margin_target` token anywhere in code/migrations. **[verified: `companies` column list + grep]** The rest of Estimate health IS derivable today: `computeEstimateHealth` (`apps/web/lib/estimate-health.ts`) already returns price/cost/profit/margin from row cost bases, and renders margin as a number with **no** target comparison, by design **[verified: `estimate-health-panel.tsx:92-103` + its header comment]**. Add the column + one Settings field; comparison renders only when set. |
-| **4 — structured payment terms not stored** | **PARTLY REFUTED.** **`estimates.retainage_percent numeric(5,2)` EXISTS** (`20260926000000_7i_contracts.sql`) **[verified]** — the collision's premise that structured terms aren't stored is wrong for retainage. **Deposit % is confirmed absent**; invoice-due is per-invoice; and **`companies` has no deposit/retainage default** to diff "changed from default" against **[verified]**. To keep deposit invoice + retainage draws + printed terms in sync: add `estimates.deposit_percent` and company-level defaults; retainage already flows. |
+| **4 — structured payment terms not stored** | **PARTLY REFUTED.** **`estimates.retainage_percent numeric(5,2)` EXISTS** (`20260926000000_7i_contracts.sql`) **[verified]** — the collision's premise that structured terms aren't stored is wrong for retainage. **Deposit % is confirmed absent**; invoice-due is per-invoice; and **`companies` has no deposit/retainage default** to diff "changed from default" against **[verified]**. To keep deposit invoice + retainage draws + printed terms in sync: add `estimates.deposit_percent` and company-level defaults; retainage already flows. **→ RULED [Josh, S103] (R9): add both company defaults (deposit + retainage).** |
 | **5 — convert creates no POs** | **CONFIRMED.** Full RPC read live (`pg_get_functiondef`): `convert_estimate_to_project()` creates project, `project_financials`, `client_contracts` + `client_contract_amounts`, backfills `contract_documents.project_id`, builds `project_budget_items` + `project_budget_amounts` per row (cost expression inlined), and `subcontractor_contracts` from winning bids — **no `purchase_orders` INSERT** **[verified: RPC body]**. It **belongs beside, not in**: PO drafting is already a separate flow (`createDraftPos`) reading the budget/line rows the RPC produced, homed on Deliveries. 18a's "third step of the convert flow" is a UI placement question, not an RPC change. |
 | **6 — line rows have no vendor** | **REFUTED.** `estimate_line_rows.vendor_id uuid → subcontractors(id)` exists (`20261041000000`, CHECK-scoped to material rows) **[verified: FK catalog]**; `cost_catalog.default_vendor_id` seeds it; and 18a assigns vendors from real vendor rows on the unassigned card. Vendor is optional (nullable) exactly as the "Unassigned lines" card implies. |
 | **7 — sub-bid comparison needs missing fields** | **CONFIRMED.** `estimate_sub_bids` has `bid_amount`, `is_winner`, `received_at`, `bid_document_file_id`, `notes` only — **no** labor/material split, **no** scope_coverage, **no** bid_holds_until **[verified: live columns]**. `is_winner` + `set_winning_bid` exist **[verified: RPC body]**. The **link-reply is an external surface** — model it like `signing_sessions` (tokenised, service-role write), flagged as its own build. |
@@ -370,6 +411,14 @@ order the dependencies allow.
 7. **Deferred/optional:** Assemblies and the "from a sub bid / past estimate" add-sheet sources
    (17); the saved `scope_library` (16b). Independent; slot wherever capacity allows.
 
+> **⚠️ RULINGS IMPACT ON THIS ORDER [Josh, S103].** Step 1 gets **simpler**: 16d keeps the blob (R4),
+> so no `estimate_notes` work. Step 4's "decide #2 before writing it" is **decided** — a send counter
+> (R2) rides on the same send-time writer. **Add a step** for the **proposal format-set** DDL + row
+> mapping (§8·A / R8) — a screen-9d dependency. Step 5 keeps the tokenised link-reply surface (R6).
+> Deferred item 7 (Assemblies / alt sources) is now **`TECH_DEBT #1-estred`** (§8·B); customized
+> templates are **`#2-estred`** (§4). The full ruled migration count is worked in **§8·C** ("five as
+> bundled", with the flagged riders).
+
 ---
 
 ## 7 — ⚠️ Questions for Josh (one batch)
@@ -377,39 +426,247 @@ order the dependencies allow.
 1. **19a Review & Send is specced as a sheet; today it's a right-rail + a separate `/proposal`
    route.** Rebuild as the pinned sheet (largest single re-architecture on the branch), or keep the
    route and restyle? If the sheet, does `/proposal`'s content move into it or feed its PDF pane?
+   → **RULED [Josh, S103] (R1):** build the sheet; `/proposal` stays a route and feeds its PDF pane.
 2. **Version numbering (collision #2):** the footer promises "edits after send create v1.2". Which
    meaning — (a) a send-counter incrementing `version_number` (one writer), or (b) immutable
    snapshots of the estimate per version (a new table)? This gates step 4/6.
+   → **RULED [Josh, S103] (R2):** a send counter — one writer incrementing on send, not snapshots.
 3. **Estimate event log (collision #1):** OK to introduce one append-only `estimate_events` table as
    the source for BOTH 16d's history rail and 19b's activity, written at reprice / send / award? Any
    other events you want captured (decline, clone, convert)?
+   → **RULED [Josh, S103] (R3):** yes, one append-only log for both surfaces. Capture reprice, send,
+   award, **convert**; **clone excluded**.
 4. **16d Notes — threaded rows vs blob.** The handoff wants author+timestamp threads and **per-note**
    carry-to-project ticks; today it's a single `internal_notes` blob carried whole. Replace with an
    `estimate_notes` rows table (migration + a change to how `convert_...()` carries notes), or keep
    the blob and drop the per-note ticks?
+   → **RULED [Josh, S103] (R4):** keep the blob; drop the per-note ticks. The handoff's threaded
+   author/timestamp notes are declined on purpose. The history rail is fed by R3's event log.
 5. **18a placement.** PO drafting is already built and homed on the **Deliveries** tab (the prior
    spec ruled it "subsumes the convert-flow entry"). Keep it there, or build a multi-step Convert
    wizard (Job details → Budget → POs) to host it as the handoff shows? The wizard does not exist
    today.
+   → **RULED [Josh, S103] (R5):** stays on Deliveries; no Convert wizard is built.
 6. **Sub-bid reply (19c "a link they fill in").** Confirm this is a **tokenised external surface**
    modelled on `signing_sessions` (own build, own route, service-role writes). And: does
    **scope-coverage %** come **from the sub** via that link (safe), or is it computed against your
    scope (inherits the Coverage-check hazard — I would not)?
+   → **RULED [Josh, S103] (R6):** yes, tokenised external surface like signing; scope-coverage %
+   comes **from the sub** via the link, never computed against your scope.
 7. **19d "their exclusions flagged against your own scope"** has the **same** scope↔category string-
    matching problem as the excluded Coverage check. Drop the auto-flag and just render the sub's
    exclusions verbatim, or is there an input I'm missing?
+   → **RULED [Josh, S103] (R7):** render the sub's exclusions verbatim; no auto-flag against scope.
 8. **Format picker mapping.** The handoff groups **6** formats (4 lump-sum + **2 open-book**: Cost
    Plus — Itemized, T&M — Itemized). Stored `proposal_pricing_level` has **5** values and no
    open-book/T&M member. Extend the enum to 6 and map, or keep 5 and treat open-book as a contract-
    type-driven render? (Related: the handoff's own "naming is a first pass" note on Category Detail
    vs Line-Item Detail.)
+   → **RULED [Josh, S103] (R8 / §8·A):** neither five nor six-on-the-old-grouping — replaced by a
+   new six-format set on two tiers (lump sum / detailed). Do not extend the stored value to six on
+   the cost-visible grouping. Open-book (Cost Plus / T&M) printing is left open for the spec run.
 9. **Deposit/retainage company defaults.** None exist today. Add `companies.default_deposit_percent`
    and `default_retainage_percent` so 16c's "changed from default" has a baseline to diff — agreed?
+   → **RULED [Josh, S103] (R9):** agreed — add both company defaults.
 10. **19b Details new fields — estimator, lead source, "Also send to", client portal-status pill.**
     None have an obvious `estimates` column. Are these in scope for this branch (new columns), or
     presentation of data that lives elsewhere (e.g. portal status on the contact)?
+    → **RULED [Josh, S103] (R10):** in scope, with two changes — **estimator** renders the existing
+    creator reference read-only (no column); **lead source is removed from the estimate** (lives on
+    the contact, now per-client not per-job); **"Also send to"** and **portal-status pill** are in
+    scope (portal status is contact data, not a new estimate column).
 11. **17 add-sheet scope.** Are **Assemblies** and the **"from a sub bid" / "past estimate"** sources
     in scope for this branch, or deferred again (they were deferred once already)?
+    → **RULED [Josh, S103] (R11):** deferred a second time; staged for `TECH_DEBT` as `#1-estred`
+    (see §8·B).
 12. **Delete → "mark lost" (19b).** The handoff steers a *sent* estimate's delete toward *mark lost*
     to keep win-rate honest. There is a `declined` status but no "lost" concept — introduce one, or
     reuse `declined` with a reason code (`decline_reason_code` exists)?
+    → **RULED [Josh, S103]:** reuse the existing `declined` status with its reason code. No new
+    "lost" concept — the column already exists. (See §8, R12.)
+
+---
+
+## 8 — Rulings [Josh, S103]
+
+> **What this section is.** Josh's decisions on the twelve §7 questions, plus the decisions that came
+> out of the discussion around them. This section is authoritative; where a ruling reverses or
+> narrows earlier text in this audit, the earlier text is left in place and superseded here and at
+> the point it occurs (marked `⚠️ SUPERSEDED [Josh, S103]`). The next run writes the spec from this
+> record. **No schema was read for this run** — column/table/file names below are named as *concerns
+> to settle*, not as decided shapes; the spec run reads live schema for that.
+
+### The twelve rulings
+
+**R1 — 19a Review & Send: BUILD AS A SHEET.** The pinned sheet, per the handoff. `/proposal` **stays
+as a route** and feeds the sheet's PDF pane; its render logic does not move. *Reasoning: 19a is the
+one genuinely absent screen and the reason this build exists; moving the proposal render is risk with
+no payoff.* (Answers Q1; settles the 19a "Open" and the headline's risk item (2).)
+
+**R2 — Version numbering: A SEND COUNTER.** One writer, incrementing on send. **Not snapshots.**
+*Reasoning: snapshots are a second table and a full immutability story, and sending already freezes
+the estimate; signed artifacts are preserved by their own mechanism.* (Answers Q2; **supersedes
+collision #2's "the choice is Josh's — I do not make it"** and the schema-appendix "version-bump …
+(collision #2)" line — the choice is now made: counter, no new table.)
+
+**R3 — Event log: YES.** One append-only estimate event log serving **both** 16d's history rail and
+19b's client activity. **Events to capture: reprice, send, award, convert. Clone is excluded.**
+(Answers Q3; **narrows** the schema-appendix/collision-#1 model, which named "reprice, send, award"
+three points — **convert is added, clone is explicitly out**.)
+
+**R4 — 16d Notes: KEEP THE BLOB. Per-note carry-to-project ticks are DROPPED.** *Reasoning: a rows
+table plus a change to how conversion carries notes, for a feature not asked for; revisit if threaded
+notes are wanted on their own merits.* ⚠️ **The handoff specifies threaded notes with author and
+timestamp; this ruling declines them.** The design and the build differ here on purpose. (Answers
+Q4; **supersedes** the 16d screen entry's "Class (c) threaded notes = a new `estimate_notes` rows
+table" / "The handoff clearly wants rows," and **removes the `estimate_notes` table** from the schema
+appendix — see the SUPERSEDED marks there. The 16d **history rail** still exists, fed by R3's event
+log, not by note rows.)
+
+**R5 — 18a placement: STAYS ON DELIVERIES.** No Convert wizard is built. *Reasoning: building a
+wizard that does not exist in order to rehome working code is the worst trade available.* ⚠️ **The
+handoff shows 18a as a third step in a Convert flow; this ruling keeps the shipped placement
+instead.** (Answers Q5; settles the 18a "Open" — the "(a) large" wizard branch is closed.)
+
+**R6 — Sub-bid reply link: YES — a tokenised external surface** modelled on the existing signing
+mechanism (own route, own service-role writes). **Scope-coverage % comes FROM THE SUB via that link;
+it is NOT computed against your scope.** *Reasoning: computing it inherits the exact hazard the
+Coverage check was excluded for.* (Answers Q6; settles the 19c/19d "Open" on where coverage comes
+from — from the sub.)
+
+**R7 — 19d exclusions: RENDER VERBATIM.** No auto-flagging against your own scope. *Reasoning: same
+string-matching hazard as the ⛔ Coverage check — the audit identified this itself (19d "Open" and
+§5's closing note).* (Answers Q7; confirms and hardens the §5/§6 exclusion.)
+
+**R8 — Proposal format set: SUPERSEDED by a full replacement set — see §8·A below.** Do **not** extend
+the stored value to six on the old grouping. (Answers Q8; **supersedes** the 9d screen entry's
+"handoff's format picker groups 6 names (4 lump-sum + 2 open-book)" mapping question and the
+schema-appendix silence on the format enum.)
+
+**R9 — Deposit and retainage company defaults: AGREED.** Both, so 16c's "changed from default" has a
+baseline to diff against. (Answers Q9; confirms the schema-appendix `default_deposit_percent` /
+`default_retainage_percent` row.)
+
+**R10 — 19b Details fields: IN SCOPE, with one change and one removal.**
+- **Estimator: NO NEW COLUMN.** Render the creating user's name from the existing creator reference,
+  **read-only; users cannot edit it.** *Reasoning: the field always shows whoever entered the
+  estimate; the data already exists.*
+- **Lead source: REMOVED from the estimate entirely.** It lives on the client contact. ⚠️ **Consequence
+  Josh accepted:** lead source becomes per-client, not per-job — a repeat client carries one value
+  across jobs.
+- **"Also send to" and the client portal-status pill: in scope.** Portal status is presentation of
+  data that already lives on the contact — **not** a new estimate column.
+(Answers Q10; **supersedes** the 19b screen entry's "Class (c) for … `lead source` / `estimator`
+fields" — estimator and lead source imply **no** estimate column now. "Also send to" still needs a
+store — its shape is a spec-run concern.)
+
+**R11 — Assemblies, and the "from a sub bid" / "past estimate" add-sheet sources: DEFERRED** (a second
+time). Recorded in §8·B for `TECH_DEBT`, not silently dropped. (Answers Q11; settles the 17 "Open".)
+
+**R12 — "Mark lost": REUSE THE EXISTING `declined` STATUS with its reason code.** No new "lost"
+concept. *Reasoning: the column already exists.* (Answers Q12.)
+
+### 8·A — The proposal format set (supersedes Q8 / the handoff's six)
+
+⚠️ **Supersession, quoted not deleted.** The handoff *"groups formats by whether your cost is
+visible"* and lists **six on that grouping** (4 lump-sum + 2 open-book: *Cost Plus — Itemized*,
+*Time & Materials — Itemized*). The stored `proposal_pricing_level` has **five** values. **Neither
+covers the ruled set.** The grouping is replaced: the tier is now *which prices print*, and within a
+tier the variants differ by *how much text prints per line*.
+
+**Six formats on two tiers [Josh, S103]:**
+
+**Lump sum**
+| Name | What the client sees |
+| --- | --- |
+| **Total Only** | One price. No line items. |
+| **Summary** | A price per category. No line items. |
+| **Summary with Descriptions** | Categories, described, priced. No line items. |
+
+**Detailed**
+| Name | What the client sees |
+| --- | --- |
+| **Itemized** | Every line, priced. |
+| **Itemized with Descriptions** | Every line, described, priced. |
+| **Itemized, No Unit Pricing** | Every line and quantity; prices at category level only. |
+
+**Rules carried over from the handoff and still in force:**
+- Selecting a format redraws the preview immediately — a **presentation choice, not a data change**;
+  lines, costs and totals are untouched.
+- **Contract type and proposal format are independent.** Type governs how you bill; format governs
+  what prints. A T&M job presented as lump sum is allowed and is flagged.
+- A company default lives in Settings; the estimate inherits it and can override; the send sheet can
+  override again for one send.
+
+⚠️ **Open item for the spec run — do NOT decide here.** The two open-book handoff formats (*Cost Plus
+— Itemized*, *Time & Materials — Itemized*) are **not** in this set. Establish whether open-book
+printing is a **seventh format**, a **property of contract type**, or **out of scope**.
+
+**Naming provenance:** these six names are the assistant's, **accepted by Josh [Josh, S103]**. Josh
+twice noted that earlier naming attempts read wrong because they described the *data tier* rather than
+*what the client receives*. That is the test any future rename must pass.
+
+*Schema consequence (named, not designed):* the stored proposal-format value must move from the
+current five to these six. That is a DDL change (allowed-value set + a data mapping of existing rows)
+— counted in §8·C.
+
+### 8·B — Deferred to TECH_DEBT (recorded, not filed — see §0)
+
+⚠️ **Constraint conflict, surfaced not resolved.** §2·Q11 and §4 instruct "Add to `TECH_DEBT`," and
+§7 asks which items were added. **§0 forbids touching any file but this audit.** §0 is the explicit,
+repeated hard constraint, so **`TECH_DEBT.md` was NOT edited in this run.** The two entries below are
+**staged here for filing in the next run that may touch `TECH_DEBT.md`**, with provisional
+branch-scoped ids per the CLAUDE.md tech-debt-numbering ruling (real numbers taken from main's file
+at merge).
+
+- **`#1-estred` — Estimate add-sheet: Assemblies + alternate sources.** Saved assemblies, plus the
+  "from a sub bid" and "from a past estimate" add-sheet sources. **Deferred a second time** (the
+  first was R-Q8 in the shipped add sheet). Sound features; out of scope for this build. *(R11.)*
+- **`#2-estred` — Customized proposal templates.** Saved, user-named format presets seen on a
+  reference screenshot Josh supplied — **not in the handoff, no design.** Deferral is **not**
+  rejection: the idea is sound, but a template raises an unanswered question — **what does it
+  capture?** Format alone is trivial; a template carrying standard terms, cover letter and printed
+  sections is a real feature that needs an interview, not a line in this spec. ⚠️ The reference
+  screenshot's own wording was **rejected** by Josh; its **"Internal (Detailed)"** and **"Field
+  Sheet"** entries are **out of scope** — they are not client proposal formats. *(§4.)*
+
+### 8·C — Scope and migration count
+
+**Full build in one pass. [Josh, S103]**
+
+⚠️ **Working shown, per §5 (verify, do not repeat "five").** The rulings imply the following DDL
+concerns. Bundled the way the ruling discussion grouped them, it is **five**:
+
+1. **Margin target** — `companies.margin_target_percent` (R-audit-#3 / build order step 2).
+2. **Deposit terms** — `estimates.deposit_percent` **plus** `companies.default_deposit_percent` /
+   `default_retainage_percent` (R9). Retainage-on-estimate already exists; bundled as one terms
+   migration.
+3. **Estimate event log** — the `estimate_events` append-only table (R3).
+4. **Sub-bid enrichment** — the split / scope-coverage / holds columns **plus** the tokenised
+   link-reply surface (R6), bundled as one sub-bid migration.
+5. **Proposal format set** — the `proposal_pricing_level` allowed-value change + row mapping (§8·A).
+
+**The estimator field was removed from the earlier six-item list** once R10 ruled it to use the
+existing creator reference — that is the "six minus estimator = five."
+
+⚠️ **Where my audit implies the count could differ — flagged, not resolved:**
+- **"Also send to" (R10) still needs a store.** If it becomes an estimate column rather than reusing
+  contact data, that is a **sixth** migration. Unsettled — spec-run concern.
+- **`invoice_due_days` (16c / schema appendix)** was listed "(or reuse per-invoice)" and is **not
+  ruled**. If stored on the estimate, add one; if derived per-invoice, none. Unsettled.
+- **Version counter (R2)** needs **no new column** (`version_number` exists) — a send-time writer,
+  possibly a trigger, not counted as a migration here.
+- **Bundling is itself a spec-run decision.** Split apart (deposit column vs company defaults;
+  sub-bid columns vs link-reply tables), the five become seven-plus. The number is "five *as
+  bundled*," and the spec must sequence whatever it lands on.
+
+⚠️ **Standing constraint the spec must honour:** migrations go to production **attended, one at a
+time, DB before code**. Five is a lot of attended pushes; sequence them.
+
+### 8·D — Still excluded (carried forward unchanged)
+
+- ⛔ **The Coverage check** (16b) — ruling stands (§5). No FK, no shared key; free-typed string
+  matching would confidently report missing scope that is not missing.
+- ⛔ **19d auto-flagging a sub's exclusions against your scope** — same hazard (R7). Render verbatim.
+- **Assemblies and alternate add-sheet sources** — R11 / `#1-estred`.
+- **Customized proposal templates** — §4 / `#2-estred`.
