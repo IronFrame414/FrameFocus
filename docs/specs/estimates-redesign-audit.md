@@ -226,6 +226,14 @@ Handoff ids. For each: **exists today / required / ties into / class (a–d) / o
   `companies` defaults (which today has **no** deposit/retainage default — see Qs).
 - **Open:** invoice-due as a stored field vs derived per-invoice; company-level deposit/retainage
   defaults do not exist to diff against.
+  > **⚠️ RULED [Josh, S103] (§2.2). Invoice due IS A FIELD** — 16c's structured terms are deposit %,
+  > retainage % **and invoice due**. Establish-and-recorded: today `invoices.due_date` is an
+  > **absolute per-invoice `date`, nullable, no default**, and **companies has no net-terms default**
+  > **[verified: live]**. So the estimate-level invoice-due is net-new. **Relationship (the trap):**
+  > the estimate field is a **default source** for the due date of invoices generated from the job —
+  > it must **seed** `invoices.due_date` when one isn't set, and **must NOT overwrite** a per-invoice
+  > `due_date` a user has chosen. An estimate-level default silently clobbering a set invoice date is
+  > exactly the S103-flagged failure. Deposit/retainage defaults: R9 adds the company baselines.
 
 ### 16d · Notes
 - **Exists today** **[verified: `text-tabs.tsx:447-489`]**: `estimates.internal_notes` single text
@@ -301,7 +309,7 @@ exists" cases are not re-proposed.**
 | `margin_target_percent numeric NULL` | `companies` | 19a, 19b (+ Estimate health) | §6b.2 (deferred there) | one Settings field; **renders nothing when unset** [verified absent] |
 | `deposit_percent numeric NULL` (+ CHECK 0–100) | `estimates` | 16c, 19a | deposit invoice (7D) | retainage already exists; deposit does not [verified] |
 | `default_deposit_percent`, `default_retainage_percent numeric NULL` | `companies` | 16c "changed from default" | — | no company defaults to diff against today [verified] |
-| `invoice_due_days integer NULL` (or reuse per-invoice) | `estimates` | 16c, 19a print | — | decide stored-vs-derived (Qs) |
+| ~~`invoice_due_days integer NULL` (or reuse per-invoice)~~ **→ RULED (§2.2): invoice due IS a field** on `estimates` (net-terms/days or a rule that computes the date); **defaults** `invoices.due_date`, never overwrites a set one | `estimates` | 16c, 19a print | 7D invoices (`invoices.due_date`, absolute date, no default today) | shape (days vs date-rule) = spec-run concern [verified: invoices.due_date live] |
 | `labor_amount`, `material_amount numeric NULL` | `estimate_sub_bids` | 19d, 9c | — | bid split [verified absent] |
 | `scope_coverage_percent numeric NULL` | `estimate_sub_bids` | 19d, 9c | — | from link-reply, not computed (Qs) [verified absent] |
 | `bid_holds_until date NULL` | `estimate_sub_bids` | 19c, 19d | — | [verified absent] |
@@ -568,6 +576,11 @@ concept. *Reasoning: the column already exists.* (Answers Q12.)
 
 ### 8·A — The proposal format set (supersedes Q8 / the handoff's six)
 
+> **⚠️⚠️ THIS SIX-FORMAT SET IS ITSELF SUPERSEDED [Josh, S103] — see §8·A2.** Open-book was recorded
+> here as an open item for the spec run; Josh has since ruled it **IN**. The set is now **EIGHT
+> formats on THREE tiers.** The six below are kept, quoted not deleted, because the three lump-sum and
+> three detailed names carry forward unchanged into the eight — only the open-book tier is added.
+
 ⚠️ **Supersession, quoted not deleted.** The handoff *"groups formats by whether your cost is
 visible"* and lists **six on that grouping** (4 lump-sum + 2 open-book: *Cost Plus — Itemized*,
 *Time & Materials — Itemized*). The stored `proposal_pricing_level` has **five** values. **Neither
@@ -610,14 +623,65 @@ twice noted that earlier naming attempts read wrong because they described the *
 current five to these six. That is a DDL change (allowed-value set + a data mapping of existing rows)
 — counted in §8·C.
 
-### 8·B — Deferred to TECH_DEBT (recorded, not filed — see §0)
+### 8·A2 — The proposal format set, FINAL: EIGHT formats on THREE tiers [Josh, S103]
 
-⚠️ **Constraint conflict, surfaced not resolved.** §2·Q11 and §4 instruct "Add to `TECH_DEBT`," and
-§7 asks which items were added. **§0 forbids touching any file but this audit.** §0 is the explicit,
-repeated hard constraint, so **`TECH_DEBT.md` was NOT edited in this run.** The two entries below are
-**staged here for filing in the next run that may touch `TECH_DEBT.md`**, with provisional
-branch-scoped ids per the CLAUDE.md tech-debt-numbering ruling (real numbers taken from main's file
-at merge).
+This supersedes the six-format set in §8·A. Open-book, recorded there as an open item, is ruled in.
+The three lump-sum and three detailed rows are unchanged; the open-book tier is added.
+
+**Lump sum** — one fixed price; cost is not shown
+| Name | What the client sees |
+| --- | --- |
+| **Total Only** | One price. No line items. |
+| **Summary** | A price per category. No line items. |
+| **Summary with Descriptions** | Categories, described, priced. No line items. |
+
+**Detailed** — line items print; your cost does not
+| Name | What the client sees |
+| --- | --- |
+| **Itemized** | Every line, priced. |
+| **Itemized with Descriptions** | Every line, described, priced. |
+| **Itemized, No Unit Pricing** | Every line and quantity; prices at category level only. |
+
+**Open book** — your cost is visible
+| Name | What the client sees |
+| --- | --- |
+| **Cost Plus — Itemized** | Costs at cost, your fee as its own line. |
+| **Time & Materials — Itemized** | Rates and hours, material plus markup. |
+
+⚠️ **The distinction a contractor gets wrong, recorded here because it is the load-bearing one:** the
+two **open-book** formats print **cost**, so they also print the **fee or markup sitting on top of
+it**. The **six** others **never print cost or markup** — *Itemized* shows a **client price** per
+line, which is **not** the same as showing cost. A format flip between tiers changes what the client
+learns about your margin; it is presentation of the same stored data, but not the same disclosure.
+
+**Rules still in force (unchanged from §8·A):** selecting a format redraws the preview immediately
+(presentation, not a data change); **contract type and proposal format are independent** — a T&M job
+presented as lump sum is allowed and is flagged; a company default lives in Settings, the estimate
+inherits and can override, the send sheet can override again for one send.
+
+⚠️ **Open item raised for the spec run — NOT decided here (the code implies an answer; see §3.1).**
+Should the two open-book formats be **restricted** by contract type, or merely **warned about** like
+the T&M-as-lump-sum flag? The estimate already stores `contract_type` (`fixed_price` / `cost_plus` /
+`time_and_materials`) and derives sell per instrument, so a restriction is *enforceable*; whether it
+*should* restrict vs warn is Josh's call. **Flagged, not resolved.**
+
+*Schema consequence (named, not designed):* the stored proposal-format value moves from the current
+**five to eight**, on **both** CHECK constraints that carry it — `estimates.proposal_pricing_level`
+**and** `companies.default_proposal_pricing_level` **[verified: live — both are 5-value CHECKs today]**
+— plus a data mapping of existing rows. Still **one** migration; §8·C updated.
+
+### 8·B — Deferred to TECH_DEBT — ✅ NOW FILED [Josh, S103, §2.3]
+
+> **✅ FILED (updated this run).** The earlier constraint conflict (a prompt that said "audit only"
+> then "add to TECH_DEBT") is resolved: both are now filed in `TECH_DEBT.md` under a new section
+> **"Branch-scoped, awaiting real numbers — `feature/estimates-redesign` [S103]"**, matching how every
+> other unmerged branch files. Ids **`#1-estred`** and **`#2-estred`** (branch-scoped per the CLAUDE.md
+> tech-debt ruling — bare `#N` on a branch is forbidden; real numbers assigned from main at merge,
+> main's highest being #156). The originals below are kept as the audit's own record.
+
+⚠️ **Original staging note, quoted not deleted.** §2·Q11 and §4 (S103 first pass) instructed "Add to
+`TECH_DEBT`," but that prompt's §0 forbade touching any file but this audit, so `TECH_DEBT.md` was
+**not** edited then and the two entries were **staged here**. This run filed them properly.
 
 - **`#1-estred` — Estimate add-sheet: Assemblies + alternate sources.** Saved assemblies, plus the
   "from a sub bid" and "from a past estimate" add-sheet sources. **Deferred a second time** (the
@@ -638,22 +702,27 @@ at merge).
 concerns. Bundled the way the ruling discussion grouped them, it is **five**:
 
 1. **Margin target** — `companies.margin_target_percent` (R-audit-#3 / build order step 2).
-2. **Deposit terms** — `estimates.deposit_percent` **plus** `companies.default_deposit_percent` /
-   `default_retainage_percent` (R9). Retainage-on-estimate already exists; bundled as one terms
-   migration.
+2. **Deposit terms** — `estimates.deposit_percent` **plus estimate-level invoice-due** (§2.2, now
+   ruled a field) **plus** `companies.default_deposit_percent` / `default_retainage_percent` (R9).
+   Retainage-on-estimate already exists; bundled as one terms migration.
 3. **Estimate event log** — the `estimate_events` append-only table (R3).
 4. **Sub-bid enrichment** — the split / scope-coverage / holds columns **plus** the tokenised
    link-reply surface (R6), bundled as one sub-bid migration.
-5. **Proposal format set** — the `proposal_pricing_level` allowed-value change + row mapping (§8·A).
+5. **Proposal format set** — the proposal-format allowed-value change (now **five → eight**, §8·A2,
+   open-book ruled in) on **both** CHECKs (`estimates.proposal_pricing_level` **and**
+   `companies.default_proposal_pricing_level`) + row mapping.
 
 **The estimator field was removed from the earlier six-item list** once R10 ruled it to use the
 existing creator reference — that is the "six minus estimator = five."
 
-⚠️ **Where my audit implies the count could differ — flagged, not resolved:**
+⚠️ **Count as it now stands, after §2.1/§2.2 closed two of the open items:** still **five as
+bundled**. Invoice-due is no longer a floating "sixth" — §2.2 ruled it a field and it folds into the
+terms migration (#2). Open-book being ruled in (§2.1) did **not** add a migration — it widened the
+format value set from six to eight within the one format migration (#5).
+
+⚠️ **What could still move the count — flagged, not resolved:**
 - **"Also send to" (R10) still needs a store.** If it becomes an estimate column rather than reusing
-  contact data, that is a **sixth** migration. Unsettled — spec-run concern.
-- **`invoice_due_days` (16c / schema appendix)** was listed "(or reuse per-invoice)" and is **not
-  ruled**. If stored on the estimate, add one; if derived per-invoice, none. Unsettled.
+  contact data, that is a **sixth** migration. **This is now the only genuinely open count-mover.**
 - **Version counter (R2)** needs **no new column** (`version_number` exists) — a send-time writer,
   possibly a trigger, not counted as a migration here.
 - **Bundling is itself a spec-run decision.** Split apart (deposit column vs company defaults;
@@ -670,3 +739,89 @@ time, DB before code**. Five is a lot of attended pushes; sequence them.
 - ⛔ **19d auto-flagging a sub's exclusions against your scope** — same hazard (R7). Render verbatim.
 - **Assemblies and alternate add-sheet sources** — R11 / `#1-estred`.
 - **Customized proposal templates** — §4 / `#2-estred`.
+
+---
+
+## 9 — Integration map [S103 verification run]
+
+> **Why this section exists.** Five migrations land on `estimates` and its children, which sit
+> **upstream of the money** in this product. This maps every place the estimate feeds, and everything
+> that feeds it, so no binding is discovered *after* it breaks. **All rows verified against live
+> schema, RPC bodies (`pg_get_functiondef`), or a cited file** unless tagged `[inferred]`. The
+> `⚠️MIG` flag marks a binding a §8·C migration touches — that intersection is the deployment risk.
+
+### 9.1 — Outbound: what the estimate FEEDS
+
+| # | Binding | Reads/writes it (path:line) | Ruling touching it | What breaks if it changes | V/I |
+| --- | --- | --- | --- | --- | --- |
+| O1 | **`convert_estimate_to_project()`** — copies name, contact, `contract_type`, `tax_rate`, scope/terms/cover/notes; writes `projects`, `project_financials`, `client_contracts`(+`client_contract_amounts`), `contract_documents.project_id`, `project_budget_items`(+`_amounts`), `subcontractor_contracts`, `project_assignments`. **Creates NO POs.** | RPC body [verified: `pg_get_functiondef`]; latest def in `20261051000000_client_contract_amounts.sql` | R3 (add **convert** event) | A restructure of estimate line rows/items/categories changes the budget loop's JOINs. Adding scope `included` flag / threaded notes would change what copies. **⚠️MIG #3** adds an event write here. | V |
+| O2 | **Budget / job cost** — `project_budget_items` (+`project_budget_amounts`) carry **cost only** (`budgeted_amount`/`committed_amount`/`actual_amount`); **no sell/price/profit column** | `apps/web/lib/services/budget.ts:10`; `payables-client.ts`; `po-lines-client.ts:124` [verified: live columns] | none directly | **Parked gap, NOT closed by this redesign:** the new margin/health work is estimate-level and does **not** flow sell into job cost. Nobody should expect margin-target to appear in budget. | V |
+| O3 | **PO drafting + basis rule** — `createDraftPos`/`listDraftableLines` read estimate rows; "Against the estimate" compares **ordered cost vs budgeted cost, never sell** | `po-lines-panel.tsx:364` ("ordered cost vs budgeted cost, never sell"), `:149` ("cost only; the client price never appears on a PO"); `po-lines-client.ts:124-126` [verified: read] | R5 (18a stays on Deliveries) | Basis rule is **honored today** — do not let a restyle introduce a sell figure into the PO or the comparison. Block renders Owner/Admin only (amounts floor). | V |
+| O4 | **Invoicing** — deposit/retainage/due | `invoices-client.ts:72-91` create (**no deposit %, no auto due_date**); `:599`,`:631-672` retainage from **invoice's own** `retainage_percent`; `:82` `due_date` caller-supplied, defaults null; deposit is a **type flag** only (`20260802000000_7d_invoicing.sql:159`) [verified] | **§2.2 (invoice due), R9 (deposit/retainage defaults)** | ⚠️ **Nothing reads an estimate-level deposit %, retainage % or due date today.** The migration adds the columns; the **consumption must be BUILT** — estimate → seed `invoices.retainage_percent` / `due_date`, and compute the deposit invoice amount. **⚠️MIG #2.** | V |
+| O5 | **Contracts / signing + immutability** — `enforce_estimate_immutability()` freezes ~36 columns once status ≠ draft/review, **including `version_number`, `retainage_percent`, `proposal_pricing_level`**; sent→draft refused; post-send revise = **void + reissue as a NEW row** (`supersedes_estimate_id`, supersedes only a *voided* one) | trigger body [verified: `pg_get_functiondef`]; `20261031000000`, `20261032000000` | **R2 (version counter), §2.1 (format set), R9 (deposit)** | ⚠️ See §9.3 — R2 and the format remap both collide with this trigger. Any **new money column** (deposit %) should be **added to the freeze list** in the same migration, or a sent estimate's deposit could be altered. | V |
+| O6 | **Client portal proposal read** — clients read via `client_proposals()` RPC only (minimal fields: number, name, status, contract_type, `grand_total`, sent/accepted); **no client SELECT on `estimates`**; `proposal_views` RLS = Owner/Admin/creating-PM (clients cannot read) | `portal.ts:395-402`; `proposal-views-client.ts:13-26`; `20261052000000_proposal_views.sql:39-42` [verified: read/policy] | **§2.1 (open-book formats)** | ⚠️ The **proposal renderer is the cost-visibility enforcement point.** The two open-book formats print cost; the six others must not. The portal proposal view and the send PDF must honor the **same** format, or a client sees cost where the format forbids it. **⚠️MIG #5.** | V |
+| O7 | **Change orders** — **NO FK to estimate structure.** `change_order_line_items`/`_rows` mirror the typed-row model but are an independent hierarchy | `20260704215000_module5_5d_change_orders.sql:112-149`; grep found no `source_estimate_id` [verified] | none | **Good news:** restructuring estimate line items/rows/categories does **not** break change orders. | V |
+| O8 | **Notifications / email on events** — **send/resend = email only, no in-app**; **accept/decline/reminder/expiration = notify**; **reprice, award, void, reissue = NOTHING fires today** | `api/proposals/send/route.ts:191-223`, `resend/route.ts`; `signing-service.ts:264-270,346-352`; `crons/estimate-reminders.ts` [verified] | **R3 (event log: reprice, send, award, convert)** | ⚠️ **Two of R3's four events (reprice, award) have no signal today** — the event writers are net-new at `recalculateEstimateTotals` and `set_winning_bid`; send/convert have existing hooks to extend. **⚠️MIG #3.** | V |
+
+### 9.2 — Inbound: what FEEDS the estimate
+
+| # | Binding | Reads/writes it (path:line) | Ruling touching it | What breaks if it changes | V/I |
+| --- | --- | --- | --- | --- | --- |
+| I1 | **Cost catalog → add sheet** — `cost_catalog` (`last_verified_at`, `is_favorite`, `cost_code`, `category`, `default_vendor_id`); "used on this job" is **in-memory from estimate rows**, not a DB count | `cost-catalog-client.ts:110-131`; `add-items-sheet.tsx:102-105` [verified] | R11 (assemblies deferred → `#1-estred`) | Add-sheet restyle only; assemblies/alt-sources are deferred, so the catalog read is unchanged. | V |
+| I2 | **Contacts → estimate: LEAD SOURCE** — `contacts.source` (CHECK enum: referral/website/google/social_media/repeat/other). **NOT on estimates** | `20260101000000_baseline_schema.sql:1113,1123` [verified: live + CHECK] | **R10 (lead source removed from estimate; lives on contact)** | 19b renders `contacts.source` (a **constrained enum**, not free text). ⚠️ **Consequence Josh accepted:** per-client, not per-job. No estimate column. | V |
+| I3 | **Contacts → estimate: portal-status pill** — `profiles.client_access_state` (active / deactivated / signed_documents_only / documents_for_signature) via the contact→profile link | `client-portal.ts:144-158`; `client-portal-shared.ts:22-28` [verified] | R10 (portal-status pill in scope) | Presentation of contact/profile data — **not a new estimate column**. | V |
+| I4 | **Subcontractor compliance → 19c — ⚠️ TWO INSURANCE STORES** — (1) `subcontractors.insurance_expiry date` on the sub row; (2) `subcontractor_compliance_documents.expiration_date` (doc_type `coi`). **W-9 is single-store** (compliance_documents, doc_type `w9`) | `subcontractors.insurance_expiry` [verified: live column]; `20260729010000_7c_accounts_payable.sql:364-384`; `payables-shared.ts:100-109` `deriveComplianceStatus()` [verified] | 19c build (no ruling changes the stores) | ⚠️ **Ruling: LEAVE THE STORES AS IS.** 19c's insurance-expiry display must **pick one store deliberately** — the two can disagree, and a surface that reads one silently picks it. Record which store 19c reads. My inbound agent **missed** `subcontractors.insurance_expiry` and reported one store — corrected here against live schema. | V |
+| I5 | **Company settings → new estimate** — `createEstimate()` seeds `default_tax_rate`, `default_pricing_mode`, markup/margin triples, `default_terms_sections`, `default_expiration_days`, `default_proposal_pricing_level`. **`default_reminder_schedule` and `default_labor_rate` are NOT seeded here** | `estimates-client.ts:288-338` [verified: read] | **Mig #1 (margin target), R9 (deposit/retainage defaults), §2.1 (format default)** | New company defaults (margin target, deposit %, retainage %) are read here / at render. Format default moves to the 8-value set. **⚠️MIG #1, #2, #5.** | V |
+| I6 | **Team member → estimator** — `estimates.created_by` (+`created_by_role`); display name resolves user id → `profiles`/`company_members` | `estimates-client.ts:283-284`; Details tab does **not** render it today | **R10 (estimator read-only from creator)** | New read-only render; **no column** — resolves the creator to a name. If the resolution path is wrong, the field shows a blank/id. | V (render path [inferred]) |
+
+### 9.3 — ⚠️ The migration × binding intersection — the deployment risk
+
+Two hazards this map surfaced that are **not obvious from the migration list alone**:
+
+1. **⚠️⚠️ The format-set remap (Mig #5) collides with the immutability trigger (O5).** The proposal
+   format migration must map existing rows from the old 5 values to the new 8. But
+   `enforce_estimate_immutability()` **freezes `proposal_pricing_level` on every non-draft estimate**
+   — a data-migration `UPDATE estimates SET proposal_pricing_level = …` on a sent/converted row
+   **raises `'A sent estimate is immutable'`** [verified: the column is in the freeze list]. So a
+   naïve remap **fails mid-migration**. The migration must either (a) **keep existing stored values
+   unchanged** and only ADD the three new ones to the CHECK (safe by construction), or (b) disable
+   the trigger for the remap, or (c) widen the CHECK to accept old+new during a two-step transition.
+   **This is a spec-run sequencing decision and it is load-bearing** — attended, DB-before-code, and
+   it touches frozen production rows.
+2. **⚠️ New money columns must join the freeze list (Mig #2, O5).** `retainage_percent` is already
+   frozen once sent; **`deposit_percent` and any invoice-due field must be added to
+   `enforce_estimate_immutability()` in the same migration**, or a sent estimate's deposit/terms
+   could be altered after the client holds the document — the exact thing the trigger exists to
+   prevent. [verified: `retainage_percent` is in the freeze list; `deposit_percent` would not be
+   unless added.]
+
+**Migration → bindings touched (for sequencing five attended pushes):**
+- **Mig #1 (margin target):** I5 only. Lowest blast radius — estimate-level + Settings. Safe first.
+- **Mig #2 (deposit terms):** O4 (invoicing consumption must be built), O5 (freeze list), I5. Medium.
+- **Mig #3 (event log):** O1 (convert), O8 (send/reprice/award writers). Additive; two writers net-new.
+- **Mig #4 (sub-bid enrichment + link-reply):** enriches `estimate_sub_bids` (O1's winning-bid read
+  and `set_winning_bid` read `bid_amount` only, so **adding columns does not break them**); link-reply
+  is a new external surface (I4-adjacent). Low breakage, its own external build.
+- **Mig #5 (format set):** O6 (portal + PDF cost visibility), O5 (immutability collision — hazard 1),
+  I5 (default). **Highest risk** — touches frozen rows and client-facing cost disclosure.
+
+### 9.4 — ⚠️ Rulings the map shows to be more expensive than they looked
+
+Surfaced plainly, per the standing rule that conflicts are raised, not smoothed:
+
+- **R2 (version = "a send counter, one writer, no new table") is more than one writer.** The
+  immutability trigger **freezes `version_number` once sent** and **forbids sent→draft** (O5). So the
+  counter can only be written **during** the send `UPDATE` (while `OLD.status` is draft/review), and
+  the handoff's "**edits after send create v1.2, client told revised**" is **impossible in place** —
+  a post-send revision is **void + reissue as a new estimate row**. To show v1.2, v1.3 across
+  revisions, the number must be **carried/computed along the `supersedes_estimate_id` chain** in the
+  reissue path, not incremented on a single row. Still no new table, but **not "one writer on send"**
+  — it is send-transition logic **plus** reissue-chain logic. The spec must own this.
+- **§2.2 + R9 (deposit/retainage/invoice-due) are a build, not just columns.** O4 shows invoicing
+  reads **none** of these today — the columns are inert until the deposit-invoice amount, the draw
+  retainage default and the `due_date` seeding are **wired**, and the seeding must **not overwrite** a
+  per-invoice value a user set. The migration is the small part.
+- **§2.1 (open-book formats) shifts cost disclosure to the renderer (O6).** Adding open-book is one
+  CHECK change, but it makes the **proposal renderer the enforcement point for whether a client sees
+  your cost** — and it must hold on **both** the send PDF and the portal view. That is correctness,
+  not presentation.
