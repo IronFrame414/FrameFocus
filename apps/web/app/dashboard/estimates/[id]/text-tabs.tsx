@@ -96,6 +96,8 @@ export function TermsTab({ data, canEdit, reload }: TabProps) {
   const [retainage, setRetainage] = useState(est.retainage_percent != null ? String(est.retainage_percent) : '');
   const [invoiceDue, setInvoiceDue] = useState<number | null>(est.invoice_due_days ?? null);
   const [defaults, setDefaults] = useState<{ deposit: number | null; retainage: number | null } | null>(null);
+  // undefined = still loading; null = no default agreement set.
+  const [agreement, setAgreement] = useState<{ name: string } | null | undefined>(undefined);
   const { error, saved, run } = useSaveState();
   const confirm = useConfirm();
   const grandTotal = Number(est.grand_total ?? 0);
@@ -114,6 +116,22 @@ export function TermsTab({ data, canEdit, reload }: TabProps) {
           co ? { deposit: co.default_deposit_percent, retainage: co.default_retainage_percent } : null
         )
       );
+  }, []);
+
+  // 16c right rail — the agreement that prints behind the proposal and is signed
+  // with it. It lives in Company Settings (contract_templates, is_default); the
+  // estimate only chooses whether to attach it (include_client_contract). We show
+  // the name, never a fabricated page count.
+  useEffect(() => {
+    createClient()
+      .from('contract_templates')
+      .select('name')
+      .eq('is_default', true)
+      .eq('is_deleted', false)
+      .order('created_at', { ascending: true })
+      .limit(1) // one default agreement per company; any is fine (existence + name)
+      .maybeSingle()
+      .then(({ data: tpl }) => setAgreement(tpl ? { name: tpl.name } : null));
   }, []);
 
   // Structured payment-terms writes (migration #2 columns). Autosave, same
@@ -178,7 +196,8 @@ export function TermsTab({ data, canEdit, reload }: TabProps) {
   }
 
   return (
-    <div style={{ maxWidth: '640px' }}>
+    <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+      <div style={{ flex: '1 1 480px', maxWidth: '640px', minWidth: 0 }}>
       <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}>
         Terms &amp; Conditions
       </h2>
@@ -355,6 +374,65 @@ export function TermsTab({ data, canEdit, reload }: TabProps) {
         </button>
       )}
       {saved && <div style={savedStyle}>Saved</div>}
+      </div>
+
+      {/* 16c right rail — the attached agreement (handoff §; from Company Settings). */}
+      <aside style={{ flex: '0 0 260px', maxWidth: '300px' }}>
+        <div
+          style={{
+            background: '#fff',
+            border: `1px solid ${color.cardBorder}`,
+            borderRadius: '14px',
+            padding: '18px 20px',
+          }}
+        >
+          <div
+            style={{
+              fontFamily: font.mono,
+              fontSize: '0.66rem',
+              fontWeight: 700,
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              color: color.muted,
+              marginBottom: '0.75rem',
+            }}
+          >
+            Attached agreement
+          </div>
+          {agreement === undefined ? (
+            <p style={{ fontSize: '0.8rem', color: color.faint, margin: 0 }}>Loading…</p>
+          ) : !est.include_client_contract ? (
+            <p style={{ fontSize: '0.8rem', color: color.muted, margin: 0 }}>
+              No agreement is attached to this proposal. Turn this on in the Details tab; the form is
+              chosen in Settings › Documents.
+            </p>
+          ) : agreement === null ? (
+            <p style={{ fontSize: '0.8rem', color: color.muted, margin: 0 }}>
+              No default agreement is set. Choose one in Settings › Documents so it prints behind the
+              proposal and is signed with it.
+            </p>
+          ) : (
+            <div style={{ display: 'flex', gap: '0.625rem', alignItems: 'flex-start' }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={color.primary} strokeWidth="1.7" style={{ flexShrink: 0, marginTop: '1px' }}>
+                <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                <path d="M14 2v6h6" />
+              </svg>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: color.navy }}>
+                  {agreement.name}
+                </div>
+                <div style={{ fontSize: '0.72rem', color: color.muted, marginTop: '2px' }}>
+                  from Company Settings
+                </div>
+                <p style={{ fontSize: '0.72rem', color: color.muted, margin: '0.5rem 0 0' }}>
+                  Prints behind the proposal and is signed with it. Swap the form in Settings ›
+                  Documents.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      </aside>
     </div>
   );
 }
