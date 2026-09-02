@@ -26,8 +26,10 @@
    and copy; no schema. This is the **smallest shippable slice** and needs no migration.
 3. **1 screen is genuinely absent and is why this build exists: 19a Review & Send**, a pinned sheet.
    Give it the most detail (§3.2).
-4. **5 migrations** land on `estimates` and children (§3.5): margin target · deposit terms · event
-   log · sub-bid enrichment + link-reply · the 5→8 format change.
+4. **~~5~~ → SEVEN migrations** land on `estimates` and children (§3.5, restated [Josh, S103]): margin
+   target · deposit terms · event log · sub-bid enrichment + link-reply · the 5→8 format change ·
+   **"also send to" column [Q3]** · **`scope_library` table [Q8]** — plus **an eighth surfaced**
+   (Q6's distinct mark-lost reason set is its own schema change).
 5. **The risk sits in three places:** (a) the format-remap migration collides with the immutability
    trigger on sent rows (§3.5); (b) 19a is a re-architecture composing many existing services; (c)
    deposit/retainage/invoice-due are a **build, not just columns** — invoicing reads none of them
@@ -73,6 +75,9 @@ Send is a **sheet**, not a tab.
   - **Right — the PDF pane.** A **PDF / Email** segmented control, paging and zoom, over the rendered
     proposal **in the selected format**. ⚠️ **`/proposal` stays a route and FEEDS this pane; its
     render logic does not move** [R1]. The pane reuses `getProposalData` (`apps/web/lib/proposal/proposal-data.ts`).
+    **→ RULED [Josh, S103] (Q1): the pane calls `getProposalData` directly and renders inline — NOT an
+    iframe/embedded route.** *Reasoning: an embedded route fights the segmented PDF/Email control, zoom
+    and paging.*
   - **Footer:** "Sending locks this version and starts the expiry clock. Edits after this create the
     next version and the client is told it was revised." + **Save without sending** · **Send to client**.
 - **Roles / entry:** Owner/Admin send directly; PM submits for review, Owner/Admin approve-&-send
@@ -99,6 +104,11 @@ Send is a **sheet**, not a tab.
   (markup/margin, default markup, labor rate, tax — a re-layout of the existing pricing-mode/contract
   block). Right rail: **Estimate health** with **margin-vs-target bar** · Client activity · a delete
   card that steers a *sent* estimate to **mark lost** (reuse `declined` + `decline_reason_code`) [R12].
+  **→ RULED [Josh, S103] (Q6): reuse the `declined` status and its reason column, with a DISTINCT
+  reason set for self-initiated "mark lost" vs a client decline** (win rate depends on telling them
+  apart). ⚠️ This needs a schema change (new reason values or a discriminator) — the surfaced eighth,
+  §3.5. **→ RULED (Q3): "Also send to" is a NEW estimate column** (per-job, not part of the client's
+  permanent record) — migration #6.
 - **Roles / entry:** builder default tab. `ContractSection` rates are **Owner/Admin edit, PM
   read-only**, and `instrument_rates` is **DB-floored to Owner/Admin** so a PM sees em-dashes for
   rates [verified]. Estimator renders read-only from `created_by` for all [R10].
@@ -109,7 +119,9 @@ Send is a **sheet**, not a tab.
   estimate** (lives on `contacts.source`, now per-client) — do NOT render a per-estimate lead source;
   "Also send to" + portal pill in scope. [R3] Client activity's "repriced" line comes from the event
   log.
-- **Open:** "Also send to" storage (Q6); the "Pricing basis" vs `ContractSection` overlap (Q3).
+- **Open:** ~~"Also send to" storage (Q6)~~ **→ RULED (Q3): new estimate column, migration #6**; the
+  "Pricing basis" card vs `ContractSection` overlap **remains a build-time layout question** (not one
+  of the eight — it is a presentation call, not a data decision).
 
 ### 19c · Sub bid — sending the request
 
@@ -130,8 +142,10 @@ Send is a **sheet**, not a tab.
   history [inferred — confirm no stored win-count].
 - **Writes:** the sub-bid request rows + a tokenised reply surface (Migration #4).
 - **Ruling:** [R6] link-reply is a tokenised external surface modelled on `signing_sessions`;
-  **scope-coverage % comes FROM THE SUB via the link, never computed**.
-- **Open:** Q7 (win-record source).
+  **scope-coverage % comes FROM THE SUB via the link, never computed**. **→ RULED [Josh, S103] (Q7):
+  the win record is DERIVED LIVE from `is_winner` history — no stored counter** (a counter needs a
+  writer and can drift — the same reasoning that superseded R2).
+- **Open:** none — Q7 ruled (win record derived live from `is_winner`).
 
 ### 19d · Sub bid — what came back
 
@@ -141,7 +155,11 @@ Send is a **sheet**, not a tab.
   + *Nudge* · a like-for-like low banner (coverage-adjusted) · selected-bid detail with **their
   exclusions rendered VERBATIM** · Keep-allowance vs Use-this-bid.
 - **Reads/writes:** new `estimate_sub_bids` columns (labor/material split, scope-coverage, holds)
-  from the reply link; `set_winning_bid` (extended to persist split/coverage — Q5).
+  from the reply link; `set_winning_bid` extended to persist split/coverage. **→ RULED [Josh, S103]
+  (Q5): `set_winning_bid` PERSISTS the labor/material split and scope coverage onto the WINNING line
+  row** — *because the subcontract draws from it; leaving it only on `estimate_sub_bids` lets a later
+  edit silently change the contract basis.* ⚠️ The winning row is an `estimate_line_rows` row, which
+  today carries no split/coverage columns [verified] — this expands Migration #4 (§3.5).
 - **Ruling:** ⛔ [R7] **no auto-flagging of exclusions against your scope** — render verbatim (same
   string-match hazard as the Coverage check). vs-low and spread are pure math once columns exist.
 
@@ -182,7 +200,9 @@ Send is a **sheet**, not a tab.
   (`text-tabs.tsx:198-404`). [verified]
 - **Becomes:** + an **Included/Excluded** state per section (JSONB shape change, no migration) ·
   **Build from line items** · a saved **scope library** with *Insert*. ⛔ **No Coverage check** (§3.8).
-- **Open:** scope-library store shape (Q8).
+- **Open:** ~~scope-library store shape (Q8)~~ **→ RULED [Josh, S103] (Q8): a NEW `scope_library`
+  TABLE, not company-level JSONB** — *rows make "editing here doesn't change the saved copy" structural
+  rather than a manual read-modify-write.* This is **migration #7** (§3.5).
 
 ### 16c · Terms
 
@@ -294,21 +314,28 @@ cost where the format forbids it.
 **Rules:** format is **presentation only** — lines, costs and totals are untouched; selecting a format
 redraws the preview immediately. **Contract type and proposal format are independent** — a T&M job
 presented as lump sum is allowed and is **flagged**. Company default in Settings; the estimate inherits
-and can override; the send sheet overrides again for one send. **Open item [Q4]:** restrict the two
-open-book formats by contract type, or merely warn — `contract_type` is stored so a restriction is
-enforceable; not decided here.
+and can override; the send sheet overrides again for one send. ~~**Open item [Q4]:** restrict the two
+open-book formats by contract type, or merely warn.~~ **→ RULED [Josh, S103] (Q4): open-book formats
+are ALLOWED AND FLAGGED, not restricted by `contract_type`** — the same treatment as
+T&M-presented-as-lump-sum.
 
-### 3.5 — The five migrations, sequenced
+### 3.5 — The migrations, sequenced
+
+> **⚠️ COUNT RESTATED [Josh, S103]. Was five; is now SEVEN, and an eighth is surfaced below.** The
+> S103 answers to §4 add two migrations and expand a third. The original five-row table is kept below
+> and rows 6–7 appended, quoted-not-deleted. See §5 for the ruling record.
 
 **Migrations go to production attended, DB before code, one at a time.** Sequence for that.
 
 | # | Migration | Enables | Breaks without it | Existing-row mapping | Ships alone? |
 | --- | --- | --- | --- | --- | --- |
 | 1 | **`companies.margin_target_percent`** (NULL) [verified absent] | 19b/19a target readouts | target bar/pts cannot render | none — NULL renders nothing | **Yes** — safest first |
-| 2 | **Deposit terms** — `estimates.deposit_percent` (+ **invoice-due** field) + `companies.default_deposit_percent`/`default_retainage_percent` (retainage-on-estimate already exists) [verified] | 16c structured terms, deposit invoice, "changed from default" | terms fields inert; deposit/due cannot seed invoices | none for new cols; ⚠️ **add `deposit_percent` (and invoice-due) to the immutability freeze list** so a sent estimate's deposit can't change | Yes, but the **consumption is a build** (§3.6 O4) |
+| 2 | **Deposit terms** — `estimates.deposit_percent` (+ **invoice-due as net-days integer** [Q3]) + `companies.default_deposit_percent`/`default_retainage_percent` (retainage-on-estimate already exists) [verified] | 16c structured terms, deposit invoice, "changed from default" | terms fields inert; deposit/due cannot seed invoices | none for new cols; ⚠️ **add `deposit_percent` (and invoice-due) to the immutability freeze list** so a sent estimate's deposit can't change | Yes, but the **consumption is a build** (§3.6 O4) |
 | 3 | **`estimate_events`** append-only log (`{id, company_id, estimate_id, kind, actor_id, created_at, payload}`) [CLAUDE.md append-only conventions] | 16d history rail + 19b activity | no reprice/margin history | none (new table) | Yes; writers added at reprice (`recalculateEstimateTotals`), send, award (`set_winning_bid`), convert (RPC). **Kinds: reprice, send, award, convert — clone EXCLUDED** [R3] |
-| 4 | **Sub-bid enrichment** — labor/material split, scope-coverage %, holds-until on `estimate_sub_bids` + the **tokenised link-reply surface** [verified cols absent] | 19c/19d/9c comparison + external reply | comparison stays amount-only | none (new cols/tables); `set_winning_bid`/convert read `bid_amount` only, so adding cols does not break them [verified] | Yes; link-reply is its own external build |
+| 4 | **Sub-bid enrichment** — labor/material split, scope-coverage %, holds-until on `estimate_sub_bids` + the **tokenised link-reply surface**; ⚠️ **[Q5] EXPANDED: `set_winning_bid` now PERSISTS the split + scope-coverage onto the winning line row**, which likely needs new columns on `estimate_line_rows` (today it carries none — [verified]) or a reference back to the bid | 19c/19d/9c comparison + external reply; the subcontract's basis is fixed at award | comparison stays amount-only; **a later edit could silently change the contract basis** [Q5] | new cols/tables; adding cols does not break `set_winning_bid`/convert (read `bid_amount` only) [verified] | Yes; link-reply is its own external build |
 | 5 | **Format set 5→8** on **both** CHECKs (`estimates.proposal_pricing_level` **and** `companies.default_proposal_pricing_level`) + row mapping [verified: both are 5-value CHECKs] | the eight formats | picker limited to 5 | ⚠️ **see hazard below** | **Highest risk** — sequence last |
+| 6 | **`estimates."also send to"` column** — a NEW estimate column [Q3, verified absent] | 19b "Also send to" (spouse/architect/lender) | the field has nowhere to persist | none (new col); **add to the immutability freeze list** if a sent estimate's recipients should be fixed [inferred — confirm at build] | **Yes** — small `estimates` ALTER; MAY ride with #2 (same table) but is a different concern (client-CC vs terms) |
+| 7 | **`scope_library` table** — a NEW table [Q8, verified: not inside any existing step] | 16b saved scope library + *Insert* (edit-here-doesn't-change-saved) | no saved scope to insert | none (new table) | **Yes** — independent; **established as a SEVENTH, not folded into any migration above** (none of #1–#6 touches scope; 16b's Included/Excluded flag is a JSONB shape change, no migration) |
 
 > **⚠️⚠️ Migration #5's remap collides with the immutability trigger.** `proposal_pricing_level` is
 > frozen on every non-draft estimate, so a naïve `UPDATE estimates SET proposal_pricing_level=…` on a
@@ -318,12 +345,24 @@ enforceable; not decided here.
 > write), **or (b) disable the trigger for the remap**, **or (c) widen the CHECK to accept old+new in a
 > two-step transition.** Prefer (a). **This is the single most dangerous migration in the set.**
 
-**Safe to defer:** #3 (event log) and #4 (sub-bid enrichment) — the presentation slice and the
-target/terms work do not depend on them. **Cannot defer past their screens:** #1 before 19b's target,
-#2 before 16c, #5 before 9d/19a's picker.
+**Safe to defer:** #3 (event log), #4 (sub-bid enrichment), #6 ("also send to"), #7 (scope_library) —
+the presentation slice and the target/terms work do not depend on them. **Cannot defer past their
+screens:** #1 before 19b's target, #2 before 16c, #5 before 9d/19a's picker, #7 before 16b's library.
 
-⚠️ **Open count-mover [Q6]:** **"Also send to" storage** is unsettled — if it becomes an estimate
-column rather than reusing contact data, it is a **sixth** migration. Recorded as unsettled.
+> **✅ SETTLED [Josh, S103], superseding the "unsettled sixth" note above.** _Quoted, not deleted:_
+> *"⚠️ Open count-mover [Q6]: 'Also send to' storage is unsettled — if it becomes an estimate column
+> rather than reusing contact data, it is a sixth migration. Recorded as unsettled."_ **Q3 rules it a
+> NEW estimate column → migration #6.** (The old note mis-cited it as Q6; "also send to" is Q3.)
+>
+> ⚠️⚠️ **AN EIGHTH, SURFACED — NOT previously counted, and the prompt did not name it. [Q6]** Q6
+> ("mark lost" reuses `declined` **with a DISTINCT reason set** for self-initiated loss vs client
+> decline) is **itself a schema change**: `estimates_decline_reason_code_check` today allows only
+> client-decline reasons — `too_expensive, chose_competitor, project_canceled, timing, scope_changed,
+> other` [verified: live CHECK]. A distinct mark-lost reason set needs **either a CHECK widening with
+> new values, or a discriminator column** distinguishing self-initiated loss from client decline.
+> **This is an eighth schema change**, in no existing step. It MAY ride with #6 (both are `estimates`
+> ALTERs) but is a different concern. **Flagged, not folded — the build must decide.** (See §5 Q6 and
+> §4 close-out.)
 
 ### 3.6 — Integration: what the build must not break [audit §9, carried forward]
 
@@ -375,13 +414,21 @@ Weighted outbound. `⚠️MIG` = a migration touches it.
    deposit invoice and seed `due_date`/retainage without overwriting set values.
 4. **Migration #3 — event log + 4 writers → 16d rail + 19b activity.** Demonstrable: a reprice shows in
    the history rail.
-5. **Migration #4 — sub-bid enrichment + link-reply → 19c/19d/9c.** Demonstrable: a sub replies via
-   link and lands as a comparable row.
+5. **Migration #4 — sub-bid enrichment + link-reply → 19c/19d/9c** (⚠️ Q5-expanded: persist split +
+   coverage onto the winning row). Demonstrable: a sub replies via link and lands as a comparable row;
+   awarding fixes the split on the winning row.
+5a. **Migration #6 — `estimates` "also send to" column [Q3]** + **Migration #8 — mark-lost reason set
+   [Q6]** (or fold #8 into #6 — both are `estimates` ALTERs). Land with the 19b work. Demonstrable: an
+   extra recipient persists; a *sent* estimate marks lost with a self-initiated reason distinct from a
+   client decline.
+5b. **Migration #7 — `scope_library` table [Q8]** → 16b saved library + *Insert*. Demonstrable:
+   inserting a saved section does not mutate the saved copy.
 6. **19a Review & Send sheet.** Composes the format picker, the internal block (needs #1's target),
-   Before-you-send (exists), the live PDF pane (reuses `/proposal`), version DERIVED (R2′).
-   Demonstrable: send from the sheet, expiry starts, version shows.
+   Before-you-send (exists), the live PDF pane (calls `getProposalData` inline — Q1), version DERIVED
+   as "v2, v3…" (R2′/Q2). Demonstrable: send from the sheet, expiry starts, version shows.
 7. **Migration #5 — format set 5→8 (add-only remap).** Sequence last (highest risk). Demonstrable: all
-   eight formats redraw the preview; open-book prints cost, the six others do not.
+   eight formats redraw the preview; open-book prints cost + fee, the six others do not (Q4: allowed
+   and flagged, not restricted).
 
 ### 3.8 — Excluded, carried forward with reasoning
 
@@ -433,38 +480,104 @@ illustrative, not verified arithmetic** — do not adjust the numbers to force a
 
 **Trace 7 — Version derived (R2′).** Input: `EST-106` sent, then revised. Store: nothing — the revise
 voids EST-106 and inserts a new estimate row with `supersedes_estimate_id = EST-106.id`. Output: the
-displayed version is computed by counting the chain length at read time (chain of 2 → "v2"/"v1.2" per
-the display rule). No counter, no write. [R2′] ⚠️ The exact label format ("v1.2" vs "v2") is a display
-decision (Q2).
+displayed version is computed by counting the chain length at read time. No counter, no write. [R2′]
+**→ RULED [Josh, S103] (Q2): the label is "v2, v3…"; the first send shows "v1"; the vestigial "v1.1"
+default never surfaces.** So EST-106's first send = **v1**; after one void+reissue the chain length is
+2 → **v2**. *Reasoning: the chain has no minor versions; decimals imply a distinction that does not
+exist.* [supersedes the handoff footer's "v1.2" wording, §2 19a.]
 
 **Trace 8 — Invoice-due seeding (§2.2).** Input: estimate invoice-due = "Net 30". Store:
 `estimates` invoice-due field (new, Mig #2). Output: an invoice generated from the job seeds
 `invoices.due_date` = issue + 30 **only if `due_date` is not already set** — it never overwrites a
-user-chosen date [§2.2]. ⚠️ The stored shape (days-integer vs a date rule) is a build-time decision
-(Q3).
+user-chosen date [§2.2]. **→ RULED [Josh, S103] (Q3): stored as net-days (integer)** — "Net 30" = the
+integer 30, which seeds `invoices.due_date = issue + 30` cleanly. The trace above foots as written.
 
 ---
 
-## 4 — ⚠️ Questions for Josh (one batch)
+## 4 — Questions for Josh — ✅ ALL EIGHT RULED [Josh, S103]
+
+> Each question kept verbatim (one batch), with its ruling appended. The authoritative record is §5.
 
 1. **19a PDF pane source.** `/proposal` stays a route and feeds the pane [R1]. Should the pane embed
    the route (iframe/RSC) or call `getProposalData` directly and render inline? Both keep the render
    logic in one place; the choice affects the segmented PDF/Email control.
+   → **RULED [Josh, S103] (Q1): calls `getProposalData` directly and renders inline. Not an iframe.**
+   *An embedded route fights the segmented control, zoom and paging.*
 2. **Version label format.** R2′ derives version from the chain length. Display it as **"v1.2, v1.3…"**
    (handoff wording) or **"v2, v3…"**? And does the first send show **v1** or the vestigial default's
    **"v1.1"**?
+   → **RULED [Josh, S103] (Q2): "v2, v3…". First send shows v1. The vestigial "v1.1" never surfaces.**
+   *The chain has no minor versions; decimals imply a distinction that does not exist.*
 3. **Invoice-due shape.** Store the estimate-level invoice-due as **net-days (integer)** or a **date
    rule**? (Trace 8.) And "Also send to" — a new estimate column, or reuse contact data? (This is the
    open sixth-migration count-mover.)
+   → **RULED [Josh, S103] (Q3): invoice-due = net-days (integer); "Also send to" = a NEW estimate
+   column (migration #6).** *Net-days seeds `invoices.due_date` cleanly; "also send to" is per-job, not
+   part of the client's permanent record.*
 4. **Open-book by contract type.** Restrict *Cost Plus — Itemized* / *T&M — Itemized* to matching
    `contract_type`, or allow-and-flag like T&M-as-lump-sum? [§3.4]
+   → **RULED [Josh, S103] (Q4): ALLOWED AND FLAGGED, not restricted by `contract_type`** — same
+   treatment as T&M-presented-as-lump-sum.
 5. **`set_winning_bid` extension.** When a bid arrives via the link with labor/material split and
    scope-coverage, should `set_winning_bid` persist those onto the winning row, or leave them on
    `estimate_sub_bids` only?
+   → **RULED [Josh, S103] (Q5): `set_winning_bid` PERSISTS the split and scope coverage onto the
+   winning row.** *The subcontract draws from it; leaving it only on `estimate_sub_bids` lets a later
+   edit silently change the contract basis.* (Expands migration #4 — §3.5.)
 6. **"Mark lost" (19b).** Reuse `declined` + `decline_reason_code` [R12] — confirm a `decline_reason_code`
    value for "lost to competitor / no decision" is acceptable, or do you want a distinct reason set for
    a self-initiated "mark lost" vs a client decline?
+   → **RULED [Josh, S103] (Q6): reuse `declined` and its reason column, with a DISTINCT reason set for
+   self-initiated "mark lost" vs a client decline.** *Win rate depends on telling them apart.* ⚠️ This
+   is itself a schema change (the surfaced eighth — §3.5, §5).
 7. **19c win record.** "won 4 of 7 bids" — derive live from `estimate_sub_bids.is_winner` history, or
    is a stored per-sub win count wanted? (No such column today.)
+   → **RULED [Josh, S103] (Q7): DERIVED LIVE from `is_winner` history. No stored counter.** *A counter
+   needs a writer and can drift — the same reasoning that superseded R2.*
 8. **Scope library store (16b).** A new `scope_library` table, or company-level JSONB? The *Insert*
    flow (edit-here-doesn't-change-saved) works with either.
+   → **RULED [Josh, S103] (Q8): a NEW `scope_library` TABLE, not company-level JSONB (migration #7).**
+   *Rows make "editing here doesn't change the saved copy" structural rather than a manual
+   read-modify-write.*
+
+---
+
+## 5 — Authoritative ruling record [Josh, S103]
+
+The eight §4 answers, recorded once as the source of truth. Where a ruling changes earlier spec text,
+that text is superseded-and-quoted at the point it occurs (see §2, §3.4, §3.5) and pointed here.
+
+| Q | Ruling | Schema? |
+| --- | --- | --- |
+| **Q1** | 19a PDF pane **calls `getProposalData` directly, renders inline — not an iframe** (an embedded route fights the segmented control, zoom, paging). | no |
+| **Q2** | Version label is **"v2, v3…"; first send = v1; "v1.1" never surfaces** (the chain has no minor versions). | no (derived, R2′) |
+| **Q3** | Invoice-due = **net-days integer**; **"Also send to" = NEW estimate column** (net-days seeds `due_date` cleanly; "also send to" is per-job). | **yes — mig #6 (also send to); invoice-due folds into mig #2** |
+| **Q4** | Open-book formats **allowed and flagged**, not restricted by `contract_type`. | no (values already in mig #5) |
+| **Q5** | `set_winning_bid` **persists split + scope coverage onto the winning row** (the subcontract draws from it; else a later edit silently changes the contract basis). | **yes — expands mig #4** (likely new `estimate_line_rows` columns) |
+| **Q6** | "Mark lost" reuses `declined` **with a DISTINCT reason set** vs client decline (win rate depends on telling them apart). | **yes — an EIGHTH: `decline_reason_code` CHECK widening or a discriminator [verified: current CHECK is client-decline reasons only]** |
+| **Q7** | Sub win record **derived live from `is_winner` history**, no stored counter (a counter needs a writer and can drift — R2′ reasoning). | no |
+| **Q8** | Scope library = **a NEW `scope_library` table**, not company JSONB (rows make "edit-here-doesn't-change-saved" structural). | **yes — mig #7** |
+
+### 5.1 — Migration count restated
+
+**Was five. Is now SEVEN, with an eighth surfaced.** [Josh, S103]
+
+1. `companies.margin_target_percent`
+2. **Deposit terms** — `estimates.deposit_percent` + **invoice-due (net-days integer, Q3)** + company deposit/retainage defaults
+3. `estimate_events` log (reprice · send · award · convert — clone excluded)
+4. **Sub-bid enrichment + link-reply** — ⚠️ **expanded by Q5** to persist split + coverage onto the winning `estimate_line_rows` row
+5. **Format set 5→8** on both CHECKs (add-only remap — the immutability hazard, §3.5)
+6. **`estimates` "also send to" column** [Q3 — the confirmed sixth]
+7. **`scope_library` table** [Q8 — established as a seventh; NOT inside any existing step: none of #1–#6 touches scope, and 16b's Included/Excluded flag is a no-migration JSONB shape change]
+
+⚠️ **The surfaced eighth [Q6], which the prompt did not name and prior counting missed:** the distinct
+"mark lost" reason set is a schema change — `estimates_decline_reason_code_check` today allows only
+`too_expensive, chose_competitor, project_canceled, timing, scope_changed, other` [verified: live
+CHECK]. Giving self-initiated loss its own reasons needs **a CHECK widening or a discriminator column**.
+It is in no existing step. **It MAY ride with #6 (both are `estimates` ALTERs) but is a different
+concern; flagged for the build to decide — not folded silently.**
+
+**Sequence (attended, DB-before-code, one at a time):** #1 (safest, standalone) → #2 → #3 → #4 → #6 →
+#7 → **#8 (or fold into #6)** → **#5 last** (highest risk: the format remap must be add-only or it hits
+the immutability trigger on sent rows, §3.5). #3, #4, #6, #7 are deferrable past the presentation
+slice; #1 before 19b, #2 before 16c, #5 before 9d/19a, #7 before 16b's library.
