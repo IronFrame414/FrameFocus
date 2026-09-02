@@ -43,6 +43,7 @@ import { CatalogPicker } from './catalog-picker';
 import { useConfirm } from '@/components/confirm/confirm-provider';
 import { EstimateHealthStrip } from './estimate-health-panel';
 import { AddItemsSheet } from './add-items-sheet';
+import { font } from '@/lib/theme';
 import type { TabProps } from './estimate-builder';
 
 type Result = { success: boolean; error?: string };
@@ -595,6 +596,26 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
                 }
               />
             </span>
+            {/* Step 9 — $0 rows get a visible treatment: an unpriced line will not
+                contribute to the proposal total, which is nearly always an omission
+                rather than an intent. Presentation only. */}
+            {Number(line.total_price) === 0 && (
+              <span
+                title="This line has no price — it won't add to the proposal total."
+                style={{
+                  fontSize: '0.65rem',
+                  fontWeight: 700,
+                  color: '#b45309',
+                  background: '#fff5e6',
+                  border: '1px solid #f6d9a8',
+                  borderRadius: '999px',
+                  padding: '1px 7px',
+                  fontFamily: font.mono,
+                }}
+              >
+                Unpriced · $0
+              </span>
+            )}
           </div>
           <div style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
             {/* Cost basis for a flat-priced line (S-3/§4.1) — carried to the
