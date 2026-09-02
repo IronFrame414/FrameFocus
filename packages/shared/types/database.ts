@@ -1689,45 +1689,6 @@ export type Database = {
           },
         ]
       }
-      contacts_dedupe_log: {
-        Row: {
-          canonical_contact_id: string | null
-          company_id: string | null
-          email: string | null
-          id: string
-          removed_contact_id: string | null
-          removed_created_at: string | null
-          removed_first_name: string | null
-          removed_last_name: string | null
-          repoint_counts: Json | null
-          run_at: string
-        }
-        Insert: {
-          canonical_contact_id?: string | null
-          company_id?: string | null
-          email?: string | null
-          id?: string
-          removed_contact_id?: string | null
-          removed_created_at?: string | null
-          removed_first_name?: string | null
-          removed_last_name?: string | null
-          repoint_counts?: Json | null
-          run_at?: string
-        }
-        Update: {
-          canonical_contact_id?: string | null
-          company_id?: string | null
-          email?: string | null
-          id?: string
-          removed_contact_id?: string | null
-          removed_created_at?: string | null
-          removed_first_name?: string | null
-          removed_last_name?: string | null
-          repoint_counts?: Json | null
-          run_at?: string
-        }
-        Relationships: []
-      }
       contract_document_attachments: {
         Row: {
           attached_after_execution: boolean
@@ -2866,64 +2827,6 @@ export type Database = {
           },
         ]
       }
-      estimate_award_bases: {
-        Row: {
-          awarded_at: string
-          company_id: string
-          created_at: string
-          id: string
-          labor_amount: number | null
-          line_row_id: string
-          material_amount: number | null
-          scope_coverage_percent: number | null
-          sub_bid_id: string | null
-        }
-        Insert: {
-          awarded_at?: string
-          company_id?: string
-          created_at?: string
-          id?: string
-          labor_amount?: number | null
-          line_row_id: string
-          material_amount?: number | null
-          scope_coverage_percent?: number | null
-          sub_bid_id?: string | null
-        }
-        Update: {
-          awarded_at?: string
-          company_id?: string
-          created_at?: string
-          id?: string
-          labor_amount?: number | null
-          line_row_id?: string
-          material_amount?: number | null
-          scope_coverage_percent?: number | null
-          sub_bid_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "estimate_award_bases_company_id_fkey"
-            columns: ["company_id"]
-            isOneToOne: false
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "estimate_award_bases_line_row_id_fkey"
-            columns: ["line_row_id"]
-            isOneToOne: true
-            referencedRelation: "estimate_line_rows"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "estimate_award_bases_sub_bid_id_fkey"
-            columns: ["sub_bid_id"]
-            isOneToOne: false
-            referencedRelation: "estimate_sub_bids"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       estimate_categories: {
         Row: {
           company_id: string
@@ -3287,144 +3190,6 @@ export type Database = {
           },
         ]
       }
-      estimate_sub_bid_requests: {
-        Row: {
-          allowance_amount: number | null
-          bids_due_date: string | null
-          company_id: string
-          created_at: string | null
-          created_by: string | null
-          deleted_at: string | null
-          estimate_id: string
-          expires_at: string
-          id: string
-          is_deleted: boolean | null
-          line_item_id: string
-          message: string | null
-          reply_bid_amount: number | null
-          reply_exclusions: string | null
-          reply_holds_until: string | null
-          reply_labor_amount: number | null
-          reply_material_amount: number | null
-          reply_mode: string
-          reply_scope_coverage_percent: number | null
-          scope_text: string | null
-          sent_at: string | null
-          site_visit_date: string | null
-          status: string
-          sub_bid_id: string | null
-          subcontractor_id: string
-          submitted_at: string | null
-          token: string
-          updated_at: string | null
-          updated_by: string | null
-          viewed_at: string | null
-          work_starts_date: string | null
-        }
-        Insert: {
-          allowance_amount?: number | null
-          bids_due_date?: string | null
-          company_id?: string
-          created_at?: string | null
-          created_by?: string | null
-          deleted_at?: string | null
-          estimate_id: string
-          expires_at: string
-          id?: string
-          is_deleted?: boolean | null
-          line_item_id: string
-          message?: string | null
-          reply_bid_amount?: number | null
-          reply_exclusions?: string | null
-          reply_holds_until?: string | null
-          reply_labor_amount?: number | null
-          reply_material_amount?: number | null
-          reply_mode?: string
-          reply_scope_coverage_percent?: number | null
-          scope_text?: string | null
-          sent_at?: string | null
-          site_visit_date?: string | null
-          status?: string
-          sub_bid_id?: string | null
-          subcontractor_id: string
-          submitted_at?: string | null
-          token?: string
-          updated_at?: string | null
-          updated_by?: string | null
-          viewed_at?: string | null
-          work_starts_date?: string | null
-        }
-        Update: {
-          allowance_amount?: number | null
-          bids_due_date?: string | null
-          company_id?: string
-          created_at?: string | null
-          created_by?: string | null
-          deleted_at?: string | null
-          estimate_id?: string
-          expires_at?: string
-          id?: string
-          is_deleted?: boolean | null
-          line_item_id?: string
-          message?: string | null
-          reply_bid_amount?: number | null
-          reply_exclusions?: string | null
-          reply_holds_until?: string | null
-          reply_labor_amount?: number | null
-          reply_material_amount?: number | null
-          reply_mode?: string
-          reply_scope_coverage_percent?: number | null
-          scope_text?: string | null
-          sent_at?: string | null
-          site_visit_date?: string | null
-          status?: string
-          sub_bid_id?: string | null
-          subcontractor_id?: string
-          submitted_at?: string | null
-          token?: string
-          updated_at?: string | null
-          updated_by?: string | null
-          viewed_at?: string | null
-          work_starts_date?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "estimate_sub_bid_requests_company_id_fkey"
-            columns: ["company_id"]
-            isOneToOne: false
-            referencedRelation: "companies"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "estimate_sub_bid_requests_estimate_id_fkey"
-            columns: ["estimate_id"]
-            isOneToOne: false
-            referencedRelation: "estimates"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "estimate_sub_bid_requests_line_item_id_fkey"
-            columns: ["line_item_id"]
-            isOneToOne: false
-            referencedRelation: "estimate_line_items"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "estimate_sub_bid_requests_sub_bid_id_fkey"
-            columns: ["sub_bid_id"]
-            isOneToOne: false
-            referencedRelation: "estimate_sub_bids"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "estimate_sub_bid_requests_subcontractor_id_fkey"
-            columns: ["subcontractor_id"]
-            isOneToOne: false
-            referencedRelation: "subcontractors"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       estimate_sub_bids: {
         Row: {
           bid_amount: number
@@ -3628,7 +3393,6 @@ export type Database = {
           labor_markup_percent: number | null
           last_reminder_sent_at: string | null
           legal_description: string | null
-          lost_reason_code: string | null
           material_markup_percent: number | null
           name: string
           parent_estimate_id: string | null
@@ -3697,7 +3461,6 @@ export type Database = {
           labor_markup_percent?: number | null
           last_reminder_sent_at?: string | null
           legal_description?: string | null
-          lost_reason_code?: string | null
           material_markup_percent?: number | null
           name: string
           parent_estimate_id?: string | null
@@ -3766,7 +3529,6 @@ export type Database = {
           labor_markup_percent?: number | null
           last_reminder_sent_at?: string | null
           legal_description?: string | null
-          lost_reason_code?: string | null
           material_markup_percent?: number | null
           name?: string
           parent_estimate_id?: string | null
@@ -6699,9 +6461,6 @@ export type Database = {
           updated_by: string | null
           vendor_id: string | null
           vendor_name: string
-          void_reason: string | null
-          voided_at: string | null
-          voided_by: string | null
         }
         Insert: {
           author_member_id?: string
@@ -6725,9 +6484,6 @@ export type Database = {
           updated_by?: string | null
           vendor_id?: string | null
           vendor_name: string
-          void_reason?: string | null
-          voided_at?: string | null
-          voided_by?: string | null
         }
         Update: {
           author_member_id?: string
@@ -6751,9 +6507,6 @@ export type Database = {
           updated_by?: string | null
           vendor_id?: string | null
           vendor_name?: string
-          void_reason?: string | null
-          voided_at?: string | null
-          voided_by?: string | null
         }
         Relationships: [
           {
@@ -9515,10 +9268,6 @@ export type Database = {
       }
       company_ai_tags_this_month: { Args: never; Returns: number }
       company_storage_used_bytes: { Args: never; Returns: number }
-      compute_member_coi_expiry: {
-        Args: { p_member_id: string }
-        Returns: string
-      }
       convert_estimate_to_project: {
         Args: { p_estimate_id: string }
         Returns: string
@@ -9564,7 +9313,6 @@ export type Database = {
         Args: { p_company_name: string; p_exclude_company_id?: string }
         Returns: string
       }
-      get_estimate_version: { Args: { p_estimate_id: string }; Returns: number }
       get_invitation_by_token: {
         Args: { invite_token: string }
         Returns: {
@@ -9614,7 +9362,6 @@ export type Database = {
           segment_type: string
         }[]
       }
-      get_sub_bid_request: { Args: { p_token: string }; Returns: Json }
       is_assigned_to_project: {
         Args: { p_project_id: string }
         Returns: boolean
@@ -9626,10 +9373,6 @@ export type Database = {
       is_project_creator: { Args: { p_project_id: string }; Returns: boolean }
       issue_po_lines: {
         Args: { p_item_ids: string[]; p_po_id: string }
-        Returns: undefined
-      }
-      mark_estimate_lost: {
-        Args: { p_estimate_id: string; p_reason_code: string }
         Returns: undefined
       }
       mark_po_lines_purchased: {
@@ -9777,18 +9520,6 @@ export type Database = {
         Args: { p_delivery_id: string }
         Returns: undefined
       }
-      submit_sub_bid_reply: {
-        Args: {
-          p_bid_amount: number
-          p_exclusions: string
-          p_holds_until: string
-          p_labor_amount: number
-          p_material_amount: number
-          p_scope_coverage_percent: number
-          p_token: string
-        }
-        Returns: Json
-      }
       supersede_instrument_rate: {
         Args: {
           p_rate_id: string
@@ -9822,10 +9553,6 @@ export type Database = {
       unlock_trial_company: { Args: { p_company_id: string }; Returns: number }
       void_estimate: {
         Args: { p_estimate_id: string; p_reason: string }
-        Returns: undefined
-      }
-      void_purchase_order: {
-        Args: { p_po_id: string; p_reason: string }
         Returns: undefined
       }
     }
