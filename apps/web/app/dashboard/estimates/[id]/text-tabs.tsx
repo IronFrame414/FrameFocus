@@ -6,6 +6,12 @@ import { termsSectionSchema } from '@framefocus/shared/validation/estimate';
 import { useConfirm } from '@/components/confirm/confirm-provider';
 import { createClient } from '@/lib/supabase-browser';
 import { listEstimateEvents, type EstimateEvent } from '@/lib/services/estimate-events-client';
+import {
+  listScopeLibrary,
+  createScopeSection,
+  type ScopeLibraryItem,
+  type ScopeSectionKind,
+} from '@/lib/services/scope-library-client';
 import { color, font } from '@/lib/theme';
 import { fmtMoney } from '../labels';
 import type { TabProps } from './estimate-builder';
@@ -356,16 +362,40 @@ export function TermsTab({ data, canEdit, reload }: TabProps) {
 // ── Scope of Work tab ──
 // 4D-rev: a free-text summary at the top, then one level of nesting —
 // named sub-category sections, each with its own bullets.
+//
+// Estimates redesign 16b [Josh, S103]:
+//  · every section is Included or Excluded (JSONB shape change, NO migration —
+//    section_kind is optional and defaults to 'included' for rows written before
+//    this, so older estimates read back unchanged);
+//  · Build from line items generates one section per category from the priced
+//    work — presentation only, it never touches costs or totals;
+//  · the saved scope library (scope_library table, migration #7). ⚠️ Insert
+//    COPIES a row's {title, bullets, kind} into scope_sections; it never links
+//    back, so editing the estimate's copy leaves the library entry unchanged (Q8).
+// ⛔ NO Coverage check — scope sections and categories share no key, so a string
+//    match would confidently report scope missing that is not missing (spec §3.8).
 
-type ScopeSection = { title: string; bullets: string[] };
+type ScopeSection = { title: string; bullets: string[]; section_kind?: ScopeSectionKind };
+
+function sectionKind(s: ScopeSection): ScopeSectionKind {
+  return s.section_kind === 'excluded' ? 'excluded' : 'included';
+}
 
 export function ScopeTab({ data, canEdit, reload }: TabProps) {
   const initialSections =
     (data.estimate.scope_sections as unknown as ScopeSection[] | null) ?? [];
   const [summary, setSummary] = useState(data.estimate.scope_summary ?? '');
   const [sections, setSections] = useState<ScopeSection[]>(initialSections);
+  const [library, setLibrary] = useState<ScopeLibraryItem[]>([]);
+  const [libraryOpen, setLibraryOpen] = useState(false);
   const { error, saved, run } = useSaveState();
   const confirm = useConfirm();
+
+  // The saved scope library (migration #7). Read-only listing here; Insert copies
+  // into this estimate. Self-fetched, like the other builder side-panels.
+  useEffect(() => {
+    listScopeLibrary().then(setLibrary);
+  }, []);
 
   async function persist(nextSummary: string, nextSections: ScopeSection[]) {
     setSummary(nextSummary);
@@ -378,6 +408,51 @@ export function ScopeTab({ data, canEdit, reload }: TabProps) {
       if (result.success) await reload();
       return result;
     });
+  }
+
+  // Build from line items — one section per category, bullets from the line
+  // item names under it. Appends only categories not already present by title;
+  // never reads or writes costs/totals (this presents the priced work as scope).
+  function buildFromLineItems() {
+    const existing = new Set(sections.map((s) => s.title.trim().toLowerCase()));
+    const generated: ScopeSection[] = [];
+    for (const cat of [...data.categories].sort((a, b) => a.sort_order - b.sort_order)) {
+      if (existing.has(cat.name.trim().toLowerCase())) continue;
+      const bullets = data.lineItems
+        .filter((li) => li.category_id === cat.id)
+        .sort((a, b) => a.sort_order - b.sort_order)
+        .map((li) => li.name)
+        .filter((n) => !!n && n.trim().length > 0);
+      if (bullets.length === 0) continue;
+      generated.push({ title: cat.name, bullets, section_kind: 'included' });
+    }
+    if (generated.length === 0) return;
+    persist(summary, [...sections, ...generated]);
+  }
+
+  // Insert = COPY (Q8). A fresh object with a fresh bullets array so no later
+  // edit to the estimate's copy can reach back to the library row.
+  async function insertFromLibrary(item: ScopeLibraryItem) {
+    const copy: ScopeSection = {
+      title: item.title,
+      bullets: [...((item.bullets as unknown as string[]) ?? [])],
+      section_kind: item.section_kind,
+    };
+    await persist(summary, [...sections, copy]);
+  }
+
+  async function saveToLibrary(section: ScopeSection) {
+    if (!section.title.trim()) return;
+    const result = await createScopeSection({
+      title: section.title,
+      bullets: section.bullets,
+      section_kind: sectionKind(section),
+    });
+    if (result.success) setLibrary(await listScopeLibrary());
+  }
+
+  function setKind(si: number, kind: ScopeSectionKind) {
+    persist(summary, sections.map((s, i) => (i === si ? { ...s, section_kind: kind } : s)));
   }
 
   function moveSection(index: number, direction: -1 | 1) {
@@ -397,6 +472,17 @@ export function ScopeTab({ data, canEdit, reload }: TabProps) {
     persist(summary, sections.map((s, i) => (i === si ? { ...s, bullets: nextBullets } : s)));
   }
 
+  const kindPill = (active: boolean, tone: 'inc' | 'exc'): React.CSSProperties => ({
+    padding: '2px 8px',
+    fontSize: '0.68rem',
+    fontWeight: 700,
+    borderRadius: '999px',
+    cursor: canEdit ? 'pointer' : 'default',
+    border: `1px solid ${active ? (tone === 'inc' ? '#1f8f4e' : '#c0362c') : '#d5dae4'}`,
+    color: active ? '#fff' : color.muted,
+    background: active ? (tone === 'inc' ? '#1f8f4e' : '#c0362c') : '#fff',
+  });
+
   return (
     <div style={{ maxWidth: '640px' }}>
       <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}>Scope of Work</h2>
@@ -413,8 +499,75 @@ export function ScopeTab({ data, canEdit, reload }: TabProps) {
         onBlur={() => persist(summary, sections)}
         rows={3}
         placeholder="A short high-level overview of the work…"
-        style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit', marginBottom: '1.25rem' }}
+        style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit', marginBottom: '1rem' }}
       />
+
+      {/* Build tools — generate from the priced work, or pull a saved section. */}
+      {canEdit && (
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1rem' }}>
+          <button type="button" onClick={buildFromLineItems} style={buttonStyle}>
+            Build from line items
+          </button>
+          <button
+            type="button"
+            onClick={() => setLibraryOpen((o) => !o)}
+            style={buttonStyle}
+          >
+            {libraryOpen ? 'Hide library' : `Insert from library${library.length ? ` (${library.length})` : ''}`}
+          </button>
+        </div>
+      )}
+
+      {/* Saved scope library (migration #7). Insert copies into this estimate. */}
+      {canEdit && libraryOpen && (
+        <div
+          style={{
+            border: `1px solid ${color.cardBorder}`,
+            borderRadius: '0.5rem',
+            padding: '0.75rem',
+            marginBottom: '1rem',
+            background: color.cardBg,
+          }}
+        >
+          <div style={{ fontSize: '0.72rem', fontWeight: 700, color: color.muted, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
+            Saved scope library
+          </div>
+          {library.length === 0 ? (
+            <p style={{ fontSize: '0.8rem', color: color.faint, margin: 0 }}>
+              Nothing saved yet. Use “Save to library” on a section to reuse it later.
+            </p>
+          ) : (
+            library.map((item) => (
+              <div
+                key={item.id}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  padding: '0.375rem 0',
+                  borderTop: `1px solid ${color.cardBorder}`,
+                }}
+              >
+                <span style={{ fontSize: '0.8rem', color: color.body, minWidth: 0 }}>
+                  <strong>{item.title}</strong>
+                  <span style={{ color: color.muted }}>
+                    {' '}· {(item.bullets as unknown as string[] | null)?.length ?? 0} items
+                    {item.section_kind === 'excluded' ? ' · excluded' : ''}
+                  </span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => insertFromLibrary(item)}
+                  style={{ ...iconButtonStyle, flexShrink: 0 }}
+                >
+                  Insert
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      )}
 
       {sections.length === 0 && (
         <p style={{ fontSize: '0.875rem', color: '#9aa4b8', marginBottom: '1rem' }}>
@@ -426,12 +579,45 @@ export function ScopeTab({ data, canEdit, reload }: TabProps) {
         <div
           key={si}
           style={{
-            border: '1px solid #e4e8ef',
+            border: `1px solid ${sectionKind(section) === 'excluded' ? '#efd3d0' : '#e4e8ef'}`,
             borderRadius: '0.375rem',
             padding: '0.75rem',
             marginBottom: '0.75rem',
+            background: sectionKind(section) === 'excluded' ? '#fdf6f5' : '#fff',
           }}
         >
+          {/* Included / Excluded + Save-to-library */}
+          <div style={{ display: 'flex', gap: '0.375rem', alignItems: 'center', marginBottom: '0.5rem' }}>
+            <button
+              type="button"
+              disabled={!canEdit}
+              onClick={() => canEdit && setKind(si, 'included')}
+              style={kindPill(sectionKind(section) === 'included', 'inc')}
+            >
+              Included
+            </button>
+            <button
+              type="button"
+              disabled={!canEdit}
+              onClick={() => canEdit && setKind(si, 'excluded')}
+              style={kindPill(sectionKind(section) === 'excluded', 'exc')}
+            >
+              Excluded
+            </button>
+            <span style={{ flex: 1 }} />
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => saveToLibrary(section)}
+                disabled={!section.title.trim()}
+                title="Save this section to your scope library to reuse on other estimates"
+                style={{ ...iconButtonStyle, opacity: section.title.trim() ? 1 : 0.4 }}
+              >
+                Save to library
+              </button>
+            )}
+          </div>
+
           {/* Section title + reorder/delete */}
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '0.5rem' }}>
             <button
