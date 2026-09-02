@@ -117,9 +117,10 @@ Handoff ids. For each: **exists today / required / ties into / class (a–d) / o
 - **Open:** biggest re-architecture on the branch — does the `/proposal` route survive as the PDF
   pane's source, or does its content move into the sheet? The footer promises a version bump the
   code cannot make today.
-  > **⚠️ RESOLVED [Josh, S103] (R1, R2).** Build the sheet; `/proposal` **stays a route** and feeds
-  > the PDF pane (render logic does not move). The version bump is a **send counter** (R2), so the
-  > footer's promise is now buildable.
+  > **⚠️ RESOLVED [Josh, S103] (R1, R2′).** Build the sheet; `/proposal` **stays a route** and feeds
+  > the PDF pane (render logic does not move). The footer's "creates v1.2" promise is met by **R2′**:
+  > the version is **DERIVED** from the void/reissue supersede chain (not a stored counter), so the
+  > sheet displays it read-only and the reissue flow is what advances it.
 
 ### 19c · Sub bid — sending the request
 - **Exists today** **[verified]**: `bidding-tab.tsx` (282 lines) lists bids and records them;
@@ -344,7 +345,9 @@ exists" cases are not re-proposed.**
 - Event-emitting writers (on reprice via `recalculateEstimateTotals`, on send, on sub-bid award) to
   populate `estimate_events` — **(d)**.
 - Version-bump-on-send logic — **(d)** (collision #2). **→ RULED [Josh, S103] (R2): a send counter
-  on the existing `version_number`; no new table.**
+  on the existing `version_number`; no new table.** **⚠️ SUPERSEDED → R2′: version is DERIVED from the
+  supersede chain at read time — NO writer at all, `version_number` stays vestigial. This `(d)` item
+  is withdrawn.**
 
 ---
 
@@ -353,7 +356,7 @@ exists" cases are not re-proposed.**
 | # | Verdict | Evidence |
 | --- | --- | --- |
 | **1 — no event log** | **CONFIRMED (with nuance).** No generic estimate audit/event/history table exists. **[verified: table-name sweep for event/audit/history/activity/log]** BUT partial event sources exist and already power Client Activity: `proposal_views` (opens), `email_logs` (sends, keyed `estimate_id`), `signing_sessions` (sign/decline), `client_access_events` (portal). **What has no source anywhere is the value-change history** — "Repriced to $123,651", "Margin dropped 31% → 18.4%", "Created from template". **Smallest model:** an append-only `estimate_events {id, company_id, estimate_id, kind, actor_id, created_at, payload jsonb}` written at three points — reprice (`recalculateEstimateTotals`), send, and sub-bid award. It serves 16d's rail and 19b's activity from one table. |
-| **2 — no version numbering** | **CONFIRMED.** `estimates.version_number text DEFAULT 'v1.1' NOT NULL` **[verified: live column default]**, and **zero writers** — only two readers, `proposal-data.ts:256` and `estimate-builder.tsx:361`, plus the dead-code comment at `estimate-health-panel.tsx:7`. **[verified: grep]** The design's footer promises "Edits after this create v1.2". **The choice (a send-counter on the column vs. immutable snapshots) is Josh's** — I do not make it. A counter is one writer on send; snapshots are a new table. **→ RULED [Josh, S103] (R2): a SEND COUNTER — one writer on the existing column, no new table.** |
+| **2 — no version numbering** | **CONFIRMED.** `estimates.version_number text DEFAULT 'v1.1' NOT NULL` **[verified: live column default]**, and **zero writers** — only two readers, `proposal-data.ts:256` and `estimate-builder.tsx:361`, plus the dead-code comment at `estimate-health-panel.tsx:7`. **[verified: grep]** The design's footer promises "Edits after this create v1.2". **The choice (a send-counter on the column vs. immutable snapshots) is Josh's** — I do not make it. A counter is one writer on send; snapshots are a new table. **→ RULED [Josh, S103] (R2): a SEND COUNTER — one writer on the existing column, no new table.** **⚠️ SUPERSEDED → R2′ [Josh, S103]: version is DERIVED by walking the void/reissue supersede chain at read time — NO counter, NO writer, `version_number` stays vestigial. See §8 R2′.** |
 | **3 — margin target not built** | **CONFIRMED.** `companies.margin_target_percent` does **not** exist; no `margin_target` token anywhere in code/migrations. **[verified: `companies` column list + grep]** The rest of Estimate health IS derivable today: `computeEstimateHealth` (`apps/web/lib/estimate-health.ts`) already returns price/cost/profit/margin from row cost bases, and renders margin as a number with **no** target comparison, by design **[verified: `estimate-health-panel.tsx:92-103` + its header comment]**. Add the column + one Settings field; comparison renders only when set. |
 | **4 — structured payment terms not stored** | **PARTLY REFUTED.** **`estimates.retainage_percent numeric(5,2)` EXISTS** (`20260926000000_7i_contracts.sql`) **[verified]** — the collision's premise that structured terms aren't stored is wrong for retainage. **Deposit % is confirmed absent**; invoice-due is per-invoice; and **`companies` has no deposit/retainage default** to diff "changed from default" against **[verified]**. To keep deposit invoice + retainage draws + printed terms in sync: add `estimates.deposit_percent` and company-level defaults; retainage already flows. **→ RULED [Josh, S103] (R9): add both company defaults (deposit + retainage).** |
 | **5 — convert creates no POs** | **CONFIRMED.** Full RPC read live (`pg_get_functiondef`): `convert_estimate_to_project()` creates project, `project_financials`, `client_contracts` + `client_contract_amounts`, backfills `contract_documents.project_id`, builds `project_budget_items` + `project_budget_amounts` per row (cost expression inlined), and `subcontractor_contracts` from winning bids — **no `purchase_orders` INSERT** **[verified: RPC body]**. It **belongs beside, not in**: PO drafting is already a separate flow (`createDraftPos`) reading the budget/line rows the RPC produced, homed on Deliveries. 18a's "third step of the convert flow" is a UI placement question, not an RPC change. |
@@ -414,14 +417,17 @@ order the dependencies allow.
    the columns; `set_winning_bid` extended last.
 6. **19a Review & Send **sheet****. Forced last of the big items: it composes the format picker, the
    internal block (needs step 2's target), the "before you send" card (exists), the live PDF pane
-   (reuses `/proposal` data), and the v1.2 promise (needs step 4's version decision). It depends on
+   (reuses `/proposal` data), and the v1.2 promise (**R2′: version DERIVED from the supersede chain —
+   read-only display, no step-4 dependency**). It depends on
    the most other work, so it lands after it.
 7. **Deferred/optional:** Assemblies and the "from a sub bid / past estimate" add-sheet sources
    (17); the saved `scope_library` (16b). Independent; slot wherever capacity allows.
 
 > **⚠️ RULINGS IMPACT ON THIS ORDER [Josh, S103].** Step 1 gets **simpler**: 16d keeps the blob (R4),
-> so no `estimate_notes` work. Step 4's "decide #2 before writing it" is **decided** — a send counter
-> (R2) rides on the same send-time writer. **Add a step** for the **proposal format-set** DDL + row
+> so no `estimate_notes` work. Step 4's "decide #2 before writing it" is **decided** — ~~a send counter
+> (R2) rides on the same send-time writer~~ **→ SUPERSEDED by R2′: version is DERIVED from the
+> supersede chain, no writer at all, so step 4 carries no version work.** **Add a step** for the
+> **proposal format-set** DDL + row
 > mapping (§8·A / R8) — a screen-9d dependency. Step 5 keeps the tokenised link-reply surface (R6).
 > Deferred item 7 (Assemblies / alt sources) is now **`TECH_DEBT #1-estred`** (§8·B); customized
 > templates are **`#2-estred`** (§4). The full ruled migration count is worked in **§8·C** ("five as
@@ -439,6 +445,8 @@ order the dependencies allow.
    meaning — (a) a send-counter incrementing `version_number` (one writer), or (b) immutable
    snapshots of the estimate per version (a new table)? This gates step 4/6.
    → **RULED [Josh, S103] (R2):** a send counter — one writer incrementing on send, not snapshots.
+   → **⚠️ SUPERSEDED → R2′ [Josh, S103]:** neither — the version is **DERIVED** by walking the
+   void/reissue supersede chain at read time. Nothing stored, no counter, no writer. (See §8 R2′.)
 3. **Estimate event log (collision #1):** OK to introduce one append-only `estimate_events` table as
    the source for BOTH 16d's history rail and 19b's activity, written at reprice / send / award? Any
    other events you want captured (decline, clone, convert)?
@@ -511,11 +519,27 @@ as a route** and feeds the sheet's PDF pane; its render logic does not move. *Re
 one genuinely absent screen and the reason this build exists; moving the proposal render is risk with
 no payoff.* (Answers Q1; settles the 19a "Open" and the headline's risk item (2).)
 
-**R2 — Version numbering: A SEND COUNTER.** One writer, incrementing on send. **Not snapshots.**
-*Reasoning: snapshots are a second table and a full immutability story, and sending already freezes
-the estimate; signed artifacts are preserved by their own mechanism.* (Answers Q2; **supersedes
-collision #2's "the choice is Josh's — I do not make it"** and the schema-appendix "version-bump …
-(collision #2)" line — the choice is now made: counter, no new table.)
+> **⚠️⚠️ R2 IS SUPERSEDED [Josh, S103] — version is DERIVED, nothing is stored. See R2′ below.**
+> The send-counter ruling is quoted-not-deleted immediately below; the replacement follows it.
+
+**R2 (SUPERSEDED) — Version numbering: A SEND COUNTER.** One writer, incrementing on send. **Not
+snapshots.** *Reasoning: snapshots are a second table and a full immutability story, and sending
+already freezes the estimate; signed artifacts are preserved by their own mechanism.* (Answered Q2;
+superseded collision #2's "the choice is Josh's — I do not make it" and the schema-appendix
+"version-bump … (collision #2)" line.)
+
+**R2′ — Version numbering: DERIVED FROM THE SUPERSEDE CHAIN. NOTHING IS STORED. [Josh, S103]**
+The version displayed on an estimate is **computed by walking the void/reissue `supersedes_estimate_id`
+chain** at read time. **No counter, no stored value, no new writer.** The vestigial
+`estimates.version_number` (`DEFAULT 'v1.1'`, zero writers) is not the source and is not written.
+*Reasoning, recorded: §9's own finding showed `version_number` **freezes on send** and **sent→draft
+is blocked**, so edits after send go through **void-and-reissue creating a new estimate row**. The
+send-counter's justification — that immutability made a counter cheap — was **backwards**:
+immutability is what makes a counter **expensive**, because the row you would increment is frozen. A
+stored counter would need a second writer and could **drift from the chain it describes**; deriving
+from the chain cannot drift, because the chain **is** the version history.* (Answers Q2. Supersedes
+R2 above; the position that "counter, no new table" was the answer is withdrawn. **Consequence for the
+count: this removes a writer, not a migration — see §8·C.**)
 
 **R3 — Event log: YES.** One append-only estimate event log serving **both** 16d's history rail and
 19b's client activity. **Events to capture: reprice, send, award, convert. Clone is excluded.**
@@ -723,8 +747,12 @@ format value set from six to eight within the one format migration (#5).
 ⚠️ **What could still move the count — flagged, not resolved:**
 - **"Also send to" (R10) still needs a store.** If it becomes an estimate column rather than reusing
   contact data, that is a **sixth** migration. **This is now the only genuinely open count-mover.**
-- **Version counter (R2)** needs **no new column** (`version_number` exists) — a send-time writer,
-  possibly a trigger, not counted as a migration here.
+- **Version numbering (R2′, SUPERSEDES R2)** needs **no migration and no writer at all** — the
+  version is **DERIVED** by walking the void/reissue supersede chain at read time; the vestigial
+  `version_number` column is untouched. This **removes** the send-time writer the old R2 implied. It
+  does not change the migration count — R2 was never one of the five — but it **removes work** (no
+  send-path counter, no trigger change for version), and it depends on the supersede chain (O5) the
+  reissue flow already maintains. **The count stands at five as bundled.**
 - **Bundling is itself a spec-run decision.** Split apart (deposit column vs company defaults;
   sub-bid columns vs link-reply tables), the five become seven-plus. The number is "five *as
   bundled*," and the spec must sequence whatever it lands on.
@@ -758,7 +786,7 @@ time, DB before code**. Five is a lot of attended pushes; sequence them.
 | O2 | **Budget / job cost** — `project_budget_items` (+`project_budget_amounts`) carry **cost only** (`budgeted_amount`/`committed_amount`/`actual_amount`); **no sell/price/profit column** | `apps/web/lib/services/budget.ts:10`; `payables-client.ts`; `po-lines-client.ts:124` [verified: live columns] | none directly | **Parked gap, NOT closed by this redesign:** the new margin/health work is estimate-level and does **not** flow sell into job cost. Nobody should expect margin-target to appear in budget. | V |
 | O3 | **PO drafting + basis rule** — `createDraftPos`/`listDraftableLines` read estimate rows; "Against the estimate" compares **ordered cost vs budgeted cost, never sell** | `po-lines-panel.tsx:364` ("ordered cost vs budgeted cost, never sell"), `:149` ("cost only; the client price never appears on a PO"); `po-lines-client.ts:124-126` [verified: read] | R5 (18a stays on Deliveries) | Basis rule is **honored today** — do not let a restyle introduce a sell figure into the PO or the comparison. Block renders Owner/Admin only (amounts floor). | V |
 | O4 | **Invoicing** — deposit/retainage/due | `invoices-client.ts:72-91` create (**no deposit %, no auto due_date**); `:599`,`:631-672` retainage from **invoice's own** `retainage_percent`; `:82` `due_date` caller-supplied, defaults null; deposit is a **type flag** only (`20260802000000_7d_invoicing.sql:159`) [verified] | **§2.2 (invoice due), R9 (deposit/retainage defaults)** | ⚠️ **Nothing reads an estimate-level deposit %, retainage % or due date today.** The migration adds the columns; the **consumption must be BUILT** — estimate → seed `invoices.retainage_percent` / `due_date`, and compute the deposit invoice amount. **⚠️MIG #2.** | V |
-| O5 | **Contracts / signing + immutability** — `enforce_estimate_immutability()` freezes ~36 columns once status ≠ draft/review, **including `version_number`, `retainage_percent`, `proposal_pricing_level`**; sent→draft refused; post-send revise = **void + reissue as a NEW row** (`supersedes_estimate_id`, supersedes only a *voided* one) | trigger body [verified: `pg_get_functiondef`]; `20261031000000`, `20261032000000` | **R2 (version counter), §2.1 (format set), R9 (deposit)** | ⚠️ See §9.3 — R2 and the format remap both collide with this trigger. Any **new money column** (deposit %) should be **added to the freeze list** in the same migration, or a sent estimate's deposit could be altered. | V |
+| O5 | **Contracts / signing + immutability** — `enforce_estimate_immutability()` freezes ~36 columns once status ≠ draft/review, **including `version_number`, `retainage_percent`, `proposal_pricing_level`**; sent→draft refused; post-send revise = **void + reissue as a NEW row** (`supersedes_estimate_id`, supersedes only a *voided* one) | trigger body [verified: `pg_get_functiondef`]; `20261031000000`, `20261032000000` | **R2′ (version derived — see below), §2.1 (format set), R9 (deposit)** | ⚠️ See §9.3 — the format remap collides with this trigger. **R2′ [Josh, S103] turns this binding to the estimate's ADVANTAGE:** version is now DERIVED by walking the `supersedes_estimate_id` chain this trigger maintains — no write, so the freeze on `version_number` is no longer a problem, it is the reason a counter was dropped. Any **new money column** (deposit %) should be **added to the freeze list** in the same migration, or a sent estimate's deposit could be altered. | V |
 | O6 | **Client portal proposal read** — clients read via `client_proposals()` RPC only (minimal fields: number, name, status, contract_type, `grand_total`, sent/accepted); **no client SELECT on `estimates`**; `proposal_views` RLS = Owner/Admin/creating-PM (clients cannot read) | `portal.ts:395-402`; `proposal-views-client.ts:13-26`; `20261052000000_proposal_views.sql:39-42` [verified: read/policy] | **§2.1 (open-book formats)** | ⚠️ The **proposal renderer is the cost-visibility enforcement point.** The two open-book formats print cost; the six others must not. The portal proposal view and the send PDF must honor the **same** format, or a client sees cost where the format forbids it. **⚠️MIG #5.** | V |
 | O7 | **Change orders** — **NO FK to estimate structure.** `change_order_line_items`/`_rows` mirror the typed-row model but are an independent hierarchy | `20260704215000_module5_5d_change_orders.sql:112-149`; grep found no `source_estimate_id` [verified] | none | **Good news:** restructuring estimate line items/rows/categories does **not** break change orders. | V |
 | O8 | **Notifications / email on events** — **send/resend = email only, no in-app**; **accept/decline/reminder/expiration = notify**; **reprice, award, void, reissue = NOTHING fires today** | `api/proposals/send/route.ts:191-223`, `resend/route.ts`; `signing-service.ts:264-270,346-352`; `crons/estimate-reminders.ts` [verified] | **R3 (event log: reprice, send, award, convert)** | ⚠️ **Two of R3's four events (reprice, award) have no signal today** — the event writers are net-new at `recalculateEstimateTotals` and `set_winning_bid`; send/convert have existing hooks to extend. **⚠️MIG #3.** | V |
@@ -817,6 +845,12 @@ Surfaced plainly, per the standing rule that conflicts are raised, not smoothed:
   revisions, the number must be **carried/computed along the `supersedes_estimate_id` chain** in the
   reissue path, not incremented on a single row. Still no new table, but **not "one writer on send"**
   — it is send-transition logic **plus** reissue-chain logic. The spec must own this.
+  > **✅ ACTED ON → R2′ [Josh, S103].** This finding was accepted and R2 was superseded: version is
+  > now **DERIVED** by walking the supersede chain at read time — **no counter, no writer at all.**
+  > Josh's recorded reasoning inverts the original justification: immutability does not make a counter
+  > *cheap*, it makes it *expensive* (the row is frozen), and a stored counter could **drift from the
+  > chain it describes**. The chain **is** the version history, so deriving from it cannot drift. This
+  > is the rare case where the map changed the ruling. See §8 R2′.
 - **§2.2 + R9 (deposit/retainage/invoice-due) are a build, not just columns.** O4 shows invoicing
   reads **none** of these today — the columns are inert until the deposit-invoice amount, the draw
   retainage default and the `due_date` seeding are **wired**, and the seeding must **not overwrite** a
