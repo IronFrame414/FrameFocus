@@ -154,6 +154,31 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
      ledger row** — every MCP-applied migration on rebuild-test needs the row inserted by hand
      afterward (done for this one). A `supabase db push` from the repo does record it normally; this
      only bites the MCP path.
+### Branch-scoped, awaiting real numbers — `feature/estimates-redesign` [S103]
+
+> Provisional ids per the CLAUDE.md tech-debt-numbering ruling ("never allocate a bare `#N` on a
+> branch"). Tag `estred`. Both are **deferred decisions** in the S179 debt/owed-work sense — features
+> Josh has ruled out of *this* build, not backlog tasks. Filed from `docs/specs/estimates-redesign-audit.md`
+> §8·B [Josh, S103]. Convert to the next free real numbers from main's file at merge (main's highest is
+> **#156** at filing time). ⚠️ The S103 prompt said "file with real ids"; bare numbers on a branch are
+> forbidden by the standing ruling, so they are filed branch-scoped like every other unmerged branch —
+> the real number is assigned at merge, not now.
+
+- **#1-estred — Estimate add-sheet: saved Assemblies + alternate item sources ("from a sub bid",
+  "from a past estimate").** The two-step add sheet (`add-items-sheet.tsx`) ships the five catalog
+  types + manual entry; it explicitly does **not** ship assemblies or the sub-bid / past-estimate
+  sources (`"No assemblies (R-Q8)"` in-file). **Deferred a SECOND time** — the first was R-Q8 during
+  the shipped add-sheet build; this run is the second [Josh, S103, R11]. Sound features, out of scope
+  for the estimates redesign. Not a defect — a bounded feature deferral.
+
+- **#2-estred — Customized proposal templates (saved, user-named format presets).** Seen on a
+  reference screenshot Josh supplied; **not in the handoff, no design.** ⚠️ **Deferral is not
+  rejection** — it is blocked on one unanswered question that makes it large: **what does a template
+  capture?** Format alone is trivial (the eight-format value already covers it); a template carrying
+  standard **terms, cover letter and printed sections** is a real feature that needs its own
+  interview, not a line in the estimates spec. The reference screenshot's own wording was **rejected**
+  by Josh, and its **"Internal (Detailed)"** and **"Field Sheet"** entries are **out of scope** — they
+  are not client proposal formats. [Josh, S103, §4]
 
 ### Branch-scoped, awaiting real numbers — `feature/deletion-sweep-analysis` [deletion-sweep §3]
 
