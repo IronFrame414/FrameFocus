@@ -408,6 +408,18 @@ It was called *"the real gap"* when the dual-store question was ruled **leave as
 never ruled either way. ⚠️ **`subcontractors.insurance_expiry` has the same hole, so this is not a
 regression — but "not a regression" is not "handled."**
 
+> ✅ **ALREADY BUILT — RECORDED [register-batch2, 2026-09-01]. This entry was STALE.** The batch-two
+> prompt carried it as "RULED, apparently never built"; the tree disagrees. Migration
+> `supabase/migrations/20261049000000_compliance_expiry_required.sql` adds the ruled CHECK —
+> `CHECK (doc_type NOT IN ('coi','license') OR expiration_date IS NOT NULL)` — with `w9`/`other` left
+> optional. **Object-level verified on rebuild-test:** the constraint
+> `compliance_docs_expiring_types_require_date` is live. **Tested, not false-green:**
+> `test/s140-compliance-floor.live.ts:141` inserts a dateless `coi`, asserts the CHECK refuses it by
+> name, then inserts WITH a date and asserts success. The migration comment records production had 0
+> violating rows at ship time (I cannot re-verify production — MCP is rebuild-test-only — but it is an
+> old, presumably-deployed migration). `subcontractors.insurance_expiry` stays as ruled (LEAVE AS IS).
+> **Nothing to build.**
+
 ### K3 — ⚠️ The live app has never been tested
 **Four separate deferrals** of "test later." What is now live and unclicked: **forty redesigned
 screens** · the **whole PO module** · **nine production migrations**, two of which touched existing data
@@ -416,6 +428,11 @@ lines to carry a budget link.
 
 ⚠️ **The CHECK should not bite** (existing POs have no line costs) — **but that is a prediction, not an
 observation.** Opening one old PO would settle it.
+
+> 📌 **JOSH'S TASK — RECORDED, NOT ACTIONED [register-batch2, 2026-09-01].** This needs a human clicking
+> the live production app; CC cannot do it and it is explicitly out of scope (batch-two §3.2). Left open
+> and routed to Josh. The one concrete check worth doing first: open one pre-`20261048` PO and confirm
+> the costed-line/budget-link CHECK does not bite.
 
 ### K4 — This register is stale again
 **A4** (the PO module) and **A12** (portfolio rollups) both **shipped**. PO Phase B produced **R-B1
@@ -433,6 +450,18 @@ stated priority and it is now unblocked. *(Register A5.)*
 Ruled to mean **row state** — a lapsed-insurance sub, an over-budget line — **not** category nesting.
 The tokens shipped in `theme.ts`; **no screen uses them.** `14a` and `14d` both have rows the mockups
 tint. *(Register A17.)*
+
+> ✅ **`14a` DONE · `14d` OWNED — [register-batch2, 2026-09-01, RULED Josh].**
+> - ⚠️ **Premise correction:** "no screen uses them" was wrong. `rowTintAttention` was already used at
+>   `changes-panel.tsx:327` (as a section banner). `rowTintProblem` was the genuinely-unused one.
+> - **`14a` projects — BUILT** (`projects-list.tsx`, commit `d64f375`). Ruling [Josh Q1]: tint the rows
+>   whose four-condition "needs attention" set is non-empty with `rowTintAttention` (the token's literal
+>   meaning). NOT the "over-budget" trigger — that is margin-under-target, DEFERRED with the C4/A6 target
+>   (§8.1 excludes it from the set). Hover mouseleave now returns to the tint, not white.
+> - **`14d` subs — OWNED, NOT BUILT** [Josh Q2]. Its "lapsed-insurance sub" tint (`rowTintProblem`) would
+>   force a choice between the two insurance stores that redesign-spec §8.4 rules **LEAVE AS IS**
+>   (`insurance_expiry` vs `subcontractor_compliance_documents`, the latter empty on the fixture). Skipped
+>   pending a ruling that revisits the store question. `rowTintProblem` stays unused by design until then.
 
 ### K8 — Two token names now hold identical values
 `warning` == `warningDeep` and `danger` == `dangerAlt` after the README ramp landed — the design carries
@@ -479,6 +508,13 @@ on every cold start, and *"if that reads badly on a real handset, this value —
 becomes the surface grey."*
 
 ⚠️ **§S2 has since MOVED it to the new navy — so the assumption is now untested on a different value.**
+
+> 📌 **OWED, ROUTED TO JOSH [register-batch2, 2026-09-01].** CC cannot test this — it needs a real
+> handset. Confirmed on the tree: `brand.ts:96` `backgroundColor: '#0f1729'` (navy), its own comment
+> `:84-96` flags the untested-splash assumption. **The exact check for Josh:** install the PWA on an
+> iPhone and Android, cold-start it, and watch the splash→first-paint transition. If the navy splash
+> flashes badly into the light app surface, change **only** `backgroundColor` to the surface grey
+> (`#f4f6fa`) — `themeColor` stays navy either way. No code change until that observation exists.
 
 ### K11 — `s138-trial-unlock`'s purge timeout, classified but not root-caused
 A **DB statement timeout in the shared purge under parallel load** — not an assertion failure, green in
@@ -530,6 +566,16 @@ The sweep removed Playwright's silent auto-dismiss trap and **made every dialog 
 it did not manufacture the coverage.** The redesign spec's §9 says *"check what remains before assuming
 every dialog is styled."* **That check was never done.**
 
+> ✅ **THE RULED SIX ARE BUILT — RECORDED [register-batch2, 2026-09-01]. This entry was STALE.** The
+> batch-two prompt carried L3 as "check whether already built" — it is. `apps/web/e2e/desktop-confirms
+> .spec.ts` exists (header: *"Register backlog §2 — the RULED SIX [Josh, Phase 2 Q5]"*) and covers
+> exactly the six money-irreversible confirms: send invoice · project complete→reopen→cancel round-trip
+> · delete payment · void contract · delete change order · delete estimate. Each asserts pre-state via
+> admin, clicks `confirm-accept`, and polls post-state via the DB (not vacuous). Contract-template delete
+> was correctly excluded (*"not a financial record"*). Pass-verification: see the batch-two log / §7
+> Playwright run. **The broader gap — 53 other `confirm()` + 20 `alert()` sites unclicked — was ruled
+> out of the "six"; it stays as recorded scope, not owed work.**
+
 ### L4 — ⚠️ Four things were CUT PERMANENTLY but read as deferrals
 A permanent cut and a deferral **look identical in a list**, and someone will eventually try to build a
 cut one.
@@ -542,6 +588,14 @@ cut one.
 | **"Resumes when permit clears"** | **No `hold_reason` column exists** anywhere. |
 
 ⚠️ **These need a "will not build" marker, not a queue position.**
+
+> ⛔ **WILL NOT BUILD — MARKED [register-batch2, 2026-09-01].** All four are permanent cuts, not
+> deferrals. Premises re-verified against the tree: `tasks` has no hours column
+> (`20260704213000_module5_5b_tasks_scheduling.sql:63-101`); no scope↔category link exists; the Gantt
+> is project-level only; `hold_reason` appears in no migration. **The redesign spec already carries the
+> ⛔ markers** — `desktop-redesign-spec.md:1063` (Coverage check), `:1212` (Crew-load bars), `:1213`
+> (Company Gantt/By-crew), `:1214` ("Resumes when permit clears"), each tagged `[register-backlog
+> §1.3]`. This register entry now matches. A cut is not a queue position; do not build any of these.
 
 ### L5 — Two step-9 deferrals never reached the register
 - **"Send me a test"** on the estimate send flow — **not built.** ("Mark as sent" is.)

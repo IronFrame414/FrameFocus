@@ -82,6 +82,64 @@ export const COMPANY_CHILDREN = [
   'profiles',
 ] as const;
 
+// K11 [register-batch2, RULED Josh] — the shared purge intermittently hit a
+// `57014 canceling statement due to statement timeout` under PARALLEL suite load,
+// green in isolation. Root cause: cross-suite lock / FK-check contention on the
+// shared rebuild-test DB — a BLOCKED delete, not a slow one (the DB
+// statement_timeout is 2 min; a scoped delete of a few companies' rows only
+// reaches that ceiling by waiting on a lock). It is not a logic bug.
+//
+// The fix is scoped to the symptom: retry the blocked statement ONCE.
+//
+// ⚠️ Josh's conditions, both load-bearing:
+//   1. Retry ONCE, then FAIL LOUDLY — and the failure must say it was a LOCK
+//      TIMEOUT, not a generic delete failure. A battery you can't trust is worse
+//      than a red one; the message has to name what actually happened.
+//   2. A retry that quietly succeeds HIDES GROWING CONTENTION. So a successful
+//      retry still warns — if this warns often, the contention is getting worse
+//      and that is the signal to act, not to raise the timeout.
+// Only `57014` is retried; any other error throws immediately, unchanged.
+type PurgeError = { code?: string; message?: string } | null;
+const STATEMENT_TIMEOUT = '57014';
+
+function isStatementTimeout(error: PurgeError): boolean {
+  if (!error) return false;
+  return (
+    error.code === STATEMENT_TIMEOUT ||
+    /canceling statement due to statement timeout/i.test(error.message ?? '')
+  );
+}
+
+async function deleteWithTimeoutRetry(
+  label: string,
+  run: () => PromiseLike<{ error: PurgeError }>
+): Promise<void> {
+  const first = await run();
+  if (!first.error) return;
+  // Non-timeout errors are real failures — throw at once, as before.
+  if (!isStatementTimeout(first.error)) throw new Error(`purge ${label}: ${first.error.message}`);
+
+  // Condition 2: surface the retry even when it succeeds.
+  console.warn(
+    `[company-purge] ${label}: statement timeout (57014) under load — retrying ONCE. ` +
+      `A retry here means the shared DB is contended; frequent warnings are the signal, not noise.`
+  );
+  // A brief pause before the one retry: the timeout is a BLOCKED delete, so an
+  // immediate retry races the same held lock and buys nothing. ~1s gives a
+  // transient lock time to clear — which is the "quietly succeeds" case Josh
+  // named. If the lock is not transient, the retry still fails and we throw.
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  const second = await run();
+  if (!second.error) return;
+
+  // Condition 1: fail loudly, and name it a lock timeout — not a generic failure.
+  throw new Error(
+    `purge ${label}: LOCK/STATEMENT TIMEOUT on retry (code ${second.error.code ?? '?'}) — ` +
+      `the shared purge is BLOCKED under parallel load, not a logic failure. Do not raise the ` +
+      `statement_timeout to mask this. Original message: ${second.error.message}`
+  );
+}
+
 /**
  * Delete these companies and everything pinning them — and THROW if the parent
  * survives.
@@ -94,13 +152,11 @@ export async function deleteCompanies(admin: SupabaseClient, ids: string[]): Pro
   if (ids.length === 0) return;
 
   for (const table of COMPANY_CHILDREN) {
-    const { error } = await admin.from(table).delete().in('company_id', ids);
-    if (error) throw new Error(`purge ${table}: ${error.message}`);
+    await deleteWithTimeoutRetry(table, () => admin.from(table).delete().in('company_id', ids));
   }
   await admin.from('trial_emails').update({ company_id: null }).in('company_id', ids);
 
-  const { error } = await admin.from('companies').delete().in('id', ids);
-  if (error) throw new Error(`purge companies: ${error.message}`);
+  await deleteWithTimeoutRetry('companies', () => admin.from('companies').delete().in('id', ids));
 }
 
 /**
