@@ -1,9 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { TermsSection, updateEstimate } from '@/lib/services/estimates-client';
 import { termsSectionSchema } from '@framefocus/shared/validation/estimate';
 import { useConfirm } from '@/components/confirm/confirm-provider';
+import { createClient } from '@/lib/supabase-browser';
+import { listEstimateEvents, type EstimateEvent } from '@/lib/services/estimate-events-client';
+import { color, font } from '@/lib/theme';
+import { fmtMoney } from '../labels';
 import type { TabProps } from './estimate-builder';
 
 const inputStyle: React.CSSProperties = {
@@ -67,11 +71,72 @@ function useSaveState() {
 // estimate's copy was seeded from the company default at creation;
 // edits here never touch the company default.
 
+const INVOICE_DUE_OPTIONS: { value: number | null; label: string }[] = [
+  { value: null, label: 'Not set' },
+  { value: 0, label: 'On receipt' },
+  { value: 15, label: 'Net 15' },
+  { value: 30, label: 'Net 30' },
+  { value: 45, label: 'Net 45' },
+  { value: 60, label: 'Net 60' },
+];
+
+const monoNum: React.CSSProperties = { fontFamily: font.mono, fontWeight: 600, color: color.navy };
+
 export function TermsTab({ data, canEdit, reload }: TabProps) {
-  const initial = (data.estimate.terms_sections as unknown as TermsSection[] | null) ?? [];
+  const est = data.estimate;
+  const initial = (est.terms_sections as unknown as TermsSection[] | null) ?? [];
   const [terms, setTerms] = useState<TermsSection[]>(initial);
+  const [deposit, setDeposit] = useState(est.deposit_percent != null ? String(est.deposit_percent) : '');
+  const [retainage, setRetainage] = useState(est.retainage_percent != null ? String(est.retainage_percent) : '');
+  const [invoiceDue, setInvoiceDue] = useState<number | null>(est.invoice_due_days ?? null);
+  const [defaults, setDefaults] = useState<{ deposit: number | null; retainage: number | null } | null>(null);
   const { error, saved, run } = useSaveState();
   const confirm = useConfirm();
+  const grandTotal = Number(est.grand_total ?? 0);
+  const depositAmount = deposit === '' ? null : (Number(deposit) / 100) * grandTotal;
+
+  // 16c "changed from default" — company baselines, self-fetched (companies RLS
+  // returns only the caller's row). Matches the ClientActivityCard self-fetch
+  // pattern rather than plumbing the shell loader. [Phase 2 default.]
+  useEffect(() => {
+    createClient()
+      .from('companies')
+      .select('default_deposit_percent, default_retainage_percent')
+      .maybeSingle()
+      .then(({ data: co }) =>
+        setDefaults(
+          co ? { deposit: co.default_deposit_percent, retainage: co.default_retainage_percent } : null
+        )
+      );
+  }, []);
+
+  // Structured payment-terms writes (migration #2 columns). Autosave, same
+  // updateEstimate → reload contract; draft-gated by the service + RLS + trigger.
+  async function saveTerm(patch: Parameters<typeof updateEstimate>[1]) {
+    await run(async () => {
+      const result = await updateEstimate(est.id, patch);
+      if (result.success) await reload();
+      return result;
+    });
+  }
+
+  const changed: string[] = [];
+  if (defaults) {
+    const dep = deposit === '' ? null : Number(deposit);
+    const ret = retainage === '' ? null : Number(retainage);
+    if (dep != null && defaults.deposit != null && dep !== defaults.deposit) {
+      const cash = ((defaults.deposit - dep) / 100) * grandTotal;
+      changed.push(
+        `Deposit is ${dep}% here; your company default is ${defaults.deposit}%.` +
+          (cash > 0
+            ? ` Taking ${dep}% instead of ${defaults.deposit}% means ${fmtMoney(cash)} less cash before you start buying material.`
+            : '')
+      );
+    }
+    if (ret != null && defaults.retainage != null && ret !== defaults.retainage) {
+      changed.push(`Retainage is ${ret}% here; your default holds ${defaults.retainage}%.`);
+    }
+  }
 
   async function persist(next: TermsSection[]) {
     setTerms(next);
@@ -112,6 +177,105 @@ export function TermsTab({ data, canEdit, reload }: TabProps) {
         Terms &amp; Conditions
       </h2>
       {error && <div style={errorBoxStyle}>{error}</div>}
+
+      {/* 16c — structured payment terms (migration #2). These drive the invoices. */}
+      <div
+        style={{
+          border: `1.5px solid ${color.warning}`,
+          borderRadius: '14px',
+          padding: '16px 18px',
+          marginBottom: '1rem',
+          background: color.cardBg,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+          <span style={{ fontWeight: 700, fontSize: '0.95rem', color: color.navy }}>Payment terms</span>
+          <span style={{ fontSize: '0.7rem', color: color.muted }}>
+            Structured, not prose — these drive the invoices
+          </span>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem' }}>
+          <label style={{ fontSize: '0.75rem', color: color.body }}>
+            Deposit %
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.5"
+                value={deposit}
+                disabled={!canEdit}
+                onChange={(e) => setDeposit(e.target.value)}
+                onBlur={() => saveTerm({ deposit_percent: deposit === '' ? null : Number(deposit) })}
+                style={{ ...inputStyle, ...monoNum, width: '5rem' }}
+              />
+              <span style={{ fontSize: '0.75rem', color: color.muted, fontFamily: font.mono }}>
+                {depositAmount != null ? fmtMoney(depositAmount) : '—'}
+              </span>
+            </div>
+          </label>
+          <label style={{ fontSize: '0.75rem', color: color.body }}>
+            Retainage %
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="0.5"
+              value={retainage}
+              disabled={!canEdit}
+              onChange={(e) => setRetainage(e.target.value)}
+              onBlur={() => saveTerm({ retainage_percent: retainage === '' ? null : Number(retainage) })}
+              style={{ ...inputStyle, ...monoNum, width: '5rem', marginTop: '0.25rem' }}
+            />
+          </label>
+          <label style={{ fontSize: '0.75rem', color: color.body }}>
+            Invoice due
+            <select
+              value={invoiceDue === null ? '' : String(invoiceDue)}
+              disabled={!canEdit}
+              onChange={(e) => {
+                const v = e.target.value === '' ? null : Number(e.target.value);
+                setInvoiceDue(v);
+                saveTerm({ invoice_due_days: v });
+              }}
+              style={{ ...inputStyle, marginTop: '0.25rem' }}
+            >
+              {INVOICE_DUE_OPTIONS.map((o) => (
+                <option key={String(o.value)} value={o.value === null ? '' : String(o.value)}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <p style={{ fontSize: '0.7rem', color: color.muted, margin: '0.75rem 0 0' }}>
+          As fields they populate the deposit invoice, the retainage held on every draw, and the due
+          date — no re-typing, and the printed terms stay in sync.
+        </p>
+      </div>
+
+      {/* Changed from default — a one-off edit is never invisible. */}
+      {changed.length > 0 && (
+        <div
+          style={{
+            border: `1.5px solid ${color.warning}`,
+            borderRadius: '14px',
+            padding: '14px 16px',
+            marginBottom: '1rem',
+            background: '#fffdf7',
+          }}
+        >
+          <div style={{ fontWeight: 700, fontSize: '0.85rem', color: color.navy, marginBottom: '0.5rem' }}>
+            Changed from default
+          </div>
+          {changed.map((c, i) => (
+            <div key={i} style={{ fontSize: '0.78rem', color: color.body, marginTop: '0.4rem' }}>
+              • {c}
+            </div>
+          ))}
+        </div>
+      )}
+
       {terms.length === 0 && (
         <p style={{ fontSize: '0.875rem', color: '#9aa4b8', marginBottom: '1rem' }}>
           No terms sections on this estimate.
@@ -444,9 +608,32 @@ export function CoverTab({ data, canEdit, reload }: TabProps) {
 // project" tick-boxes have nothing to tick — internal_notes is ONE blob and
 // the convert RPC copies the whole of it; the banner says that instead.
 
+function eventLabel(e: EstimateEvent): string {
+  switch (e.kind) {
+    case 'reprice': {
+      const to = e.payload?.to;
+      return typeof to === 'number' ? `Repriced to ${fmtMoney(to)}` : 'Repriced';
+    }
+    case 'send':
+      return 'Sent to client';
+    case 'award':
+      return 'Sub bid awarded';
+    case 'convert':
+      return 'Converted to project';
+    default:
+      return e.kind;
+  }
+}
+
 export function NotesTab({ data, canEdit, reload }: TabProps) {
   const [text, setText] = useState(data.estimate.internal_notes ?? '');
+  const [events, setEvents] = useState<EstimateEvent[]>([]);
   const { error, saved, run } = useSaveState();
+
+  // 16d history rail — from the estimate_events log (migration #3). Newest first.
+  useEffect(() => {
+    listEstimateEvents(data.estimate.id).then(setEvents);
+  }, [data.estimate.id]);
 
   return (
     <div style={{ maxWidth: '640px' }}>
@@ -484,6 +671,49 @@ export function NotesTab({ data, canEdit, reload }: TabProps) {
         style={{ ...inputStyle, resize: 'vertical', fontFamily: 'inherit' }}
       />
       {saved && <div style={savedStyle}>Saved</div>}
+
+      {/* 16d — estimate history rail, from the estimate_events log (migration #3). */}
+      <div style={{ marginTop: '1.5rem' }}>
+        <div
+          style={{
+            fontFamily: font.mono,
+            fontSize: '0.7rem',
+            fontWeight: 600,
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            color: color.muted,
+            marginBottom: '0.5rem',
+          }}
+        >
+          Estimate history
+        </div>
+        {events.length === 0 ? (
+          <p style={{ fontSize: '0.8rem', color: color.faint }}>No activity recorded yet.</p>
+        ) : (
+          events.map((e) => (
+            <div
+              key={e.id}
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'baseline',
+                padding: '0.375rem 0',
+                borderTop: `1px solid ${color.cardBorder}`,
+                fontSize: '0.8rem',
+              }}
+            >
+              <span style={{ color: color.body }}>{eventLabel(e)}</span>
+              <span style={{ fontFamily: font.mono, fontSize: '0.72rem', color: color.muted }}>
+                {new Date(e.created_at).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                })}
+              </span>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }

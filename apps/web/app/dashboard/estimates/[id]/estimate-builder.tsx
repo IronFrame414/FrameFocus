@@ -56,14 +56,16 @@ type TabKey =
   | 'cover'
   | 'notes';
 
+// Estimates redesign — the handoff tab set: Line Items, Sub Bids, Proposal
+// (renames of Items/Bidding/Cover Sheet); Files stays disabled ("Soon").
 const TABS: Array<{ key: TabKey; label: string; disabled?: boolean }> = [
   { key: 'details', label: 'Details' },
-  { key: 'items', label: 'Items' },
+  { key: 'items', label: 'Line Items' },
   { key: 'terms', label: 'Terms' },
   { key: 'scope', label: 'Scope of Work' },
-  { key: 'bidding', label: 'Bidding' },
+  { key: 'bidding', label: 'Sub Bids' },
   { key: 'files', label: 'Files', disabled: true },
-  { key: 'cover', label: 'Cover Sheet' },
+  { key: 'cover', label: 'Proposal' },
   { key: 'notes', label: 'Notes' },
 ];
 
@@ -647,9 +649,17 @@ export function EstimateBuilder({
         <span>
           Subtotal <strong>{fmtMoney(estimate.subtotal)}</strong>
         </span>
-        <span>
-          Tax <strong>{fmtMoney(estimate.tax_total)}</strong>
-        </span>
+        {/* Terms swaps Tax for Deposit due (handoff §; deposit_percent × grand_total). */}
+        {activeTab === 'terms' && estimate.deposit_percent != null ? (
+          <span>
+            Deposit due{' '}
+            <strong>{fmtMoney((Number(estimate.deposit_percent) / 100) * Number(estimate.grand_total ?? 0))}</strong>
+          </span>
+        ) : (
+          <span>
+            Tax <strong>{fmtMoney(estimate.tax_total)}</strong>
+          </span>
+        )}
         <span>
           Discount <strong>−{fmtMoney(estimate.discount_total)}</strong>
         </span>
