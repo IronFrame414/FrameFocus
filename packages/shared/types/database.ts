@@ -3248,6 +3248,144 @@ export type Database = {
           },
         ]
       }
+      estimate_sub_bid_requests: {
+        Row: {
+          allowance_amount: number | null
+          bids_due_date: string | null
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          estimate_id: string
+          expires_at: string
+          id: string
+          is_deleted: boolean | null
+          line_item_id: string
+          message: string | null
+          reply_bid_amount: number | null
+          reply_exclusions: string | null
+          reply_holds_until: string | null
+          reply_labor_amount: number | null
+          reply_material_amount: number | null
+          reply_mode: string
+          reply_scope_coverage_percent: number | null
+          scope_text: string | null
+          sent_at: string | null
+          site_visit_date: string | null
+          status: string
+          sub_bid_id: string | null
+          subcontractor_id: string
+          submitted_at: string | null
+          token: string
+          updated_at: string | null
+          updated_by: string | null
+          viewed_at: string | null
+          work_starts_date: string | null
+        }
+        Insert: {
+          allowance_amount?: number | null
+          bids_due_date?: string | null
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          estimate_id: string
+          expires_at: string
+          id?: string
+          is_deleted?: boolean | null
+          line_item_id: string
+          message?: string | null
+          reply_bid_amount?: number | null
+          reply_exclusions?: string | null
+          reply_holds_until?: string | null
+          reply_labor_amount?: number | null
+          reply_material_amount?: number | null
+          reply_mode?: string
+          reply_scope_coverage_percent?: number | null
+          scope_text?: string | null
+          sent_at?: string | null
+          site_visit_date?: string | null
+          status?: string
+          sub_bid_id?: string | null
+          subcontractor_id: string
+          submitted_at?: string | null
+          token?: string
+          updated_at?: string | null
+          updated_by?: string | null
+          viewed_at?: string | null
+          work_starts_date?: string | null
+        }
+        Update: {
+          allowance_amount?: number | null
+          bids_due_date?: string | null
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          estimate_id?: string
+          expires_at?: string
+          id?: string
+          is_deleted?: boolean | null
+          line_item_id?: string
+          message?: string | null
+          reply_bid_amount?: number | null
+          reply_exclusions?: string | null
+          reply_holds_until?: string | null
+          reply_labor_amount?: number | null
+          reply_material_amount?: number | null
+          reply_mode?: string
+          reply_scope_coverage_percent?: number | null
+          scope_text?: string | null
+          sent_at?: string | null
+          site_visit_date?: string | null
+          status?: string
+          sub_bid_id?: string | null
+          subcontractor_id?: string
+          submitted_at?: string | null
+          token?: string
+          updated_at?: string | null
+          updated_by?: string | null
+          viewed_at?: string | null
+          work_starts_date?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimate_sub_bid_requests_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_sub_bid_requests_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_sub_bid_requests_line_item_id_fkey"
+            columns: ["line_item_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_line_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_sub_bid_requests_sub_bid_id_fkey"
+            columns: ["sub_bid_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_sub_bids"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_sub_bid_requests_subcontractor_id_fkey"
+            columns: ["subcontractor_id"]
+            isOneToOne: false
+            referencedRelation: "subcontractors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       estimate_sub_bids: {
         Row: {
           bid_amount: number
