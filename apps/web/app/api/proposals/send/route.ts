@@ -230,5 +230,16 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Send event (R3) — server-side, via the service-role client, so company_id
+  // and actor_id are passed EXPLICITLY (auth.uid()/get_my_company_id() defaults
+  // are null under service role). Best-effort: a failed event write must not
+  // undo a completed send. [Build decision, S103 §0.]
+  await admin.from('estimate_events').insert({
+    company_id: estimate.company_id,
+    estimate_id: estimate.id,
+    kind: 'send',
+    actor_id: user.id,
+  });
+
   return NextResponse.json({ success: true });
 }
