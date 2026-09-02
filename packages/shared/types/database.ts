@@ -3393,6 +3393,7 @@ export type Database = {
           labor_markup_percent: number | null
           last_reminder_sent_at: string | null
           legal_description: string | null
+          lost_reason_code: string | null
           material_markup_percent: number | null
           name: string
           parent_estimate_id: string | null
@@ -3461,6 +3462,7 @@ export type Database = {
           labor_markup_percent?: number | null
           last_reminder_sent_at?: string | null
           legal_description?: string | null
+          lost_reason_code?: string | null
           material_markup_percent?: number | null
           name: string
           parent_estimate_id?: string | null
@@ -3529,6 +3531,7 @@ export type Database = {
           labor_markup_percent?: number | null
           last_reminder_sent_at?: string | null
           legal_description?: string | null
+          lost_reason_code?: string | null
           material_markup_percent?: number | null
           name?: string
           parent_estimate_id?: string | null
