@@ -376,6 +376,34 @@ export async function updateEstimate(
   return { success: true };
 }
 
+/** The self-initiated "mark lost" reasons (Q6). Distinct from a client decline;
+ *  the DB xor CHECK keeps them apart for win-rate analytics. */
+export type LostReasonCode =
+  | 'lost_to_competitor'
+  | 'no_response'
+  | 'client_postponed'
+  | 'we_declined'
+  | 'other';
+
+/**
+ * 19b — mark a SENT estimate lost [R12/Q6]. Goes through the mark_estimate_lost
+ * SECURITY DEFINER RPC (mirrors void_estimate's authority: Owner/Admin, or the
+ * authoring PM), because a PM's UPDATE RLS is floored to draft. Sets status
+ * 'declined' + declined_at + lost_reason_code; the RPC guards status and reason.
+ */
+export async function markEstimateLost(
+  estimateId: string,
+  reasonCode: LostReasonCode
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = createClient();
+  const { error } = await supabase.rpc('mark_estimate_lost', {
+    p_estimate_id: estimateId,
+    p_reason_code: reasonCode,
+  });
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
 /**
  * Caller's profile row — used for service-layer role guards on top
  * of RLS (defense in depth) and for reviewed_by (FK profiles).

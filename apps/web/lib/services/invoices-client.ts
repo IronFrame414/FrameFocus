@@ -71,6 +71,43 @@ export interface CreateInvoiceInput {
  *  sent series. See markInvoiceSent. */
 export async function createInvoice(input: CreateInvoiceInput): Promise<CreateResult> {
   const supabase = createClient();
+
+  // Estimates redesign service #4 — seed due_date and retainage_percent from the
+  // source estimate's structured terms (invoice_due_days as net-days [Q3];
+  // retainage_percent). ⚠️ SEED ONLY — a value the CALLER already provided is
+  // NEVER overwritten (§2.2): we look up the estimate only for a term the caller
+  // left undefined/null. A deposit invoice withholds nothing, so it is never
+  // seeded with retainage.
+  let seededDueDate = input.dueDate ?? null;
+  let seededRetainage = input.retainagePercent ?? null;
+  const isDeposit = (input.invoiceType ?? 'standard') === 'deposit';
+  if (seededDueDate == null || (seededRetainage == null && !isDeposit)) {
+    const { data: proj } = await supabase
+      .from('projects')
+      .select('source_estimate_id')
+      .eq('id', input.projectId)
+      .maybeSingle();
+    if (proj?.source_estimate_id) {
+      const { data: est } = await supabase
+        .from('estimates')
+        .select('invoice_due_days, retainage_percent')
+        .eq('id', proj.source_estimate_id)
+        .maybeSingle();
+      if (est) {
+        if (seededDueDate == null && est.invoice_due_days != null) {
+          // Net-days from today (the draft's issue date). A later user-set date
+          // wins — this only fills an otherwise-empty due date.
+          const due = new Date();
+          due.setUTCDate(due.getUTCDate() + est.invoice_due_days);
+          seededDueDate = due.toISOString().slice(0, 10);
+        }
+        if (seededRetainage == null && !isDeposit) {
+          seededRetainage = est.retainage_percent ?? null;
+        }
+      }
+    }
+  }
+
   const { data, error } = await supabase
     .from('invoices')
     .insert({
@@ -79,15 +116,49 @@ export async function createInvoice(input: CreateInvoiceInput): Promise<CreateRe
       invoice_type: input.invoiceType ?? 'standard',
       presentation_level: input.presentationLevel ?? 'lump_sum',
       is_final: input.isFinal ?? false,
-      due_date: input.dueDate ?? null,
+      due_date: seededDueDate,
       notes: input.notes ?? null,
-      retainage_percent: input.retainagePercent ?? null,
+      retainage_percent: seededRetainage,
     })
     .select('id')
     .single();
 
   if (error) return { success: false, error: error.message };
   return { success: true, id: data.id };
+}
+
+/**
+ * Estimates redesign service #4 — the suggested deposit-invoice amount:
+ * deposit_percent (source estimate) × contract value (project_financials).
+ * The deposit-invoice creation UI (Owner/Admin — project_financials is
+ * O/A-floored) uses this to PRE-FILL the amount; it is a suggestion, never an
+ * override of an amount the user then types. Returns null when no deposit % is
+ * set or the caller cannot read the contract value.
+ */
+export async function getSuggestedDepositAmount(projectId: string): Promise<number | null> {
+  const supabase = createClient();
+  const { data: proj } = await supabase
+    .from('projects')
+    .select('source_estimate_id')
+    .eq('id', projectId)
+    .maybeSingle();
+  if (!proj?.source_estimate_id) return null;
+
+  const { data: est } = await supabase
+    .from('estimates')
+    .select('deposit_percent')
+    .eq('id', proj.source_estimate_id)
+    .maybeSingle();
+  if (!est || est.deposit_percent == null) return null;
+
+  const { data: fin } = await supabase
+    .from('project_financials')
+    .select('contract_value')
+    .eq('project_id', projectId)
+    .maybeSingle();
+  if (!fin || fin.contract_value == null) return null; // O/A-only; PM reads nothing
+
+  return Math.round(Number(fin.contract_value) * (Number(est.deposit_percent) / 100) * 100) / 100;
 }
 
 // ── §6/§7 — derive and persist a cost-plus / T&M invoice ────────────────────
