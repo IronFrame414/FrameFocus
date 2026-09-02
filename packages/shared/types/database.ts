@@ -2827,6 +2827,64 @@ export type Database = {
           },
         ]
       }
+      estimate_award_bases: {
+        Row: {
+          awarded_at: string
+          company_id: string
+          created_at: string
+          id: string
+          labor_amount: number | null
+          line_row_id: string
+          material_amount: number | null
+          scope_coverage_percent: number | null
+          sub_bid_id: string | null
+        }
+        Insert: {
+          awarded_at?: string
+          company_id?: string
+          created_at?: string
+          id?: string
+          labor_amount?: number | null
+          line_row_id: string
+          material_amount?: number | null
+          scope_coverage_percent?: number | null
+          sub_bid_id?: string | null
+        }
+        Update: {
+          awarded_at?: string
+          company_id?: string
+          created_at?: string
+          id?: string
+          labor_amount?: number | null
+          line_row_id?: string
+          material_amount?: number | null
+          scope_coverage_percent?: number | null
+          sub_bid_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimate_award_bases_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_award_bases_line_row_id_fkey"
+            columns: ["line_row_id"]
+            isOneToOne: true
+            referencedRelation: "estimate_line_rows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_award_bases_sub_bid_id_fkey"
+            columns: ["sub_bid_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_sub_bids"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       estimate_categories: {
         Row: {
           company_id: string
@@ -9376,6 +9434,10 @@ export type Database = {
       is_project_creator: { Args: { p_project_id: string }; Returns: boolean }
       issue_po_lines: {
         Args: { p_item_ids: string[]; p_po_id: string }
+        Returns: undefined
+      }
+      mark_estimate_lost: {
+        Args: { p_estimate_id: string; p_reason_code: string }
         Returns: undefined
       }
       mark_po_lines_purchased: {
