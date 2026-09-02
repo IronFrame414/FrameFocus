@@ -21,6 +21,26 @@ import { createClient } from '@/lib/supabase-browser';
 
 export type EstimateEventKind = 'reprice' | 'send' | 'award' | 'convert';
 
+export interface EstimateEvent {
+  id: string;
+  kind: EstimateEventKind;
+  actor_id: string | null;
+  payload: Record<string, unknown> | null;
+  created_at: string;
+}
+
+/** The 16d history rail — events for one estimate, newest first. RLS scopes to
+ *  who can see the estimate (Owner/Admin + authoring PM). */
+export async function listEstimateEvents(estimateId: string): Promise<EstimateEvent[]> {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from('estimate_events')
+    .select('id, kind, actor_id, payload, created_at')
+    .eq('estimate_id', estimateId)
+    .order('created_at', { ascending: false });
+  return (data ?? []) as EstimateEvent[];
+}
+
 /** Fire-and-forget estimate event. Swallows its own errors on purpose — the
  *  history rail must never be the reason a save or an award fails. */
 export async function logEstimateEvent(

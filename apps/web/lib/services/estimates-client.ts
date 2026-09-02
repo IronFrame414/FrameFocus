@@ -117,6 +117,11 @@ export type UpdateEstimateInput = Partial<
     | 'terms_sections'
     | 'expiration_days'
     | 'internal_notes'
+    // Estimates redesign 16c — structured payment terms (migration #2). Frozen
+    // on send by enforce_estimate_immutability; editable only while draft.
+    | 'deposit_percent'
+    | 'invoice_due_days'
+    | 'retainage_percent'
     // Money representation §4.2/§7.1 S-3 — Owner/Admin-gated in the UI
     // (projected_value is user-entered, never derived; NULL is normal).
     | 'projected_value'
