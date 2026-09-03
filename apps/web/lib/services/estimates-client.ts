@@ -111,6 +111,26 @@ export type CreateEstimateInput = Pick<EstimateInsert, 'name' | 'contact_id'> & 
   contact_address_id?: string | null;
 };
 
+/**
+ * One extra proposal recipient (19b "Also send to"). §1.4 — the ONE canonical
+ * shape, reconciling the three that had existed (mig #6's `{name,email}[]`,
+ * mig #210's freeze, and the UI's `string[]`).
+ *
+ * Stores BOTH the `contact_id` (who) AND a `name`/`email` snapshot (where it
+ * actually went): a sent estimate freezes `also_send_to`, so if the contact's
+ * email is later edited the frozen record must still resolve to the address the
+ * proposal was sent to — which is what a delivery record has to prove.
+ *
+ * A `type` (not interface) so it keeps an implicit index signature and stays
+ * assignable to the generated Json type on the JSONB column (same reason as
+ * `TermsSection` in company.ts).
+ */
+export type AlsoSendToRecipient = {
+  contact_id: string;
+  name: string;
+  email: string | null;
+};
+
 // Content fields only — lifecycle transitions (Mark as Sent, accept,
 // decline, new version) are 4D scope and get dedicated functions there.
 export type UpdateEstimateInput = Partial<

@@ -12,9 +12,11 @@ import {
   updatePricingMode,
   markEstimateLost,
   type LostReasonCode,
+  type AlsoSendToRecipient,
 } from '@/lib/services/estimates-client';
 import { recalculateEstimateTotals } from '@/lib/services/estimate-items-client';
 import { ProposalFormatPicker } from './proposal-format-picker';
+import { AlsoSendToField } from './also-send-to-field';
 import { ContactAddressPicker } from '../contact-address-picker';
 import { InlineNumber } from '../inline-edit';
 import { fmtPercent } from '../labels';
@@ -108,8 +110,9 @@ export function DetailsTab({
   // (an RLS floor). No second resolver; users cannot edit it [R10].
   const [estimatorName, setEstimatorName] = useState<string | null>(null);
   const [target, setTarget] = useState<number | null>(null);
-  const [alsoSendTo, setAlsoSendTo] = useState<string>(() =>
-    ((estimate.also_send_to as string[] | null) ?? []).join('\n')
+  // 19b "Also send to" (§1.4) — { contact_id, name, email } snapshots.
+  const [alsoSendTo, setAlsoSendTo] = useState<AlsoSendToRecipient[]>(
+    () => (estimate.also_send_to as AlsoSendToRecipient[] | null) ?? []
   );
   const confirm = useConfirm();
 
@@ -134,12 +137,9 @@ export function DetailsTab({
   });
   const gapPts = target != null && health.marginPercent != null ? health.marginPercent - target : null;
 
-  async function saveAlsoSendTo() {
-    const list = alsoSendTo
-      .split('\n')
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const result = await saveField({ also_send_to: list });
+  async function saveAlsoSendTo(next: AlsoSendToRecipient[]) {
+    setAlsoSendTo(next);
+    const result = await saveField({ also_send_to: next });
     if (!result.success) setError(result.error || 'Could not save recipients');
   }
 
@@ -252,29 +252,10 @@ export function DetailsTab({
           </div>
 
           {/* Also send to — extra proposal recipients (spouse, architect, lender).
-              Per-job; frozen on send (the also_send_to freeze migration). */}
-          <div style={{ marginTop: '0.75rem' }}>
-            <label style={{ ...fieldLabel, display: 'block', marginBottom: '0.25rem' }}>
-              Also send to <span style={{ color: '#9aa4b8', fontWeight: 400 }}>(one email per line)</span>
-            </label>
-            <textarea
-              value={alsoSendTo}
-              disabled={!canEdit}
-              onChange={(e) => setAlsoSendTo(e.target.value)}
-              onBlur={saveAlsoSendTo}
-              rows={2}
-              placeholder="spouse@example.com&#10;architect@example.com"
-              style={{
-                width: '100%',
-                padding: '0.5rem 0.75rem',
-                border: '1px solid #d5dae4',
-                borderRadius: '0.375rem',
-                fontSize: '0.8125rem',
-                fontFamily: 'inherit',
-                resize: 'vertical',
-              }}
-            />
-          </div>
+              Per-job; frozen on send (the also_send_to freeze migration). §1.4:
+              pick an existing contact or add one inline; stores contact_id +
+              name/email snapshot. */}
+          <AlsoSendToField value={alsoSendTo} canEdit={canEdit} onChange={saveAlsoSendTo} />
         </div>
 
         {/* Expiration */}
