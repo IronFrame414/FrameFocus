@@ -191,6 +191,7 @@ export type EstimatingSettings = Omit<
     | 'default_tax_rate'
     | 'default_labor_rate'
     | 'default_terms_sections'
+    | 'margin_target_percent'
   >,
   'default_pricing_mode' | 'default_terms_sections'
 > & {
@@ -210,7 +211,7 @@ export async function getEstimatingSettings(): Promise<EstimatingSettings | null
   const { data } = await supabase
     .from('companies')
     .select(
-      'id, estimate_number_prefix, estimate_number_sequence, default_pricing_mode, default_subcontractor_markup_percent, default_material_markup_percent, default_labor_markup_percent, default_subcontractor_margin_percent, default_material_margin_percent, default_labor_margin_percent, default_tax_rate, default_labor_rate, default_terms_sections'
+      'id, estimate_number_prefix, estimate_number_sequence, default_pricing_mode, default_subcontractor_markup_percent, default_material_markup_percent, default_labor_markup_percent, default_subcontractor_margin_percent, default_material_margin_percent, default_labor_margin_percent, default_tax_rate, default_labor_rate, default_terms_sections, margin_target_percent'
     )
     .maybeSingle();
 

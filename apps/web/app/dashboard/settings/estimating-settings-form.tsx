@@ -34,6 +34,7 @@ type FieldKey =
   | 'default_labor_margin_percent'
   | 'default_tax_rate'
   | 'default_labor_rate'
+  | 'margin_target_percent'
   | 'default_terms_sections';
 
 const SAVE_DEBOUNCE_MS = 1000;
@@ -55,6 +56,7 @@ export function EstimatingSettingsForm({ settings }: EstimatingSettingsFormProps
     default_labor_margin_percent: toInputValue(settings.default_labor_margin_percent),
     default_tax_rate: toInputValue(settings.default_tax_rate),
     default_labor_rate: toInputValue(settings.default_labor_rate),
+    margin_target_percent: toInputValue(settings.margin_target_percent),
   });
   const [terms, setTerms] = useState<TermsSection[]>(settings.default_terms_sections ?? []);
 
@@ -393,6 +395,34 @@ export function EstimatingSettingsForm({ settings }: EstimatingSettingsFormProps
           {errors.default_labor_rate && <div style={errorStyle}>{errors.default_labor_rate}</div>}
           {savedField === 'default_labor_rate' && <div style={savedStyle}>Saved</div>}
         </div>
+      </div>
+
+      {/* Margin target — the estimate health bar and 19a's "pts under target"
+          read this. Nullable: when unset, NO against-target comparison renders
+          (not a defaulted number nobody chose) [C4/A6]. */}
+      <div style={sectionStyle}>
+        <div style={sectionTitleStyle}>Target Gross Margin (%)</div>
+        <div style={{ maxWidth: '200px' }}>
+          <label style={labelStyle}>The margin you aim for on a job</label>
+          <input
+            inputMode="decimal"
+            value={percents.margin_target_percent}
+            onChange={(e) =>
+              setPercents((prev) => ({ ...prev, margin_target_percent: e.target.value }))
+            }
+            onBlur={() => handlePercentBlur('margin_target_percent', 'margin')}
+            style={inputStyle}
+            placeholder="—"
+          />
+          {errors.margin_target_percent && (
+            <div style={errorStyle}>{errors.margin_target_percent}</div>
+          )}
+          {savedField === 'margin_target_percent' && <div style={savedStyle}>Saved</div>}
+        </div>
+        <p style={{ fontSize: '0.75rem', color: '#7b8699', marginTop: '0.5rem' }}>
+          Leave blank and no “against target” comparison appears — estimate health just shows the
+          margin. Set it and each estimate shows how many points it is over or under.
+        </p>
       </div>
 
       {/* Terms sections */}
