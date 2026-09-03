@@ -485,3 +485,74 @@ export async function disposeProjectChangeOrdersError(
   if (error) return { message: `read change orders: ${error.message}` };
   return disposeChangeOrdersError(((data ?? []) as { id: string }[]).map((r) => r.id));
 }
+
+/**
+ * §2 [S103] — INSERT-OR-REUSE a contact, mirroring `createContact` in the app
+ * (`lib/services/contacts-client.ts`) exactly, so a harness exercises the SAME
+ * semantics as production rather than a test-only workaround.
+ *
+ * The partial unique index `contacts_company_email_unique` on
+ * `(company_id, lower(email))` — active, non-blank email — now rejects a
+ * duplicate insert with 23505. Before it landed these harness inserts silently
+ * dup'd; a fixed marker email (`s97estlines@example.invalid` etc.) re-inserted on
+ * a re-run — the norm, since `afterAll` does not run when a run is interrupted —
+ * now throws in `beforeAll` and reds the whole file. Reusing the existing row is
+ * the same thing the app now does, and it makes a suite runnable from a dirty
+ * database, which a single green run does not demonstrate.
+ *
+ * Look up an ACTIVE contact by `(company_id, lower(email))`; return it if present;
+ * otherwise insert. A NULL/blank email is exempt from the index, so it always
+ * inserts. The 23505 branch is the race backstop — two harnesses can reach for
+ * the same email between the read and the insert — re-resolving to the winner
+ * rather than throwing, exactly as `createContact` does.
+ *
+ * ⚠️ TWO DELIBERATE DIFFERENCES FROM `createContact`, both because the caller is
+ * a test:
+ *  1. It takes the client. The default is `admin` (service role, RLS bypassed) —
+ *     which is why the lookup MUST filter `company_id` explicitly (a fixed marker
+ *     email could otherwise match a row in another tenant). `createContact` omits
+ *     that filter because it runs under RLS. Pass a session client (as the
+ *     7e-clicktest does) to insert AS a user, and its RLS scopes the lookup; a
+ *     `company_id` in `fields` still narrows it and is honoured either way.
+ *  2. It THROWS on a non-duplicate error instead of returning `{success:false}`,
+ *     so a call site stays one line and a real failure still reds the suite.
+ *
+ * ⚠️ REUSE CARRIES PRIOR STATE. A suite that needs a genuinely FRESH contact
+ * (asserting an empty history, a new row's defaults, a zero count) must pass a
+ * UNIQUE email per run instead — a silently reused contact would make such a test
+ * pass for the wrong reason. As of S103 no live harness needs this; every one
+ * keys into the run's own freshly-created rows by id.
+ */
+export async function upsertContact(
+  fields: { company_id?: string; email?: string | null; [k: string]: unknown },
+  client: SupabaseClient = admin
+): Promise<{ id: string }> {
+  const email = typeof fields.email === 'string' ? fields.email.trim() : null;
+
+  async function findActive(): Promise<string | null> {
+    if (!email) return null;
+    const escaped = email.replace(/([\\%_])/g, '\\$1');
+    let query = client.from('contacts').select('id, email').eq('is_deleted', false);
+    if (fields.company_id) query = query.eq('company_id', fields.company_id);
+    const { data } = await query.ilike('email', escaped).limit(5);
+    const match = ((data ?? []) as { id: string; email: string | null }[]).find(
+      (r) => (r.email ?? '').trim().toLowerCase() === email.toLowerCase()
+    );
+    return match?.id ?? null;
+  }
+
+  if (email) {
+    const existing = await findActive();
+    if (existing) return { id: existing };
+  }
+
+  const { data, error } = await client.from('contacts').insert(fields).select('id').single();
+  if (error) {
+    if (error.code === '23505' && email) {
+      const winner = await findActive();
+      if (winner) return { id: winner };
+    }
+    throw new Error(`upsertContact(${email ?? '<no email>'}): ${error.message}`);
+  }
+  return { id: (data as { id: string }).id };
+}

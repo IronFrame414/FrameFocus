@@ -26,7 +26,7 @@ import { createClient as createSupabaseClient, type SupabaseClient } from '@supa
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 // S135 — see the call site. This file predates live-session.ts and builds its
 // own service-role client; only the identity-adoption helper is borrowed.
-import { adoptSignupProfile } from './live-session';
+import { adoptSignupProfile, upsertContact } from './live-session';
 
 const REQUIRED_PROJECT_REF = 'nmyphyhmfttxkdoposvf';
 const MARKER = 'S97CT7E';
@@ -271,17 +271,12 @@ beforeAll(async () => {
   // ── fixtures, as Owner, through the app's own defaults ────────────────────
   as(ownerClient);
 
-  const { data: contact, error: cErr } = await ownerClient
-    .from('contacts')
-    .insert({
-      contact_type: 'client',
-      first_name: MARKER,
-      last_name: 'Client',
-      email: `${MARKER.toLowerCase()}@example.invalid`,
-    })
-    .select('id')
-    .single();
-  if (cErr) throw new Error(`contact: ${cErr.message}`);
+  const contact = await upsertContact({
+    contact_type: 'client',
+    first_name: MARKER,
+    last_name: 'Client',
+    email: `${MARKER.toLowerCase()}@example.invalid`,
+  }, ownerClient);
   contactId = contact.id;
 
   const { data: project, error: prErr } = await ownerClient

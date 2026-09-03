@@ -19,7 +19,7 @@
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { admin, assertRebuildTest, disposeChangeOrdersError, sessionFor, sweepChangeOrders } from './live-session';
+import { admin, assertRebuildTest, disposeChangeOrdersError, sessionFor, sweepChangeOrders, upsertContact } from './live-session';
 import { deriveInvoiceLines } from '@/lib/services/invoice-derivation-server';
 
 const MARKER = 'S97DERIV';
@@ -151,15 +151,14 @@ beforeAll(async () => {
   pmClient = await sessionFor('josh+pm@worthprop.com');
 
   // ── fixtures ──────────────────────────────────────────────────────────────
-  const { data: contact, error: cErr } = await admin
-    .from('contacts')
-    .insert({
-      company_id: companyId, contact_type: 'client',
-      first_name: MARKER, last_name: 'Client', email: `${MARKER.toLowerCase()}@example.invalid`,
-    })
-    .select('id').single();
-  must('contact', cErr);
-  contactId = contact!.id;
+  const contact = await upsertContact({
+    company_id: companyId,
+    contact_type: 'client',
+    first_name: MARKER,
+    last_name: 'Client',
+    email: `${MARKER.toLowerCase()}@example.invalid`,
+  });
+  contactId = contact.id;
 
   const { data: counters } = await admin
     .from('companies')
