@@ -101,7 +101,7 @@ export function DraftPosModal({
         type="button"
         data-testid="open-draft-pos"
         onClick={() => setOpen(true)}
-        className="rounded-[9px] border border-[#dbe0fb] bg-[#f2f4ff] px-[15px] py-[9px] text-[13px] font-semibold text-[#3b4ae0]"
+        className="rounded-[9px] border border-[#dbe0fb] bg-[#f2f4ff] px-[15px] py-[9px] text-[13px] font-semibold text-blue"
       >
         Draft POs from the estimate
       </button>
@@ -117,7 +117,7 @@ export function DraftPosModal({
             className="absolute bottom-0 right-0 top-0 flex w-[min(760px,96vw)] flex-col bg-white shadow-[-18px_0_44px_rgba(15,23,41,.18)]"
           >
             <div className="flex items-center justify-between border-b border-[#e4e8ef] px-[22px] py-[14px]">
-              <div className="text-[18px] font-extrabold text-[#0f1729]">
+              <div className="text-[18px] font-extrabold text-navy">
                 Draft purchase orders
               </div>
               <button
@@ -145,7 +145,7 @@ export function DraftPosModal({
                   onClick={() => setGroupBy(key)}
                   className={`rounded-[20px] px-3 py-[5px] text-[12px] font-semibold ${
                     groupBy === key
-                      ? 'bg-[#0f1729] text-white'
+                      ? 'bg-navy text-white'
                       : 'border border-[#d5dae4] bg-white text-[#3f4a60]'
                   }`}
                 >
@@ -179,12 +179,12 @@ export function DraftPosModal({
                       }`}
                     >
                       <div className="mb-1 flex items-center justify-between">
-                        <span className="text-[13.5px] font-bold text-[#0f1729]">
+                        <span className="text-[13.5px] font-bold text-navy">
                           {noVendorCard
                             ? `${preview.lines.length} line${preview.lines.length === 1 ? ' has' : 's have'} no vendor yet`
                             : preview.label}
                         </span>
-                        <span className="font-mono text-[13px] font-semibold text-[#0f1729]">
+                        <span className="font-mono text-[13px] font-semibold text-navy">
                           {fmt(preview.total)}
                         </span>
                       </div>
@@ -235,14 +235,14 @@ export function DraftPosModal({
               )}
             </div>
 
-            <div className="flex items-center gap-3 border-t border-[#e4e8ef] bg-[#0f1729] px-[22px] py-[12px] text-[13px] text-white">
+            <div className="flex items-center gap-3 border-t border-[#e4e8ef] bg-navy px-[22px] py-[12px] text-[13px] text-white">
               <span>
                 {previews.length} PO{previews.length === 1 ? '' : 's'} to draft
               </span>
               <span>
                 Cost <strong className="font-mono text-[#f5a524]">{fmt(totalCost)}</strong>
               </span>
-              <span className="flex-1 text-[11px] text-[#8fa0c4]">
+              <span className="flex-1 text-[11px] text-muted-navy">
                 POs are created as drafts — nothing is committed until lines are issued.
               </span>
               <button
@@ -258,7 +258,7 @@ export function DraftPosModal({
                 data-testid="create-draft-pos"
                 disabled={busy || previews.length === 0 || Boolean(unassigned && unassigned.lines.some((l) => !l.vendorId))}
                 onClick={() => void handleCreate()}
-                className="rounded-[8px] bg-[#3b4ae0] px-[15px] py-[8px] font-bold disabled:opacity-50"
+                className="rounded-[8px] bg-blue px-[15px] py-[8px] font-bold disabled:opacity-50"
                 title={
                   unassigned && unassigned.lines.some((l) => !l.vendorId)
                     ? 'Assign a vendor to every line first (or switch the grouping).'
