@@ -29,6 +29,12 @@ export default defineConfig({
     // full-suite scale, the exact flaky-neighbour class the battery must not
     // ship. Forks makes it deterministic; full suite is 1011/1011 either way.
     pool: 'forks',
+    // Global React `cache` passthrough shim (test/setup/react-cache-shim.ts).
+    // Without it, any *.test.ts that imports lib/supabase-server by value throws
+    // at collection. Today only supabase-server.identity.test.ts reaches it and
+    // it self-shims; this closes the gap so the NEXT such test cannot silently
+    // reopen it.
+    setupFiles: [new URL('./test/setup/react-cache-shim.ts', import.meta.url).pathname],
     include: ['**/*.{test,spec}.{ts,tsx}'],
     // e2e/** is Playwright's (playwright.config.ts testDir). The include glob
     // above and Playwright's default testMatch overlap completely, so without
