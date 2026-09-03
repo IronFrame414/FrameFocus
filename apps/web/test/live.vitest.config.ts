@@ -63,6 +63,11 @@ export default defineConfig({
   },
   test: {
     include: ['test/*.live.ts'],
+    // Global React `cache` passthrough shim — the fix for the Class-A regression
+    // where every .live.ts importing a server service (transitively
+    // lib/supabase-server, which calls cache() at module load) threw at
+    // collection and registered zero tests. See test/setup/react-cache-shim.ts.
+    setupFiles: [fileURLToPath(new URL('./setup/react-cache-shim.ts', import.meta.url))],
     environment: 'node',
     testTimeout: 120_000,
     hookTimeout: 240_000,
