@@ -7,6 +7,8 @@ import {
   setWinningBid,
   softDeleteEstimateSubBid,
   updateEstimateSubBid,
+  listAwardBases,
+  type AwardBasis,
 } from '@/lib/services/estimate-items-client';
 import {
   SubcontractorOption,
@@ -55,6 +57,17 @@ export function BiddingTab({ data, canEdit, reload, companyTimeZone }: TabProps)
   useEffect(() => {
     listSubBidRequests(data.estimate.id).then(setRequests);
   }, [data.estimate.id]);
+
+  // 19d (§1.5) — the FROZEN award basis per winning bid. What set_winning_bid
+  // locked onto the winning line row (the subcontract's basis), so 19d can show
+  // it distinctly from the still-editable estimate_sub_bids row.
+  const [awardBases, setAwardBases] = useState<AwardBasis[]>([]);
+  useEffect(() => {
+    const winnerIds = subBids.filter((b) => b.is_winner).map((b) => b.id);
+    listAwardBases(winnerIds).then(setAwardBases);
+  }, [subBids]);
+  const awardBasisFor = (subBidId: string): AwardBasis | undefined =>
+    awardBases.find((a) => a.sub_bid_id === subBidId);
 
   // 19d — the lowest bid on a line, for the "vs low" delta. Coverage-adjust is
   // deferred (spec §2 19d "coverage-adjusted low banner"); raw delta here.
@@ -367,6 +380,37 @@ export function BiddingTab({ data, canEdit, reload, companyTimeZone }: TabProps)
                       Exclusions (verbatim): <span style={{ whiteSpace: 'pre-wrap' }}>{winner.exclusions}</span>
                     </div>
                   )}
+                  {/* §1.5 — the FROZEN award basis (estimate_award_bases). What
+                      set_winning_bid locked onto the line row; the subcontract
+                      draws from THIS, not the editable bid above. */}
+                  {(() => {
+                    const basis = awardBasisFor(winner.id);
+                    if (!basis) return null;
+                    const drifted =
+                      Number(basis.labor_amount ?? 0) !== Number(winner.labor_amount ?? 0) ||
+                      Number(basis.material_amount ?? 0) !== Number(winner.material_amount ?? 0) ||
+                      Number(basis.scope_coverage_percent ?? 0) !==
+                        Number(winner.scope_coverage_percent ?? 0);
+                    return (
+                      <div style={{ marginTop: '0.5rem', paddingTop: '0.4rem', borderTop: '1px dashed #cfe3d6' }}>
+                        <div style={{ fontSize: '0.72rem', color: '#5b6472', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.25rem' }}>
+                          Contract basis — frozen at award
+                        </div>
+                        <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', fontSize: '0.78rem', color: '#5b6472', fontFamily: 'var(--font-mono, monospace)' }}>
+                          {basis.labor_amount != null && <span>Labor {fmtMoney(basis.labor_amount)}</span>}
+                          {basis.material_amount != null && <span>Material {fmtMoney(basis.material_amount)}</span>}
+                          {basis.scope_coverage_percent != null && <span>Coverage {basis.scope_coverage_percent}%</span>}
+                          {basis.awarded_at && <span>Awarded {new Date(basis.awarded_at).toLocaleDateString()}</span>}
+                        </div>
+                        {drifted && (
+                          <div style={{ marginTop: '0.25rem', fontSize: '0.72rem', color: '#b45309' }}>
+                            The bid above has been edited since award — the contract basis stays as
+                            frozen here.
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               )}
 

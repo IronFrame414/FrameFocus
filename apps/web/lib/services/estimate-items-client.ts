@@ -551,6 +551,29 @@ export async function softDeleteEstimateSubBid(id: string): Promise<Result> {
 }
 
 /**
+ * The FROZEN award basis for one or more winning bids (§1.5). `set_winning_bid`
+ * persists the labor/material split and scope coverage onto `estimate_award_bases`
+ * (keyed to the winning line row) at award time — Q5's "the subcontract draws
+ * from it" record. This is that side table's reader: 19d shows the frozen basis
+ * so a later edit to the `estimate_sub_bids` row is visibly distinct from what
+ * the contract was awarded on.
+ */
+export type AwardBasis = Pick<
+  Database['public']['Tables']['estimate_award_bases']['Row'],
+  'sub_bid_id' | 'line_row_id' | 'labor_amount' | 'material_amount' | 'scope_coverage_percent' | 'awarded_at'
+>;
+
+export async function listAwardBases(subBidIds: string[]): Promise<AwardBasis[]> {
+  if (subBidIds.length === 0) return [];
+  const supabase = createClient();
+  const { data } = await supabase
+    .from('estimate_award_bases')
+    .select('sub_bid_id, line_row_id, labor_amount, material_amount, scope_coverage_percent, awarded_at')
+    .in('sub_bid_id', subBidIds);
+  return data ?? [];
+}
+
+/**
  * Atomic winner flip via the set_winning_bid RPC (Rev 2 §2.5): clears
  * any previous winner, marks the new one, and upserts a single
  * subcontractor row on the line (insert if none, update if one, error
