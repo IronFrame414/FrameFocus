@@ -159,6 +159,14 @@ export async function getProposalData(
   const contact = contactRes.data;
   if (!company || !contact) return null;
 
+  // Version is DERIVED, never the stored `version_number` (whose 'v1.1' default
+  // is vestigial). get_estimate_version walks the void/reissue supersede chain;
+  // the label is "v" || depth — first send v1, one reissue v2 (§1.2, R2′/Q2).
+  const { data: versionDepth } = await supabase.rpc('get_estimate_version', {
+    p_estimate_id: estimateId,
+  });
+  const derivedVersion = `v${versionDepth ?? 1}`;
+
   const pricingLevel = estimate.proposal_pricing_level as ProposalPricingLevel;
   const lineItems = lineItemsRes.data ?? [];
   const lineIds = lineItems.map((l) => l.id);
@@ -265,7 +273,7 @@ export async function getProposalData(
     estimate: {
       id: estimate.id,
       number: estimate.estimate_number,
-      version: estimate.version_number,
+      version: derivedVersion,
       name: estimate.name,
       status: estimate.status,
       date: estimate.created_at ?? new Date().toISOString(),

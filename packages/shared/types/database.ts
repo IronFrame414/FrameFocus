@@ -9512,6 +9512,10 @@ export type Database = {
         Args: { p_company_name: string; p_exclude_company_id?: string }
         Returns: string
       }
+      get_estimate_version: {
+        Args: { p_estimate_id: string }
+        Returns: number
+      }
       get_invitation_by_token: {
         Args: { invite_token: string }
         Returns: {

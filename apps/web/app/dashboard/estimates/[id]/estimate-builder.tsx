@@ -7,6 +7,7 @@ import {
   EstimateWithChildren,
   approveAndSend,
   getEstimate,
+  getEstimateVersion,
   markAsSent,
   softDeleteEstimate,
   voidEstimate,
@@ -107,6 +108,11 @@ export function EstimateBuilder({
     body: string;
   } | null>(null);
 
+  // Version is DERIVED from the supersede chain, never the stored 'v1.1'
+  // default (§1.2). Fetched once per estimate; it changes only on void+reissue,
+  // which navigates to a new estimate id.
+  const [derivedVersion, setDerivedVersion] = useState<string | null>(null);
+
   const reload = useCallback(async () => {
     const fresh = await getEstimate(estimateId);
     setData(fresh);
@@ -116,6 +122,10 @@ export function EstimateBuilder({
     setLoading(true);
     reload().then(() => setLoading(false));
   }, [reload]);
+
+  useEffect(() => {
+    getEstimateVersion(estimateId).then(setDerivedVersion);
+  }, [estimateId]);
 
   if (loading) {
     return <p style={{ color: '#9aa4b8', fontSize: '0.875rem' }}>Loading estimate…</p>;
@@ -371,7 +381,7 @@ export function EstimateBuilder({
               }}
             >
               <span style={{ fontWeight: 600 }}>{estimate.estimate_number}</span>
-              <span>{estimate.version_number}</span>
+              {derivedVersion && <span>{derivedVersion}</span>}
               <StatusBadge status={estimate.status} />
             </div>
           </div>

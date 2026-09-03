@@ -241,6 +241,18 @@ export async function listEstimates(filters?: ListEstimatesFilters): Promise<Est
  * read soft-deleted rows by id); soft-deleted sub bids are excluded
  * because they are a listing within the estimate.
  */
+/**
+ * The DERIVED version label ("v1", "v2", …) — the length of the void/reissue
+ * supersede chain walked at read time (§1.2, R2′/Q2). Never the stored
+ * `version_number` (whose 'v1.1' default is vestigial). Returns "v1" on any
+ * error so the header never renders the dead default.
+ */
+export async function getEstimateVersion(id: string): Promise<string> {
+  const supabase = createClient();
+  const { data } = await supabase.rpc('get_estimate_version', { p_estimate_id: id });
+  return `v${data ?? 1}`;
+}
+
 export async function getEstimate(id: string): Promise<EstimateWithChildren | null> {
   const supabase = createClient();
 
