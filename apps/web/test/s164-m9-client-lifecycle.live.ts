@@ -368,12 +368,24 @@ describe('C — R17: three termination states, Owner/Admin only, all recorded', 
   });
 
   it('C6 — the client cannot change her own state', async () => {
-    const { data } = await linked
+    // ⚠️ ATTEMPT A REAL CHANGE. The self-update RLS arm (profiles_update_self)
+    // lets her touch her OWN row, so column scope is NOT enforced by RLS — it is
+    // the `profiles_self_column_scope` trigger, which allows only first/last name
+    // and RAISES on anything else. Writing the value she ALREADY has (this test's
+    // former bug: `'active'`) changes no guarded column, so the row-touch on
+    // updated_at succeeds and returns the id — which is not what "cannot change"
+    // means. Set a DIFFERENT state and prove it is rejected AND did not persist.
+    const { data, error } = await linked
       .from('profiles')
-      .update({ client_access_state: 'active' })
+      .update({ client_access_state: 'deactivated' })
       .eq('id', linkedProfileId)
       .select('id');
+    expect(error).not.toBeNull();
     expect(data ?? []).toHaveLength(0);
+
+    const { data: after } = await admin
+      .from('profiles').select('client_access_state').eq('id', linkedProfileId).single();
+    expect((after as { client_access_state: string }).client_access_state).toBe('active');
   });
 
   it('C7 — the audit log is Owner/Admin only; the client cannot read it', async () => {
