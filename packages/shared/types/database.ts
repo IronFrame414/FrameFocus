@@ -9561,6 +9561,7 @@ export type Database = {
           segment_type: string
         }[]
       }
+      get_sub_bid_request: { Args: { p_token: string }; Returns: Json }
       is_assigned_to_project: {
         Args: { p_project_id: string }
         Returns: boolean
@@ -9722,6 +9723,18 @@ export type Database = {
       submit_delivery_check_in: {
         Args: { p_delivery_id: string }
         Returns: undefined
+      }
+      submit_sub_bid_reply: {
+        Args: {
+          p_bid_amount: number
+          p_exclusions: string
+          p_holds_until: string
+          p_labor_amount: number
+          p_material_amount: number
+          p_scope_coverage_percent: number
+          p_token: string
+        }
+        Returns: Json
       }
       supersede_instrument_rate: {
         Args: {
