@@ -23,6 +23,7 @@ import {
   listSubBidRequests,
   bidReplyUrl,
   type SubBidRequestRow,
+  type SubBidReplyMode,
 } from '@/lib/services/sub-bid-requests-client';
 import { fmtMoney } from '../labels';
 import { useConfirm } from '@/components/confirm/confirm-provider';
@@ -610,19 +611,35 @@ function RequestByLinkForm({
   winRecordFor: (subId: string | null) => { won: number; total: number };
   onDone: (error?: string) => void;
 }) {
+  const [trade, setTrade] = useState('');
   const [subId, setSubId] = useState('');
   const [scope, setScope] = useState('');
+  const [allowance, setAllowance] = useState('');
+  const [message, setMessage] = useState('');
+  const [replyMode, setReplyMode] = useState<SubBidReplyMode>('link');
   const [bidsDue, setBidsDue] = useState('');
   const [workStarts, setWorkStarts] = useState('');
   const [siteVisit, setSiteVisit] = useState('');
   const [busy, setBusy] = useState(false);
   const [link, setLink] = useState<string | null>(null);
+  const [emailed, setEmailed] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const rec = winRecordFor(subId);
+
+  // Trade filter (§1.6): the distinct trades present, and the subs narrowed to
+  // the chosen one. A sub whose trade is cleared drops off the filtered list, so
+  // clear the selection if it no longer qualifies.
+  const trades = Array.from(new Set(subs.map((s) => s.trade_type).filter(Boolean))).sort() as string[];
+  const filteredSubs = trade ? subs.filter((s) => s.trade_type === trade) : subs;
 
   async function send() {
     if (!subId) {
       setErr('Pick a subcontractor.');
+      return;
+    }
+    const allowanceNum = allowance.trim() === '' ? null : Number(allowance);
+    if (allowanceNum != null && (Number.isNaN(allowanceNum) || allowanceNum < 0)) {
+      setErr('Allowance must be a non-negative number.');
       return;
     }
     setBusy(true);
@@ -632,6 +649,9 @@ function RequestByLinkForm({
       lineItemId,
       subcontractorId: subId,
       scopeText: scope.trim() || null,
+      message: message.trim() || null,
+      allowanceAmount: allowanceNum,
+      replyMode,
       bidsDueDate: bidsDue || null,
       workStartsDate: workStarts || null,
       siteVisitDate: siteVisit || null,
@@ -641,7 +661,8 @@ function RequestByLinkForm({
       setErr(result.error ?? 'Could not create the request.');
       return;
     }
-    setLink(bidReplyUrl(result.token));
+    if (replyMode === 'email') setEmailed(true);
+    else setLink(bidReplyUrl(result.token));
   }
 
   const inputStyle: React.CSSProperties = {
@@ -650,6 +671,20 @@ function RequestByLinkForm({
     borderRadius: '0.25rem',
     fontSize: '0.8125rem',
   };
+
+  if (emailed) {
+    return (
+      <div style={{ border: '1px solid #dbe0fb', backgroundColor: '#f2f4ff', borderRadius: '0.375rem', padding: '0.75rem' }}>
+        <p style={{ fontSize: '0.8125rem', color: '#1f2a44', margin: '0 0 0.5rem' }}>
+          Request recorded. This sub replies by email — when their bid arrives, enter it with
+          “Add bid” on this line.
+        </p>
+        <button type="button" onClick={() => onDone()} style={{ padding: '0.375rem 0.875rem', fontSize: '0.8125rem', backgroundColor: '#3b4ae0', color: '#fff', border: 'none', borderRadius: '0.25rem', cursor: 'pointer' }}>
+          Done
+        </button>
+      </div>
+    );
+  }
 
   if (link) {
     return (
@@ -668,9 +703,28 @@ function RequestByLinkForm({
   return (
     <div style={{ border: '1px solid #dbe0fb', backgroundColor: '#f2f4ff', borderRadius: '0.375rem', padding: '0.75rem' }}>
       <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        {trades.length > 0 && (
+          <select
+            value={trade}
+            onChange={(e) => {
+              setTrade(e.target.value);
+              // drop a selected sub that no longer matches the filter
+              if (e.target.value && subId) {
+                const s = subs.find((x) => x.id === subId);
+                if (!s || s.trade_type !== e.target.value) setSubId('');
+              }
+            }}
+            style={inputStyle}
+          >
+            <option value="">All trades</option>
+            {trades.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+        )}
         <select value={subId} onChange={(e) => setSubId(e.target.value)} style={inputStyle}>
           <option value="">Subcontractor…</option>
-          {subs.map((s) => (
+          {filteredSubs.map((s) => (
             <option key={s.id} value={s.id}>{s.company_name}</option>
           ))}
         </select>
@@ -680,6 +734,10 @@ function RequestByLinkForm({
           </span>
         )}
         <input value={scope} onChange={(e) => setScope(e.target.value)} placeholder="Scope (free text)" style={{ ...inputStyle, flex: 1, minWidth: '160px' }} />
+        <label style={{ fontSize: '0.72rem', color: '#5b6472' }}>
+          Allowance{' '}
+          <input inputMode="decimal" value={allowance} onChange={(e) => setAllowance(e.target.value)} placeholder="$" style={{ ...inputStyle, width: '90px' }} />
+        </label>
         <label style={{ fontSize: '0.72rem', color: '#5b6472' }}>
           Bids due{' '}
           <input type="date" value={bidsDue} onChange={(e) => setBidsDue(e.target.value)} style={inputStyle} />
@@ -692,8 +750,25 @@ function RequestByLinkForm({
           Site visit{' '}
           <input type="date" value={siteVisit} onChange={(e) => setSiteVisit(e.target.value)} style={inputStyle} />
         </label>
+      </div>
+      <textarea
+        value={message}
+        onChange={(e) => setMessage(e.target.value)}
+        placeholder="Message to the sub (optional)"
+        rows={2}
+        style={{ ...inputStyle, width: '100%', marginTop: '0.5rem', resize: 'vertical', fontFamily: 'inherit' }}
+      />
+      <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '0.72rem', color: '#5b6472' }}>How they reply:</span>
+        {(['link', 'email'] as const).map((m) => (
+          <label key={m} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', color: '#5b6472' }}>
+            <input type="radio" name={`reply-${lineItemId}`} checked={replyMode === m} onChange={() => setReplyMode(m)} />
+            {m === 'link' ? 'A link they fill in' : 'They email me back'}
+          </label>
+        ))}
+        <div style={{ flex: 1 }} />
         <button type="button" onClick={send} disabled={busy} style={{ padding: '0.375rem 0.875rem', fontSize: '0.8125rem', fontWeight: 600, color: '#fff', backgroundColor: busy ? '#9aa4b8' : '#3b4ae0', border: 'none', borderRadius: '0.25rem', cursor: busy ? 'not-allowed' : 'pointer' }}>
-          {busy ? 'Creating…' : 'Create link'}
+          {busy ? 'Creating…' : replyMode === 'link' ? 'Create link' : 'Record request'}
         </button>
         <button type="button" onClick={() => onDone()} style={{ padding: '0.375rem 0.875rem', fontSize: '0.8125rem', backgroundColor: '#f4f6fa', border: '1px solid #d5dae4', borderRadius: '0.25rem', cursor: 'pointer' }}>
           Cancel

@@ -180,6 +180,31 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
   by Josh, and its **"Internal (Detailed)"** and **"Field Sheet"** entries are **out of scope** — they
   are not client proposal formats. [Josh, S103, §4]
 
+- **#3-estred — 19c insurance-expiry + W-9 status on the sub picker, by subcontractor.** The 19c
+  request form still shows no per-sub insurance/W-9, and the "how they reply" W-9 warning is a static
+  banner. This is **architecturally blocked, not an oversight**: compliance lives in
+  `subcontractor_compliance_documents`, keyed by `member_id` and floored to Owner/Admin server-side,
+  while the bidding surface is `subcontractor_id`-keyed and PM-reachable. Wiring the two would either
+  leak the floored store to a PM or duplicate its data. **It needs a client-safe, by-`subcontractor_id`
+  compliance read** (a service/RPC that returns only expiry + W-9 present/absent, no documents) before
+  the picker can show it. Do NOT work around the floor. [§1.6]
+
+- **#4-estred — Sub-bid reminders: schedule input, status chips reflecting reminders, and 19d "Nudge".**
+  `estimate_sub_bid_requests` has `sent_at`/`viewed_at`/`submitted_at` but **no reminder-tracking model**
+  (no reminder-sent timestamps, no schedule). So a reminder schedule input, "reminder sent N days ago"
+  chips, and the 19d no-reply **Nudge** action all have nowhere to record what was sent. Needs a small
+  schema addition (a reminders log or a `reminded_at[]`/schedule column) + a send path before any of the
+  three can be built honestly. [§1.6]
+
+- **#5-estred — 19c plan attachments to a bid request.** `estimate_sub_bid_requests` has no attachment
+  column and the tokenised reply surface (`get_sub_bid_request` RPC → `/bid/[token]`) exposes no files.
+  Attaching plans is a real feature but a **security-sensitive one**: it needs (a) storage — a
+  `plan_file_ids` column or a join table referencing estimate files — AND (b) an **anonymous-download
+  exposure path** for the unauthenticated sub (the RPC returning file refs, the public page minting
+  short-lived signed URLs via the service-role client, with expiry). Deliberately **not** bolted on in
+  this unverified run — the anonymous file-exposure surface deserves its own careful pass, the same
+  reasoning by which insurance/W-9 and reminders above were filed rather than forced. [§1.6]
+
 ### Branch-scoped, awaiting real numbers — `feature/deletion-sweep-analysis` [deletion-sweep §3]
 
 > Provisional id per the S136 rule. Tag `delsweep`. (The `#N-trial` ids amended on this branch

@@ -155,6 +155,8 @@ export async function saveSubcontractorFinancials(
 export interface SubcontractorOption {
   id: string;
   company_name: string;
+  /** For the 19c trade filter (§1.6). Nullable — many subs carry no trade. */
+  trade_type: string | null;
 }
 
 export async function listSubcontractorOptions(): Promise<SubcontractorOption[]> {
@@ -162,7 +164,7 @@ export async function listSubcontractorOptions(): Promise<SubcontractorOption[]>
 
   const { data, error } = await supabase
     .from('subcontractors')
-    .select('id, company_name')
+    .select('id, company_name, trade_type')
     .eq('is_deleted', false)
     .order('company_name', { ascending: true });
 

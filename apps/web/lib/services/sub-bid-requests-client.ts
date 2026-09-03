@@ -21,6 +21,8 @@ export interface SubBidRequestRow {
   sub_bid_id: string | null;
 }
 
+export type SubBidReplyMode = 'link' | 'email';
+
 export interface CreateSubBidRequestInput {
   estimateId: string;
   lineItemId: string;
@@ -31,6 +33,9 @@ export interface CreateSubBidRequestInput {
   bidsDueDate?: string | null;
   workStartsDate?: string | null;
   siteVisitDate?: string | null;
+  /** How the sub replies (§1.6): 'link' = the tokenised page, 'email' = they
+   *  email back and you enter it manually. Defaults to 'link'. */
+  replyMode?: SubBidReplyMode;
   /** Days until the link expires (default 14). */
   expiresInDays?: number;
 }
@@ -58,6 +63,7 @@ export async function createSubBidRequest(input: CreateSubBidRequestInput): Prom
       scope_text: input.scopeText ?? null,
       message: input.message ?? null,
       allowance_amount: input.allowanceAmount ?? null,
+      reply_mode: input.replyMode ?? 'link',
       bids_due_date: input.bidsDueDate ?? null,
       work_starts_date: input.workStartsDate ?? null,
       site_visit_date: input.siteVisitDate ?? null,
