@@ -1,7 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { getUploaderNames } from '@/lib/services/photos';
+import { computeEstimateHealth } from '@/lib/estimate-health';
+import { createClient } from '@/lib/supabase-browser';
 import {
   DiscountType,
   PricingMode,
@@ -101,7 +104,44 @@ export function DetailsTab({
   const { estimate, lineItems } = data;
   const [menuOpen, setMenuOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 19b — estimator is READ-ONLY, resolved via getUploaderNames from created_by
+  // (an RLS floor). No second resolver; users cannot edit it [R10].
+  const [estimatorName, setEstimatorName] = useState<string | null>(null);
+  const [target, setTarget] = useState<number | null>(null);
+  const [alsoSendTo, setAlsoSendTo] = useState<string>(() =>
+    ((estimate.also_send_to as string[] | null) ?? []).join('\n')
+  );
   const confirm = useConfirm();
+
+  useEffect(() => {
+    if (estimate.created_by) {
+      getUploaderNames([estimate.created_by]).then((m) =>
+        setEstimatorName(m.get(estimate.created_by as string) ?? null)
+      );
+    }
+    createClient()
+      .from('companies')
+      .select('margin_target_percent')
+      .maybeSingle()
+      .then(({ data: co }) => setTarget(co?.margin_target_percent ?? null));
+  }, [estimate.created_by]);
+
+  const health = computeEstimateHealth({
+    grandTotal: estimate.grand_total,
+    taxRate: estimate.tax_rate,
+    lineItems,
+    rows: data.rows,
+  });
+  const gapPts = target != null && health.marginPercent != null ? health.marginPercent - target : null;
+
+  async function saveAlsoSendTo() {
+    const list = alsoSendTo
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const result = await saveField({ also_send_to: list });
+    if (!result.success) setError(result.error || 'Could not save recipients');
+  }
 
   const mode = estimate.pricing_mode;
   const modeNoun = mode === 'markup' ? 'markup' : 'margin';
@@ -203,6 +243,38 @@ export function DetailsTab({
               {STATUS_LABELS[estimate.status].toLowerCase()}.
             </p>
           )}
+
+          {/* Estimator — read-only, from created_by (no lead source; it lives on
+              the contact). */}
+          <div style={{ ...rowStyle, marginTop: '0.5rem' }}>
+            <span style={fieldLabel}>Estimator</span>
+            <span style={{ color: '#7b8699' }}>{estimatorName ?? '—'}</span>
+          </div>
+
+          {/* Also send to — extra proposal recipients (spouse, architect, lender).
+              Per-job; frozen on send (the also_send_to freeze migration). */}
+          <div style={{ marginTop: '0.75rem' }}>
+            <label style={{ ...fieldLabel, display: 'block', marginBottom: '0.25rem' }}>
+              Also send to <span style={{ color: '#9aa4b8', fontWeight: 400 }}>(one email per line)</span>
+            </label>
+            <textarea
+              value={alsoSendTo}
+              disabled={!canEdit}
+              onChange={(e) => setAlsoSendTo(e.target.value)}
+              onBlur={saveAlsoSendTo}
+              rows={2}
+              placeholder="spouse@example.com&#10;architect@example.com"
+              style={{
+                width: '100%',
+                padding: '0.5rem 0.75rem',
+                border: '1px solid #d5dae4',
+                borderRadius: '0.375rem',
+                fontSize: '0.8125rem',
+                fontFamily: 'inherit',
+                resize: 'vertical',
+              }}
+            />
+          </div>
         </div>
 
         {/* Expiration */}
@@ -419,6 +491,35 @@ export function DetailsTab({
             History and Coverage are NOT built — see estimate-health-panel.tsx
             for the reasons, recorded once there. */}
         <EstimateHealthCard data={data} />
+
+        {/* 19b — margin-vs-target bar. Renders ONLY when a company target is set
+            (nullable; unset = no comparison, per the ruling). */}
+        {target != null && health.marginPercent != null && (
+          <div style={{ border: '1px solid #e4e8ef', borderRadius: '0.5rem', padding: '0.875rem 1rem', marginBottom: '1rem' }}>
+            <div style={{ fontSize: '0.75rem', color: '#7b8699', marginBottom: '0.4rem' }}>
+              Margin vs target
+            </div>
+            <div style={{ position: 'relative', height: '8px', background: '#eef1f6', borderRadius: '999px', overflow: 'hidden' }}>
+              <div
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: `${Math.max(0, Math.min(100, health.marginPercent))}%`,
+                  background: gapPts != null && gapPts < 0 ? '#c0362c' : '#1f8f4e',
+                }}
+              />
+              {/* target marker */}
+              <div style={{ position: 'absolute', left: `${Math.max(0, Math.min(100, target))}%`, top: '-2px', bottom: '-2px', width: '2px', background: '#0f1729' }} />
+            </div>
+            <div style={{ fontSize: '0.72rem', color: gapPts != null && gapPts < 0 ? '#c0362c' : '#1f8f4e', marginTop: '0.4rem', fontFamily: 'var(--font-mono, monospace)' }}>
+              {health.marginPercent}% vs {target}% target
+              {gapPts != null && ` · ${Math.abs(gapPts).toFixed(1)} pts ${gapPts < 0 ? 'under' : 'over'}`}
+            </div>
+          </div>
+        )}
+
         <BeforeYouSendCard data={data} />
         <ClientActivityCard data={data} />
 

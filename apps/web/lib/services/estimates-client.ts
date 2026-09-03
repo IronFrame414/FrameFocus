@@ -135,6 +135,9 @@ export type UpdateEstimateInput = Partial<
     | 'deposit_percent'
     | 'invoice_due_days'
     | 'retainage_percent'
+    // 19b — extra proposal recipients (migration #6). Per-job, frozen on send by
+    // enforce_estimate_immutability (the also_send_to freeze).
+    | 'also_send_to'
     // Money representation §4.2/§7.1 S-3 — Owner/Admin-gated in the UI
     // (projected_value is user-entered, never derived; NULL is normal).
     | 'projected_value'
