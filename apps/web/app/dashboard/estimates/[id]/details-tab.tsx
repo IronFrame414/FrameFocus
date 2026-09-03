@@ -5,12 +5,13 @@ import Link from 'next/link';
 import {
   DiscountType,
   PricingMode,
-  PROPOSAL_PRICING_LEVEL_OPTIONS,
-  ProposalPricingLevel,
   updateEstimate,
   updatePricingMode,
+  markEstimateLost,
+  type LostReasonCode,
 } from '@/lib/services/estimates-client';
 import { recalculateEstimateTotals } from '@/lib/services/estimate-items-client';
+import { ProposalFormatPicker } from './proposal-format-picker';
 import { ContactAddressPicker } from '../contact-address-picker';
 import { InlineNumber } from '../inline-edit';
 import { fmtPercent } from '../labels';
@@ -29,6 +30,62 @@ interface DetailsTabProps extends TabProps {
   onDelete?: () => void;
   onClone: () => void;
   statusAction: React.ReactNode;
+}
+
+const LOST_REASONS: { value: LostReasonCode; label: string }[] = [
+  { value: 'lost_to_competitor', label: 'Lost to a competitor' },
+  { value: 'no_response', label: 'No response' },
+  { value: 'client_postponed', label: 'Client postponed' },
+  { value: 'we_declined', label: 'We declined' },
+  { value: 'other', label: 'Other' },
+];
+
+/** 19b — mark a sent estimate lost (win-rate honesty). Wires markEstimateLost. */
+function MarkLostCard({ estimateId, onDone }: { estimateId: string; onDone: () => Promise<void> }) {
+  const [reason, setReason] = useState<LostReasonCode>('lost_to_competitor');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function submit() {
+    setBusy(true);
+    setErr(null);
+    const result = await markEstimateLost(estimateId, reason);
+    setBusy(false);
+    if (!result.success) {
+      setErr(result.error ?? 'Could not mark this estimate lost.');
+      return;
+    }
+    await onDone();
+  }
+
+  return (
+    <div style={{ border: '1px solid #efd3d0', borderRadius: '0.5rem', padding: '1rem', marginBottom: '1rem', background: '#fdf6f5' }}>
+      <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f1729', marginBottom: '0.25rem' }}>
+        Didn&rsquo;t win this one?
+      </div>
+      <p style={{ fontSize: '0.72rem', color: '#7b8699', margin: '0 0 0.5rem' }}>
+        Mark it lost instead of deleting it, so your win rate stays honest.
+      </p>
+      <select
+        value={reason}
+        onChange={(e) => setReason(e.target.value as LostReasonCode)}
+        style={{ width: '100%', padding: '0.375rem 0.5rem', border: '1px solid #d5dae4', borderRadius: '0.25rem', fontSize: '0.8125rem', marginBottom: '0.5rem' }}
+      >
+        {LOST_REASONS.map((r) => (
+          <option key={r.value} value={r.value}>{r.label}</option>
+        ))}
+      </select>
+      <button
+        type="button"
+        onClick={submit}
+        disabled={busy}
+        style={{ width: '100%', padding: '0.45rem', fontSize: '0.8125rem', fontWeight: 600, color: '#fff', background: busy ? '#9aa4b8' : '#c0362c', border: 'none', borderRadius: '0.375rem', cursor: busy ? 'not-allowed' : 'pointer' }}
+      >
+        {busy ? 'Marking…' : 'Mark as lost'}
+      </button>
+      {err && <p style={{ color: '#c0362c', fontSize: '0.72rem', marginTop: '0.5rem' }}>{err}</p>}
+    </div>
+  );
 }
 
 export function DetailsTab({
@@ -199,31 +256,23 @@ export function DetailsTab({
               ))}
             </span>
           </div>
-          {/* 4D-rev3: estimate-level proposal detail level. Defaults from the
-              company default at creation; this edits the persisted value. */}
-          <div style={rowStyle}>
-            <span style={fieldLabel}>Proposal detail level</span>
-            <select
+          {/* Markup vs margin — the correction the pricing card exists to make. */}
+          <p style={{ fontSize: '0.75rem', color: '#7b8699', margin: '0.25rem 0 0.75rem' }}>
+            Markup and margin are not the same number: a 20% markup is a 16.7% margin, and hitting a
+            30% margin target takes a 43% markup.
+          </p>
+          {/* Proposal format — the one control (same as 9d/19a); writes proposal_pricing_level. */}
+          <div style={{ padding: '0.5rem 0' }}>
+            <span style={{ ...fieldLabel, display: 'block', marginBottom: '0.5rem' }}>Proposal format</span>
+            <ProposalFormatPicker
               value={estimate.proposal_pricing_level}
-              disabled={!canEdit}
-              onChange={async (e) => {
-                const value = e.target.value as ProposalPricingLevel;
-                const result = await saveField({ proposal_pricing_level: value });
+              contractType={estimate.contract_type}
+              canEdit={canEdit}
+              onSelect={async (code) => {
+                const result = await saveField({ proposal_pricing_level: code });
                 if (!result.success) setError(result.error || 'Save failed');
               }}
-              style={{
-                padding: '0.25rem 0.5rem',
-                border: '1px solid #d5dae4',
-                borderRadius: '0.25rem',
-                fontSize: '0.875rem',
-              }}
-            >
-              {PROPOSAL_PRICING_LEVEL_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
+            />
           </div>
           <div style={rowStyle}>
             <span style={fieldLabel}>Subcontractor {modeNoun} %</span>
@@ -372,6 +421,13 @@ export function DetailsTab({
         <EstimateHealthCard data={data} />
         <BeforeYouSendCard data={data} />
         <ClientActivityCard data={data} />
+
+        {/* 19b — a SENT estimate that didn't win is marked lost (not deleted), so
+            win rate stays honest. Reuses the declined status with a DISTINCT
+            reason set via the mark_estimate_lost RPC [R12/Q6]. */}
+        {(estimate.status === 'sent' || estimate.status === 'expired') && (
+          <MarkLostCard estimateId={estimate.id} onDone={reload} />
+        )}
 
         <div style={{ position: 'relative' }}>
           <button
