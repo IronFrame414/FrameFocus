@@ -16,6 +16,12 @@ import {
   getFileSignedUrlClient,
   uploadEstimateBidDocument,
 } from '@/lib/services/files-client';
+import {
+  createSubBidRequest,
+  listSubBidRequests,
+  bidReplyUrl,
+  type SubBidRequestRow,
+} from '@/lib/services/sub-bid-requests-client';
 import { fmtMoney } from '../labels';
 import { useConfirm } from '@/components/confirm/confirm-provider';
 import type { TabProps } from './estimate-builder';
@@ -37,11 +43,32 @@ export function BiddingTab({ data, canEdit, reload, companyTimeZone }: TabProps)
   const [subs, setSubs] = useState<SubcontractorOption[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [addingFor, setAddingFor] = useState<string | null>(null);
+  const [requests, setRequests] = useState<SubBidRequestRow[]>([]);
+  const [requestingFor, setRequestingFor] = useState<string | null>(null);
   const confirm = useConfirm();
 
   useEffect(() => {
     listSubcontractorOptions().then(setSubs);
   }, []);
+
+  // 19c — tokenised requests already sent, for the status chips.
+  useEffect(() => {
+    listSubBidRequests(data.estimate.id).then(setRequests);
+  }, [data.estimate.id]);
+
+  // 19d — the lowest bid on a line, for the "vs low" delta. Coverage-adjust is
+  // deferred (spec §2 19d "coverage-adjusted low banner"); raw delta here.
+  const lowBidFor = (lineId: string): number | null => {
+    const amts = subBids.filter((b) => b.line_item_id === lineId).map((b) => Number(b.bid_amount));
+    return amts.length ? Math.min(...amts) : null;
+  };
+  const winRecordFor = (subId: string | null): { won: number; total: number } => {
+    // Derived LIVE from is_winner history on this estimate's visible bids (no
+    // stored counter exists — confirmed). A company-wide record would need a
+    // dedicated query; scoped to loaded bids here.
+    const mine = subBids.filter((b) => b.subcontractor_id === subId);
+    return { won: mine.filter((b) => b.is_winner).length, total: mine.length };
+  };
 
   // A line is biddable once it carries a subcontractor row, or already
   // has bids recorded (set_winning_bid upserts the sub row on win).
@@ -83,9 +110,15 @@ export function BiddingTab({ data, canEdit, reload, companyTimeZone }: TabProps)
   return (
     <div style={{ maxWidth: '760px' }}>
       <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.25rem' }}>Sub Bidding</h2>
-      <p style={{ fontSize: '0.8125rem', color: '#7b8699', marginBottom: '1.5rem' }}>
+      <p style={{ fontSize: '0.8125rem', color: '#7b8699', marginBottom: '0.5rem' }}>
         Track every bid received per line. Picking a winner updates that line&rsquo;s subcontractor
-        row with the winning amount and subcontractor.
+        row with the winning amount and subcontractor. Send a request by link and the sub&rsquo;s
+        reply lands here with no retyping.
+      </p>
+      {/* 19c — the payment gate, surfaced up front. */}
+      <p style={{ fontSize: '0.75rem', color: '#b45309', backgroundColor: '#fff5e6', padding: '0.4rem 0.7rem', borderRadius: '0.375rem', marginBottom: '1.25rem' }}>
+        A subcontractor without a W-9 on file can bid, but cannot be paid — collect it before you
+        award. Insurance and W-9 status live on the sub&rsquo;s compliance record.
       </p>
 
       {error && (
@@ -169,11 +202,12 @@ export function BiddingTab({ data, canEdit, reload, companyTimeZone }: TabProps)
                   No bids recorded for this line yet.
                 </p>
               ) : (
+                <div style={{ overflowX: 'auto', marginBottom: '0.75rem' }}>
                 <table
                   style={{
                     width: '100%',
                     borderCollapse: 'collapse',
-                    marginBottom: '0.75rem',
+                    minWidth: '860px',
                   }}
                 >
                   <thead>
@@ -181,14 +215,22 @@ export function BiddingTab({ data, canEdit, reload, companyTimeZone }: TabProps)
                       <th style={cellStyle}>Winner</th>
                       <th style={cellStyle}>Subcontractor</th>
                       <th style={{ ...cellStyle, textAlign: 'right' }}>Bid</th>
+                      <th style={{ ...cellStyle, textAlign: 'right' }}>Labor</th>
+                      <th style={{ ...cellStyle, textAlign: 'right' }}>Material</th>
+                      <th style={{ ...cellStyle, textAlign: 'right' }}>Coverage</th>
+                      <th style={{ ...cellStyle, textAlign: 'right' }}>vs Low</th>
+                      <th style={cellStyle}>Holds</th>
                       <th style={cellStyle}>Received</th>
                       <th style={cellStyle}>Document</th>
-                      <th style={cellStyle}>Notes</th>
                       <th style={cellStyle}></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {bids.map((bid) => (
+                    {bids.map((bid) => {
+                      const low = lowBidFor(line.id);
+                      const vsLow = low != null ? Number(bid.bid_amount) - low : null;
+                      const mono: React.CSSProperties = { fontFamily: 'var(--font-mono, monospace)' };
+                      return (
                       <tr
                         key={bid.id}
                         style={{ backgroundColor: bid.is_winner ? '#e6f0e9' : undefined }}
@@ -203,8 +245,23 @@ export function BiddingTab({ data, canEdit, reload, companyTimeZone }: TabProps)
                           />
                         </td>
                         <td style={cellStyle}>{subName(bid.subcontractor_id)}</td>
-                        <td style={{ ...cellStyle, textAlign: 'right', fontWeight: 600 }}>
+                        <td style={{ ...cellStyle, ...mono, textAlign: 'right', fontWeight: 600 }}>
                           {fmtMoney(bid.bid_amount)}
+                        </td>
+                        <td style={{ ...cellStyle, ...mono, textAlign: 'right' }}>
+                          {bid.labor_amount != null ? fmtMoney(bid.labor_amount) : '—'}
+                        </td>
+                        <td style={{ ...cellStyle, ...mono, textAlign: 'right' }}>
+                          {bid.material_amount != null ? fmtMoney(bid.material_amount) : '—'}
+                        </td>
+                        <td style={{ ...cellStyle, ...mono, textAlign: 'right' }}>
+                          {bid.scope_coverage_percent != null ? `${bid.scope_coverage_percent}%` : '—'}
+                        </td>
+                        <td style={{ ...cellStyle, ...mono, textAlign: 'right', color: vsLow && vsLow > 0 ? '#c0362c' : '#1f8f4e' }}>
+                          {vsLow == null ? '—' : vsLow === 0 ? 'low' : `+${fmtMoney(vsLow)}`}
+                        </td>
+                        <td style={{ ...cellStyle, ...mono }}>
+                          {bid.bid_holds_until ?? '—'}
                         </td>
                         <td style={cellStyle}>
                           {bid.received_at
@@ -221,7 +278,6 @@ export function BiddingTab({ data, canEdit, reload, companyTimeZone }: TabProps)
                             onError={setError}
                           />
                         </td>
-                        <td style={cellStyle}>{bid.notes || '—'}</td>
                         <td style={cellStyle}>
                           {canEdit && (
                             <button
@@ -242,9 +298,52 @@ export function BiddingTab({ data, canEdit, reload, companyTimeZone }: TabProps)
                           )}
                         </td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
+                </div>
+              )}
+
+              {/* 19d — the sub's exclusions and notes, rendered VERBATIM. No
+                  auto-flagging against your own scope (spec §3.8). */}
+              {bids.some((b) => b.exclusions || b.notes) && (
+                <div style={{ marginBottom: '0.75rem' }}>
+                  {bids
+                    .filter((b) => b.exclusions || b.notes)
+                    .map((b) => (
+                      <div key={b.id} style={{ fontSize: '0.75rem', color: '#5b6472', marginBottom: '0.25rem' }}>
+                        <strong>{subName(b.subcontractor_id)}</strong>
+                        {b.exclusions ? <> · excludes: <span style={{ whiteSpace: 'pre-wrap' }}>{b.exclusions}</span></> : null}
+                        {b.notes ? <> · {b.notes}</> : null}
+                      </div>
+                    ))}
+                </div>
+              )}
+
+              {/* 19c — tokenised request status chips for this line. */}
+              {requests.filter((r) => r.line_item_id === line.id).length > 0 && (
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
+                  {requests
+                    .filter((r) => r.line_item_id === line.id)
+                    .map((r) => (
+                      <span
+                        key={r.id}
+                        title={bidReplyUrl(r.token)}
+                        style={{
+                          fontSize: '0.72rem',
+                          fontWeight: 600,
+                          borderRadius: '9999px',
+                          padding: '0.125rem 0.625rem',
+                          border: '1px solid #dbe0fb',
+                          color: r.status === 'submitted' ? '#1f8f4e' : '#3b4ae0',
+                          backgroundColor: r.status === 'submitted' ? '#e6f0e9' : '#f2f4ff',
+                        }}
+                      >
+                        {subName(r.subcontractor_id)} · {r.status}
+                      </span>
+                    ))}
+                </div>
               )}
 
               {canEdit &&
@@ -260,21 +359,50 @@ export function BiddingTab({ data, canEdit, reload, companyTimeZone }: TabProps)
                       else await reload();
                     }}
                   />
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setAddingFor(line.id)}
-                    style={{
-                      padding: '0.375rem 0.75rem',
-                      fontSize: '0.8125rem',
-                      backgroundColor: '#f4f6fa',
-                      border: '1px solid #d5dae4',
-                      borderRadius: '0.375rem',
-                      cursor: 'pointer',
+                ) : requestingFor === line.id ? (
+                  <RequestByLinkForm
+                    lineItemId={line.id}
+                    estimateId={data.estimate.id}
+                    subs={subs}
+                    winRecordFor={winRecordFor}
+                    onDone={async (err) => {
+                      setRequestingFor(null);
+                      if (err) setError(err);
+                      else setRequests(await listSubBidRequests(data.estimate.id));
                     }}
-                  >
-                    + Add Sub Bid
-                  </button>
+                  />
+                ) : (
+                  <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      onClick={() => setAddingFor(line.id)}
+                      style={{
+                        padding: '0.375rem 0.75rem',
+                        fontSize: '0.8125rem',
+                        backgroundColor: '#f4f6fa',
+                        border: '1px solid #d5dae4',
+                        borderRadius: '0.375rem',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      + Add Sub Bid
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRequestingFor(line.id)}
+                      style={{
+                        padding: '0.375rem 0.75rem',
+                        fontSize: '0.8125rem',
+                        color: '#3b4ae0',
+                        backgroundColor: '#f2f4ff',
+                        border: '1px solid #dbe0fb',
+                        borderRadius: '0.375rem',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Request by link
+                    </button>
+                  </div>
                 ))}
             </div>
           );
@@ -372,6 +500,102 @@ function BidDocCell({
         </>
       )}
     </span>
+  );
+}
+
+/** 19c — send a tokenised bid request to a sub; the reply lands via /bid/[token]. */
+function RequestByLinkForm({
+  lineItemId,
+  estimateId,
+  subs,
+  winRecordFor,
+  onDone,
+}: {
+  lineItemId: string;
+  estimateId: string;
+  subs: SubcontractorOption[];
+  winRecordFor: (subId: string | null) => { won: number; total: number };
+  onDone: (error?: string) => void;
+}) {
+  const [subId, setSubId] = useState('');
+  const [scope, setScope] = useState('');
+  const [bidsDue, setBidsDue] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [link, setLink] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const rec = winRecordFor(subId);
+
+  async function send() {
+    if (!subId) {
+      setErr('Pick a subcontractor.');
+      return;
+    }
+    setBusy(true);
+    setErr(null);
+    const result = await createSubBidRequest({
+      estimateId,
+      lineItemId,
+      subcontractorId: subId,
+      scopeText: scope.trim() || null,
+      bidsDueDate: bidsDue || null,
+    });
+    setBusy(false);
+    if (!result.success || !result.token) {
+      setErr(result.error ?? 'Could not create the request.');
+      return;
+    }
+    setLink(bidReplyUrl(result.token));
+  }
+
+  const inputStyle: React.CSSProperties = {
+    padding: '0.375rem 0.5rem',
+    border: '1px solid #d5dae4',
+    borderRadius: '0.25rem',
+    fontSize: '0.8125rem',
+  };
+
+  if (link) {
+    return (
+      <div style={{ border: '1px solid #dbe0fb', backgroundColor: '#f2f4ff', borderRadius: '0.375rem', padding: '0.75rem' }}>
+        <p style={{ fontSize: '0.8125rem', color: '#1f2a44', margin: '0 0 0.5rem' }}>
+          Request created. Send this link to the sub — their reply lands here automatically:
+        </p>
+        <input readOnly value={link} onFocus={(e) => e.target.select()} style={{ ...inputStyle, width: '100%', fontFamily: 'var(--font-mono, monospace)' }} />
+        <button type="button" onClick={() => onDone()} style={{ marginTop: '0.5rem', padding: '0.375rem 0.875rem', fontSize: '0.8125rem', backgroundColor: '#3b4ae0', color: '#fff', border: 'none', borderRadius: '0.25rem', cursor: 'pointer' }}>
+          Done
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ border: '1px solid #dbe0fb', backgroundColor: '#f2f4ff', borderRadius: '0.375rem', padding: '0.75rem' }}>
+      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        <select value={subId} onChange={(e) => setSubId(e.target.value)} style={inputStyle}>
+          <option value="">Subcontractor…</option>
+          {subs.map((s) => (
+            <option key={s.id} value={s.id}>{s.company_name}</option>
+          ))}
+        </select>
+        {subId && (
+          <span style={{ fontSize: '0.72rem', color: '#5b6472' }}>
+            won {rec.won} of {rec.total} bids here
+          </span>
+        )}
+        <input value={scope} onChange={(e) => setScope(e.target.value)} placeholder="Scope (free text)" style={{ ...inputStyle, flex: 1, minWidth: '160px' }} />
+        <label style={{ fontSize: '0.72rem', color: '#5b6472' }}>
+          Bids due{' '}
+          <input type="date" value={bidsDue} onChange={(e) => setBidsDue(e.target.value)} style={inputStyle} />
+        </label>
+        <button type="button" onClick={send} disabled={busy} style={{ padding: '0.375rem 0.875rem', fontSize: '0.8125rem', fontWeight: 600, color: '#fff', backgroundColor: busy ? '#9aa4b8' : '#3b4ae0', border: 'none', borderRadius: '0.25rem', cursor: busy ? 'not-allowed' : 'pointer' }}>
+          {busy ? 'Creating…' : 'Create link'}
+        </button>
+        <button type="button" onClick={() => onDone()} style={{ padding: '0.375rem 0.875rem', fontSize: '0.8125rem', backgroundColor: '#f4f6fa', border: '1px solid #d5dae4', borderRadius: '0.25rem', cursor: 'pointer' }}>
+          Cancel
+        </button>
+      </div>
+      {err && <p style={{ color: '#c0362c', fontSize: '0.75rem', marginTop: '0.5rem' }}>{err}</p>}
+    </div>
   );
 }
 
