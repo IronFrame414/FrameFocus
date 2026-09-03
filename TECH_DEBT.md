@@ -122,6 +122,39 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
      few people told is a safety problem; too many and everyone ignores them.** That judgement needs
      Josh's knowledge of how a real crew operates, and it is **wrong in a way tests cannot catch.**
 
+### Branch-scoped, awaiting real numbers — `fix/contacts-and-insurance` [S103]
+
+> Provisional id per the S136 rule. Tag `cai`. Convert to a real number from main's file at merge.
+> ⚠️ Under the S179 split this is arguably **owed work, not a deferred decision** — filed here on
+> Josh's explicit instruction (the deploy risk was living only in a SQL comment); reclassify to the
+> register at merge if that reading holds.
+
+- **#1-cai — THE PRODUCTION CONTACTS DEDUPE IS A HARD PREREQUISITE FOR THE UNIQUE INDEX, and it has
+  never run against real duplicate data.** `20261270000000_contacts_email_unique.sql` creates a
+  UNIQUE index over `(company_id, lower(email))`; production still holds its duplicate contact
+  groups, so that `CREATE UNIQUE INDEX` **will fail on production** unless the dedupe runs first.
+  That dedupe was manual DB work on rebuild-test with **no repo record** until this branch.
+
+  **What now exists:** `20261265000000_contacts_email_dedupe.sql` — timestamped to order strictly
+  before the index, idempotent, keeps the oldest row per group, repoints all nine FKs (with explicit
+  collision handling for the four constrained ones), hard-deletes the redundant rows, and records
+  every removal in a new `contacts_dedupe_log` table. It **pre-flight ABORTS**, before any write, if
+  any duplicate group owns more than one portal login (`profiles.contact_id` is UNIQUE and which
+  login survives is not ours to decide).
+
+  **⚠️ Residual risk that stays open until production is actually pushed:**
+  1. On rebuild-test it was a **clean no-op** (already deduped) — so its real repoint/delete paths
+     are **exercised only by reasoning and by the collision analysis, never by production-shaped
+     data.** Whoever runs the production push should read the `contacts_dedupe_log` rows afterward and
+     confirm the counts against expectation.
+  2. If it **aborts on the multi-login case**, production has duplicate contacts that each have a
+     portal account; those must be merged by hand before the push can proceed. There is no automated
+     answer for that case by design.
+  3. **`mcp__supabase__apply_migration` does not write a `supabase_migrations.schema_migrations`
+     ledger row** — every MCP-applied migration on rebuild-test needs the row inserted by hand
+     afterward (done for this one). A `supabase db push` from the repo does record it normally; this
+     only bites the MCP path.
+
 ### Branch-scoped, awaiting real numbers — `feature/deletion-sweep-analysis` [deletion-sweep §3]
 
 > Provisional id per the S136 rule. Tag `delsweep`. (The `#N-trial` ids amended on this branch

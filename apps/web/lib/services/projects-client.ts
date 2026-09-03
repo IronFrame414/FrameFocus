@@ -121,6 +121,35 @@ export async function updateProject(
 }
 
 /**
+ * §2 — set the project's CLIENT (`projects.contact_id`), the one field that
+ * drives invoicing, payments, refunds, reminders and the invoice email address.
+ * Before this, `contact_id` was written only at project creation
+ * (`new-project-form`), so a project's client could never be changed or
+ * corrected. This is the explicit, deliberate promote — it is NOT a side effect
+ * of `attachContact`, precisely so attaching an architect cannot silently
+ * overwrite the client.
+ *
+ * RLS (`projects_update_authorized`) gates it to Owner/Admin/assigned-PM; the
+ * `applied()` guard turns a policy refusal into an error rather than a false
+ * "saved". The confirmation (naming the client being replaced) lives in the UI.
+ */
+export async function setProjectClient(
+  projectId: string,
+  contactId: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = createClient();
+  // BEFORE UPDATE triggers handle updated_by / updated_at.
+  const { data, error } = await supabase
+    .from('projects')
+    .update({ contact_id: contactId })
+    .eq('id', projectId)
+    .select('id');
+  if (error) return { success: false, error: error.message };
+  if (!applied(data)) return { success: false, error: DISCARDED };
+  return { success: true };
+}
+
+/**
  * Status transition with lifecycle validation. The active -> complete punch
  * gate (5A §2, enforced per 5C §6) blocks completion while any punch item is
  * unresolved: an item is closed when verified (if verification required) or

@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase-browser';
 import type { ContactType } from '@framefocus/shared/constants';
 import type { ProjectContact } from '@/lib/services/project-contacts';
 import { applied, DISCARDED } from '@/lib/services/mutation-result';
+import { createContact } from '@/lib/services/contacts-client';
 export type { ProjectContact };
 
 /** Attach an existing Module 2 contact to a project. */
@@ -46,12 +47,16 @@ export async function createAndAttachContact(
   },
   role?: string | null
 ): Promise<{ success: boolean; error?: string }> {
-  const supabase = createClient();
+  // §1d — route through createContact so a matching (company_id, lower(email))
+  // contact is REUSED, not duplicated. This is the path behind "create a contact
+  // in the project" and the inline add-a-contact surfaces; minting a fresh row
+  // each time is what produced the Karen Foster duplicates.
+  const created = await createContact(contact as Record<string, unknown>);
+  if (!created.success || !created.id) {
+    return { success: false, error: created.error ?? 'Could not create the contact.' };
+  }
 
-  const { data, error } = await supabase.from('contacts').insert(contact).select('id').single();
-  if (error) return { success: false, error: error.message };
-
-  return attachContact(projectId, data.id, role ?? contact.contact_type);
+  return attachContact(projectId, created.id, role ?? contact.contact_type);
 }
 
 export async function detachContact(

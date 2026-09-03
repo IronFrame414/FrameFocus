@@ -22,11 +22,16 @@ export default async function ProjectContactsPage({ params }: { params: { id: st
     .single();
   if (!profile) redirect('/dashboard');
 
-  const [projectContacts, allContacts, portalRows] = await Promise.all([
+  const [projectContacts, allContacts, portalRows, projectRow] = await Promise.all([
     getProjectContacts(params.id),
     getContacts(),
     getPortalAccountsForProject(supabase, params.id),
+    // §2 — the current client, so the panel can label it and confirm before a
+    // money-routing change replaces it.
+    supabase.from('projects').select('contact_id').eq('id', params.id).maybeSingle(),
   ]);
+  const currentClientContactId =
+    (projectRow.data as { contact_id: string | null } | null)?.contact_id ?? null;
 
   const canManage = ['owner', 'admin', 'project_manager'].includes(profile.role);
   // ⚠️ NARROWER THAN `canManage`, on purpose. Attaching a contact is a PM job;
@@ -46,6 +51,7 @@ export default async function ProjectContactsPage({ params }: { params: { id: st
           contact_type: c.contact_type,
         }))}
         canManage={canManage}
+        currentClientContactId={currentClientContactId}
       />
       <PortalPanel projectId={params.id} rows={portalRows} canManage={canManagePortal} />
     </>
