@@ -93,6 +93,48 @@ export function proposalFormatShowsCost(stored: string | null | undefined): bool
   return resolveProposalFormat(stored).showsCost;
 }
 
+/** The canonical-eight render plan — the ONE source both proposal renderers
+ *  (React-PDF `proposal-template` and signing-page `proposal-html`) switch on,
+ *  so the format taxonomy cannot fork into two disagreeing implementations
+ *  (the #129 parity hazard). Legacy stored values are handled by each renderer's
+ *  own legacy path and never reach here. */
+export type ProposalLayout =
+  | 'total' // one grand total, no lines, no categories
+  | 'category' // one price per category, no line items
+  | 'itemized' // line items listed (prices per §linePrices)
+  | 'cost_plus' // open book: contractor price · markup % · sell, sell totals only
+  | 'time_and_materials'; // open book: Time (rate·hrs·total) + Material (total only)
+
+export interface ProposalRenderPlan {
+  layout: ProposalLayout;
+  /** List individual line items (itemized/open-book layouts). */
+  showLines: boolean;
+  /** Show a per-line sell price (false for itemized_no_unit_pricing). */
+  linePrices: boolean;
+  /** Show line descriptions (the *_with_descriptions variants). */
+  descriptions: boolean;
+  /** Open book — cost (and thus markup) is printed. */
+  showsCost: boolean;
+}
+
+const RENDER_PLAN: Record<CanonicalProposalFormat, ProposalRenderPlan> = {
+  total_only:                 { layout: 'total',    showLines: false, linePrices: false, descriptions: false, showsCost: false },
+  summary:                    { layout: 'category', showLines: false, linePrices: false, descriptions: false, showsCost: false },
+  summary_with_descriptions:  { layout: 'category', showLines: false, linePrices: false, descriptions: true,  showsCost: false },
+  itemized:                   { layout: 'itemized', showLines: true,  linePrices: true,  descriptions: false, showsCost: false },
+  itemized_with_descriptions: { layout: 'itemized', showLines: true,  linePrices: true,  descriptions: true,  showsCost: false },
+  itemized_no_unit_pricing:   { layout: 'itemized', showLines: true,  linePrices: false, descriptions: false, showsCost: false },
+  cost_plus_itemized:         { layout: 'cost_plus', showLines: true, linePrices: true,  descriptions: false, showsCost: true },
+  time_and_materials_itemized:{ layout: 'time_and_materials', showLines: true, linePrices: true, descriptions: false, showsCost: true },
+};
+
+/** Resolve a CANONICAL format code to its render plan. Callers must pass a
+ *  canonical code (resolve legacy separately) — a legacy or unknown value falls
+ *  back to the safest plan (a single total, no cost). */
+export function proposalRenderPlan(code: CanonicalProposalFormat): ProposalRenderPlan {
+  return RENDER_PLAN[code] ?? RENDER_PLAN.total_only;
+}
+
 /** Q4: open-book (a cost-showing format) on a fixed-price/lump-sum contract is
  *  ALLOWED but FLAGGED — the same posture as T&M-presented-as-lump-sum. Returns
  *  a flag message when the pairing is worth warning about, else null. Never

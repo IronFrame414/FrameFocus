@@ -1,6 +1,6 @@
 import { Document, Image, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
 import type { ProposalData } from './proposal-data';
-import { resolveProposalFormat } from '@framefocus/shared/utils/proposal-format';
+import { resolveProposalFormat, proposalRenderPlan } from '@framefocus/shared/utils/proposal-format';
 
 // Spec 2 (4E) — branded React-PDF proposal. Rendered server-side
 // (renderToBuffer in the generate/send routes) and in-browser
@@ -317,15 +317,18 @@ export function ProposalDocument({ data }: { data: ProposalData }) {
 
         {/* Canonical eight (estimates-redesign §3.4) — a SEPARATE path from the
             legacy five above, which stay byte-for-byte so the 23 already-sent
-            estimates render exactly as before. ⚠️ Open book (cost_plus / t&m)
-            SHOULD print cost + fee, but ProposalData carries no cost, so it
-            renders as itemized CLIENT prices — SAFE (never leaks cost), and
-            incomplete vs §3.4. Flagged in the build report. */}
+            estimates render exactly as before. Driven by proposalRenderPlan so
+            this and the signing-page HTML renderer cannot disagree about what a
+            format shows (#129 parity). Open book prints cost + fee (cost_plus /
+            time_and_materials); the six others print a CLIENT PRICE and never
+            cost — enforced upstream: ProposalData carries cost ONLY when the
+            format shows it. */}
         {(() => {
           const info = resolveProposalFormat(estimate.pricingLevel);
           if (info.legacy) return null; // legacy stored value → handled above
-          const c = info.code;
-          if (c === 'total_only') {
+          const plan = proposalRenderPlan(info.code);
+
+          if (plan.layout === 'total') {
             return (
               <View style={styles.row}>
                 <Text style={{ flex: 1, fontFamily: 'Helvetica-Bold' }}>Project Total</Text>
@@ -333,37 +336,100 @@ export function ProposalDocument({ data }: { data: ProposalData }) {
               </View>
             );
           }
-          const showLines =
-            c === 'itemized' ||
-            c === 'itemized_with_descriptions' ||
-            c === 'itemized_no_unit_pricing' ||
-            c === 'cost_plus_itemized' ||
-            c === 'time_and_materials_itemized';
-          // itemized_no_unit_pricing: lines listed, prices only at category level.
-          const linePrices = showLines && c !== 'itemized_no_unit_pricing';
-          const descriptions =
-            c === 'summary_with_descriptions' || c === 'itemized_with_descriptions';
+
+          // ── Time & Materials — two sections. Time: rate · hours · amount.
+          //    Material: amount only (the markup is inside that number). ──
+          if (plan.layout === 'time_and_materials') {
+            const all = categories.flatMap((cat) => cat.lines.flatMap((l) => l.rows));
+            const labor = all.filter((r) => r.rowType === 'labor');
+            const material = all.filter((r) => r.rowType !== 'labor');
+            return (
+              <View>
+                {labor.length > 0 && (
+                  <View style={{ marginBottom: 10 }}>
+                    <Text style={{ fontFamily: 'Helvetica-Bold', marginBottom: 3 }}>Time</Text>
+                    <View style={styles.tableHeader}>
+                      <Text style={[styles.th, { flex: 1 }]}>Labor</Text>
+                      <Text style={[styles.th, { width: 70, textAlign: 'right' }]}>Rate</Text>
+                      <Text style={[styles.th, { width: 50, textAlign: 'right' }]}>Hours</Text>
+                      <Text style={[styles.th, { width: 80, textAlign: 'right' }]}>Amount</Text>
+                    </View>
+                    {labor.map((r, k) => (
+                      <View key={k} style={styles.row} wrap={false}>
+                        <Text style={{ flex: 1 }}>{r.name}</Text>
+                        <Text style={{ width: 70, textAlign: 'right' }}>
+                          {r.rate != null ? fmtMoney(r.rate) : '—'}
+                        </Text>
+                        <Text style={{ width: 50, textAlign: 'right' }}>
+                          {r.hours != null ? r.hours : '—'}
+                        </Text>
+                        <Text style={{ width: 80, textAlign: 'right' }}>{fmtMoney(r.total)}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+                {material.length > 0 && (
+                  <View>
+                    <Text style={{ fontFamily: 'Helvetica-Bold', marginBottom: 3 }}>Materials</Text>
+                    <View style={styles.tableHeader}>
+                      <Text style={[styles.th, { flex: 1 }]}>Item</Text>
+                      <Text style={[styles.th, { width: 80, textAlign: 'right' }]}>Amount</Text>
+                    </View>
+                    {material.map((r, k) => (
+                      <View key={k} style={styles.row} wrap={false}>
+                        <Text style={{ flex: 1 }}>{r.name}</Text>
+                        <Text style={{ width: 80, textAlign: 'right' }}>{fmtMoney(r.total)}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </View>
+            );
+          }
+
+          // ── category · itemized · cost_plus ──
+          const isCostPlus = plan.layout === 'cost_plus';
           return categories.map((cat, i) => (
             <View key={i} style={{ marginBottom: 8 }}>
               <View style={styles.row}>
                 <Text style={{ flex: 1, fontFamily: 'Helvetica-Bold' }}>{cat.name}</Text>
                 <Text style={{ fontFamily: 'Helvetica-Bold' }}>{fmtMoney(cat.subtotal)}</Text>
               </View>
-              {showLines &&
+              {isCostPlus && cat.lines.length > 0 && (
+                <View style={[styles.tableHeader, { marginTop: 3 }]}>
+                  <Text style={[styles.th, { flex: 1 }]}>Item</Text>
+                  <Text style={[styles.th, { width: 80, textAlign: 'right' }]}>Your cost</Text>
+                  <Text style={[styles.th, { width: 55, textAlign: 'right' }]}>Markup</Text>
+                  <Text style={[styles.th, { width: 80, textAlign: 'right' }]}>Price</Text>
+                </View>
+              )}
+              {plan.showLines &&
                 cat.lines.map((line, j) => (
                   <View key={j} style={[styles.row, { borderBottomWidth: 0 }]} wrap={false}>
                     <View style={{ flex: 1, paddingRight: 12 }}>
                       <Text>{line.name}</Text>
-                      {descriptions && line.description && (
+                      {plan.descriptions && line.description && (
                         <Text style={{ fontSize: 8, color: '#6b7280' }}>{line.description}</Text>
                       )}
                     </View>
-                    {linePrices && (
-                      <Text>
-                        {line.originalTotal != null
-                          ? fmtMoney(line.originalTotal)
-                          : fmtMoney(line.total)}
-                      </Text>
+                    {isCostPlus ? (
+                      <>
+                        <Text style={{ width: 80, textAlign: 'right' }}>
+                          {line.cost != null ? fmtMoney(line.cost) : '—'}
+                        </Text>
+                        <Text style={{ width: 55, textAlign: 'right' }}>
+                          {line.markupPercent != null ? `${line.markupPercent}%` : '—'}
+                        </Text>
+                        <Text style={{ width: 80, textAlign: 'right' }}>{fmtMoney(line.total)}</Text>
+                      </>
+                    ) : (
+                      plan.linePrices && (
+                        <Text>
+                          {line.originalTotal != null
+                            ? fmtMoney(line.originalTotal)
+                            : fmtMoney(line.total)}
+                        </Text>
+                      )
                     )}
                   </View>
                 ))}
