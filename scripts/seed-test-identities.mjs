@@ -323,9 +323,12 @@ async function seedIsolationFixtures(company, tag, ownerMemberId) {
   console.log(`\nCompany ${tag} isolation fixtures:`);
   const name = `QA ${tag} — isolation fixture`;
 
+  // Matched on EMAIL, not last_name: the linked-client section renames company
+  // A's fixture contact for a presentable portal capture, and a last_name match
+  // would then miss it and insert a duplicate. Email/id are the stable keys.
   const contactId = await ensureRow(
     `contact ${tag}`, 'contacts',
-    { company_id: company.id, last_name: `Client${tag}` },
+    { company_id: company.id, email: `qa-client-${tag.toLowerCase()}@example.invalid` },
     {
       company_id: company.id, contact_type: 'client',
       first_name: 'QA', last_name: `Client${tag}`,
@@ -730,10 +733,23 @@ const CLIENT_LINKED_EMAIL = 'josh+qa-client-linked@worthprop.com';
 // `is_client_of_project()`.
 const { data: fixtureContact } = await db
   .from('contacts').select('id')
-  .eq('company_id', companyA.id).eq('last_name', 'ClientA').maybeSingle();
+  .eq('company_id', companyA.id).eq('email', 'qa-client-a@example.invalid').maybeSingle();
 if (!fixtureContact) {
-  throw new Error('contact ClientA not found in company A — seedIsolationFixtures did not run.');
+  throw new Error('contact qa-client-a@example.invalid not found in company A — seedIsolationFixtures did not run.');
 }
+
+// ⚠️ PRESENTABLE NAME FOR THE PORTAL [S103]. The portal renders the CONTACT's
+// name, and the fixture project's contact IS this row, so a capture would read
+// "QA ClientA". Give it a plausible homeowner name — the thing the earlier hand
+// edit was reaching for when it moved the client PROFILE onto a Karen-named
+// contact instead (the drift this session reverts). Only the display name
+// changes: the id and the email (`qa-client-a@example.invalid`, keyed on by
+// s175-stage6, s174 and s164-writes) are untouched, and no test asserts the
+// name. Idempotent.
+must('rename fixture contact for portal', (await db.from('contacts')
+  .update({ first_name: 'Karen', last_name: 'Delgado' })
+  .eq('id', fixtureContact.id)).error);
+note('fixture contact display name', 'set', `${fixtureContact.id} -> Karen Delgado`);
 
 // TWO addresses on ONE contact, and the second one is the entire point.
 //
@@ -804,15 +820,27 @@ for (const email of [CLIENT_LINKED_EMAIL, CLIENT_EMAIL]) {
   );
 }
 
-// The link. Requires `20261016000000_m9_client_identity.sql` to be pushed
-// first — if it has not been, say so plainly rather than failing on an unknown
-// column three steps later.
+// The link — RECONCILE, don't skip [S103 revert]. Requires
+// `20261016000000_m9_client_identity.sql` to be pushed first — if it has not
+// been, say so plainly rather than failing on an unknown column three steps
+// later.
+//
+// ⚠️ This was guarded `.is('contact_id', null)`, so a profile already pointing at
+// some OTHER contact was never corrected by a reseed. That guard is exactly why a
+// one-off hand edit — repointing this profile to a Karen-named contact so a
+// portal screenshot showed a presentable name — survived every reseed and
+// drifted s164/s171 for a whole session. The linked client MUST share the fixture
+// project's contact: that is arm (a) of is_client_of_project() and the
+// site-address grant. Set it UNCONDITIONALLY so a reseed puts it back. The
+// screenshot need is met properly by renaming that contact (below), not by moving
+// the profile off it.
 {
+  const { data: before } = await db
+    .from('profiles').select('contact_id').eq('id', linkedClientProfile.id).single();
   const { error: linkErr } = await db
     .from('profiles')
     .update({ contact_id: fixtureContact.id })
-    .eq('id', linkedClientProfile.id)
-    .is('contact_id', null);
+    .eq('id', linkedClientProfile.id);
   if (linkErr && /contact_id/.test(linkErr.message)) {
     throw new Error(
       'profiles.contact_id does not exist yet — push ' +
@@ -820,7 +848,13 @@ for (const email of [CLIENT_LINKED_EMAIL, CLIENT_EMAIL]) {
     );
   }
   must('link client profile -> contact', linkErr);
-  note('client profile ↔ contact link', 'ok', `${linkedClientProfile.id} -> ${fixtureContact.id}`);
+  const changed = before?.contact_id !== fixtureContact.id;
+  note(
+    'client profile ↔ contact link',
+    changed ? 'RECONCILED' : 'ok',
+    `${linkedClientProfile.id} -> ${fixtureContact.id}` +
+      (changed ? ` (was ${before?.contact_id ?? 'null'})` : '')
+  );
 }
 
 // Arm (b) of `is_client_of_project()` — R3's "several contacts per project".
