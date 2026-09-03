@@ -19,7 +19,9 @@
 // flow; Save without sending just closes.
 
 import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { updateEstimate, type EstimateWithChildren } from '@/lib/services/estimates-client';
+import type { ProposalData } from '@/lib/proposal/proposal-data';
 import { computeEstimateHealth } from '@/lib/estimate-health';
 import { resolveProposalFormat } from '@framefocus/shared/utils/proposal-format';
 import { createClient } from '@/lib/supabase-browser';
@@ -29,6 +31,15 @@ import { ProposalFormatPicker } from './proposal-format-picker';
 import { BeforeYouSendCard } from './estimate-health-panel';
 
 const mono: React.CSSProperties = { fontFamily: font.mono };
+
+// ⚠️ Q1 [S103]: the pane renders the SAME PdfPreview -> ProposalDocument the
+// /proposal route and the send PDF use, fed by the SAME getProposalData (via the
+// API route). One renderer, one source of truth — the sheet cannot drift from
+// what the client is sent. @react-pdf's viewer needs the DOM → ssr:false.
+const PdfPreview = dynamic(() => import('./proposal/pdf-preview'), {
+  ssr: false,
+  loading: () => <div style={{ padding: '2rem', color: color.muted, fontSize: '0.85rem' }}>Loading preview…</div>,
+});
 
 export function ReviewSendSheet({
   data,
@@ -43,9 +54,11 @@ export function ReviewSendSheet({
   onSend: () => void;
   reload: () => Promise<void>;
 }) {
-  const { estimate, lineItems, categories, subBids } = data;
+  const { estimate, lineItems, subBids } = data;
   const [target, setTarget] = useState<number | null>(null);
   const [view, setView] = useState<'pdf' | 'email'>('pdf');
+  const [proposal, setProposal] = useState<ProposalData | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
   useEffect(() => {
     createClient()
@@ -54,6 +67,14 @@ export function ReviewSendSheet({
       .maybeSingle()
       .then(({ data: co }) => setTarget(co?.margin_target_percent ?? null));
   }, []);
+
+  // The one source of truth for the preview: getProposalData via the API route.
+  useEffect(() => {
+    fetch(`/api/estimates/${estimate.id}/proposal-data`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`))))
+      .then((d: ProposalData) => setProposal(d))
+      .catch(() => setPreviewError('Could not load the proposal preview.'));
+  }, [estimate.id]);
 
   const health = computeEstimateHealth({
     grandTotal: estimate.grand_total,
@@ -128,6 +149,10 @@ export function ReviewSendSheet({
                 contractType={estimate.contract_type}
                 canEdit={canEdit}
                 onSelect={async (code) => {
+                  // Live redraw of the same renderer, then persist (draft-gated).
+                  setProposal((prev) =>
+                    prev ? { ...prev, estimate: { ...prev.estimate, pricingLevel: code } } : prev
+                  );
                   await updateEstimate(estimate.id, { proposal_pricing_level: code });
                   await reload();
                 }}
@@ -208,54 +233,17 @@ export function ReviewSendSheet({
                 The client receives an email with a secure link to view and sign this proposal. The
                 message and follow-up cadence are set on the send step.
               </div>
-            ) : (
-              <div style={{ background: '#fff', borderRadius: '10px', padding: '28px', boxShadow: '0 1px 3px rgba(0,0,0,0.08)' }}>
-                <div style={{ fontSize: '1.1rem', fontWeight: 800, color: color.navy }}>{estimate.name}</div>
-                <div style={{ fontSize: '0.78rem', color: color.muted, marginBottom: '1rem' }}>{fmt.label}</div>
-
-                {/* Faithful lightweight render honoring the format's cost boundary. */}
-                {fmt.tier === 'lump_sum' && fmt.code === 'total_only' ? (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1rem', fontWeight: 700 }}>
-                    <span>Total</span>
-                    <span style={mono}>{fmtMoney(health.price)}</span>
-                  </div>
-                ) : (
-                  categories.map((cat) => {
-                    const catLines = lineItems.filter((li) => li.category_id === cat.id);
-                    const catTotal = catLines.reduce((s, li) => s + Number(li.total_price), 0);
-                    return (
-                      <div key={cat.id} style={{ marginBottom: '0.9rem' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: '0.9rem', borderBottom: `1px solid ${color.cardBorder}`, paddingBottom: '0.2rem' }}>
-                          <span>{cat.name}</span>
-                          <span style={mono}>{fmtMoney(catTotal)}</span>
-                        </div>
-                        {/* Detailed / open-book tiers print the lines. */}
-                        {fmt.tier !== 'lump_sum' &&
-                          catLines.map((li) => (
-                            <div key={li.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: color.body, padding: '0.15rem 0' }}>
-                              <span>{li.name}</span>
-                              <span style={mono}>
-                                {fmt.code === 'itemized_no_unit_pricing' ? '' : fmtMoney(li.total_price)}
-                              </span>
-                            </div>
-                          ))}
-                      </div>
-                    );
-                  })
-                )}
-
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1rem', fontWeight: 800, borderTop: `2px solid ${color.navy}`, paddingTop: '0.4rem', marginTop: '0.6rem' }}>
-                  <span>Total</span>
-                  <span style={mono}>{fmtMoney(health.price)}</span>
-                </div>
-
-                {fmt.showsCost && (
-                  <div style={{ marginTop: '0.8rem', fontSize: '0.75rem', color: '#b45309', background: '#fff5e6', border: '1px solid #f6d9a8', borderRadius: '8px', padding: '0.5rem 0.7rem' }}>
-                    Open-book format — this proposal shows your cost ({fmtMoney(health.cost)}) and your
-                    fee ({fmtMoney(health.profit)}) to the client.
-                  </div>
-                )}
+            ) : previewError ? (
+              <div style={{ background: '#fff', borderRadius: '10px', padding: '22px', fontSize: '0.85rem', color: color.danger }}>
+                {previewError}
               </div>
+            ) : proposal ? (
+              // The SAME renderer /proposal and the send PDF use, from the SAME
+              // data. Changing the format on the left mutates proposal.estimate
+              // .pricingLevel and this redraws — no second renderer, no drift.
+              <PdfPreview data={proposal} />
+            ) : (
+              <div style={{ padding: '2rem', color: color.muted, fontSize: '0.85rem' }}>Loading preview…</div>
             )}
           </div>
         </div>

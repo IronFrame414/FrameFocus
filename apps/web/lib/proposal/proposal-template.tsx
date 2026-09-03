@@ -1,5 +1,6 @@
 import { Document, Image, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
 import type { ProposalData } from './proposal-data';
+import { resolveProposalFormat } from '@framefocus/shared/utils/proposal-format';
 
 // Spec 2 (4E) — branded React-PDF proposal. Rendered server-side
 // (renderToBuffer in the generate/send routes) and in-browser
@@ -313,6 +314,62 @@ export function ProposalDocument({ data }: { data: ProposalData }) {
               </View>
             ));
           })()}
+
+        {/* Canonical eight (estimates-redesign §3.4) — a SEPARATE path from the
+            legacy five above, which stay byte-for-byte so the 23 already-sent
+            estimates render exactly as before. ⚠️ Open book (cost_plus / t&m)
+            SHOULD print cost + fee, but ProposalData carries no cost, so it
+            renders as itemized CLIENT prices — SAFE (never leaks cost), and
+            incomplete vs §3.4. Flagged in the build report. */}
+        {(() => {
+          const info = resolveProposalFormat(estimate.pricingLevel);
+          if (info.legacy) return null; // legacy stored value → handled above
+          const c = info.code;
+          if (c === 'total_only') {
+            return (
+              <View style={styles.row}>
+                <Text style={{ flex: 1, fontFamily: 'Helvetica-Bold' }}>Project Total</Text>
+                <Text style={{ fontFamily: 'Helvetica-Bold' }}>{fmtMoney(estimate.grandTotal)}</Text>
+              </View>
+            );
+          }
+          const showLines =
+            c === 'itemized' ||
+            c === 'itemized_with_descriptions' ||
+            c === 'itemized_no_unit_pricing' ||
+            c === 'cost_plus_itemized' ||
+            c === 'time_and_materials_itemized';
+          // itemized_no_unit_pricing: lines listed, prices only at category level.
+          const linePrices = showLines && c !== 'itemized_no_unit_pricing';
+          const descriptions =
+            c === 'summary_with_descriptions' || c === 'itemized_with_descriptions';
+          return categories.map((cat, i) => (
+            <View key={i} style={{ marginBottom: 8 }}>
+              <View style={styles.row}>
+                <Text style={{ flex: 1, fontFamily: 'Helvetica-Bold' }}>{cat.name}</Text>
+                <Text style={{ fontFamily: 'Helvetica-Bold' }}>{fmtMoney(cat.subtotal)}</Text>
+              </View>
+              {showLines &&
+                cat.lines.map((line, j) => (
+                  <View key={j} style={[styles.row, { borderBottomWidth: 0 }]} wrap={false}>
+                    <View style={{ flex: 1, paddingRight: 12 }}>
+                      <Text>{line.name}</Text>
+                      {descriptions && line.description && (
+                        <Text style={{ fontSize: 8, color: '#6b7280' }}>{line.description}</Text>
+                      )}
+                    </View>
+                    {linePrices && (
+                      <Text>
+                        {line.originalTotal != null
+                          ? fmtMoney(line.originalTotal)
+                          : fmtMoney(line.total)}
+                      </Text>
+                    )}
+                  </View>
+                ))}
+            </View>
+          ));
+        })()}
 
         {/* 7. Subtotal / Discount / Total block — always shown */}
         <View style={styles.totalsBlock} wrap={false}>

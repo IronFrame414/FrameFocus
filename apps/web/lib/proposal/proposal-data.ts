@@ -12,11 +12,23 @@ import { roundMoney, type DiscountType } from '@framefocus/shared/utils/estimate
 // (template + html) decides what each level shows; the data layer always
 // supplies the full category → line → row tree and lets the renderer hide.
 export type ProposalPricingLevel =
+  // Legacy five — STORED on 23 sent estimates; the renderer keeps their exact
+  // behaviour (never remapped, so what a client was sent never changes).
   | 'lump_sum'
   | 'category_with_price'
   | 'category_no_price'
   | 'detail_with_price_qty'
-  | 'detail_no_price';
+  | 'detail_no_price'
+  // Canonical eight (estimates-redesign §3.4). The renderer handles these via a
+  // SEPARATE code path from the legacy five.
+  | 'total_only'
+  | 'summary'
+  | 'summary_with_descriptions'
+  | 'itemized'
+  | 'itemized_with_descriptions'
+  | 'itemized_no_unit_pricing'
+  | 'cost_plus_itemized'
+  | 'time_and_materials_itemized';
 
 export interface ProposalLine {
   name: string;
