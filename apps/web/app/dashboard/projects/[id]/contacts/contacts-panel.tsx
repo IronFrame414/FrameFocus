@@ -11,12 +11,15 @@ import {
   createAndAttachContact,
   detachContact,
 } from '@/lib/services/project-contacts-client';
+import { setProjectClient } from '@/lib/services/projects-client';
 
 interface ContactsPanelProps {
   projectId: string;
   projectContacts: ProjectContact[];
   allContacts: { id: string; name: string; contact_type: string }[];
   canManage: boolean;
+  /** §2 — the project's current client (projects.contact_id), or null. */
+  currentClientContactId: string | null;
 }
 
 // External stakeholder types offered when creating a contact from a project
@@ -27,6 +30,7 @@ export function ContactsPanel({
   projectContacts,
   allContacts,
   canManage,
+  currentClientContactId,
 }: ContactsPanelProps) {
   const router = useRouter();
   const confirm = useConfirm();
@@ -102,6 +106,28 @@ export function ContactsPanel({
       router.refresh();
     } else {
       setError(result.error || 'Remove failed');
+    }
+    setBusy(false);
+  }
+
+  // §2 — promote a project contact to THE client. Deliberate and confirmed: it
+  // reroutes invoicing, payments, refunds, reminders and the invoice email, and
+  // it replaces whoever is the client now. Never a side effect of attaching.
+  async function handleSetClient(contactId: string, name: string) {
+    const currentName = currentClientContactId
+      ? allContacts.find((c) => c.id === currentClientContactId)?.name ?? 'the current client'
+      : null;
+    const message = currentName
+      ? `Make ${name} the client on this project, replacing ${currentName}? This reroutes invoicing, payments, refunds, reminders and the invoice email address to them.`
+      : `Make ${name} the client on this project? This routes invoicing, payments, refunds, reminders and the invoice email address to them.`;
+    if (!(await confirm(message))) return;
+    setBusy(true);
+    setError(null);
+    const result = await setProjectClient(projectId, contactId);
+    if (result.success) {
+      router.refresh();
+    } else {
+      setError(result.error || 'Could not set the client');
     }
     setBusy(false);
   }
@@ -297,28 +323,67 @@ export function ContactsPanel({
                   · {pc.role || CONTACT_TYPE_LABELS[pc.contact?.contact_type as ContactType] || ''}
                 </span>
                 {pc.contact?.phone && <span style={{ color: '#6b7280' }}> · {pc.contact.phone}</span>}
+                {pc.contact_id === currentClientContactId && (
+                  <span
+                    style={{
+                      marginLeft: '0.5rem',
+                      padding: '0.0625rem 0.5rem',
+                      fontSize: '0.6875rem',
+                      fontWeight: 600,
+                      color: '#166534',
+                      backgroundColor: '#dcfce7',
+                      borderRadius: '9999px',
+                    }}
+                  >
+                    Client
+                  </span>
+                )}
               </div>
               {canManage && (
-                <button
-                  onClick={() =>
-                    handleDetach(
-                      pc.id,
-                      pc.contact ? `${pc.contact.first_name} ${pc.contact.last_name}` : 'contact'
-                    )
-                  }
-                  disabled={busy}
-                  style={{
-                    padding: '0.25rem 0.625rem',
-                    fontSize: '0.75rem',
-                    color: '#991b1b',
-                    backgroundColor: '#fff',
-                    border: '1px solid #fecaca',
-                    borderRadius: '0.375rem',
-                    cursor: busy ? 'default' : 'pointer',
-                  }}
-                >
-                  Remove
-                </button>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  {pc.contact && pc.contact_id !== currentClientContactId && (
+                    <button
+                      onClick={() =>
+                        handleSetClient(
+                          pc.contact_id,
+                          `${pc.contact!.first_name} ${pc.contact!.last_name}`
+                        )
+                      }
+                      disabled={busy}
+                      style={{
+                        padding: '0.25rem 0.625rem',
+                        fontSize: '0.75rem',
+                        color: '#1d4ed8',
+                        backgroundColor: '#fff',
+                        border: '1px solid #bfdbfe',
+                        borderRadius: '0.375rem',
+                        cursor: busy ? 'default' : 'pointer',
+                      }}
+                    >
+                      Set as client
+                    </button>
+                  )}
+                  <button
+                    onClick={() =>
+                      handleDetach(
+                        pc.id,
+                        pc.contact ? `${pc.contact.first_name} ${pc.contact.last_name}` : 'contact'
+                      )
+                    }
+                    disabled={busy}
+                    style={{
+                      padding: '0.25rem 0.625rem',
+                      fontSize: '0.75rem',
+                      color: '#991b1b',
+                      backgroundColor: '#fff',
+                      border: '1px solid #fecaca',
+                      borderRadius: '0.375rem',
+                      cursor: busy ? 'default' : 'pointer',
+                    }}
+                  >
+                    Remove
+                  </button>
+                </div>
               )}
             </div>
           ))
