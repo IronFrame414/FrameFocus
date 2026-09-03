@@ -1,15 +1,60 @@
 import { createClient } from '@/lib/supabase-browser';
 import { applied, DISCARDED } from '@/lib/services/mutation-result';
 
+/**
+ * The id of an ACTIVE contact with this email in the caller's company, or null.
+ * Case-insensitive (matches `contacts_company_email_unique`); RLS scopes the
+ * read to the caller's company, so no company_id is passed. The JS re-check
+ * makes the match exact regardless of ilike wildcard handling.
+ */
+async function findActiveContactIdByEmail(
+  supabase: ReturnType<typeof createClient>,
+  email: string
+): Promise<string | null> {
+  const trimmed = email.trim();
+  if (!trimmed) return null;
+  const escaped = trimmed.replace(/([\\%_])/g, '\\$1');
+  const { data } = await supabase
+    .from('contacts')
+    .select('id, email')
+    .eq('is_deleted', false)
+    .ilike('email', escaped)
+    .limit(5);
+  const match = (data ?? []).find(
+    (r) => (r.email ?? '').trim().toLowerCase() === trimmed.toLowerCase()
+  );
+  return (match?.id as string | undefined) ?? null;
+}
+
 export async function createContact(
   contact: Record<string, unknown>
 ): Promise<{ success: boolean; id?: string; error?: string }> {
   const supabase = createClient();
 
+  // §1d — REUSE an existing (company_id, lower(email)) contact rather than mint a
+  // duplicate. Every create path funnels through here, and the portal-invite /
+  // inline "add a contact" flows minted a fresh row each run (the Karen Foster
+  // triple). Since `contacts_company_email_unique` landed, a blind insert would
+  // 23505 anyway; this turns that into a reuse. NULL/blank email is exempt from
+  // the constraint, so those always insert.
+  const email = typeof contact.email === 'string' ? contact.email.trim() : null;
+  if (email) {
+    const existingId = await findActiveContactIdByEmail(supabase, email);
+    if (existingId) return { success: true, id: existingId };
+  }
+
   // Postgres defaults fill in company_id, created_by, updated_by.
   const { data, error } = await supabase.from('contacts').insert(contact).select('id').single();
 
-  if (error) return { success: false, error: error.message };
+  if (error) {
+    // Race backstop: the unique index fired between the check and the insert —
+    // resolve to the row that won rather than surfacing a raw 23505.
+    if (error.code === '23505' && email) {
+      const existingId = await findActiveContactIdByEmail(supabase, email);
+      if (existingId) return { success: true, id: existingId };
+    }
+    return { success: false, error: error.message };
+  }
   return { success: true, id: data.id };
 }
 
