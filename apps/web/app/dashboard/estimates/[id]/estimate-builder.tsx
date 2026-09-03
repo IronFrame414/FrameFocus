@@ -30,6 +30,7 @@ import { ConvertToProject } from './convert-to-project';
 import { ItemsTab } from './items-tab';
 import { BiddingTab } from './bidding-tab';
 import { CoverTab, FilesTab, NotesTab, ScopeTab, TermsTab } from './text-tabs';
+import { ReviewSendSheet } from './review-send-sheet';
 import { useConfirm } from '@/components/confirm/confirm-provider';
 import { color } from '@/lib/theme';
 
@@ -99,6 +100,7 @@ export function EstimateBuilder({
   const [voidReason, setVoidReason] = useState('');
   const [busyVoid, setBusyVoid] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
   const [sendPrefill, setSendPrefill] = useState<{
     email: string | null;
     subject: string;
@@ -374,6 +376,25 @@ export function EstimateBuilder({
             </div>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+            {(estimate.status === 'draft' || estimate.status === 'review') && (
+              <button
+                type="button"
+                data-testid="est-review-send"
+                onClick={() => setReviewOpen(true)}
+                style={{
+                  padding: '0.5rem 1rem',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  color: '#3f4a60',
+                  backgroundColor: '#f4f6fa',
+                  border: '1px solid #d5dae4',
+                  borderRadius: '0.375rem',
+                  cursor: 'pointer',
+                }}
+              >
+                Review &amp; Send
+              </button>
+            )}
             {statusActionButton()}
             {estimate.status !== 'accepted' && (
               <ConvertToProject
@@ -689,6 +710,19 @@ export function EstimateBuilder({
           onSent={async () => {
             setSendOpen(false);
             await reload();
+          }}
+        />
+      )}
+
+      {reviewOpen && (
+        <ReviewSendSheet
+          data={data}
+          canEdit={canEdit}
+          reload={reload}
+          onClose={() => setReviewOpen(false)}
+          onSend={() => {
+            setReviewOpen(false);
+            openSendModal();
           }}
         />
       )}
