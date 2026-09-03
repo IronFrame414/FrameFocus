@@ -14,6 +14,8 @@ import {
 } from '@/lib/services/scope-library-client';
 import { color, font } from '@/lib/theme';
 import { fmtMoney } from '../labels';
+import Link from 'next/link';
+import { ProposalFormatPicker } from './proposal-format-picker';
 import type { TabProps } from './estimate-builder';
 
 const inputStyle: React.CSSProperties = {
@@ -834,13 +836,44 @@ export function ScopeTab({ data, canEdit, reload }: TabProps) {
 // ── Cover Sheet tab ──
 
 export function CoverTab({ data, canEdit, reload }: TabProps) {
-  const [text, setText] = useState(data.estimate.cover_letter ?? '');
+  const est = data.estimate;
+  const [text, setText] = useState(est.cover_letter ?? '');
   const { error, saved, run } = useSaveState();
 
   return (
     <div style={{ maxWidth: '640px' }}>
-      <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '1rem' }}>Cover Letter</h2>
+      <h2 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: '0.25rem' }}>Proposal</h2>
+      <p style={{ fontSize: '0.8125rem', color: color.muted, marginBottom: '1rem' }}>
+        How the client sees this proposal, and the letter that opens it.
+      </p>
       {error && <div style={errorBoxStyle}>{error}</div>}
+
+      {/* 9d — the proposal format (the detail-level control and the format picker
+          are the same setting; this is the one control). Writes proposal_pricing_level. */}
+      <div style={{ border: `1px solid ${color.cardBorder}`, borderRadius: '14px', padding: '16px 18px', marginBottom: '1.25rem' }}>
+        <div style={{ fontWeight: 700, fontSize: '0.9rem', color: color.navy, marginBottom: '0.75rem' }}>
+          Proposal format
+        </div>
+        <ProposalFormatPicker
+          value={est.proposal_pricing_level}
+          contractType={est.contract_type}
+          canEdit={canEdit}
+          onSelect={async (code) => {
+            await run(async () => {
+              const result = await updateEstimate(est.id, { proposal_pricing_level: code });
+              if (result.success) await reload();
+              return result;
+            });
+          }}
+        />
+        <div style={{ marginTop: '0.75rem' }}>
+          <Link href={`/dashboard/estimates/${est.id}/proposal`} style={{ fontSize: '0.8rem', color: color.primary }}>
+            Preview the proposal →
+          </Link>
+        </div>
+      </div>
+
+      <h3 style={{ fontSize: '0.9rem', fontWeight: 700, color: color.navy, marginBottom: '0.5rem' }}>Cover letter</h3>
       <textarea
         value={text}
         disabled={!canEdit}

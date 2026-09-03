@@ -40,11 +40,24 @@ export const CONTRACT_TYPE_LABELS: Record<ContractType, string> = {
 
 // 4D-rev3: single estimate-level five-value proposal presentation.
 export type ProposalPricingLevel =
+  // Legacy five — still STORED on 23 sent estimates, never rewritten (a sent
+  // proposal's format is part of what the client agreed to).
   | 'lump_sum'
   | 'category_with_price'
   | 'category_no_price'
   | 'detail_with_price_qty'
-  | 'detail_no_price';
+  | 'detail_no_price'
+  // Canonical eight (new estimates store these) — estimates-redesign §3.4,
+  // migration #5. Both sets are in the DB CHECK; widening here lets the 8-format
+  // picker write a canonical code. Display mapping lives in proposal-format.ts.
+  | 'total_only'
+  | 'summary'
+  | 'summary_with_descriptions'
+  | 'itemized'
+  | 'itemized_with_descriptions'
+  | 'itemized_no_unit_pricing'
+  | 'cost_plus_itemized'
+  | 'time_and_materials_itemized';
 
 // Shared labels for the five proposal detail levels — reused by the Details tab
 // selector, the proposal preview selector, and the company-default settings form.
