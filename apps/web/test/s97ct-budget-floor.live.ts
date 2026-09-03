@@ -17,7 +17,7 @@
  * plain role floor on project_budget_items unusable, since it shares a row.
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { admin, assertRebuildTest, sessionFor } from './live-session';
+import { admin, assertRebuildTest, sessionFor, upsertContact } from './live-session';
 
 const state = vi.hoisted(() => ({ client: null as never }));
 vi.mock('@/lib/supabase-server', () => ({ createClient: async () => state.client }));
@@ -53,15 +53,14 @@ beforeAll(async () => {
     sessions[role] = (await sessionFor(email)) as never;
   }
 
-  const { data: contact, error: cErr } = await admin
-    .from('contacts')
-    .insert({
-      company_id: companyId, contact_type: 'client',
-      first_name: MARKER, last_name: 'Client', email: `${MARKER.toLowerCase()}@example.invalid`,
-    })
-    .select('id').single();
-  must('contact', cErr);
-  contactId = contact!.id;
+  const contact = await upsertContact({
+    company_id: companyId,
+    contact_type: 'client',
+    first_name: MARKER,
+    last_name: 'Client',
+    email: `${MARKER.toLowerCase()}@example.invalid`,
+  });
+  contactId = contact.id;
 
   const { data: counters } = await admin
     .from('companies')

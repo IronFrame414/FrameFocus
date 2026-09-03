@@ -11,7 +11,7 @@
  * written — the trigger is INSERT-only and deliberately never touches one.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { admin, assertRebuildTest } from './live-session';
+import { admin, assertRebuildTest, upsertContact } from './live-session';
 
 const MARKER = 'S97PASSTHRU';
 
@@ -89,15 +89,14 @@ beforeAll(async () => {
     .from('company_members').select('id')
     .eq('company_id', companyId).eq('member_type', 'subcontractor').limit(1).single()).data!.id;
 
-  const { data: contact, error: cErr } = await admin
-    .from('contacts')
-    .insert({
-      company_id: companyId, contact_type: 'client',
-      first_name: MARKER, last_name: 'Client', email: `${MARKER.toLowerCase()}@example.invalid`,
-    })
-    .select('id').single();
-  must('contact', cErr);
-  contactId = contact!.id;
+  const contact = await upsertContact({
+    company_id: companyId,
+    contact_type: 'client',
+    first_name: MARKER,
+    last_name: 'Client',
+    email: `${MARKER.toLowerCase()}@example.invalid`,
+  });
+  contactId = contact.id;
 
   projectWithRetainage = await project('with-retainage', 10);
   projectWithout = await project('no-retainage', null);
