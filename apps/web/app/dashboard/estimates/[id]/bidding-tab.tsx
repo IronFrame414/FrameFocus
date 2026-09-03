@@ -321,6 +321,55 @@ export function BiddingTab({ data, canEdit, reload, companyTimeZone }: TabProps)
                 </div>
               )}
 
+              {/* 19d — coverage-adjusted low. The cheapest bid is not always the
+                  comparable one: a bid covering 80% of scope is cheaper because it
+                  does less. Lead with the cheapest, then name the like-for-like low.
+                  ⚠️ Coverage comes FROM THE SUB — never computed. */}
+              {bids.length >= 2 &&
+                (() => {
+                  const rawLow = lowBidFor(line.id);
+                  if (rawLow == null) return null;
+                  const adj = bids
+                    .filter((b) => b.scope_coverage_percent != null && Number(b.scope_coverage_percent) > 0)
+                    .map((b) => ({ b, adj: Number(b.bid_amount) / (Number(b.scope_coverage_percent) / 100) }));
+                  const likeLow = adj.length ? adj.reduce((m, x) => (x.adj < m.adj ? x : m)) : null;
+                  return (
+                    <div style={{ fontSize: '0.75rem', background: '#f2f4ff', border: '1px solid #dbe0fb', borderRadius: '0.375rem', padding: '0.5rem 0.7rem', marginBottom: '0.75rem' }}>
+                      Cheapest bid <strong>{fmtMoney(rawLow)}</strong>.
+                      {likeLow ? (
+                        <>
+                          {' '}Adjusted to full scope coverage, the like-for-like low is{' '}
+                          <strong>{subName(likeLow.b.subcontractor_id)}</strong> at{' '}
+                          <strong>~{fmtMoney(likeLow.adj)}</strong> — the cheaper number may just be doing less.
+                        </>
+                      ) : (
+                        <> Add each bid&rsquo;s scope coverage to compare like-for-like.</>
+                      )}
+                    </div>
+                  );
+                })()}
+
+              {/* 19d — the selected bid in detail (exclusions verbatim). */}
+              {winner && (
+                <div style={{ border: '1px solid #e6f0e9', background: '#f6fbf8', borderRadius: '0.5rem', padding: '0.75rem', marginBottom: '0.75rem' }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.82rem', color: '#0f1729', marginBottom: '0.4rem' }}>
+                    Selected bid — {subName(winner.subcontractor_id)}
+                  </div>
+                  <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap', fontSize: '0.78rem', color: '#5b6472', fontFamily: 'var(--font-mono, monospace)' }}>
+                    <span>Bid {fmtMoney(winner.bid_amount)}</span>
+                    {winner.labor_amount != null && <span>Labor {fmtMoney(winner.labor_amount)}</span>}
+                    {winner.material_amount != null && <span>Material {fmtMoney(winner.material_amount)}</span>}
+                    {winner.scope_coverage_percent != null && <span>Coverage {winner.scope_coverage_percent}%</span>}
+                    {winner.bid_holds_until && <span>Holds until {winner.bid_holds_until}</span>}
+                  </div>
+                  {winner.exclusions && (
+                    <div style={{ marginTop: '0.4rem', fontSize: '0.78rem', color: '#5b6472' }}>
+                      Exclusions (verbatim): <span style={{ whiteSpace: 'pre-wrap' }}>{winner.exclusions}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* 19c — tokenised request status chips for this line. */}
               {requests.filter((r) => r.line_item_id === line.id).length > 0 && (
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
@@ -520,6 +569,8 @@ function RequestByLinkForm({
   const [subId, setSubId] = useState('');
   const [scope, setScope] = useState('');
   const [bidsDue, setBidsDue] = useState('');
+  const [workStarts, setWorkStarts] = useState('');
+  const [siteVisit, setSiteVisit] = useState('');
   const [busy, setBusy] = useState(false);
   const [link, setLink] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -538,6 +589,8 @@ function RequestByLinkForm({
       subcontractorId: subId,
       scopeText: scope.trim() || null,
       bidsDueDate: bidsDue || null,
+      workStartsDate: workStarts || null,
+      siteVisitDate: siteVisit || null,
     });
     setBusy(false);
     if (!result.success || !result.token) {
@@ -586,6 +639,14 @@ function RequestByLinkForm({
         <label style={{ fontSize: '0.72rem', color: '#5b6472' }}>
           Bids due{' '}
           <input type="date" value={bidsDue} onChange={(e) => setBidsDue(e.target.value)} style={inputStyle} />
+        </label>
+        <label style={{ fontSize: '0.72rem', color: '#5b6472' }}>
+          Work starts{' '}
+          <input type="date" value={workStarts} onChange={(e) => setWorkStarts(e.target.value)} style={inputStyle} />
+        </label>
+        <label style={{ fontSize: '0.72rem', color: '#5b6472' }}>
+          Site visit{' '}
+          <input type="date" value={siteVisit} onChange={(e) => setSiteVisit(e.target.value)} style={inputStyle} />
         </label>
         <button type="button" onClick={send} disabled={busy} style={{ padding: '0.375rem 0.875rem', fontSize: '0.8125rem', fontWeight: 600, color: '#fff', backgroundColor: busy ? '#9aa4b8' : '#3b4ae0', border: 'none', borderRadius: '0.25rem', cursor: busy ? 'not-allowed' : 'pointer' }}>
           {busy ? 'Creating…' : 'Create link'}
