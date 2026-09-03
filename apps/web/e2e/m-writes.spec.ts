@@ -1354,6 +1354,12 @@ test.describe('A-69 / A-70 / A-71 / A-73 · a PM edits, and what goes on the wir
     // A-73 — finding 4's mitigation: company_id is never in an update payload,
     // because these policies carry USING with no WITH CHECK.
     expect(keys).not.toContain('company_id');
+    // §2 [S103] — insurance_expiry is a DERIVED cache (COI expiry, pinned by
+    // trigger, migration 20261280000000). The edit form's date input was removed
+    // because the pin trigger silently discarded anything typed; the field must
+    // no longer reach the wire. Inverted from the old assertion, which required
+    // it in the payload.
+    expect(keys).not.toContain('insurance_expiry');
     // A-71 — the payload is EXACTLY the named subset, not a superset.
     expect(keys.sort()).toEqual(
       [
@@ -1361,7 +1367,6 @@ test.describe('A-69 / A-70 / A-71 / A-73 · a PM edits, and what goes on the wir
         'contact_first_name',
         'contact_last_name',
         'email',
-        'insurance_expiry',
         'license_number',
         'mobile',
         'phone',

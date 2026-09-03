@@ -10,13 +10,15 @@ import { SubcontractorsList } from './subcontractors-list';
 /**
  * 14d Subs & Vendors (desktop-redesign §8.4).
  *
- * ⚠️ Insurance expiry has TWO independent stores, RULED LEAVE AS IS — this
- * build does not silently pick a side. What renders here is the compliance-
- * documents side (`getExpiringCompliance()`, type-blind, already covers
- * licenses); `subcontractors.insurance_expiry` stays where it is (written by
- * the forms, rendered on /m, invisible on desktop). Live state: the documents
- * table holds ZERO rows, so the alert is silent and W-9 reads "missing" for
- * every sub until documents are uploaded — that is the reality, not a bug.
+ * ⚠️ Insurance expiry: `subcontractors.insurance_expiry` is now a DERIVED cache
+ * of the COI expiry in the compliance store (migration 20261280000000, §4/S103),
+ * pinned by trigger and no longer written by any form — the two stores are no
+ * longer independent. What renders here is the compliance-documents side
+ * (`getExpiringCompliance()`, type-blind, already covers licenses); the loose
+ * `subcontractors.insurance_expiry` column is rendered on /m (crew never touch
+ * the floored store) and invisible on desktop. Live state: the documents table
+ * holds ZERO rows, so the alert is silent and W-9 reads "missing" for every sub
+ * until documents are uploaded — that is the reality, not a bug.
  *
  * ⚠️ Compliance reads are Owner/Admin by RLS, and the read is SKIPPED for
  * other roles rather than rendered empty — "an empty list renders identically

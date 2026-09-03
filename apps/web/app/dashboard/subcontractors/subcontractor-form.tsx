@@ -46,7 +46,6 @@ export function SubcontractorForm({
     zip: existing?.zip || '',
     trade_type: existing?.trade_type || '',
     license_number: existing?.license_number || '',
-    insurance_expiry: existing?.insurance_expiry || '',
     rating: existing?.rating ?? 0,
     rating_notes: existing?.rating_notes || '',
     // #132 — these three come from `financials`, not from the sub row. They
@@ -97,7 +96,10 @@ export function SubcontractorForm({
       zip: form.zip.trim() || null,
       trade_type: form.trade_type || null,
       license_number: form.license_number.trim() || null,
-      insurance_expiry: form.insurance_expiry || null,
+      // insurance_expiry is NOT written here — it is a derived cache of the COI
+      // expiry, pinned by the `subcontractors_pin_insurance_expiry` trigger
+      // (migration 20261280000000). A value sent from the form would be silently
+      // overwritten on save, so the input was removed; see the read-only display.
       rating: form.rating > 0 ? form.rating : null,
       rating_notes: form.rating_notes.trim() || null,
       preferred: form.preferred,
@@ -279,13 +281,30 @@ export function SubcontractorForm({
         </div>
         <div>
           <label style={labelStyle}>Insurance Expiry Date</label>
-          <input
-            name="insurance_expiry"
-            type="date"
-            value={form.insurance_expiry}
-            onChange={handleChange}
-            style={inputStyle}
-          />
+          {/* §2 [S103] — DERIVED, NOT ENTERED. `insurance_expiry` is now a cache
+              of the subcontractor's Certificate of Insurance (COI) expiry,
+              maintained by trigger (migration 20261280000000). The old date
+              input was removed because the pin trigger silently discarded
+              anything typed here — a field that ate its own input. Shown
+              read-only so an Owner/Admin can still see the current value and
+              knows where it comes from. */}
+          <p
+            style={{
+              margin: '0 0 0.25rem',
+              padding: '0.5rem 0.75rem',
+              backgroundColor: '#f9fafb',
+              border: '1px solid #e5e7eb',
+              borderRadius: '0.375rem',
+              color: existing?.insurance_expiry ? '#111827' : '#6b7280',
+              fontSize: '0.875rem',
+            }}
+          >
+            {existing?.insurance_expiry ?? 'No Certificate of Insurance on file'}
+          </p>
+          <p style={{ margin: 0, fontSize: '0.75rem', color: '#6b7280' }}>
+            Derived from the subcontractor&rsquo;s Certificate of Insurance (COI). Upload or update a
+            COI to change this date — it can no longer be entered by hand.
+          </p>
         </div>
         {/* TECH_DEBT #132 [S122] — OWNER/ADMIN ONLY, AND HIDDEN RATHER THAN
             DISABLED FOR EVERYONE ELSE.

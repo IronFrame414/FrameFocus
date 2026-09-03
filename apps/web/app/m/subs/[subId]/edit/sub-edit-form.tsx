@@ -100,7 +100,9 @@ export function SubEditForm({ sub }: { sub: SubEditable }) {
   const [email, setEmail] = useState(sub.email ?? '');
   const [tradeType, setTradeType] = useState(sub.trade_type ?? '');
   const [licenseNumber, setLicenseNumber] = useState(sub.license_number ?? '');
-  const [insuranceExpiry, setInsuranceExpiry] = useState(sub.insurance_expiry ?? '');
+  // §2 [S103] — no insurance_expiry state: it is a derived cache of the COI
+  // expiry (migration 20261280000000) and cannot be hand-edited. The detail
+  // screen (m/subs/[subId]) still displays it read-only.
   const [status, setStatus] = useState<string | null>(sub.status);
   const [subType, setSubType] = useState<string | null>(sub.sub_type);
 
@@ -132,7 +134,7 @@ export function SubEditForm({ sub }: { sub: SubEditable }) {
       email: email.trim() || null,
       trade_type: tradeType.trim() || null,
       license_number: licenseNumber.trim() || null,
-      insurance_expiry: insuranceExpiry.trim() || null,
+      // insurance_expiry intentionally omitted — derived cache, pinned by trigger.
       status,
       sub_type: subType,
     });
@@ -197,13 +199,9 @@ export function SubEditForm({ sub }: { sub: SubEditable }) {
         onChange={setLicenseNumber}
         testId="m-sub-edit-licence"
       />
-      <TextField
-        label="Insurance expiry (YYYY-MM-DD)"
-        value={insuranceExpiry}
-        onChange={setInsuranceExpiry}
-        testId="m-sub-edit-insurance"
-        placeholder="2027-01-31"
-      />
+      {/* §2 [S103] — the insurance-expiry input was removed. It is a derived
+          cache of the COI expiry; the pin trigger silently discarded whatever
+          was typed here. The value is shown read-only on the detail screen. */}
 
       <div className="mt-[14px]">
         <FieldLabel>Type</FieldLabel>
