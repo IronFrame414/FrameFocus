@@ -6,7 +6,7 @@ import {
   UpdateProposalSettingsInput,
   updateProposalSettings,
 } from '@/lib/services/company-client';
-import { PROPOSAL_PRICING_LEVEL_OPTIONS } from '@/lib/services/estimates-client';
+import { ProposalFormatPicker } from '@/app/dashboard/estimates/[id]/proposal-format-picker';
 import {
   brandColorSchema,
   expirationDaysSchema,
@@ -264,42 +264,40 @@ export function ProposalSettingsForm({ settings }: ProposalSettingsFormProps) {
       {/* Proposal defaults */}
       <div style={sectionStyle}>
         <div style={sectionTitleStyle}>Proposal Defaults</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '0.75rem' }}>
-          <div>
-            <label style={labelStyle}>Default pricing detail</label>
-            <select
-              value={pricingLevel}
-              onChange={(e) => {
-                const value = e.target.value as ProposalSettings['default_proposal_pricing_level'];
-                setPricingLevel(value);
-                scheduleSave('default_proposal_pricing_level', {
-                  default_proposal_pricing_level: value,
-                });
-              }}
-              style={inputStyle}
-            >
-              {PROPOSAL_PRICING_LEVEL_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-            {savedKey === 'default_proposal_pricing_level' && <div style={savedStyle}>Saved</div>}
-          </div>
-          <div>
-            <label style={labelStyle}>Default expiration (days)</label>
-            <input
-              inputMode="numeric"
-              value={expirationDays}
-              onChange={(e) => setExpirationDays(e.target.value)}
-              onBlur={handleExpirationBlur}
-              style={inputStyle}
-            />
-            {errors.default_expiration_days && (
-              <div style={errorStyle}>{errors.default_expiration_days}</div>
-            )}
-            {savedKey === 'default_expiration_days' && <div style={savedStyle}>Saved</div>}
-          </div>
+        <div style={{ marginBottom: '0.75rem' }}>
+          <label style={labelStyle}>Default proposal format</label>
+          <p style={{ fontSize: '0.75rem', color: '#7b8699', margin: '0 0 0.5rem' }}>
+            The format new estimates start from. An estimate can override it, and the send sheet can
+            override it once more for a single send.
+          </p>
+          {/* The one format control (§3.4). Company level: no contract to warn
+              against (contractType=null), always editable (Owner/Admin page). */}
+          <ProposalFormatPicker
+            value={pricingLevel}
+            contractType={null}
+            canEdit={true}
+            onSelect={(code) => {
+              setPricingLevel(code);
+              scheduleSave('default_proposal_pricing_level', {
+                default_proposal_pricing_level: code,
+              });
+            }}
+          />
+          {savedKey === 'default_proposal_pricing_level' && <div style={savedStyle}>Saved</div>}
+        </div>
+        <div style={{ maxWidth: '220px', marginBottom: '0.75rem' }}>
+          <label style={labelStyle}>Default expiration (days)</label>
+          <input
+            inputMode="numeric"
+            value={expirationDays}
+            onChange={(e) => setExpirationDays(e.target.value)}
+            onBlur={handleExpirationBlur}
+            style={inputStyle}
+          />
+          {errors.default_expiration_days && (
+            <div style={errorStyle}>{errors.default_expiration_days}</div>
+          )}
+          {savedKey === 'default_expiration_days' && <div style={savedStyle}>Saved</div>}
         </div>
         {textField(
           'default_proposal_email_subject',
