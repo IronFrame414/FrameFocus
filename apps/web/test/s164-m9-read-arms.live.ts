@@ -234,10 +234,32 @@ describe('ARM 3 — contract_documents', () => {
 
 // ───────────────────────────────────────────────────────────────────────────
 describe('ARM 4 — change_orders', () => {
-  it('4a — LINKED reads sent/signed COs', async () => {
+  it('4a — LINKED reads sent/signed COs, and the seeded SENT fixture is specifically sent', async () => {
     const rows = await ids(linked, 'change_orders', 'id, status, net_delta');
     expect(rows.length).toBeGreaterThan(0);
     for (const r of rows) expect(r.status).not.toBe('draft');
+
+    // ⚠️ [#3-s168, S103] A fixture pinned to ONE state needs an assertion that
+    // NAMES that state. The loop above only checks `!== 'draft'`, and `signed`
+    // satisfies it — so when a click-test SIGNED CO-QA-M9-SENT, this file stayed
+    // 188/188 for three runs over a broken fixture, and the corruption surfaced
+    // two hours later by accident. The seed now renames a signed row aside and
+    // rebuilds the canonical SENT CO (CO-QA-M9-SENT-n) under this title; assert
+    // the LIVE seeded row is `sent`, so a future portal signature goes RED here
+    // at the time instead. Read by TITLE — the stable handle the seed pins.
+    const { data: seeded } = await admin
+      .from('change_orders').select('id, status')
+      .eq('company_id', companyId).eq('title', 'QA M9 — sent CO').single();
+    const s = seeded as { id: string; status: string };
+    expect(
+      s.status,
+      'the seeded SENT fixture is not `sent` — a click-test may have signed it; re-run the seed to rebuild it',
+    ).toBe('sent');
+
+    // …and the client actually READS it — not merely that some non-draft exists.
+    const { data: seenByClient } = await linked
+      .from('change_orders').select('id').eq('id', s.id);
+    expect((seenByClient ?? []), 'the client cannot read the seeded SENT CO').toHaveLength(1);
   });
 
   it('4b — CONTROL reads none', async () => {
