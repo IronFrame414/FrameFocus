@@ -354,3 +354,62 @@ the 19b **two-column card grid `minmax(0,1fr) 320px`**:
    type-check exit 0 (5/5).
 
 ⇒ Details is sound. Proceeding to Line Items.
+
+## ✅ Line Items (9b) — BUILT + VERIFIED. Built across three commits, restyle-only.
+The 9b gap was three genuinely-missing pieces + a restyle of existing elements. All landed without
+touching the autosave write path — every `InlineText`/`InlineNumber` kept its `value`/`disabled`/
+`onSave`/`validate`/`format` verbatim; the changes are net-new read-only derivations, one local
+collapse `useState`, and presentational wrapping. **No `updateEstimateLineRow|Item` call was touched;
+`disabled={!canEdit}` stays on every field; the shell footer (`estimate-builder.tsx:671`) remains the
+only one — no in-tab footer was reproduced.**
+
+- **`19ca3fa`** — category-header **subtotal pill** (Σ line totals, rendered ON the header so it
+  survives collapse), category **collapse** (one `useState<Set<categoryId>>`, persists nothing), and
+  the aggregate **unpriced / no-cap banner** (read-only derivation from `rows`).
+- **`6558178`** — coloured per-type **badges** (LABOR/MATL/ALLOW/SUB/OTHER) replacing the grey text
+  pill, and mono on the row **Total** cell.
+- **this session** — the **mono pass**, finishing the numeric-typeface rule (log §precedence: money/
+  qty/% = IBM Plex Mono). `InlineNumber` is `fontFamily:'inherit'`, so the editable numeric cells
+  rendered in body sans. Fixed by WRAPPING each numeric field in a `<span style={monoNum}>` (never
+  the whole cell — sibling buttons, unit selects and the allowance/WINNER labels stay in Barlow):
+  row **Price** (rate/unit_cost/amount), **Qty** (quantity), **Markup %**, and the line-header
+  **Total**, **Cost** and **Discount** figures; **Markup** and row **Total** carry it on the `<td>`
+  (those cells hold only the number).
+
+### ⚠️ DEFECT FOUND AND FIXED IN THE SAME PASS — the mono token was the WRONG variable.
+`19ca3fa`/`6558178` (badge, subtotal pill, row Total) and this session's first cut all wrote
+`fontFamily: 'var(--font-mono, monospace)'`. **There is no `--font-mono` CSS variable** — next/font
+defines `--font-plex-mono` (`app/layout.tsx`), exposed as the theme token
+`font.mono = 'var(--font-plex-mono), "IBM Plex Mono", ui-monospace, monospace'` (`lib/theme.ts:65`).
+So the mono was silently falling back to **generic `monospace`, not the design's IBM Plex Mono** —
+invisible to last session's "verified by loading" because that only checked the text was present, not
+the resolved typeface. **Confirmed via `getComputedStyle().fontFamily`**: pre-fix the row cells
+resolved to bare `"monospace"` while the `font.mono`-based "Unpriced · $0" badge resolved to IBM Plex
+Mono. All five occurrences in `items-tab.tsx` were switched to `font.mono` (`font` was already
+imported). Post-fix every numeric cell resolves to `__IBM_Plex_Mono_…, "IBM Plex Mono", …`.
+
+### 9b elements NOT built, by decision (unchanged from the spec above):
+- The 9b top **catalog search bar** — superseded by the two-step AddItemsSheet (Items/PO handoff wins).
+- The 9b **in-tab footer** — the shell renders the only totals footer.
+- **Spacing:** reviewed against the spec's "flex-era spacing" note; the row grid is a `<table>` that
+  already aligns columns, cards already carry redesign chrome, and there is no concrete numeric
+  divergence to close. Left as-is rather than churn spacing without a target.
+
+### Verification — by LOADING (owner `josh+test50`, draft EST-106, all five row types), not tsc alone:
+1. **Line Items tab loads** — HTTP 200, no `next/headers`/client-boundary error, **zero uncaught page
+   errors**. ✓
+2. **Per-field autosave** — changed the **material row's unit_cost (Price cell) $0.00 → $12.34**, blur
+   (Enter), **full page reload**, read back **$12.34**; then RESTORED to 0 (DB-confirmed `unit_cost=0`).
+   Chose a wrapped **numeric** field specifically to regression-test that the mono `<span>` did not
+   break `InlineNumber` click-to-edit. ✓
+3. **`markup_percent` still null on every row** — re-queried the DB after the run: all five rows
+   `markup_percent = null`; the parenthesised `(20%)` inherit display renders unchanged; no resolved
+   default was persisted. ✓
+4. **Shell footer renders exactly once** — Grand Total count = 1 on Line Items (and on Details). ✓
+5. **Mono is real** — `getComputedStyle` confirms row Price/Qty/Markup + money values are IBM Plex
+   Mono, while the Name column stays Barlow (no bleed onto buttons/selects/labels). ✓
+6. **Details unregressed** — still loads all four cards, footer once. ✓
+   type-check exit 0 (both before and after the token fix).
+
+⇒ **The estimates redesign gap is closed. Details (19b) and Line Items (9b) both conform; nothing
+else on the platform exhibited the layered-on-old-layout pattern (Phase 1).**
