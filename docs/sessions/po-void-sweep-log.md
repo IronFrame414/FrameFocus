@@ -103,3 +103,11 @@ shape recorded here.
   `actual_end_date` already fixed. Deferred on context grounds — per-component prop plumbing across 7
   client components is error-prone at this session depth.
 - Next: #54 trash server-side filter.
+
+### Step 5 — §4.4 #54 trash server filter: ALREADY FIXED (stale entry)
+- `getFiles` (`files.ts:98`) already has an `only_deleted?: boolean` param → `query.eq('is_deleted',
+  true)` at the DB, with a comment documenting the exact old-vs-new (was `include_deleted:true` +
+  in-memory filter). The trash page (`projects/[id]/files/trash/page.tsx:35`) calls
+  `getFiles({ project_id, only_deleted: true })`. Server-side filter is in place. #54 is STALE — no
+  change. (Add to the register-hygiene note.)
+- Next: §4.2 .limit(1) risky-finder (subagent) for the risky count.
