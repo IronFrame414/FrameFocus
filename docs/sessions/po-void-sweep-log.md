@@ -196,3 +196,31 @@ committed on its own.
 - ⚠️ UI follow-up (bounded, NOT built this run): a Void button on `po-actions.tsx` (reason-required
   confirm) calling `voidPurchaseOrder`, and hiding Delete for non-draft POs. Same shape as the CO/estimate
   void buttons already shipped. Logged; the money + authority are fully enforced in the DB regardless.
+
+### Step 11 — §3 issued-PO edit + audit: established, DEFERRED as larger-than-it-looks (per §3's allowance)
+- Drafts are already editable (`updatePurchaseOrder`, header fields; `setPurchaseOrderItems` for
+  non-costed lines). An issued PO's HEADER (vendor_name/po_number/need_by) is also already editable via
+  RLS (O/A/PM while not closed). The real gap is editing an issued LINE's amount (qty/unit_cost) — no
+  path exists, and it must re-run `sync_po_commitment` to keep committed honest.
+- Audit mechanism: NO reusable edit-history table. `time_edit_logs` is time-tracking-specific,
+  `client_access_events` is client-lifecycle-specific; there is no generic change-log. So §3 needs a NEW
+  append-only table (e.g. `purchase_order_events(company_id default get_my_company_id(), actor_id default
+  auth.uid(), po_id, field, old_value, new_value, created_at)` on the `client_access_events`/`time_edit_logs`
+  shape, O/A RLS, no updated_*/is_deleted per the append-only-log convention) + a SECURITY DEFINER edit RPC
+  that writes the change rows AND re-runs `sync_po_commitment`. That is a full table+RPC+service+UI+proof
+  build. ⚠️ **DEFERRED, not half-built** [per §3's explicit instruction], on context grounds — the PO
+  VOID (the run's headline) is fully built and proven.
+
+### Step 12 — §4.2 #3-s168 CO fixture: DEFERRED on context; plan stands (from run-1 log)
+No click-test running (prompt confirms), so it may proceed. Not started this run — context is deep after
+the void build. Plan (unchanged, from the run-1 log Step 7): rename `CO-QA-M9-SENT` aside
+(`ZZ SUPERSEDED — …`; co_number frozen), build `CO-QA-M9-SENT-2` in the seed (draft→line→sent,
+idempotent), tighten `s164-m9-read-arms` ARM 4a to assert `sent`, run it and record the count, and keep
+the seed twice-clean.
+
+### RUN 2 SUMMARY
+DONE: all 9 #116 sites (UTC-tomorrow defect eliminated; 4 server with real tz, 4 client with NY-fallback +
+logged threading follow-up); PO VOID built + proven by observation (6 cases) + soft-delete restricted to
+drafts + service fns; #54 confirmed stale; #67 done (run-1). DEFERRED (logged, not half-built): §3
+issued-PO edit+audit (new table+RPC+UI — larger than it looks); #3-s168 CO fixture (context). No test
+turned green→red (all changes are additive guards / tz corrections; type-check clean throughout).
