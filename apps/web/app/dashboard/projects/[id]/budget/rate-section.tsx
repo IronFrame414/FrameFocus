@@ -1,4 +1,6 @@
 import { getChangeOrders } from '@/lib/services/change-orders';
+import { createClient } from '@/lib/supabase-server';
+import { companyToday } from '@framefocus/shared/utils/dates';
 import {
   listInstrumentRates,
   type InstrumentRate,
@@ -150,7 +152,10 @@ export async function RateSection({ project, canSupersede }: RateSectionProps) {
 
   if (groups.length === 0) return null;
 
-  const today = new Date().toISOString().slice(0, 10);
+  // #116 [S103]: the COMPANY day for rate-in-force display, not the UTC day.
+  const supabase = await createClient();
+  const { data: coTz } = await supabase.from('companies').select('timezone').maybeSingle();
+  const today = companyToday(coTz?.timezone ?? 'America/New_York');
 
   return (
     <div style={{ ...cardStyle, overflow: 'hidden', marginBottom: '18px', maxWidth: '640px' }}>
