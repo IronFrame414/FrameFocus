@@ -90,3 +90,70 @@ updated_by.** Everything else frozen. The existing once-set/void/status sub-guar
 
 Test data: created + deleted one throwaway `EST-ZZZ-PROBE` (status sent) in the owner company. Removed.
 
+### ITEM 2 — issued PO line edit
+
+**PO tables (live = branch; item-2 tables are on `main` too — PO module predates the estimates branch).**
+- `purchase_orders` status ∈ {draft, issued, closed, voided}. Header cols incl. vendor_name, vendor_id,
+  po_number, need_by, deliver_to, total_amount. Header triggers: `enforce_purchase_order_lifecycle`
+  (voided → no edit; issued → no soft-delete), `enforce_purchase_orders_column_scope` (total_amount only
+  via `set_po_total_amount`, which uses the GUC `app.po_total='on'`), set_updated_by, updated_at.
+- `purchase_order_items` line_status ∈ {draft, issued, purchased, flagged}. Commitment cols =
+  **qty_ordered, unit_cost, budget_item_id**. ⚠️ **NO immutability/lifecycle trigger — only
+  set_updated_by + updated_at.**
+- `sync_po_commitment(po_id)` sums `round(qty_ordered*unit_cost,2)` over lines with `line_status IN
+  ('issued','flagged')`, grouped by budget_item_id → writes the `committed`-state expense +
+  allocations. It is NOT called by any trigger — callers invoke it (e.g. `set_po_total_amount`, void).
+
+**RLS:** `purchase_order_items_update_authorized` = company + role owner/admin/**PM** + can_view_project,
+**with NO PO-status check.** So a line edit is NOT blocked by RLS — a direct PostgREST UPDATE by
+owner/admin/PM on an ISSUED line would SUCCEED today, unaudited, and would NOT resync commitment.
+"No path exists" = no SERVICE/UI path + no resync + no audit, NOT an RLS block. `purchase_orders`
+UPDATE = owner/admin/PM (closed/deleted gated to owner/admin) — header editable as the prompt says.
+
+⇒ Build needs (a) an owner/admin-only, audited, resyncing edit path for issued lines, and (b) to stop
+the raw path from bypassing it.
+
+**`estimate_events` is estimate-SPECIFIC, NOT generalisable.** Columns: `id, company_id, estimate_id,
+kind, actor_id, payload, created_at` — keyed by `estimate_id` (FK to estimates), and it is an EVENT
+log (kind+payload), not a field-level EDIT log. Forcing PO edits into it would mean a null estimate_id
+and a repurposed payload. **Build a new PO audit table.** Precedents to follow: `time_edit_logs`
+(append-only, `changes` jsonb, company-scoped) and `client_access_events` (`actor_id` default from
+auth). Both are append-only: SELECT/INSERT only, no `updated_*`/`is_deleted`.
+
+## Phase 2 — questions, answered with reversible defaults (nobody watching; did not wait)
+
+**Item 1**
+1. Allowlist mechanism? Default: rewrite `enforce_estimate_immutability` to compare
+   `to_jsonb(NEW) - permitted[]` vs `to_jsonb(OLD) - permitted[]` (a true allowlist that also closes
+   FUTURE columns), keeping the existing once-set/void/status sub-guards verbatim on top. Reversible.
+2. `is_deleted`/`deleted_at` on a sent estimate — freeze or permit? Default: **PERMIT** (keep
+   trash/restore + trial-deletion working; the ruling freezes the DOCUMENT, not the trash bin).
+   Named as a decision. Reversible (drop from the permitted list to freeze).
+3. Permitted set = ruling's 8 (viewed_at, accepted_at, declined_at, reminder_count,
+   last_reminder_sent_at, client_unsubscribed_at, signed_proposal_file_id, status) + the writer-census
+   additions (decline_reason_code, decline_reason_notes, lost_reason_code, void_reason, voided_by,
+   voided_at, project_id, is_deleted, deleted_at, updated_at, updated_by). Everything else frozen.
+
+**Item 2**
+4. Audit table: `purchase_order_edits`, append-only (SELECT/INSERT only; no updated_*/is_deleted),
+   cols: id, company_id (dflt get_my_company_id()), purchase_order_id, purchase_order_item_id (NULL =
+   header), edit_kind ('header'|'line'), changes jsonb ({col:[old,new]}), actor_id (dflt auth.uid()),
+   created_at. Follows time_edit_logs/client_access_events.
+5. Line-edit path: SECURITY DEFINER RPC `edit_purchase_order_line(p_line_id, p_qty_ordered, p_unit_cost,
+   p_budget_item_id)` — owner/admin only; parent PO must be `issued` (draft → "edit lines directly";
+   voided/closed → frozen); sets GUC `app.po_line_edit='on'` (mirrors `app.po_total`), UPDATEs the line,
+   writes ONE `purchase_order_edits` row, then `sync_po_commitment` — one txn.
+6. Bypass guard: BEFORE UPDATE trigger on `purchase_order_items` raises if a commitment col
+   (qty_ordered/unit_cost/budget_item_id) changes on a non-draft parent PO unless `app.po_line_edit`
+   is set → forces the RPC (so audit+resync can't be skipped). Draft lines unchanged.
+7. Header audit: AFTER UPDATE trigger on `purchase_orders` logging changed header cols to
+   `purchase_order_edits` (edit_kind='header') when OLD.status <> 'draft' — audits the EXISTING
+   owner/admin/PM path without rewiring it. Draft header edits stay unchanged/unaudited.
+8. RPC line columns: qty_ordered, unit_cost, budget_item_id (commitment drivers); description/unit left
+   to the normal path (no resync impact). Proof edits qty + unit_cost. Reversible.
+
+None of these needs Josh — all reversible. Building.
+
+## Phase 3 — build
+(in progress)
+
