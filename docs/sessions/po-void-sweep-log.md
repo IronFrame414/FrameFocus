@@ -173,3 +173,19 @@ committed on its own.
     display`, `[Estimates][Projects] four client`.
 
 ### Step 10 — §2 PO VOID: build
+- Migration `20261300000000_purchase_order_void.sql`: `voided` status + `void_reason/voided_by/voided_at`
+  + two-way shape CHECK + lifecycle trigger (freeze voided POs; soft-delete only for drafts) +
+  `void_purchase_order(p_po_id, p_reason)` SECURITY DEFINER RPC (O/A authority — mirrors the WITH CHECK's
+  closed/is_deleted restriction, because void releases committed dollars). Mechanism: soft-delete the
+  non-purchased lines → `sync_po_commitment` recomputes the PO's single committed expense to 0 → closes
+  it out; purchased lines' ACTUAL untouched. Applied to rebuild-test; objects + ledger verified.
+- **PROVEN BY OBSERVATION** (impersonated owner for the RPC; committed = the PO's committed expense
+  amount where closed_out_at IS NULL; test data ZZVOID%, created and fully removed — 0 left):
+  | case | committed before → after | notes |
+  | --- | --- | --- |
+  | nothing purchased (2 issued, 500) | 500 → **0** | all lines cancelled |
+  | some purchased (1 purchased 300, 1 issued 200) | 200 → **0** | ⚠️ purchased line UNCHANGED (still `purchased`, not soft-deleted); the $200 issued line cancelled → sum 0 → committed row closed out. Purchased $300 stays as actual. |
+  | fully purchased (2 purchased) | 0 → **0** | void succeeds, changes nothing financially |
+  | void with no reason | **REFUSED** — "A void needs a reason. It is kept permanently." |
+  | soft-delete an ISSUED PO | **REFUSED** — "An issued purchase order cannot be deleted — void it instead." |
+  | soft-delete a DRAFT | **SUCCEEDED** |
