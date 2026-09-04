@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase-server';
 import type { Database } from '@framefocus/shared/types/database';
+import { companyToday } from '@framefocus/shared/utils/dates';
 
 // 6B Daily Logs — server reads (6B-1 spec §3/§3a; data spec 6B-spec.md).
 // Visibility is RLS-governed: daily_logs_select_visible = company scope +
@@ -278,7 +279,12 @@ export async function getMobileDailyLogs(filters?: {
   // A user who taps "Mine" has not changed how many logs the week holds, and a
   // figure that moved with the chips would be reporting the filter rather than
   // the week.
-  const start = weekStart(filters?.today ?? new Date().toISOString().slice(0, 10));
+  // #116 [S103]: fall back to the COMPANY day, not the UTC day (tomorrow after
+  // ~20:00 EDT). `companies` is RLS-scoped to the caller's own row.
+  const { data: coTz } = await supabase.from('companies').select('timezone').maybeSingle();
+  const start = weekStart(
+    filters?.today ?? companyToday(coTz?.timezone ?? 'America/New_York')
+  );
   const { count: weekCount } = await supabase
     .from('daily_logs')
     .select('id', { count: 'exact', head: true })
