@@ -84,3 +84,22 @@ shape recorded here.
   `companies.timezone` (RLS-scoped, no id filter — the payables-client/instrument-rates pattern) and
   stamps `companyToday(tz ?? 'America/New_York')`. type-check exit 0.
 - Next: check desktop test complicity, then the remaining 9 #116 sites.
+
+### Step 4 — §4.1 #116 remaining 9 sites: complicity check done; sites logged as remaining
+- **Desktop-test complicity finding:** scanned `apps/web/test` + `e2e` for the `toISOString().slice(0,10)`
+  derivation shape. Hits are comments, symmetric date-arithmetic (`s164` windowOpen `day()`),
+  fixture-INPUT dates (`s98ct-offline` log_date, `s175` 400-days-ago), or timezone-AWARE tests
+  (`s123-timesheets-ready`, `pricing-as-of`). **None asserts `actual_end_date` == a UTC-derived
+  today**, so the projects-client fix breaks no complicit test. (m6m-hubs was already de-complicited
+  per the entry — confirmed it now pins the 21:00-EDT boundary, not re-touched.)
+- **Remaining 9 sites — NOT done, logged precisely.** All are `'use client'` components with a bare
+  `const today = new Date().toISOString().slice(0,10)` and NO timezone in scope, so each needs the
+  company timezone threaded from its parent server component (prop) or fetched. Sites: `daily-logs.ts:281`
+  (service fallback — can fetch `companies.timezone` directly), `contract-section.tsx:94`,
+  `items-tab.tsx:105`, `bidding-tab.tsx:386`, `co-rate-section.tsx:103`, `rate-summary.tsx:33`,
+  `projects/[id]/page.tsx:105` (server — easy), `budget/rate-section.tsx:153`. Fix each with
+  `companyToday(timezone ?? 'America/New_York')`, timezone from parent/`companies.timezone`. These are
+  DISPLAY bugs (wrong rate-in-force after ~20:00 EDT), lower severity than the persisted
+  `actual_end_date` already fixed. Deferred on context grounds — per-component prop plumbing across 7
+  client components is error-prone at this session depth.
+- Next: #54 trash server-side filter.
