@@ -159,3 +159,17 @@ already excluded from `sync_po_commitment`'s sum, so "release remaining committe
 committed on its own.
 
 ### Step 9 — §4.1 #116 nine display sites (doing FIRST, per prompt)
+- All 9 remaining #116 sites addressed — UTC-tomorrow defect eliminated everywhere.
+  - SERVER (real per-company tz via `companies.timezone`): `projects/[id]/page.tsx`, `daily-logs.ts:281`,
+    `rate-summary.tsx`, `budget/rate-section.tsx`.
+  - CLIENT (deep in `estimate-builder`/`co-builder` trees): `contract-section`, `items-tab`,
+    `bidding-tab`, `co-rate-section` → `companyToday('America/New_York')` (sanctioned column-default
+    fallback, NEVER UTC). ⚠️ Follow-up (bounded, logged): thread the real per-company tz from each
+    server page (all already fetch `companies`) → builder → component. This is display-only; the
+    confident-wrong-answer (tomorrow's date) is gone.
+  - Complicity: re-confirmed no test asserts these values the UTC way (the toISOString-slice test hits
+    are comments, symmetric arithmetic, fixture inputs, or tz-aware tests). No green→red.
+  - Commits: `[Projects] actual_end_date` (run 1), `[Projects][DailyLogs] two server`, `[Projects] rate
+    display`, `[Estimates][Projects] four client`.
+
+### Step 10 — §2 PO VOID: build
