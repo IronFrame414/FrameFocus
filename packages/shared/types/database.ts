@@ -6510,6 +6510,61 @@ export type Database = {
           },
         ]
       }
+      purchase_order_edits: {
+        Row: {
+          actor_id: string | null
+          changes: Json
+          company_id: string
+          created_at: string
+          edit_kind: string
+          id: string
+          purchase_order_id: string
+          purchase_order_item_id: string | null
+        }
+        Insert: {
+          actor_id?: string | null
+          changes: Json
+          company_id?: string
+          created_at?: string
+          edit_kind: string
+          id?: string
+          purchase_order_id: string
+          purchase_order_item_id?: string | null
+        }
+        Update: {
+          actor_id?: string | null
+          changes?: Json
+          company_id?: string
+          created_at?: string
+          edit_kind?: string
+          id?: string
+          purchase_order_id?: string
+          purchase_order_item_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "purchase_order_edits_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_order_edits_purchase_order_id_fkey"
+            columns: ["purchase_order_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_order_edits_purchase_order_item_id_fkey"
+            columns: ["purchase_order_item_id"]
+            isOneToOne: false
+            referencedRelation: "purchase_order_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       purchase_order_item_assignments: {
         Row: {
           company_id: string
@@ -9555,6 +9610,15 @@ export type Database = {
             }
             Returns: string
           }
+      edit_purchase_order_line: {
+        Args: {
+          p_budget_item_id?: string
+          p_line_id: string
+          p_qty_ordered?: number
+          p_unit_cost?: number
+        }
+        Returns: undefined
+      }
       email_has_account: { Args: { p_email: string }; Returns: boolean }
       flag_po_item_missing: {
         Args: { p_item_id: string; p_note: string }
