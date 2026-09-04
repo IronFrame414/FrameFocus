@@ -157,7 +157,10 @@ describe('S175-A — the frozen set: the exact writes S174 proved, now refused',
     ['estimate_number', { estimate_number: `${MARKER}-HIJACK` }, 'estimate_number'],
     ['sent_at', { sent_at: new Date(0).toISOString() }, 'sent_at'],
     ['expires_at', { expires_at: new Date(0).toISOString() }, 'expires_at'],
-    ['include_client_contract', { include_client_contract: true }, 'include_client_contract'],
+    // include_client_contract MOVED to the positive half (B10). [Josh, S103] ruled
+    // it internal bookkeeping — a company config toggle, not proposal content — so
+    // it stays editable on a sent estimate. This case asserted the overturned rule;
+    // inverted (not deleted) into B10 so it guards the new rule instead.
   ] as const)('A1 — an OWNER cannot rewrite %s on a sent estimate, and the value does not move', async (_label, patch, col) => {
     const before = await row(sentId);
     const { error } = await ownerC.from('estimates').update(patch as never).eq('id', sentId).select('id');
@@ -248,6 +251,20 @@ describe('S175-B — ⚠️ THE POSITIVE HALF: every legitimate writer still wor
     const { error } = await ownerC.from('estimates')
       .update({ reminder_schedule: [3, 7] as never }).eq('id', sentId).select('id');
     expect(error).toBeNull();
+  });
+
+  it('B9 — projected_value stays editable — the internal cost-plus/T&M projection [Josh, S103]', async () => {
+    const { error } = await ownerC.from('estimates')
+      .update({ projected_value: 54321 }).eq('id', sentId).select('id');
+    expect(error).toBeNull();
+  });
+
+  it('B10 — include_client_contract stays editable — a company config toggle, not the document [Josh, S103]', async () => {
+    const before = (await row(sentId)).include_client_contract;
+    const { error } = await ownerC.from('estimates')
+      .update({ include_client_contract: !before }).eq('id', sentId).select('id');
+    expect(error).toBeNull();
+    expect((await row(sentId)).include_client_contract).toBe(!before);
   });
 });
 
