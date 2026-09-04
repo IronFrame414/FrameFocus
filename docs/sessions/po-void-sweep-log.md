@@ -291,3 +291,26 @@ reads failed type-check.
   `payment_method_on_file` is NOT dropped (present in both old and new — diff re-anchoring only).
 - type-check exit 0 (5/5 tasks). PO unit tests: `po-legacy-tolerance` + `s123-delivery-discrepancy`
   10/10 passed, exit 0.
+
+### Step 15 — §2 #116: thread the REAL tz into the four fallback sites (done, type-check clean)
+The four sites used `companyToday('America/New_York')` (hardcoded fallback — the UTC-tomorrow defect
+was already gone, but a company in another tz still gets the wrong day). Threaded the real
+per-company tz server-page → builder → component. NY fallback kept for a null column (matching
+`getCompanyTimeSettings`); NEVER UTC. Committed as two trees (each a complete type-checking unit; a
+restart costs one tree, not all four):
+
+- **Estimate tree** — `contract-section` (via details-tab), `items-tab`, `bidding-tab`/AddBidForm.
+  The estimate page did **NOT** already fetch companies (the prompt's "every page fetches companies"
+  did not hold here), so `page.tsx` now calls `getCompanyTimezone()` and threads `companyTimeZone`
+  through `EstimateBuilder` → `TabProps` → each tab. The four sibling text tabs partially destructure
+  `TabProps` and are unaffected.
+- **CO tree** — `co-rate-section` via `CoBuilder`. The CO page already fetched `companies` (for the
+  name); added `timezone` to that same select and threaded `companyTimeZone` → `CoBuilder` →
+  `CoRateSection`. No second round-trip.
+- Both mounts are the only consumers of the widened prop interfaces (grep-confirmed); type-check exit
+  0 (5/5) after each tree.
+- **Complicity re-check:** no test asserts these four defaults the UTC way. The four are
+  client-component FORM defaults (`.live.ts` tests hit the DB, never render these); the
+  `new Date().toISOString` hits across the suite are fixture-INPUT dates, symmetric arithmetic, or
+  tz-AWARE helper tests (`pricing-as-of` validates tz handling — the opposite of complicit).
+  Consistent with the run-1/run-2 finding. No green→red.
