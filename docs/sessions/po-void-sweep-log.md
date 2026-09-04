@@ -224,3 +224,70 @@ logged threading follow-up); PO VOID built + proven by observation (6 cases) + s
 drafts + service fns; #54 confirmed stale; #67 done (run-1). DEFERRED (logged, not half-built): §3
 issued-PO edit+audit (new table+RPC+UI — larger than it looks); #3-s168 CO fixture (context). No test
 turned green→red (all changes are additive guards / tz corrections; type-check clean throughout).
+
+---
+
+## RUN 3 (S103, 2026-09-04) — the Void BUTTON, real timezone, the s168 fixture
+
+Grounding: clean tree, `fix/po-void-and-sweep` @ `e685701`. §1a re-read; the void money+authority are
+enforced in the DB from run 2 and PROVEN. This run makes the feature reachable, threads the real tz,
+and rebuilds the s168 fixture.
+
+### Step 13 — §1 THE VOID BUTTON (built + type-check clean)
+The feature was unreachable — no control called `voidPurchaseOrder`. Built, following the shipped
+CO/estimate void pattern (a reason-required PANEL, never a `window.confirm()` — the reason is DATA):
+
+- **`po-actions.tsx` → new `VoidPoButton`** modeled on the shipped `ClosePoButton` reason-modal (the
+  PO-local precedent — same surface, not a second pattern). Reason required; calls
+  `voidPurchaseOrder(id, reason.trim())`; on success `router.refresh()` so the voided state renders.
+- **`page.tsx` (PO detail):**
+  - Void button rendered **Owner/Admin only** (`isAdminRole`) and only for `issued`/`closed` POs —
+    matching the RPC (a draft has no committed dollars and exits via Delete; the RPC refuses to void
+    a draft).
+  - **Delete now hidden for non-draft POs** — was `isAdminRole` for any status; now
+    `isAdminRole && po.status === 'draft'`. The DB freezes non-draft delete anyway, so a Delete
+    button on an issued/closed PO could never succeed (the offered-then-fails anti-pattern).
+  - **Voided badge** added to the header (was falling through to "Closed").
+  - **Voided record block** read back (reason + date) below the ordered-vs-usable panel, mirroring the
+    closed block and the CO void's read-back.
+  - Edit link and `PoTotalControl` edit gated off `voided` (frozen at the DB).
+- **`po-lines-panel.tsx`** — a voided PO is TERMINAL like closed: introduced `readOnly = closed ||
+  voided` and replaced the three `poStatus !== 'closed'` control gates with `!readOnly`, so a voided
+  PO shows no issue/review/assign controls (they'd hit the DB freeze). Prop type widened to include
+  `voided`.
+- **`deliveries-sections.tsx` (list)** — `StatusBadge` gains a distinct **Voided** badge (was
+  mislabelling voided as "Closed"); grouping now puts `closed`+`voided` in the terminal section
+  (was `!== 'closed'`, which listed voided under "Open" with the wrong badge). Section retitled
+  "Closed & voided purchase orders".
+- **`deliveries.ts`** — `PurchaseOrderStatus` union widened `'draft'|'issued'|'closed'` →
+  `+ 'voided'`. This is the load-bearing type fix: the void columns already ride `PurchaseOrder` via
+  `Omit<PurchaseOrderRow,'status'>`, but the hand-maintained status union could not represent a
+  voided PO. Widening it surfaced every stale status consumer (the list grouping, the panel cast) —
+  each fixed above; `check-in` pages and `po-lines-client` filter `=== 'issued'` and are correct
+  unchanged (a voided PO drops out).
+
+Who sees the control: **Owner/Admin only**, on an issued or closed PO. Proven reachable by
+type-check + the PO unit tests (below); observed money behaviour was proven in run 2.
+
+### Step 14 — ⚠️ ledger repair + types regen (the database.ts was STALE for purchase_orders)
+`database.ts` did **not** carry the void columns — the run-2 migration was applied to rebuild-test via
+MCP `apply_migration` but `db:types` was never run, so `page.tsx`'s `po.void_reason`/`voided_at`
+reads failed type-check.
+
+- **Ledger defect found and repaired** (the "MCP apply_migration writes no ledger row — check and
+  repair" caution, in its actual form here): the void migration was recorded **twice** — under the
+  canonical file version `20261300000000` AND under an MCP auto-stamp `20260904012646` (no migration
+  file carries that version). Deleted the orphan `20260904012646` row; one canonical row remains.
+  Schema objects all verified present on rebuild-test: 3 void columns, both constraints, the RPC, and
+  the status CHECK includes `voided`.
+- **`npm run db:types`** regenerated `database.ts` from the linked project — confirmed
+  `framefocus-rebuild-test` (NOT production), via the script's own link marker. 9558→9962 lines.
+  ⚠️ The diff is **+417/−13** — larger than the 3 void columns because the committed `database.ts`
+  was stale for MULTIPLE already-committed migrations (estimate_events, scope_library,
+  estimate_award_bases, estimate_sub_bid_requests, contacts_dedupe_log; RPCs mark_estimate_lost,
+  submit_sub_bid_reply, compute_member_coi_expiry, void_purchase_order). This is pre-existing
+  stale-types drift on the branch, corrected by the regen — **all additive, from committed
+  migrations**. The 13 deletions are cosmetic generator reformatting of the utility types; verified
+  `payment_method_on_file` is NOT dropped (present in both old and new — diff re-anchoring only).
+- type-check exit 0 (5/5 tasks). PO unit tests: `po-legacy-tolerance` + `s123-delivery-discrepancy`
+  10/10 passed, exit 0.
