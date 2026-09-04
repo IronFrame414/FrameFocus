@@ -227,3 +227,61 @@ Test data: 3 throwaway POs (PO-ZZZ/ZZZ2/ZZZ3) + lines + their audit/expense rows
 one leftover PO-ZZZ from an aborted setup run was also swept. PM was already assigned to the reused
 project, so no assignment row was created. Net zero rows added; reused project untouched.
 
+## §4 — fallback recorded (NOT built): estimates live-test priorities
+Both items finished. §4's estimates work lives on `feature/estimates-redesign`, which is UNMERGED;
+per §4 I record the plan and STOP rather than start testing an unmerged branch from this one. Priority
+order (from §4, with the concrete assertion each needs):
+1. **Cost-disclosure boundary, all 8 proposal formats** — the 6 non-open-book formats must emit
+   `cost`/`rate`/`hours`/`markupPercent` as NULL; the 2 open-book populate them. (Getting it wrong
+   shows a client the margin.) Highest value.
+2. **Version derivation** off the void/reissue supersede chain: v1 → v2, never v1.1.
+3. **Q5 award-basis freeze** — split + coverage frozen at award (award_basis_side_table).
+4. **Deposit / invoice-due seeding** — seeds only, never overwrites a set value.
+5. **Contact reuse** vs the unique index — no 23505 from any create path.
+6. **PO void committed release** — purchased lines keep actual; the rest → zero.
+
+## §5 — Session summary
+
+**Trees.** rebuild-test carries the `feature/estimates-redesign` migrations already (remote-only ledger
+rows), so every live probe = the BRANCH tree. `main`-tree facts came from reading main's migration
+files. Item 2's PO tables predate the branch and are identical on both trees.
+
+**Item 1 — was it already closed? PARTIALLY.** The original `#2-s174` holes (name/grand_total/
+scope_summary) were already frozen by `enforce_estimate_immutability` on BOTH trees. But it was a
+denylist, so a live owner probe still wrote `internal_notes`, `projected_value`, `reminder_schedule`
+(branch) and, on main only, also `deposit_percent`/`invoice_due_days`/`also_send_to`. Converted to an
+allowlist → all closed, incl. future columns. Build shrank accordingly (one function rewrite).
+
+**Writers that touch a sent estimate and are NOT on the ruling's permitted list** (would have broken
+the proposal flow — the thing §5 asked to surface): `void_estimate` (void_reason/voided_by/voided_at),
+`mark_estimate_lost` (lost_reason_code), decline (decline_reason_code/notes), convert
+(project_id), the BEFORE-UPDATE triggers (updated_at/updated_by — fatal: every write), and soft-delete
+(is_deleted/deleted_at). All added to the allowlist; proven not to break.
+
+**estimate_events generalisable? NO** — estimate-specific (keyed by estimate_id; an event log, not a
+field-level edit log). A new `purchase_order_edits` table was built instead.
+
+**Migrations (rebuild-test only; never production):**
+| version | applied | ledger row |
+| --- | --- | --- |
+| 20261310000000_sent_estimate_allowlist_freeze | ✅ via `db query --linked` | ✅ inserted + verified |
+| 20261320000000_po_line_edit_audit | ✅ via `db query --linked` | ✅ inserted + verified |
+
+⚠️ **More than ruled / process note:** `supabase db push` could NOT be used — the remote ledger holds
+branch/MCP migrations with no local file, and push's suggested `migration repair --status reverted`
+would falsely mark the applied estimates-branch migrations reverted. So DDL was applied via
+`db query --linked` (no ledger row, like MCP apply_migration) and each ledger row inserted by hand and
+verified — exactly the "check and repair after every one" the prompt anticipated. No production access.
+No UI touched (both items are DB-only; the line-edit RPC is ready for a UI to call but wiring it is not
+in this prompt), so no build/compile risk was introduced.
+
+**Commits (all path-scoped, none pushed):**
+- Start log · Phase 1 item 1 · Phase 1 item 2 + Phase 2 · item 1 migration+log · item 2 migration+log.
+
+**Nothing built on inference:** every freeze/permit decision came from the live trigger body + a live
+owner probe; every PO claim from the live policies/functions + a measured committed recompute.
+
+**Test data:** all throwaways created were deleted (verified: 0 ZZZ estimates, 0 ZZZ POs, 0 orphan
+audit/expense rows remain). No existing row was altered or destroyed; the one reused project was left
+untouched.
+
