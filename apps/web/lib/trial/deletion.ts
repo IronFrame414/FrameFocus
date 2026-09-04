@@ -341,12 +341,21 @@ export const COMPANY_TABLES: string[] = [
   'invoice_cost_claims', 'invoice_hour_claims', 'invoice_lines', 'invoices',
   'expense_payments', 'expense_allocations', 'expenses',
   // purchase_order_item_assignments references purchase_order_items (20261043).
+  // purchase_order_edits (20261320000000) FK purchase_orders with NO ACTION and
+  // purchase_order_items with SET NULL — it MUST be walked, and before
+  // purchase_orders, or the PO delete is blocked and the audit rows orphan [S103].
+  'purchase_order_edits',
   'delivery_items', 'deliveries', 'purchase_order_item_assignments', 'purchase_order_items', 'purchase_orders',
   'daily_log_crew', 'daily_log_sub_entries', 'daily_logs',
   'safety_incident_injuries', 'safety_incident_witnesses', 'safety_incidents',
   'punch_list_items', 'punch_lists',
   'task_dependencies', 'tasks', 'phases', 'inspections', 'schedule_entries',
   'time_session_rate_snapshots', 'time_edit_logs', 'time_segments', 'time_clock_sessions',
+  // Estimates redesign children (S103): estimate_events (cascades with estimates),
+  // estimate_award_bases + estimate_sub_bid_requests (hang off estimates), and
+  // scope_library (company-scoped template library). Walked explicitly, before
+  // estimates, per the proposal_views precedent.
+  'estimate_events', 'estimate_award_bases', 'estimate_sub_bid_requests', 'scope_library',
   'estimate_sub_bids', 'estimate_line_rows', 'estimate_line_items',
   // proposal_views cascades with estimates (20261052); listed anyway so the
   // walk stays explicit about every company-scoped table it owns.
@@ -375,6 +384,9 @@ export const COMPANY_TABLES: string[] = [
   // file_categories sits between files and projects: files reference it
   // (files_category_fkey) and its per-job rows reference projects (20261039).
   'files', 'file_categories', 'projects',
+  // contacts_dedupe_log (20261265000000) — append-only audit of the one-time
+  // email dedupe; company-scoped, walked before contacts [S103].
+  'contacts_dedupe_log',
   'contact_addresses', 'contacts', 'subcontractors',
   'member_pay_rates', 'member_burden_settings', 'instrument_rates', 'cost_catalog',
   // email_unsubscribes (20261060, Email §3) — a company-scoped consent leaf,
