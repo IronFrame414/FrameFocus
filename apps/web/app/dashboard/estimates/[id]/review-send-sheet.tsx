@@ -21,6 +21,8 @@
 import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { updateEstimate, type EstimateWithChildren } from '@/lib/services/estimates-client';
+import { getProposalEmailDefaults } from '@/lib/services/company-client';
+import { DEFAULT_PROPOSAL_SUBJECT, DEFAULT_PROPOSAL_BODY } from '@/lib/proposal/proposal-defaults';
 import type { ProposalData } from '@/lib/proposal/proposal-data';
 import { computeEstimateHealth } from '@/lib/estimate-health';
 import { resolveProposalFormat } from '@framefocus/shared/utils/proposal-format';
@@ -51,7 +53,11 @@ export function ReviewSendSheet({
   data: EstimateWithChildren;
   canEdit: boolean;
   onClose: () => void;
-  onSend: () => void;
+  // 19a [S103]: the Email tab is a real editor. The edited subject/body ride up
+  // to the send step so they are genuinely used — not a decorative field. The
+  // send mechanism itself (SendProposalModal → /api/proposals/send) is unchanged;
+  // this only seeds it with what the sheet shows.
+  onSend: (draft?: { subject: string; body: string }) => void;
   reload: () => Promise<void>;
 }) {
   const { estimate, lineItems, subBids } = data;
@@ -59,6 +65,11 @@ export function ReviewSendSheet({
   const [view, setView] = useState<'pdf' | 'email'>('pdf');
   const [proposal, setProposal] = useState<ProposalData | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  // The client email, editable. Seeded from the company defaults — the SAME
+  // source the send modal uses — so the tab shows the actual message, not a
+  // description of one. Template tokens like {{company_name}} fill in at send.
+  const [emailSubject, setEmailSubject] = useState('');
+  const [emailBody, setEmailBody] = useState('');
 
   useEffect(() => {
     createClient()
@@ -66,6 +77,13 @@ export function ReviewSendSheet({
       .select('margin_target_percent')
       .maybeSingle()
       .then(({ data: co }) => setTarget(co?.margin_target_percent ?? null));
+  }, []);
+
+  useEffect(() => {
+    getProposalEmailDefaults().then((d) => {
+      setEmailSubject(d.subject || DEFAULT_PROPOSAL_SUBJECT);
+      setEmailBody(d.body || DEFAULT_PROPOSAL_BODY);
+    });
   }, []);
 
   // The one source of truth for the preview: getProposalData via the API route.
@@ -229,9 +247,33 @@ export function ReviewSendSheet({
             </div>
 
             {view === 'email' ? (
-              <div style={{ background: '#fff', borderRadius: '10px', padding: '22px', fontSize: '0.85rem', color: color.body }}>
-                The client receives an email with a secure link to view and sign this proposal. The
-                message and follow-up cadence are set on the send step.
+              <div style={{ background: '#fff', border: `1px solid ${color.cardBorder}`, borderRadius: '10px', padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontWeight: 600, fontSize: '0.78rem', color: color.body, marginBottom: '0.3rem' }}>
+                    Subject
+                  </label>
+                  <input
+                    value={emailSubject}
+                    onChange={(e) => setEmailSubject(e.target.value)}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '0.55rem 0.7rem', border: `1px solid ${color.cardBorder}`, borderRadius: '8px', fontSize: '0.85rem', color: color.navy, fontFamily: 'inherit' }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontWeight: 600, fontSize: '0.78rem', color: color.body, marginBottom: '0.3rem' }}>
+                    Message
+                  </label>
+                  <textarea
+                    value={emailBody}
+                    onChange={(e) => setEmailBody(e.target.value)}
+                    rows={12}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '0.6rem 0.75rem', border: `1px solid ${color.cardBorder}`, borderRadius: '8px', fontSize: '0.85rem', lineHeight: 1.55, color: color.navy, fontFamily: 'inherit', resize: 'vertical' }}
+                  />
+                </div>
+                <p style={{ fontSize: '0.72rem', color: color.muted, margin: 0 }}>
+                  Tokens like <code style={{ fontFamily: font.mono }}>{'{{company_name}}'}</code> and{' '}
+                  <code style={{ fontFamily: font.mono }}>{'{{estimate_number}}'}</code> are filled in when the
+                  email is sent. The client also receives a secure link to review and sign; follow-ups go out day 3 · 7 · 14.
+                </p>
               </div>
             ) : previewError ? (
               <div style={{ background: '#fff', borderRadius: '10px', padding: '22px', fontSize: '0.85rem', color: color.danger }}>
@@ -264,7 +306,7 @@ export function ReviewSendSheet({
             </button>
             <button
               type="button"
-              onClick={onSend}
+              onClick={() => onSend({ subject: emailSubject, body: emailBody })}
               style={{ padding: '0.6rem 1.3rem', borderRadius: '9px', border: 'none', background: color.primary, color: '#fff', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer' }}
             >
               Send to client

@@ -169,17 +169,19 @@ export function EstimateBuilder({
   // S173 Job 1: open the same SendProposalModal / api/proposals/send the
   // preview page uses (parity: one mechanism, two entry points). The route
   // accepts draft AND review — on review it stamps reviewed_by/reviewed_at.
-  async function openSendModal() {
+  // draft (from the Review & Send Email tab) seeds the send instead of a
+  // re-fetch, so what the user edited in that tab is what actually sends.
+  async function openSendModal(draft?: { subject: string; body: string }) {
     setActionBusy(true);
     setActionError(null);
     const [email, defaults] = await Promise.all([
       estimate.contact_id ? getContactEmail(estimate.contact_id) : Promise.resolve(null),
-      getProposalEmailDefaults(),
+      draft ? Promise.resolve(null) : getProposalEmailDefaults(),
     ]);
     setSendPrefill({
       email,
-      subject: defaults.subject || DEFAULT_PROPOSAL_SUBJECT,
-      body: defaults.body || DEFAULT_PROPOSAL_BODY,
+      subject: draft ? draft.subject : defaults?.subject || DEFAULT_PROPOSAL_SUBJECT,
+      body: draft ? draft.body : defaults?.body || DEFAULT_PROPOSAL_BODY,
     });
     setActionBusy(false);
     setSendOpen(true);
@@ -211,7 +213,7 @@ export function EstimateBuilder({
             data-testid="est-send"
             disabled={actionBusy}
             style={buttonStyle}
-            onClick={openSendModal}
+            onClick={() => openSendModal()}
           >
             Send to Client
           </button>
@@ -256,7 +258,7 @@ export function EstimateBuilder({
             data-testid="est-approve-send"
             disabled={actionBusy}
             style={buttonStyle}
-            onClick={openSendModal}
+            onClick={() => openSendModal()}
           >
             Approve &amp; Send
           </button>
@@ -736,9 +738,9 @@ export function EstimateBuilder({
           canEdit={canEdit}
           reload={reload}
           onClose={() => setReviewOpen(false)}
-          onSend={() => {
+          onSend={(draft) => {
             setReviewOpen(false);
-            openSendModal();
+            openSendModal(draft);
           }}
         />
       )}
