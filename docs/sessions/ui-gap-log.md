@@ -35,5 +35,60 @@ ships payload) · grids `minmax(0,1fr)` never bare `1fr`.
 ---
 
 ## Phase 1 — audit (READ-ONLY). Classification per screen.
-(appended below as each cluster completes)
+
+### ⚠️ HEADLINE: the gap is NOT platform-wide. Two large clusters conform.
+Measured (not assumed). Of the non-estimates breadth audited by parallel readers against the Desktop
+handoff:
+
+**Cluster: top-level destinations + six list screens — 10/10 MATCH, 0 partly, 0 not.**
+dashboard(15a), schedule(15b — see FLAG), fieldops-daily-logs(15c), timeclock-timesheets(15d),
+billing(15e), contacts(14c), subs-and-vendors(14d), team(14e), cost-catalog(14f), notifications(10a).
+All re-laid-out to the redesign: Barlow headings, IBM Plex Mono on every numeric/money/date/ID/%
+column, pill filters, 13–14px cards, amber NEW/attention rings, avatar tiles, status pills. Two
+COSMETIC nits: money columns on subs-and-vendors(14d) and team(14e) are not right-aligned as the
+handoff specifies (cost-catalog + timeclock do align). Mono is intact; decimals just don't line up.
+
+**Cluster: Expenses + 7 Settings tabs — 8/8 MATCH, 0 gaps.**
+expenses-receipts(10b), expenses-bills(10c), expenses-review-queue(10d), settings-estimates(8b),
+settings-proposal-email(8c), settings-time-tracking(8d), settings-accounting(8e),
+settings-documents(8f). Faithful native rebuilds end-to-end. Only divergence: proposal-email variable
+tokens read `{{company_name}}` (shipped, correct) vs `{{vCompany}}` (mock) — a string, not a layout
+gap; and the proposal variable palette is correctly a legend, not an editor (intentional deviation).
+
+⇒ **The "features layered on the old layout" anti-pattern does NOT appear in these 18 screens.** This
+shrinks the job to the estimates tree (Josh-confirmed: Details, Line Items; + Review&Send Email tab)
+and the projects tree (audit pending). Reported per §7 as a finding.
+
+### ⚠️ FLAG for Josh — schedule.png (15b): shipped screen reproduces a ⛔WILL-NOT-BUILD mockup
+The shipped Schedule capture faithfully renders handoff 15b — the **Timeline/Calendar/By-crew
+three-view toggle (Timeline active), the company Gantt, and the "Resumes when permit clears" hold
+bar**. All three are explicit ⛔ WILL NOT BUILD in `desktop-redesign-spec.md:1213–1214` (company
+schedule is calendar-only; no `hold_reason` column). So either the app shipped forbidden, largely
+un-backable UI, or `docs/design/current-state/schedule.png` is a capture of the MOCKUP misfiled as
+current-state. **Not a restyle gap and not mine to resolve — it needs a ruling. Recorded, not acted
+on** (a decision not in this prompt/handoffs is a STOP per §6).
+
+**Cluster: Project detail tree — 11/11 handoff-backed screens MATCH, 0 gaps.**
+project-overview(11a), projects-work-schedule(11b — project Gantt, which IS allowed; only the COMPANY
+Gantt is forbidden), docs-files(12a), docs-photos(12b), docs-photos-markup(12c), money-budget(13a),
+money-change-orders list(13b), money-change-orders detail(16a), money-invoices(13c), money-payments(13d),
+money-profitability(13e — carries the Owner/Admin role badge; floor intact). Tab consolidation, mono
+numerics, amber cards, per-screen grids all present. The clean end of the codebase.
+
+**projects-purchase-order.png — NOT a gap (stale-spec flag resolved).** The auditor flagged it because
+`desktop-redesign-spec.md` §420–463 ruled the PO redesign out "no schema behind it." That rationale is
+STALE: the PO module shipped after that section — `purchase_order_items` got `unit_cost`,
+`budget_item_id`, `line_status` (migrations 20261042/20261048), and `po-lines-panel.tsx` is the real,
+correct surface §4 of this very prompt cites at `:364` (cost vs budgeted, never sell). So the shipped
+PO detail is legitimate and conforms to the Items/PO handoff. No action.
+
+### Phase 1 conclusion — SCOPE MEASURED
+**29 non-estimates screens audited → all conform.** Josh's "platform-wide" hypothesis is disproven for
+everything outside estimates. The gap is concentrated in the **estimates tree**, exactly where §5 says:
+- estimates **Details** — CONFIRMED wrong (features present, layout untouched) — BUILD.
+- estimates **Line Items** — CONFIRMED wrong — BUILD (⚠️ autosave + add-sheet contracts, §4).
+- Review & Send **Email tab** — CONFIRMED placeholder — BUILD (bounded).
+- add-item sheet / convert-PO / PO detail — screenshots consistent with conformance (projects PO MATCHES).
+Two cosmetic nits outside estimates (money right-align on subs-and-vendors 14d + team 14e) and two
+flags-for-Josh (schedule 15b, resolved PO). estimates-cluster per-screen table below.
 
