@@ -176,3 +176,152 @@ Both are large restyles over the per-field autosave contract; Details is fully s
 untouched rather than half-restyled — per §4 (don't break autosave) and §7 (must verify compile +
 behaviour). No files touched for these.
 
+
+---
+
+# SPECIFICATION — estimates Line Items (9b) [read-only run, S103]
+
+⚠️ Written to the standard of the Details (19b) spec above: shipped state, target, concrete diffs,
+the autosave-risk list, money surfaces, sequencing. **Nothing built this run.** Kept in this doc
+(not a sibling) so Details + Line Items — the whole remaining gap — read together.
+
+## Which handoff governs 9b, and the precedence resolution
+**9b is governed by the ESTIMATES handoff** (`EZCB_Estimates_handoff` id `9b`, "Tab 2 · Line Items",
+turn 9 "first pass"). The Desktop handoff (rank 1) only references it; there is no Desktop 9b screen.
+The **Estimate Items / PO handoff (rank 3, highest) does NOT contain a 9b** — it overrides only the
+ADD flow (the two-step add sheet 17a/b/c) and convert/PO (18a/b). So:
+- The Line Items **body layout** follows Estimates 9b.
+- **⚠️ Precedence override that matters:** 9b draws a top "**Search the cost catalog and drop a priced
+  row straight in…**" bar (the OLD one-row-at-a-time add). The Items/PO handoff SUPERSEDED that with
+  the two-step Add-items sheet. The shipped **"+ Add items" → `AddItemsSheet` (17a/b/c)** is therefore
+  CORRECT and the 9b top search bar is **NOT to be built** — building it would restore a superseded
+  flow. Later wins.
+- The **shell** (header, tab strip, sticky totals footer) is NOT 9b's — it follows the later 19b /
+  the builder and already ships. 9b's first-pass header (Preview Proposal / Mark as Sent / Convert)
+  and its in-tab footer are superseded by the shell. Do not reproduce them.
+
+## No screenshot — specified from code
+There is **no `estimates-line-items.png`** in `docs/design/current-state/` (only the three
+`estimates-add-item-*`). Josh confirmed Line Items is wrong; this spec is from reading
+`apps/web/app/dashboard/estimates/[id]/items-tab.tsx` (1004 lines) against handoff 9b (read, not
+rendered). Flagged per §5: the shipped appearance is **read, not verified against a capture.**
+
+## What ships today (items-tab.tsx, 1004 lines)
+- **Three-tier grouped anatomy** — `categoryBlock` (832) → `subcategoryBlock` (781) → `lineItemBlock`
+  → typed rows (labor/material/allowance/subcontractor/other). CONFORMS structurally.
+- **Live cost/price/margin strip** — `<EstimateHealthStrip data={data}/>` at the top of the return
+  (905), "same derivation as the Details Health card; one implementation, two surfaces". SHIPS.
+- **$0 / unpriced per-row cue** — the "Unpriced · $0" badge (599–616). SHIPS.
+- **Inherited markup rendered parenthesized** — `markup_percent == null` renders
+  `(${default%})` and the field placeholder is the type default (459–461). This is EXACTLY the 9b
+  `(20%)` treatment. SHIPS and is CORRECT — see the null-preservation warning below.
+- **Per-field autosave** — every field is `InlineText`/`InlineNumber` with `disabled={!canEdit}` and
+  `onSave={(v) => mutate(() => updateEstimateLineRow|Item(...), recalc)}`. `mutate(fn, recalc)`
+  (127–137): run write → if recalc `recalculateEstimateTotals(estimate.id)` → `reload()`. No Save
+  button, no dirty state, no batch. `recalc=true` on pricing fields (rate, unit_cost, amount,
+  quantity, markup_percent, apply_tax, discount_amount, total_price_override), `false` on
+  name/notes/description.
+- **Catalog fill** — per-material-row "Catalog" button (315) + `CatalogPicker` + `AddItemsSheet`.
+- **Row layout is FLEX** — `display:'flex'` rows (571, 582…). **No CSS grid anywhere in the file**
+  (`grep` for gridTemplateColumns / 1fr / minmax → zero hits).
+
+## What the handoff (9b) requires, and the concrete differences
+| element | 9b target | shipped | verdict |
+| --- | --- | --- | --- |
+| Row table | 8-col CSS grid `Type · Name · Price · Qty · Markup · Tax · Total · ✕`, numbers mono + right-aligned, columns line up across rows | flex rows, numbers not column-aligned | **RESTYLE** (flex → grid) |
+| Type marker | colored **badge pill** — LABOR blue `#e8ecfb`, MATL green `#e6f0e9`, ALLOW amber `#f6ecdd`, SUB purple `#ede9f8/#5b45c4`, OTHER grey | `ROW_TYPE_LABELS` text (438) | **RESTYLE** (text → colored pill; the purple SUB token is `#136`/R7's `purpleBg`) |
+| Category header | card header carries the **category subtotal pill** (`$85.00`) so it survives collapse | header has name + buttons, **no subtotal** | **MISSING — build** (derive Σ line totals per category from `data`) |
+| Collapse | category cards collapse; subtotal on header is why | no collapse | **MISSING — build** (new local state) |
+| Unpriced warning | aggregate amber banner: "N rows are unpriced and M allowance has no cap. Unpriced rows print as $0.00" + Review | per-row badge only, **no aggregate banner** | **MISSING — build** (derive counts from `data`) |
+| $0 rows | `$0.00` in amber `#b45309` | "Unpriced · $0" badge + amber | **CONFORMS** (restyle to amber `$0.00` in the grid cell) |
+| cost/price/margin strip | top strip, mono, margin colored | `EstimateHealthStrip` | **CONFORMS** (keep; the 9b search-bar beside it is superseded) |
+| card chrome / type scale / spacing | 14px cards, Barlow headings, mono numerics | present but flex-era spacing | **RESTYLE** |
+
+**Genuinely missing (net-new): category-header subtotal, category collapse, the aggregate unpriced/
+uncapped-allowance banner.** Everything else is a restyle of existing elements, and the anatomy +
+strip + $0 cue + inherited-markup display already conform (⇒ shrinks the job).
+
+## ⚠️ §2 — the autosave contract, and how it survives
+**There is no batch to hook.** The restyle is safe ONLY if the existing field components are
+**relocated, not rewritten** — each `InlineText`/`InlineNumber` keeps its `value`, `disabled`,
+`onSave`, `validate`, `formatValue`/`placeholder` verbatim, just re-parented into grid cells.
+
+**Restylable with NO handler touch (pure presentation):**
+- Wrapping the row fields in the 8-col grid; colored type badges; category/line card chrome; mono +
+  right-align on numeric cells; the amber `$0.00` cell.
+
+**Forces a NEW derivation (read-only from `data`; no write, no new mutation — low risk):**
+- Category-header **subtotal** (Σ of that category's line totals).
+- Aggregate **unpriced/uncapped-allowance counts** for the warning banner.
+These read the same `data` the tab already has; they add no persistence and touch `mutate` not at all.
+
+**Forces NEW client STATE (presentation only; no autosave impact):**
+- **Collapse** per category — one `useState<Set<categoryId>>`. This is the ONE genuinely new stateful
+  behaviour. It persists nothing.
+
+**MUST NOT change (the red lines):**
+- The `mutate(fn, recalc)` contract and the per-field `recalc` true/false split.
+- ⚠️ **`markup_percent` NULL = "inherit the estimate default for that row type."** The field at
+  459–464 shows `(default%)` when null and writes `v` (null when cleared). **The restyle must keep
+  this exactly — never persist the resolved default into `markup_percent`, or a row silently stops
+  inheriting.** Render inherited as parenthesized per 9b; do not "fill it in".
+- `disabled={!canEdit}` on every field (`canEdit = status==='draft'`, from `TabProps`). The restyle
+  keeps immutability by keeping that prop on each relocated field — there is no separate read-only
+  view to build.
+- ⚠️ Grids use **`minmax(0,1fr)` never bare `1fr`** — the Name column especially, or a long item name
+  sets a min-content floor and overflows. (9b's mockup uses bare `1.5fr`; our rule overrides the
+  mockup here, as the Items/PO handoff itself does with `minmax(0,1.9fr)`.)
+
+**⚠️ Nothing in the 9b target requires changing the autosave write path.** Subtotals and the banner
+are reads; the grid is presentational; collapse is local state. The restyle is achievable WITHOUT
+touching `mutate` or any `updateEstimateLineRow|Item` call — **provided** the ~1000-line field-by-field
+relocation preserves every field's props. That mechanical scale is the real risk, not a contract
+conflict. **No part of the target is blocked by the autosave contract; no ruling needed on that.**
+
+## ⚠️ §3 — money surfaces
+- **Cost, price, margin all render on this tab** (EstimateHealthStrip; per-row unit_cost/rate/amount;
+  override_cost cost-basis at 624–633; totals). There is **NO in-tab role gate** — `ItemsTab` takes
+  `{data, canEdit, reload, companyTimeZone}`, no `role`/`canSeeRates`.
+- **The gate is ROUTE-level and payload-deep, not render-deep:** `estimates/[id]/page.tsx` redirects
+  anyone not `owner|admin|project_manager` BEFORE rendering, and the builder fetches via `getEstimate`
+  under RLS. Foreman/crew/client never reach the route and RLS returns them nothing — so there is no
+  `#136`-class render-only gate on this screen to preserve or break. **The restyle must not introduce
+  one** (no "hide cost at render while it rides the payload").
+- **Line Items is INTERNAL-ONLY.** The client-facing surface is the **Proposal** (PDF), gated by
+  `proposal_pricing_level`. Cost/margin here must never be wired into a client surface: the restyle
+  must not feed Line-Items cost into the proposal renderer, and must not move a figure onto any
+  client-reachable component. Internal-only: EstimateHealthStrip (cost/price/margin), per-row cost,
+  override_cost, category subtotals, the unpriced banner.
+
+## §4 — sequencing (Details + Line Items in one build run)
+1. **Build Details (19b) FIRST, Line Items (9b) SECOND.** Details is the lower-risk restyle (a dozen
+   fields into a two-column card grid + right rail); Line Items is the ~1000-line autosave-dense typed
+   grid — highest risk, done last, after the card-grid/right-rail patterns are proven on Details.
+2. **Shared surfaces:** the builder **shell** (header, tab strip, and the **single sticky totals
+   footer at `estimate-builder.tsx:671`**) and `TabProps`. ⚠️ **The footer is rendered ONCE by the
+   shell, on every tab (it even swaps Tax→Deposit on Terms).** Both mockups (9b:1775, 19b:386) draw an
+   in-tab footer — **neither restyle may reproduce it; both end their content above the shell footer,
+   or the page shows two.** Neither restyle needs a new `TabProp` (`estimatorName`/`companyTimeZone`
+   already threaded), so changing one tab does not force the other via `TabProps`.
+3. **Verify BETWEEN them, not just at the end:** after Details and before starting Line Items —
+   (a) the route compiles and loads (client/server boundary — a client tab importing a server module
+   builds clean under tsc and fails at runtime); (b) the shell footer still renders **exactly once**
+   below the active tab (Details didn't add its own); (c) per-field autosave on a Details field still
+   persists on blur. Only then touch the riskier Line Items.
+
+## §5 summary
+- Doc: `docs/sessions/ui-gap-log.md` (this file). Governing handoff for 9b: **Estimates handoff**;
+  Items/PO overrides only the add-sheet, and its supersession means the 9b catalog search bar is NOT
+  built.
+- **Ships today:** three-tier anatomy, cost/price/margin strip, per-row $0/unpriced cue, inherited-
+  markup parenthesized display, per-field autosave, catalog fill, AddItemsSheet.
+- **Genuinely missing:** category-header subtotal, category collapse, aggregate unpriced/uncapped
+  banner. **Everything else is a restyle** (flex rows → aligned 8-col grid; text type → colored badge;
+  card chrome/spacing/mono).
+- **Restyle forces a handler/state change at:** (only) a new read-derivation for category subtotals +
+  the unpriced banner, and one new local `useState` for collapse. **It forces NO change to the write
+  path / `mutate` / any `updateEstimateLineRow|Item`.**
+- **Build order:** Details first, Line Items second; verify compile + single-footer + autosave between.
+- **Nothing in the target is blocked by the autosave contract** — no ruling for Josh required on that.
+- **Could only READ, not verify:** the shipped Line Items appearance (no screenshot); asserted from
+  the code.
