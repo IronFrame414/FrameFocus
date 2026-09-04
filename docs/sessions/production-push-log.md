@@ -108,3 +108,46 @@ rebuild-test (`framefocus-rebuild-test`) — the safe state.
 2. **Classify the 6 tables** into `COMPANY_TABLES`; re-run `deletion-census.test.ts`.
 3. **Triage** s131/s126 + the harness purge-FK error — confirm pre-existing vs merge-caused.
 4. Re-run the FULL battery green, THEN re-attempt §4.
+
+---
+
+# UNBLOCK RUN — three fixes, then re-attempt the battery
+
+## FIX 1 — the over-freeze (finding A) — DONE + VERIFIED
+⚠️ RULED [Josh, S103]: the client-facing DOCUMENT freezes; internal bookkeeping does not. Four columns
+stay editable on a sent estimate: `internal_notes`, `reminder_schedule`, `include_client_contract`,
+`projected_value` (projected_value newly ruled internal).
+- FORWARD migration `20261330000000_sent_estimate_internal_bookkeeping_editable.sql` — adds the four to
+  the `enforce_estimate_immutability` allowlist; 20261310000000 left applied (not rewritten). Applied to
+  rebuild-test via `db query`; ledger row `20261330000000` inserted + verified; live function confirmed
+  to carry all four.
+- ⚠️ **Test-level contradiction found + resolved:** `s175-estimate-freeze` A1 asserted
+  `include_client_contract` FROZEN, while `s146-C5` needs it editable — both shipped on the estimates
+  branch, mutually exclusive. Josh's ruling makes it editable, so A1's case was the overturned rule.
+  INVERTED (not deleted) into the positive half as B10 (+ B9 for projected_value), per the CLAUDE.md
+  sweep rule.
+- **Sweep:** the live run is itself the sweep (it exercised every live test post-migration); only
+  s175 B7/B8 + s146 C5 touched a frozen column expecting success. Corroborated by grepping every
+  `from('estimates').update(` in tests — the rest target drafts or assert refusals.
+- **Proof:** re-ran s175-estimate-freeze + s146-contract-services live → **2 files, 53 tests, ALL PASS.**
+
+## FIX 2 — the deletion census (finding B) — DONE + VERIFIED
+- Classified all six merge-added `company_id` tables into `COMPANY_TABLES` (`deletion.ts`):
+  `estimate_events`, `estimate_award_bases`, `estimate_sub_bid_requests`, `scope_library` (before
+  estimates); `purchase_order_edits` (before purchase_orders — its NO-ACTION FK would otherwise block
+  the PO delete and orphan the audit rows); `contacts_dedupe_log` (before contacts).
+- **Proof:** `deletion-census.test.ts` → **5/5 PASS.**
+
+## FIX 3 — triage finding C (in isolation) — DONE
+Both re-run in ISOLATION; both fail deterministically there (NOT suite-parallelism flakes):
+- **`s131-punch-names` (1 fail) — PRE-EXISTING.** `origin/main` (= production) ALREADY seeds crew as
+  "QA Crew A" AND `s131` ALREADY expects "Casey Crew" → it was red on production before this merge. The
+  merge changed `seed-test-identities.mjs` (+102/−16) but NOT the crew identity line and NOT `s131`.
+  The S176 rename drift. **Not merge-caused. Left as-is.**
+- **`s126-chat-core` (2 fail) — PRE-EXISTING.** Merge touches no chat code, not `s126`, and the seed
+  diff has no chat/thread/membership lines; the failure ("owner not in the crew thread's mentionable
+  set — []") is a rebuild-test chat-fixture issue independent of the deploy. **Not merge-caused. Left.**
+- **Harness `createUser: email already registered` + `purge companies … contacts_company_id_fkey`** —
+  full-suite-only (absent in isolation) → parallel-createUser collision + teardown ordering.
+  Environmental; `contacts_company_id_fkey` is a long-standing FK the dedupe migrations don't touch.
+  **Not merge-caused.**
