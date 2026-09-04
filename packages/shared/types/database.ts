@@ -1254,6 +1254,7 @@ export type Database = {
           client_contracts_enabled: boolean
           contractor_signature_path: string | null
           created_at: string | null
+          default_deposit_percent: number | null
           default_expiration_days: number
           default_labor_margin_percent: number | null
           default_labor_markup_percent: number | null
@@ -1267,6 +1268,7 @@ export type Database = {
           default_reminder_email_body: string | null
           default_reminder_email_subject: string | null
           default_reminder_schedule: Json | null
+          default_retainage_percent: number | null
           default_subcontractor_margin_percent: number | null
           default_subcontractor_markup_percent: number | null
           default_tax_rate: number | null
@@ -1285,11 +1287,13 @@ export type Database = {
           invoice_number_sequence: number
           license_number: string | null
           logo_url: string | null
+          margin_target_percent: number | null
           name: string
           notify_hours_end: string
           notify_hours_start: string
           ot_threshold_hours: number
           paid_break_cap_minutes: number
+          payment_method_on_file: boolean
           phone: string | null
           project_internal_sequence: number
           qb_connected_at: string | null
@@ -1297,7 +1301,6 @@ export type Database = {
           qb_income_item_id: string | null
           qb_income_item_name: string | null
           qb_last_refresh_at: string | null
-          payment_method_on_file: boolean
           qb_payments_enabled: boolean
           qb_realm_id: string | null
           qb_reauth_required_after: string | null
@@ -1329,6 +1332,7 @@ export type Database = {
           client_contracts_enabled?: boolean
           contractor_signature_path?: string | null
           created_at?: string | null
+          default_deposit_percent?: number | null
           default_expiration_days?: number
           default_labor_margin_percent?: number | null
           default_labor_markup_percent?: number | null
@@ -1342,6 +1346,7 @@ export type Database = {
           default_reminder_email_body?: string | null
           default_reminder_email_subject?: string | null
           default_reminder_schedule?: Json | null
+          default_retainage_percent?: number | null
           default_subcontractor_margin_percent?: number | null
           default_subcontractor_markup_percent?: number | null
           default_tax_rate?: number | null
@@ -1360,11 +1365,13 @@ export type Database = {
           invoice_number_sequence?: number
           license_number?: string | null
           logo_url?: string | null
+          margin_target_percent?: number | null
           name: string
           notify_hours_end?: string
           notify_hours_start?: string
           ot_threshold_hours?: number
           paid_break_cap_minutes?: number
+          payment_method_on_file?: boolean
           phone?: string | null
           project_internal_sequence?: number
           qb_connected_at?: string | null
@@ -1372,7 +1379,6 @@ export type Database = {
           qb_income_item_id?: string | null
           qb_income_item_name?: string | null
           qb_last_refresh_at?: string | null
-          payment_method_on_file?: boolean
           qb_payments_enabled?: boolean
           qb_realm_id?: string | null
           qb_reauth_required_after?: string | null
@@ -1404,6 +1410,7 @@ export type Database = {
           client_contracts_enabled?: boolean
           contractor_signature_path?: string | null
           created_at?: string | null
+          default_deposit_percent?: number | null
           default_expiration_days?: number
           default_labor_margin_percent?: number | null
           default_labor_markup_percent?: number | null
@@ -1417,6 +1424,7 @@ export type Database = {
           default_reminder_email_body?: string | null
           default_reminder_email_subject?: string | null
           default_reminder_schedule?: Json | null
+          default_retainage_percent?: number | null
           default_subcontractor_margin_percent?: number | null
           default_subcontractor_markup_percent?: number | null
           default_tax_rate?: number | null
@@ -1435,11 +1443,13 @@ export type Database = {
           invoice_number_sequence?: number
           license_number?: string | null
           logo_url?: string | null
+          margin_target_percent?: number | null
           name?: string
           notify_hours_end?: string
           notify_hours_start?: string
           ot_threshold_hours?: number
           paid_break_cap_minutes?: number
+          payment_method_on_file?: boolean
           phone?: string | null
           project_internal_sequence?: number
           qb_connected_at?: string | null
@@ -1447,7 +1457,6 @@ export type Database = {
           qb_income_item_id?: string | null
           qb_income_item_name?: string | null
           qb_last_refresh_at?: string | null
-          payment_method_on_file?: boolean
           qb_payments_enabled?: boolean
           qb_realm_id?: string | null
           qb_reauth_required_after?: string | null
@@ -1679,6 +1688,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      contacts_dedupe_log: {
+        Row: {
+          canonical_contact_id: string | null
+          company_id: string | null
+          email: string | null
+          id: string
+          removed_contact_id: string | null
+          removed_created_at: string | null
+          removed_first_name: string | null
+          removed_last_name: string | null
+          repoint_counts: Json | null
+          run_at: string
+        }
+        Insert: {
+          canonical_contact_id?: string | null
+          company_id?: string | null
+          email?: string | null
+          id?: string
+          removed_contact_id?: string | null
+          removed_created_at?: string | null
+          removed_first_name?: string | null
+          removed_last_name?: string | null
+          repoint_counts?: Json | null
+          run_at?: string
+        }
+        Update: {
+          canonical_contact_id?: string | null
+          company_id?: string | null
+          email?: string | null
+          id?: string
+          removed_contact_id?: string | null
+          removed_created_at?: string | null
+          removed_first_name?: string | null
+          removed_last_name?: string | null
+          repoint_counts?: Json | null
+          run_at?: string
+        }
+        Relationships: []
       }
       contract_document_attachments: {
         Row: {
@@ -2818,6 +2866,64 @@ export type Database = {
           },
         ]
       }
+      estimate_award_bases: {
+        Row: {
+          awarded_at: string
+          company_id: string
+          created_at: string
+          id: string
+          labor_amount: number | null
+          line_row_id: string
+          material_amount: number | null
+          scope_coverage_percent: number | null
+          sub_bid_id: string | null
+        }
+        Insert: {
+          awarded_at?: string
+          company_id?: string
+          created_at?: string
+          id?: string
+          labor_amount?: number | null
+          line_row_id: string
+          material_amount?: number | null
+          scope_coverage_percent?: number | null
+          sub_bid_id?: string | null
+        }
+        Update: {
+          awarded_at?: string
+          company_id?: string
+          created_at?: string
+          id?: string
+          labor_amount?: number | null
+          line_row_id?: string
+          material_amount?: number | null
+          scope_coverage_percent?: number | null
+          sub_bid_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimate_award_bases_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_award_bases_line_row_id_fkey"
+            columns: ["line_row_id"]
+            isOneToOne: true
+            referencedRelation: "estimate_line_rows"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_award_bases_sub_bid_id_fkey"
+            columns: ["sub_bid_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_sub_bids"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       estimate_categories: {
         Row: {
           company_id: string
@@ -2862,6 +2968,51 @@ export type Database = {
           },
           {
             foreignKeyName: "estimate_categories_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      estimate_events: {
+        Row: {
+          actor_id: string | null
+          company_id: string
+          created_at: string
+          estimate_id: string
+          id: string
+          kind: string
+          payload: Json | null
+        }
+        Insert: {
+          actor_id?: string | null
+          company_id?: string
+          created_at?: string
+          estimate_id: string
+          id?: string
+          kind: string
+          payload?: Json | null
+        }
+        Update: {
+          actor_id?: string | null
+          company_id?: string
+          created_at?: string
+          estimate_id?: string
+          id?: string
+          kind?: string
+          payload?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimate_events_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_events_estimate_id_fkey"
             columns: ["estimate_id"]
             isOneToOne: false
             referencedRelation: "estimates"
@@ -3136,21 +3287,164 @@ export type Database = {
           },
         ]
       }
-      estimate_sub_bids: {
+      estimate_sub_bid_requests: {
         Row: {
-          bid_amount: number
-          bid_document_file_id: string | null
+          allowance_amount: number | null
+          bids_due_date: string | null
           company_id: string
           created_at: string | null
           created_by: string | null
           deleted_at: string | null
           estimate_id: string
+          expires_at: string
+          id: string
+          is_deleted: boolean | null
+          line_item_id: string
+          message: string | null
+          reply_bid_amount: number | null
+          reply_exclusions: string | null
+          reply_holds_until: string | null
+          reply_labor_amount: number | null
+          reply_material_amount: number | null
+          reply_mode: string
+          reply_scope_coverage_percent: number | null
+          scope_text: string | null
+          sent_at: string | null
+          site_visit_date: string | null
+          status: string
+          sub_bid_id: string | null
+          subcontractor_id: string
+          submitted_at: string | null
+          token: string
+          updated_at: string | null
+          updated_by: string | null
+          viewed_at: string | null
+          work_starts_date: string | null
+        }
+        Insert: {
+          allowance_amount?: number | null
+          bids_due_date?: string | null
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          estimate_id: string
+          expires_at: string
+          id?: string
+          is_deleted?: boolean | null
+          line_item_id: string
+          message?: string | null
+          reply_bid_amount?: number | null
+          reply_exclusions?: string | null
+          reply_holds_until?: string | null
+          reply_labor_amount?: number | null
+          reply_material_amount?: number | null
+          reply_mode?: string
+          reply_scope_coverage_percent?: number | null
+          scope_text?: string | null
+          sent_at?: string | null
+          site_visit_date?: string | null
+          status?: string
+          sub_bid_id?: string | null
+          subcontractor_id: string
+          submitted_at?: string | null
+          token?: string
+          updated_at?: string | null
+          updated_by?: string | null
+          viewed_at?: string | null
+          work_starts_date?: string | null
+        }
+        Update: {
+          allowance_amount?: number | null
+          bids_due_date?: string | null
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          estimate_id?: string
+          expires_at?: string
+          id?: string
+          is_deleted?: boolean | null
+          line_item_id?: string
+          message?: string | null
+          reply_bid_amount?: number | null
+          reply_exclusions?: string | null
+          reply_holds_until?: string | null
+          reply_labor_amount?: number | null
+          reply_material_amount?: number | null
+          reply_mode?: string
+          reply_scope_coverage_percent?: number | null
+          scope_text?: string | null
+          sent_at?: string | null
+          site_visit_date?: string | null
+          status?: string
+          sub_bid_id?: string | null
+          subcontractor_id?: string
+          submitted_at?: string | null
+          token?: string
+          updated_at?: string | null
+          updated_by?: string | null
+          viewed_at?: string | null
+          work_starts_date?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "estimate_sub_bid_requests_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_sub_bid_requests_estimate_id_fkey"
+            columns: ["estimate_id"]
+            isOneToOne: false
+            referencedRelation: "estimates"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_sub_bid_requests_line_item_id_fkey"
+            columns: ["line_item_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_line_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_sub_bid_requests_sub_bid_id_fkey"
+            columns: ["sub_bid_id"]
+            isOneToOne: false
+            referencedRelation: "estimate_sub_bids"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "estimate_sub_bid_requests_subcontractor_id_fkey"
+            columns: ["subcontractor_id"]
+            isOneToOne: false
+            referencedRelation: "subcontractors"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      estimate_sub_bids: {
+        Row: {
+          bid_amount: number
+          bid_document_file_id: string | null
+          bid_holds_until: string | null
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          estimate_id: string
+          exclusions: string | null
           id: string
           is_deleted: boolean | null
           is_winner: boolean
+          labor_amount: number | null
           line_item_id: string
+          material_amount: number | null
           notes: string | null
           received_at: string | null
+          scope_coverage_percent: number | null
           subcontractor_id: string
           updated_at: string | null
           updated_by: string | null
@@ -3158,17 +3452,22 @@ export type Database = {
         Insert: {
           bid_amount: number
           bid_document_file_id?: string | null
+          bid_holds_until?: string | null
           company_id?: string
           created_at?: string | null
           created_by?: string | null
           deleted_at?: string | null
           estimate_id: string
+          exclusions?: string | null
           id?: string
           is_deleted?: boolean | null
           is_winner?: boolean
+          labor_amount?: number | null
           line_item_id: string
+          material_amount?: number | null
           notes?: string | null
           received_at?: string | null
+          scope_coverage_percent?: number | null
           subcontractor_id: string
           updated_at?: string | null
           updated_by?: string | null
@@ -3176,17 +3475,22 @@ export type Database = {
         Update: {
           bid_amount?: number
           bid_document_file_id?: string | null
+          bid_holds_until?: string | null
           company_id?: string
           created_at?: string | null
           created_by?: string | null
           deleted_at?: string | null
           estimate_id?: string
+          exclusions?: string | null
           id?: string
           is_deleted?: boolean | null
           is_winner?: boolean
+          labor_amount?: number | null
           line_item_id?: string
+          material_amount?: number | null
           notes?: string | null
           received_at?: string | null
+          scope_coverage_percent?: number | null
           subcontractor_id?: string
           updated_at?: string | null
           updated_by?: string | null
@@ -3293,6 +3597,7 @@ export type Database = {
       estimates: {
         Row: {
           accepted_at: string | null
+          also_send_to: Json
           client_unsubscribed_at: string | null
           cloned_from_estimate_id: string | null
           company_id: string
@@ -3307,6 +3612,7 @@ export type Database = {
           decline_reason_notes: string | null
           declined_at: string | null
           deleted_at: string | null
+          deposit_percent: number | null
           discount_amount: number | null
           discount_total: number
           discount_type: string | null
@@ -3317,10 +3623,12 @@ export type Database = {
           id: string
           include_client_contract: boolean
           internal_notes: string | null
+          invoice_due_days: number | null
           is_deleted: boolean | null
           labor_markup_percent: number | null
           last_reminder_sent_at: string | null
           legal_description: string | null
+          lost_reason_code: string | null
           material_markup_percent: number | null
           name: string
           parent_estimate_id: string | null
@@ -3358,6 +3666,7 @@ export type Database = {
         }
         Insert: {
           accepted_at?: string | null
+          also_send_to?: Json
           client_unsubscribed_at?: string | null
           cloned_from_estimate_id?: string | null
           company_id?: string
@@ -3372,6 +3681,7 @@ export type Database = {
           decline_reason_notes?: string | null
           declined_at?: string | null
           deleted_at?: string | null
+          deposit_percent?: number | null
           discount_amount?: number | null
           discount_total?: number
           discount_type?: string | null
@@ -3382,10 +3692,12 @@ export type Database = {
           id?: string
           include_client_contract?: boolean
           internal_notes?: string | null
+          invoice_due_days?: number | null
           is_deleted?: boolean | null
           labor_markup_percent?: number | null
           last_reminder_sent_at?: string | null
           legal_description?: string | null
+          lost_reason_code?: string | null
           material_markup_percent?: number | null
           name: string
           parent_estimate_id?: string | null
@@ -3423,6 +3735,7 @@ export type Database = {
         }
         Update: {
           accepted_at?: string | null
+          also_send_to?: Json
           client_unsubscribed_at?: string | null
           cloned_from_estimate_id?: string | null
           company_id?: string
@@ -3437,6 +3750,7 @@ export type Database = {
           decline_reason_notes?: string | null
           declined_at?: string | null
           deleted_at?: string | null
+          deposit_percent?: number | null
           discount_amount?: number | null
           discount_total?: number
           discount_type?: string | null
@@ -3447,10 +3761,12 @@ export type Database = {
           id?: string
           include_client_contract?: boolean
           internal_notes?: string | null
+          invoice_due_days?: number | null
           is_deleted?: boolean | null
           labor_markup_percent?: number | null
           last_reminder_sent_at?: string | null
           legal_description?: string | null
+          lost_reason_code?: string | null
           material_markup_percent?: number | null
           name?: string
           parent_estimate_id?: string | null
@@ -6383,6 +6699,9 @@ export type Database = {
           updated_by: string | null
           vendor_id: string | null
           vendor_name: string
+          void_reason: string | null
+          voided_at: string | null
+          voided_by: string | null
         }
         Insert: {
           author_member_id?: string
@@ -6406,6 +6725,9 @@ export type Database = {
           updated_by?: string | null
           vendor_id?: string | null
           vendor_name: string
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
         }
         Update: {
           author_member_id?: string
@@ -6429,6 +6751,9 @@ export type Database = {
           updated_by?: string | null
           vendor_id?: string | null
           vendor_name?: string
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
         }
         Relationships: [
           {
@@ -7082,6 +7407,59 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scope_library: {
+        Row: {
+          bullets: Json
+          company_id: string
+          created_at: string | null
+          created_by: string | null
+          deleted_at: string | null
+          id: string
+          is_deleted: boolean | null
+          section_kind: string
+          sort_order: number
+          title: string
+          updated_at: string | null
+          updated_by: string | null
+        }
+        Insert: {
+          bullets?: Json
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          section_kind?: string
+          sort_order?: number
+          title: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Update: {
+          bullets?: Json
+          company_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          deleted_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          section_kind?: string
+          sort_order?: number
+          title?: string
+          updated_at?: string | null
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scope_library_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
             referencedColumns: ["id"]
           },
         ]
@@ -9137,6 +9515,10 @@ export type Database = {
       }
       company_ai_tags_this_month: { Args: never; Returns: number }
       company_storage_used_bytes: { Args: never; Returns: number }
+      compute_member_coi_expiry: {
+        Args: { p_member_id: string }
+        Returns: string
+      }
       convert_estimate_to_project: {
         Args: { p_estimate_id: string }
         Returns: string
@@ -9182,6 +9564,7 @@ export type Database = {
         Args: { p_company_name: string; p_exclude_company_id?: string }
         Returns: string
       }
+      get_estimate_version: { Args: { p_estimate_id: string }; Returns: number }
       get_invitation_by_token: {
         Args: { invite_token: string }
         Returns: {
@@ -9231,6 +9614,7 @@ export type Database = {
           segment_type: string
         }[]
       }
+      get_sub_bid_request: { Args: { p_token: string }; Returns: Json }
       is_assigned_to_project: {
         Args: { p_project_id: string }
         Returns: boolean
@@ -9242,6 +9626,10 @@ export type Database = {
       is_project_creator: { Args: { p_project_id: string }; Returns: boolean }
       issue_po_lines: {
         Args: { p_item_ids: string[]; p_po_id: string }
+        Returns: undefined
+      }
+      mark_estimate_lost: {
+        Args: { p_estimate_id: string; p_reason_code: string }
         Returns: undefined
       }
       mark_po_lines_purchased: {
@@ -9389,6 +9777,18 @@ export type Database = {
         Args: { p_delivery_id: string }
         Returns: undefined
       }
+      submit_sub_bid_reply: {
+        Args: {
+          p_bid_amount: number
+          p_exclusions: string
+          p_holds_until: string
+          p_labor_amount: number
+          p_material_amount: number
+          p_scope_coverage_percent: number
+          p_token: string
+        }
+        Returns: Json
+      }
       supersede_instrument_rate: {
         Args: {
           p_rate_id: string
@@ -9424,6 +9824,10 @@ export type Database = {
         Args: { p_estimate_id: string; p_reason: string }
         Returns: undefined
       }
+      void_purchase_order: {
+        Args: { p_po_id: string; p_reason: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
@@ -9442,12 +9846,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -9471,11 +9875,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -9496,11 +9900,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -9521,11 +9925,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -9538,11 +9942,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
