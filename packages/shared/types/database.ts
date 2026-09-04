@@ -1689,6 +1689,45 @@ export type Database = {
           },
         ]
       }
+      contacts_dedupe_log: {
+        Row: {
+          canonical_contact_id: string | null
+          company_id: string | null
+          email: string | null
+          id: string
+          removed_contact_id: string | null
+          removed_created_at: string | null
+          removed_first_name: string | null
+          removed_last_name: string | null
+          repoint_counts: Json | null
+          run_at: string
+        }
+        Insert: {
+          canonical_contact_id?: string | null
+          company_id?: string | null
+          email?: string | null
+          id?: string
+          removed_contact_id?: string | null
+          removed_created_at?: string | null
+          removed_first_name?: string | null
+          removed_last_name?: string | null
+          repoint_counts?: Json | null
+          run_at?: string
+        }
+        Update: {
+          canonical_contact_id?: string | null
+          company_id?: string | null
+          email?: string | null
+          id?: string
+          removed_contact_id?: string | null
+          removed_created_at?: string | null
+          removed_first_name?: string | null
+          removed_last_name?: string | null
+          repoint_counts?: Json | null
+          run_at?: string
+        }
+        Relationships: []
+      }
       contract_document_attachments: {
         Row: {
           attached_after_execution: boolean
@@ -6660,6 +6699,9 @@ export type Database = {
           updated_by: string | null
           vendor_id: string | null
           vendor_name: string
+          void_reason: string | null
+          voided_at: string | null
+          voided_by: string | null
         }
         Insert: {
           author_member_id?: string
@@ -6683,6 +6725,9 @@ export type Database = {
           updated_by?: string | null
           vendor_id?: string | null
           vendor_name: string
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
         }
         Update: {
           author_member_id?: string
@@ -6706,6 +6751,9 @@ export type Database = {
           updated_by?: string | null
           vendor_id?: string | null
           vendor_name?: string
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
         }
         Relationships: [
           {
@@ -9467,6 +9515,10 @@ export type Database = {
       }
       company_ai_tags_this_month: { Args: never; Returns: number }
       company_storage_used_bytes: { Args: never; Returns: number }
+      compute_member_coi_expiry: {
+        Args: { p_member_id: string }
+        Returns: string
+      }
       convert_estimate_to_project: {
         Args: { p_estimate_id: string }
         Returns: string
@@ -9512,10 +9564,7 @@ export type Database = {
         Args: { p_company_name: string; p_exclude_company_id?: string }
         Returns: string
       }
-      get_estimate_version: {
-        Args: { p_estimate_id: string }
-        Returns: number
-      }
+      get_estimate_version: { Args: { p_estimate_id: string }; Returns: number }
       get_invitation_by_token: {
         Args: { invite_token: string }
         Returns: {
@@ -9773,6 +9822,10 @@ export type Database = {
       unlock_trial_company: { Args: { p_company_id: string }; Returns: number }
       void_estimate: {
         Args: { p_estimate_id: string; p_reason: string }
+        Returns: undefined
+      }
+      void_purchase_order: {
+        Args: { p_po_id: string; p_reason: string }
         Returns: undefined
       }
     }
