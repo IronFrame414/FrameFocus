@@ -63,7 +63,7 @@ function MarkLostCard({ estimateId, onDone }: { estimateId: string; onDone: () =
   }
 
   return (
-    <div style={{ border: '1px solid #efd3d0', borderRadius: '0.5rem', padding: '1rem', marginBottom: '1rem', background: '#fdf6f5' }}>
+    <div style={{ border: '1px solid #efd3d0', borderRadius: '14px', padding: '18px 20px', background: '#fdf6f5' }}>
       <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f1729', marginBottom: '0.25rem' }}>
         Didn&rsquo;t win this one?
       </div>
@@ -189,13 +189,46 @@ export function DetailsTab({
     if (!result.success) setError(result.error || 'Could not update client');
   }
 
-  const sectionStyle: React.CSSProperties = { marginBottom: '2rem', maxWidth: '560px' };
-  const sectionTitleStyle: React.CSSProperties = {
-    fontSize: '1rem',
-    fontWeight: 600,
-    marginBottom: '0.75rem',
-    paddingBottom: '0.375rem',
-    borderBottom: '1px solid #e4e8ef',
+  // ── 19b card anatomy. Fields are RELOCATED into cards; every handler above is
+  // unchanged (per-field autosave via saveField on blur). The dark totals footer
+  // is the SHELL's (estimate-builder), rendered once — this tab adds none. ──
+  const card: React.CSSProperties = {
+    background: '#fff',
+    border: '1px solid #e4e8ef',
+    borderRadius: '14px',
+    padding: '18px 20px',
+  };
+  const cardAmber: React.CSSProperties = {
+    ...card,
+    border: '1.5px solid #f5cf8f',
+    boxShadow: '0 0 0 4px rgba(245,165,36,.09)',
+  };
+  // Mono uppercase section label — "THE JOB", "CLIENT" (handoff 19b).
+  const monoTitle: React.CSSProperties = {
+    fontFamily: 'var(--font-mono, monospace)',
+    fontSize: '0.6875rem',
+    fontWeight: 700,
+    letterSpacing: '0.09em',
+    textTransform: 'uppercase',
+    color: '#5c6784',
+    marginBottom: '0.9rem',
+  };
+  const cardHeadRow: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.6rem',
+    marginBottom: '0.4rem',
+  };
+  const cardHeadTitle: React.CSSProperties = { fontSize: '0.97rem', fontWeight: 700, color: '#1a2437' };
+  const newBadge: React.CSSProperties = {
+    fontFamily: 'var(--font-mono, monospace)',
+    fontSize: '0.6rem',
+    fontWeight: 800,
+    letterSpacing: '0.1em',
+    background: '#f5a524',
+    color: '#0f1729',
+    padding: '3px 7px',
+    borderRadius: '5px',
   };
   const rowStyle: React.CSSProperties = {
     display: 'flex',
@@ -205,16 +238,24 @@ export function DetailsTab({
     fontSize: '0.875rem',
   };
   const fieldLabel: React.CSSProperties = { color: '#3f4a60', fontWeight: 500 };
+  const railCardHead: React.CSSProperties = { fontSize: '0.75rem', color: '#7b8699', marginBottom: '0.25rem' };
 
   return (
-    <div style={{ display: 'flex', gap: '2rem', alignItems: 'flex-start' }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'minmax(0,1fr) 320px',
+        gap: '16px',
+        alignItems: 'start',
+      }}
+    >
+      {/* LEFT — the decision cards */}
+      <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {error && (
           <div
             style={{
               padding: '0.75rem 1rem',
               borderRadius: '0.375rem',
-              marginBottom: '1rem',
               backgroundColor: '#fdf1f0',
               color: '#c0362c',
               fontSize: '0.875rem',
@@ -224,9 +265,9 @@ export function DetailsTab({
           </div>
         )}
 
-        {/* Client */}
-        <div style={sectionStyle}>
-          <div style={sectionTitleStyle}>Client &amp; Job Site</div>
+        {/* CLIENT */}
+        <div style={card}>
+          <div style={monoTitle}>CLIENT</div>
           {canEdit ? (
             <ContactAddressPicker
               contactId={estimate.contact_id}
@@ -234,18 +275,11 @@ export function DetailsTab({
               onChange={handleContactChange}
             />
           ) : (
-            <p style={{ fontSize: '0.875rem', color: '#7b8699' }}>
+            <p style={{ fontSize: '0.875rem', color: '#7b8699', margin: 0 }}>
               Client and address are locked while the estimate is{' '}
               {STATUS_LABELS[estimate.status].toLowerCase()}.
             </p>
           )}
-
-          {/* Estimator — read-only, from created_by (no lead source; it lives on
-              the contact). */}
-          <div style={{ ...rowStyle, marginTop: '0.5rem' }}>
-            <span style={fieldLabel}>Estimator</span>
-            <span style={{ color: '#7b8699' }}>{estimatorName ?? '—'}</span>
-          </div>
 
           {/* Also send to — extra proposal recipients (spouse, architect, lender).
               Per-job; frozen on send (the also_send_to freeze migration). §1.4:
@@ -254,9 +288,15 @@ export function DetailsTab({
           <AlsoSendToField value={alsoSendTo} canEdit={canEdit} onChange={saveAlsoSendTo} />
         </div>
 
-        {/* Expiration */}
-        <div style={sectionStyle}>
-          <div style={sectionTitleStyle}>Expiration</div>
+        {/* THE JOB — estimator (read-only) + timing. Estimate name/number live in
+            the shell header; contract type + rates are in ContractSection below;
+            lead source lives on the contact (not duplicated here). */}
+        <div style={card}>
+          <div style={monoTitle}>THE JOB</div>
+          <div style={rowStyle}>
+            <span style={fieldLabel}>Estimator</span>
+            <span style={{ color: '#7b8699' }}>{estimatorName ?? '—'}</span>
+          </div>
           <div style={rowStyle}>
             <span style={fieldLabel}>Days until expiration</span>
             <InlineNumber
@@ -273,7 +313,7 @@ export function DetailsTab({
         </div>
 
         {/* Contract type + negotiated rates + P11 projection (S-3).
-            Owner/Admin edit; PM sees read-only (§7.3). */}
+            Owner/Admin edit; PM sees read-only (§7.3). Its own card component. */}
         <ContractSection
           estimate={estimate}
           canEditSettings={canEdit && (role === 'owner' || role === 'admin')}
@@ -282,17 +322,39 @@ export function DetailsTab({
           reload={reload}
         />
 
-        {/* Pricing */}
-        <div style={sectionStyle}>
-          <div style={sectionTitleStyle}>Pricing</div>
+        {/* Proposal format — the one control (same as 9d/19a); writes proposal_pricing_level. */}
+        <div style={cardAmber}>
+          <div style={cardHeadRow}>
+            <span style={cardHeadTitle}>Proposal format</span>
+            <span style={newBadge}>NEW</span>
+            <span style={{ flex: 1 }} />
+            <span style={{ fontSize: '0.72rem', color: '#7b8699' }}>Override at send time</span>
+          </div>
+          <p style={{ fontSize: '0.78rem', color: '#7b8699', margin: '0 0 0.75rem' }}>
+            How much of the breakdown the client sees on the printed estimate and the contract.
+          </p>
+          <ProposalFormatPicker
+            value={estimate.proposal_pricing_level}
+            contractType={estimate.contract_type}
+            canEdit={canEdit}
+            onSelect={async (code) => {
+              const result = await saveField({ proposal_pricing_level: code });
+              if (!result.success) setError(result.error || 'Save failed');
+            }}
+          />
+        </div>
+
+        {/* Pricing basis */}
+        <div style={cardAmber}>
+          <div style={cardHeadRow}>
+            <span style={cardHeadTitle}>Pricing basis</span>
+            <span style={newBadge}>NEW</span>
+          </div>
           <div style={rowStyle}>
             <span style={fieldLabel}>Pricing mode</span>
             <span style={{ display: 'flex', gap: '1rem' }}>
               {(['markup', 'margin'] as const).map((m) => (
-                <label
-                  key={m}
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}
-                >
+                <label key={m} style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
                   <input
                     type="radio"
                     name="pricing_mode"
@@ -306,23 +368,10 @@ export function DetailsTab({
             </span>
           </div>
           {/* Markup vs margin — the correction the pricing card exists to make. */}
-          <p style={{ fontSize: '0.75rem', color: '#7b8699', margin: '0.25rem 0 0.75rem' }}>
+          <p style={{ fontSize: '0.75rem', color: '#7b8699', margin: '0.25rem 0 0.5rem' }}>
             Markup and margin are not the same number: a 20% markup is a 16.7% margin, and hitting a
             30% margin target takes a 43% markup.
           </p>
-          {/* Proposal format — the one control (same as 9d/19a); writes proposal_pricing_level. */}
-          <div style={{ padding: '0.5rem 0' }}>
-            <span style={{ ...fieldLabel, display: 'block', marginBottom: '0.5rem' }}>Proposal format</span>
-            <ProposalFormatPicker
-              value={estimate.proposal_pricing_level}
-              contractType={estimate.contract_type}
-              canEdit={canEdit}
-              onSelect={async (code) => {
-                const result = await saveField({ proposal_pricing_level: code });
-                if (!result.success) setError(result.error || 'Save failed');
-              }}
-            />
-          </div>
           <div style={rowStyle}>
             <span style={fieldLabel}>Subcontractor {modeNoun} %</span>
             <InlineNumber
@@ -370,8 +419,8 @@ export function DetailsTab({
         </div>
 
         {/* Whole-estimate discount */}
-        <div style={sectionStyle}>
-          <div style={sectionTitleStyle}>Whole-Estimate Discount</div>
+        <div style={card}>
+          <div style={monoTitle}>WHOLE-ESTIMATE DISCOUNT</div>
           <div style={rowStyle}>
             <span style={fieldLabel}>Type</span>
             <select
@@ -425,19 +474,10 @@ export function DetailsTab({
         )}
       </div>
 
-      {/* Right column: status + actions + the §8.10.4 panels */}
-      <div style={{ width: '260px', flexShrink: 0 }}>
-        <div
-          style={{
-            border: '1px solid #e4e8ef',
-            borderRadius: '0.5rem',
-            padding: '1rem',
-            marginBottom: '1rem',
-          }}
-        >
-          <div style={{ fontSize: '0.75rem', color: '#7b8699', marginBottom: '0.25rem' }}>
-            Status
-          </div>
+      {/* RIGHT RAIL (320px) — status, health, activity, delete. */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={card}>
+          <div style={railCardHead}>Status</div>
           <div style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.75rem' }}>
             {STATUS_LABELS[estimate.status]}
           </div>
@@ -457,7 +497,6 @@ export function DetailsTab({
             border: '1px solid #dbe0fb',
             borderRadius: '0.375rem',
             textDecoration: 'none',
-            marginBottom: '1rem',
           }}
         >
           Preview Proposal
@@ -472,7 +511,7 @@ export function DetailsTab({
         {/* 19b — margin-vs-target bar. Renders ONLY when a company target is set
             (nullable; unset = no comparison, per the ruling). */}
         {target != null && health.marginPercent != null && (
-          <div style={{ border: '1px solid #e4e8ef', borderRadius: '0.5rem', padding: '0.875rem 1rem', marginBottom: '1rem' }}>
+          <div style={card}>
             <div style={{ fontSize: '0.75rem', color: '#7b8699', marginBottom: '0.4rem' }}>
               Margin vs target
             </div>
