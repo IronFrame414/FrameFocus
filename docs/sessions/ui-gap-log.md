@@ -325,3 +325,32 @@ conflict. **No part of the target is blocked by the autosave contract; no ruling
 - **Nothing in the target is blocked by the autosave contract** — no ruling for Josh required on that.
 - **Could only READ, not verify:** the shipped Line Items appearance (no screenshot); asserted from
   the code.
+
+---
+
+# BUILD RUN (S103) — Details (19b) then Line Items (9b)
+
+## ✅ Details (19b) — BUILT. Commit: [Estimates] Details (19b): restyle the sectioned form into the card grid
+Restyled `details-tab.tsx` from the borderBottom-titled ~560px form (in a flex left + 260px rail) into
+the 19b **two-column card grid `minmax(0,1fr) 320px`**:
+- LEFT cards: **CLIENT** (ContactAddressPicker + Also-send-to), **THE JOB** (Estimator read-only +
+  expiration), **ContractSection** (its own card), **Proposal format** (amber NEW ring),
+  **Pricing basis** (amber NEW; mode + 3 markups + tax), **WHOLE-ESTIMATE DISCOUNT**, SigningActivity.
+- RIGHT rail (320px): Status + statusAction, Preview Proposal, EstimateHealthCard, margin-vs-target,
+  BeforeYouSend, ClientActivity, MarkLost, More actions.
+- **RESTYLE ONLY** — every field RELOCATED; handlers untouched (`saveField` on blur,
+  handleContactChange, handleModeToggle, saveAlsoSendTo, ProposalFormatPicker onSelect). **No footer
+  added — the shell's is the only one.**
+- ⚠️ Did NOT fabricate the mockup's un-wired fields: Estimate name/number are the shell header's;
+  contract type/rates are ContractSection's; **lead source lives on the contact by design** (the
+  shipped code says so). Building them would be new behaviour with no handler — out of scope.
+
+### §1 between-screens gates (all PASS — verified by LOADING, not tsc):
+1. **Route compiles + page loads** — `/dashboard/estimates/[id]` HTTP **200**, no `next/headers`
+   boundary error, all four cards render (CLIENT/THE JOB/Proposal format/Pricing basis). ✓
+2. **Shell footer renders EXACTLY ONCE** — Grand Total count = **1** on the Details tab. ✓
+3. **Per-field autosave works** — changed **"Days until expiration" 30 → 37**, pressed Enter (blur),
+   reloaded the page fresh, read back **37**. ✓ Then RESTORED to 30 (no fixture drift).
+   type-check exit 0 (5/5).
+
+⇒ Details is sound. Proceeding to Line Items.
