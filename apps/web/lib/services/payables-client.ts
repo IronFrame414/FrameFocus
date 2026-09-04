@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase-browser';
 import { readBudgeted } from '@/lib/services/budget-shared';
 import type { Database } from '@framefocus/shared/types/database';
 import { uploadFile, softDeleteFile } from '@/lib/services/files-client';
+import { applied, DISCARDED } from '@/lib/services/mutation-result';
 import type { ExpenseCategory } from '@/lib/services/expenses';
 import type { PayableListItem } from '@/lib/services/payables';
 import {
@@ -507,11 +508,16 @@ export async function recordPayment(
  *  trigger) — soft-delete + re-enter. Derivation self-corrects. */
 export async function softDeletePayment(paymentId: string): Promise<MutationResult> {
   const supabase = createClient();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('expense_payments')
     .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-    .eq('id', paymentId);
+    .eq('id', paymentId)
+    .select('id');
   if (error) return { success: false, error: error.message };
+  // #1-s146 sweep: a zero-row UPDATE is not an error — RLS filtered this payment
+  // away, or it is already gone. Either way the delete did NOT happen, so do not
+  // report success over a payment we never touched. DISCARDED names both causes.
+  if (!applied(data)) return { success: false, error: DISCARDED };
   return { success: true };
 }
 

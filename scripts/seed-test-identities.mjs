@@ -1464,15 +1464,24 @@ const draftInvoiceId = await ensureInvoice('QA M9 — draft bill', {
   // The first version of this fixture selected them from `time_segments`,
   // which fails as a silent `null` and left the R8 probe reading an empty
   // table. Exactly the §2 vacuity trap, inside the fixture written to prevent it.
+  // ⚠️ ORDERED [S103]. An unordered `.limit(1)` returns heap order, so a re-run
+  // picked a DIFFERENT segment and re-inserted, tripping the idempotency check.
+  // `.order('id')` pins the same segment every run.
   const { data: seg } = await db.from('time_segments')
-    .select('id').eq('company_id', companyA.id).eq('is_deleted', false).limit(1).maybeSingle();
+    .select('id').eq('company_id', companyA.id).eq('is_deleted', false)
+    .order('id').limit(1).maybeSingle();
   const { data: laborLine } = await db.from('invoice_lines')
     .select('id').eq('invoice_id', fullDetailInvoiceId)
     .eq('description', 'QA M9 labor (full_detail)').maybeSingle();
   if (seg && laborLine) {
     await ensureRow(
+      // ⚠️ MATCH ALIGNED TO THE CONSTRAINT [S103]. invoice_hour_claims has a
+      // UNIQUE index on time_segment_id ALONE (one claim per segment, globally).
+      // Matching on {invoice_id, time_segment_id} could miss an existing claim
+      // for the segment and re-insert -> 23505 on the second run. Match the
+      // constraint's column so ensureRow finds and reuses it.
       'M9 hour claim (R8 — client must never read a crew name)', 'invoice_hour_claims',
-      { invoice_id: fullDetailInvoiceId, time_segment_id: seg.id },
+      { time_segment_id: seg.id },
       {
         company_id: companyA.id, invoice_id: fullDetailInvoiceId,
         invoice_line_id: laborLine.id, time_segment_id: seg.id,
