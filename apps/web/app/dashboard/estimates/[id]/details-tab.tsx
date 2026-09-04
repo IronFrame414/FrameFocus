@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { getUploaderNames } from '@/lib/services/photos';
 import { computeEstimateHealth } from '@/lib/estimate-health';
 import { createClient } from '@/lib/supabase-browser';
 import {
@@ -99,6 +98,7 @@ export function DetailsTab({
   canEdit,
   reload,
   companyTimeZone,
+  estimatorName,
   onDelete,
   onClone,
   statusAction,
@@ -106,9 +106,10 @@ export function DetailsTab({
   const { estimate, lineItems } = data;
   const [menuOpen, setMenuOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // 19b — estimator is READ-ONLY, resolved via getUploaderNames from created_by
-  // (an RLS floor). No second resolver; users cannot edit it [R10].
-  const [estimatorName, setEstimatorName] = useState<string | null>(null);
+  // 19b/R10 — estimator is READ-ONLY, resolved SERVER-SIDE (page.tsx →
+  // getUploaderNames) and passed as a prop. It was formerly fetched here, but
+  // getUploaderNames imports next/headers via supabase-server and cannot be
+  // imported into a client component — the module-boundary break this fixes.
   const [target, setTarget] = useState<number | null>(null);
   // 19b "Also send to" (§1.4) — { contact_id, name, email } snapshots.
   const [alsoSendTo, setAlsoSendTo] = useState<AlsoSendToRecipient[]>(
@@ -117,17 +118,12 @@ export function DetailsTab({
   const confirm = useConfirm();
 
   useEffect(() => {
-    if (estimate.created_by) {
-      getUploaderNames([estimate.created_by]).then((m) =>
-        setEstimatorName(m.get(estimate.created_by as string) ?? null)
-      );
-    }
     createClient()
       .from('companies')
       .select('margin_target_percent')
       .maybeSingle()
       .then(({ data: co }) => setTarget(co?.margin_target_percent ?? null));
-  }, [estimate.created_by]);
+  }, []);
 
   const health = computeEstimateHealth({
     grandTotal: estimate.grand_total,

@@ -46,6 +46,10 @@ export interface TabProps {
   /** #116 [S103] — the company calendar timezone, from the server page. Tabs
    *  derive date defaults with companyToday(companyTimeZone); never UTC. */
   companyTimeZone: string;
+  /** 19b/R10 [S103] — the estimator's display name, resolved SERVER-SIDE from
+   *  estimates.created_by (getUploaderNames imports next/headers and cannot run
+   *  in a client tab). Read-only; null when unresolved. */
+  estimatorName: string | null;
 }
 
 type TabKey =
@@ -76,6 +80,7 @@ interface EstimateBuilderProps {
   role: BuilderRole;
   userId: string;
   companyTimeZone: string;
+  estimatorName: string | null;
 }
 
 export function EstimateBuilder({
@@ -83,6 +88,7 @@ export function EstimateBuilder({
   role,
   userId,
   companyTimeZone,
+  estimatorName,
 }: EstimateBuilderProps) {
   const router = useRouter();
   const confirm = useConfirm();
@@ -323,7 +329,7 @@ export function EstimateBuilder({
     }
   }
 
-  const tabProps: TabProps = { data, role, userId, canEdit, reload, companyTimeZone };
+  const tabProps: TabProps = { data, role, userId, canEdit, reload, companyTimeZone, estimatorName };
 
   // Step 9 (§8.10.1) — left rail → top tabs, the mockup's one structural
   // change that survives contact with reality. The SET is the shipped eight
