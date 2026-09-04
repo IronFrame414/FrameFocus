@@ -32,7 +32,7 @@ import type { TabProps } from './estimate-builder';
 // (updateEstimateSubBid, previously dead code). The attached PDF rides to
 // the draft sub-contract's signed_doc_file_id at conversion (spec §3).
 
-export function BiddingTab({ data, canEdit, reload }: TabProps) {
+export function BiddingTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
   const { lineItems, subBids, rows } = data;
   const [subs, setSubs] = useState<SubcontractorOption[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -253,6 +253,7 @@ export function BiddingTab({ data, canEdit, reload }: TabProps) {
                     lineItemId={line.id}
                     estimateId={data.estimate.id}
                     subs={subs}
+                    companyTimeZone={companyTimeZone}
                     onDone={async (err) => {
                       setAddingFor(null);
                       if (err) setError(err);
@@ -378,15 +379,18 @@ interface AddBidFormProps {
   lineItemId: string;
   estimateId: string;
   subs: SubcontractorOption[];
+  /** #116 [S103] — company calendar timezone, threaded from the estimate page. */
+  companyTimeZone: string;
   onDone: (error?: string) => void;
 }
 
-function AddBidForm({ lineItemId, estimateId, subs, onDone }: AddBidFormProps) {
+function AddBidForm({ lineItemId, estimateId, subs, companyTimeZone, onDone }: AddBidFormProps) {
   const [subcontractorId, setSubcontractorId] = useState('');
   const [amount, setAmount] = useState('');
-  // #116 [S103]: default the bid-received date to the company day, not the UTC
-  // day (tomorrow after ~20:00 EDT). Company-tz default here (client component).
-  const [receivedAt, setReceivedAt] = useState(() => companyToday('America/New_York'));
+  // #116 [S103]: default the bid-received date to the company calendar day, not
+  // the UTC day (tomorrow after ~20:00 EDT). Real per-company timezone threaded
+  // from the estimate page (America/New_York fallback; never UTC).
+  const [receivedAt, setReceivedAt] = useState(() => companyToday(companyTimeZone));
   const [notes, setNotes] = useState('');
   const [docFile, setDocFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);

@@ -80,7 +80,7 @@ const ROW_TYPE_DEFAULT_NAME: Record<RowType, string> = {
   allowance: 'Allowance',
 };
 
-export function ItemsTab({ data, canEdit, reload }: TabProps) {
+export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
   const { estimate, categories, subcategories, lineItems, rows } = data;
   const [error, setError] = useState<string | null>(null);
   // PO module 17 — the batch add sheet (R8). Draft-only, like every write here.
@@ -103,9 +103,9 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
   const nonFixed = contractType === 'cost_plus' || contractType === 'time_and_materials';
   const laborRateType: InstrumentRateType =
     contractType === 'cost_plus' ? 'cost_plus_labor_hourly' : 'tm_labor_hourly';
-  // #116 [S103]: NOT the UTC day. Company-tz default here (client component);
-  // per-company tz can be threaded from the estimate page later.
-  const today = companyToday('America/New_York');
+  // #116 [S103]: the company calendar day — NOT the UTC day. Real per-company
+  // timezone threaded from the estimate page (America/New_York fallback; never UTC).
+  const today = companyToday(companyTimeZone);
   const [instRates, setInstRates] = useState<InstrumentRate[]>([]);
 
   const refetchInstRates = useCallback(async () => {
