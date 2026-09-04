@@ -26,3 +26,12 @@ after every step.
   fix/po-void-and-sweep`. Created this log.
 - Next: Phase 1 analysis for §2 (PO schema, how "completed" is determined per line,
   `countsTowardCommitted`, `voidContractWithCloseout` precedent).
+
+### Step 1 — §4.5 #67 dead barrel (DONE)
+- Verified all four functions in `packages/shared/utils/index.ts` (`hasPermission`, `formatName`,
+  `generateSlug`, `formatCurrency`) have ZERO callers across `apps/` + `packages/`. Barrel had no
+  importers (`from '@framefocus/shared/utils'` — none; live utils imported by specific path
+  `@framefocus/shared/utils/dates`).
+- Deleted the file; removed `export * from './utils'` from `packages/shared/index.ts` (left a note).
+- Verified: `npm run type-check` exit 0.
+- Commit: `[Shared] #67 — delete the dead utils barrel`.
