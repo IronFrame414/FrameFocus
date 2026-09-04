@@ -142,3 +142,20 @@ DONE: #67 (dead barrel deleted); #116 highest-severity (projects-client actual_e
 + complicity check (0 complicit tests) + remaining 9 sites logged; #54 confirmed already-fixed (stale);
 .limit(1) risky count = 0 (already swept). STOPS/ANALYSIS: §2 PO void — genuine money-rule ruling
 needed (logged); §3 PO edit — analyzed, large build deferred; #3-s168 — logged precisely, not started.
+
+---
+
+## RUN 2 (S103, 2026-09-04) — build the void, restrict soft-delete, finish sweep
+
+### Step 8 — §1 money rule CORRECTED [Josh]
+The earlier phrasing "committed drops to the completed portion, not zeroed" is WITHDRAWN (my STOP was
+right). Corrected ruling: (1) "completed" = `purchased` (review status), not delivery qty — void and
+the committed sum now key on the SAME notion; (2) **void ZEROES the remaining committed**; (3)
+purchased lines keep their cost as ACTUAL, untouched; (4) nothing purchased → 0; (5) fully purchased →
+void succeeds, changes nothing financially; (6) reason always required. Mechanism: a purchased line is
+already excluded from `sync_po_commitment`'s sum, so "release remaining committed, leave actual alone"
+= close out the PO's single committed expense row (`closed_out_at`), amount kept as history — mirrors
+`voidContractWithCloseout`'s `writeCloseout`, but PARTIAL is unnecessary because purchased already left
+committed on its own.
+
+### Step 9 — §4.1 #116 nine display sites (doing FIRST, per prompt)
