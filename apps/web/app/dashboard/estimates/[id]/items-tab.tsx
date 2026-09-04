@@ -81,6 +81,16 @@ const ROW_TYPE_DEFAULT_NAME: Record<RowType, string> = {
   allowance: 'Allowance',
 };
 
+// 9b — coloured type badge (short mono label). Matches the handoff palette:
+// labor blue, material green, allowance amber, subcontractor purple, other grey.
+const ROW_TYPE_BADGE: Record<RowType, { label: string; fg: string; bg: string }> = {
+  labor: { label: 'LABOR', fg: '#3b4ae0', bg: '#e8ecfb' },
+  material: { label: 'MATL', fg: '#1f8f4e', bg: '#e6f0e9' },
+  allowance: { label: 'ALLOW', fg: '#b45309', bg: '#f6ecdd' },
+  subcontractor: { label: 'SUB', fg: '#5b45c4', bg: '#ede9f8' },
+  other: { label: 'OTHER', fg: '#5c6784', bg: '#eef1f6' },
+};
+
 export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
   const { estimate, categories, subcategories, lineItems, rows } = data;
   const [error, setError] = useState<string | null>(null);
@@ -449,15 +459,17 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
         <td style={{ padding: '0.25rem 0.5rem' }}>
           <span
             style={{
+              fontFamily: 'var(--font-mono, monospace)',
               fontSize: '0.625rem',
               fontWeight: 700,
-              color: '#3f4a60',
-              backgroundColor: '#f4f6fa',
-              padding: '0.0625rem 0.375rem',
-              borderRadius: '9999px',
+              letterSpacing: '0.05em',
+              color: ROW_TYPE_BADGE[row.row_type].fg,
+              backgroundColor: ROW_TYPE_BADGE[row.row_type].bg,
+              padding: '0.125rem 0.4375rem',
+              borderRadius: '5px',
             }}
           >
-            {ROW_TYPE_LABELS[row.row_type]}
+            {ROW_TYPE_BADGE[row.row_type].label}
           </span>
         </td>
         <td style={{ padding: '0.25rem 0.5rem', minWidth: '10rem' }}>
@@ -506,7 +518,7 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
             />
           )}
         </td>
-        <td style={{ padding: '0.25rem 0.5rem', textAlign: 'right', fontSize: '0.8125rem' }}>
+        <td style={{ padding: '0.25rem 0.5rem', textAlign: 'right', fontSize: '0.8125rem', fontFamily: 'var(--font-mono, monospace)' }}>
           {fmtMoney(row.total)}
         </td>
         <td style={{ padding: '0.25rem 0.5rem' }}>
