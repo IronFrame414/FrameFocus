@@ -63,7 +63,7 @@ export function PoLinesPanel({
   vendorEmailState,
 }: {
   poId: string;
-  poStatus: 'draft' | 'issued' | 'closed';
+  poStatus: 'draft' | 'issued' | 'closed' | 'voided';
   lines: PanelLine[];
   staff: StaffOption[];
   /** cost_code → budgeted cost. EMPTY for a reader the amounts floor filters
@@ -80,6 +80,10 @@ export function PoLinesPanel({
   const [error, setError] = useState<string | null>(null);
   const [assigningLine, setAssigningLine] = useState<string | null>(null);
 
+  // A closed OR voided PO is terminal — no issue/review/assign controls. A
+  // voided PO is frozen at the DB, so offering a control that can't succeed is
+  // the anti-pattern this project rules against by name.
+  const readOnly = poStatus === 'closed' || poStatus === 'voided';
   const lineBearing = lines.some((l) => l.unitCost != null);
   const draftLines = lines.filter((l) => l.lineStatus === 'draft');
   const openForReview = lines.filter((l) => l.lineStatus === 'issued' || l.lineStatus === 'flagged');
@@ -149,7 +153,7 @@ export function PoLinesPanel({
             — cost only; the client price never appears on a PO
           </span>
         </div>
-        {poStatus !== 'closed' && (
+        {!readOnly && (
           <div className="flex gap-2">
             {canIssue && tickedDrafts.length > 0 && (
               <button
@@ -208,7 +212,7 @@ export function PoLinesPanel({
                   key={line.id}
                   className={`flex items-center gap-3 border-b border-[#f4f6fa] px-2 py-[7px] ${line.lineStatus === 'purchased' ? 'opacity-60' : ''}`}
                 >
-                  {poStatus !== 'closed' &&
+                  {!readOnly &&
                   ((canIssue && line.lineStatus === 'draft') ||
                     (canReview && (line.lineStatus === 'issued' || line.lineStatus === 'flagged'))) ? (
                     <input
@@ -233,7 +237,7 @@ export function PoLinesPanel({
                             className="rounded-full bg-[#f2f4ff] px-2 py-[1px] text-[10.5px] font-semibold text-[#3b4ae0]"
                           >
                             {a.name}
-                            {canAssign && poStatus !== 'closed' && (
+                            {canAssign && !readOnly && (
                               <button
                                 type="button"
                                 aria-label={`Unassign ${a.name}`}
@@ -262,7 +266,7 @@ export function PoLinesPanel({
                   >
                     {STATUS_STYLE[line.lineStatus].label}
                   </span>
-                  {canAssign && poStatus !== 'closed' && line.lineStatus !== 'purchased' && (
+                  {canAssign && !readOnly && line.lineStatus !== 'purchased' && (
                     <div className="w-[130px]">
                       {assigningLine === line.id ? (
                         <select
