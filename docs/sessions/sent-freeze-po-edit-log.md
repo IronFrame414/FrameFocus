@@ -155,5 +155,36 @@ auth). Both are append-only: SELECT/INSERT only, no `updated_*`/`is_deleted`.
 None of these needs Josh — all reversible. Building.
 
 ## Phase 3 — build
-(in progress)
+
+### Migration mechanics (applies to every migration this session)
+⚠️ `supabase db push` REFUSES: the remote ledger holds branch/MCP migrations with no local file
+(`LegacyDbPushMissingLocalError`), and its suggested `migration repair --status reverted 2026111…`
+would FALSELY mark the applied estimates-branch migrations reverted — a ledger corruption, NOT done.
+So each migration is applied via `supabase db query --linked -f <file>` (DDL, no ledger row — same as
+MCP apply_migration) and the ledger row is then inserted by hand into
+`supabase_migrations.schema_migrations (version, name, statements)` and verified present. Idle check
+(`pg_stat_activity` active writes = 0) run before applying.
+
+### ✅ ITEM 1 — `20261310000000_sent_estimate_allowlist_freeze.sql` — BUILT + PROVEN
+Rewrote `enforce_estimate_immutability` from a denylist to an ALLOWLIST (same function, same
+`estimates_z_immutability` trigger). On a non-draft/review estimate, `to_jsonb(NEW) - permitted[]` vs
+`to_jsonb(OLD) - permitted[]` freezes any change outside the permitted machinery set; the existing
+once-set/void/status sub-guards preserved. Applied to rebuild-test; ledger row `20261310000000`
+inserted + verified.
+
+**PROOF by observation (owner via anon key, throwaway sent estimates; measured, not read):**
+- FROZEN now (all REFUSED "A sent estimate is immutable"): name, grand_total, scope_summary,
+  **internal_notes, projected_value, reminder_schedule** (the previously-open holes), deposit_percent.
+- MACHINERY still writable (all APPLIED): viewed_at, reminder_count, last_reminder_sent_at,
+  client_unsubscribed_at, project_id. ⚠️ Each of these APPLIED updates ALSO changed updated_at/
+  updated_by via the trailing triggers — proving the allowlist permits them and does NOT break every
+  sent-estimate write.
+- `void_estimate` on a sent estimate → OK (status=voided, voided_at set).
+- `mark_estimate_lost` on a sent estimate → OK (status=declined, declined_at set,
+  lost_reason_code=lost_to_competitor). (First attempt used an invalid code — the RPC's own validation,
+  not the freeze; re-proven with a valid code.)
+- Draft estimate → name AND grand_total both APPLIED (fully editable, unchanged).
+
+Test data: throwaways EST-ZZZ-FREEZE/VOID/LOST/DRAFT/LOST2 (+ earlier EST-ZZZ-PROBE) created and all
+deleted. Net zero rows added.
 
