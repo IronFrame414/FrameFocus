@@ -111,3 +111,34 @@ shape recorded here.
   `getFiles({ project_id, only_deleted: true })`. Server-side filter is in place. #54 is STALE — no
   change. (Add to the register-hygiene note.)
 - Next: §4.2 .limit(1) risky-finder (subagent) for the risky count.
+
+### Step 6 — §4.2 .limit(1) sweep: RISKY COUNT = 0 (finding)
+- 140 `.limit(1)` in live tests; 39 already ordered; **101 unordered but all SAFE-arbitrary**
+  (existence/non-vacuity probes reading only `.length`/truthiness; schema/column-exists checks;
+  own-row-by-RLS reads; and filter-scoped fixtures where the `.in(...)`/`.neq`/`.not(...)` scope
+  already guarantees the test's premise for every candidate). **RISKY = 0.**
+- Both named precedents are already fixed in place: `s143-void-authority:155` carries `.order('project_id')`;
+  `s163-m5-m6-fixes:372` carries `.neq(member_id, owner).order('id')` (scoped AND ordered). The tree
+  has already been swept. **Nothing to fix.** (Optional future nicety, not done: add an
+  "arbitrary by design" comment to the bare `.eq(company_id).limit(1)` picks in `s97ct-roles:92,97,144`
+  and `s97ct-invoice-email:43` to spare the next sweep — cosmetic only.)
+
+### Step 7 — §4.3 #3-s168 CO fixture: NOT STARTED (logged precisely)
+- Deferred on context grounds (this session is very deep). Precise shape for the next run:
+  1. Rename the corrupted signed row aside — its NAME/description to `ZZ SUPERSEDED — QA M9 sent CO
+     (portal-signed during click-test)`; `co_number` is frozen by the immutability trigger so it stays
+     taken (that is WHY the rebuild takes `-2`).
+  2. In `seed-test-identities.mjs`, build `CO-QA-M9-SENT-2` idempotently: draft CO → add a line → flip
+     to `sent` (per the S167 repair block).
+  3. Tighten `s164-m9-read-arms` ARM 4a to assert the seeded CO is specifically `sent` (today it
+     asserts only `status !== 'draft'`, which `signed` satisfied — the reason it stayed 188/188 over a
+     broken fixture). Then run and record the new count.
+  ⚠️ The entry cautions NOT to re-seed during a live click-test (the S167 mistake); I cannot verify
+     from here whether Josh's click-test is finished. The prompt directs the rebuild, so a next run
+     should confirm the click-test is done before touching `CO-QA-M9-SENT`.
+
+### Summary of this run
+DONE: #67 (dead barrel deleted); #116 highest-severity (projects-client actual_end_date → company tz)
++ complicity check (0 complicit tests) + remaining 9 sites logged; #54 confirmed already-fixed (stale);
+.limit(1) risky count = 0 (already swept). STOPS/ANALYSIS: §2 PO void — genuine money-rule ruling
+needed (logged); §3 PO edit — analyzed, large build deferred; #3-s168 — logged precisely, not started.
