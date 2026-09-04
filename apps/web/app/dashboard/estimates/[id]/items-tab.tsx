@@ -88,6 +88,16 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [pickerForRow, setPickerForRow] = useState<EstimateLineRow | null>(null);
   const [defaultLaborRate, setDefaultLaborRate] = useState<number | null>(null);
+  // 9b — category collapse. PRESENTATIONAL only, persists nothing (the subtotal
+  // rides the header so it survives collapse). Not an autosave concern.
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const toggleCollapsed = (id: string) =>
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   const confirm = useConfirm();
 
   useEffect(() => {
@@ -119,6 +129,18 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
   }, [refetchInstRates]);
 
   const laborRateInForce = nonFixed ? rateInForce(instRates, laborRateType, today) : null;
+
+  // 9b — aggregate "unpriced" summary for the banner. A row is unpriced when its
+  // price basis is unset/zero (labor→rate, material/allowance→unit_cost,
+  // sub/other→amount); an allowance with no unit_cost has "no cap". Read-only
+  // from data; no write path, same signal as the per-row $0 cue.
+  const rowUnpriced = (r: EstimateLineRow): boolean => {
+    if (r.row_type === 'labor') return !r.rate;
+    if (r.row_type === 'material' || r.row_type === 'allowance') return !r.unit_cost;
+    return !r.amount;
+  };
+  const unpricedCount = rows.filter(rowUnpriced).length;
+  const uncappedAllowances = rows.filter((r) => r.row_type === 'allowance' && !r.unit_cost).length;
 
   const mode = estimate.pricing_mode;
   const modeNoun = mode === 'markup' ? 'markup' : 'margin';
@@ -834,6 +856,13 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
     const directLines = lineItems.filter(
       (l) => l.category_id === category.id && l.subcategory_id == null
     );
+    // 9b — category subtotal = Σ of every line's total in the category (direct
+    // AND subcategory lines carry category_id). It renders ON THE HEADER so it
+    // survives collapse. Read-only derivation from data; no write.
+    const catTotal = lineItems
+      .filter((l) => l.category_id === category.id)
+      .reduce((s, l) => s + Number(l.total_price ?? 0), 0);
+    const isCollapsed = collapsed.has(category.id);
 
     return (
       <div
@@ -851,10 +880,26 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
             display: 'flex',
             alignItems: 'center',
             gap: '0.75rem',
-            marginBottom: '0.75rem',
+            marginBottom: isCollapsed ? 0 : '0.75rem',
             flexWrap: 'wrap',
           }}
         >
+          <button
+            type="button"
+            onClick={() => toggleCollapsed(category.id)}
+            aria-label={isCollapsed ? 'Expand category' : 'Collapse category'}
+            style={{
+              border: 'none',
+              background: 'none',
+              cursor: 'pointer',
+              padding: '0 0.25rem 0 0',
+              color: '#8792a8',
+              fontSize: '0.75rem',
+              lineHeight: 1,
+            }}
+          >
+            {isCollapsed ? '▸' : '▾'}
+          </button>
           <span style={{ fontWeight: 700, fontSize: '1rem' }}>
             <InlineText
               value={category.name}
@@ -865,6 +910,19 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
                   : Promise.resolve({ success: false, error: 'Name required' })
               }
             />
+          </span>
+          <span
+            style={{
+              fontFamily: 'var(--font-mono, monospace)',
+              fontSize: '0.75rem',
+              fontWeight: 600,
+              color: '#5c6784',
+              background: '#eef1f6',
+              padding: '3px 9px',
+              borderRadius: '20px',
+            }}
+          >
+            {fmtMoney(catTotal)}
           </span>
           {canEdit && (
             <>
@@ -892,8 +950,12 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
             </>
           )}
         </div>
-        {directLines.map(lineItemBlock)}
-        {subs.map(subcategoryBlock)}
+        {!isCollapsed && (
+          <>
+            {directLines.map(lineItemBlock)}
+            {subs.map(subcategoryBlock)}
+          </>
+        )}
       </div>
     );
   }
@@ -903,6 +965,45 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
       {/* Step 9 — the live cost/price/margin strip (same derivation as the
           Details Health card; one implementation, two surfaces). */}
       <EstimateHealthStrip data={data} />
+
+      {/* 9b — the aggregate unpriced/no-cap banner. Read-only derivation from
+          data (unpricedCount / uncappedAllowances); no write path. Complements
+          the per-row "$0" cue with a job-level summary. */}
+      {(unpricedCount > 0 || uncappedAllowances > 0) && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.7rem',
+            background: '#fff5e6',
+            border: '1.5px solid #f5cf8f',
+            borderRadius: '12px',
+            padding: '12px 16px',
+            marginBottom: '0.75rem',
+            boxShadow: '0 0 0 4px rgba(245,165,36,.09)',
+            fontSize: '0.8125rem',
+            color: '#8a5a12',
+          }}
+        >
+          <span aria-hidden style={{ fontSize: '1rem', lineHeight: 1 }}>
+            ⚠
+          </span>
+          <div style={{ flex: 1 }}>
+            {unpricedCount > 0 && (
+              <strong style={{ fontWeight: 700 }}>
+                {unpricedCount} row{unpricedCount === 1 ? '' : 's'} unpriced
+              </strong>
+            )}
+            {unpricedCount > 0 && uncappedAllowances > 0 && ' · '}
+            {uncappedAllowances > 0 && (
+              <strong style={{ fontWeight: 700 }}>
+                {uncappedAllowances} allowance{uncappedAllowances === 1 ? '' : 's'} with no cap
+              </strong>
+            )}
+            {' — unpriced rows print as $0.00 on the proposal.'}
+          </div>
+        </div>
+      )}
       {canEdit && (
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.75rem' }}>
           <button
