@@ -64,6 +64,12 @@ const selectStyle: React.CSSProperties = {
   border: '1px solid #d5dae4',
   borderRadius: '0.25rem',
 };
+// 9b — the numeric typeface rule: money/qty/% render in IBM Plex Mono so digits
+// are tabular and line up down each column. Applied by WRAPPING the numeric
+// InlineNumber (its display span and input both inherit fontFamily), never by
+// touching the field's props — and never on the whole cell, so sibling buttons,
+// unit selects and the "allowance"/"WINNER" labels stay in the body typeface.
+const monoNum: React.CSSProperties = { fontFamily: font.mono };
 
 const ROW_TYPE_LABELS: Record<RowType, string> = {
   labor: 'Labor',
@@ -305,13 +311,15 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
   function rowPriceCell(row: EstimateLineRow) {
     if (row.row_type === 'labor') {
       return (
-        <InlineNumber
-          value={row.rate}
-          disabled={!canEdit}
-          format={fmtMoney}
-          validate={(v) => (v == null || v < 0 ? 'Rate ≥ 0' : null)}
-          onSave={(v) => mutate(() => updateEstimateLineRow(row.id, { rate: v }), true)}
-        />
+        <span style={monoNum}>
+          <InlineNumber
+            value={row.rate}
+            disabled={!canEdit}
+            format={fmtMoney}
+            validate={(v) => (v == null || v < 0 ? 'Rate ≥ 0' : null)}
+            onSave={(v) => mutate(() => updateEstimateLineRow(row.id, { rate: v }), true)}
+          />
+        </span>
       );
     }
 
@@ -323,17 +331,19 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
       const isAllowance = row.row_type === 'allowance';
       return (
         <span style={{ display: 'inline-flex', gap: '0.375rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <InlineNumber
-            value={row.unit_cost}
-            disabled={!canEdit}
-            format={fmtMoney}
-            validate={(v) => (v == null || v < 0 ? 'Cost ≥ 0' : null)}
-            onSave={(v) =>
-              v == null
-                ? Promise.resolve({ success: false, error: 'Required' })
-                : mutate(() => updateEstimateLineRow(row.id, { unit_cost: v }), true)
-            }
-          />
+          <span style={monoNum}>
+            <InlineNumber
+              value={row.unit_cost}
+              disabled={!canEdit}
+              format={fmtMoney}
+              validate={(v) => (v == null || v < 0 ? 'Cost ≥ 0' : null)}
+              onSave={(v) =>
+                v == null
+                  ? Promise.resolve({ success: false, error: 'Required' })
+                  : mutate(() => updateEstimateLineRow(row.id, { unit_cost: v }), true)
+              }
+            />
+          </span>
           {isAllowance && (
             <span style={{ fontSize: '0.625rem', color: '#b45309' }} title="Client-selected later; budgeted at qty × cost">
               allowance
@@ -356,17 +366,19 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
     // subcontractor / other — single amount
     return (
       <span style={{ display: 'inline-flex', gap: '0.375rem', alignItems: 'center' }}>
-        <InlineNumber
-          value={row.amount}
-          disabled={!canEdit}
-          format={fmtMoney}
-          validate={(v) => (v == null || v < 0 ? 'Amount ≥ 0' : null)}
-          onSave={(v) =>
-            v == null
-              ? Promise.resolve({ success: false, error: 'Required' })
-              : mutate(() => updateEstimateLineRow(row.id, { amount: v }), true)
-          }
-        />
+        <span style={monoNum}>
+          <InlineNumber
+            value={row.amount}
+            disabled={!canEdit}
+            format={fmtMoney}
+            validate={(v) => (v == null || v < 0 ? 'Amount ≥ 0' : null)}
+            onSave={(v) =>
+              v == null
+                ? Promise.resolve({ success: false, error: 'Required' })
+                : mutate(() => updateEstimateLineRow(row.id, { amount: v }), true)
+            }
+          />
+        </span>
         {row.row_type === 'subcontractor' && row.subcontractor_id && (
           <span
             style={{
@@ -390,12 +402,14 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
     if (row.row_type === 'labor') {
       return (
         <span style={{ display: 'inline-flex', gap: '0.375rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <InlineNumber
-            value={row.quantity}
-            disabled={!canEdit}
-            validate={(v) => (v == null || v < 0 ? 'Qty ≥ 0' : null)}
-            onSave={(v) => mutate(() => updateEstimateLineRow(row.id, { quantity: v }), true)}
-          />
+          <span style={monoNum}>
+            <InlineNumber
+              value={row.quantity}
+              disabled={!canEdit}
+              validate={(v) => (v == null || v < 0 ? 'Qty ≥ 0' : null)}
+              onSave={(v) => mutate(() => updateEstimateLineRow(row.id, { quantity: v }), true)}
+            />
+          </span>
           <select
             value={row.labor_unit ?? 'hours'}
             disabled={!canEdit}
@@ -418,12 +432,14 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
     if (row.row_type === 'material' || row.row_type === 'allowance') {
       return (
         <span style={{ display: 'inline-flex', gap: '0.375rem', alignItems: 'center', flexWrap: 'wrap' }}>
-          <InlineNumber
-            value={row.quantity}
-            disabled={!canEdit}
-            validate={(v) => (v == null || v < 0 ? 'Qty ≥ 0' : null)}
-            onSave={(v) => mutate(() => updateEstimateLineRow(row.id, { quantity: v }), true)}
-          />
+          <span style={monoNum}>
+            <InlineNumber
+              value={row.quantity}
+              disabled={!canEdit}
+              validate={(v) => (v == null || v < 0 ? 'Qty ≥ 0' : null)}
+              onSave={(v) => mutate(() => updateEstimateLineRow(row.id, { quantity: v }), true)}
+            />
+          </span>
           <select
             value={row.unit_of_measure ?? 'each'}
             disabled={!canEdit}
@@ -459,7 +475,7 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
         <td style={{ padding: '0.25rem 0.5rem' }}>
           <span
             style={{
-              fontFamily: 'var(--font-mono, monospace)',
+              fontFamily: font.mono,
               fontSize: '0.625rem',
               fontWeight: 700,
               letterSpacing: '0.05em',
@@ -485,7 +501,7 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
         </td>
         <td style={{ padding: '0.25rem 0.5rem' }}>{rowPriceCell(row)}</td>
         <td style={{ padding: '0.25rem 0.5rem' }}>{rowQtyCell(row)}</td>
-        <td style={{ padding: '0.25rem 0.5rem', textAlign: 'right' }}>
+        <td style={{ padding: '0.25rem 0.5rem', textAlign: 'right', fontFamily: font.mono }}>
           <InlineNumber
             value={row.markup_percent}
             disabled={!canEdit}
@@ -518,7 +534,7 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
             />
           )}
         </td>
-        <td style={{ padding: '0.25rem 0.5rem', textAlign: 'right', fontSize: '0.8125rem', fontFamily: 'var(--font-mono, monospace)' }}>
+        <td style={{ padding: '0.25rem 0.5rem', textAlign: 'right', fontSize: '0.8125rem', fontFamily: font.mono }}>
           {fmtMoney(row.total)}
         </td>
         <td style={{ padding: '0.25rem 0.5rem' }}>
@@ -565,18 +581,20 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
           <option value="fixed">Fixed</option>
         </select>
         {line.discount_type && (
-          <InlineNumber
-            value={line.discount_amount}
-            disabled={!canEdit}
-            validate={(v) => {
-              if (v == null || v < 0) return '≥ 0';
-              if (line.discount_type === 'percent' && v > 100) return 'Max 100%';
-              return null;
-            }}
-            onSave={(v) =>
-              mutate(() => updateEstimateLineItem(line.id, { discount_amount: v }), true)
-            }
-          />
+          <span style={monoNum}>
+            <InlineNumber
+              value={line.discount_amount}
+              disabled={!canEdit}
+              validate={(v) => {
+                if (v == null || v < 0) return '≥ 0';
+                if (line.discount_type === 'percent' && v > 100) return 'Max 100%';
+                return null;
+              }}
+              onSave={(v) =>
+                mutate(() => updateEstimateLineItem(line.id, { discount_amount: v }), true)
+              }
+            />
+          </span>
         )}
       </span>
     );
@@ -657,29 +675,33 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
             {hasOverride && (
               <span style={{ marginRight: '0.75rem' }}>
                 <span style={rowLabel}>Cost </span>
-                <InlineNumber
-                  value={line.override_cost}
-                  disabled={!canEdit}
-                  allowNull
-                  format={(v) => (v == null ? 'not set' : fmtMoney(v))}
-                  validate={(v) => (v != null && v < 0 ? '≥ 0' : null)}
-                  onSave={(v) =>
-                    mutate(() => updateEstimateLineItem(line.id, { override_cost: v }), false)
-                  }
-                />
+                <span style={monoNum}>
+                  <InlineNumber
+                    value={line.override_cost}
+                    disabled={!canEdit}
+                    allowNull
+                    format={(v) => (v == null ? 'not set' : fmtMoney(v))}
+                    validate={(v) => (v != null && v < 0 ? '≥ 0' : null)}
+                    onSave={(v) =>
+                      mutate(() => updateEstimateLineItem(line.id, { override_cost: v }), false)
+                    }
+                  />
+                </span>
               </span>
             )}
             <span style={rowLabel}>Total </span>
-            <InlineNumber
-              value={line.total_price_override}
-              disabled={!canEdit}
-              allowNull
-              format={() => fmtMoney(line.total_price)}
-              validate={(v) => (v != null && v < 0 ? '≥ 0' : null)}
-              onSave={(v) =>
-                mutate(() => updateEstimateLineItem(line.id, { total_price_override: v }), true)
-              }
-            />
+            <span style={monoNum}>
+              <InlineNumber
+                value={line.total_price_override}
+                disabled={!canEdit}
+                allowNull
+                format={() => fmtMoney(line.total_price)}
+                validate={(v) => (v != null && v < 0 ? '≥ 0' : null)}
+                onSave={(v) =>
+                  mutate(() => updateEstimateLineItem(line.id, { total_price_override: v }), true)
+                }
+              />
+            </span>
             {hasOverride && (
               <button
                 type="button"
@@ -925,7 +947,7 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
           </span>
           <span
             style={{
-              fontFamily: 'var(--font-mono, monospace)',
+              fontFamily: font.mono,
               fontSize: '0.75rem',
               fontWeight: 600,
               color: '#5c6784',
