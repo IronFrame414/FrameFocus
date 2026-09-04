@@ -1,4 +1,5 @@
 'use client';
+import { companyToday } from '@framefocus/shared/utils/dates';
 
 // Money representation §7.1 S-5 — CO instrument rates on the CO builder.
 // A non-fixed CO carries its OWN negotiated rate(s) (P4 — no mixing, never
@@ -100,7 +101,8 @@ export function CoRateSection({
     listInstrumentRatesClient({ estimate_id: sourceEstimateId }).then(setEstimateRates);
   }, [sourceEstimateId]);
 
-  const today = new Date().toISOString().slice(0, 10);
+  // #116 [S103]: NOT the UTC day. Company-tz default here (client component).
+  const today = companyToday('America/New_York');
   const fields = RATE_FIELDS[coType];
   const missing = fields.filter((f) => rateInForce(rates, f.rateType, today) == null);
 

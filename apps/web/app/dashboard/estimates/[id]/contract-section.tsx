@@ -1,4 +1,5 @@
 'use client';
+import { companyToday } from '@framefocus/shared/utils/dates';
 
 // Money representation §7.1 S-3 (as amended 2026-07-31) — estimate
 // settings: contract type, the per-type negotiated rate AMOUNT (date-free
@@ -91,7 +92,10 @@ export function ContractSection({
     refetchRates();
   }, [refetchRates]);
 
-  const today = new Date().toISOString().slice(0, 10);
+  // #116 [S103]: NOT the UTC day (tomorrow after ~20:00 EDT). Client component
+  // deep in the estimate tree; falls back to the company-tz default here. The
+  // per-company timezone can be threaded from the estimate page later.
+  const today = companyToday('America/New_York');
 
   // Rateless surface: rate types the contract type carries but which have
   // nothing in force (never set, or the only rate was superseded). A missing

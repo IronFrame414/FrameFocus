@@ -36,6 +36,7 @@ import {
 } from '@/lib/services/instrument-rates-client';
 import type { CostCatalogItem } from '@/lib/services/cost-catalog-client';
 import { materialUnitsOfMeasure } from '@framefocus/shared/validation/estimate-items';
+import { companyToday } from '@framefocus/shared/utils/dates';
 import { InlineNumber, InlineText } from '../inline-edit';
 import { UNIT_LABELS, fmtMoney, fmtPercent } from '../labels';
 import { CatalogPicker } from './catalog-picker';
@@ -102,7 +103,9 @@ export function ItemsTab({ data, canEdit, reload }: TabProps) {
   const nonFixed = contractType === 'cost_plus' || contractType === 'time_and_materials';
   const laborRateType: InstrumentRateType =
     contractType === 'cost_plus' ? 'cost_plus_labor_hourly' : 'tm_labor_hourly';
-  const today = new Date().toISOString().slice(0, 10);
+  // #116 [S103]: NOT the UTC day. Company-tz default here (client component);
+  // per-company tz can be threaded from the estimate page later.
+  const today = companyToday('America/New_York');
   const [instRates, setInstRates] = useState<InstrumentRate[]>([]);
 
   const refetchInstRates = useCallback(async () => {

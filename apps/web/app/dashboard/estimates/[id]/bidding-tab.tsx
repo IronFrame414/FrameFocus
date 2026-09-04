@@ -1,4 +1,5 @@
 'use client';
+import { companyToday } from '@framefocus/shared/utils/dates';
 
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -383,7 +384,9 @@ interface AddBidFormProps {
 function AddBidForm({ lineItemId, estimateId, subs, onDone }: AddBidFormProps) {
   const [subcontractorId, setSubcontractorId] = useState('');
   const [amount, setAmount] = useState('');
-  const [receivedAt, setReceivedAt] = useState(() => new Date().toISOString().slice(0, 10));
+  // #116 [S103]: default the bid-received date to the company day, not the UTC
+  // day (tomorrow after ~20:00 EDT). Company-tz default here (client component).
+  const [receivedAt, setReceivedAt] = useState(() => companyToday('America/New_York'));
   const [notes, setNotes] = useState('');
   const [docFile, setDocFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
