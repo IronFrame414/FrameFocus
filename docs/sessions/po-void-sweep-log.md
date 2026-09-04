@@ -314,3 +314,39 @@ restart costs one tree, not all four):
   `new Date().toISOString` hits across the suite are fixture-INPUT dates, symmetric arithmetic, or
   tz-AWARE helper tests (`pricing-as-of` validates tz handling — the opposite of complicit).
   Consistent with the run-1/run-2 finding. No green→red.
+
+### Step 16 — §3 #3-s168: rebuild the corrupted SENT fixture + tighten ARM 4a (done, twice-clean, 35/35)
+**Confirmed the corruption on rebuild-test first (no guessing).** `CO-QA-M9-SENT` (id `76e8c483…`,
+title `QA M9 — sent CO`) had `signed_at` SET (portal-signed) yet status `sent` — the OLD seed's flip
+block force-flips a signed row's status back to `sent` every run, which is precisely how the
+corruption hid: status looked healthy while the row carried an indelible signature. `CO-QA-M9-DRAFT`
+was already renamed-aside + rebuilt as `-2` in a prior session (the pattern to mirror). No
+`CO-QA-M9-SENT-2` existed yet.
+
+- **Seed — SENT rename-aside + `-n` rebuild** (mirrors the DRAFT block). Signal is `signed_at IS NOT
+  NULL` OR `status = 'signed'`, NOT status alone (status is force-flipped). The poisoned row is
+  renamed to `ZZ SUPERSEDED — QA M9 sent CO (CO-QA-M9-SENT, signed from the portal — do not use)`
+  (title not frozen; co_number frozen so the rebuild takes the next free `-n`), then the canonical
+  `QA M9 — sent CO` is rebuilt draft→line→sent under `CO-QA-M9-SENT-2`. The rename-aside runs BEFORE
+  the flip block, so the flip only ever touches the clean row — no signed row is force-flipped-and-
+  left again.
+- **Seed — the `invoice_hour_claims` idempotency re-fix (the lost fix, re-applied).** Run 1 CRASHED
+  downstream on `invoice_hour_claims_one_per_segment` — a DUPLICATE-KEY on insert. Verified on
+  rebuild-test that the constraint is `UNIQUE(time_segment_id)` ALONE; the `ensureRow` match keyed on
+  `{invoice_id, time_segment_id}` — WIDER than the constraint — so a re-run whose existing claim
+  carried a different `invoice_id` missed the SELECT and collided on INSERT. Aligned the match to
+  `{time_segment_id}` and **ordered the `seg` `.limit(1)`** (was heap-order — CLAUDE.md category 1;
+  an unordered pick silently creates a second claim on re-run). This is the exact bug the prompt said
+  was fixed last run and lost in the restart; the on-disk seed carried the pre-fix version.
+- **Test — ARM 4a tightened** to assert the seeded SENT fixture (read by its stable TITLE `QA M9 —
+  sent CO`) is specifically `sent` AND is readable by the client — not merely that some non-draft
+  exists. This is the assertion that would have caught the corruption at the time; ⚠️ it is GREEN now
+  only because the fixture was rebuilt in the SAME pass. Against a freshly portal-signed row (status
+  `signed`, before the next re-seed) it goes RED — which is the point.
+- **Twice-clean PROVEN:** seed run #1 exit 0 (did the REPAIR/rename + rebuild), run #2 exit 0, run #3
+  exit 0 — no REPAIRED, no errors, everything `exists`. (The very first run exited 1 on the
+  hour-claim crash BEFORE the fix; post-fix it is clean and idempotent.)
+- **Fixture verified:** `CO-QA-M9-SENT` = `ZZ SUPERSEDED …` (signed, aside); `CO-QA-M9-SENT-2` =
+  `QA M9 — sent CO`, status `sent`, `signed_at` NULL.
+- **`s164-m9-read-arms`: 35/35 passed, exit 0** (ARM 1–9). The prompt's "188/188" was a whole-suite
+  count from a prior session; this file alone is 35 tests, and the tightened 4a is among them.
