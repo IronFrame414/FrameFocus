@@ -158,6 +158,9 @@ interface CoBuilderProps {
   sourceEstimateId: string | null;
   pendingSigningToken: string | null;
   companyName: string;
+  /** #116 [S103] — company calendar timezone, threaded to the CO rate section
+   *  so its date default is the company day, not UTC. */
+  companyTimeZone: string;
   hasSavedSignature: boolean;
   /** Owner/Admin only [S168]. DELETE is narrower than void on purpose — it is
    *  destructive and unrecoverable, so it does not inherit `canManage`'s PM. */
@@ -179,6 +182,7 @@ export function CoBuilder({
   sourceEstimateId,
   pendingSigningToken,
   companyName,
+  companyTimeZone,
   hasSavedSignature,
   canDelete,
   supersedes,
@@ -491,6 +495,7 @@ export function CoBuilder({
             coType={co.co_type}
             isDraft={co.status === 'draft'}
             sourceEstimateId={sourceEstimateId}
+            companyTimeZone={companyTimeZone}
           />
         )}
 

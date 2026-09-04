@@ -1200,10 +1200,37 @@ await ensureRow(
     status: 'draft', pricing_mode: 'markup', net_delta: 1234.56,
   }
 );
-// Idempotency repair. An earlier run created this CO already SENT, and the
-// immutability trigger then refuses to add its line for ever. Drop the row when
-// it is sent-but-lineless so the create-draft/add-line/flip sequence below can
-// run; a CO that already has its line is left alone.
+// ⚠️ THE SENT CO GETS ITS OWN CLICK-TEST POISONING [#3-s168, S103]. Exactly like
+// the DRAFT CO above: a portal SIGNATURE on CO-QA-M9-SENT sets signed_at for
+// ever, and `enforce_change_order_immutability()` will not clear a signature
+// stamp — so the row can never be reset to a clean SENT CO. A signed row still
+// satisfied ARM 4a (`status !== 'draft'`) and ARM 5a (its line is visible),
+// which is why `s164-m9-read-arms` stayed 188/188 over a broken fixture for
+// THREE runs. Rename the poisoned row out of the way (title is not frozen;
+// co_number IS, and is UNIQUE per company, so the rebuild takes the next free
+// CO-QA-M9-SENT-n) and rebuild the canonical SENT CO below. ARM 4a is tightened
+// to assert the rebuilt row is specifically `sent` — the assertion that would
+// have caught this at the time. The signal is signed_at (or a status of
+// 'signed'), NOT status alone: the flip block below force-flips a signed row's
+// status back to 'sent' every run, which is exactly how it hid.
+{
+  const { data: poisoned } = await db
+    .from('change_orders').select('id, status, co_number, signed_at')
+    .eq('company_id', companyA.id).eq('title', 'QA M9 — sent CO').maybeSingle();
+  if (poisoned && (poisoned.status === 'signed' || poisoned.signed_at !== null)) {
+    const dead = `ZZ SUPERSEDED — QA M9 sent CO (${poisoned.co_number}, signed from the portal — do not use)`;
+    must('rename superseded sent CO', (await db.from('change_orders')
+      .update({ title: dead }).eq('id', poisoned.id)).error);
+    note('QA M9 — sent CO', 'REPAIRED', `signed from the portal (signed_at set); renamed to "${dead}" and rebuilt below`);
+  }
+}
+
+// Idempotency repair, distinct from the poisoning above. An earlier run created
+// this CO already SENT (before the create-draft/add-line/flip ordering below),
+// and the immutability trigger then refuses to add its line for ever. Drop the
+// row when it is sent-but-lineless so the sequence below can run; a CO that
+// already has its line is left alone. Such a row was never SIGNED, so it can be
+// recreated under the SAME co_number.
 {
   const { data: co } = await db
     .from('change_orders').select('id, status')
@@ -1220,12 +1247,24 @@ await ensureRow(
   }
 }
 
+// Next free co_number, computed AFTER both repairs: a dropped lineless row frees
+// -1, while a renamed-aside signed row keeps its (frozen) co_number and pushes
+// the rebuild to -2. Only consulted when the row below is actually created.
+let sentCoNumber = 'CO-QA-M9-SENT';
+{
+  const { data: taken } = await db
+    .from('change_orders').select('co_number')
+    .eq('company_id', companyA.id).like('co_number', 'CO-QA-M9-SENT%');
+  const used = new Set((taken ?? []).map((r) => r.co_number));
+  for (let n = 2; used.has(sentCoNumber); n += 1) sentCoNumber = `CO-QA-M9-SENT-${n}`;
+}
+
 await ensureRow(
   'SENT change order (client must see)', 'change_orders',
   { company_id: companyA.id, project_id: aProjectId, title: 'QA M9 — sent CO' },
   {
     company_id: companyA.id, project_id: aProjectId,
-    co_number: 'CO-QA-M9-SENT', title: 'QA M9 — sent CO',
+    co_number: sentCoNumber, title: 'QA M9 — sent CO',
     co_type: 'fixed_price', author_member_id: ownerMemberIdA,
     // ⚠️ CREATED AS A DRAFT and flipped below. `change_orders` has a trigger —
     // "Lines of a sent change order are immutable — void and reissue instead" —
@@ -1464,9 +1503,11 @@ const draftInvoiceId = await ensureInvoice('QA M9 — draft bill', {
   // The first version of this fixture selected them from `time_segments`,
   // which fails as a silent `null` and left the R8 probe reading an empty
   // table. Exactly the §2 vacuity trap, inside the fixture written to prevent it.
-  // ⚠️ ORDERED [S103]. An unordered `.limit(1)` returns heap order, so a re-run
-  // picked a DIFFERENT segment and re-inserted, tripping the idempotency check.
-  // `.order('id')` pins the same segment every run.
+  // ⚠️ ORDERED .limit(1). An unordered pick returns a heap-order segment that
+  // shifts whenever any time_segments row is touched, so a re-run picks a
+  // DIFFERENT segment and silently creates a SECOND claim. Any stable segment
+  // will do here (the R8 probe only needs a claim to exist), so ordering is the
+  // right fix — CLAUDE.md .limit(1) category 1.
   const { data: seg } = await db.from('time_segments')
     .select('id').eq('company_id', companyA.id).eq('is_deleted', false)
     .order('id').limit(1).maybeSingle();
@@ -1475,12 +1516,14 @@ const draftInvoiceId = await ensureInvoice('QA M9 — draft bill', {
     .eq('description', 'QA M9 labor (full_detail)').maybeSingle();
   if (seg && laborLine) {
     await ensureRow(
-      // ⚠️ MATCH ALIGNED TO THE CONSTRAINT [S103]. invoice_hour_claims has a
-      // UNIQUE index on time_segment_id ALONE (one claim per segment, globally).
-      // Matching on {invoice_id, time_segment_id} could miss an existing claim
-      // for the segment and re-insert -> 23505 on the second run. Match the
-      // constraint's column so ensureRow finds and reuses it.
       'M9 hour claim (R8 — client must never read a crew name)', 'invoice_hour_claims',
+      // ⚠️ MATCH THE UNIQUE CONSTRAINT, NOT MORE. `invoice_hour_claims_one_per_
+      // segment` is UNIQUE(time_segment_id) ALONE, so the ensureRow match keys on
+      // time_segment_id only. A prior version also matched invoice_id — wider
+      // than the constraint — so a re-run whose existing claim on this segment
+      // carried a different invoice_id MISSED on the SELECT and then COLLIDED on
+      // INSERT. Aligning the match to the constraint is what makes the re-run
+      // find-and-leave instead of re-insert. [#3-s168 follow-on, S103]
       { time_segment_id: seg.id },
       {
         company_id: companyA.id, invoice_id: fullDetailInvoiceId,

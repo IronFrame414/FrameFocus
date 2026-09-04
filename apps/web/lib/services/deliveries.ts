@@ -13,8 +13,10 @@ type DeliveryRow = Database['public']['Tables']['deliveries']['Row'];
 type DeliveryItemRow = Database['public']['Tables']['delivery_items']['Row'];
 
 // PO module R5: draft | issued | closed. 'open' became 'issued' (a relabel
-// — 20261042); a DRAFT is new and accepts no deliveries.
-export type PurchaseOrderStatus = 'draft' | 'issued' | 'closed';
+// — 20261042); a DRAFT is new and accepts no deliveries. 'voided' joined the
+// set at S103 (20261300000000) — the audit-preserving exit that releases the
+// remaining committed dollars; a voided PO is FROZEN and terminal.
+export type PurchaseOrderStatus = 'draft' | 'issued' | 'closed' | 'voided';
 
 export type PurchaseOrder = Omit<PurchaseOrderRow, 'status'> & {
   status: PurchaseOrderStatus;

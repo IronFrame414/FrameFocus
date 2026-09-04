@@ -1,4 +1,5 @@
 'use client';
+import { companyToday } from '@framefocus/shared/utils/dates';
 
 // Money representation §7.1 S-3 (as amended 2026-07-31) — estimate
 // settings: contract type, the per-type negotiated rate AMOUNT (date-free
@@ -41,6 +42,8 @@ interface ContractSectionProps {
    *  non-fixed estimate. Gated callers skip the fetch entirely and get an
    *  honest caption instead. */
   canReadRates: boolean;
+  /** #116 [S103] — company calendar timezone, threaded from the estimate page. */
+  companyTimeZone: string;
   reload: () => Promise<void>;
 }
 
@@ -74,6 +77,7 @@ export function ContractSection({
   estimate,
   canEditSettings,
   canReadRates,
+  companyTimeZone,
   reload,
 }: ContractSectionProps) {
   const contractType = estimate.contract_type;
@@ -91,7 +95,10 @@ export function ContractSection({
     refetchRates();
   }, [refetchRates]);
 
-  const today = new Date().toISOString().slice(0, 10);
+  // #116 [S103]: the company calendar day — NOT the UTC day (tomorrow after
+  // ~20:00 EDT). Real per-company timezone threaded from the estimate page
+  // (getCompanyTimezone, America/New_York fallback when null; never UTC).
+  const today = companyToday(companyTimeZone);
 
   // Rateless surface: rate types the contract type carries but which have
   // nothing in force (never set, or the only rate was superseded). A missing

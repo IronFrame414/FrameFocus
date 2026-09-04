@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase-server';
 import { redirect, notFound } from 'next/navigation';
 import Link from 'next/link';
 import { getProject, PROJECT_TYPE_LABELS } from '@/lib/services/projects';
+import { companyToday } from '@framefocus/shared/utils/dates';
 import { getChangeOrders } from '@/lib/services/change-orders';
 import { getRevisedContract } from '@/lib/services/contract-value';
 import { getPhases, getTasks, rollupPhases } from '@/lib/services/tasks';
@@ -102,7 +103,11 @@ export default async function ProjectOverviewPage({ params }: { params: { id: st
   const contractLabel = isFixed ? 'Revised Contract' : 'Projected Value, revised';
   const originalLabel = isFixed ? 'Original contract' : 'Projected value (non-binding)';
 
-  const today = new Date().toISOString().slice(0, 10);
+  // #116 [S103]: the COMPANY day for the days-to-target display, not the UTC day
+  // (which rolls to tomorrow after ~20:00 EDT). `companies` is RLS-scoped to the
+  // caller's own row, so no id filter.
+  const { data: coTz } = await supabase.from('companies').select('timezone').maybeSingle();
+  const today = companyToday(coTz?.timezone ?? 'America/New_York');
   const daysToTarget = project.target_end_date
     ? Math.round(
         (new Date(project.target_end_date + 'T00:00:00').getTime() -

@@ -5,7 +5,7 @@ import { getProject } from '@/lib/services/projects';
 import { getPurchaseOrderDetail, poTitle } from '@/lib/services/deliveries';
 import { getMyMember } from '@/lib/services/members';
 import { FieldTabs } from '@/components/field/field-tabs';
-import { ClosePoButton, DeletePoButton, PoTotalControl } from './po-actions';
+import { ClosePoButton, DeletePoButton, PoTotalControl, VoidPoButton } from './po-actions';
 import { PoLinesPanel, type PanelLine, type StaffOption } from './po-lines-panel';
 import { PoLogistics } from './po-logistics';
 
@@ -163,6 +163,10 @@ export default async function PurchaseOrderDetailPage({
             <span className="rounded-full bg-[#fdece0] px-[10px] py-[4px] text-[12px] font-semibold text-[#b45309]">
               Open
             </span>
+          ) : po.status === 'voided' ? (
+            <span className="rounded-full bg-[#fbe4e2] px-[10px] py-[4px] text-[12px] font-semibold text-[#c0362c]">
+              Voided
+            </span>
           ) : (
             <span className="rounded-full bg-[#eef1f6] px-[10px] py-[4px] text-[12px] font-semibold text-[#6b7280]">
               Closed
@@ -174,7 +178,7 @@ export default async function PurchaseOrderDetailPage({
               the RPC family; the legacy editor predates the lifecycle and
               would hard-delete issued lines without a re-sync. Hidden AND
               route-guarded (edit/page.tsx redirects), per D-54. */}
-          {canEditPo && !lineBearing ? (
+          {canEditPo && !lineBearing && po.status !== 'voided' ? (
             <Link
               href={`/dashboard/field-ops/${project.id}/deliveries/${po.id}/edit`}
               className="rounded-[9px] border border-[#e0e4ea] bg-white px-[15px] py-[9px] text-[13px] font-semibold text-[#374151] transition-colors hover:border-[#c9d2e4]"
@@ -183,7 +187,20 @@ export default async function PurchaseOrderDetailPage({
             </Link>
           ) : null}
           {isAdminRole && po.status === 'issued' ? <ClosePoButton poId={po.id} /> : null}
-          {isAdminRole ? <DeletePoButton poId={po.id} projectId={project.id} /> : null}
+          {/* §2 [S103] — void is the exit for a PO that has been issued (or
+              closed): it releases the remaining committed dollars. Owner/Admin
+              only, matching the RPC. A draft has no committed dollars and exits
+              via Delete instead. */}
+          {isAdminRole && (po.status === 'issued' || po.status === 'closed') ? (
+            <VoidPoButton poId={po.id} />
+          ) : null}
+          {/* §2.1 — soft-delete is the DRAFT exit ONLY; an issued PO carries
+              committed dollars and must exit via Void. The DB freezes it either
+              way, so a Delete button on a non-draft could never succeed — not
+              offered. */}
+          {isAdminRole && po.status === 'draft' ? (
+            <DeletePoButton poId={po.id} projectId={project.id} />
+          ) : null}
           {po.status === 'issued' ? (
             <Link
               href={`/dashboard/field-ops/${project.id}/deliveries/check-in?po=${po.id}`}
@@ -213,14 +230,14 @@ export default async function PurchaseOrderDetailPage({
           poId={po.id}
           projectId={params.projectId}
           totalAmount={po.total_amount}
-          canEdit={canEditPo}
+          canEdit={canEditPo && po.status !== 'voided'}
           hideAmounts={!isAdminRole}
         />
       )}
 
       <PoLinesPanel
         poId={po.id}
-        poStatus={po.status as 'draft' | 'issued' | 'closed'}
+        poStatus={po.status}
         lines={panelLines}
         staff={staff}
         budgetedByCode={budgetedByCode}
@@ -293,6 +310,21 @@ export default async function PurchaseOrderDetailPage({
             <div className="mt-4 rounded-[9px] border border-[#e6e9ef] bg-[#f4f6f9] p-[12px] text-[12px] leading-snug text-[#6b7280]">
               {autoClosed ? 'Auto-closed' : `Closed by ${po.closer?.display_name ?? 'Owner/Admin'}`}
               {po.closed_reason ? ` — "${po.closed_reason}"` : ''}
+            </div>
+          ) : null}
+          {/* §2 [S103] — the void record, read back. A void whose reason nobody
+              can see afterwards is only half a record (mirrors the CO void). */}
+          {po.status === 'voided' ? (
+            <div className="mt-4 rounded-[9px] border border-[#f3c8c2] bg-[#fdf1f0] p-[12px] text-[12px] leading-snug text-[#8a3227]">
+              <span className="font-semibold">Voided</span>
+              {po.voided_at
+                ? ` ${new Date(po.voided_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
+                : ''}
+              {po.void_reason ? ` — "${po.void_reason}"` : ''}
+              <div className="mt-1 text-[#b06a61]">
+                Remaining committed cost was released off the job; any purchased lines kept their
+                cost.
+              </div>
             </div>
           ) : null}
         </div>

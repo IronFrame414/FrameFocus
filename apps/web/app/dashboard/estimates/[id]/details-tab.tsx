@@ -36,6 +36,7 @@ export function DetailsTab({
   role,
   canEdit,
   reload,
+  companyTimeZone,
   onDelete,
   onClone,
   statusAction,
@@ -171,6 +172,7 @@ export function DetailsTab({
           estimate={estimate}
           canEditSettings={canEdit && (role === 'owner' || role === 'admin')}
           canReadRates={role === 'owner' || role === 'admin'}
+          companyTimeZone={companyTimeZone}
           reload={reload}
         />
 

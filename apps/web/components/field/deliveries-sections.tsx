@@ -21,8 +21,9 @@ function fmtYmd(ymd: string | null): string {
 }
 
 // R5 (20261042): draft | issued | closed. 'issued' wears the old open badge;
-// a DRAFT is visibly not-yet-ordered.
-function StatusBadge({ status }: { status: 'draft' | 'issued' | 'closed' }) {
+// a DRAFT is visibly not-yet-ordered. 'voided' (S103) is terminal — a distinct
+// badge, never mislabelled as Closed.
+function StatusBadge({ status }: { status: 'draft' | 'issued' | 'closed' | 'voided' }) {
   if (status === 'draft') {
     return (
       <span className="rounded-full bg-[#eef1f6] px-[10px] py-[3px] text-[11px] font-semibold text-[#7b8699]">
@@ -30,9 +31,16 @@ function StatusBadge({ status }: { status: 'draft' | 'issued' | 'closed' }) {
       </span>
     );
   }
-  return status === 'issued' ? (
-    <span className="rounded-full bg-[#fdece0] px-[10px] py-[3px] text-[11px] font-semibold text-[#b45309]">
-      Open
+  if (status === 'issued') {
+    return (
+      <span className="rounded-full bg-[#fdece0] px-[10px] py-[3px] text-[11px] font-semibold text-[#b45309]">
+        Open
+      </span>
+    );
+  }
+  return status === 'voided' ? (
+    <span className="rounded-full bg-[#fbe4e2] px-[10px] py-[3px] text-[11px] font-semibold text-[#c0362c]">
+      Voided
     </span>
   ) : (
     <span className="rounded-full bg-[#eef1f6] px-[10px] py-[3px] text-[11px] font-semibold text-[#6b7280]">
@@ -88,9 +96,11 @@ export function DeliveriesSections({
   canCreatePo: boolean;
 }) {
   // Draft + issued both list under "open" here — the field surface's job is
-  // "what is not finished", and a draft is certainly that.
-  const openPos = pos.filter((po) => po.status !== 'closed');
-  const closedPos = pos.filter((po) => po.status === 'closed');
+  // "what is not finished", and a draft is certainly that. Closed AND voided
+  // are terminal and group below (a voided PO grouped under "open" with the
+  // wrong badge is exactly what widening PurchaseOrderStatus surfaced).
+  const openPos = pos.filter((po) => po.status === 'draft' || po.status === 'issued');
+  const closedPos = pos.filter((po) => po.status === 'closed' || po.status === 'voided');
 
   return (
     <div>
@@ -102,7 +112,7 @@ export function DeliveriesSections({
           <div className="rounded-[13px] border border-[#e6e9ef] bg-white p-6 text-sm text-[#6b7280]">
             {pos.length === 0
               ? `No purchase orders yet.${canCreatePo ? ' Enter one so the crew has something to check the truck against.' : ''}`
-              : 'No open purchase orders — every PO is closed (below).'}
+              : 'No open purchase orders — every PO is closed or voided (below).'}
           </div>
         ) : (
           openPos.map((po) => <PoRow key={po.id} projectId={projectId} po={po} />)
@@ -112,9 +122,9 @@ export function DeliveriesSections({
       {closedPos.length > 0 ? (
         <>
           <div className="mb-2 mt-6 text-[13px] font-bold uppercase text-[#14213d]">
-            Closed purchase orders{' '}
+            Closed &amp; voided purchase orders{' '}
             <span className="text-[11px] font-medium normal-case text-[#9aa1ac]">
-              · filled or closed by hand — kept here for the record
+              · filled, closed by hand, or voided — kept here for the record
             </span>
           </div>
           <div className="flex flex-col gap-2">

@@ -6,6 +6,8 @@ import type { ChangeOrderWithAuthor } from '@/lib/services/change-orders';
 import type { ProjectWithContact } from '@/lib/services/projects';
 import { cardStyle, color, font, microLabelStyle } from '@/lib/theme';
 import Link from 'next/link';
+import { createClient } from '@/lib/supabase-server';
+import { companyToday } from '@framefocus/shared/utils/dates';
 import {
   EXPECTED_TYPES,
   RATE_TYPE_META,
@@ -30,7 +32,11 @@ interface RateSummaryProps {
 }
 
 export async function RateSummary({ project, changeOrders }: RateSummaryProps) {
-  const today = new Date().toISOString().slice(0, 10);
+  // #116 [S103]: the COMPANY day for rate-in-force display, not the UTC day
+  // (tomorrow after ~20:00 EDT — the wrong rate would read as in force).
+  const supabase = await createClient();
+  const { data: coTz } = await supabase.from('companies').select('timezone').maybeSingle();
+  const today = companyToday(coTz?.timezone ?? 'America/New_York');
 
   const instruments: {
     key: string;
