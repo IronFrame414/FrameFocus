@@ -151,3 +151,44 @@ Both re-run in ISOLATION; both fail deterministically there (NOT suite-paralleli
   full-suite-only (absent in isolation) → parallel-createUser collision + teardown ordering.
   Environmental; `contacts_company_id_fkey` is a long-standing FK the dedupe migrations don't touch.
   **Not merge-caused.**
+
+## Battery re-run (§3) — merge-caused reds FIXED; ⚠️ NOT fully green (pre-existing/environmental remain)
+
+| check | before | after fixes |
+| --- | --- | --- |
+| type-check `--force` | 5/5 | **5/5, exit 0** |
+| lint | clean | **clean, exit 0** (pre-existing `<img>` warning only) |
+| cold build `--force` | 1/1 | **1/1, exit 0, no errors** |
+| unit `vitest run` | 1 failed / 1020 | ✅ **1021 passed / 1021, exit 0** (deletion-census fixed) |
+| live `test:live` | 6 files / 6 tests failed | **4 files failed / 3 tests failed; 1530 passed / 32 skipped (1565)** |
+
+**Live delta — the merge-caused reds are gone:**
+- `s175-estimate-freeze` — was 2 failed → **PASS** (fix 1; +B9/B10, −A1 include_client_contract case).
+- `s146-contract-services` — was 1 failed → **PASS** (fix 1).
+- Count moved 1526→1530 passed, 1564→1565 total, exactly as the fix-1 test edits predict (+B7/B8/C5
+  pass, +B9/B10 new, −A1 case).
+
+**⚠️ Remaining 4 failed files — ALL pre-existing or environmental, NONE merge-caused:**
+- `s126-chat-core` (2 fail) — PRE-EXISTING (merge touches no chat; fixture "owner not mentionable").
+- `s131-punch-names` (1 fail) — PRE-EXISTING (fails on origin/main too; S176 rename drift).
+- `s133-subcontractor-read-floor` (25 SKIPPED) + `s178-storage-trash` (7 SKIPPED) — 0 failed tests;
+  marked "failed files" because their fixture SETUP hit the harness errors (`createUser: already
+  registered` parallel collision + `purge companies … contacts_company_id_fkey` teardown ordering).
+  Environmental; identical behaviour in the pre-fix run.
+
+## ⚠️ DECISION — STOPPED before §4. Production untouched. Not pushed.
+The battery is NOT fully green. Every remaining red is confirmed pre-existing (s126/s131 — s131 red on
+production origin/main too) or environmental (s133/s178 setup collisions). None reflects a defect in
+what would deploy. **But the ruled gate is "if anything is still red, STOP and report — Josh decides
+whether it blocks."** So I did NOT cross into §4:
+- Production ledger NOT read/modified; NO migration applied to production; `main` NOT pushed
+  (origin/main still `38b9c5a`); CLI still linked to rebuild-test.
+- rebuild-test now carries `20261330000000` (fix 1) in addition to the earlier migrations.
+- LOCAL `main` = merges + fixes 1/2 + log, unpushed.
+
+**Recommendation:** the four remaining reds are safe to proceed past — none is caused by this deploy and
+s131 already fails on the current production baseline — so they do not gate the deploy's correctness.
+If Josh confirms "proceed despite the pre-existing/environmental reds," §4 can run as specified
+(ledger-first, migrations in filename order one at a time, dedupe abort = hard stop, push main, relink).
+Otherwise the two fixture failures (s126/s131) and the harness setup collisions (s133/s178) should be
+fixed first. **The go/no-go on the pre-existing reds is Josh's, per the rule.**
