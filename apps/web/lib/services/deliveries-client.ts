@@ -170,13 +170,44 @@ export async function closePurchaseOrder(id: string, reason: string): Promise<Mu
   return { success: true };
 }
 
+/**
+ * Void an issued (or closed) PO — the audit-preserving exit that RELEASES the
+ * remaining committed dollars. §2 [S103]. Reason required; Owner/Admin; the
+ * money and freeze all live in the `void_purchase_order` RPC.
+ */
+export async function voidPurchaseOrder(id: string, reason: string): Promise<MutationResult> {
+  const supabase = createClient();
+  const { error } = await supabase.rpc('void_purchase_order', { p_po_id: id, p_reason: reason });
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
 export async function softDeletePurchaseOrder(id: string): Promise<MutationResult> {
   const supabase = createClient();
-  const { error } = await supabase
+  // §2.1 [S103]: soft-delete is the DRAFT exit only. An issued PO carries live
+  // committed dollars and exits through void — deleting it would strand them
+  // (the accidental exit #110(b) named). The DB lifecycle trigger enforces this;
+  // check here first so the message names the alternative rather than surfacing
+  // a raw trigger error.
+  const { data: po } = await supabase
+    .from('purchase_orders').select('status').eq('id', id).single();
+  if (po && po.status !== 'draft') {
+    return { success: false, error: 'An issued purchase order cannot be deleted — void it instead.' };
+  }
+  const { data, error } = await supabase
     .from('purchase_orders')
     .update({ is_deleted: true, deleted_at: new Date().toISOString() })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
   if (error) return { success: false, error: error.message };
+  // A zero-row UPDATE is RLS filtering (is_deleted is Owner/Admin-only) — not
+  // success. Name both causes rather than claim a delete that did not happen.
+  if (!data?.length) {
+    return {
+      success: false,
+      error: 'That change was not applied. You may not have permission to make it, or the record no longer exists.',
+    };
+  }
   return { success: true };
 }
 

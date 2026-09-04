@@ -189,3 +189,10 @@ committed on its own.
   | void with no reason | **REFUSED** — "A void needs a reason. It is kept permanently." |
   | soft-delete an ISSUED PO | **REFUSED** — "An issued purchase order cannot be deleted — void it instead." |
   | soft-delete a DRAFT | **SUCCEEDED** |
+- Service layer (`deliveries-client.ts`): added `voidPurchaseOrder(id, reason)` → `rpc('void_purchase_order')`.
+  Restricted `softDeletePurchaseOrder` to DRAFT (pre-check with the "void it instead" message) and gave it
+  the `.select('id')` + zero-row guard (it was a bare UPDATE reporting success over an RLS-filtered
+  delete). DB lifecycle trigger is the real enforcement; the pre-check is the clean message. type-check clean.
+- ⚠️ UI follow-up (bounded, NOT built this run): a Void button on `po-actions.tsx` (reason-required
+  confirm) calling `voidPurchaseOrder`, and hiding Delete for non-draft POs. Same shape as the CO/estimate
+  void buttons already shipped. Logged; the money + authority are fully enforced in the DB regardless.
