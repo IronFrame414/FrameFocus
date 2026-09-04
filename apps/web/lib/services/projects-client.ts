@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase-browser';
 import type { Project, ProjectStatus, ProjectType } from '@/lib/services/projects';
 import { applied, DISCARDED } from '@/lib/services/mutation-result';
+import { companyToday } from '@framefocus/shared/utils/dates';
 export type { Project, ProjectStatus, ProjectType };
 
 /**
@@ -201,11 +202,18 @@ export async function transitionProjectStatus(
       return { success: false, error: 'Could not verify the project end date. Try again.' };
     }
 
+    // ⚠️ #116 [S103]: stamp the COMPANY calendar day, not the UTC day.
+    // `new Date().toISOString().slice(0,10)` is the UTC date, which after ~20:00
+    // EDT is TOMORROW — so a project completed at 9pm was stamped a day late.
+    // `companies` is RLS-scoped to the caller's own row, so no id filter.
+    const { data: co } = await supabase.from('companies').select('timezone').maybeSingle();
+    const today = companyToday(co?.timezone ?? 'America/New_York');
+
     if (current.actual_end_date === null) {
       // First completion — auto-stamp today (unchanged 5A behavior).
-      updates.actual_end_date = new Date().toISOString().slice(0, 10);
+      updates.actual_end_date = today;
     } else if (opts?.endDateChoice === 'today') {
-      updates.actual_end_date = new Date().toISOString().slice(0, 10);
+      updates.actual_end_date = today;
     } else if (opts?.endDateChoice === 'keep') {
       // Keep the original date — no write.
     } else {

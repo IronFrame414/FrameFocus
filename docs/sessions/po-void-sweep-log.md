@@ -77,3 +77,10 @@ large independent build (new append-only `purchase_order_events`/`po_line_edits`
 `sync_po_commitment` + service + UI). Deferred on context grounds after the sweep items; precise
 shape recorded here.
 - Next: continue the well-specified sweep items (#116 remaining sites, #54, .limit(1) finder, #3-s168).
+
+### Step 3 — §4.1 #116 highest-severity site (projects-client.ts) DONE
+- `transitionProjectStatus` stamped `actual_end_date = new Date().toISOString().slice(0,10)` (UTC) at
+  two branches → a project completed after ~20:00 EDT was dated TOMORROW. Now fetches
+  `companies.timezone` (RLS-scoped, no id filter — the payables-client/instrument-rates pattern) and
+  stamps `companyToday(tz ?? 'America/New_York')`. type-check exit 0.
+- Next: check desktop test complicity, then the remaining 9 #116 sites.
