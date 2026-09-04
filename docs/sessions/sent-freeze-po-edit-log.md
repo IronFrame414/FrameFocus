@@ -188,3 +188,42 @@ inserted + verified.
 Test data: throwaways EST-ZZZ-FREEZE/VOID/LOST/DRAFT/LOST2 (+ earlier EST-ZZZ-PROBE) created and all
 deleted. Net zero rows added.
 
+### ✅ ITEM 2 — `20261320000000_po_line_edit_audit.sql` — BUILT + PROVEN
+Four parts, all applied to rebuild-test + ledger row `20261320000000` inserted/verified:
+1. `purchase_order_edits` — append-only audit table (id, company_id dflt get_my_company_id(),
+   purchase_order_id, purchase_order_item_id NULL=header, edit_kind header|line, changes jsonb
+   {col:[old,new]}, actor_id dflt auth.uid(), created_at). SELECT/INSERT only; SELECT mirrors
+   `purchase_order_items` visibility (company + can_view_project) so NO cost figure is exposed to
+   anyone who can't already see the PO lines — Financial Visibility Floor not widened.
+2. `enforce_po_line_commit_guard` BEFORE UPDATE on purchase_order_items — raises if a money col
+   (qty_ordered/unit_cost/budget_item_id) changes on a COMMITTED line (line_status issued/flagged AND
+   unit_cost NOT NULL) unless the GUC `app.po_line_edit='on'` is set. Scoped to committed lines so the
+   existing draft/uncosted reconciler (`setPurchaseOrderItems`, which refuses costed lines) and the
+   line_status flows (issue/flag/purchase) and void soft-delete are untouched.
+3. `log_purchase_order_header_edit` AFTER UPDATE on purchase_orders — audits vendor_name/vendor_id/
+   po_number/need_by/deliver_to changes on an issued+ PO (draft header edits stay unchanged/unaudited).
+   Header authority unchanged (owner/admin/PM); this only records.
+4. `edit_purchase_order_line(p_line_id, p_qty_ordered, p_unit_cost, p_budget_item_id)` SECURITY
+   DEFINER — owner/admin only; PO must be `issued` (draft → edit directly; voided/closed → frozen);
+   line must be issued/flagged; sets the GUC, UPDATEs, writes ONE audit row, then `sync_po_commitment`
+   — audit + recompute inseparable, one txn.
+
+`estimate_events` was NOT reused (estimate-specific, keyed by estimate_id).
+
+**PROOF by observation (throwaway issued PO on a budgeted project, committed = the state='committed'
+expense sum; measured, not read):**
+- A) OWNER `edit_purchase_order_line` unit_cost 5→7 (qty 10) → OK; **committed 70 = 10×7**; audit row
+  `line {unit_cost:[5,7]}` actor=owner.
+- A2) OWNER edit qty 10→4 → **committed 28 = 4×7**; audit row `line {qty_ordered:[10,4]}`. (Restored
+  qty→10, committed 70.) ⇒ recompute tracks BOTH drivers, arithmetic exact.
+- B) PM via RPC → REFUSED "Only an owner or admin…"; PM direct table UPDATE → REFUSED "…edited through
+  the edit action, not directly." Line + committed unchanged (7 / 70).
+- C) PM edits header need_by → APPLIED, and audit row `header {need_by:[…]}` actor=PM. (Header stays
+  owner/admin/PM, now recorded.)
+- D) OWNER edit line on a VOIDED PO → REFUSED "…voided and its lines are frozen."
+- E) DRAFT PO direct line qty edit 1→8 → APPLIED (unchanged behaviour).
+
+Test data: 3 throwaway POs (PO-ZZZ/ZZZ2/ZZZ3) + lines + their audit/expense rows created and deleted;
+one leftover PO-ZZZ from an aborted setup run was also swept. PM was already assigned to the reused
+project, so no assignment row was created. Net zero rows added; reused project untouched.
+
