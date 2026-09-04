@@ -63,10 +63,14 @@ export default async function ChangeOrderPage({
   // column — expected type errors vs. un-regenerated database.ts until applied.
   const { data: company } = await supabase
     .from('companies')
-    .select('name, contractor_signature_path')
+    .select('name, contractor_signature_path, timezone')
     .eq('id', changeOrder.company_id)
     .maybeSingle();
   const companyName = company?.name ?? '';
+  // #116 [S103]: the real per-company calendar timezone for the CO rate
+  // section's date default. NY fallback when the column is null (matching
+  // getCompanyTimeSettings); never UTC.
+  const companyTimeZone = company?.timezone ?? 'America/New_York';
   const hasSavedSignature = Boolean(
     (company as { contractor_signature_path?: string | null } | null)?.contractor_signature_path
   );
@@ -106,6 +110,7 @@ export default async function ChangeOrderPage({
       sourceEstimateId={project?.source_estimate_id ?? null}
       pendingSigningToken={pendingSession?.token ?? null}
       companyName={companyName}
+      companyTimeZone={companyTimeZone}
       hasSavedSignature={hasSavedSignature}
       canDelete={canDelete}
       supersedes={supersession.supersedes}

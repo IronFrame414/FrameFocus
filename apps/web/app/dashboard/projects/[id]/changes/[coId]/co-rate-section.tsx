@@ -77,6 +77,8 @@ interface CoRateSectionProps {
    *  (P4 anchoring unchanged) and the prefill is editable. Null (project
    *  without an estimate) disables the prefill. */
   sourceEstimateId: string | null;
+  /** #116 [S103] — company calendar timezone, threaded from the CO page. */
+  companyTimeZone: string;
 }
 
 export function CoRateSection({
@@ -84,6 +86,7 @@ export function CoRateSection({
   coType,
   isDraft,
   sourceEstimateId,
+  companyTimeZone,
 }: CoRateSectionProps) {
   const [rates, setRates] = useState<InstrumentRate[]>([]);
   const [estimateRates, setEstimateRates] = useState<InstrumentRate[]>([]);
@@ -101,8 +104,9 @@ export function CoRateSection({
     listInstrumentRatesClient({ estimate_id: sourceEstimateId }).then(setEstimateRates);
   }, [sourceEstimateId]);
 
-  // #116 [S103]: NOT the UTC day. Company-tz default here (client component).
-  const today = companyToday('America/New_York');
+  // #116 [S103]: the company calendar day — NOT the UTC day. Real per-company
+  // timezone threaded from the CO page (America/New_York fallback; never UTC).
+  const today = companyToday(companyTimeZone);
   const fields = RATE_FIELDS[coType];
   const missing = fields.filter((f) => rateInForce(rates, f.rateType, today) == null);
 
