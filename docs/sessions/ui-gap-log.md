@@ -117,8 +117,21 @@ by handoff (3) 17a/b/c (two-step add sheet) + the base grouped line table. ⚠�
 autosave + the two-step add-sheet contract (writes nothing until step 2; controls never in the scroll
 body). Not yet visually diffed by me; §5 is authoritative that it is wrong.
 
-(estimates-overview / add-item 1-3 / convert-create-po / notes / sub-bid 1-2 rows appended from the
-estimates-cluster audit subagent below.)
+**Rest of the estimates cluster — 8/8 MATCH, 0 gaps, both §4 contracts honored:**
+| screen | handoff | verdict | note |
+| --- | --- | --- | --- |
+| estimates-overview | Desktop 14b | MATCHES | genuine re-layout: 5-card KPI strip incl. dark win-rate card, amber expiry banner, pill filters, real 8-col table with IBM Plex Mono on Number/Amount/Margin/Expires. The prime suspect (pre-existing list) — and it conforms. |
+| estimates-add-item-1 | PO 17a | MATCHES | 210px source rail + list + 268px tray; "Nothing is written until step 2" microcopy present. |
+| estimates-add-item-2 | PO 17b | MATCHES | ⚠️ CONTRACT HONORED: step-2 controls ("Back to picking", "Add 5 items") are in PINNED footers, NOT the scroll body. |
+| estimates-add-item-3 | PO 17c | MATCHES | manual form + "Save to cost catalog" NEW card. |
+| estimates-convert-create-po | PO 18a | MATCHES | ⚠️ CONTRACT HONORED: cost-only — unit cost, line totals, "Committed on issue"; NO sell/margin. |
+| estimates-notes | Estimates 16d | MATCHES | internal banner, notes list, carry-to-project NEW card, role table, dark totals strip. |
+| estimates-sub-bid-request-1 | Estimates 19c | MATCHES | sub picker + scope + "How they reply" NEW card + right rail. |
+| estimates-sub-bid-request-2 | Estimates 19d | MATCHES | 7-col mono comparison table + insight banner + selected-bid detail. |
+
+⇒ §5's caution ("screenshots may contradict that add-items/draft-POs/PO-lines conform") **resolved in
+favour of conformance** — they DO conform, contracts intact. **The entire redesign gap reduces to two
+screens: estimates Details (19b) and Line Items.** Nothing else on the platform exhibits the pattern.
 
 ## Phase 2 — questions, answered with reversible defaults (nobody watching; did not wait)
 
