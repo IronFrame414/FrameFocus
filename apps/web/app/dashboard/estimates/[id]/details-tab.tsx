@@ -1,16 +1,21 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { computeEstimateHealth } from '@/lib/estimate-health';
+import { createClient } from '@/lib/supabase-browser';
 import {
   DiscountType,
   PricingMode,
-  PROPOSAL_PRICING_LEVEL_OPTIONS,
-  ProposalPricingLevel,
   updateEstimate,
   updatePricingMode,
+  markEstimateLost,
+  type LostReasonCode,
+  type AlsoSendToRecipient,
 } from '@/lib/services/estimates-client';
 import { recalculateEstimateTotals } from '@/lib/services/estimate-items-client';
+import { ProposalFormatPicker } from './proposal-format-picker';
+import { AlsoSendToField } from './also-send-to-field';
 import { ContactAddressPicker } from '../contact-address-picker';
 import { InlineNumber } from '../inline-edit';
 import { fmtPercent } from '../labels';
@@ -31,12 +36,69 @@ interface DetailsTabProps extends TabProps {
   statusAction: React.ReactNode;
 }
 
+const LOST_REASONS: { value: LostReasonCode; label: string }[] = [
+  { value: 'lost_to_competitor', label: 'Lost to a competitor' },
+  { value: 'no_response', label: 'No response' },
+  { value: 'client_postponed', label: 'Client postponed' },
+  { value: 'we_declined', label: 'We declined' },
+  { value: 'other', label: 'Other' },
+];
+
+/** 19b — mark a sent estimate lost (win-rate honesty). Wires markEstimateLost. */
+function MarkLostCard({ estimateId, onDone }: { estimateId: string; onDone: () => Promise<void> }) {
+  const [reason, setReason] = useState<LostReasonCode>('lost_to_competitor');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function submit() {
+    setBusy(true);
+    setErr(null);
+    const result = await markEstimateLost(estimateId, reason);
+    setBusy(false);
+    if (!result.success) {
+      setErr(result.error ?? 'Could not mark this estimate lost.');
+      return;
+    }
+    await onDone();
+  }
+
+  return (
+    <div style={{ border: '1px solid #efd3d0', borderRadius: '14px', padding: '18px 20px', background: '#fdf6f5' }}>
+      <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f1729', marginBottom: '0.25rem' }}>
+        Didn&rsquo;t win this one?
+      </div>
+      <p style={{ fontSize: '0.72rem', color: '#7b8699', margin: '0 0 0.5rem' }}>
+        Mark it lost instead of deleting it, so your win rate stays honest.
+      </p>
+      <select
+        value={reason}
+        onChange={(e) => setReason(e.target.value as LostReasonCode)}
+        style={{ width: '100%', padding: '0.375rem 0.5rem', border: '1px solid #d5dae4', borderRadius: '0.25rem', fontSize: '0.8125rem', marginBottom: '0.5rem' }}
+      >
+        {LOST_REASONS.map((r) => (
+          <option key={r.value} value={r.value}>{r.label}</option>
+        ))}
+      </select>
+      <button
+        type="button"
+        onClick={submit}
+        disabled={busy}
+        style={{ width: '100%', padding: '0.45rem', fontSize: '0.8125rem', fontWeight: 600, color: '#fff', background: busy ? '#9aa4b8' : '#c0362c', border: 'none', borderRadius: '0.375rem', cursor: busy ? 'not-allowed' : 'pointer' }}
+      >
+        {busy ? 'Marking…' : 'Mark as lost'}
+      </button>
+      {err && <p style={{ color: '#c0362c', fontSize: '0.72rem', marginTop: '0.5rem' }}>{err}</p>}
+    </div>
+  );
+}
+
 export function DetailsTab({
   data,
   role,
   canEdit,
   reload,
   companyTimeZone,
+  estimatorName,
   onDelete,
   onClone,
   statusAction,
@@ -44,7 +106,38 @@ export function DetailsTab({
   const { estimate, lineItems } = data;
   const [menuOpen, setMenuOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // 19b/R10 — estimator is READ-ONLY, resolved SERVER-SIDE (page.tsx →
+  // getUploaderNames) and passed as a prop. It was formerly fetched here, but
+  // getUploaderNames imports next/headers via supabase-server and cannot be
+  // imported into a client component — the module-boundary break this fixes.
+  const [target, setTarget] = useState<number | null>(null);
+  // 19b "Also send to" (§1.4) — { contact_id, name, email } snapshots.
+  const [alsoSendTo, setAlsoSendTo] = useState<AlsoSendToRecipient[]>(
+    () => (estimate.also_send_to as AlsoSendToRecipient[] | null) ?? []
+  );
   const confirm = useConfirm();
+
+  useEffect(() => {
+    createClient()
+      .from('companies')
+      .select('margin_target_percent')
+      .maybeSingle()
+      .then(({ data: co }) => setTarget(co?.margin_target_percent ?? null));
+  }, []);
+
+  const health = computeEstimateHealth({
+    grandTotal: estimate.grand_total,
+    taxRate: estimate.tax_rate,
+    lineItems,
+    rows: data.rows,
+  });
+  const gapPts = target != null && health.marginPercent != null ? health.marginPercent - target : null;
+
+  async function saveAlsoSendTo(next: AlsoSendToRecipient[]) {
+    setAlsoSendTo(next);
+    const result = await saveField({ also_send_to: next });
+    if (!result.success) setError(result.error || 'Could not save recipients');
+  }
 
   const mode = estimate.pricing_mode;
   const modeNoun = mode === 'markup' ? 'markup' : 'margin';
@@ -96,13 +189,46 @@ export function DetailsTab({
     if (!result.success) setError(result.error || 'Could not update client');
   }
 
-  const sectionStyle: React.CSSProperties = { marginBottom: '2rem', maxWidth: '560px' };
-  const sectionTitleStyle: React.CSSProperties = {
-    fontSize: '1rem',
-    fontWeight: 600,
-    marginBottom: '0.75rem',
-    paddingBottom: '0.375rem',
-    borderBottom: '1px solid #e4e8ef',
+  // ── 19b card anatomy. Fields are RELOCATED into cards; every handler above is
+  // unchanged (per-field autosave via saveField on blur). The dark totals footer
+  // is the SHELL's (estimate-builder), rendered once — this tab adds none. ──
+  const card: React.CSSProperties = {
+    background: '#fff',
+    border: '1px solid #e4e8ef',
+    borderRadius: '14px',
+    padding: '18px 20px',
+  };
+  const cardAmber: React.CSSProperties = {
+    ...card,
+    border: '1.5px solid #f5cf8f',
+    boxShadow: '0 0 0 4px rgba(245,165,36,.09)',
+  };
+  // Mono uppercase section label — "THE JOB", "CLIENT" (handoff 19b).
+  const monoTitle: React.CSSProperties = {
+    fontFamily: 'var(--font-mono, monospace)',
+    fontSize: '0.6875rem',
+    fontWeight: 700,
+    letterSpacing: '0.09em',
+    textTransform: 'uppercase',
+    color: '#5c6784',
+    marginBottom: '0.9rem',
+  };
+  const cardHeadRow: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '0.6rem',
+    marginBottom: '0.4rem',
+  };
+  const cardHeadTitle: React.CSSProperties = { fontSize: '0.97rem', fontWeight: 700, color: '#1a2437' };
+  const newBadge: React.CSSProperties = {
+    fontFamily: 'var(--font-mono, monospace)',
+    fontSize: '0.6rem',
+    fontWeight: 800,
+    letterSpacing: '0.1em',
+    background: '#f5a524',
+    color: '#0f1729',
+    padding: '3px 7px',
+    borderRadius: '5px',
   };
   const rowStyle: React.CSSProperties = {
     display: 'flex',
@@ -112,16 +238,24 @@ export function DetailsTab({
     fontSize: '0.875rem',
   };
   const fieldLabel: React.CSSProperties = { color: '#3f4a60', fontWeight: 500 };
+  const railCardHead: React.CSSProperties = { fontSize: '0.75rem', color: '#7b8699', marginBottom: '0.25rem' };
 
   return (
-    <div style={{ display: 'flex', gap: '2rem', alignItems: 'flex-start' }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'minmax(0,1fr) 320px',
+        gap: '16px',
+        alignItems: 'start',
+      }}
+    >
+      {/* LEFT — the decision cards */}
+      <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: '16px' }}>
         {error && (
           <div
             style={{
               padding: '0.75rem 1rem',
               borderRadius: '0.375rem',
-              marginBottom: '1rem',
               backgroundColor: '#fdf1f0',
               color: '#c0362c',
               fontSize: '0.875rem',
@@ -131,9 +265,9 @@ export function DetailsTab({
           </div>
         )}
 
-        {/* Client */}
-        <div style={sectionStyle}>
-          <div style={sectionTitleStyle}>Client &amp; Job Site</div>
+        {/* CLIENT */}
+        <div style={card}>
+          <div style={monoTitle}>CLIENT</div>
           {canEdit ? (
             <ContactAddressPicker
               contactId={estimate.contact_id}
@@ -141,16 +275,28 @@ export function DetailsTab({
               onChange={handleContactChange}
             />
           ) : (
-            <p style={{ fontSize: '0.875rem', color: '#7b8699' }}>
+            <p style={{ fontSize: '0.875rem', color: '#7b8699', margin: 0 }}>
               Client and address are locked while the estimate is{' '}
               {STATUS_LABELS[estimate.status].toLowerCase()}.
             </p>
           )}
+
+          {/* Also send to — extra proposal recipients (spouse, architect, lender).
+              Per-job; frozen on send (the also_send_to freeze migration). §1.4:
+              pick an existing contact or add one inline; stores contact_id +
+              name/email snapshot. */}
+          <AlsoSendToField value={alsoSendTo} canEdit={canEdit} onChange={saveAlsoSendTo} />
         </div>
 
-        {/* Expiration */}
-        <div style={sectionStyle}>
-          <div style={sectionTitleStyle}>Expiration</div>
+        {/* THE JOB — estimator (read-only) + timing. Estimate name/number live in
+            the shell header; contract type + rates are in ContractSection below;
+            lead source lives on the contact (not duplicated here). */}
+        <div style={card}>
+          <div style={monoTitle}>THE JOB</div>
+          <div style={rowStyle}>
+            <span style={fieldLabel}>Estimator</span>
+            <span style={{ color: '#7b8699' }}>{estimatorName ?? '—'}</span>
+          </div>
           <div style={rowStyle}>
             <span style={fieldLabel}>Days until expiration</span>
             <InlineNumber
@@ -167,7 +313,7 @@ export function DetailsTab({
         </div>
 
         {/* Contract type + negotiated rates + P11 projection (S-3).
-            Owner/Admin edit; PM sees read-only (§7.3). */}
+            Owner/Admin edit; PM sees read-only (§7.3). Its own card component. */}
         <ContractSection
           estimate={estimate}
           canEditSettings={canEdit && (role === 'owner' || role === 'admin')}
@@ -176,17 +322,39 @@ export function DetailsTab({
           reload={reload}
         />
 
-        {/* Pricing */}
-        <div style={sectionStyle}>
-          <div style={sectionTitleStyle}>Pricing</div>
+        {/* Proposal format — the one control (same as 9d/19a); writes proposal_pricing_level. */}
+        <div style={cardAmber}>
+          <div style={cardHeadRow}>
+            <span style={cardHeadTitle}>Proposal format</span>
+            <span style={newBadge}>NEW</span>
+            <span style={{ flex: 1 }} />
+            <span style={{ fontSize: '0.72rem', color: '#7b8699' }}>Override at send time</span>
+          </div>
+          <p style={{ fontSize: '0.78rem', color: '#7b8699', margin: '0 0 0.75rem' }}>
+            How much of the breakdown the client sees on the printed estimate and the contract.
+          </p>
+          <ProposalFormatPicker
+            value={estimate.proposal_pricing_level}
+            contractType={estimate.contract_type}
+            canEdit={canEdit}
+            onSelect={async (code) => {
+              const result = await saveField({ proposal_pricing_level: code });
+              if (!result.success) setError(result.error || 'Save failed');
+            }}
+          />
+        </div>
+
+        {/* Pricing basis */}
+        <div style={cardAmber}>
+          <div style={cardHeadRow}>
+            <span style={cardHeadTitle}>Pricing basis</span>
+            <span style={newBadge}>NEW</span>
+          </div>
           <div style={rowStyle}>
             <span style={fieldLabel}>Pricing mode</span>
             <span style={{ display: 'flex', gap: '1rem' }}>
               {(['markup', 'margin'] as const).map((m) => (
-                <label
-                  key={m}
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}
-                >
+                <label key={m} style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
                   <input
                     type="radio"
                     name="pricing_mode"
@@ -199,32 +367,11 @@ export function DetailsTab({
               ))}
             </span>
           </div>
-          {/* 4D-rev3: estimate-level proposal detail level. Defaults from the
-              company default at creation; this edits the persisted value. */}
-          <div style={rowStyle}>
-            <span style={fieldLabel}>Proposal detail level</span>
-            <select
-              value={estimate.proposal_pricing_level}
-              disabled={!canEdit}
-              onChange={async (e) => {
-                const value = e.target.value as ProposalPricingLevel;
-                const result = await saveField({ proposal_pricing_level: value });
-                if (!result.success) setError(result.error || 'Save failed');
-              }}
-              style={{
-                padding: '0.25rem 0.5rem',
-                border: '1px solid #d5dae4',
-                borderRadius: '0.25rem',
-                fontSize: '0.875rem',
-              }}
-            >
-              {PROPOSAL_PRICING_LEVEL_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Markup vs margin — the correction the pricing card exists to make. */}
+          <p style={{ fontSize: '0.75rem', color: '#7b8699', margin: '0.25rem 0 0.5rem' }}>
+            Markup and margin are not the same number: a 20% markup is a 16.7% margin, and hitting a
+            30% margin target takes a 43% markup.
+          </p>
           <div style={rowStyle}>
             <span style={fieldLabel}>Subcontractor {modeNoun} %</span>
             <InlineNumber
@@ -272,8 +419,8 @@ export function DetailsTab({
         </div>
 
         {/* Whole-estimate discount */}
-        <div style={sectionStyle}>
-          <div style={sectionTitleStyle}>Whole-Estimate Discount</div>
+        <div style={card}>
+          <div style={monoTitle}>WHOLE-ESTIMATE DISCOUNT</div>
           <div style={rowStyle}>
             <span style={fieldLabel}>Type</span>
             <select
@@ -327,19 +474,10 @@ export function DetailsTab({
         )}
       </div>
 
-      {/* Right column: status + actions + the §8.10.4 panels */}
-      <div style={{ width: '260px', flexShrink: 0 }}>
-        <div
-          style={{
-            border: '1px solid #e4e8ef',
-            borderRadius: '0.5rem',
-            padding: '1rem',
-            marginBottom: '1rem',
-          }}
-        >
-          <div style={{ fontSize: '0.75rem', color: '#7b8699', marginBottom: '0.25rem' }}>
-            Status
-          </div>
+      {/* RIGHT RAIL (320px) — status, health, activity, delete. */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={card}>
+          <div style={railCardHead}>Status</div>
           <div style={{ fontSize: '0.875rem', fontWeight: 600, marginBottom: '0.75rem' }}>
             {STATUS_LABELS[estimate.status]}
           </div>
@@ -359,7 +497,6 @@ export function DetailsTab({
             border: '1px solid #dbe0fb',
             borderRadius: '0.375rem',
             textDecoration: 'none',
-            marginBottom: '1rem',
           }}
         >
           Preview Proposal
@@ -370,8 +507,44 @@ export function DetailsTab({
             History and Coverage are NOT built — see estimate-health-panel.tsx
             for the reasons, recorded once there. */}
         <EstimateHealthCard data={data} />
+
+        {/* 19b — margin-vs-target bar. Renders ONLY when a company target is set
+            (nullable; unset = no comparison, per the ruling). */}
+        {target != null && health.marginPercent != null && (
+          <div style={card}>
+            <div style={{ fontSize: '0.75rem', color: '#7b8699', marginBottom: '0.4rem' }}>
+              Margin vs target
+            </div>
+            <div style={{ position: 'relative', height: '8px', background: '#eef1f6', borderRadius: '999px', overflow: 'hidden' }}>
+              <div
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: `${Math.max(0, Math.min(100, health.marginPercent))}%`,
+                  background: gapPts != null && gapPts < 0 ? '#c0362c' : '#1f8f4e',
+                }}
+              />
+              {/* target marker */}
+              <div style={{ position: 'absolute', left: `${Math.max(0, Math.min(100, target))}%`, top: '-2px', bottom: '-2px', width: '2px', background: '#0f1729' }} />
+            </div>
+            <div style={{ fontSize: '0.72rem', color: gapPts != null && gapPts < 0 ? '#c0362c' : '#1f8f4e', marginTop: '0.4rem', fontFamily: 'var(--font-mono, monospace)' }}>
+              {health.marginPercent}% vs {target}% target
+              {gapPts != null && ` · ${Math.abs(gapPts).toFixed(1)} pts ${gapPts < 0 ? 'under' : 'over'}`}
+            </div>
+          </div>
+        )}
+
         <BeforeYouSendCard data={data} />
         <ClientActivityCard data={data} />
+
+        {/* 19b — a SENT estimate that didn't win is marked lost (not deleted), so
+            win rate stays honest. Reuses the declined status with a DISTINCT
+            reason set via the mark_estimate_lost RPC [R12/Q6]. */}
+        {(estimate.status === 'sent' || estimate.status === 'expired') && (
+          <MarkLostCard estimateId={estimate.id} onDone={reload} />
+        )}
 
         <div style={{ position: 'relative' }}>
           <button

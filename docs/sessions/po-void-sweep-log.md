@@ -350,3 +350,43 @@ was already renamed-aside + rebuilt as `-2` in a prior session (the pattern to m
   `QA M9 — sent CO`, status `sent`, `signed_at` NULL.
 - **`s164-m9-read-arms`: 35/35 passed, exit 0** (ARM 1–9). The prompt's "188/188" was a whole-suite
   count from a prior session; this file alone is 35 tests, and the tightened 4a is among them.
+
+---
+
+## RUN 4 (S103) — client/server boundary error blocking the estimate builder
+Branch: `feature/estimates-redesign` (clean, @ `0b7d594`). Single-job run.
+
+### The error
+`details-tab.tsx` (a `'use client'` component) imported `getUploaderNames` from
+`@/lib/services/photos`, called in a `useEffect` to resolve the estimator's name. `photos.ts` imports
+`supabase-server` → `next/headers`, so the client bundle broke: "You're importing a component that
+needs next/headers." ⚠️ `tsc` was GREEN — this is a module-boundary error, not a type error.
+
+### The fix [Josh, S103] — resolve server-side, thread as a prop (mirrors companyTimeZone)
+The estimator is READ-ONLY [R10]; it never needed a client fetch. Did NOT move/refactor `photos.ts`
+(reused `getUploaderNames` from the server), added no server action or API route.
+- **`page.tsx`** (server) — fetches `estimates.created_by` (RLS-scoped) and calls `getUploaderNames`
+  server-side, resolving `estimatorName`; threads it into `EstimateBuilder` next to `companyTimeZone`.
+- **`estimate-builder.tsx`** — `estimatorName: string | null` added to `EstimateBuilderProps` and
+  `TabProps`; passed through `tabProps`.
+- **`details-tab.tsx`** — dropped the `getUploaderNames` import, the `estimatorName` state and its
+  `useEffect` branch; now consumes the prop. The `margin_target_percent` fetch stays (it uses
+  `supabase-browser`, client-safe).
+
+### Swept the whole estimates tree for the same class [prompt ask]
+Built the set of 50 real server-only modules (actual `import` of `supabase-server`/`next/headers`,
+not comment mentions — a first pass false-positived on `instrument-rates-client`, which only
+*mentions* it in a warning comment and imports `supabase-browser`). Cross-referenced against all 22
+`'use client'` components under `app/dashboard/estimates`: **NONE imports a server-only module** after
+the fix. Only one `EstimateBuilder` mount (the page).
+
+### VERIFIED BY LOADING THE PAGE (not tsc)
+- `type-check` exit 0 (5/5) — necessary, not sufficient, per the warning.
+- Started `next dev`; drove a real Chromium (Playwright) signed in as the company owner
+  `josh+test50@worthprop.com` (= Dave Whitfield), opened draft estimate `ca2f5374…` (EST-3940
+  "Kitchen Remodel") Details tab.
+  - dev log: `✓ Compiled /dashboard/estimates/[id] in 891ms (549 modules)` — no next/headers error.
+  - page HTTP **200**, no boundary error in the body, zero page errors.
+  - **Estimator renders: "Dave Whitfield"** (screenshot confirmed). This is the estimate's
+    `created_by`, resolved server-side.
+- Dev server stopped by PID (not `pkill -f`); temp verify script removed.

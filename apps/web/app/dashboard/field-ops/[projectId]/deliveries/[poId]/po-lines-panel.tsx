@@ -46,7 +46,7 @@ const fmt = (v: number) =>
 
 const STATUS_STYLE: Record<PanelLine['lineStatus'], { label: string; cls: string }> = {
   draft: { label: 'Draft', cls: 'bg-[#eef1f6] text-[#7b8699]' },
-  issued: { label: 'Issued', cls: 'bg-[#e8ecfb] text-[#3b4ae0]' },
+  issued: { label: 'Issued', cls: 'bg-[#e8ecfb] text-blue' },
   purchased: { label: 'Purchased', cls: 'bg-[#e6f0e9] text-[#1f8f4e]' },
   flagged: { label: 'Flagged missing', cls: 'bg-[#fdece0] text-[#b45309]' },
 };
@@ -147,7 +147,7 @@ export function PoLinesPanel({
   return (
     <div className="mb-4 rounded-[13px] border border-[#e4e8ef] bg-white p-[16px]" data-testid="po-lines-panel">
       <div className="mb-2 flex items-center justify-between">
-        <div className="text-[13px] font-bold uppercase text-[#0f1729]">
+        <div className="text-[13px] font-bold uppercase text-navy">
           Lines{' '}
           <span className="text-[11px] font-medium normal-case tracking-normal text-[#9aa4b8]">
             — cost only; the client price never appears on a PO
@@ -161,7 +161,7 @@ export function PoLinesPanel({
                 data-testid="po-issue-lines"
                 disabled={busy}
                 onClick={() => void run(() => issuePoLines(poId, tickedDrafts))}
-                className="rounded-[8px] bg-[#3b4ae0] px-[13px] py-[7px] text-[12.5px] font-bold text-white disabled:opacity-50"
+                className="rounded-[8px] bg-blue px-[13px] py-[7px] text-[12.5px] font-bold text-white disabled:opacity-50"
               >
                 Issue {tickedDrafts.length} line{tickedDrafts.length === 1 ? '' : 's'}
               </button>
@@ -225,7 +225,7 @@ export function PoLinesPanel({
                     <span className="w-[13px]" />
                   )}
                   <div className="min-w-0 flex-1">
-                    <div className="text-[13px] font-semibold text-[#0f1729]">{line.description}</div>
+                    <div className="text-[13px] font-semibold text-navy">{line.description}</div>
                     {line.flagNote && (
                       <div className="text-[11.5px] text-[#b45309]">&ldquo;{line.flagNote}&rdquo;</div>
                     )}
@@ -234,7 +234,7 @@ export function PoLinesPanel({
                         {line.assignments.map((a) => (
                           <span
                             key={a.id}
-                            className="rounded-full bg-[#f2f4ff] px-2 py-[1px] text-[10.5px] font-semibold text-[#3b4ae0]"
+                            className="rounded-full bg-[#f2f4ff] px-2 py-[1px] text-[10.5px] font-semibold text-blue"
                           >
                             {a.name}
                             {canAssign && !readOnly && (
@@ -258,7 +258,7 @@ export function PoLinesPanel({
                   <span className="w-[76px] text-right font-mono text-[12.5px] text-[#3f4a60]">
                     {line.unitCost != null ? fmt(line.unitCost) : '—'}
                   </span>
-                  <span className="w-[86px] text-right font-mono text-[12.5px] font-semibold text-[#0f1729]">
+                  <span className="w-[86px] text-right font-mono text-[12.5px] font-semibold text-navy">
                     {line.unitCost != null ? fmt(Math.round(line.qty * line.unitCost * 100) / 100) : '—'}
                   </span>
                   <span
@@ -294,7 +294,7 @@ export function PoLinesPanel({
                         <button
                           type="button"
                           onClick={() => setAssigningLine(line.id)}
-                          className="text-[12px] font-semibold text-[#3b4ae0] hover:underline"
+                          className="text-[12px] font-semibold text-blue hover:underline"
                         >
                           + Assign
                         </button>
@@ -308,7 +308,7 @@ export function PoLinesPanel({
 
           {/* R-L1: the footing row renders ONLY when lines carry cost. */}
           {lineBearing && (
-            <div className="flex justify-between bg-[#fbfcfe] px-3 py-[8px] text-[13px] font-bold text-[#0f1729]">
+            <div className="flex justify-between bg-[#fbfcfe] px-3 py-[8px] text-[13px] font-bold text-navy">
               <span>PO total (foots against the lines above)</span>
               <span className="font-mono">{fmt(footed)}</span>
             </div>
@@ -339,7 +339,7 @@ export function PoLinesPanel({
                     return { success: false, error: payload.error ?? 'Send failed.' };
                   })
                 }
-                className="rounded-[8px] bg-[#3b4ae0] px-[13px] py-[7px] text-[12.5px] font-bold text-white disabled:opacity-50"
+                className="rounded-[8px] bg-blue px-[13px] py-[7px] text-[12.5px] font-bold text-white disabled:opacity-50"
               >
                 Email to vendor
               </button>
@@ -362,7 +362,7 @@ export function PoLinesPanel({
       {/* Against the estimate — renders only with budgeted figures (O/A). */}
       {Object.keys(budgetedByCode).length > 0 && Object.keys(orderedByCode).length > 0 && (
         <div className="mt-3 border-t border-[#f4f6fa] pt-3" data-testid="po-against-estimate">
-          <div className="mb-1 text-[12px] font-bold uppercase text-[#0f1729]">
+          <div className="mb-1 text-[12px] font-bold uppercase text-navy">
             Against the estimate{' '}
             <span className="text-[10.5px] font-medium normal-case text-[#9aa4b8]">
               — ordered cost vs budgeted cost, never sell
@@ -384,7 +384,7 @@ export function PoLinesPanel({
                 </div>
                 <div className="h-[6px] rounded-[20px] bg-[#eef1f6]">
                   <div
-                    className={`h-[6px] rounded-[20px] ${over ? 'bg-[#c0362c]' : 'bg-[#3b4ae0]'}`}
+                    className={`h-[6px] rounded-[20px] ${over ? 'bg-[#c0362c]' : 'bg-blue'}`}
                     style={{ width: `${pct}%` }}
                   />
                 </div>

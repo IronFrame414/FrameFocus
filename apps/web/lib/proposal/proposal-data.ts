@@ -1,6 +1,15 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@framefocus/shared/types/database';
-import { roundMoney, type DiscountType } from '@framefocus/shared/utils/estimate-totals';
+import {
+  roundMoney,
+  computeRowCost,
+  resolveRowMarkupPercent,
+  type DiscountType,
+  type RowType,
+} from '@framefocus/shared/utils/estimate-totals';
+import { proposalFormatShowsCost } from '@framefocus/shared/utils/proposal-format';
+
+const ROW_TYPES: readonly RowType[] = ['labor', 'material', 'subcontractor', 'other', 'allowance'];
 
 // Spec 2 (4E/4F) — assembles everything the proposal renderers
 // (React-PDF document + public signing page HTML) need, as one
@@ -12,11 +21,41 @@ import { roundMoney, type DiscountType } from '@framefocus/shared/utils/estimate
 // (template + html) decides what each level shows; the data layer always
 // supplies the full category → line → row tree and lets the renderer hide.
 export type ProposalPricingLevel =
+  // Legacy five — STORED on 23 sent estimates; the renderer keeps their exact
+  // behaviour (never remapped, so what a client was sent never changes).
   | 'lump_sum'
   | 'category_with_price'
   | 'category_no_price'
   | 'detail_with_price_qty'
-  | 'detail_no_price';
+  | 'detail_no_price'
+  // Canonical eight (estimates-redesign §3.4). The renderer handles these via a
+  // SEPARATE code path from the legacy five.
+  | 'total_only'
+  | 'summary'
+  | 'summary_with_descriptions'
+  | 'itemized'
+  | 'itemized_with_descriptions'
+  | 'itemized_no_unit_pricing'
+  | 'cost_plus_itemized'
+  | 'time_and_materials_itemized';
+
+export interface ProposalRow {
+  name: string;
+  total: number;
+  /** Row instrument type ('labor' | 'material' | …). Harmless to carry; the
+   *  T&M layout partitions on it. */
+  rowType: string;
+  // ── Open-book only — populated ONLY when the estimate's format shows cost
+  //    (cost_plus / t&m). Null otherwise, so a non-open-book payload never
+  //    carries cost, and the cost-disclosure boundary holds in the DATA, not
+  //    just the renderer (audit O6). ──
+  /** Pre-markup, pre-tax cost of this row. */
+  cost: number | null;
+  /** Labor hourly rate (T&M Time section). */
+  rate: number | null;
+  /** Labor hours / material quantity (T&M Time section). */
+  hours: number | null;
+}
 
 export interface ProposalLine {
   name: string;
@@ -25,11 +64,17 @@ export interface ProposalLine {
   /** Pre-discount amount — present only when a per-line discount applies (E1). */
   originalTotal: number | null;
   discountLabel: string | null;
+  /** Line contractor price = Σ row costs. Open-book only, else null. */
+  cost: number | null;
+  /** The line's effective markup %, shown only when it is UNIFORM across the
+   *  line's rows (open-book only). Null when rows carry different markups or
+   *  cost is hidden — never a blended figure invented to fill the column. */
+  markupPercent: number | null;
   /**
    * 4D-rev3: the line's marked-up rows. Always populated; the renderer shows
-   * them only at the detail levels (detail_with_price_qty / detail_no_price).
+   * them only at the detail / open-book levels.
    */
-  rows: Array<{ name: string; total: number }>;
+  rows: ProposalRow[];
 }
 
 export interface ProposalCategory {
@@ -147,14 +192,36 @@ export async function getProposalData(
   const contact = contactRes.data;
   if (!company || !contact) return null;
 
+  // Version is DERIVED, never the stored `version_number` (whose 'v1.1' default
+  // is vestigial). get_estimate_version walks the void/reissue supersede chain;
+  // the label is "v" || depth — first send v1, one reissue v2 (§1.2, R2′/Q2).
+  const { data: versionDepth } = await supabase.rpc('get_estimate_version', {
+    p_estimate_id: estimateId,
+  });
+  const derivedVersion = `v${versionDepth ?? 1}`;
+
   const pricingLevel = estimate.proposal_pricing_level as ProposalPricingLevel;
+
+  // The cost-disclosure boundary, decided ONCE here (audit O6 / §3.4). When
+  // false, no cost, rate, hours or markup is ever written into ProposalData —
+  // so the six non-open-book formats cannot leak cost even through the JSON
+  // payload, not merely through the renderer.
+  const showsCost = proposalFormatShowsCost(pricingLevel);
+  const markupDefaults = {
+    labor_markup_percent: estimate.labor_markup_percent,
+    material_markup_percent: estimate.material_markup_percent,
+    subcontractor_markup_percent: estimate.subcontractor_markup_percent,
+  };
+
   const lineItems = lineItemsRes.data ?? [];
   const lineIds = lineItems.map((l) => l.id);
   const { data: allRows } =
     lineIds.length > 0
       ? await supabase
           .from('estimate_line_rows')
-          .select('line_item_id, row_type, name, total, unit_of_measure, unit_cost, quantity, sort_order')
+          .select(
+            'line_item_id, row_type, name, total, unit_of_measure, unit_cost, quantity, rate, amount, markup_percent, apply_tax, sort_order'
+          )
           .in('line_item_id', lineIds)
           .order('sort_order', { ascending: true })
       : { data: [] };
@@ -166,6 +233,11 @@ export async function getProposalData(
     total: number;
     unit_of_measure: string | null;
     unit_cost: number | null;
+    quantity: number | null;
+    rate: number | null;
+    amount: number | null;
+    markup_percent: number | null;
+    apply_tax: boolean;
     sort_order: number;
   };
   const rowsByLine = new Map<string, ProposalRowRec[]>();
@@ -201,9 +273,48 @@ export async function getProposalData(
           }
         }
 
-        // 4D-rev3: always supply the line's marked-up rows. The renderer
-        // shows them only at the detail levels.
-        const rows = (rowsByLine.get(l.id) ?? []).map((r) => ({ name: r.name, total: r.total }));
+        // 4D-rev3: always supply the line's marked-up rows. Cost/rate/hours and
+        // the effective markup are populated ONLY for open-book formats.
+        const recs = rowsByLine.get(l.id) ?? [];
+        const rows: ProposalRow[] = recs.map((r) => {
+          const knownType = (ROW_TYPES as readonly string[]).includes(r.row_type);
+          const cost =
+            showsCost && knownType
+              ? computeRowCost({
+                  row_type: r.row_type as RowType,
+                  rate: r.rate,
+                  quantity: r.quantity,
+                  unit_cost: r.unit_cost,
+                  amount: r.amount,
+                })
+              : null;
+          return {
+            name: r.name,
+            total: r.total,
+            rowType: r.row_type,
+            cost,
+            rate: showsCost && r.row_type === 'labor' ? r.rate : null,
+            hours: showsCost && r.row_type === 'labor' ? r.quantity : null,
+          };
+        });
+
+        // Line contractor price and the line's markup, for the Cost Plus layout.
+        // The markup is shown only when every row resolves to the SAME effective
+        // markup — otherwise the column is left blank rather than blending a
+        // figure the estimate never carried.
+        let lineCost: number | null = null;
+        let lineMarkup: number | null = null;
+        if (showsCost && recs.length > 0) {
+          lineCost = roundMoney(rows.reduce((sum, r) => sum + (r.cost ?? 0), 0));
+          const markups = recs
+            .filter((r) => (ROW_TYPES as readonly string[]).includes(r.row_type))
+            .map((r) =>
+              resolveRowMarkupPercent(r.row_type as RowType, r.markup_percent, markupDefaults)
+            );
+          const first = markups[0] ?? null;
+          lineMarkup =
+            markups.length > 0 && markups.every((m) => m === first) ? first : null;
+        }
 
         return {
           name: l.name,
@@ -211,6 +322,8 @@ export async function getProposalData(
           total: l.total_price,
           originalTotal,
           discountLabel,
+          cost: lineCost,
+          markupPercent: lineMarkup,
           rows,
         };
       });
@@ -253,7 +366,7 @@ export async function getProposalData(
     estimate: {
       id: estimate.id,
       number: estimate.estimate_number,
-      version: estimate.version_number,
+      version: derivedVersion,
       name: estimate.name,
       status: estimate.status,
       date: estimate.created_at ?? new Date().toISOString(),

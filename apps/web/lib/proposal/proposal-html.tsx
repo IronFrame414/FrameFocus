@@ -1,4 +1,5 @@
 import type { ProposalData } from './proposal-data';
+import { resolveProposalFormat, proposalRenderPlan } from '@framefocus/shared/utils/proposal-format';
 
 // Spec 2 (4F F5) — HTML rendering of the proposal for the public
 // signing page: same data as the PDF, responsive for mobile. Plain
@@ -246,6 +247,141 @@ export function ProposalHtml({ data }: { data: ProposalData }) {
             </div>
           ));
         })()}
+
+      {/* Canonical eight (estimates-redesign §3.4) — mirrors the React-PDF
+          renderer via the SAME proposalRenderPlan so the signing page and the
+          PDF cannot disagree about a format (#129 parity). Open book prints
+          cost + markup; ProposalData carries cost only when the format shows
+          it, so the six others cannot leak it. */}
+      {(() => {
+        const info = resolveProposalFormat(estimate.pricingLevel);
+        if (info.legacy) return null; // legacy → handled above
+        const plan = proposalRenderPlan(info.code);
+
+        if (plan.layout === 'total') {
+          return (
+            <div style={{ ...row, fontWeight: 700 }}>
+              <span>Project Total</span>
+              <span>{fmtMoney(estimate.grandTotal)}</span>
+            </div>
+          );
+        }
+
+        // Time & Materials — Time (rate·hours·amount) + Materials (amount only).
+        if (plan.layout === 'time_and_materials') {
+          const all = categories.flatMap((cat) => cat.lines.flatMap((l) => l.rows));
+          const labor = all.filter((r) => r.rowType === 'labor');
+          const material = all.filter((r) => r.rowType !== 'labor');
+          const head: React.CSSProperties = {
+            ...row,
+            fontSize: '0.6875rem',
+            color: '#6b7280',
+            textTransform: 'uppercase',
+          };
+          return (
+            <div>
+              {labor.length > 0 && (
+                <div style={{ marginBottom: '0.75rem' }}>
+                  <div style={{ fontWeight: 700, margin: '0.5rem 0 0.25rem' }}>Time</div>
+                  <div style={head}>
+                    <span style={{ flex: 1 }}>Labor</span>
+                    <span style={{ width: '5rem', textAlign: 'right' }}>Rate</span>
+                    <span style={{ width: '4rem', textAlign: 'right' }}>Hours</span>
+                    <span style={{ width: '6rem', textAlign: 'right' }}>Amount</span>
+                  </div>
+                  {labor.map((r, k) => (
+                    <div key={k} style={row}>
+                      <span style={{ flex: 1 }}>{r.name}</span>
+                      <span style={{ width: '5rem', textAlign: 'right' }}>
+                        {r.rate != null ? fmtMoney(r.rate) : '—'}
+                      </span>
+                      <span style={{ width: '4rem', textAlign: 'right' }}>
+                        {r.hours != null ? r.hours : '—'}
+                      </span>
+                      <span style={{ width: '6rem', textAlign: 'right' }}>{fmtMoney(r.total)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {material.length > 0 && (
+                <div>
+                  <div style={{ fontWeight: 700, margin: '0.5rem 0 0.25rem' }}>Materials</div>
+                  <div style={head}>
+                    <span style={{ flex: 1 }}>Item</span>
+                    <span style={{ width: '6rem', textAlign: 'right' }}>Amount</span>
+                  </div>
+                  {material.map((r, k) => (
+                    <div key={k} style={row}>
+                      <span style={{ flex: 1 }}>{r.name}</span>
+                      <span style={{ width: '6rem', textAlign: 'right' }}>{fmtMoney(r.total)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        // category · itemized · cost_plus
+        const isCostPlus = plan.layout === 'cost_plus';
+        return categories.map((cat, i) => (
+          <div key={i} style={{ marginBottom: '0.75rem' }}>
+            <div style={{ ...row, fontWeight: 700, margin: '0.5rem 0 0.25rem' }}>
+              <span>{cat.name}</span>
+              <span>{fmtMoney(cat.subtotal)}</span>
+            </div>
+            {isCostPlus && cat.lines.length > 0 && (
+              <div
+                style={{
+                  ...row,
+                  fontSize: '0.6875rem',
+                  color: '#6b7280',
+                  textTransform: 'uppercase',
+                }}
+              >
+                <span style={{ flex: 1 }}>Item</span>
+                <span style={{ width: '6rem', textAlign: 'right' }}>Your cost</span>
+                <span style={{ width: '4rem', textAlign: 'right' }}>Markup</span>
+                <span style={{ width: '6rem', textAlign: 'right' }}>Price</span>
+              </div>
+            )}
+            {plan.showLines &&
+              cat.lines.map((line, j) => (
+                <div key={j} style={row}>
+                  <span style={{ flex: 1 }}>
+                    {line.name}
+                    {plan.descriptions && line.description && (
+                      <span style={{ display: 'block', fontSize: '0.75rem', color: '#6b7280' }}>
+                        {line.description}
+                      </span>
+                    )}
+                  </span>
+                  {isCostPlus ? (
+                    <>
+                      <span style={{ width: '6rem', textAlign: 'right' }}>
+                        {line.cost != null ? fmtMoney(line.cost) : '—'}
+                      </span>
+                      <span style={{ width: '4rem', textAlign: 'right' }}>
+                        {line.markupPercent != null ? `${line.markupPercent}%` : '—'}
+                      </span>
+                      <span style={{ width: '6rem', textAlign: 'right' }}>
+                        {fmtMoney(line.total)}
+                      </span>
+                    </>
+                  ) : (
+                    plan.linePrices && (
+                      <span>
+                        {line.originalTotal != null
+                          ? fmtMoney(line.originalTotal)
+                          : fmtMoney(line.total)}
+                      </span>
+                    )
+                  )}
+                </div>
+              ))}
+          </div>
+        ));
+      })()}
 
       {/* Totals block */}
       <div style={{ maxWidth: '320px', marginLeft: 'auto', marginTop: '1rem' }}>

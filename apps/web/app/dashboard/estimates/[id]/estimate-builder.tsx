@@ -7,6 +7,7 @@ import {
   EstimateWithChildren,
   approveAndSend,
   getEstimate,
+  getEstimateVersion,
   markAsSent,
   softDeleteEstimate,
   voidEstimate,
@@ -30,6 +31,7 @@ import { ConvertToProject } from './convert-to-project';
 import { ItemsTab } from './items-tab';
 import { BiddingTab } from './bidding-tab';
 import { CoverTab, FilesTab, NotesTab, ScopeTab, TermsTab } from './text-tabs';
+import { ReviewSendSheet } from './review-send-sheet';
 import { useConfirm } from '@/components/confirm/confirm-provider';
 import { color } from '@/lib/theme';
 
@@ -44,6 +46,10 @@ export interface TabProps {
   /** #116 [S103] — the company calendar timezone, from the server page. Tabs
    *  derive date defaults with companyToday(companyTimeZone); never UTC. */
   companyTimeZone: string;
+  /** 19b/R10 [S103] — the estimator's display name, resolved SERVER-SIDE from
+   *  estimates.created_by (getUploaderNames imports next/headers and cannot run
+   *  in a client tab). Read-only; null when unresolved. */
+  estimatorName: string | null;
 }
 
 type TabKey =
@@ -56,14 +62,16 @@ type TabKey =
   | 'cover'
   | 'notes';
 
+// Estimates redesign — the handoff tab set: Line Items, Sub Bids, Proposal
+// (renames of Items/Bidding/Cover Sheet); Files stays disabled ("Soon").
 const TABS: Array<{ key: TabKey; label: string; disabled?: boolean }> = [
   { key: 'details', label: 'Details' },
-  { key: 'items', label: 'Items' },
+  { key: 'items', label: 'Line Items' },
   { key: 'terms', label: 'Terms' },
   { key: 'scope', label: 'Scope of Work' },
-  { key: 'bidding', label: 'Bidding' },
+  { key: 'bidding', label: 'Sub Bids' },
   { key: 'files', label: 'Files', disabled: true },
-  { key: 'cover', label: 'Cover Sheet' },
+  { key: 'cover', label: 'Proposal' },
   { key: 'notes', label: 'Notes' },
 ];
 
@@ -72,6 +80,7 @@ interface EstimateBuilderProps {
   role: BuilderRole;
   userId: string;
   companyTimeZone: string;
+  estimatorName: string | null;
 }
 
 export function EstimateBuilder({
@@ -79,6 +88,7 @@ export function EstimateBuilder({
   role,
   userId,
   companyTimeZone,
+  estimatorName,
 }: EstimateBuilderProps) {
   const router = useRouter();
   const confirm = useConfirm();
@@ -97,11 +107,17 @@ export function EstimateBuilder({
   const [voidReason, setVoidReason] = useState('');
   const [busyVoid, setBusyVoid] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
+  const [reviewOpen, setReviewOpen] = useState(false);
   const [sendPrefill, setSendPrefill] = useState<{
     email: string | null;
     subject: string;
     body: string;
   } | null>(null);
+
+  // Version is DERIVED from the supersede chain, never the stored 'v1.1'
+  // default (§1.2). Fetched once per estimate; it changes only on void+reissue,
+  // which navigates to a new estimate id.
+  const [derivedVersion, setDerivedVersion] = useState<string | null>(null);
 
   const reload = useCallback(async () => {
     const fresh = await getEstimate(estimateId);
@@ -112,6 +128,10 @@ export function EstimateBuilder({
     setLoading(true);
     reload().then(() => setLoading(false));
   }, [reload]);
+
+  useEffect(() => {
+    getEstimateVersion(estimateId).then(setDerivedVersion);
+  }, [estimateId]);
 
   if (loading) {
     return <p style={{ color: '#9aa4b8', fontSize: '0.875rem' }}>Loading estimate…</p>;
@@ -149,17 +169,19 @@ export function EstimateBuilder({
   // S173 Job 1: open the same SendProposalModal / api/proposals/send the
   // preview page uses (parity: one mechanism, two entry points). The route
   // accepts draft AND review — on review it stamps reviewed_by/reviewed_at.
-  async function openSendModal() {
+  // draft (from the Review & Send Email tab) seeds the send instead of a
+  // re-fetch, so what the user edited in that tab is what actually sends.
+  async function openSendModal(draft?: { subject: string; body: string }) {
     setActionBusy(true);
     setActionError(null);
     const [email, defaults] = await Promise.all([
       estimate.contact_id ? getContactEmail(estimate.contact_id) : Promise.resolve(null),
-      getProposalEmailDefaults(),
+      draft ? Promise.resolve(null) : getProposalEmailDefaults(),
     ]);
     setSendPrefill({
       email,
-      subject: defaults.subject || DEFAULT_PROPOSAL_SUBJECT,
-      body: defaults.body || DEFAULT_PROPOSAL_BODY,
+      subject: draft ? draft.subject : defaults?.subject || DEFAULT_PROPOSAL_SUBJECT,
+      body: draft ? draft.body : defaults?.body || DEFAULT_PROPOSAL_BODY,
     });
     setActionBusy(false);
     setSendOpen(true);
@@ -191,7 +213,7 @@ export function EstimateBuilder({
             data-testid="est-send"
             disabled={actionBusy}
             style={buttonStyle}
-            onClick={openSendModal}
+            onClick={() => openSendModal()}
           >
             Send to Client
           </button>
@@ -236,7 +258,7 @@ export function EstimateBuilder({
             data-testid="est-approve-send"
             disabled={actionBusy}
             style={buttonStyle}
-            onClick={openSendModal}
+            onClick={() => openSendModal()}
           >
             Approve &amp; Send
           </button>
@@ -309,7 +331,7 @@ export function EstimateBuilder({
     }
   }
 
-  const tabProps: TabProps = { data, role, userId, canEdit, reload, companyTimeZone };
+  const tabProps: TabProps = { data, role, userId, canEdit, reload, companyTimeZone, estimatorName };
 
   // Step 9 (§8.10.1) — left rail → top tabs, the mockup's one structural
   // change that survives contact with reality. The SET is the shipped eight
@@ -367,11 +389,30 @@ export function EstimateBuilder({
               }}
             >
               <span style={{ fontWeight: 600 }}>{estimate.estimate_number}</span>
-              <span>{estimate.version_number}</span>
+              {derivedVersion && <span>{derivedVersion}</span>}
               <StatusBadge status={estimate.status} />
             </div>
           </div>
           <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+            {(estimate.status === 'draft' || estimate.status === 'review') && (
+              <button
+                type="button"
+                data-testid="est-review-send"
+                onClick={() => setReviewOpen(true)}
+                style={{
+                  padding: '0.5rem 1rem',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  color: '#3f4a60',
+                  backgroundColor: '#f4f6fa',
+                  border: '1px solid #d5dae4',
+                  borderRadius: '0.375rem',
+                  cursor: 'pointer',
+                }}
+              >
+                Review &amp; Send
+              </button>
+            )}
             {statusActionButton()}
             {estimate.status !== 'accepted' && (
               <ConvertToProject
@@ -647,9 +688,17 @@ export function EstimateBuilder({
         <span>
           Subtotal <strong>{fmtMoney(estimate.subtotal)}</strong>
         </span>
-        <span>
-          Tax <strong>{fmtMoney(estimate.tax_total)}</strong>
-        </span>
+        {/* Terms swaps Tax for Deposit due (handoff §; deposit_percent × grand_total). */}
+        {activeTab === 'terms' && estimate.deposit_percent != null ? (
+          <span>
+            Deposit due{' '}
+            <strong>{fmtMoney((Number(estimate.deposit_percent) / 100) * Number(estimate.grand_total ?? 0))}</strong>
+          </span>
+        ) : (
+          <span>
+            Tax <strong>{fmtMoney(estimate.tax_total)}</strong>
+          </span>
+        )}
         <span>
           Discount <strong>−{fmtMoney(estimate.discount_total)}</strong>
         </span>
@@ -679,6 +728,19 @@ export function EstimateBuilder({
           onSent={async () => {
             setSendOpen(false);
             await reload();
+          }}
+        />
+      )}
+
+      {reviewOpen && (
+        <ReviewSendSheet
+          data={data}
+          canEdit={canEdit}
+          reload={reload}
+          onClose={() => setReviewOpen(false)}
+          onSend={(draft) => {
+            setReviewOpen(false);
+            openSendModal(draft);
           }}
         />
       )}

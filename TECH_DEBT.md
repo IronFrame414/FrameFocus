@@ -154,6 +154,56 @@ Complete as of Session 40. All polish items closed. Module 4 build is unblocked.
      ledger row** — every MCP-applied migration on rebuild-test needs the row inserted by hand
      afterward (done for this one). A `supabase db push` from the repo does record it normally; this
      only bites the MCP path.
+### Branch-scoped, awaiting real numbers — `feature/estimates-redesign` [S103]
+
+> Provisional ids per the CLAUDE.md tech-debt-numbering ruling ("never allocate a bare `#N` on a
+> branch"). Tag `estred`. Both are **deferred decisions** in the S179 debt/owed-work sense — features
+> Josh has ruled out of *this* build, not backlog tasks. Filed from `docs/specs/estimates-redesign-audit.md`
+> §8·B [Josh, S103]. Convert to the next free real numbers from main's file at merge (main's highest is
+> **#156** at filing time). ⚠️ The S103 prompt said "file with real ids"; bare numbers on a branch are
+> forbidden by the standing ruling, so they are filed branch-scoped like every other unmerged branch —
+> the real number is assigned at merge, not now.
+
+- **#1-estred — Estimate add-sheet: saved Assemblies + alternate item sources ("from a sub bid",
+  "from a past estimate").** The two-step add sheet (`add-items-sheet.tsx`) ships the five catalog
+  types + manual entry; it explicitly does **not** ship assemblies or the sub-bid / past-estimate
+  sources (`"No assemblies (R-Q8)"` in-file). **Deferred a SECOND time** — the first was R-Q8 during
+  the shipped add-sheet build; this run is the second [Josh, S103, R11]. Sound features, out of scope
+  for the estimates redesign. Not a defect — a bounded feature deferral.
+
+- **#2-estred — Customized proposal templates (saved, user-named format presets).** Seen on a
+  reference screenshot Josh supplied; **not in the handoff, no design.** ⚠️ **Deferral is not
+  rejection** — it is blocked on one unanswered question that makes it large: **what does a template
+  capture?** Format alone is trivial (the eight-format value already covers it); a template carrying
+  standard **terms, cover letter and printed sections** is a real feature that needs its own
+  interview, not a line in the estimates spec. The reference screenshot's own wording was **rejected**
+  by Josh, and its **"Internal (Detailed)"** and **"Field Sheet"** entries are **out of scope** — they
+  are not client proposal formats. [Josh, S103, §4]
+
+- **#3-estred — 19c insurance-expiry + W-9 status on the sub picker, by subcontractor.** The 19c
+  request form still shows no per-sub insurance/W-9, and the "how they reply" W-9 warning is a static
+  banner. This is **architecturally blocked, not an oversight**: compliance lives in
+  `subcontractor_compliance_documents`, keyed by `member_id` and floored to Owner/Admin server-side,
+  while the bidding surface is `subcontractor_id`-keyed and PM-reachable. Wiring the two would either
+  leak the floored store to a PM or duplicate its data. **It needs a client-safe, by-`subcontractor_id`
+  compliance read** (a service/RPC that returns only expiry + W-9 present/absent, no documents) before
+  the picker can show it. Do NOT work around the floor. [§1.6]
+
+- **#4-estred — Sub-bid reminders: schedule input, status chips reflecting reminders, and 19d "Nudge".**
+  `estimate_sub_bid_requests` has `sent_at`/`viewed_at`/`submitted_at` but **no reminder-tracking model**
+  (no reminder-sent timestamps, no schedule). So a reminder schedule input, "reminder sent N days ago"
+  chips, and the 19d no-reply **Nudge** action all have nowhere to record what was sent. Needs a small
+  schema addition (a reminders log or a `reminded_at[]`/schedule column) + a send path before any of the
+  three can be built honestly. [§1.6]
+
+- **#5-estred — 19c plan attachments to a bid request.** `estimate_sub_bid_requests` has no attachment
+  column and the tokenised reply surface (`get_sub_bid_request` RPC → `/bid/[token]`) exposes no files.
+  Attaching plans is a real feature but a **security-sensitive one**: it needs (a) storage — a
+  `plan_file_ids` column or a join table referencing estimate files — AND (b) an **anonymous-download
+  exposure path** for the unauthenticated sub (the RPC returning file refs, the public page minting
+  short-lived signed URLs via the service-role client, with expiry). Deliberately **not** bolted on in
+  this unverified run — the anonymous file-exposure surface deserves its own careful pass, the same
+  reasoning by which insurance/W-9 and reminders above were filed rather than forced. [§1.6]
 
 ### Branch-scoped, awaiting real numbers — `feature/deletion-sweep-analysis` [deletion-sweep §3]
 

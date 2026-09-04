@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase-browser';
 import type { Project, ProjectStatus, ProjectType } from '@/lib/services/projects';
 import { applied, DISCARDED } from '@/lib/services/mutation-result';
 import { companyToday } from '@framefocus/shared/utils/dates';
+import { logEstimateEvent } from '@/lib/services/estimate-events-client';
 export type { Project, ProjectStatus, ProjectType };
 
 /**
@@ -328,5 +329,9 @@ export async function convertEstimateToProject(
   });
 
   if (error) return { success: false, error: error.message };
+
+  // Convert event (R3) — best-effort; the estimate is now 'converted' but still
+  // readable, so the estimate_events INSERT policy admits it.
+  await logEstimateEvent(estimateId, 'convert', { project_id: data as string });
   return { success: true, projectId: data as string };
 }

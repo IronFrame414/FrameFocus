@@ -13,6 +13,7 @@ import {
 } from '@framefocus/shared/utils/estimate-totals';
 import { buildInstrumentPricingContext } from '@/lib/services/instrument-rates-shared';
 import { pricingAsOfDate } from '@/lib/services/pricing-as-of';
+import { logEstimateEvent } from '@/lib/services/estimate-events-client';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type {
   DiscountType,
@@ -550,6 +551,29 @@ export async function softDeleteEstimateSubBid(id: string): Promise<Result> {
 }
 
 /**
+ * The FROZEN award basis for one or more winning bids (§1.5). `set_winning_bid`
+ * persists the labor/material split and scope coverage onto `estimate_award_bases`
+ * (keyed to the winning line row) at award time — Q5's "the subcontract draws
+ * from it" record. This is that side table's reader: 19d shows the frozen basis
+ * so a later edit to the `estimate_sub_bids` row is visibly distinct from what
+ * the contract was awarded on.
+ */
+export type AwardBasis = Pick<
+  Database['public']['Tables']['estimate_award_bases']['Row'],
+  'sub_bid_id' | 'line_row_id' | 'labor_amount' | 'material_amount' | 'scope_coverage_percent' | 'awarded_at'
+>;
+
+export async function listAwardBases(subBidIds: string[]): Promise<AwardBasis[]> {
+  if (subBidIds.length === 0) return [];
+  const supabase = createClient();
+  const { data } = await supabase
+    .from('estimate_award_bases')
+    .select('sub_bid_id, line_row_id, labor_amount, material_amount, scope_coverage_percent, awarded_at')
+    .in('sub_bid_id', subBidIds);
+  return data ?? [];
+}
+
+/**
  * Atomic winner flip via the set_winning_bid RPC (Rev 2 §2.5): clears
  * any previous winner, marks the new one, and upserts a single
  * subcontractor row on the line (insert if none, update if one, error
@@ -575,6 +599,12 @@ export async function setWinningBid(
     .single();
 
   if (line) {
+    // Award event (R3) before the recalc so the rail can read "sub bid came in
+    // high" alongside the reprice the recalc may emit. Best-effort.
+    await logEstimateEvent(line.estimate_id, 'award', {
+      line_item_id: lineItemId,
+      sub_bid_id: subBidId,
+    });
     const recalc = await recalculateEstimateTotals(line.estimate_id);
     if (!recalc.success) return recalc;
   }
@@ -638,7 +668,7 @@ export async function recalculateEstimateTotals(estimateId: string): Promise<Res
   const { data: estimate, error: estimateError } = await supabase
     .from('estimates')
     .select(
-      'id, pricing_mode, contract_type, tax_rate, subcontractor_markup_percent, material_markup_percent, labor_markup_percent, discount_type, discount_amount'
+      'id, grand_total, pricing_mode, contract_type, tax_rate, subcontractor_markup_percent, material_markup_percent, labor_markup_percent, discount_type, discount_amount'
     )
     .eq('id', estimateId)
     .single();
@@ -762,5 +792,15 @@ export async function recalculateEstimateTotals(estimateId: string): Promise<Res
     .eq('id', estimateId);
 
   if (totalsError) return { success: false, error: totalsError.message };
+
+  // Reprice event (R3) — GUARDED on an actual grand_total change. recalc runs on
+  // every pricing-field blur (per-field autosave), so emitting unconditionally
+  // would flood the history rail; only a real change is a "reprice". [Build
+  // decision, S103 §0.] Best-effort — never fails the save.
+  const oldTotal = Number(estimate.grand_total ?? 0);
+  const newTotal = Number(totals.grand_total ?? 0);
+  if (oldTotal !== newTotal) {
+    await logEstimateEvent(estimateId, 'reprice', { from: oldTotal, to: newTotal });
+  }
   return { success: true };
 }

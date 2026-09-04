@@ -40,11 +40,24 @@ export const CONTRACT_TYPE_LABELS: Record<ContractType, string> = {
 
 // 4D-rev3: single estimate-level five-value proposal presentation.
 export type ProposalPricingLevel =
+  // Legacy five — still STORED on 23 sent estimates, never rewritten (a sent
+  // proposal's format is part of what the client agreed to).
   | 'lump_sum'
   | 'category_with_price'
   | 'category_no_price'
   | 'detail_with_price_qty'
-  | 'detail_no_price';
+  | 'detail_no_price'
+  // Canonical eight (new estimates store these) — estimates-redesign §3.4,
+  // migration #5. Both sets are in the DB CHECK; widening here lets the 8-format
+  // picker write a canonical code. Display mapping lives in proposal-format.ts.
+  | 'total_only'
+  | 'summary'
+  | 'summary_with_descriptions'
+  | 'itemized'
+  | 'itemized_with_descriptions'
+  | 'itemized_no_unit_pricing'
+  | 'cost_plus_itemized'
+  | 'time_and_materials_itemized';
 
 // Shared labels for the five proposal detail levels — reused by the Details tab
 // selector, the proposal preview selector, and the company-default settings form.
@@ -98,6 +111,26 @@ export type CreateEstimateInput = Pick<EstimateInsert, 'name' | 'contact_id'> & 
   contact_address_id?: string | null;
 };
 
+/**
+ * One extra proposal recipient (19b "Also send to"). §1.4 — the ONE canonical
+ * shape, reconciling the three that had existed (mig #6's `{name,email}[]`,
+ * mig #210's freeze, and the UI's `string[]`).
+ *
+ * Stores BOTH the `contact_id` (who) AND a `name`/`email` snapshot (where it
+ * actually went): a sent estimate freezes `also_send_to`, so if the contact's
+ * email is later edited the frozen record must still resolve to the address the
+ * proposal was sent to — which is what a delivery record has to prove.
+ *
+ * A `type` (not interface) so it keeps an implicit index signature and stays
+ * assignable to the generated Json type on the JSONB column (same reason as
+ * `TermsSection` in company.ts).
+ */
+export type AlsoSendToRecipient = {
+  contact_id: string;
+  name: string;
+  email: string | null;
+};
+
 // Content fields only — lifecycle transitions (Mark as Sent, accept,
 // decline, new version) are 4D scope and get dedicated functions there.
 export type UpdateEstimateInput = Partial<
@@ -117,6 +150,14 @@ export type UpdateEstimateInput = Partial<
     | 'terms_sections'
     | 'expiration_days'
     | 'internal_notes'
+    // Estimates redesign 16c — structured payment terms (migration #2). Frozen
+    // on send by enforce_estimate_immutability; editable only while draft.
+    | 'deposit_percent'
+    | 'invoice_due_days'
+    | 'retainage_percent'
+    // 19b — extra proposal recipients (migration #6). Per-job, frozen on send by
+    // enforce_estimate_immutability (the also_send_to freeze).
+    | 'also_send_to'
     // Money representation §4.2/§7.1 S-3 — Owner/Admin-gated in the UI
     // (projected_value is user-entered, never derived; NULL is normal).
     | 'projected_value'
@@ -220,6 +261,18 @@ export async function listEstimates(filters?: ListEstimatesFilters): Promise<Est
  * read soft-deleted rows by id); soft-deleted sub bids are excluded
  * because they are a listing within the estimate.
  */
+/**
+ * The DERIVED version label ("v1", "v2", …) — the length of the void/reissue
+ * supersede chain walked at read time (§1.2, R2′/Q2). Never the stored
+ * `version_number` (whose 'v1.1' default is vestigial). Returns "v1" on any
+ * error so the header never renders the dead default.
+ */
+export async function getEstimateVersion(id: string): Promise<string> {
+  const supabase = createClient();
+  const { data } = await supabase.rpc('get_estimate_version', { p_estimate_id: id });
+  return `v${data ?? 1}`;
+}
+
 export async function getEstimate(id: string): Promise<EstimateWithChildren | null> {
   const supabase = createClient();
 
@@ -373,6 +426,34 @@ export async function updateEstimate(
 
   if (error) return { success: false, error: error.message };
   if (!applied(data)) return { success: false, error: DISCARDED };
+  return { success: true };
+}
+
+/** The self-initiated "mark lost" reasons (Q6). Distinct from a client decline;
+ *  the DB xor CHECK keeps them apart for win-rate analytics. */
+export type LostReasonCode =
+  | 'lost_to_competitor'
+  | 'no_response'
+  | 'client_postponed'
+  | 'we_declined'
+  | 'other';
+
+/**
+ * 19b — mark a SENT estimate lost [R12/Q6]. Goes through the mark_estimate_lost
+ * SECURITY DEFINER RPC (mirrors void_estimate's authority: Owner/Admin, or the
+ * authoring PM), because a PM's UPDATE RLS is floored to draft. Sets status
+ * 'declined' + declined_at + lost_reason_code; the RPC guards status and reason.
+ */
+export async function markEstimateLost(
+  estimateId: string,
+  reasonCode: LostReasonCode
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = createClient();
+  const { error } = await supabase.rpc('mark_estimate_lost', {
+    p_estimate_id: estimateId,
+    p_reason_code: reasonCode,
+  });
+  if (error) return { success: false, error: error.message };
   return { success: true };
 }
 

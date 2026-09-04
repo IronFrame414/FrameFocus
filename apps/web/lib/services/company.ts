@@ -191,6 +191,13 @@ export type EstimatingSettings = Omit<
     | 'default_tax_rate'
     | 'default_labor_rate'
     | 'default_terms_sections'
+    | 'margin_target_percent'
+    // 16c — the company baselines the Terms "changed from default" block diffs
+    // against. Written here for the first time; they were read-only-dead before
+    // (the reader shipped, the writer never did). Nullable; when unset the
+    // "changed from default" note never fires.
+    | 'default_deposit_percent'
+    | 'default_retainage_percent'
   >,
   'default_pricing_mode' | 'default_terms_sections'
 > & {
@@ -210,7 +217,7 @@ export async function getEstimatingSettings(): Promise<EstimatingSettings | null
   const { data } = await supabase
     .from('companies')
     .select(
-      'id, estimate_number_prefix, estimate_number_sequence, default_pricing_mode, default_subcontractor_markup_percent, default_material_markup_percent, default_labor_markup_percent, default_subcontractor_margin_percent, default_material_margin_percent, default_labor_margin_percent, default_tax_rate, default_labor_rate, default_terms_sections'
+      'id, estimate_number_prefix, estimate_number_sequence, default_pricing_mode, default_subcontractor_markup_percent, default_material_markup_percent, default_labor_markup_percent, default_subcontractor_margin_percent, default_material_margin_percent, default_labor_margin_percent, default_tax_rate, default_labor_rate, default_terms_sections, margin_target_percent, default_deposit_percent, default_retainage_percent'
     )
     .maybeSingle();
 
@@ -220,13 +227,28 @@ export async function getEstimatingSettings(): Promise<EstimatingSettings | null
 
 // ── Spec 2 (4E/4J) — proposals & email settings ──
 
-// 4D-rev3: single estimate-level five-value proposal presentation.
+// The company's default proposal format. The CHECK on
+// companies.default_proposal_pricing_level now accepts all thirteen values
+// (legacy five + canonical eight, migration 20261170000000), so the type
+// admits them all: a company chooses one of the eight from ProposalFormatPicker;
+// the legacy five remain assignable only because the stored default may still
+// be one (e.g. the column default 'category_with_price') until a company picks.
 export type ProposalPricingLevel =
+  // Legacy five (retained; a stored default may still be one of these).
   | 'lump_sum'
   | 'category_with_price'
   | 'category_no_price'
   | 'detail_with_price_qty'
-  | 'detail_no_price';
+  | 'detail_no_price'
+  // Canonical eight (estimates-redesign §3.4) — what the picker writes.
+  | 'total_only'
+  | 'summary'
+  | 'summary_with_descriptions'
+  | 'itemized'
+  | 'itemized_with_descriptions'
+  | 'itemized_no_unit_pricing'
+  | 'cost_plus_itemized'
+  | 'time_and_materials_itemized';
 
 export type ProposalSettings = Omit<
   Pick<
@@ -355,6 +377,7 @@ const SETTINGS_BUNDLE_COLUMNS = [
   'default_subcontractor_markup_percent, default_material_markup_percent, default_labor_markup_percent',
   'default_subcontractor_margin_percent, default_material_margin_percent, default_labor_margin_percent',
   'default_tax_rate, default_labor_rate, default_terms_sections',
+  'margin_target_percent, default_deposit_percent, default_retainage_percent',
   // ProposalSettings
   'brand_color, default_proposal_email_subject, default_proposal_email_body',
   'default_reminder_email_subject, default_reminder_email_body, default_reminder_schedule',

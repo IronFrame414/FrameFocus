@@ -6,8 +6,10 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createInvoice } from '@/lib/services/invoices-client';
-import { color, primaryButtonStyle, secondaryButtonStyle } from '@/lib/theme';
+import { createInvoice, getSuggestedDepositAmount } from '@/lib/services/invoices-client';
+import { color, font, primaryButtonStyle, secondaryButtonStyle } from '@/lib/theme';
+
+const fmtUsd = (n: number) => n.toLocaleString('en-US', { style: 'currency', currency: 'USD' });
 
 interface NewInvoiceButtonProps {
   projectId: string;
@@ -22,6 +24,17 @@ export function NewInvoiceButton({ projectId, projectRetainagePercent }: NewInvo
   const [isDeposit, setIsDeposit] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Estimates redesign — the suggested deposit (deposit_percent x contract value)
+  // from the source estimate. Owner/Admin only (contract value is floored);
+  // returns null otherwise. A suggestion, never an imposed amount.
+  const [suggested, setSuggested] = useState<number | null>(null);
+
+  async function onToggleDeposit(checked: boolean) {
+    setIsDeposit(checked);
+    if (checked && suggested == null) {
+      setSuggested(await getSuggestedDepositAmount(projectId));
+    }
+  }
 
   async function create() {
     setBusy(true);
@@ -74,9 +87,16 @@ export function NewInvoiceButton({ projectId, projectRetainagePercent }: NewInvo
         }}
       />
       <label style={{ fontSize: '12px', color: color.body, display: 'inline-flex', gap: '4px' }}>
-        <input type="checkbox" checked={isDeposit} onChange={(e) => setIsDeposit(e.target.checked)} />
+        <input type="checkbox" checked={isDeposit} onChange={(e) => onToggleDeposit(e.target.checked)} />
         Deposit
       </label>
+      {isDeposit && suggested != null && (
+        <span style={{ fontSize: '12px', color: color.muted }}>
+          Suggested:{' '}
+          <strong style={{ fontFamily: font.mono, color: color.navy }}>{fmtUsd(suggested)}</strong>{' '}
+          <span style={{ color: color.faint }}>(deposit % × contract)</span>
+        </span>
+      )}
       <button type="button" onClick={create} disabled={busy} style={primaryButtonStyle}>
         {busy ? 'Creating…' : 'Create draft'}
       </button>
