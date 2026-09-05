@@ -127,7 +127,7 @@ export function ReviewSendSheet({
 
   return (
     <div
-      style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', justifyContent: 'flex-end' }}
+      style={{ position: 'fixed', inset: 0, zIndex: 70, display: 'flex', justifyContent: 'flex-end' }}
     >
       {/* Scrim */}
       <div

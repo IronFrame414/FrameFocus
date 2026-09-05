@@ -414,7 +414,9 @@ export function AddItemsSheet({
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 60,
+        // #6 — above the chat launcher (z 60) so its scrim covers the launcher
+        // while the sheet is open; otherwise the FAB floated over "Add N items".
+        zIndex: 70,
         backgroundColor: 'rgba(15,23,41,.42)',
       }}
       onClick={() => !busy && onClose()}

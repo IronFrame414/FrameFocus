@@ -19,6 +19,13 @@ Plan:
 
 ---
 
+## §3 item 6 — DONE (commit: chat icon vs sheet)
+- Root cause: the add-items sheet AND review-send sheet both used `zIndex:60` — the SAME as the chat
+  launcher (`chat-panel.tsx:70`), so they tied and the FAB painted over the sheet footer ("Add N items").
+- Fix (my call — ASIDE/behind, not repositioned): raised both estimate sheets to `zIndex:70`, so the
+  sheet's full-screen scrim covers the launcher while the sheet is open. The FAB is out of the way and
+  un-clickable during the sheet, which is correct for a modal sheet. type-check PASS.
+
 ## §3 items 7,8,9 — DONE (commit: bid-request form) — one coherent form restructure in bidding-tab.tsx
 - (7) The bid-request row rewrapped because the trade `<select>` resized between "All trades" and a
   specific trade. Gave it a FIXED `width:150px`; moved allowance + 3 dates into a fixed
