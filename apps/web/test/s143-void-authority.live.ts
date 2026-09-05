@@ -230,10 +230,21 @@ describe('S143-V2 — PAID invoice: NOBODY may void [tightened S103]', () => {
     expect(await statusOf(id)).toBe('sent');
   });
 
-  it('OWNER is ALSO refused — THIS IS THE S103 FIX', async () => {
-    // Superseded: "Owner may void." A paid invoice cannot be voided by anyone;
-    // the refusal names the credit/refund path.
+  it('OWNER is ALSO refused when the payment is NOT in QuickBooks — THIS IS THE S103 FIX', async () => {
+    // Superseded: "Owner may void." A paid invoice cannot be voided by anyone,
+    // whether or not it reached QB; the refusal names the credit/refund path.
+    const id = await makeInvoice({ applied: 300 }); // no qb_invoice_id — not synced
+    const { error } = await tryVoid(ownerC, id);
+    expect(error).toBeTruthy();
+    expect(error?.message).toMatch(/credit memo or a refund/i);
+    expect(await statusOf(id)).toBe('sent');
+  });
+
+  it('OWNER is refused when the payment IS in QuickBooks too — the trigger is QB-agnostic (unchanged)', async () => {
+    // The QB-synced qualifier never lived in this trigger; a paid invoice is
+    // refused regardless of qb_invoice_id. Set it to prove the same refusal.
     const id = await makeInvoice({ applied: 300 });
+    await admin.from('invoices').update({ qb_invoice_id: 'QB-SYNCED-145' }).eq('id', id);
     const { error } = await tryVoid(ownerC, id);
     expect(error).toBeTruthy();
     expect(error?.message).toMatch(/credit memo or a refund/i);
@@ -290,10 +301,13 @@ describe('S143-V3 — the credit effect (A3), now reachable ONLY via the service
     // Retiring an application fires client_payment_applications_revert_settlement
     // -> revert_invoice_settlement(), which un-settles a 'paid' invoice. It must
     // early-return here: a voided invoice is frozen forever (7D §9).
+    // [S103] Superseded `tryVoid(ownerC, …)` → `tryVoid(admin, …)`: no user may
+    // void a paid invoice now, so the settlement-revert interaction is reached
+    // only via the service-role escape. The behaviour under test is unchanged.
     const id = await makeInvoice({ applied: 1000 });
     await admin.from('invoices').update({ status: 'paid' }).eq('id', id);
 
-    const { error } = await tryVoid(ownerC, id);
+    const { error } = await tryVoid(admin, id); // service role — bypasses the authority gate
     expect(error).toBeNull();
     expect(await statusOf(id), 'a voided invoice was resurrected').toBe('voided');
   });

@@ -81,4 +81,25 @@ report. Refusal message must NAME the credit/refund path. Existing rows untouche
     user can. (Live run pending rebuild-test.)
 - type-check PASS.
 
-## §0 — status: Part A done. Part B code done. Applying to rebuild-test + proving.
+## PART B — PROVEN on rebuild-test. ✅
+- Confirmed target is **rebuild-test** (seeded QA identities josh+test50/josh+pm present; 11 users, 6
+  companies — the fixture set, not prod). Idle (0 other active queries) before applying.
+- Migration `20261340000000_paid_invoice_void_refusal` applied via MCP `apply_migration` → `{success:true}`.
+  Ledger repaired: MCP writes no `schema_migrations` row, so inserted version `20261340000000` +
+  name (confirmed present). Prior ledger tip was `20261330000000`.
+- **A second old-behaviour test surfaced on the live run** (I'd missed it): S143-V3 "the voided invoice is
+  NOT flipped back to sent" voided a paid invoice via `ownerC` → went RED with EXACTLY the fix's message
+  ("This invoice has a payment applied and cannot be voided. Issue a credit memo or a refund…"). Inverted
+  it (void via the service-role `admin`, since no user may void a paid invoice) — NOT softened the guard.
+- **The four proofs — ALL PASS (live, real sessions), 12/12:**
+  1. Paid AND QB-synced → refused (unchanged): V2 "…IS in QuickBooks too — trigger is QB-agnostic". ✓
+  2. Paid, NOT synced → **NOW REFUSED (the fix)**: V2 "OWNER is ALSO refused when… NOT in QuickBooks". ✓
+  3. Unpaid → still voidable: V1 Owner/Admin void succeed. ✓
+  4. Refusal message NAMES the credit path: `/credit memo or a refund/i` asserted. ✓
+- Unit `invoice-lifecycle.test.ts`: 25/25. type-check PASS.
+- **Test data:** the live harness creates invoices (title 'S143 harness fixture'), payments ($100/$300/
+  $400/$1000) and applications, and HARD-DELETES them all in `afterAll`. Verified: **0 leftover harness
+  invoices, 0 leftover synced fixtures.** Two `client_payments` matched a broad filter but are
+  **pre-existing seed data (34 days old, live applications, $3000, other contacts)** — NOT mine; left untouched.
+
+## §0 — status: Part A + Part B DONE. Final commit + tree-clean check.
