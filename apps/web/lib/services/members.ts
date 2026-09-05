@@ -4,6 +4,13 @@ import type { Database } from '@framefocus/shared/types/database';
 type MemberRow = Database['public']['Tables']['company_members']['Row'];
 export type CompanyMember = Omit<MemberRow, 'member_type'> & {
   member_type: 'crew' | 'subcontractor';
+  // #89: the linked subcontractor's type, so callers can label a member "(Sub)"
+  // vs "(Vendor)" — `member_type` alone cannot tell them apart (both are
+  // 'subcontractor'). Null when the member has no linked sub row (crew, or an
+  // unresolved directory sub whose `member_id` was never backfilled).
+  // Optional: only the list `getMembers()` embeds it; the single-row fetchers
+  // (`getMember`/`getMyMember`) do not, so it is absent there rather than lied about.
+  sub_type?: 'subcontractor' | 'vendor' | null;
 };
 
 /**
@@ -18,7 +25,9 @@ export async function getMembers(filters?: {
 
   let query = supabase
     .from('company_members')
-    .select('*')
+    // #89: embed the linked sub's type via subcontractors.member_id so pickers
+    // can distinguish subcontractor from vendor. Reverse embed → array (0/1 rows).
+    .select('*, subcontractors!subcontractors_member_id_fkey(sub_type)')
     .eq('is_deleted', false)
     .order('display_name', { ascending: true });
 
@@ -28,7 +37,18 @@ export async function getMembers(filters?: {
 
   const { data, error } = await query;
   if (error) return [];
-  return (data ?? []) as CompanyMember[];
+  return (data ?? []).map((row) => {
+    const { subcontractors, ...m } = row as Record<string, unknown> & {
+      subcontractors?: { sub_type?: string }[] | { sub_type?: string } | null;
+    };
+    const sub = Array.isArray(subcontractors) ? subcontractors[0] : subcontractors;
+    const subType = sub?.sub_type;
+    return {
+      ...m,
+      sub_type:
+        subType === 'vendor' || subType === 'subcontractor' ? subType : null,
+    } as CompanyMember;
+  });
 }
 
 export async function getMember(id: string): Promise<CompanyMember | null> {

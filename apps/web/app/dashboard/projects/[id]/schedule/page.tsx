@@ -49,6 +49,7 @@ export default async function ProjectSchedulePage({ params }: { params: { id: st
         id: m.id,
         display_name: m.display_name,
         member_type: m.member_type,
+        sub_type: m.sub_type ?? null, // #89: distinguish subcontractor vs vendor in the label
         schedule_color: m.schedule_color,
       }))}
       canManage={canManage}
