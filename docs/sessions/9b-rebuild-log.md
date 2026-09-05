@@ -23,4 +23,26 @@ If not → STOP, it's a ruling.
 
 ---
 
+## §2 gating question — RESOLVED: schema DOES carry three tiers. NO STOP. (commit: findings)
+
+**What the shipped tab nests TODAY = THREE tiers already** (`items-tab.tsx`):
+`categoryBlock → subcategoryBlock → lineItemBlock(Section) → rows`. Data model `EstimateWithChildren`
+carries `categories · subcategories · lineItems · rows` (4 levels; the mockup's "Section" = the schema's
+`estimate_line_items` row, with `rows` as its leaf).
+
+**`estimate_line_items` columns confirm every Section-level field the mockup needs** (database.ts):
+`name`, `description` (= "Shown on proposal"), `discount_amount`+`discount_type` (Discount control),
+`notes` (= "Internal notes — never on proposal"), `total_price`/`total_price_override`/`override_cost`,
+`category_id`, `subcategory_id`. **So this is a RESTYLE, not a schema change.**
+
+**Already present in the shipped Section (RESTYLE, don't rebuild the logic):** rows table whose pricing
+column is `{modeNoun} %` — i.e. it ALREADY follows the markup/margin toggle (§1 guardrail satisfied);
+Discount control; Internal notes editor; an empty-state line; an "Unpriced · $0" inline badge.
+
+**Genuinely NEW (§2, to build):** "Find a line…" search in the health strip · category count line
+("N subcategories · M sections") · Section "Shown on proposal" description (the `description` column is
+NOT rendered today) · per-subcategory & per-section "+ Add items" · "+ Add category" + "Collapse all"
+at the foot · section EMPTY STATE + "Unpriced" badge on the header · the unpriced-section WARNING
+banner with an "Add items to X" jump. Plus the card-layout restyle of the three block renderers.
+
 ## §0 — status: starting. Log created + committed first.
