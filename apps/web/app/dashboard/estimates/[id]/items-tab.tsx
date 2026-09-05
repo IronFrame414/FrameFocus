@@ -121,6 +121,10 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
       else next.add(id);
       return next;
     });
+  // 9b (§2) — Collapse all / Expand all. Presentational; uses the same Set.
+  const allCollapsed = categories.length > 0 && categories.every((c) => collapsed.has(c.id));
+  const toggleCollapseAll = () =>
+    setCollapsed(allCollapsed ? new Set() : new Set(categories.map((c) => c.id)));
   const confirm = useConfirm();
 
   // 9b — "Find a line…" (§2). PRESENTATIONAL filter only; no persistence. A
@@ -983,6 +987,12 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
           >
             {fmtMoney(catTotal)}
           </span>
+          {/* 9b (§2) — category count line. */}
+          <span style={{ fontSize: '0.72rem', color: '#8792a8' }}>
+            {subs.length} subcategor{subs.length === 1 ? 'y' : 'ies'} ·{' '}
+            {lineItems.filter((l) => l.category_id === category.id).length} section
+            {lineItems.filter((l) => l.category_id === category.id).length === 1 ? '' : 's'}
+          </span>
           {canEdit && (
             <>
               {/* #4 — add catalog items straight into this category. Shown only
@@ -1173,22 +1183,40 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
       ) : (
         <>
           {categories.map(categoryBlock)}
-          {canEdit && (
+          {/* 9b (§2) — foot controls: + Add category · Collapse all. */}
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={addCategory}
+                style={{
+                  padding: '0.5rem 1rem',
+                  fontSize: '0.875rem',
+                  backgroundColor: '#f4f6fa',
+                  border: '1px solid #d5dae4',
+                  borderRadius: '0.375rem',
+                  cursor: 'pointer',
+                }}
+              >
+                + Add Category
+              </button>
+            )}
             <button
               type="button"
-              onClick={addCategory}
+              onClick={toggleCollapseAll}
               style={{
                 padding: '0.5rem 1rem',
                 fontSize: '0.875rem',
-                backgroundColor: '#f4f6fa',
+                backgroundColor: 'transparent',
                 border: '1px solid #d5dae4',
                 borderRadius: '0.375rem',
                 cursor: 'pointer',
+                color: '#5c6784',
               }}
             >
-              + Add Category
+              {allCollapsed ? 'Expand all' : 'Collapse all'}
             </button>
-          )}
+          </div>
         </>
       )}
 

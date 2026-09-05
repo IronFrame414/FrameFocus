@@ -23,6 +23,10 @@ If not → STOP, it's a ruling.
 
 ---
 
+## §2 Unit B — Collapse all + category count line — DONE (commit)
+- `toggleCollapseAll` (reuses the `collapsed` Set); "Collapse all/Expand all" button at the foot beside
+  "+ Add Category". Category header now shows "N subcategories · M sections". Presentational only. PASS.
+
 ## §2 Unit A — "Find a line…" search — DONE (commit)
 - Added `findQuery` state + `sectionMatches(line)` (name OR any row name). PRESENTATIONAL filter, no
   persistence. Applied as early-returns in `lineItemBlock`/`subcategoryBlock`/`categoryBlock` so empty
