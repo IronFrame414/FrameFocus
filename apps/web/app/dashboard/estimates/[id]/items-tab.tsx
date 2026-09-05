@@ -102,11 +102,14 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
   const [error, setError] = useState<string | null>(null);
   // PO module 17 — the batch add sheet (R8). Draft-only, like every write here.
   const [sheetOpen, setSheetOpen] = useState(false);
-  // #4 — which category the add-items sheet was opened from (null = top-level
-  // button; the sheet pre-targets this category's first section when set).
+  // #4/9b — where the add-items sheet was opened from. categoryId pre-targets that
+  // category's first section; lineItemId pre-targets a specific section. null/none
+  // = the top-level button (first section overall).
   const [sheetCategoryId, setSheetCategoryId] = useState<string | null>(null);
-  function openAddItems(categoryId: string | null) {
-    setSheetCategoryId(categoryId);
+  const [sheetLineItemId, setSheetLineItemId] = useState<string | null>(null);
+  function openAddItems(opts?: { categoryId?: string | null; lineItemId?: string | null }) {
+    setSheetCategoryId(opts?.categoryId ?? null);
+    setSheetLineItemId(opts?.lineItemId ?? null);
     setSheetOpen(true);
   }
   const [pickerForRow, setPickerForRow] = useState<EstimateLineRow | null>(null);
@@ -121,7 +124,23 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
       else next.add(id);
       return next;
     });
+  // 9b (§2) — Collapse all / Expand all. Presentational; uses the same Set.
+  const allCollapsed = categories.length > 0 && categories.every((c) => collapsed.has(c.id));
+  const toggleCollapseAll = () =>
+    setCollapsed(allCollapsed ? new Set() : new Set(categories.map((c) => c.id)));
   const confirm = useConfirm();
+
+  // 9b — "Find a line…" (§2). PRESENTATIONAL filter only; no persistence. A
+  // section shows if its own name matches, or any of its rows' names do.
+  const [findQuery, setFindQuery] = useState('');
+  const findQ = findQuery.trim().toLowerCase();
+  function sectionMatches(line: EstimateLineItem): boolean {
+    if (!findQ) return true;
+    if (line.name.toLowerCase().includes(findQ)) return true;
+    return rows.some(
+      (r) => r.line_item_id === line.id && (r.name ?? '').toLowerCase().includes(findQ)
+    );
+  }
 
   useEffect(() => {
     getCompanyDefaultLaborRate().then(setDefaultLaborRate);
@@ -164,6 +183,8 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
   };
   const unpricedCount = rows.filter(rowUnpriced).length;
   const uncappedAllowances = rows.filter((r) => r.row_type === 'allowance' && !r.unit_cost).length;
+  // 9b (§2) — SECTIONS that will print at $0. Read-only derivation; no write.
+  const unpricedSections = lineItems.filter((l) => Number(l.total_price) === 0);
 
   const mode = estimate.pricing_mode;
   const modeNoun = mode === 'markup' ? 'markup' : 'margin';
@@ -478,7 +499,8 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
 
   function lineRowTr(row: EstimateLineRow) {
     return (
-      <tr key={row.id}>
+      // #3 — rule between rows.
+      <tr key={row.id} style={{ borderBottom: '1px solid #f4f6fa' }}>
         <td style={{ padding: '0.25rem 0.5rem' }}>
           <span
             style={{
@@ -548,6 +570,8 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
           {canEdit && (
             <button
               type="button"
+              aria-label="Delete row"
+              title="Delete row"
               onClick={async () => {
                 if (!(await confirm(`Remove ${ROW_TYPE_LABELS[row.row_type]} row "${row.name}"?`))) return;
                 const r = await mutate(() => deleteEstimateLineRow(row.id), true);
@@ -555,7 +579,7 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
               }}
               style={dangerButton}
             >
-              ✕
+              🗑
             </button>
           )}
         </td>
@@ -608,20 +632,26 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
   }
 
   function lineItemBlock(line: EstimateLineItem) {
+    if (!sectionMatches(line)) return null; // 9b Find filter
     const lineRows = rows
       .filter((r) => r.line_item_id === line.id)
       .sort((a, b) => a.sort_order - b.sort_order);
     const hasOverride = line.total_price_override != null;
+    // #5 — a section printing at $0 is tinted amber whole-card.
+    const isUnpriced = Number(line.total_price) === 0;
 
     return (
       <div
         key={line.id}
         style={{
-          border: '1px solid #e4e8ef',
-          borderRadius: '0.375rem',
-          padding: '0.75rem',
-          marginBottom: '0.625rem',
-          backgroundColor: '#fff',
+          // 9b — Section card geometry (mockup: radius 14, padding 16).
+          borderRadius: '14px',
+          padding: '16px',
+          marginBottom: '10px',
+          // #5 — amber tint for an unpriced section, else the plain white card.
+          border: isUnpriced ? '1.5px solid #f5cf8f' : '1px solid #e4e8ef',
+          boxShadow: isUnpriced ? '0 0 0 4px rgba(245,165,36,.09)' : undefined,
+          backgroundColor: isUnpriced ? '#fffdf7' : '#fff',
         }}
       >
         {/* Line header */}
@@ -672,7 +702,7 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
                   fontFamily: font.mono,
                 }}
               >
-                Unpriced · $0
+                Unpriced
               </span>
             )}
           </div>
@@ -696,18 +726,23 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
                 </span>
               </span>
             )}
-            <span style={rowLabel}>Total </span>
-            <span style={monoNum}>
-              <InlineNumber
-                value={line.total_price_override}
-                disabled={!canEdit}
-                allowNull
-                format={() => fmtMoney(line.total_price)}
-                validate={(v) => (v != null && v < 0 ? '≥ 0' : null)}
-                onSave={(v) =>
-                  mutate(() => updateEstimateLineItem(line.id, { total_price_override: v }), true)
-                }
-              />
+            {/* #7 — TOTAL label stacked above the figure; #5 — greyed when $0. */}
+            <span style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', lineHeight: 1.15, verticalAlign: 'middle' }}>
+              <span style={{ fontFamily: font.mono, fontSize: '9px', fontWeight: 700, letterSpacing: '.08em', color: '#8792a8' }}>
+                TOTAL
+              </span>
+              <span style={{ ...monoNum, color: isUnpriced ? '#9aa4b8' : undefined }}>
+                <InlineNumber
+                  value={line.total_price_override}
+                  disabled={!canEdit}
+                  allowNull
+                  format={() => fmtMoney(line.total_price)}
+                  validate={(v) => (v != null && v < 0 ? '≥ 0' : null)}
+                  onSave={(v) =>
+                    mutate(() => updateEstimateLineItem(line.id, { total_price_override: v }), true)
+                  }
+                />
+              </span>
             </span>
             {hasOverride && (
               <button
@@ -729,6 +764,8 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
             {canEdit && (
               <button
                 type="button"
+                aria-label="Delete section"
+                title="Delete section"
                 onClick={async () => {
                   if (!(await confirm(`Delete line "${line.name}"?`))) return;
                   const result = await mutate(() => deleteEstimateLineItem(line.id), true);
@@ -736,7 +773,7 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
                 }}
                 style={{ ...dangerButton, marginLeft: '0.375rem' }}
               >
-                ✕
+                🗑
               </button>
             )}
           </div>
@@ -761,7 +798,8 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
         {/* Rows table */}
         <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '0.5rem' }}>
           <thead>
-            <tr style={{ fontSize: '0.6875rem', color: '#7b8699', textAlign: 'left' }}>
+            {/* #3 — rule under the column header. */}
+            <tr style={{ fontSize: '0.6875rem', color: '#7b8699', textAlign: 'left', borderBottom: '1px solid #e4e8ef' }}>
               <th style={{ padding: '0.25rem 0.5rem' }}>Type</th>
               <th style={{ padding: '0.25rem 0.5rem' }}>Name</th>
               <th style={{ padding: '0.25rem 0.5rem' }}>Price</th>
@@ -774,39 +812,79 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
           </thead>
           <tbody>{lineRows.map(lineRowTr)}</tbody>
         </table>
+        {/* 9b (§2) — section EMPTY STATE, with a jump into the add-items sheet. */}
+        {/* #5 — CENTRED empty state with its own + Add items. */}
         {lineRows.length === 0 && (
-          <div style={{ fontSize: '0.75rem', color: '#9aa4b8', marginBottom: '0.5rem' }}>
-            No rows yet — add labor, materials, a subcontractor bid, or another cost.
+          <div
+            style={{
+              fontSize: '0.8125rem',
+              color: '#8792a8',
+              marginBottom: '0.5rem',
+              padding: '1rem',
+              border: '1px dashed #d5dae4',
+              borderRadius: '10px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              textAlign: 'center',
+              gap: '0.6rem',
+            }}
+          >
+            <span>
+              Nothing priced here yet — labor, material, a subcontractor bid, or another cost.
+            </span>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={() => openAddItems({ lineItemId: line.id })}
+                style={{ ...smallButton, color: '#3b4ae0', borderColor: '#dbe0fb', background: '#f2f4ff' }}
+              >
+                + Add items
+              </button>
+            )}
           </div>
         )}
 
+        {/* #6 — ONE footer row: + Add items / Discount on the left, Internal notes right. */}
         <div
           style={{
             display: 'flex',
+            justifyContent: 'space-between',
             gap: '1rem',
             flexWrap: 'wrap',
             alignItems: 'center',
             fontSize: '0.8125rem',
           }}
         >
-          {canEdit && addRowDropdown(line.id)}
-          <span>
-            <span style={rowLabel}>Discount </span>
-            {discountControls(line)}
-          </span>
-        </div>
-
-        {/* Internal line notes */}
-        <div style={{ marginTop: '0.5rem', fontSize: '0.8125rem' }}>
-          <span style={rowLabel}>Internal notes: </span>
-          <InlineText
-            value={line.notes ?? ''}
-            disabled={!canEdit}
-            placeholder="Add notes (never on proposal)"
-            onSave={(v) =>
-              mutate(() => updateEstimateLineItem(line.id, { notes: v.trim() || null }), false)
-            }
-          />
+          <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            {/* 9b (§2) — per-section "+ Add items" (pre-targeted); "+ Add Row" stays for a blank row. */}
+            {canEdit && (
+              <button
+                type="button"
+                data-testid={`open-add-items-section-${line.id}`}
+                onClick={() => openAddItems({ lineItemId: line.id })}
+                style={{ ...smallButton, color: '#3b4ae0', borderColor: '#dbe0fb', background: '#f2f4ff' }}
+              >
+                + Add items
+              </button>
+            )}
+            {canEdit && addRowDropdown(line.id)}
+            <span>
+              <span style={rowLabel}>Discount </span>
+              {discountControls(line)}
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', minWidth: 0 }}>
+            <span style={rowLabel}>Internal notes</span>
+            <InlineText
+              value={line.notes ?? ''}
+              disabled={!canEdit}
+              placeholder="Add a note — never on the proposal"
+              onSave={(v) =>
+                mutate(() => updateEstimateLineItem(line.id, { notes: v.trim() || null }), false)
+              }
+            />
+          </div>
         </div>
       </div>
     );
@@ -843,32 +921,73 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
 
   function subcategoryBlock(sub: EstimateSubcategory) {
     const lines = lineItems.filter((l) => l.subcategory_id === sub.id);
+    // 9b Find filter — hide a subcategory with no matching section during a search.
+    if (findQ && !lines.some(sectionMatches)) return null;
+    // 9b — subcategory subtotal (Σ its sections). Read-only derivation; no write.
+    const subSubtotal = lines.reduce((s, l) => s + Number(l.total_price ?? 0), 0);
     return (
       <div key={sub.id} style={{ marginLeft: '1.25rem', marginBottom: '0.75rem' }}>
+        {/* #2 — lighter TINTED subcategory bar; name + subtotal left, actions right. */}
         <div
           style={{
             display: 'flex',
+            justifyContent: 'space-between',
             alignItems: 'center',
             gap: '0.75rem',
             marginBottom: '0.5rem',
+            flexWrap: 'wrap',
+            padding: '8px 12px',
+            background: '#fbfcfe',
+            border: '1px solid #eef1f6',
+            borderRadius: '10px',
           }}
         >
-          <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>
-            <InlineText
-              value={sub.name}
-              disabled={!canEdit}
-              onSave={(v) =>
-                v.trim()
-                  ? mutate(() => updateEstimateSubcategory(sub.id, { name: v.trim() }), false)
-                  : Promise.resolve({ success: false, error: 'Name required' })
-              }
-            />
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', minWidth: 0 }}>
+            <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>
+              <InlineText
+                value={sub.name}
+                disabled={!canEdit}
+                onSave={(v) =>
+                  v.trim()
+                    ? mutate(() => updateEstimateSubcategory(sub.id, { name: v.trim() }), false)
+                    : Promise.resolve({ success: false, error: 'Name required' })
+                }
+              />
+            </span>
+            <span
+              style={{
+                fontFamily: font.mono,
+                fontSize: '0.72rem',
+                fontWeight: 600,
+                color: '#5c6784',
+                background: '#fff',
+                border: '1px solid #dde3ee',
+                padding: '2px 8px',
+                borderRadius: '20px',
+              }}
+            >
+              {fmtMoney(subSubtotal)}
+            </span>
+          </div>
           {canEdit && (
-            <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0, flexWrap: 'wrap' }}>
+              {/* 9b (§2) — add catalog items straight into this subcategory (its
+                  first section). Shown only when it has a section to receive them. */}
+              {lines.length > 0 && (
+                <button
+                  type="button"
+                  data-testid={`open-add-items-sub-${sub.id}`}
+                  onClick={() => openAddItems({ lineItemId: lines[0].id })}
+                  style={{ ...smallButton, color: '#3b4ae0', borderColor: '#dbe0fb', background: '#f2f4ff' }}
+                >
+                  + Add items
+                </button>
+              )}
               {addLineButton(sub.category_id, sub.id)}
               <button
                 type="button"
+                aria-label="Delete subcategory"
+                title="Delete subcategory"
                 onClick={async () => {
                   if (
                     !(await confirm(
@@ -884,7 +1003,7 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
               >
                 🗑
               </button>
-            </>
+            </div>
           )}
         </div>
         {lines.map(lineItemBlock)}
@@ -897,6 +1016,9 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
     const directLines = lineItems.filter(
       (l) => l.category_id === category.id && l.subcategory_id == null
     );
+    // 9b Find filter — hide a category with no matching section anywhere in it.
+    if (findQ && !lineItems.some((l) => l.category_id === category.id && sectionMatches(l)))
+      return null;
     // 9b — category subtotal = Σ of every line's total in the category (direct
     // AND subcategory lines carry category_id). It renders ON THE HEADER so it
     // survives collapse. Read-only derivation from data; no write.
@@ -909,64 +1031,80 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
       <div
         key={category.id}
         style={{
+          // 9b — Category card geometry, aligned with the Section cards.
           border: '1px solid #e4e8ef',
-          borderRadius: '0.5rem',
-          padding: '1rem',
-          marginBottom: '1rem',
+          borderRadius: '14px',
+          padding: '16px',
+          marginBottom: '14px',
           backgroundColor: '#fbfcfe',
         }}
       >
+        {/* #1 — full-width TINTED category bar; identity on the left, actions
+            right-aligned. */}
         <div
           style={{
             display: 'flex',
+            justifyContent: 'space-between',
             alignItems: 'center',
             gap: '0.75rem',
-            marginBottom: isCollapsed ? 0 : '0.75rem',
             flexWrap: 'wrap',
+            margin: isCollapsed ? '-16px' : '-16px -16px 12px',
+            padding: '10px 16px',
+            background: '#eef1f6',
+            borderRadius: isCollapsed ? '14px' : '14px 14px 0 0',
           }}
         >
-          <button
-            type="button"
-            onClick={() => toggleCollapsed(category.id)}
-            aria-label={isCollapsed ? 'Expand category' : 'Collapse category'}
-            style={{
-              border: 'none',
-              background: 'none',
-              cursor: 'pointer',
-              padding: '0 0.25rem 0 0',
-              color: '#8792a8',
-              fontSize: '0.75rem',
-              lineHeight: 1,
-            }}
-          >
-            {isCollapsed ? '▸' : '▾'}
-          </button>
-          <span style={{ fontWeight: 700, fontSize: '1rem' }}>
-            <InlineText
-              value={category.name}
-              disabled={!canEdit}
-              onSave={(v) =>
-                v.trim()
-                  ? mutate(() => updateEstimateCategory(category.id, { name: v.trim() }), false)
-                  : Promise.resolve({ success: false, error: 'Name required' })
-              }
-            />
-          </span>
-          <span
-            style={{
-              fontFamily: font.mono,
-              fontSize: '0.75rem',
-              fontWeight: 600,
-              color: '#5c6784',
-              background: '#eef1f6',
-              padding: '3px 9px',
-              borderRadius: '20px',
-            }}
-          >
-            {fmtMoney(catTotal)}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flexWrap: 'wrap', minWidth: 0 }}>
+            <button
+              type="button"
+              onClick={() => toggleCollapsed(category.id)}
+              aria-label={isCollapsed ? 'Expand category' : 'Collapse category'}
+              style={{
+                border: 'none',
+                background: 'none',
+                cursor: 'pointer',
+                padding: '0 0.25rem 0 0',
+                color: '#8792a8',
+                fontSize: '0.75rem',
+                lineHeight: 1,
+              }}
+            >
+              {isCollapsed ? '▸' : '▾'}
+            </button>
+            <span style={{ fontWeight: 700, fontSize: '1rem' }}>
+              <InlineText
+                value={category.name}
+                disabled={!canEdit}
+                onSave={(v) =>
+                  v.trim()
+                    ? mutate(() => updateEstimateCategory(category.id, { name: v.trim() }), false)
+                    : Promise.resolve({ success: false, error: 'Name required' })
+                }
+              />
+            </span>
+            <span
+              style={{
+                fontFamily: font.mono,
+                fontSize: '0.75rem',
+                fontWeight: 600,
+                color: '#5c6784',
+                background: '#fff',
+                border: '1px solid #dde3ee',
+                padding: '3px 9px',
+                borderRadius: '20px',
+              }}
+            >
+              {fmtMoney(catTotal)}
+            </span>
+            {/* 9b (§2) — category count line. */}
+            <span style={{ fontSize: '0.72rem', color: '#8792a8' }}>
+              {subs.length} subcategor{subs.length === 1 ? 'y' : 'ies'} ·{' '}
+              {lineItems.filter((l) => l.category_id === category.id).length} section
+              {lineItems.filter((l) => l.category_id === category.id).length === 1 ? '' : 's'}
+            </span>
+          </div>
           {canEdit && (
-            <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexShrink: 0, flexWrap: 'wrap' }}>
               {/* #4 — add catalog items straight into this category. Shown only
                   when the category has a section to receive them; the sheet
                   pre-targets that section (adjustable in step 2). */}
@@ -974,8 +1112,8 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
                 <button
                   type="button"
                   data-testid={`open-add-items-${category.id}`}
-                  onClick={() => openAddItems(category.id)}
-                  style={smallButton}
+                  onClick={() => openAddItems({ categoryId: category.id })}
+                  style={{ ...smallButton, color: '#3b4ae0', borderColor: '#dbe0fb', background: '#f2f4ff' }}
                 >
                   + Add items
                 </button>
@@ -986,6 +1124,8 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
               {addLineButton(category.id, null)}
               <button
                 type="button"
+                aria-label="Delete category"
+                title="Delete category"
                 onClick={async () => {
                   if (
                     !(await confirm(
@@ -1001,7 +1141,7 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
               >
                 🗑
               </button>
-            </>
+            </div>
           )}
         </div>
         {!isCollapsed && (
@@ -1017,8 +1157,27 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
   return (
     <div>
       {/* Step 9 — the live cost/price/margin strip (same derivation as the
-          Details Health card; one implementation, two surfaces). */}
-      <EstimateHealthStrip data={data} />
+          Details Health card; one implementation, two surfaces). 9b (§2): the
+          "Find a line…" box sits beside it — the strip itself is NOT rebuilt. */}
+      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'stretch', marginBottom: '0.75rem' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <EstimateHealthStrip data={data} />
+        </div>
+        <input
+          value={findQuery}
+          onChange={(e) => setFindQuery(e.target.value)}
+          placeholder="Find a line…"
+          aria-label="Find a line"
+          style={{
+            width: '200px',
+            alignSelf: 'center',
+            padding: '9px 12px',
+            borderRadius: '9px',
+            border: '1px solid #d5dae4',
+            fontSize: '13px',
+          }}
+        />
+      </div>
 
       {/* 9b — the aggregate unpriced/no-cap banner. Read-only derivation from
           data (unpricedCount / uncappedAllowances); no write path. Complements
@@ -1058,32 +1217,70 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
           </div>
         </div>
       )}
-      {canEdit && (
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '0.75rem' }}>
-          <button
-            type="button"
-            data-testid="open-add-items"
-            onClick={() => openAddItems(null)}
-            style={{
-              padding: '9px 16px',
-              borderRadius: '9px',
-              backgroundColor: '#3b4ae0',
-              color: '#fff',
-              fontSize: '13px',
-              fontWeight: 700,
-              border: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            + Add items
-          </button>
+      {/* 9b (§2) — SECTION-level unpriced warning, with a jump per section. An
+          empty section still prints, so it names each one and offers Add items. */}
+      {unpricedSections.length > 0 && (
+        <div
+          style={{
+            background: '#fff5e6',
+            border: '1.5px solid #f5cf8f',
+            borderRadius: '12px',
+            padding: '12px 16px',
+            marginBottom: '0.75rem',
+            boxShadow: '0 0 0 4px rgba(245,165,36,.09)',
+            fontSize: '0.8125rem',
+            color: '#8a5a12',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+            <span aria-hidden style={{ fontSize: '1rem', lineHeight: 1 }}>⚠</span>
+            <strong style={{ fontWeight: 700 }}>
+              {unpricedSections.length} section{unpricedSections.length === 1 ? ' is' : 's are'} unpriced
+            </strong>
+            <span
+              style={{
+                fontFamily: font.mono,
+                fontSize: '9px',
+                fontWeight: 800,
+                letterSpacing: '.08em',
+                color: '#b45309',
+                background: '#fffdf7',
+                border: '1px solid #f3e2c4',
+                borderRadius: '20px',
+                padding: '1px 6px',
+              }}
+            >
+              NEW
+            </span>
+          </div>
+          <div style={{ marginBottom: canEdit ? '0.4rem' : 0 }}>
+            An empty section still prints on the proposal — price it or remove it before you send.
+          </div>
+          {canEdit && (
+            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+              {unpricedSections.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => openAddItems({ lineItemId: s.id })}
+                  style={{ ...smallButton, color: '#3b4ae0', borderColor: '#dbe0fb', background: '#f2f4ff' }}
+                >
+                  Add items to {s.name}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
+      {/* #8 [S103] — the page-level "+ Add items" was REMOVED. Adding items
+          belongs inside a category / subcategory / section (those buttons are the
+          paths). `openAddItems()` with no target is still used by the sheet plumbing. */}
       {sheetOpen && (
         <AddItemsSheet
           data={data}
           reload={reload}
           initialCategoryId={sheetCategoryId ?? undefined}
+          initialLineItemId={sheetLineItemId ?? undefined}
           onClose={() => setSheetOpen(false)}
         />
       )}
@@ -1136,22 +1333,40 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
       ) : (
         <>
           {categories.map(categoryBlock)}
-          {canEdit && (
+          {/* 9b (§2) — foot controls: + Add category · Collapse all. */}
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            {canEdit && (
+              <button
+                type="button"
+                onClick={addCategory}
+                style={{
+                  padding: '0.5rem 1rem',
+                  fontSize: '0.875rem',
+                  backgroundColor: '#f4f6fa',
+                  border: '1px solid #d5dae4',
+                  borderRadius: '0.375rem',
+                  cursor: 'pointer',
+                }}
+              >
+                + Add Category
+              </button>
+            )}
             <button
               type="button"
-              onClick={addCategory}
+              onClick={toggleCollapseAll}
               style={{
                 padding: '0.5rem 1rem',
                 fontSize: '0.875rem',
-                backgroundColor: '#f4f6fa',
+                backgroundColor: 'transparent',
                 border: '1px solid #d5dae4',
                 borderRadius: '0.375rem',
                 cursor: 'pointer',
+                color: '#5c6784',
               }}
             >
-              + Add Category
+              {allCollapsed ? 'Expand all' : 'Collapse all'}
             </button>
-          )}
+          </div>
         </>
       )}
 
