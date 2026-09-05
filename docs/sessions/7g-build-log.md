@@ -279,3 +279,126 @@ because the same shape will recur for anyone adding a shared constant to a route
 
 `npx tsc --noEmit` — real exit line read: **`0`**. (Necessary, not sufficient; the full `next build` is
 run in a later unit.)
+
+---
+
+## Unit 4 — entity mappers + the worker
+
+`lib/quickbooks/entities.ts` (1295 lines) and `lib/quickbooks/worker.ts`, plus
+`app/api/cron/qb-sync/route.ts` and a `*/5 * * * *` entry in `apps/web/vercel.json` beside
+`export-worker`.
+
+**Handlers, all OUTBOUND** — the direction is the ruling (S103 #5: two-way, not three):
+
+| Queue key | Does |
+| --- | --- |
+| `customer:create` | contact → QB Customer; **asks on a name collision** |
+| `sub_customer:create` | project → QB **job** (`Job:true`, `ParentRef`), named `PRJ-### — Name` |
+| `invoice:create` | **the pay-link flow** — lines + retainage line + `AllowOnline*Payment` |
+| `invoice:update` | amended invoice re-pushed in full |
+| `invoice:void` | `operation=void`, `PrivateNote` = `qb_void_memo` only |
+| `bill:create` / `bill:update` / `bill:void` | expense → QB Bill; **S103 Q9 parity** |
+| `payment:create` | a manually recorded payment reaches QB |
+| `refund:create` | `credit_memo` → CreditMemo, `refund_receipt` → RefundReceipt |
+| `vendor:create`, `time_activity:*`, anything else | **terminal, never silently ignored** |
+
+### ⚠️ CORRECTION 6 — `gl_account_*` are free-text PATHS, not ids (the finding I stopped on)
+
+`companies.gl_account_{labor,material,subcontractor,other}` hold **free-text QuickBooks account
+paths**. Migration `20260728010000` says so in its own words — *"Free-text QB account paths; NULL =
+connector prompts at 7G export time"* — and `gl-mapping-settings-form.tsx` is literally four text
+inputs.
+
+**So the connector must resolve a path to an Account Id before it can post a Bill.** Passing the
+string to Intuit as an `AccountRef.value` fails with a validation fault that names the value and not
+the cause — the kind of error that costs a day. `resolveAccountId()` matches on `FullyQualifiedName`
+first (that is what a path like `Job Expenses:Materials` *is*), then falls back to `Name` so a user who
+typed only the leaf still resolves. **An unresolvable path parks the row with a sentence naming the
+account and the settings tab** — it does not fail it.
+
+### ⚠️ CORRECTION 7 — there is nowhere to persist a QuickBooks Vendor id
+
+7g2 Flow 3 says to "enqueue `vendor:create` … → `bill:create` (depends_on vendor)". **That cannot be
+built as written.** Checked against the live schema this run: `expenses.supplier` is **free text**, and
+`subcontractors` carries **no `qb_vendor_id`** — there is no row to write a vendor id back to, so a
+vendor cannot be modelled the way a customer is.
+
+**Built instead:** the vendor is resolved-or-created **inline** by `bill:create`, memoised per drain
+(one metered read per distinct supplier per drain, not per bill). `vendor:create` is explicitly
+**terminal** in the dispatcher with a sentence saying why, so an old or hand-made row of that shape
+cannot sit `queued` forever. Owed follow-up: a real vendor mapping (`subcontractors.qb_vendor_id` or a
+mapping table) — **filed as `#1-7gqb` in `TECH_DEBT.md`** (branch-scoped id per the S136 numbering
+ruling).
+
+**And a name collision on a VENDOR is not the §5.2 question.** Two clients called "Acme" are plausibly
+two different clients; a supplier string that already names a QuickBooks Vendor **is** that vendor —
+matching it is the intent. §5.2's "ASK, never auto-create a duplicate" is about **customers**, and is
+honoured there and only there.
+
+### The retainage line — and the arithmetic that forced its shape
+
+RULED [S103 Q7]: full invoice amount, retainage as a **line item**, held portion **OPEN** until
+released, release is a **payment against the same invoice**.
+
+⚠️ **The retainage line carries NO amount.** It is `DetailType: "DescriptionOnly"`. For
+`billed_total 12,500` / `retainage_withheld 1,250`, the work lines already carry the full 12,500; a
+`1,250` line *on top* makes `TotalAmt 13,750` and the ruling's own arithmetic
+(`11,250 + 1,250 = 12,500`) stops footing. **The held portion is expressed by the invoice staying open
+for 1,250 after the first payment — not by an extra line of money.** Written at the function, because
+the obvious "fix" is to give that line an amount.
+
+**Money that does not foot is flagged, not adjusted.** If `invoice_lines` disagree with `billed_total`
+by more than half a cent, the push is refused **terminal with both figures**. The defect is upstream in
+7D, and pushing either number would put a wrong money document in the customer's books. An invoice with
+**no** lines is different and legitimate (a lump-sum draw) — one line for the whole amount.
+
+### `payment:create` — beyond the literal three flows, and why
+
+7g2 §3 names invoice OUT · payment BACK · expenses OUT. Payment-BACK is Model A (client pays the
+pay-link, webhook brings it here). But **7E also has a manual path** — a cheque recorded by the Owner.
+Nothing in QuickBooks knows about it, so without this handler **the QuickBooks invoice stays open
+forever while FrameFocus shows it paid.** Two sets of books disagreeing about money is the exact defect
+7G exists to prevent, so a manually recorded payment is pushed OUT.
+
+**It cannot loop.** A payment that *arrived* from QuickBooks already carries `qb_payment_id`, and the
+handler's first check returns `pushed` without calling Intuit. The webhook sets that id in the same
+write that creates the row, so there is no window where an inbound payment looks outbound.
+
+**A payment is never part-pushed.** If any invoice it covers has not reached QuickBooks, the row
+**parks**. A QB Payment linking only some of its invoices would be wrong and there is no second chance
+to add the rest.
+
+### Other decisions taken here
+
+- **Invoice and bill updates send the FULL object, not a sparse one.** QuickBooks **replaces** the
+  `Line` array on update; a sparse update that omits `Line` leaves the **old amounts** in the
+  customer's books while this side reads as synced. That is a silent money divergence, so both
+  handlers send everything.
+- **QuickBooks Bills are DELETED, not voided** — there is no `operation=void` for a Bill, only
+  `operation=delete`. The queue's operation stays named `void` (that is our vocabulary and the CHECK
+  constraint's) and the two mean the same thing: the payable stops existing. Our own row keeps its
+  soft-delete audit trail.
+- **EIN reads ASSERT success** (7g1 §7G.4). `subcontractor_financials` is Owner/Admin-floored, so a
+  caller that lost privilege reads zero rows and looks identical to a sub who genuinely has no EIN.
+  Silently filing a 1099 vendor as non-1099 is a tax defect, so a query **error throws** (the row
+  retries) while a genuine absence returns null. The 1099 stamp itself is best-effort — a failed stamp
+  must not block the money record.
+- **`qb_push_status` is mirrored onto the record only on TERMINAL failure.** Flipping it to `failed` on
+  a transient error would alarm every user during a routine blip the queue is about to retry.
+  ⚠️ And the value must be one of the **four** that table's CHECK allows (`not_pushed | queued | pushed
+  | failed`) — the **queue's** wider vocabulary (`failed_transient`/`failed_terminal`) raises a
+  constraint violation if written there. Two enums, one word; noted in code.
+- **A row queued for a different realm is refused by the worker too**, not only escalated at
+  `/callback`. Belt to that braces.
+
+### ⚠️ The half-synced create — stated, not hidden
+
+QuickBooks accepts the object, our write-back of `qb_*_id` fails. The record re-queues and a naive
+retry creates a **second** object (QB has no PUT). Two shipped guarantees limit it: the
+one-live-per-(entity,op) unique index, and every handler checking its local `qb_*_id` first and
+returning `pushed`. **The residual window is real:** if QB accepted but the write-back failed, the id
+is not stored and that check cannot see it. Closing it fully needs an idempotency key Intuit does not
+offer for all entity types. What limits it today is that the write-back is a single statement
+immediately after the call. **Recorded in the worker's header, in the code, where the next reader is.**
+
+`npx tsc --noEmit` — real exit line: **`0`**.
