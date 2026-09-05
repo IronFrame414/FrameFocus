@@ -903,6 +903,8 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
     const lines = lineItems.filter((l) => l.subcategory_id === sub.id);
     // 9b Find filter — hide a subcategory with no matching section during a search.
     if (findQ && !lines.some(sectionMatches)) return null;
+    // 9b — subcategory subtotal (Σ its sections). Read-only derivation; no write.
+    const subSubtotal = lines.reduce((s, l) => s + Number(l.total_price ?? 0), 0);
     return (
       <div key={sub.id} style={{ marginLeft: '1.25rem', marginBottom: '0.75rem' }}>
         <div
@@ -911,6 +913,7 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
             alignItems: 'center',
             gap: '0.75rem',
             marginBottom: '0.5rem',
+            flexWrap: 'wrap',
           }}
         >
           <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>
@@ -924,8 +927,33 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
               }
             />
           </span>
+          <span
+            style={{
+              fontFamily: font.mono,
+              fontSize: '0.72rem',
+              fontWeight: 600,
+              color: '#5c6784',
+              background: '#eef1f6',
+              padding: '2px 8px',
+              borderRadius: '20px',
+            }}
+          >
+            {fmtMoney(subSubtotal)}
+          </span>
           {canEdit && (
             <>
+              {/* 9b (§2) — add catalog items straight into this subcategory (its
+                  first section). Shown only when it has a section to receive them. */}
+              {lines.length > 0 && (
+                <button
+                  type="button"
+                  data-testid={`open-add-items-sub-${sub.id}`}
+                  onClick={() => openAddItems({ lineItemId: lines[0].id })}
+                  style={{ ...smallButton, color: '#3b4ae0', borderColor: '#dbe0fb', background: '#f2f4ff' }}
+                >
+                  + Add items
+                </button>
+              )}
               {addLineButton(sub.category_id, sub.id)}
               <button
                 type="button"
