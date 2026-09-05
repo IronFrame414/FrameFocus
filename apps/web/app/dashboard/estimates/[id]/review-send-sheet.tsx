@@ -20,7 +20,11 @@
 
 import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { updateEstimate, type EstimateWithChildren } from '@/lib/services/estimates-client';
+import {
+  updateEstimate,
+  CONTRACT_TYPE_LABELS,
+  type EstimateWithChildren,
+} from '@/lib/services/estimates-client';
 import { getProposalEmailDefaults } from '@/lib/services/company-client';
 import { DEFAULT_PROPOSAL_SUBJECT, DEFAULT_PROPOSAL_BODY } from '@/lib/proposal/proposal-defaults';
 import type { ProposalData } from '@/lib/proposal/proposal-data';
@@ -205,7 +209,7 @@ export function ReviewSendSheet({
             {/* 3) Summary. */}
             <div style={{ background: '#fff', border: `1px solid ${color.cardBorder}`, borderRadius: '12px', padding: '14px 16px', marginBottom: '1rem' }}>
               <div style={{ fontWeight: 700, fontSize: '0.85rem', color: color.navy, marginBottom: '0.4rem' }}>Summary</div>
-              {summaryRow('Contract type', estimate.contract_type)}
+              {summaryRow('Contract type', CONTRACT_TYPE_LABELS[estimate.contract_type])}
               {summaryRow('Proposal format', fmt.label)}
               {summaryRow('Expires', expiresDate ? `${estimate.expiration_days}d · ${expiresDate}` : '—')}
               {summaryRow('Pricing', estimate.pricing_mode)}

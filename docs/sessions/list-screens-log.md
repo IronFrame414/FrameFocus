@@ -19,6 +19,13 @@ Plan:
 
 ---
 
+## §2 item 2 — DONE (commit: contract_type enum leak)
+- `review-send-sheet.tsx:208` now renders `CONTRACT_TYPE_LABELS[estimate.contract_type]` (the SAME
+  map `contract-section.tsx`/Details uses, from `estimates-client.ts:35`) → "Time & Materials" etc.
+  No second map written. type-check PASS.
+- ⚠️ MINOR (not fixed, out of item-2 scope): `:211` renders `estimate.pricing_mode` lowercase
+  ("markup"/"margin") — a readable word, not a `foo_bar` leak. Flagging for Josh, not touching.
+
 ## §2 item 1 — DONE (commit: remove header Send to Client)
 - `estimate-builder.tsx` draft-manager branch: removed the `est-send` "Send to Client" button. Send
   path is now solely Review & Send → Send to client (`est-review-send`, renders for draft/review).
