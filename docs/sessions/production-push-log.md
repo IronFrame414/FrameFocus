@@ -293,3 +293,51 @@ green first: re-run the full live suite once (it may have been a transient slow 
   in ONE atomic request — a failure rolls back the migration AND records no ledger row.
 
 ## §4.2 — applying 24 pending migrations in filename order, one at a time, STOP on first error
+
+⚠️ **First attempt was BLOCKED at the WAF, not at Postgres — NOTHING applied, prod still 171 /
+`20261100000000`.** The driver's first request returned **HTTP 403, Cloudflare error 1010** ("browser
+signature banned"): the read-only probes used `curl` (allowed), but the driver used Python `urllib`,
+whose default User-Agent Cloudflare blocks. The query never reached the database. Verified prod ledger
+still 171 rows and `estimates.margin_target_pct` absent. Driver switched to shell out to `curl` (the
+proven-working path) and re-run. The earlier "FAILED / STOP" table row this run appended was a false
+record of a WAF block and is corrected by this note.
+
+| version | name | apply | ledger row |
+| --- | --- | --- | --- |
+| 20261110000000 | estimate_margin_target | ✅ applied | ✅ present |
+| 20261120000000 | estimate_deposit_terms | ✅ applied | ✅ present |
+| 20261130000000 | estimate_events_log | ✅ applied | ✅ present |
+| 20261140000000 | estimate_sub_bid_enrichment | ✅ applied | ✅ present |
+| 20261150000000 | estimate_also_send_to | ✅ applied | ✅ present |
+| 20261160000000 | scope_library | ✅ applied | ✅ present |
+| 20261170000000 | estimate_format_set_eight | ✅ applied | ✅ present |
+| 20261180000000 | estimate_events_actor_default | ✅ applied | ✅ present |
+| 20261190000000 | estimate_mark_lost_reason | ✅ applied | ✅ present |
+| 20261200000000 | mark_estimate_lost_rpc | ✅ applied | ✅ present |
+| 20261210000000 | also_send_to_freeze | ✅ applied | ✅ present |
+| 20261220000000 | award_basis_side_table | ✅ applied | ✅ present |
+| 20261230000000 | sub_bid_request_surface | ✅ applied | ✅ present |
+| 20261240000000 | sub_bid_request_token_rpcs | ✅ applied | ✅ present |
+| 20261250000000 | estimate_version_derivation | ✅ applied | ✅ present |
+| 20261260000000 | also_send_to_shape | ✅ applied | ✅ present |
+| 20261265000000 | contacts_email_dedupe | ✅ applied | ✅ present |
+| 20261270000000 | contacts_email_unique | ✅ applied | ✅ present |
+| 20261280000000 | insurance_expiry_derived | ✅ applied | ✅ present |
+| 20261290000000 | cost_catalog_updated_by_definer | ✅ applied | ✅ present |
+| 20261300000000 | purchase_order_void | ✅ applied | ✅ present |
+| 20261310000000 | sent_estimate_allowlist_freeze | ✅ applied | ✅ present |
+| 20261320000000 | po_line_edit_audit | ✅ applied | ✅ present |
+| 20261330000000 | sent_estimate_internal_bookkeeping_editable | ✅ applied | ✅ present |
+
+**All 24 pending migrations applied. No failures. Proceeding to §4.3 object verification.**
+
+## §4.3 — object verification (post-apply)
+- **Prod ledger now 195 rows, newest `20261330000000`** — exact match to local. All 24 landed in
+  filename order; every ledger row verified present per-migration during apply.
+- **`contacts_dedupe_log`: 0 rows_removed, 0 companies, 0 dup_groups.** Production had NO duplicate
+  `(company_id, lower(email))` groups — the dedupe was a clean NO-OP on prod (rebuild-test had 7;
+  prod had none) and did NOT hit the multi-login pre-flight abort. Remaining dup groups on prod: **0**.
+- Unique index `contacts_company_email_unique` present. Six new tables present: `estimate_events`,
+  `scope_library`, `purchase_order_edits`, `estimate_award_bases`, `estimate_sub_bid_requests`,
+  `contacts_dedupe_log`. Dedupe (`…265`) applied strictly before the index (`…270`) ✓.
+- **§4 DB migration COMPLETE and verified. Next: push `main` (deploys the code), then relink CLI.**
