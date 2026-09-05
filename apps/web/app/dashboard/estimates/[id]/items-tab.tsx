@@ -123,6 +123,18 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
     });
   const confirm = useConfirm();
 
+  // 9b — "Find a line…" (§2). PRESENTATIONAL filter only; no persistence. A
+  // section shows if its own name matches, or any of its rows' names do.
+  const [findQuery, setFindQuery] = useState('');
+  const findQ = findQuery.trim().toLowerCase();
+  function sectionMatches(line: EstimateLineItem): boolean {
+    if (!findQ) return true;
+    if (line.name.toLowerCase().includes(findQ)) return true;
+    return rows.some(
+      (r) => r.line_item_id === line.id && (r.name ?? '').toLowerCase().includes(findQ)
+    );
+  }
+
   useEffect(() => {
     getCompanyDefaultLaborRate().then(setDefaultLaborRate);
   }, []);
@@ -608,6 +620,7 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
   }
 
   function lineItemBlock(line: EstimateLineItem) {
+    if (!sectionMatches(line)) return null; // 9b Find filter
     const lineRows = rows
       .filter((r) => r.line_item_id === line.id)
       .sort((a, b) => a.sort_order - b.sort_order);
@@ -843,6 +856,8 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
 
   function subcategoryBlock(sub: EstimateSubcategory) {
     const lines = lineItems.filter((l) => l.subcategory_id === sub.id);
+    // 9b Find filter — hide a subcategory with no matching section during a search.
+    if (findQ && !lines.some(sectionMatches)) return null;
     return (
       <div key={sub.id} style={{ marginLeft: '1.25rem', marginBottom: '0.75rem' }}>
         <div
@@ -897,6 +912,9 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
     const directLines = lineItems.filter(
       (l) => l.category_id === category.id && l.subcategory_id == null
     );
+    // 9b Find filter — hide a category with no matching section anywhere in it.
+    if (findQ && !lineItems.some((l) => l.category_id === category.id && sectionMatches(l)))
+      return null;
     // 9b — category subtotal = Σ of every line's total in the category (direct
     // AND subcategory lines carry category_id). It renders ON THE HEADER so it
     // survives collapse. Read-only derivation from data; no write.
@@ -1017,8 +1035,27 @@ export function ItemsTab({ data, canEdit, reload, companyTimeZone }: TabProps) {
   return (
     <div>
       {/* Step 9 — the live cost/price/margin strip (same derivation as the
-          Details Health card; one implementation, two surfaces). */}
-      <EstimateHealthStrip data={data} />
+          Details Health card; one implementation, two surfaces). 9b (§2): the
+          "Find a line…" box sits beside it — the strip itself is NOT rebuilt. */}
+      <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'stretch', marginBottom: '0.75rem' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <EstimateHealthStrip data={data} />
+        </div>
+        <input
+          value={findQuery}
+          onChange={(e) => setFindQuery(e.target.value)}
+          placeholder="Find a line…"
+          aria-label="Find a line"
+          style={{
+            width: '200px',
+            alignSelf: 'center',
+            padding: '9px 12px',
+            borderRadius: '9px',
+            border: '1px solid #d5dae4',
+            fontSize: '13px',
+          }}
+        />
+      </div>
 
       {/* 9b — the aggregate unpriced/no-cap banner. Read-only derivation from
           data (unpricedCount / uncappedAllowances); no write path. Complements

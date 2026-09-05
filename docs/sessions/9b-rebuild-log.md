@@ -23,6 +23,12 @@ If not → STOP, it's a ruling.
 
 ---
 
+## §2 Unit A — "Find a line…" search — DONE (commit)
+- Added `findQuery` state + `sectionMatches(line)` (name OR any row name). PRESENTATIONAL filter, no
+  persistence. Applied as early-returns in `lineItemBlock`/`subcategoryBlock`/`categoryBlock` so empty
+  containers hide during a search. Search box rendered BESIDE `EstimateHealthStrip` (strip NOT rebuilt,
+  per §2). No `updateEstimateLine*` touched. type-check PASS.
+
 ## §2 gating question — RESOLVED: schema DOES carry three tiers. NO STOP. (commit: findings)
 
 **What the shipped tab nests TODAY = THREE tiers already** (`items-tab.tsx`):
