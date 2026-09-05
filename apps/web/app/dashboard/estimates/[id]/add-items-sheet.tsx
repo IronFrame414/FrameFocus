@@ -83,7 +83,12 @@ export function AddItemsSheet({
   reload,
   onClose,
   initialCategoryId,
-}: Pick<TabProps, 'data' | 'reload'> & { onClose: () => void; initialCategoryId?: string }) {
+  initialLineItemId,
+}: Pick<TabProps, 'data' | 'reload'> & {
+  onClose: () => void;
+  initialCategoryId?: string;
+  initialLineItemId?: string;
+}) {
   const { estimate, categories, lineItems, rows } = data;
 
   const [step, setStep] = useState<1 | 2>(1);
@@ -105,10 +110,12 @@ export function AddItemsSheet({
     [rows]
   );
 
-  // #4 — opened from a category's "+ Add items", pre-target that category's first
-  // section so picks land there without a manual Section pick. Falls back to the
-  // first section overall (top-level "+ Add items", or a category with no sections).
+  // #4/9b — pre-target the section picks land in, so no manual Section pick is
+  // needed. Precedence: an explicit section (per-section/subcategory "+ Add items")
+  // → that category's first section (per-category) → the first section overall
+  // (top-level button, or an empty category).
   const defaultLineItemId =
+    (initialLineItemId && lineItems.find((li) => li.id === initialLineItemId)?.id) ||
     (initialCategoryId && lineItems.find((li) => li.category_id === initialCategoryId)?.id) ||
     lineItems[0]?.id ||
     '';
