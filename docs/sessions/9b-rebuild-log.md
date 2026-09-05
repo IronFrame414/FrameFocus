@@ -23,6 +23,42 @@ If not → STOP, it's a ruling.
 
 ---
 
+## ✅ 9b COMPLETE [S103] — REVIEWER CHECKLIST (Josh is the verification step)
+
+**Open an estimate → Line Items tab, on a DRAFT estimate (edit affordances need `status==='draft'`).**
+Build-verified: `next build` ✓ Compiled, `/dashboard/estimates/[id]` route builds. Whole-branch diff
+touches **zero** `updateEstimateLineRow|Item` calls, no in-tab footer, no role gate, no `markup_percent`
+(verified by grep). Look area by area:
+
+1. **Health strip row (top).** The `EstimateHealthStrip` (YOUR COST · CLIENT PRICE · PROFIT · MARGIN +
+   "N pts under target") is UNCHANGED — not rebuilt. To its RIGHT is the new **"Find a line…"** box.
+   Type a section or row name → non-matching categories/subcategories/sections hide; clear it → all return.
+2. **Unpriced warnings (below the strip).** Two banners: the existing **row-level** one ("N rows unpriced")
+   and the new **section-level** one — "N sections are unpriced… An empty section still prints… price it
+   or remove it," with a **"Add items to {section}"** jump per unpriced section and a NEW pill. Both only
+   show when something is unpriced.
+3. **Category card.** Radius-14 card. Header: collapse ▸/▾ · name (editable) · subtotal pill · **count
+   line "N subcategories · M sections"** · **"+ Add items"** (opens the sheet pre-targeted to the
+   category's first section) · "+ Add Subcategory" · "+ Add Line" · delete. Collapse hides the body but the
+   **subtotal pill survives** (rides the header).
+4. **Subcategory (indented).** Name (editable) · **its own subtotal pill** · **"+ Add items"** (pre-targets
+   the subcategory's first section, shown only when it has one) · "+ Add Line" · delete.
+5. **Section card (the line item).** Radius-14 card. Header: name (editable) · **"Unpriced"** badge when
+   $0 · Cost-override (when set) · **Total** (editable override) · override-revert · delete. Below the name:
+   **"Description (shown on proposal)"** (editable — was already present). Then the **rows table**
+   (Type · Name · Price · Qty · **{markup|margin} %** · Tax · Total — ⚠️ this column FOLLOWS the toggle,
+   unchanged). **Empty state** (no rows): "Nothing priced here yet — labor, material, a subcontractor bid,
+   or another cost" + an **"+ Add items"** jump. Action row: **"+ Add items"** (pre-targets this section) ·
+   "+ Add Row…" · Discount. Then **"Internal notes"** (editable, "never on proposal").
+6. **Foot of the list.** "+ Add Category" · **"Collapse all / Expand all"**.
+7. **The grand-total footer** is the DARK bar at the very bottom of the estimate — rendered ONCE by the
+   shell (`estimate-builder.tsx`), NOT inside this tab. Confirm there is exactly one.
+
+**What to poke for autosave (relocated, not rewritten):** edit a section **name**, a **Qty** or **Unit
+cost** in a row, the **Total** override, the **Description**, **Internal notes** — each persists on blur
+via the SAME `InlineText`/`InlineNumber` as before (I moved the wrappers, never their onSave/value/disabled).
+A row's **markup %** left blank still shows the inherited default parenthesised, e.g. `(20%)`.
+
 ## §2 — CONTINUED [S103: build-verified accepted]. Card restyle + per-tier add-items.
 
 ⚠️ **Correction to my earlier finding:** the section **"Shown on proposal" description field ALREADY
