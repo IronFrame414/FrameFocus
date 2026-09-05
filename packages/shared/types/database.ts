@@ -9722,6 +9722,16 @@ export type Database = {
         Returns: boolean
       }
       prune_proposal_views: { Args: never; Returns: number }
+      qb_enqueue: {
+        Args: {
+          p_company_id: string
+          p_depends_on?: string
+          p_entity_id: string
+          p_entity_type: string
+          p_operation: string
+        }
+        Returns: string
+      }
       qb_record_inbound_payment: {
         Args: {
           p_amount: number

@@ -515,3 +515,74 @@ truncated signature rejected without throwing** (the `timingSafeEqual` length gu
 updates to the same entity must produce **different** keys.
 
 `npx tsc --noEmit` — real exit line: **`0`**. Types regenerated (10037 → 10050), additive only.
+
+---
+
+## Unit 6 — M-E: what actually PUTS work in the queue
+
+| Migration | rebuild-test | Ledger | Verified |
+| --- | --- | --- | --- |
+| `20261380000000_qb_enqueue_triggers.sql` (**M-E, not in the spec**) | `{"success":true}` | ⚠️ **no row from MCP — repaired**; confirmed | **A live probe on rebuild-test, results below** |
+
+### ⚠️ CORRECTION 9 — nothing in the entire design was going to enqueue anything
+
+7g2 §7 states: *"No migration is needed for the worker, routes, UI, or disclosure."* That is true of
+those four things and **leaves out a fifth.** The queue table shipped at S149, the worker and every
+mapper were built in Units 2 and 4 — and **not one line of code or schema put a row into
+`qb_sync_queue`.** The worker would have drained an empty table forever and every surface would have
+looked healthy.
+
+**Built as triggers, not as service-layer calls, for two reasons:**
+
+1. **Most of those writes are client-side.** `invoices-client.ts` voids an invoice with the browser's
+   anon key, and `qb_sync_queue` has **no client INSERT policy by design** — *"a client-side INSERT
+   would let a PM enqueue arbitrary pushes to the company's books"* (20260929000000). A client write
+   **cannot** enqueue, so the hook has to live below it.
+2. **A call site is a list someone forgets to add to** — the failure shape CLAUDE.md names repeatedly
+   (the middleware matcher, the lock-exempt prefixes). A trigger hangs off the row, so it catches every
+   path: client, server, RPC, and a screen nobody has written yet.
+
+**An enqueue failure never blocks the business action.** Every trigger swallows unexpected errors as a
+`RAISE WARNING`. Sending an invoice must not fail because QuickBooks bookkeeping could not be queued;
+the cost is that a lost enqueue needs a manual re-sync.
+
+**The gate is `qb_realm_id IS NOT NULL`, not `qb_connection_state = 'connected'`** — and the difference
+is the S148 ruling: a company in `needs_reauth` **must keep queueing**, because the work is still valid
+and flows the moment they reconnect. Only a tenant that has never linked QuickBooks queues nothing.
+
+**The `qb_payment_id IS NULL` guard on the payments trigger is what prevents an infinite loop.** M-D
+writes that id in the *same INSERT* as the row precisely so this guard can see it. Without that
+ordering an inbound payment would be queued straight back out, and QuickBooks would hold two Payments
+for money received once. The two migrations are load-bearing on each other; neither comment stands
+alone.
+
+### The probe — run on rebuild-test, with real rows, and it rolled itself back
+
+Fixtures were **created by the probe, never borrowed from existing data** (altering existing rows is a
+stop condition). The whole thing ran inside a `DO` block that ends in `RAISE EXCEPTION`, so the
+assertions surface in the error message **and every insert is rolled back**. Verified afterwards:
+`probe_companies 0, probe_invoices 0, probe_expenses 0, probe_contacts 0, probe_projects 0,
+qb_sync_queue total 0`. Nothing existing was touched and nothing was left behind.
+
+```
+SENT-CHAIN => customer:create(status=queued,realm=REALM-PROBE-7G,dep=none)
+              sub_customer:create(status=queued,realm=REALM-PROBE-7G,dep=customer)
+              invoice:create(status=queued,realm=REALM-PROBE-7G,dep=sub_customer)
+EXPENSE-APPROVED       => bill:create
+EXPENSE-EDITED         => bill ops: create, update
+EXPENSE-DELETED        => bill ops: create, update, void
+VOID                   => invoice:void
+DUPLICATE-GUARD        => invoice:void row count = 1
+NEVER-CONNECTED        => qb_enqueue returned NULL (correct)
+```
+
+**What that proves, on real rows rather than by construction:** the dependency chain is built in the
+right order and correctly linked (`invoice` waits on `sub_customer` waits on `customer`); `realm_id` is
+stamped on every row; **S103 Q9's expense edit/delete parity fires** (`bill:update` on an amount
+change, `bill:void` on a soft delete); voiding a *pushed* invoice queues `invoice:void`; re-enqueueing
+the same work yields **one** live row, not two; and a tenant with no realm queues nothing.
+
+This is the first part of 7G exercised against a live database rather than reasoned about. Everything
+that requires Intuit itself remains verified by construction only.
+
+Types regenerated (10050 → 10060), additive only.
