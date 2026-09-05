@@ -256,7 +256,10 @@ describe('mentions and notify() — the whole pipeline', () => {
     expect(plainRows, 'a plain message must notify nobody — R6').toHaveLength(0);
 
     // --- now the tagged one ---
-    const body = '@Josh running short on trim, need about 3 more sticks';
+    // The Owner is "Dave Whitfield" [S176 rename] — addressable by first name
+    // "@Dave" (candidateTokens = first/last/first.last/firstlast). Was "@Josh",
+    // stale; the owner IS mentionable, the token just no longer matched the name.
+    const body = '@Dave running short on trim, need about 3 more sticks';
     const parse = parseMentions(body, candidates, crewProfileId);
     expect(parse.profileIds, 'the Owner must be mentionable in the crew thread').toContain(
       ownerProfileId
