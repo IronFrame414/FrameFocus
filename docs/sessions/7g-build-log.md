@@ -196,3 +196,86 @@ could otherwise alter the WHERE clause of a query running against the customer's
 **`last_error` is treated as user-facing** (it renders on the Accounting screen): Intuit's message
 only, truncated to 1000 chars, never a raw response body — an Intuit error page can echo request
 headers.
+
+---
+
+## Unit 3 — the OAuth routes
+
+| Route | Method | Registered with Intuit? | Auth |
+| --- | --- | --- | --- |
+| `/api/quickbooks/connect` | GET | no (ours) | **Owner-only** |
+| `/api/quickbooks/callback` | GET | ✅ **exact path, both hosts** | **Owner-only**, session-derived |
+| `/api/quickbooks/disconnect` | GET (Intuit) + POST (our UI) | ✅ **exact path** | **Owner-only** |
+
+Owner-only matches CLAUDE.md owner-only item 4 and the **database** guard that already exists
+(`enforce_companies_qb_scope`, narrower than `companies_update_owner_admin`). The route check is not
+the floor — it exists so an Admin gets a 403 instead of a raised exception three hops later.
+
+**CSRF on the callback.** A 32-byte random nonce goes into both `state` and an httpOnly/Lax cookie;
+`/callback` compares them with `timingSafeEqual` **before exchanging the code** — an exchanged code is
+already a live grant. Without this, a crafted callback URL handed to a signed-in Owner binds the
+attacker's QuickBooks realm to this company's books. **The company is always taken from the session,
+never from the URL** — `realmId` is attacker-controllable, the signed-in Owner is not.
+
+**One realm, one tenant, checked before the write.** `idx_companies_qb_realm_id` is UNIQUE and the
+migration calls a shared realm "the worst failure this integration can have". The callback looks for a
+prior claim first, and if it finds one it **revokes the grant it just obtained** rather than leaving a
+live token for a connection that will not exist.
+
+**Reconnecting to a DIFFERENT realm escalates the old queue instead of retargeting it.** Rows still
+queued for the previous `realm_id` go `failed_terminal` with an explanatory `last_error`. This is the
+whole reason `qb_sync_queue.realm_id` was denormalised, and it is the difference between "a human
+reviews six records" and "six records were pushed into a stranger's books".
+
+### ⚠️ CORRECTION 4 — the Intuit-initiated GET deliberately changes nothing without a session
+
+The prompt says the disconnect route "must revoke the token and clear the connection" when Intuit calls
+it. Built — **but only for an authenticated Owner**, and the anonymous case is a deliberate refusal:
+
+> Intuit's disconnect redirect is an ordinary **unsigned browser navigation**. It carries no secret we
+> can verify. Acting on `?realmId=…` from an anonymous caller would make this an **unauthenticated
+> endpoint that can sever any tenant's accounting integration by guessing a realm id.**
+
+Refusing costs nothing, because **the disconnect already self-heals**: Intuit has revoked the grant on
+their side, so our next refresh returns `invalid_grant`, and `getAccessToken()` sets `needs_reauth`
+with the queue untouched — exactly the state the route would have set by hand. The user sees the same
+banner. This is the same reasoning the prompt applies to the webhook ("an unverified webhook is an open
+write endpoint on a money path"), applied to the one other unauthenticated entry point.
+
+**Disconnect ordering is fixed and commented:** revoke with Intuit **first**, then drop our copy.
+Reversed, a failure between the two leaves a live grant we can no longer address. The state and the
+token id move in **one** update because `companies_qb_token_required_check` forbids
+`connected`/`needs_reauth` with a null token id — splitting them violates the constraint mid-way.
+
+**"Clear it" nulls remote identifiers only.** No row is deleted and no money is touched; `qb_push_status`
+resets alongside the ids, because a record marked `pushed` with no id is a lie about where it lives.
+Every statement is `company_id`-scoped — the service role bypasses RLS and a missing filter would blank
+every tenant's links.
+
+### ⚠️ CORRECTION 5 — `qb_payments_enabled` cannot be read at connect time
+
+7g2 §3.1 says `companies.qb_payments_enabled` is "the connected **QBO company's own Payments
+capability** (**read via the accounting API**)". **There is no such read.** The accounting API exposes
+no "QuickBooks Payments is enabled" field — not on `CompanyInfo`, not on `Preferences`.
+
+What *is* observable: when an Invoice is created with `AllowOnlineACHPayment` / `AllowOnlineCreditCard
+Payment` set true, a company **without** Payments gets those flags echoed back **false** and **no
+`InvoiceLink`**. So the capability is discovered from the **first invoice push response**, and that is
+where Unit 5 sets it. Logged as a build decision; the column, its meaning and the non-blocking ruling
+(S103 Q10) are all unchanged — only the *source* of the value differs from the spec's sentence.
+
+**Income Item: found, never created, and never guessed.** `listIncomeItems()` auto-maps **only** an
+exact `Construction Income` match. Anything else is returned as a list for the Owner to pick from, and
+none at all leaves it unset. Auto-picking "the only service item" would be the same class of guess as
+auto-creating one — it would silently post a customer's revenue to an account nobody chose.
+
+### ⚠️ A build trap caught here rather than at deploy
+
+`QB_STATE_COOKIE` was first declared in `connect/route.ts` and imported by `callback/route.ts`.
+**Next.js type-checks route modules against a fixed export surface and rejects an unrecognised export
+at build time, while `tsc --noEmit` says nothing** — the §6 trap ("type-check is necessary and NOT
+sufficient") in its exact form. Moved to `lib/quickbooks/config.ts` before it could bite. Recorded
+because the same shape will recur for anyone adding a shared constant to a route file.
+
+`npx tsc --noEmit` — real exit line read: **`0`**. (Necessary, not sufficient; the full `next build` is
+run in a later unit.)

@@ -91,3 +91,17 @@ export function qboBasicAuthHeader(): string {
   const { clientId, clientSecret } = qboCredentials();
   return `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString('base64')}`;
 }
+
+/**
+ * The OAuth state cookie name.
+ *
+ * ⚠️ LIVES HERE, NOT IN THE ROUTE FILE. Next.js type-checks route modules
+ * against a fixed export surface (`GET`, `POST`, `dynamic`, …) and REJECTS an
+ * unrecognised export at build time — while `tsc --noEmit` says nothing. That
+ * is precisely the §6 trap: "type-check is necessary and NOT sufficient".
+ *
+ * httpOnly so no script can read it; SameSite=Lax so it survives Intuit's
+ * top-level GET redirect back to /callback. A `Strict` cookie would be withheld
+ * on that navigation and every single connection would fail its state check.
+ */
+export const QB_STATE_COOKIE = 'qb_oauth_state';
